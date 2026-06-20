@@ -327,7 +327,7 @@
     color: var(--accent);
   }
   .h-today-value.bad {
-    color: #8a3a08;
+    color: var(--trend-down);
   }
   .h-today-unit {
     font-family: var(--font-mono);
@@ -348,7 +348,7 @@
     color: var(--accent);
   }
   .h-today-delta.down {
-    color: #8a3a08;
+    color: var(--trend-down);
   }
   .h-today-delta.flat {
     color: var(--text-muted);

@@ -79,7 +79,7 @@
     <div class="tags">
       <span class="tag">{KIND_LABEL[poi.kind] ?? 'Place'}</span>
       {#if poi.dog_friendly === true}
-        <span class="tag tag-dog">🐾 dog-friendly</span>
+        <span class="tag tag-dog"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="7" r="1.4" /><circle cx="14" cy="7" r="1.4" /><circle cx="3.5" cy="11" r="1.2" /><circle cx="16.5" cy="11" r="1.2" /><path d="M10 10c-2.4 0-4 1.8-4 4 0 1.6 1.4 2.5 4 2.5s4-.9 4-2.5c0-2.2-1.6-4-4-4z" /></svg> dog-friendly</span>
       {:else if poi.dog_friendly === false}
         <span class="tag tag-muted">no dogs</span>
       {/if}
@@ -160,9 +160,8 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -191,7 +190,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -206,10 +205,10 @@
     color: var(--text-secondary);
     border: 1px solid var(--card-border);
     padding: 0.16rem 0.42rem;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
-  .tag-dog { color: var(--success); border-color: color-mix(in srgb, var(--success) 55%, transparent); }
+  .tag-dog { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--success); border-color: color-mix(in srgb, var(--success) 55%, transparent); }
   .tag-muted { color: var(--text-muted); }
 
   .desc {
@@ -226,7 +225,7 @@
     gap: 0.4rem;
     padding: 0.65rem 0.7rem;
     border: 1px solid var(--card-border);
-    border-radius: 0.45rem;
+    border-radius: var(--radius-round);
     background: var(--card-bg);
   }
   .rating-head { display: flex; align-items: baseline; gap: 0.4rem; }
@@ -252,7 +251,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.85rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     min-height: 40px;
     text-decoration: none;

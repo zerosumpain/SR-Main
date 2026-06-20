@@ -12,6 +12,6 @@
     align-items: center;
     gap: 0.25rem;
     font: 0.7rem 'JetBrains Mono', monospace;
-    color: var(--nm-text-muted, #666);
+    color: var(--text-muted);
   }
 </style>

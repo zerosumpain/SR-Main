@@ -549,8 +549,8 @@
     font-size: 10px;
     color: var(--text-muted);
   }
-  .status-chip.ok { color: #4a9; }
-  .status-chip.failed { color: #c44; }
+  .status-chip.ok { color: var(--success); }
+  .status-chip.failed { color: var(--error); }
 
   .cred-actions {
     display: flex;
@@ -574,9 +574,9 @@
   .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
   .row-link:disabled { opacity: 0.5; cursor: default; }
   .row-link:disabled:hover { text-decoration: none; color: var(--accent); }
-  .row-link.danger { color: #c44; }
-  .row-link.danger:hover { color: #a33; }
-  .row-link.danger:disabled:hover { color: #c44; }
+  .row-link.danger { color: var(--error); }
+  .row-link.danger:hover { color: var(--error-hover); }
+  .row-link.danger:disabled:hover { color: var(--error); }
 
   /* ——— Rename inline form ——— */
   .rename-row {
@@ -640,7 +640,7 @@
     margin: 0;
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #c44;
+    color: var(--error);
   }
   .connect-actions { display: flex; gap: 0.6rem; align-items: center; }
 

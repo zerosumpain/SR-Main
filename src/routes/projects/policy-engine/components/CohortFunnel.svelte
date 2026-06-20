@@ -140,7 +140,7 @@
 </div>
 
 <style>
-  .funnel { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; padding: 10px 12px 8px; }
+  .funnel { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); padding: 10px 12px 8px; }
   svg { display: block; }
   .seg { transition: y 0.28s ease, height 0.28s ease; }
   @media (prefers-reduced-motion: reduce) { .seg { transition: none; } }
@@ -160,10 +160,10 @@
   .cap { margin-top: 6px; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .lg { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.7); }
-  .lg i { width: 11px; height: 8px; border-radius: 2px; display: inline-block; }
+  .lg i { width: 11px; height: 8px; border-radius: var(--radius-sharp); display: inline-block; }
   .lg i.dash { width: 14px; height: 0; border-top: 1.4px dashed rgba(28,22,17,0.6); border-radius: 0; }
-  .lg i.dash.cmp { border-top-color: #3a5fa8; }
+  .lg i.dash.cmp { border-top-color: var(--accent-ink); }
   .note { margin: 6px 0 0; font-size: 10.5px; line-height: 1.5; color: rgba(28,22,17,0.62); }
-  .note b { color: #1c1611; }
+  .note b { color: var(--ink); }
   .fn { color: rgba(28,22,17,0.5); font-size: 10px; }
 </style>

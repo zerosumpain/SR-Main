@@ -122,7 +122,7 @@
   }
   .step-bar { display: flex; gap: 2px; }
   .step-seg { flex: 1; height: 2px; background: var(--card-border); }
-  .step-seg[data-state="done"] { background: #2d7a3a; }
+  .step-seg[data-state="done"] { background: var(--success); }
   .step-seg[data-state="current"] { background: var(--accent); }
 
   .task-body { padding-top: 0.4rem; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 0.55rem; }
@@ -137,7 +137,7 @@
     flex-direction: column;
     gap: 2px;
   }
-  .step-list li[data-state="done"] { color: #2d7a3a; }
+  .step-list li[data-state="done"] { color: var(--success); }
   .step-list li[data-state="current"] { color: var(--accent); }
   .step-list li[data-state="pending"] { color: var(--text-ghost); }
 

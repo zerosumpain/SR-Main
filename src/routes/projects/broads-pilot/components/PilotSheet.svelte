@@ -65,11 +65,11 @@
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 450;
     display: flex; flex-direction: column;
     background: var(--surface-elevated); border-top: 1px solid var(--card-border);
-    border-radius: 0.9rem 0.9rem 0 0; box-shadow: 0 -4px 24px rgba(26, 16, 8, 0.18);
+    border-radius: var(--radius-round) var(--radius-round) 0 0;
   }
-  .sheet:not(.dragging) { transition: height 0.26s cubic-bezier(0.4, 0, 0.2, 1); }
+  .sheet:not(.dragging) { transition: height 0.2s var(--ease-out); }
   .grip { display: block; width: 100%; height: 30px; border: none; background: transparent; cursor: grab; position: relative; flex: 0 0 auto; touch-action: none; z-index: 2; }
-  .grip::before { content: ''; position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: 40px; height: 4px; border-radius: 2px; background: var(--card-border); }
+  .grip::before { content: ''; position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: 40px; height: 4px; border-radius: var(--radius-sharp); background: var(--card-border); }
   .grip:active { cursor: grabbing; }
   .sheet-head { flex: 0 0 auto; padding: 0 0.7rem 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
   .body { flex: 1 1 auto; overflow-y: auto; padding: 0.1rem 0.7rem 0.9rem; display: flex; flex-direction: column; gap: 0.7rem; }
@@ -80,7 +80,7 @@
       left: 0.6rem; right: auto; top: 0.6rem; bottom: auto; width: 23rem;
       height: auto !important; max-height: calc(100% - 5.5rem);
       border: 1px solid var(--card-border); border-top: 1px solid var(--card-border);
-      border-radius: 0.7rem; box-shadow: 0 6px 24px rgba(26, 16, 8, 0.18);
+      border-radius: var(--radius-round);
     }
     .grip { display: none; }
     .sheet-head { padding-top: 0.7rem; }

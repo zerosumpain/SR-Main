@@ -75,7 +75,7 @@
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text-secondary);
-    background: rgba(26, 16, 8, 0.04);
+    background: var(--bg-section);
     padding: 6px 8px;
     margin: 6px 0 0;
     overflow-x: auto;
@@ -85,7 +85,7 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--status-error);
-    background: rgba(194, 91, 91, 0.08);
+    background: var(--error-bg);
     border-left: 2px solid var(--status-error);
     padding: 4px 8px;
   }

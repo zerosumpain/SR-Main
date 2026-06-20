@@ -39,8 +39,8 @@
   }
   .lh-tag {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.18em;
+    font-size: 12px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-ghost);
     margin: 0 0 14px;
@@ -48,7 +48,7 @@
   .lh-head {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: clamp(36px, 9vw, 120px);
+    font-size: clamp(36px, 9vw, 132px);
     line-height: 0.86;
     letter-spacing: -0.03em;
     text-transform: uppercase;

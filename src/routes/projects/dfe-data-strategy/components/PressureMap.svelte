@@ -87,8 +87,8 @@
   .side { display: flex; flex-direction: column; gap: 12px; }
   .legend { display: flex; flex-direction: column; gap: 4px; }
   .lg { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.65); }
-  .lg i { width: 11px; height: 11px; border-radius: 50%; }
-  .detail { border: 1px solid rgba(28,22,17,0.14); border-radius: 12px; background: rgba(255,255,255,0.5); padding: 13px 15px; min-height: 150px; }
+  .lg i { width: 11px; height: 11px; border-radius: var(--radius-pill); }
+  .detail { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.5); padding: 13px 15px; min-height: 150px; }
   .detail.show { background: rgba(255,255,255,0.75); }
   .d-org { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
   .detail h4 { margin: 6px 0 4px; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.2; }

@@ -56,7 +56,7 @@
     </div>
   {/if}
   {#if app.layers.services}
-    <p class="hint">{#if hasFuel}<strong>⛽</strong> fuel · {/if}<strong>P</strong> pump-out · <strong>W</strong> water · <strong>⚡</strong> shore power</p>
+    <p class="hint">{#if hasFuel}<strong class="lc-ic"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="4" width="7" height="13" rx="1" /><line x1="4.5" y1="8.5" x2="11.5" y2="8.5" /><path d="M11.5 7h2a1.5 1.5 0 0 1 1.5 1.5V13a1.3 1.3 0 0 0 2.6 0V8l-1.6-2" /></svg></strong> fuel · {/if}<strong>P</strong> pump-out · <strong>W</strong> water · <strong>E</strong> shore power</p>
   {/if}
 </section>
 
@@ -68,7 +68,7 @@
     padding: 0.85rem 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.6rem;
+    border-radius: var(--radius-round);
     color: var(--text-primary);
   }
   .kicker {
@@ -86,7 +86,7 @@
     letter-spacing: 0.05em;
     min-height: 40px;
     padding: 0.45rem 0.7rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     cursor: pointer;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -111,4 +111,5 @@
   .key i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
   .hint { margin: 0; line-height: 1.5; }
   .hint strong { color: var(--text-secondary); }
+  .hint strong.lc-ic { display: inline-flex; vertical-align: -2px; }
 </style>

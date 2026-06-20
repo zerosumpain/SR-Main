@@ -127,9 +127,9 @@
     align-items: center;
     gap: 14px;
     padding: 10px 18px;
-    background: var(--paper, #f1ead6);
+    background: var(--paper);
     border-top: 1px solid rgba(28, 22, 17, 0.12);
-    color: var(--ink, #1c1611);
+    color: var(--ink);
     font-family: 'DM Sans', system-ui, sans-serif;
   }
 
@@ -139,7 +139,7 @@
     gap: 2px;
     background: rgba(28, 22, 17, 0.06);
     padding: 3px;
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     flex-shrink: 0;
   }
   .zooms button {
@@ -147,7 +147,7 @@
     border: none;
     color: var(--ink);
     padding: 6px 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     letter-spacing: 0.06em;
@@ -177,7 +177,7 @@
     border: 1px solid rgba(28, 22, 17, 0.18);
     background: rgba(255, 255, 255, 0.35);
     color: var(--ink);
-    border-radius: 5px;
+    border-radius: var(--radius-round);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -207,7 +207,7 @@
     position: absolute;
     inset: 16px 0 16px 0;
     background: rgba(28, 22, 17, 0.18);
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
   }
   .scrub-fill {
     position: absolute;
@@ -215,7 +215,7 @@
     bottom: 16px;
     left: 0;
     background: var(--ink);
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     pointer-events: none;
   }
   .scrub-thumb {
@@ -225,8 +225,7 @@
     height: 24px;
     transform: translateX(-50%);
     background: var(--ink);
-    border-radius: 3px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+    border-radius: var(--radius-sharp);
     pointer-events: none;
   }
   .thumb-label {
@@ -254,7 +253,7 @@
     border: 1px solid rgba(28, 22, 17, 0.2);
     color: var(--ink);
     padding: 5px 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     font-family: inherit;
     font-size: 12px;
     cursor: pointer;

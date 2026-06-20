@@ -291,10 +291,10 @@
   }
   @keyframes intel-pulse {
     0%, 100% {
-      box-shadow: inset 0 0 0 0 rgba(93, 190, 163, 0.15);
+      background: var(--bg);
     }
     50% {
-      box-shadow: inset 0 0 12px 2px rgba(93, 190, 163, 0.12);
+      background: var(--accent-tint-08);
     }
   }
   .rr-header {
@@ -302,19 +302,19 @@
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
-    border-bottom: 1px solid var(--divider, #1c1f27);
+    border-bottom: 1px solid var(--divider);
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.08em;
     flex-shrink: 0;
   }
-  .kind-bar { width: 3px; align-self: stretch; background: #5dbea3; flex-shrink: 0; }
+  .kind-bar { width: 3px; align-self: stretch; background: var(--accent); flex-shrink: 0; }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cancel {
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     padding: 0 6px;
     font: inherit;
     font-size: 10px;
@@ -328,7 +328,7 @@
     text-decoration: none;
     flex-shrink: 0;
   }
-  .open-link:hover { color: #5dbea3; }
+  .open-link:hover { color: var(--accent); }
   .rr-pending {
     flex: 1;
     min-height: 0;
@@ -341,13 +341,13 @@
   .spinner {
     width: 16px; height: 16px;
     border: 2px solid var(--divider);
-    border-top-color: #5dbea3;
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.9s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .log { color: var(--text-muted); font-size: 11px; text-align: center; padding: 0 12px; }
-  .rr-failed { padding: 12px; color: #c66; font-size: 11px; flex-shrink: 0; }
+  .rr-failed { padding: 12px; color: var(--error); font-size: 11px; flex-shrink: 0; }
 
   /*
     .rr-body — quick engine scroll container.
@@ -365,16 +365,16 @@
     gap: 6px;
     flex-shrink: 0;
     scrollbar-width: thin;
-    scrollbar-color: #5dbea3 transparent;
+    scrollbar-color: var(--accent) transparent;
   }
   .rr-body::-webkit-scrollbar { width: 10px; }
   .rr-body::-webkit-scrollbar-track { background: transparent; }
   .rr-body::-webkit-scrollbar-thumb {
-    background: #2f5a50;
-    border-radius: 5px;
+    background: var(--accent-tint-35);
+    border-radius: var(--radius-sharp);
     border: 2px solid var(--bg);
   }
-  .rr-body::-webkit-scrollbar-thumb:hover { background: #5dbea3; }
+  .rr-body::-webkit-scrollbar-thumb:hover { background: var(--accent); }
   .report { white-space: pre-wrap; color: var(--text-primary); }
   .sources { margin-top: 4px; font-size: 10px; }
   .sources summary { cursor: pointer; color: var(--text-muted); }

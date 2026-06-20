@@ -47,14 +47,14 @@
     padding: 12px 13px;
     background: rgba(255, 255, 255, 0.4);
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: 9px;
+    border-radius: var(--radius-round);
     min-width: 0;
   }
   .step {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
     letter-spacing: 0.1em;
-    color: #c4570a;
+    color: var(--accent);
   }
   h4 {
     margin: 0;
@@ -62,7 +62,7 @@
     font-weight: 600;
     font-size: 13.5px;
     line-height: 1.15;
-    color: #1c1611;
+    color: var(--ink);
   }
   ul {
     margin: 0;

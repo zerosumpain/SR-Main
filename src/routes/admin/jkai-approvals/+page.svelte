@@ -65,7 +65,7 @@
       </button>
 
       {#if form?.saved}<span class="ml-3 text-xs" style="color:var(--accent)">Saved.</span>{/if}
-      {#if form?.error}<span class="ml-3 text-xs" style="color:var(--danger)">Error: {form.error}</span>{/if}
+      {#if form?.error}<span class="ml-3 text-xs" style="color:var(--error)">Error: {form.error}</span>{/if}
     </form>
   </div>
 </PageWrap>

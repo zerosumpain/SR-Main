@@ -319,7 +319,7 @@
         borderLeftWidth: '2px',
       },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: 'rgba(196, 87, 10, 0.2)',
+        backgroundColor: 'var(--accent-tint-20)',
       },
       '.cm-gutters': {
         backgroundColor: 'transparent',
@@ -332,10 +332,10 @@
         color: 'var(--text-secondary)',
       },
       '.cm-activeLine': {
-        backgroundColor: 'rgba(255, 255, 255, 0.02)',
+        backgroundColor: 'var(--accent-tint-04)',
       },
       '.cm-matchingBracket': {
-        backgroundColor: 'rgba(196, 87, 10, 0.25)',
+        backgroundColor: 'var(--accent-tint-25)',
         outline: 'none',
       },
       '.cm-foldGutter': {
@@ -478,7 +478,7 @@
 <style>
   .editor-wrapper {
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: var(--radius-sharp);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -524,12 +524,12 @@
   }
 
   .tool-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--accent-tint-08);
     color: var(--text-primary);
   }
 
   .tool-btn:active {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--accent-tint-14);
   }
 
   .tool-divider {
@@ -560,7 +560,7 @@
   }
 
   .mode-btn.active {
-    background: rgba(196, 87, 10, 0.12);
+    background: var(--accent-tint-14);
     color: var(--accent);
     border-color: var(--accent);
   }
@@ -708,21 +708,21 @@
   }
 
   .status-saved {
-    color: #4a9;
+    color: var(--success);
   }
 
   .status-error {
-    color: #c44;
+    color: var(--error);
   }
 
   .readability {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
     padding: 8px 12px; border-top: 1px solid var(--card-border);
     font-family: var(--font-mono); font-size: 11px;
-    color: var(--text-secondary); background: rgba(255,255,255,0.02);
+    color: var(--text-secondary); background: var(--accent-tint-04);
   }
   .r-pill {
-    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: 999px;
+    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: var(--radius-pill);
     text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px;
   }
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }

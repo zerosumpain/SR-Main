@@ -28,7 +28,7 @@
       onCreate({ url, fromNodeId: sourceNodeId });
     }}
   >
-    🌐
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M3 10h14M10 3c2 2.5 2 11.5 0 14M10 3c-2 2.5-2 11.5 0 14"/></svg>
   </button>
 {/if}
 
@@ -39,10 +39,10 @@
     cursor: pointer;
     padding: 0 4px;
     font-size: inherit;
-    color: var(--fg-2, #a0a0a0);
+    color: var(--text-muted);
     line-height: 1;
   }
   .open-as-webpage:hover {
-    color: var(--accent, #7aa2f7);
+    color: var(--accent);
   }
 </style>

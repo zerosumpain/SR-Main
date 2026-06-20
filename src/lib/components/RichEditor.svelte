@@ -640,7 +640,7 @@
 <style>
   .editor-wrapper {
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: var(--radius-sharp);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -664,9 +664,9 @@
     font-family: var(--font-mono); font-size: 11px;
     transition: background 0.15s, color 0.15s;
   }
-  .tool-btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+  .tool-btn:hover:not(:disabled) { background: var(--accent-tint-08); color: var(--text-primary); }
   .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .tool-btn.active { background: rgba(196, 87, 10, 0.12); color: var(--accent); }
+  .tool-btn.active { background: var(--accent-tint-14); color: var(--accent); }
   .tool-divider { width: 1px; height: 16px; background: var(--card-border); margin: 0 4px; }
   .rich-host { min-height: 480px; padding: 16px 22px; overflow-y: auto; }
 
@@ -708,17 +708,17 @@
   }
   .status-left, .status-right { display: flex; align-items: center; gap: 12px; }
   .status-saving { color: var(--accent); }
-  .status-saved { color: #4a9; }
-  .status-error { color: #c44; }
+  .status-saved { color: var(--success); }
+  .status-error { color: var(--error); }
 
   .readability {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
     padding: 8px 12px; border-top: 1px solid var(--card-border);
     font-family: var(--font-mono); font-size: 11px;
-    color: var(--text-secondary); background: rgba(255,255,255,0.02);
+    color: var(--text-secondary); background: var(--accent-tint-04);
   }
   .r-pill {
-    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: 999px;
+    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: var(--radius-pill);
     text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px;
   }
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
@@ -728,20 +728,20 @@
   /* Margin-only display: highlight the original (will be replaced) in the
      body, hide the proposed insertion entirely (it lives in the callout). */
   :global(.sg-remove) {
-    background: rgba(255, 217, 64, 0.45); /* warm marker-pen yellow */
+    background: var(--accent-tint-25); /* warm marker-pen highlight */
     text-decoration: none;
-    border-radius: 2px;
+    border-radius: var(--radius-sharp);
     padding: 0 1px;
     cursor: pointer;
-    transition: background 120ms ease;
+    transition: background 0.2s var(--ease-out);
   }
   :global(.sg-add) {
     display: none;
   }
   /* Active state — bumped highlight when the user clicks a callout. */
   :global(.sg-remove.sg-active) {
-    background: rgba(255, 184, 0, 0.85);
-    outline: 2px solid rgba(255, 184, 0, 1);
+    background: var(--accent-tint-35);
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
 </style>

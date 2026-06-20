@@ -166,16 +166,16 @@
   .wb-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .wb-head .pe-h1 { margin-bottom: 4px; }
   .wb-export { display: flex; gap: 7px; }
-  .ex { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 7px 11px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.6); border-radius: 7px; cursor: pointer; color: var(--ink); }
+  .ex { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 7px 11px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.6); border-radius: var(--radius-round); cursor: pointer; color: var(--ink); }
   .ex:hover { background: rgba(28,22,17,0.06); }
   .wb-hint { margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 80ch; }
   .wb-hint b { color: var(--ink); }
-  .card { border: 1px solid rgba(28,22,17,0.12); background: rgba(255,255,255,0.4); border-radius: 12px; padding: 15px 17px; margin-bottom: 14px; }
+  .card { border: 1px solid rgba(28,22,17,0.12); background: rgba(255,255,255,0.4); border-radius: var(--radius-round); padding: 15px 17px; margin-bottom: 14px; }
   .card-h { margin: 0 0 8px; font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); }
   .card-sub { margin: -4px 0 10px; font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.6); }
   .cols { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 14px; align-items: start; }
   .rightcol { display: flex; flex-direction: column; }
   @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } }
   .wb-up { margin: 6px 0 0; font-size: 12.5px; color: rgba(28,22,17,0.6); }
-  .wb-up a { color: #2f6f97; }
+  .wb-up a { color: var(--accent-ink); }
 </style>

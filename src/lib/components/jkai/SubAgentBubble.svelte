@@ -130,7 +130,7 @@
     display: inline-block;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: currentColor;
     animation: hb-pulse 1.4s ease-in-out infinite;
   }

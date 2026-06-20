@@ -32,7 +32,7 @@
       {#each data.entities as entity}
         <a
           href="/jkai/intel/entities/{entity.id}"
-          class="rounded-lg p-4 hover:opacity-80 transition border"
+          class="rounded-[var(--radius-round)] p-4 hover:opacity-80 transition border"
           style="background: var(--card-bg); border-color: var(--card-border);"
         >
           <div class="flex items-center gap-3 mb-2">
@@ -42,7 +42,7 @@
               <div class="text-xs" style="color: var(--text-ghost);">{entity.typeName}</div>
             </div>
             {#if !entity.confirmed}
-              <span class="ml-auto text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">unconfirmed</span>
+              <span class="ml-auto text-xs px-2 py-0.5 rounded" style="background: var(--warn-bg); color: var(--warn);">unconfirmed</span>
             {/if}
           </div>
           {#if entity.summary}

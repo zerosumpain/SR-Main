@@ -34,11 +34,11 @@
   .grp-h { margin: 0 0 2px; font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; color: var(--ink); }
   .grp-sub { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 70ch; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .fc { border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid #b4632e; border-radius: 9px; background: rgba(255,255,255,0.45); padding: 12px 14px; }
-  .fc.gov { border-top-color: #2f6155; }
+  .fc { border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid #b4632e; border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; }
+  .fc.gov { border-top-color: var(--accent-ink); }
   .fc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .fc-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 15.5px; font-weight: 600; color: var(--ink); }
-  .fc-src { color: #2f6f97; text-decoration: none; font-size: 13px; }
+  .fc-src { color: var(--accent-ink); text-decoration: none; font-size: 13px; }
   .fc-sum { margin: 6px 0 8px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76); }
   .fc-el { margin: 0; padding-left: 16px; }
   .fc-el li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.66); margin-bottom: 2px; }

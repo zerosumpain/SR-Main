@@ -196,8 +196,8 @@
     z-index: 0;
     isolation: isolate;
     margin: 0.5rem 0;
-    border: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
-    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
     overflow: hidden;
     max-width: 100%;
   }
@@ -239,8 +239,8 @@
   figcaption {
     padding: 0.4rem 0.75rem;
     font-size: 0.8rem;
-    color: rgb(var(--muted-fg-rgb, 100 100 100));
-    border-top: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
+    color: var(--text-muted);
+    border-top: 1px solid var(--card-border);
   }
   .map-artifact.fullscreen figcaption {
     position: absolute;
@@ -248,10 +248,10 @@
     left: 0;
     right: 0;
     background: rgba(255,255,255,0.95);
-    border-top: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
+    border-top: 1px solid var(--card-border);
   }
   .error {
-    color: #b00;
+    color: var(--error);
     padding: 0.5rem;
     font-size: 0.85rem;
     margin: 0;

@@ -45,7 +45,7 @@
   .sb-num .v { font-family: var(--font-display); font-size: 30px; line-height: 1; }
   .sb-num .band { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; }
   .sb-track { height: 5px; background: var(--surface-overlay); }
-  .sb-fill { height: 100%; transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+  .sb-fill { height: 100%; transition: width 0.2s var(--ease-out); }
   .sb-items { list-style: none; margin: 0; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 7px; }
   .sb-items li { display: grid; grid-template-columns: 16px 1fr; gap: 2px 8px; align-items: start; }
   .sb-items .dot { grid-row: 1 / span 2; font-size: 12px; color: var(--text-ghost); }

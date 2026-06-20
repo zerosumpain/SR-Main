@@ -50,5 +50,5 @@
 <style>
   .push-opt-in { padding: 0.75rem; margin: 0.5rem; }
   .row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
-  .error { color: #b00; font: 0.75rem 'JetBrains Mono', monospace; }
+  .error { color: var(--error); font: 0.75rem 'JetBrains Mono', monospace; }
 </style>

@@ -18,7 +18,7 @@
   .h-narrative {
     border: 2px solid var(--card-border);
     padding: 22px 26px;
-    background: rgba(26, 16, 8, 0.04);
+    background: var(--bg-section);
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 20px;

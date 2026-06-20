@@ -1103,11 +1103,11 @@
   // the composer and sends immediately — a one-tap way to discover what jkai
   // can do instead of staring at a blank thread.
   const EXAMPLE_PROMPTS = [
-    { icon: '🏠', label: 'Check the house', text: 'Give me a quick status of my home — is everything secure, and is anything off or needing attention?' },
-    { icon: '💓', label: "Today's health", text: 'Summarise my health data for today — sleep, recovery and strain.' },
-    { icon: '⚡', label: "What's running?", text: 'What workflows and scheduled tasks do I have running right now?' },
-    { icon: '✨', label: 'What can you do?', text: 'What can you help me with? Give me a short tour of your capabilities.' },
-  ];
+    { icon: 'home', label: 'Check the house', text: 'Give me a quick status of my home — is everything secure, and is anything off or needing attention?' },
+    { icon: 'health', label: "Today's health", text: 'Summarise my health data for today — sleep, recovery and strain.' },
+    { icon: 'bolt', label: "What's running?", text: 'What workflows and scheduled tasks do I have running right now?' },
+    { icon: 'spark', label: 'What can you do?', text: 'What can you help me with? Give me a short tour of your capabilities.' },
+  ] as const;
   function usePrompt(text: string) {
     input = text;
     void send();
@@ -1566,7 +1566,17 @@
           <div class="hero-chips">
             {#each EXAMPLE_PROMPTS as p (p.label)}
               <button type="button" class="hero-chip" onclick={() => usePrompt(p.text)}>
-                <span class="hero-chip-icon" aria-hidden="true">{p.icon}</span>
+                <span class="hero-chip-icon" aria-hidden="true">
+                  {#if p.icon === 'home'}
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9 10 3l7 6" /><path d="M5 8.5V16h10V8.5" /><path d="M8.5 16v-4h3v4" /></svg>
+                  {:else if p.icon === 'health'}
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 16.5S3 12 3 7.5A3.5 3.5 0 0 1 10 6a3.5 3.5 0 0 1 7 1.5C17 12 10 16.5 10 16.5z" /><path d="M3.5 10h3l1.5-3 2 5 1.5-2h5" /></svg>
+                  {:else if p.icon === 'bolt'}
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 2 4 11h5l-1 7 7-9h-5z" /></svg>
+                  {:else}
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2.5 11.5 8 17 9.5 11.5 11 10 16.5 8.5 11 3 9.5 8.5 8z" /></svg>
+                  {/if}
+                </span>
                 {p.label}
               </button>
             {/each}
@@ -1622,7 +1632,9 @@
                 {#if pendingApproval}
                   <div class="approval-card">
                     <div class="approval-head">
-                      <span aria-hidden="true">⚠️</span>
+                      <span aria-hidden="true">
+                        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3 18 16.5H2z" /><path d="M10 8v3.5" /><circle cx="10" cy="14" r="0.4" fill="currentColor" stroke="none" /></svg>
+                      </span>
                       <span>Dangerous command requires approval</span>
                     </div>
                     <pre class="approval-cmd">{pendingApproval.command}</pre>
@@ -1942,7 +1954,7 @@
       ondrop={onDrop}
     >
       {#if dragOver}
-        <div class="absolute inset-0 z-10 border-2 border-dashed rounded flex items-center justify-center pointer-events-none" style="border-color: var(--accent, #3498db); background: rgba(0,0,0,0.3); color: white;">
+        <div class="absolute inset-0 z-10 border-2 border-dashed rounded flex items-center justify-center pointer-events-none" style="border-color: var(--accent); background: rgba(0,0,0,0.3); color: white;">
           Drop files to attach
         </div>
       {/if}
@@ -2011,7 +2023,7 @@
   {/if}
 
   {#if toast}
-    <div class="fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded text-sm z-50" style="background: #c0392b; color: white;">
+    <div class="fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded text-sm z-50" style="background: var(--error); color: white;">
       {toast}
     </div>
   {/if}
@@ -2030,10 +2042,9 @@
     left: 0;
     right: 0;
     margin-bottom: 0.5rem;
-    background: var(--card-bg);
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border-radius: var(--radius-round);
     overflow: hidden;
     z-index: 20;
   }
@@ -2048,7 +2059,7 @@
     border: none;
     cursor: pointer;
   }
-  .cmd-row.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
+  .cmd-row.active { background: var(--accent-tint-08); }
   .cmd-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); flex-shrink: 0; }
   .cmd-hint { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2063,14 +2074,14 @@
     font-size: 11px;
     color: var(--text-secondary);
     padding: 0.2rem 0.5rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
     border: 1px solid transparent;
     background: transparent;
   }
   .model-btn { cursor: pointer; border-color: var(--card-border); }
   .model-btn:hover:not(:disabled) { color: var(--text-primary); }
   .model-btn:disabled { opacity: 0.5; cursor: default; }
-  .model-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .model-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--accent); flex-shrink: 0; }
   .model-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-caret { opacity: 0.6; flex-shrink: 0; }
   .model-backdrop { position: fixed; inset: 0; z-index: 25; }
@@ -2080,10 +2091,9 @@
     right: 0;
     margin-top: 0.35rem;
     min-width: 12rem;
-    background: var(--card-bg);
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border-radius: var(--radius-round);
     overflow: hidden;
     z-index: 26;
   }
@@ -2100,7 +2110,7 @@
     cursor: pointer;
   }
   .model-opt:hover { background: var(--bg-section); }
-  .model-opt.active { background: var(--accent-tint-10, rgba(52, 152, 219, 0.12)); }
+  .model-opt.active { background: var(--accent-tint-08); }
   .model-opt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .model-opt-provider { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
   .skill-glyph { font-size: 11px; color: var(--accent); flex-shrink: 0; line-height: 1; }
@@ -2109,8 +2119,8 @@
   .approval-card {
     margin-top: 8px;
     padding: 10px 12px;
-    border: 1px solid var(--danger, #b54242);
-    border-radius: 6px;
+    border: 1px solid var(--error);
+    border-radius: var(--radius-round);
     background: var(--card-bg);
   }
   .approval-head {
@@ -2121,7 +2131,7 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--danger, #b54242);
+    color: var(--error);
     margin-bottom: 6px;
   }
   .approval-cmd {
@@ -2180,7 +2190,7 @@
     font-size: 12px;
     padding: 8px 14px;
     border: 1px solid var(--card-border);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
@@ -2210,7 +2220,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 2px 8px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     line-height: 1.4;
   }
   .src-tag-fu {
@@ -2218,8 +2228,8 @@
     background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
   .src-tag-wa {
-    color: #1c8c4e;
-    background: rgba(37, 211, 102, 0.15);
+    color: var(--wa-green);
+    background: color-mix(in srgb, var(--wa-green) 15%, transparent);
   }
   .src-tag-glyph { font-size: 10px; line-height: 1; }
 
@@ -2228,7 +2238,7 @@
     margin: 4px 0;
     padding: 0;
     border: 1px solid var(--card-border);
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     background: color-mix(in srgb, var(--accent) 3%, transparent);
     font-family: var(--font-mono);
     font-size: 11px;
@@ -2344,7 +2354,7 @@
     padding: 7px 9px;
     background: color-mix(in srgb, var(--accent) 5%, var(--bg-section));
     border: 1px solid var(--card-border);
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     overflow-x: auto;
     font-size: 11px;
     line-height: 1.5;
@@ -2387,7 +2397,7 @@
   .heartbeat-line .hb-dot {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--accent);
     animation: hb-pulse 1.4s ease-in-out infinite;
   }
@@ -2399,21 +2409,21 @@
     font-size: 10px;
   }
   .heartbeat-line .hb-summary { flex: 1; }
-  .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success, #2a9d4a); }
+  .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success); }
   .heartbeat-line[data-phase='waiting_llm'] .hb-dot { background: var(--accent); }
   .heartbeat-line[data-phase='subagent'] .hb-dot { background: color-mix(in srgb, var(--accent) 60%, white); }
   .heartbeat-line .hb-countdown.stuck {
     opacity: 1;
-    color: var(--status-error, #c0392b);
+    color: var(--status-error);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
   .heartbeat-line[data-stall='stuck'] {
-    background: color-mix(in srgb, var(--status-error, #c0392b) 10%, transparent);
+    background: color-mix(in srgb, var(--status-error) 10%, transparent);
   }
   .heartbeat-line[data-stall='stuck'] .hb-dot {
-    background: var(--status-error, #c0392b);
+    background: var(--status-error);
     animation: hb-pulse 0.6s ease-in-out infinite;
   }
   .heartbeat-line .hb-cancel {
@@ -2423,14 +2433,14 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    background: var(--status-error, #c0392b);
+    background: var(--status-error);
     color: white;
     border: none;
     border-radius: 2px;
     cursor: pointer;
   }
   .heartbeat-line .hb-cancel:hover {
-    background: color-mix(in srgb, var(--status-error, #c0392b) 80%, black);
+    background: color-mix(in srgb, var(--status-error) 80%, black);
   }
   .conn-warning {
     display: flex;
@@ -2439,15 +2449,15 @@
     padding: 6px 10px;
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--status-error, #c0392b);
-    background: color-mix(in srgb, var(--status-error, #c0392b) 6%, transparent);
+    color: var(--status-error);
+    background: color-mix(in srgb, var(--status-error) 6%, transparent);
     border-bottom: 1px solid var(--card-border);
   }
   .conn-warning .hb-dot.warn {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
-    background: var(--status-error, #c0392b);
+    border-radius: var(--radius-pill);
+    background: var(--status-error);
     animation: hb-pulse 1.0s ease-in-out infinite;
   }
   @keyframes hb-pulse {
@@ -2465,9 +2475,9 @@
   }
   .step-card {
     padding: 6px 10px;
-    background: rgba(26, 16, 8, 0.04);
+    background: var(--bg-section);
     border: 1px solid var(--card-border);
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     transition: border-color 100ms ease;
   }
   .step-card[data-status="error"] {
@@ -2496,7 +2506,7 @@
     display: inline-block;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--accent);
     animation: hb-pulse 1.4s ease-in-out infinite;
   }
@@ -2535,13 +2545,13 @@
   .subagent { font-size: 11px; }
   .sa-hdr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .sa-badge { font-size: 10px; flex-shrink: 0; color: var(--text-muted); }
-  .sa-badge[data-status='completed'] { color: var(--status-success, #3ba55d); }
-  .sa-badge[data-status='error'], .sa-badge[data-status='failed'] { color: var(--status-error, #b54242); }
+  .sa-badge[data-status='completed'] { color: var(--status-success); }
+  .sa-badge[data-status='error'], .sa-badge[data-status='failed'] { color: var(--status-error); }
   .sa-title { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
   .sa-meta { font-size: 9px; color: var(--text-muted); }
   .sa-trace { margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 10px; }
-  .sa-tool { background: var(--bg-section); border-radius: 3px; padding: 0 4px; color: var(--text-secondary); }
-  .sa-tool[data-status='error'], .sa-tool[data-status='failed'] { color: var(--status-error, #b54242); }
+  .sa-tool { background: var(--bg-section); border-radius: var(--radius-sharp); padding: 0 4px; color: var(--text-secondary); }
+  .sa-tool[data-status='error'], .sa-tool[data-status='failed'] { color: var(--status-error); }
   .sa-arrow { color: var(--text-ghost, var(--text-muted)); }
   .sa-summary { margin-top: 4px; font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 9rem; overflow-y: auto; }
   .step-body-label {
@@ -2579,9 +2589,9 @@
   .tool-activity-summary:hover { color: var(--text-secondary); }
   .ta-status {
     font-weight: 700;
-    color: var(--status-success, #2a9d4a);
+    color: var(--status-success);
   }
-  .ta-status[data-error="true"] { color: var(--status-error, #c0392b); }
+  .ta-status[data-error="true"] { color: var(--status-error); }
   .ta-count {
     font-weight: 500;
     color: var(--text-secondary);
@@ -2620,7 +2630,7 @@
   .working-dot {
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--accent);
     animation: hb-pulse 1.4s ease-in-out infinite;
   }

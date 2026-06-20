@@ -83,11 +83,11 @@
     color: var(--text-muted);
     text-decoration: none;
     padding: 0.35rem 0.6rem;
-    border-radius: 0.4rem;
+    border-radius: var(--radius-round);
   }
   .bp-link.active {
     color: var(--accent);
-    background: var(--accent-tint-08, rgba(196, 87, 10, 0.08));
+    background: var(--accent-tint-08);
   }
   .bp-main {
     flex: 1 1 auto;

@@ -366,7 +366,7 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.18em;
-    color: #2d7a3a;
+    color: var(--success);
   }
   .title-input {
     font-family: var(--font-display);

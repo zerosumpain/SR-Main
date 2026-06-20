@@ -234,7 +234,7 @@
     display: flex; align-items: center; gap: 8px;
     font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
   }
-  .lg-card { width: 14px; height: 10px; background: #faf6ee; border: 1px solid var(--card-border); box-shadow: 1px 1px 0 rgba(26,16,8,.1); }
+  .lg-card { width: 14px; height: 10px; background: #faf6ee; border: 1px solid var(--card-border); }
   .lg-chip { width: 14px; height: 10px; background: #1a1008; }
   .lg-unfiled { width: 14px; height: 10px; border: 1.5px dashed var(--accent); }
   .lg-edge { width: 14px; height: 0; border-top: 1.5px solid var(--text-muted); }

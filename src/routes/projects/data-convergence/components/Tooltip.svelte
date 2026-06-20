@@ -104,15 +104,14 @@
     position: fixed;
     z-index: 40;
     pointer-events: none;
-    background: var(--ink, #1c1611);
-    color: var(--paper, #f1ead6);
+    background: var(--ink);
+    color: var(--paper);
     border: 1px solid rgba(241, 234, 214, 0.15);
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     padding: 10px 12px;
     font-family: 'DM Sans', system-ui, sans-serif;
     font-size: 12px;
     line-height: 1.4;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
     min-width: 200px;
     max-width: 320px;
   }
@@ -125,13 +124,12 @@
   .dot {
     width: 11px;
     height: 11px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(255,255,255,0.12);
   }
   .dot.dotted {
     background: transparent;
     border: 1.5px dashed currentColor;
-    box-shadow: none;
   }
   .dot.spine {
     background: var(--paper);
@@ -139,7 +137,7 @@
   .ring {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     border: 2px solid;
     background: transparent;
   }
@@ -147,7 +145,7 @@
     display: inline-block;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     border: 1.5px solid;
     vertical-align: middle;
   }

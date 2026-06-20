@@ -311,7 +311,7 @@
 
   .leaf { display: flex; gap: 9px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 9px 11px; background: var(--surface-elevated); }
   .leaf.sel { border-color: var(--accent); background: var(--accent-tint-04); }
-  .use { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-size: 13px; cursor: pointer; line-height: 1; }
+  .use { flex-shrink: 0; width: 24px; height: 24px; border-radius: var(--radius-pill); border: 1.5px solid var(--card-border); background: transparent; color: var(--text-muted); font-size: 13px; cursor: pointer; line-height: 1; }
   .use.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .leaf-body { min-width: 0; flex: 1; }
   .leaf-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }

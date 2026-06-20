@@ -47,18 +47,18 @@
 {/if}
 
 <style>
-  .mp-btn { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.04em; color: #3a5f5f;
-    background: rgba(74,124,124,0.07); border: 1px solid rgba(74,124,124,0.3); border-radius: 10px; padding: 2px 8px; cursor: pointer; }
-  .mp-btn:hover, .mp-btn.on { background: rgba(74,124,124,0.16); border-color: #4a7c7c; }
+  .mp-btn { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.04em; color: var(--accent-ink);
+    background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); padding: 2px 8px; cursor: pointer; }
+  .mp-btn:hover, .mp-btn.on { background: var(--accent-ink-tint-22); border-color: var(--accent-ink); }
   .mp-scrim { position: fixed; inset: 0; z-index: 190; background: transparent; border: none; cursor: default; }
   .mp-panel { position: fixed; z-index: 200; width: min(380px, calc(100vw - 24px));
-    background: var(--paper, #f1ead6); border: 1px solid rgba(28,22,17,0.3); border-radius: 10px;
-    box-shadow: 0 12px 32px -8px rgba(28,22,17,0.35); padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
+    background: var(--paper); border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-round);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 7px; }
   .mp-row { display: grid; grid-template-columns: 76px 1fr; gap: 8px; align-items: baseline; }
   .mp-k { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
   .mp-v { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.8); }
   .mp-v.gap { color: #8a2d3a; }
-  .mp-v.better { color: #2f7d4f; }
+  .mp-v.better { color: var(--success); }
   .mp-eli { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.8); }
-  .mp-link { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; align-self: flex-start; }
+  .mp-link { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; align-self: flex-start; }
 </style>

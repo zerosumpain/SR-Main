@@ -213,7 +213,7 @@
     </div>
   {:else}
     <!-- Dark background intentionally kept for the graph canvas — looks better for visualisation -->
-    <div class="flex-1 bg-gray-950 rounded-lg overflow-hidden relative" bind:this={container}>
+    <div class="flex-1 bg-gray-950 rounded-[var(--radius-round)] overflow-hidden relative" bind:this={container}>
     </div>
     <div class="text-xs mt-2 text-center flex-shrink-0" style="color: var(--text-ghost);">
       {nodes.length} entities &middot; {edges.length} relationships &middot; Drag to rearrange &middot; Scroll to zoom &middot; Click to view
@@ -222,7 +222,7 @@
 
   {#if hoveredNode}
     <div
-      class="fixed rounded-lg px-3 py-2 text-sm pointer-events-none z-50 max-w-xs border"
+      class="fixed rounded-[var(--radius-round)] px-3 py-2 text-sm pointer-events-none z-50 max-w-xs border"
       style="left: {tooltipX + 12}px; top: {tooltipY - 10}px; background: var(--card-bg); border-color: var(--card-border);"
     >
       <div class="font-medium">{hoveredNode.icon} {hoveredNode.name}</div>

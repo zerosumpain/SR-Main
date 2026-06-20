@@ -70,8 +70,8 @@
   .chart-artifact {
     margin: 0.5rem 0;
     padding: 0.5rem;
-    border: 1px solid rgb(var(--border-rgb, 200 200 200) / 0.4);
-    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
     max-width: 100%;
     overflow: hidden;
   }
@@ -83,11 +83,11 @@
   figcaption {
     font-size: 0.8rem;
     margin-top: 0.4rem;
-    color: rgb(var(--muted-fg-rgb, 100 100 100));
+    color: var(--text-muted);
     text-align: center;
   }
   .error {
-    color: #b00;
+    color: var(--error);
     font-size: 0.85rem;
     margin: 0.5rem 0;
   }

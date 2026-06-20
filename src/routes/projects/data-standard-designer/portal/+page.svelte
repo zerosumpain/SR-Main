@@ -129,6 +129,10 @@
   }
 </script>
 
+{#snippet eyeIcon()}
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 10S4.5 4 10 4s8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6Z" /><circle cx="10" cy="10" r="2.4" /></svg>
+{/snippet}
+
 <div class="dsd-route wide">
   <span class="dsd-eyebrow">Standards registry</span>
   <h1 class="dsd-h1" style="font-size:clamp(26px,4vw,40px)">Find a standard before you build one.</h1>
@@ -217,7 +221,7 @@
             <div class="watch-row">
               {#each watches as w}
                 <button class="watch" class:on={watchFilter === w.id} onclick={() => (watchFilter = watchFilter === w.id ? 'all' : w.id)}>
-                  <span class="eye">👁</span><span class="w-body"><b>{w.label}</b><span class="w-meta">{w.count} match{w.count === 1 ? '' : 'es'}{w.latest ? ` · latest ${fmtDate(w.latest)}` : ''}</span></span>
+                  <span class="eye">{@render eyeIcon()}</span><span class="w-body"><b>{w.label}</b><span class="w-meta">{w.count} match{w.count === 1 ? '' : 'es'}{w.latest ? ` · latest ${fmtDate(w.latest)}` : ''}</span></span>
                 </button>
               {/each}
               {#if watchFilter !== 'all'}<button class="watch-clear" onclick={() => (watchFilter = 'all')}>clear ✕</button>{/if}
@@ -236,7 +240,7 @@
           <div class="entries">
             {#each filtered as e}
               <a class="entry" href={e.url} target="_blank" rel="noopener">
-                <div class="e-top"><span class="e-title">{e.title}</span><div class="e-tags">{#if e.watch}<span class="dsd-pill watch-pill">👁</span>{/if}{#if e.kind}<span class="dsd-pill">{e.kind}</span>{/if}{#if e.confidence === 'high'}<span class="dsd-pill ok">high</span>{/if}</div></div>
+                <div class="e-top"><span class="e-title">{e.title}</span><div class="e-tags">{#if e.watch}<span class="dsd-pill watch-pill">{@render eyeIcon()}</span>{/if}{#if e.kind}<span class="dsd-pill">{e.kind}</span>{/if}{#if e.confidence === 'high'}<span class="dsd-pill ok">high</span>{/if}</div></div>
                 {#if e.summary}<p class="e-sum">{e.summary}</p>{/if}
                 <div class="e-meta">{#if e.publisher}<span>{e.publisher}</span>{/if}{#if e.domain}<span class="dot-sep">{e.domain}</span>{/if}<span class="dot-sep">{SOURCE_LABEL[e.sourceKey] ?? e.sourceKey}</span><span class="dot-sep">{fmtDate(e.publishedAt)}</span></div>
               </a>
@@ -288,7 +292,7 @@
   .hcard.bad { border-color: var(--error-border); }
   .hc-top { display: flex; align-items: center; justify-content: space-between; }
   .hc-top b { font-size: 12.5px; color: var(--text-primary); }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-ghost); }
+  .dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--text-ghost); }
   .dot.ok { background: var(--success); } .dot.bad { background: var(--error); }
   .hc-stats { display: flex; gap: 12px; margin: 6px 0 3px; font-size: 11px; color: var(--text-muted); }
   .hc-stats b { color: var(--accent); font-family: var(--font-mono); }
@@ -298,12 +302,12 @@
   .watch-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .watch { display: inline-flex; align-items: center; gap: 8px; text-align: left; border: 1.5px solid var(--info-border); border-radius: var(--radius-round); padding: 8px 12px; background: var(--info-bg); cursor: pointer; }
   .watch.on { border-color: var(--info); box-shadow: 0 0 0 2px var(--info-bg); }
-  .watch .eye { font-size: 14px; }
+  .watch .eye { display: inline-flex; color: var(--info); }
   .watch .w-body { display: flex; flex-direction: column; }
   .watch b { font-size: 12.5px; color: var(--text-primary); }
   .watch .w-meta { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--info); }
   .watch-clear { background: none; border: none; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; cursor: pointer; }
-  :global(.dsd-pill.watch-pill) { background: var(--info-bg); color: var(--info); }
+  :global(.dsd-pill.watch-pill) { background: var(--info-bg); color: var(--info); display: inline-flex; align-items: center; }
 
   .rev { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 5px; }
   .count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: auto; }

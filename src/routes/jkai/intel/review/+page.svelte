@@ -35,7 +35,7 @@
       <h2 class="text-sm font-semibold mb-3" style="color: var(--accent);">New Entity Types</h2>
       <div class="space-y-2">
         {#each newTypes as type}
-          <div class="rounded-lg p-4 flex items-center justify-between border" style="background: var(--card-bg); border-color: var(--card-border);">
+          <div class="rounded-[var(--radius-round)] p-4 flex items-center justify-between border" style="background: var(--card-bg); border-color: var(--card-border);">
             <div class="flex items-center gap-3">
               <span class="text-xl">{type.icon}</span>
               <div>
@@ -43,14 +43,14 @@
                 <div class="text-xs" style="color: var(--text-ghost);">{type.description}</div>
               </div>
             </div>
-            <button onclick={() => deleteType(type.id)} class="text-xs px-3 py-1 border border-red-300 rounded text-red-700 hover:bg-red-50">Remove</button>
+            <button onclick={() => deleteType(type.id)} class="text-xs px-3 py-1 border rounded" style="border-color: var(--error-border); color: var(--error);">Remove</button>
           </div>
         {/each}
       </div>
     </div>
   {/if}
 
-  <h2 class="text-sm font-semibold text-amber-600 mb-3">Unconfirmed Entities ({entities.length})</h2>
+  <h2 class="text-sm font-semibold mb-3" style="color: var(--warn);">Unconfirmed Entities ({entities.length})</h2>
 
   {#if entities.length === 0}
     <div class="text-center py-12" style="color: var(--text-ghost);">
@@ -59,7 +59,7 @@
   {:else}
     <div class="space-y-2">
       {#each entities as entity}
-        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <span class="text-lg">{entity.typeIcon}</span>
@@ -75,8 +75,8 @@
               </div>
             </div>
             <div class="flex gap-2">
-              <button onclick={() => reviewEntity(entity.id, 'accept')} class="text-xs px-3 py-1 border border-emerald-400 rounded text-emerald-700 hover:bg-emerald-50">Confirm</button>
-              <button onclick={() => reviewEntity(entity.id, 'reject')} class="text-xs px-3 py-1 border border-red-300 rounded text-red-700 hover:bg-red-50">Reject</button>
+              <button onclick={() => reviewEntity(entity.id, 'accept')} class="text-xs px-3 py-1 border rounded" style="border-color: var(--success-border); color: var(--success);">Confirm</button>
+              <button onclick={() => reviewEntity(entity.id, 'reject')} class="text-xs px-3 py-1 border rounded" style="border-color: var(--error-border); color: var(--error);">Reject</button>
             </div>
           </div>
         </div>

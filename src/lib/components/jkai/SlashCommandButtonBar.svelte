@@ -96,7 +96,7 @@
         // The action that proceeds with the dangerous command. Marked as a
         // caution (red outline) and deliberately NOT filled, so it can't
         // out-weigh the safe primary action above.
-        return 'background: transparent; color: var(--danger, #b54242); border: 1px solid var(--danger, #b54242);';
+        return 'background: transparent; color: var(--error); border: 1px solid var(--error);';
       case 'subtle':
         return 'background: transparent; color: var(--text-secondary); border: 1px solid var(--card-border);';
       default:
@@ -145,7 +145,7 @@
   }
   .slash-btn {
     padding: 4px 10px;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     border: none;
     font-family: var(--font-mono);
     font-size: 11px;

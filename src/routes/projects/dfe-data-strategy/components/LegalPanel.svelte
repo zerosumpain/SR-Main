@@ -28,8 +28,8 @@
   .lp-note { margin: 0 0 2px; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.6); }
   .lp-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .lp-layer { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.55); width: 100%; }
-  .lp-item { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; border: 1px solid rgba(47,111,151,0.35); background: rgba(47,111,151,0.06); border-radius: 6px; text-decoration: none; }
-  .lp-item:hover { background: rgba(47,111,151,0.14); }
-  .li-name { font-size: 11.5px; font-weight: 600; color: #2f6f97; }
+  .lp-item { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; border: 1px solid var(--accent-ink-tint-35); background: var(--accent-ink-tint-06); border-radius: var(--radius-round); text-decoration: none; }
+  .lp-item:hover { background: var(--accent-ink-tint-12); }
+  .li-name { font-size: 11.5px; font-weight: 600; color: var(--accent-ink); }
   .li-cite { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.45); }
 </style>

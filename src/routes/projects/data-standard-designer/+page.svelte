@@ -72,7 +72,7 @@
   </div>
 
   <p class="tools-line">
-    In the <b>Tools</b> menu: <a href={`${base}/portal`}>↻ Registry — find existing standards</a> · <a href={`${base}/validate`}>🧪 Test data</a> · <a href={`${base}/legal`}>⚖ Legal basis</a>. See also <a href={`${base}/method`}>About &amp; method</a>. You can also describe a dataset in plain English on the Brief step and let AI draft a first pass.
+    In the <b>Tools</b> menu: <a href={`${base}/portal`}>↻ Registry — find existing standards</a> · <a class="tool-link" href={`${base}/validate`}><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5h4M9 2.5v5l-4 7.5a1.6 1.6 0 0 0 1.4 2.4h7.2a1.6 1.6 0 0 0 1.4-2.4l-4-7.5v-5" /><line x1="6.6" y1="12.5" x2="13.4" y2="12.5" /></svg> Test data</a> · <a href={`${base}/legal`}>⚖ Legal basis</a>. See also <a href={`${base}/method`}>About &amp; method</a>. You can also describe a dataset in plain English on the Brief step and let AI draft a first pass.
   </p>
 
   <h2 class="dsd-h2">Start from a worked example</h2>
@@ -117,6 +117,8 @@
 
   .tools-line { font-size: 13px; line-height: 1.7; color: var(--text-secondary); max-width: 80ch; margin: 4px 0 8px; }
   .tools-line a { color: var(--accent); white-space: nowrap; }
+  .tools-line a.tool-link { display: inline-flex; align-items: center; gap: 4px; }
+  .tools-line a.tool-link svg { vertical-align: middle; }
   .tools-line a:hover { border-bottom: 1px solid currentColor; }
 
   @media (max-width: 700px) { .modes { grid-template-columns: 1fr; } }

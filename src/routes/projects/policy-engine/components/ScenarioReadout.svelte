@@ -47,17 +47,17 @@
 </div>
 
 <style>
-  .readout { border: 1px solid rgba(28,22,17,0.12); border-radius: 8px; background: rgba(255,255,255,0.34); padding: 8px 12px; }
+  .readout { border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.34); padding: 8px 12px; }
   .ro-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-  .ro-scn { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink, #1c1611); }
+  .ro-scn { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); }
   .ro-yr { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
   .ro-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
   .ro-cell { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px; border-left: 2px solid rgba(28,22,17,0.12); cursor: help; }
   .ro-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
-  .ro-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; line-height: 1.05; color: var(--ink, #1c1611); }
+  .ro-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; line-height: 1.05; color: var(--ink); }
   .ro-val small { font-size: 10px; font-weight: 500; color: rgba(28,22,17,0.5); margin-left: 1px; }
   .ro-delta { font-family: 'JetBrains Mono', monospace; font-size: 9px; }
-  .ro-delta.good { color: #2f7d4f; }
-  .ro-delta.bad { color: #b1455e; }
+  .ro-delta.good { color: var(--success); }
+  .ro-delta.bad { color: var(--error); }
   .ro-delta.neutral { color: rgba(28,22,17,0.45); }
 </style>

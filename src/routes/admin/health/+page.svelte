@@ -638,8 +638,8 @@
   .row-err {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: #c44;
-    background: rgba(196, 68, 68, 0.05);
+    color: var(--error);
+    background: var(--error-bg);
   }
 
   .ep-list {
@@ -702,7 +702,7 @@
     color: var(--accent);
   }
   .nm-link-btn.danger {
-    color: #c44;
+    color: var(--error);
   }
 
   @media (max-width: 720px) {

@@ -45,5 +45,5 @@
   .viz-head { max-width: 80ch; margin-bottom: 12px; }
   .viz-head .pe-h2 { margin-bottom: 4px; }
   .foot-link { margin: 22px 0 0; font-size: 13px; color: rgba(28,22,17,0.65); }
-  .foot-link a { color: #2f6f97; }
+  .foot-link a { color: var(--accent-ink); }
 </style>

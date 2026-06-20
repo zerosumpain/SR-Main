@@ -503,10 +503,10 @@
   .err-line {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: #c44;
+    color: var(--error);
     padding: 6px 8px;
-    background: rgba(196, 68, 68, 0.08);
-    border-left: 2px solid #c44;
+    background: var(--error-bg);
+    border-left: 2px solid var(--error);
   }
   .form-actions {
     display: flex;
@@ -678,8 +678,8 @@
     background: var(--text-ghost);
     display: inline-block;
   }
-  .status-dot[data-status='completed'] { background: #3a8a56; }
-  .status-dot[data-status='failed'] { background: #c44; }
+  .status-dot[data-status='completed'] { background: var(--success); }
+  .status-dot[data-status='failed'] { background: var(--error); }
   .status-dot[data-status='running'] { background: var(--accent); }
   .status-dot[data-status='pending'] { background: var(--text-muted); }
 
@@ -697,8 +697,8 @@
     text-decoration: none;
   }
   .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
-  .row-link.danger { color: #c44; }
-  .row-link.danger:hover { color: #a33; }
+  .row-link.danger { color: var(--error); }
+  .row-link.danger:hover { color: var(--error-hover); }
   .card-del {
     position: absolute;
     top: 0.75rem;

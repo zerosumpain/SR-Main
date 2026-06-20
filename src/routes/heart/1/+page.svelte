@@ -120,7 +120,7 @@
 
   .cycle-bar {
     position: relative; width: 280px; height: 6px;
-    background: rgba(26, 16, 8, 0.08); border-radius: 3px; overflow: hidden;
+    background: var(--divider); border-radius: var(--radius-sharp); overflow: hidden;
     pointer-events: auto;
   }
   .cycle-fill {
@@ -129,7 +129,7 @@
     transition: width 0.05s linear;
   }
   .cycle-bar .seg {
-    position: absolute; top: 0; bottom: 0; border-right: 1px solid rgba(26, 16, 8, 0.15);
+    position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--card-border);
   }
   .seg.s1 { left: 0;     width: 10%; }
   .seg.s2 { left: 10%;   width: 5%;  }
@@ -139,7 +139,7 @@
   .seg.s6 { left: 70%;   width: 30%; border-right: none; }
 
   .controls {
-    border-top: 2px solid rgba(26, 16, 8, 0.08);
+    border-top: 2px solid var(--divider);
     padding: 1.5rem 2rem 2.5rem;
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 2rem; row-gap: 1rem;
     align-items: center; background: var(--bg);
@@ -155,7 +155,7 @@
   .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; grid-column: 1 / -1; }
   .presets button {
     background: transparent; border: 1px solid var(--card-border); color: var(--text-primary);
-    padding: 0.35rem 0.75rem; border-radius: 4px; font-family: var(--font-mono);
+    padding: 0.35rem 0.75rem; border-radius: var(--radius-round); font-family: var(--font-mono);
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
   }

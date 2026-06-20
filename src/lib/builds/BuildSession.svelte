@@ -429,8 +429,7 @@
     flex: 0 0 auto;
   }
   .bs-preview.ready .bs-dot {
-    background: var(--color-emerald, #10b981);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-emerald, #10b981) 25%, transparent);
+    background: var(--success);
   }
   .bs-preview.building .bs-dot {
     background: var(--accent);

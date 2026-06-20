@@ -46,8 +46,7 @@
   .bp-legend {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 0.5rem;
-    box-shadow: 0 2px 10px rgba(26, 16, 8, 0.18);
+    border-radius: var(--radius-round);
     overflow: hidden;
     width: max-content;
     max-width: min(92vw, 30rem);

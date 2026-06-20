@@ -259,8 +259,8 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: var(--bg-2, #1a1a1a);
-    border-radius: 6px;
+    background: var(--bg);
+    border-radius: var(--radius-round);
     overflow: hidden;
     position: relative;
   }
@@ -268,16 +268,15 @@
     position: fixed;
     inset: 20px;
     z-index: 900;
-    border: 1px solid var(--border, #2a2a2a);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--card-border);
   }
   .webpage-header {
     display: flex;
     align-items: center;
     gap: 4px;
     padding: 2px 6px;
-    background: var(--bg-3, #252525);
-    border-bottom: 1px solid var(--border, #2a2a2a);
+    background: var(--bg-section);
+    border-bottom: 1px solid var(--card-border);
     font-size: 12px;
     flex: 0 0 auto;
   }
@@ -285,7 +284,7 @@
     flex: 1;
     background: transparent;
     border: none;
-    color: var(--fg, #e0e0e0);
+    color: var(--text-primary);
     font: inherit;
     font-size: 12px;
     outline: none;
@@ -294,30 +293,30 @@
   .webpage-btn {
     background: transparent;
     border: none;
-    color: var(--fg-2, #a0a0a0);
+    color: var(--text-muted);
     cursor: pointer;
     padding: 2px 6px;
     font: inherit;
     font-size: 12px;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     text-decoration: none;
     display: inline-flex;
     align-items: center;
   }
   .webpage-btn:hover:not(:disabled) {
-    background: var(--bg-4, #2e2e2e);
-    color: var(--fg, #e0e0e0);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
   .webpage-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }
   .webpage-badge {
-    background: var(--accent-dim, #3a5074);
-    color: var(--fg, #e0e0e0);
+    background: var(--accent-ink);
+    color: #fff;
     font-size: 10px;
     padding: 1px 6px;
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
     margin-left: 4px;
   }
   .webpage-viewport {
@@ -334,7 +333,7 @@
   }
   .webpage-empty {
     padding: 24px;
-    color: var(--fg-2, #a0a0a0);
+    color: var(--text-muted);
     text-align: center;
     font-size: 12px;
   }
@@ -342,11 +341,11 @@
     position: absolute;
     bottom: 4px;
     right: 4px;
-    background: var(--bg-3, #252525);
-    color: var(--fg-2, #a0a0a0);
+    background: var(--bg-section);
+    color: var(--text-muted);
     padding: 2px 6px;
     font-size: 11px;
-    border-radius: 3px;
+    border-radius: var(--radius-sharp);
     pointer-events: none;
   }
 </style>

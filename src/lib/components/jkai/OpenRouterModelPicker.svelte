@@ -263,10 +263,9 @@
     flex-direction: column;
     /* Opaque surface — the shared --card-bg token is a 7%-opacity tint meant
        to sit on the page, so it reads as transparent over the dark overlay. */
-    background: var(--surface-elevated, #e8dece);
+    background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    border-radius: var(--radius-round);
     overflow: hidden;
   }
   .picker-head {
@@ -288,7 +287,7 @@
     font-size: 14px;
     line-height: 1;
     padding: 4px 6px;
-    border-radius: 6px;
+    border-radius: var(--radius-round);
   }
   .picker-close:hover { color: var(--text-primary); background: var(--surface-overlay); }
 
@@ -309,7 +308,7 @@
     margin-right: 2px;
   }
   .glm-pill {
-    border-radius: 9999px;
+    border-radius: var(--radius-pill);
     padding: 4px 12px;
     font-size: 12px;
     background: var(--surface-overlay);
@@ -328,7 +327,7 @@
     margin: 12px 16px 4px;
     padding: 9px 12px;
     font-size: 13px;
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
     color: var(--text-primary);
@@ -346,7 +345,7 @@
     overflow-x: hidden;
     margin: 0 16px;
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: var(--radius-round);
   }
   .picker-table {
     width: 100%;
@@ -364,7 +363,7 @@
     top: 0;
     z-index: 1;
     /* Opaque so scrolled rows don't show through the pinned header. */
-    background: var(--bg, #ede4d4);
+    background: var(--bg);
     color: var(--text-ghost);
     font-family: var(--font-mono);
     text-transform: uppercase;
@@ -434,7 +433,7 @@
   }
   .foot-pager { display: flex; gap: 8px; }
   .pager-btn {
-    border-radius: 6px;
+    border-radius: var(--radius-round);
     padding: 5px 12px;
     font-size: 12px;
     border: 1px solid var(--card-border);

@@ -148,30 +148,30 @@
   .sub { margin: 0.6rem 0 0; font-size: 0.92rem; line-height: 1.45; color: var(--text-secondary); max-width: 62ch; }
   .sub a, .empty a { color: var(--accent); text-decoration: none; }
   .sub a:hover { text-decoration: underline; }
-  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg, var(--bg-section)); padding: 0.1em 0.35em; border-radius: 3px; }
+  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: var(--radius-sharp); }
   .back-link { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
   .back-link:hover { text-decoration: underline; }
   .mono { font-family: var(--font-mono); }
 
-  .nm-sec { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: 1.1rem; }
+  .nm-sec { background: var(--card-bg); border: 1px solid var(--card-border); padding: 1rem 1.1rem; margin-bottom: 1.1rem; }
   .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.7rem; }
   .sr-label-tight { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
   .nm-sec-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 
-  .banner { font-size: 0.88rem; padding: 0.5rem 0.8rem; border-radius: 6px; margin: 0 0 1rem; }
-  .banner.ok { background: color-mix(in srgb, var(--status-success, #3ba55d) 14%, transparent); color: var(--status-success, #3ba55d); }
-  .banner.err { background: color-mix(in srgb, var(--status-error, #b54242) 14%, transparent); color: var(--status-error, #b54242); }
+  .banner { font-size: 0.88rem; padding: 0.5rem 0.8rem; border-radius: var(--radius-round); margin: 0 0 1rem; }
+  .banner.ok { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+  .banner.err { background: color-mix(in srgb, var(--error) 14%, transparent); color: var(--error); }
   .empty { font-size: 0.9rem; color: var(--text-secondary); }
 
   .new-job { display: flex; flex-direction: column; gap: 0.6rem; }
   .nj-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-end; }
-  .nm-text-input { background: var(--bg-section); border: 1px solid var(--card-border); border-radius: 6px; padding: 0.45rem 0.6rem; color: var(--text-primary); font-size: 0.9rem; font-family: inherit; }
+  .nm-text-input { background: var(--bg-section); border: 1px solid var(--card-border); padding: 0.45rem 0.6rem; color: var(--text-primary); font-size: 0.9rem; font-family: inherit; }
   .nm-text-input:focus { outline: none; border-color: var(--accent); }
   .grow { flex: 1; min-width: 16rem; }
   textarea.nm-text-input { width: 100%; resize: vertical; }
   .nj-lbl { display: flex; flex-direction: column; gap: 0.2rem; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
   .nj-repeat { width: 6rem; }
-  .nm-save-btn { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.45rem 0.9rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg, #fff); cursor: pointer; margin-left: auto; }
+  .nm-save-btn { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.45rem 0.9rem; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); cursor: pointer; margin-left: auto; }
   .nm-save-btn:disabled { opacity: 0.5; cursor: default; }
   .deliver-note { font-size: 11px; color: var(--text-muted); margin: 0.2rem 0 0; line-height: 1.4; }
 
@@ -181,17 +181,17 @@
   .job[data-enabled='false'] { opacity: 0.65; }
   .job-main { min-width: 0; flex: 1; }
   .job-name { font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem; }
-  .tag { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.1em 0.4em; border-radius: 3px; background: var(--bg-section); color: var(--text-muted); }
-  .tag.paused { color: var(--status-error, #b54242); }
+  .tag { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.1em 0.4em; border-radius: var(--radius-sharp); background: var(--bg-section); color: var(--text-muted); }
+  .tag.paused { color: var(--error); }
   .job-sub { font-size: 11px; color: var(--text-secondary); margin-top: 0.2rem; }
   .job-prompt { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.3rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
-  .job-meta { font-size: 10px; color: var(--text-ghost, var(--text-muted)); margin-top: 0.3rem; }
-  .job-err { color: var(--status-error, #b54242); margin-left: 0.5rem; }
+  .job-meta { font-size: 10px; color: var(--text-ghost); margin-top: 0.3rem; }
+  .job-err { color: var(--error); margin-left: 0.5rem; }
   .job-actions { display: flex; gap: 0.4rem; align-items: flex-start; flex-shrink: 0; }
   .job-actions form { margin: 0; }
   .row-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.25rem 0.55rem; border-radius: 4px; border: 1px solid var(--card-border); background: transparent; color: var(--text-secondary); cursor: pointer; }
   .row-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-muted); }
-  .row-btn.danger { color: var(--status-error, #b54242); border-color: color-mix(in srgb, var(--status-error, #b54242) 40%, transparent); }
+  .row-btn.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 40%, transparent); }
   .row-btn:disabled { opacity: 0.5; cursor: default; }
 
   @media (max-width: 640px) {

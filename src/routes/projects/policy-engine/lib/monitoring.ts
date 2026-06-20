@@ -109,7 +109,7 @@ export interface InfraRow {
 
 export const INFRA: InfraRow[] = [
   {
-    country: 'Estonia', flag: '🇪🇪', system: 'X-Road + EHIS + AI Leap',
+    country: 'Estonia', flag: 'EE', system: 'X-Road + EHIS + AI Leap',
     mechanism: 'Decentralised registers exchange data over X-Road on the once-only principle; the EHIS education register links 20+ state systems. Schools are only funded if EHIS data are complete and non-duplicated.',
     result: 'Funding-by-data discipline keeps records clean; X-Road credited with ~1,407 working-years saved a year. AI Leap (Sept 2025) adds AI tutoring across ~154 schools.',
     lesson: 'Tie data quality to money. England’s spine has no equivalent enforcement hook — “connected” data can still be stale.',
@@ -117,7 +117,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'isikukood', level: 'full' }, cross: { label: 'X-Road, 20+ registers', level: 'full' }, live: { label: 'EHIS, K→uni', level: 'full' }, gate: { label: 'State, once-only', level: 'full' } },
   },
   {
-    country: 'New Zealand', flag: '🇳🇿', system: 'Integrated Data Infrastructure (IDI)',
+    country: 'New Zealand', flag: 'NZ', system: 'Integrated Data Infrastructure (IDI)',
     mechanism: 'A de-identified whole-population spine (~10m ever-resident people) links education, health, benefits, justice, income and housing, gated by a public-good test and the Five Safes framework.',
     result: 'The international gold standard for cross-sector longitudinal policy analysis, including NEET and life-course research.',
     lesson: 'Linkage can be powerful AND privacy-respecting if access is gated rather than open — a model for governing the spine’s analytical use.',
@@ -125,7 +125,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'linked spine', level: 'full' }, cross: { label: 'whole-of-government', level: 'full' }, live: { label: 'research only', level: 'research' }, gate: { label: 'Five Safes', level: 'full' } },
   },
   {
-    country: 'Netherlands', flag: '🇳🇱', system: 'DUO / ROD + onderwijsnummer (= BSN)',
+    country: 'Netherlands', flag: 'NL', system: 'DUO / ROD + onderwijsnummer (= BSN)',
     mechanism: 'One lifelong learner number, equal to the national BSN, tracks a pupil across primary, secondary, vocational and higher education. Built originally to combat early school-leaving.',
     result: 'A single durable identifier underpins all funded education — the participation backbone England lacks.',
     lesson: 'A lifelong learner ID is the join key that makes longitudinal “did it work?” answerable. England’s nearest analogue is safeguarding-scoped and still in pilot.',
@@ -133,7 +133,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'onderwijsnummer', level: 'full' }, cross: { label: 'via BSN', level: 'partial' }, live: { label: 'ROD, all funded ed', level: 'full' }, gate: { label: 'DUO', level: 'full' } },
   },
   {
-    country: 'Denmark / Norway', flag: '🇩🇰', system: 'CPR / personnummer + statistics registers',
+    country: 'Denmark / Norway', flag: 'DK', system: 'CPR / personnummer + statistics registers',
     mechanism: 'A universal civic ID (since 1968) lets the national statistics office run whole-population education registers — Denmark’s from 1974/1981 — linkable to income, health and welfare; de-identified researcher access under GDPR.',
     result: 'Decades-deep, whole-population longitudinal education data linkable across domains via one civic number.',
     lesson: 'Time-depth compounds: an identifier introduced now yields its richest insight a generation later. The value of starting is that it starts the clock.',
@@ -141,7 +141,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'CPR (1968)', level: 'full' }, cross: { label: 'income/health/welfare', level: 'full' }, live: { label: 'registers from 1974', level: 'full' }, gate: { label: 'GDPR de-identified', level: 'full' } },
   },
   {
-    country: 'Singapore', flag: '🇸🇬', system: 'Student Learning Space + Singpass',
+    country: 'Singapore', flag: 'SG', system: 'Student Learning Space + Singpass',
     mechanism: 'A national learning-plus-analytics platform (2018) gives every student curriculum-aligned resources and teachers visibility into thinking; AI features include adaptive learning. Sign-in via the national ID stack.',
     result: '~500,000 users (up to 300,000 concurrent during COVID); adaptive learning live in Maths and Geography.',
     lesson: 'A single national platform doubles as a monitoring surface — but couples tightly to a national ID, so the surveillance/consent questions are front-loaded.',
@@ -149,7 +149,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'Singpass', level: 'full' }, cross: { label: 'platform-bound', level: 'partial' }, live: { label: 'SLS, ~500k users', level: 'full' }, gate: { label: 'national-ID coupled', level: 'partial' } },
   },
   {
-    country: 'Australia', flag: '🇦🇺', system: 'PLIDA + Unique Student Identifier',
+    country: 'Australia', flag: 'AU', system: 'PLIDA + Unique Student Identifier',
     mechanism: 'PLIDA combines health, education, payments, income and Census via a Person Linkage Spine that keeps keys separate (access via the ABS DataLab); the USI is a mandatory lifelong education ID across VET and higher ed.',
     result: 'A national research-linkage asset plus an authenticated training transcript and one number across all training and university.',
     lesson: 'Separation-of-keys — linkage without a single master file — is a privacy-by-design template for a spine: link for analysis without one all-seeing database.',
@@ -157,7 +157,7 @@ export const INFRA: InfraRow[] = [
     cells: { id: { label: 'USI', level: 'full' }, cross: { label: 'PLIDA, keys separate', level: 'full' }, live: { label: 'USI live / PLIDA research', level: 'partial' }, gate: { label: 'ABS DataLab', level: 'full' } },
   },
   {
-    country: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', system: 'Data spine + consistent identifier',
+    country: 'England', flag: 'ENG', system: 'Data spine + consistent identifier',
     mechanism: 'A connectivity/standards layer over datasets DfE already runs, plus a separate statutory cross-service identifier for safeguarding. Both overseen by the same new DG.',
     result: 'Announced (Bett, Jan 2026) and committed (White Paper, Feb 2026); the identifier is in law (Apr 2026). No architecture or delivery date published.',
     lesson: 'England is a relative latecomer — assembling, belatedly, the participation backbone its comparators have run for years.',

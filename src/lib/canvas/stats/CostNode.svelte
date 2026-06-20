@@ -165,7 +165,7 @@
     width: 100%; height: 100%;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     font: 11px / 1.4 var(--font-mono);
     color: var(--text-primary);
     overflow: hidden;

@@ -172,22 +172,21 @@
     max-height: 85vh;
     background: #000;
     color: #d8d8d8;
-    border: 2px solid #2d7d46;
+    border: 2px solid var(--success);
     display: flex;
     flex-direction: column;
     font-family: 'Menlo', 'Monaco', 'Consolas', 'Courier New', var(--font-mono), monospace;
-    box-shadow: 0 0 0 1px #2d7d46, 0 0 28px rgba(45, 125, 70, 0.35);
   }
   .think-hdr {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0.55rem 0.85rem;
-    border-bottom: 1px solid #2d7d46;
+    border-bottom: 1px solid var(--success);
     background: #0b0b0b;
   }
   .think-title {
-    color: #2d7d46;
+    color: var(--success);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     font-size: 11px;

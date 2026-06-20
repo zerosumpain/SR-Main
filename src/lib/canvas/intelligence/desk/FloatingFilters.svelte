@@ -147,7 +147,6 @@
     width: 200px;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     padding: 10px 12px;
     display: flex;
     flex-direction: column;
@@ -194,7 +193,7 @@
   .ff-swatch-src { background: var(--surface-elevated); border: 1px solid var(--card-border); }
   .ff-swatch-fact { background: var(--accent-tint-25); border: 1px solid var(--accent); }
   .ff-swatch-ent { background: var(--text-primary); }
-  .ff-swatch-chal { background: rgba(196, 68, 68, 0.18); border: 1px solid #c44; }
+  .ff-swatch-chal { background: var(--error-bg); border: 1px solid var(--error); }
   .ff-label { flex: 1; }
   .ff-count {
     font-family: var(--font-mono);
@@ -224,7 +223,6 @@
     background: var(--surface-elevated);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     cursor: pointer;
   }
   .ff-select:hover,
@@ -252,7 +250,6 @@
     background: var(--surface-elevated);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    box-shadow: 3px 4px 0 rgba(26, 16, 8, 0.1);
     cursor: pointer;
     text-align: left;
   }

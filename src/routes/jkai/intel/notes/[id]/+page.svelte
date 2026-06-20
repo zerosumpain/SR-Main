@@ -82,7 +82,7 @@
       <button
         onclick={deleteNote}
         disabled={deleting}
-        class="px-3 py-1 rounded text-xs border transition-colors hover:bg-red-50 hover:text-red-600 hover:border-red-300"
+        class="px-3 py-1 rounded text-xs border transition-colors nm-delete-btn"
         style="background: transparent; color: var(--text-secondary); border-color: var(--card-border);"
         aria-label="Delete note"
       >{deleting ? 'Deleting...' : 'Delete'}</button>
@@ -98,13 +98,13 @@
 
   <div class="grid grid-cols-3 gap-6">
     <div class="col-span-2 space-y-4">
-      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Content</h2>
         <pre class="text-sm whitespace-pre-wrap leading-relaxed">{data.note.processedContent ?? data.note.rawContent}</pre>
       </div>
 
       {#if data.note.processedContent && data.note.processedContent !== data.note.rawContent}
-        <details class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <details class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <summary class="text-xs uppercase cursor-pointer" style="color: var(--text-ghost);">Raw Input</summary>
           <pre class="text-sm whitespace-pre-wrap leading-relaxed mt-2">{data.note.rawContent}</pre>
         </details>
@@ -112,7 +112,7 @@
     </div>
 
     <div class="space-y-4">
-      <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Extracted Entities</h2>
         {#if data.entities.length === 0}
           <p class="text-sm" style="color: var(--text-ghost);">No entities extracted.</p>
@@ -131,11 +131,11 @@
       </div>
 
       {#if data.timelineEvents.length > 0}
-        <div class="rounded-lg p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Timeline Events</h2>
           {#each data.timelineEvents as event}
             <div class="py-1.5 text-sm">
-              <span class="text-amber-600">{event.date}</span>
+              <span style="color: var(--warn);">{event.date}</span>
               <span class="mx-1" style="color: var(--text-ghost);">&middot;</span>
               <span>{event.title}</span>
             </div>
@@ -145,3 +145,11 @@
     </div>
   </div>
 </div>
+
+<style>
+  .nm-delete-btn:hover {
+    background: var(--error-bg);
+    color: var(--error);
+    border-color: var(--error-border);
+  }
+</style>

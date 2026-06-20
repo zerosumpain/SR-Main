@@ -53,7 +53,7 @@
 </div>
 
 <style>
-  .tc { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: 12px; padding: 12px 14px; }
+  .tc { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 12px 14px; }
   /* keep annotation text legible on phones: scroll sideways rather than shrink */
   .tc-scroll { overflow-x: auto; }
   .tc svg { display: block; width: 100%; min-width: 560px; height: auto; }
@@ -64,7 +64,7 @@
   .zone-line { stroke: #b1455e; stroke-width: 1.3; stroke-dasharray: 5 3; opacity: 0.6; }
   .zone-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: #8a2d3a; letter-spacing: 0.04em; }
   .curve { fill: none; stroke: #566a8c; stroke-width: 2.6; }
-  .pt { fill: #566a8c; stroke: var(--paper, #f1ead6); stroke-width: 2; }
+  .pt { fill: #566a8c; stroke: var(--paper); stroke-width: 2; }
   .ann { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; fill: rgba(28,22,17,0.6); }
   .ann.strong { fill: #8a2d3a; font-weight: 600; }
   .tc-note { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: rgba(28,22,17,0.65); }

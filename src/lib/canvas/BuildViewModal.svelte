@@ -104,7 +104,6 @@
     padding: 6px 8px;
     border: 1px solid var(--text-primary, #1f1c18);
     background: var(--bg, #ede4d4);
-    box-shadow: 0 4px 18px color-mix(in srgb, #000 28%, transparent);
     z-index: 9001;
   }
   .bvm-id {

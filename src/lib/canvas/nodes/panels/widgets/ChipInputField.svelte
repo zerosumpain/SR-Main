@@ -201,7 +201,6 @@
     list-style: none;
     background: var(--bg);
     border: 1px solid var(--card-border);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
     max-height: 200px;
     overflow-y: auto;
   }

@@ -227,7 +227,7 @@
     font-size: 10px;
     color: var(--text-muted, #6b675f);
   }
-  .bsp-status.connected { color: var(--color-emerald, #10b981); }
+  .bsp-status.connected { color: var(--success); }
   .bsp-err {
     font-family: var(--font-mono);
     font-size: 10px;

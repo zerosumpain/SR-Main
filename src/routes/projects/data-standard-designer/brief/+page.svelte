@@ -307,7 +307,7 @@
   .ai-note { font-size: 11px; color: var(--text-muted); }
   .ai-error { font-size: 12px; color: var(--error); background: var(--error-bg); padding: 7px 10px; border-radius: var(--radius-sharp); margin: 8px 0 0; }
   .ex-wrap { position: relative; }
-  .ex-menu { position: absolute; left: 0; top: calc(100% + 6px); width: 280px; background: var(--surface-elevated); border: 2px solid var(--text-primary); box-shadow: var(--shadow-md); z-index: 20; display: flex; flex-direction: column; }
+  .ex-menu { position: absolute; left: 0; top: calc(100% + 6px); width: 280px; background: var(--surface-elevated); border: 2px solid var(--text-primary); z-index: 20; display: flex; flex-direction: column; }
   .ex-menu button { text-align: left; padding: 9px 12px; background: transparent; border: none; border-bottom: 1px solid var(--divider); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
   .ex-menu button:hover { background: var(--accent-tint-08); }
   .ex-menu b { font-size: 13px; color: var(--text-primary); }

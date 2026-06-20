@@ -135,7 +135,7 @@
     </p>
     <a
       href="/quickanswer"
-      class="inline-block mt-3 text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-lg"
+      class="inline-block mt-3 text-[13px] uppercase tracking-[0.2em] px-4 py-2 rounded-[var(--radius-round)]"
       style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--accent); font-family: var(--font-mono);"
     >
       Quick Answer &rarr;
@@ -145,7 +145,7 @@
   <!-- Error banner -->
   {#if error}
     <div
-      class="mb-6 p-4 rounded-lg text-sm"
+      class="mb-6 p-4 rounded-[var(--radius-round)] text-sm"
       style="background: var(--card-bg); border: 1px solid var(--card-border); color: #8b3a1a; font-family: var(--font-mono);"
     >
       {error}
@@ -164,14 +164,14 @@
       type="text"
       bind:value={topic}
       placeholder="Enter a research topic..."
-      class="w-full px-4 py-3 rounded-xl text-base"
+      class="w-full px-4 py-3 rounded-[var(--radius-round)] text-base"
       style="background: var(--card-bg); border: 2px solid var(--card-border); color: var(--text-primary); font-family: var(--font-body);"
     />
   </div>
 
   <!-- Goals section -->
   <div
-    class="mb-6 p-5 rounded-xl border"
+    class="mb-6 p-5 rounded-[var(--radius-round)] border"
     style="background: var(--card-bg); border-color: var(--card-border);"
   >
     <div class="flex items-center justify-between mb-3">
@@ -184,7 +184,7 @@
       <button
         onclick={suggestGoals}
         disabled={suggestingGoals || !topic.trim()}
-        class="text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        class="text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-[var(--radius-round)] transition-colors disabled:opacity-50"
         style="background: var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
       >
         {suggestingGoals ? 'Thinking...' : 'Suggest goals'}
@@ -197,7 +197,7 @@
           <input
             type="text"
             bind:value={goals[i]}
-            class="flex-1 px-3 py-2 rounded-lg text-sm"
+            class="flex-1 px-3 py-2 rounded-[var(--radius-round)] text-sm"
             style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
           />
           <button
@@ -213,7 +213,7 @@
 
     <button
       onclick={addGoal}
-      class="mt-3 text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg"
+      class="mt-3 text-[13px] uppercase tracking-[0.2em] px-3 py-1.5 rounded-[var(--radius-round)]"
       style="color: var(--text-muted); font-family: var(--font-mono);"
     >
       + Add goal
@@ -232,7 +232,7 @@
 
     {#if showAdvanced}
       <div
-        class="p-5 rounded-xl border space-y-5"
+        class="p-5 rounded-[var(--radius-round)] border space-y-5"
         style="background: var(--card-bg); border-color: var(--card-border);"
       >
         <!-- Time limit -->
@@ -244,7 +244,7 @@
             {#each [{ v: 15, l: '15 min' }, { v: 30, l: '30 min' }, { v: 60, l: '1 hour' }, { v: 120, l: '2 hours' }, { v: null, l: 'Run to completion' }] as opt}
               <button
                 onclick={() => (timeLimit = opt.v as number | null)}
-                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-[var(--radius-round)]"
                 style="font-family: var(--font-mono); background: {timeLimit === opt.v ? 'var(--accent)' : 'var(--bg)'}; color: {timeLimit === opt.v ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt.l}
@@ -277,7 +277,7 @@
             {#each ['low', 'medium', 'high'] as opt}
               <button
                 onclick={() => (diversityThreshold = opt as any)}
-                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-[var(--radius-round)] capitalize"
                 style="font-family: var(--font-mono); background: {diversityThreshold === opt ? 'var(--accent)' : 'var(--bg)'}; color: {diversityThreshold === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -295,7 +295,7 @@
             {#each ['shallow', 'standard', 'deep'] as opt}
               <button
                 onclick={() => (analysisDepth = opt as any)}
-                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-[var(--radius-round)] capitalize"
                 style="font-family: var(--font-mono); background: {analysisDepth === opt ? 'var(--accent)' : 'var(--bg)'}; color: {analysisDepth === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -313,7 +313,7 @@
             {#each ['gentle', 'standard', 'aggressive'] as opt}
               <button
                 onclick={() => (redTeamAggression = opt as any)}
-                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-lg capitalize"
+                class="text-[13px] uppercase tracking-[0.15em] px-3 py-1.5 rounded-[var(--radius-round)] capitalize"
                 style="font-family: var(--font-mono); background: {redTeamAggression === opt ? 'var(--accent)' : 'var(--bg)'}; color: {redTeamAggression === opt ? 'white' : 'var(--text-muted)'}; border: 1px solid var(--card-border);"
               >
                 {opt}
@@ -333,7 +333,7 @@
             min="50"
             max="1000"
             step="10"
-            class="w-24 px-3 py-2 rounded-lg text-sm"
+            class="w-24 px-3 py-2 rounded-[var(--radius-round)] text-sm"
             style="background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
           />
         </div>
@@ -346,7 +346,7 @@
     <button
       onclick={startResearch}
       disabled={starting || !topic.trim()}
-      class="w-full py-4 rounded-xl text-sm uppercase tracking-[0.2em] transition-colors disabled:opacity-50"
+      class="w-full py-4 rounded-[var(--radius-round)] text-sm uppercase tracking-[0.2em] transition-colors disabled:opacity-50"
       style="background: var(--accent); color: white; font-family: var(--font-mono);"
     >
       {starting ? 'Starting...' : 'Start Research'}
@@ -366,7 +366,7 @@
       <div class="space-y-3">
         {#each data.sessions as session}
           <div
-            class="p-4 rounded-xl border transition-colors"
+            class="p-4 rounded-[var(--radius-round)] border transition-colors"
             style="background: var(--card-bg); border-color: var(--card-border);"
           >
             <div class="flex items-start justify-between">

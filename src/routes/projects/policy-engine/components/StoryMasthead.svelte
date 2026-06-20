@@ -28,12 +28,12 @@
   .sm-kicker { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em;
     text-transform: uppercase; color: var(--ink-soft, rgba(28,22,17,0.62)); margin-bottom: 7px; }
   .sm-thesis { margin: 0 0 14px; max-width: 78ch; }
-  .sm-ask { border-left: 3px solid #4a7c7c; background: rgba(74,124,124,0.07); border-radius: 7px;
+  .sm-ask { border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-12); border-radius: var(--radius-round);
     padding: 10px 14px; max-width: 78ch; }
   .sm-ask-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #3a5f5f; margin-bottom: 6px; }
+    text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
   .sm-ask ul { margin: 0; padding-left: 18px; }
   .sm-ask li { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); margin-bottom: 3px; }
   .sm-ask-link { display: inline-block; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
-    color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+    color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
 </style>

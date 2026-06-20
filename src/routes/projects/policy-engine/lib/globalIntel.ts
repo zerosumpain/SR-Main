@@ -85,25 +85,25 @@ export interface SystemResponse {
 
 export const RESPONSES: SystemResponse[] = [
   {
-    flag: '🇩🇪', country: 'Germany', pattern: 'Institutionalise, then renew', colour: '#2f6f97',
+    flag: 'DE', country: 'Germany', pattern: 'Institutionalise, then renew', colour: '#2f6f97',
     story: 'The archetypal “PISA shock” (2001, below OECD average): the response was institutional — binding national standards (2003–04) and the IQB monitoring institute (2004), plus language support and full-day schooling. Germany improved to ~2012, then decayed to its lowest-ever scores in PISA 2022 — same diagnosis as 2001. The 2024 answer: the €20bn, ten-year Startchancen programme for ~4,000 disadvantaged schools, with an IEA evaluation built in from day one.',
     lesson: 'Reforms decay. The response function must be a permanent institution, not a one-off shock reaction — and Germany’s second response targets equity, not rankings.',
     url: 'https://www.bmbf.de/EN/Education/School/StartchancenProgramme/startchancenprogramme.html',
   },
   {
-    flag: '🇵🇱', country: 'Poland', pattern: 'Gains undone by politics', colour: '#b1455e',
+    flag: 'PL', country: 'Poland', pattern: 'Gains undone by politics', colour: '#b1455e',
     story: 'The 1999 reform (delayed tracking, the gimnazjum, national exams) took Poland from below-average to top-10 by PISA 2012. The 2016 government abolished the gimnazjum and restored earlier tracking; Poland’s PISA 2022 fall was roughly twice the OECD average in reading and maths, three times in science.',
     lesson: 'The cleanest natural experiment in benchmarked gains being reversed by political churn — the cautionary tale for every reform without cross-party settlement.',
     url: 'https://link.springer.com/chapter/10.1007/978-3-030-59031-4_7',
   },
   {
-    flag: '🇯🇵', country: 'Japan', pattern: 'Precise correction', colour: '#3f7d6e',
+    flag: 'JP', country: 'Japan', pattern: 'Precise correction', colour: '#3f7d6e',
     story: 'The yutori (“relaxed education”) curriculum collided with PISA 2003/06 falls; MEXT diagnosed precisely, restored content and hours, and built an annual national assessment (2007). Back to the global top by 2009 — and one of the few systems that ROSE in PISA 2022.',
     lesson: 'A system with institutional memory metabolises a bad result into a targeted correction rather than structural churn.',
     url: 'https://www.oecd.org/content/dam/oecd/en/publications/reports/2011/09/education-reform-in-japan_g17a200a/5kg58z7g95np-en.pdf',
   },
   {
-    flag: '🇪🇪', country: 'Estonia', pattern: 'Standing data governance', colour: '#9a7b1f',
+    flag: 'EE', country: 'Estonia', pattern: 'Standing data governance', colour: '#9a7b1f',
     story: 'Europe’s top performer with unusually small socio-economic gaps — and no famous “PISA response” at all. The distinctive feature is permanent infrastructure: the national education information system, e-school platforms, and a 2021–2035 strategy horizon.',
     lesson: 'The quiet exemplar: benchmarking as continuous instrumentation, not episodic panic.',
     url: 'https://www.oecd.org/content/dam/oecd/en/publications/reports/2021/11/enhancing-data-informed-strategic-governance-in-education-in-estonia_3f763a1b/11495e02-en.pdf',

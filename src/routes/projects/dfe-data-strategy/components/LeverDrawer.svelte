@@ -55,18 +55,18 @@
 <style>
   .ld { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
   .ld-top { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; border-bottom: 1px solid rgba(28,22,17,0.1); }
-  .x { margin-left: auto; background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: 6px; width: 26px; height: 26px; cursor: pointer; color: var(--ink); font-size: 13px; }
+  .x { margin-left: auto; background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); width: 26px; height: 26px; cursor: pointer; color: var(--ink); font-size: 13px; }
   .ld-cov { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid rgba(28,22,17,0.08); }
   .cov-lab { grid-column: 1 / -1; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.55); }
-  .cov-bar { height: 8px; border-radius: 4px; background: rgba(28,22,17,0.1); overflow: hidden; }
-  .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #b4632e, #2f7d4f); transition: width 0.2s ease; }
+  .cov-bar { height: 8px; border-radius: var(--radius-round); background: rgba(28,22,17,0.1); overflow: hidden; }
+  .cov-bar span { display: block; height: 100%; background: linear-gradient(90deg, #b4632e, var(--success)); transition: width 0.2s ease; }
   .cov-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--ink); }
   .ld-body { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 14px 10px; }
   .grp { margin-bottom: 14px; }
   .grp-h { margin: 12px 0 2px; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); }
   .grp-sub { margin: 0 0 8px; font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.6); }
   .ld-foot { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid rgba(28,22,17,0.1); background: rgba(241,234,214,0.6); }
-  .lb { background: rgba(255,255,255,0.7); border: 1px solid rgba(28,22,17,0.22); border-radius: 6px; padding: 5px 9px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink); cursor: pointer; }
+  .lb { background: rgba(255,255,255,0.7); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 5px 9px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink); cursor: pointer; }
   .lb:hover { background: rgba(28,22,17,0.06); }
-  .lb.danger { border-color: rgba(177,69,94,0.5); color: #b1455e; }
+  .lb.danger { border-color: var(--error-border); color: var(--error); }
 </style>

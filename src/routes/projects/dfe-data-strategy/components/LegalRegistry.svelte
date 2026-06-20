@@ -35,12 +35,12 @@
   .layer-head h3 { margin: 0 0 2px; font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink); }
   .layer-head p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 72ch; }
   .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid #2f6f97; border-radius: 9px; background: rgba(255,255,255,0.45); padding: 12px 14px; scroll-margin-top: 120px; }
+  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; scroll-margin-top: 120px; }
   .li-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .li-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--ink); }
   .li-cite { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
   .li-sum { margin: 6px 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76); }
   .li-rel { margin: 6px 0 8px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.66); }
-  .rel-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #2f6155; margin-bottom: 2px; }
-  .li-src { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #2f6f97; text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .rel-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-ink); margin-bottom: 2px; }
+  .li-src { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
 </style>

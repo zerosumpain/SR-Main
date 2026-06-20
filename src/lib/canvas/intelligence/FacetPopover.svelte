@@ -72,7 +72,7 @@
     background: var(--bg);
     border: 1px solid var(--text-primary);
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius-round);
     font-size: 11px;
     min-width: 220px;
     z-index: 20;
@@ -98,7 +98,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--divider);
-    border-radius: 12px;
+    border-radius: var(--radius-pill);
     padding: 2px 8px;
     margin: 2px 4px 2px 0;
     font-size: 10px;

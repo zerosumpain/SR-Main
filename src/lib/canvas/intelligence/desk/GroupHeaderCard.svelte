@@ -49,17 +49,14 @@
     display: block;
     background: var(--surface-elevated, #faf6ee);
     border: 2px solid var(--text-primary, #1a1008);
-    border-radius: 5px;
-    box-shadow: 4px 5px 0 rgba(26, 16, 8, 0.16);
+    border-radius: var(--radius-round);
     padding: 9px 12px 11px;
     cursor: pointer;
     overflow: hidden;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
+    transition: border-color 140ms ease;
   }
   .group-header-card:hover {
-    transform: translate(-1px, -1px);
-    box-shadow: 5px 6px 0 rgba(26, 16, 8, 0.2);
     border-color: var(--accent, #c4570a);
   }
   .group-header-card:focus-visible {
@@ -68,7 +65,6 @@
   }
   .group-header-card.focused {
     border-color: var(--accent, #c4570a);
-    box-shadow: 4px 5px 0 var(--accent-tint-25, rgba(196, 87, 10, 0.25));
   }
   .ghc-bar {
     height: 4px;

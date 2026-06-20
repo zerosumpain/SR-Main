@@ -46,7 +46,7 @@
   .viz-head { max-width: 80ch; margin-bottom: 12px; }
   .viz-head .pe-h2 { margin-bottom: 4px; }
   .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 6px; }
-  .theme { border: 1px solid rgba(28,22,17,0.1); border-radius: 8px; background: rgba(255,255,255,0.4); padding: 10px 12px; }
+  .theme { border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; }
   .t-title { display: block; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
   .t-blurb { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.66); }
   @media (max-width: 820px) { .themes { grid-template-columns: 1fr; } }

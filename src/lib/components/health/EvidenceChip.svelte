@@ -26,7 +26,7 @@
     align-items: center;
     height: 22px;
     padding: 0 8px;
-    background: rgba(26, 16, 8, 0.04);
+    background: var(--bg-section);
     border: 1px solid var(--card-border);
     color: var(--text-ghost);
     font-family: var(--font-mono);

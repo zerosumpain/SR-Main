@@ -109,7 +109,7 @@
   .empty { color: var(--text-muted); padding: 20px; }
 
   .foot-note { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin-top: 18px; max-width: 80ch; }
-  .foot-note code { font-family: var(--font-mono); background: var(--card-bg); padding: 1px 4px; border-radius: 3px; }
+  .foot-note code { font-family: var(--font-mono); background: var(--card-bg); padding: 1px 4px; border-radius: var(--radius-sharp); }
 
   @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .preview { position: static; } }
 </style>

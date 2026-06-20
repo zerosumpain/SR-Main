@@ -125,7 +125,7 @@
     gap: 6px;
     cursor: pointer;
     padding: 3px 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-round);
     transition: background 0.12s, opacity 0.12s;
     white-space: nowrap;
     user-select: none;
@@ -142,20 +142,19 @@
   .dot {
     width: 10px;
     height: 10px;
-    border-radius: 50%;
-    box-shadow: 0 0 0 1px rgba(28, 22, 17, 0.12);
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(28, 22, 17, 0.12);
   }
   .dot.dotted {
     background: transparent !important;
-    border: 1.5px dashed #888;
-    border-radius: 50%;
-    box-shadow: none;
+    border: 1.5px dashed rgba(28, 22, 17, 0.45);
+    border-radius: var(--radius-pill);
   }
   .ring {
     width: 12px;
     height: 12px;
-    border-radius: 50%;
-    border: 2px solid #888;
+    border-radius: var(--radius-pill);
+    border: 2px solid rgba(28, 22, 17, 0.45);
     background: transparent;
   }
   .nm { font-size: 12px; }

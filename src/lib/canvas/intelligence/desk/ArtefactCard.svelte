@@ -175,7 +175,6 @@
   .ac {
     --card-surface: #faf6ee;
     --hairline: rgba(26, 16, 8, 0.18);
-    --brutal: 3px 4px 0 rgba(26, 16, 8, 0.1);
 
     display: flex;
     flex-direction: column;
@@ -189,13 +188,10 @@
     color: var(--text-primary);
     background: var(--card-surface);
     border: 1px solid var(--hairline);
-    box-shadow: var(--brutal);
     transition:
-      box-shadow 0.18s ease,
-      border-color 0.18s ease,
-      transform 0.18s ease;
+      border-color 0.18s ease;
   }
-  .ac:hover { transform: translate(-1px, -1px); }
+  .ac:hover { border-color: var(--accent); }
   .ac.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* UNFILED: dashed burnt-orange border, NO shadow. */
@@ -287,7 +283,6 @@
     max-width: 220px;
     background: var(--text-primary);
     color: var(--bg);
-    box-shadow: var(--brutal);
   }
   .ac[data-variant='entity'] .ac-entity-type { color: rgba(237, 228, 212, 0.6); }
   .ac-entity-name {
@@ -321,17 +316,19 @@
   /* ---------------------------------------------------------------------------
    * Active-source "analysing…" (Feature 2)
    * The SOURCE card whose facts are being produced right now gets a subtle warm
-   * accent ring (box-shadow, NOT transform) + a mono badge. Pure colour/shadow,
-   * so it never conflicts with the hover micro-transform or the host transform.
+   * accent ring (outline, NOT transform) + a mono badge. Pure colour, so it
+   * never conflicts with the host transform.
    * --------------------------------------------------------------------------- */
   .ac.ac-analysing {
     border-color: var(--accent);
+    outline: 2px solid transparent;
+    outline-offset: 1px;
     animation: ac-analysing-ring 1.4s ease-in-out infinite;
   }
   @keyframes ac-analysing-ring {
     0%,
-    100% { box-shadow: var(--brutal), 0 0 0 0 rgba(196, 87, 10, 0); }
-    50%  { box-shadow: var(--brutal), 0 0 0 3px rgba(196, 87, 10, 0.22); }
+    100% { outline-color: transparent; }
+    50%  { outline-color: var(--accent-tint-25); }
   }
   .ac-analysing-tag {
     display: inline-flex;
@@ -357,7 +354,7 @@
     50%  { opacity: 0.25; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .ac.ac-analysing { animation: none; box-shadow: var(--brutal), 0 0 0 2px rgba(196, 87, 10, 0.22); }
+    .ac.ac-analysing { animation: none; outline-color: var(--accent-tint-25); }
     .ac-analysing-dot { animation: none; }
   }
 

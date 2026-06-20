@@ -210,15 +210,15 @@ const fundingPerPupil = clamp(base + fundGrowth - sendLeak - overridePenalty, 45
 </div>
 
 <style>
-  .cv { border: 1px solid rgba(28,22,17,0.16); border-radius: 10px; background: rgba(255,255,255,0.45); padding: 12px 14px; margin: 12px 0; }
+  .cv { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; margin: 12px 0; }
   .cv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
   .cv-pick { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
   .cv-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); }
-  .cv-pick select { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--ink, #1c1611); background: transparent; border: none; border-bottom: 2px solid #b4632e; padding: 1px 2px; cursor: pointer; }
+  .cv-pick select { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--ink); background: transparent; border: none; border-bottom: 2px solid #b4632e; padding: 1px 2px; cursor: pointer; }
   .cv-yr { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.5); }
-  .cv-toggle { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: 7px; border: 1px solid rgba(28,22,17,0.12); }
-  .cv-toggle button { background: transparent; border: none; color: var(--ink, #1c1611); padding: 4px 12px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
-  .cv-toggle button.on { background: var(--ink, #1c1611); color: var(--paper, #f1ead6); }
+  .cv-toggle { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.12); }
+  .cv-toggle button { background: transparent; border: none; color: var(--ink); padding: 4px 12px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
+  .cv-toggle button.on { background: var(--ink); color: var(--paper); }
 
   .cv-grid { display: grid; grid-template-columns: 1fr 230px; gap: 16px; align-items: start; }
   @media (max-width: 760px) { .cv-grid { grid-template-columns: 1fr; } }
@@ -229,33 +229,33 @@ const fundingPerPupil = clamp(base + fundGrowth - sendLeak - overridePenalty, 45
   .t-main { display: grid; grid-template-columns: 16px 1fr auto auto; gap: 8px; align-items: baseline; width: 100%; background: transparent; border: none; padding: 0; text-align: left; cursor: default; }
   .t-main:not(:disabled) { cursor: pointer; }
   .t-op { font-family: 'JetBrains Mono', monospace; color: rgba(28,22,17,0.4); }
-  .t-lab { font-size: 12.5px; color: var(--ink, #1c1611); }
+  .t-lab { font-size: 12.5px; color: var(--ink); }
   .t-exp { font-style: normal; font-size: 9px; color: rgba(28,22,17,0.45); margin-left: 4px; }
   .t-sym { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.5); text-align: right; }
   .t-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; text-align: right; min-width: 56px; }
   .t-note { grid-column: 1 / -1; margin: 2px 0 0 24px; font-size: 10px; line-height: 1.4; color: rgba(28,22,17,0.55); }
   .eq-row.result { border-bottom: none; border-top: 1.5px solid rgba(28,22,17,0.3); margin-top: 3px; padding-top: 7px; }
   .eq-row.result .t-lab { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; }
-  .t-val.big { font-family: 'Fraunces', serif; font-size: 22px; color: var(--ink, #1c1611); }
+  .t-val.big { font-family: 'Fraunces', serif; font-size: 22px; color: var(--ink); }
   .t-val.big i { font-style: normal; font-size: 10px; opacity: 0.55; margin-left: 2px; }
-  .reconcile { margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #2f7d4f; background: rgba(47,125,79,0.08); border-radius: 6px; padding: 5px 8px; line-height: 1.5; }
+  .reconcile { margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--success); background: var(--success-bg); border-radius: var(--radius-round); padding: 5px 8px; line-height: 1.5; }
   .reconcile .check { font-weight: 700; margin-right: 3px; }
-  .reconcile b { color: var(--ink, #1c1611); }
+  .reconcile b { color: var(--ink); }
 
   .parts { grid-column: 1 / -1; margin: 5px 0 2px 24px; display: flex; flex-direction: column; gap: 2px; border-left: 2px solid rgba(28,22,17,0.12); padding-left: 8px; }
-  .part { display: flex; justify-content: space-between; gap: 10px; background: transparent; border: none; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+  .part { display: flex; justify-content: space-between; gap: 10px; background: transparent; border: none; padding: 2px 4px; cursor: pointer; border-radius: var(--radius-round); }
   .part:hover { background: rgba(28,22,17,0.05); }
   .p-lab { font-size: 11px; color: rgba(28,22,17,0.75); }
   .p-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; }
   .parts-note { margin: 3px 0 0; font-size: 9px; color: rgba(28,22,17,0.5); }
 
-  .code { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre-wrap; background: rgba(28,22,17,0.05); border-left: 2px solid #7a5aa6; border-radius: 5px; padding: 9px 11px; color: rgba(28,22,17,0.85); overflow-x: auto; }
+  .code { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.6; white-space: pre-wrap; background: rgba(28,22,17,0.05); border-left: 2px solid var(--accent-ink); border-radius: var(--radius-round); padding: 9px 11px; color: rgba(28,22,17,0.85); overflow-x: auto; }
   .code-live { margin-top: 8px; }
   .cl-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
   .cl-vals { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 4px; }
   .cl-vals span { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(28,22,17,0.7); }
-  .cl-vals b { color: var(--ink, #1c1611); }
-  .cl-res { color: #2f7d4f !important; }
+  .cl-vals b { color: var(--ink); }
+  .cl-res { color: var(--success) !important; }
 
   .cv-side { display: flex; flex-direction: column; gap: 8px; border-left: 1px solid rgba(28,22,17,0.1); padding-left: 14px; }
   @media (max-width: 760px) { .cv-side { border-left: none; padding-left: 0; border-top: 1px solid rgba(28,22,17,0.1); padding-top: 10px; } }

@@ -87,14 +87,14 @@
   .pe-next.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(28,22,17,0.3); }
   .pe-next.ghost:hover { background: rgba(28,22,17,0.06); }
   .origins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 8px 0 6px; }
-  .org { display: flex; flex-direction: column; gap: 3px; border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid var(--c); border-radius: 10px; background: rgba(255,255,255,0.45); padding: 14px 16px; text-decoration: none; }
+  .org { display: flex; flex-direction: column; gap: 3px; border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid var(--c); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; text-decoration: none; }
   .org:hover { background: rgba(255,255,255,0.7); }
   .o-n { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 600; color: var(--c); line-height: 1; }
   .o-l { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); }
   .o-d { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.6); margin-top: 2px; }
   .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .how .pe-card p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); }
-  .h-step { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #2f6155; }
+  .h-step { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-ink); }
   .link-para { max-width: 80ch; }
   @media (max-width: 820px) { .origins, .how { grid-template-columns: 1fr; } }
 </style>

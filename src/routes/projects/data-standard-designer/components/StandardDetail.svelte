@@ -102,7 +102,7 @@
 
 <style>
   .scrim { position: fixed; inset: 0; z-index: 150; background: rgba(26,16,8,0.4); border: none; cursor: pointer; }
-  .drawer { position: fixed; z-index: 151; top: 0; right: 0; height: 100vh; width: min(520px, 96vw); background: var(--surface-elevated); border-left: 2px solid var(--text-primary); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+  .drawer { position: fixed; z-index: 151; top: 0; right: 0; height: 100vh; width: min(520px, 96vw); background: var(--surface-elevated); border-left: 2px solid var(--text-primary); display: flex; flex-direction: column; }
   .dh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--divider); }
   .dh h2 { font-family: var(--font-body); font-weight: 700; font-size: 19px; line-height: 1.2; margin: 8px 0 3px; color: var(--text-primary); }
   .owner { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }

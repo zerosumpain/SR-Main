@@ -4,10 +4,10 @@
   let { data } = $props();
 
   const typeColors: Record<string, string> = {
-    deadline: 'border-red-500 bg-red-500',
-    milestone: 'border-emerald-500 bg-emerald-500',
-    event: 'border-sky-500 bg-sky-500',
-    decision: 'border-amber-500 bg-amber-500',
+    deadline: 'var(--error)',
+    milestone: 'var(--success)',
+    event: 'var(--accent-ink)',
+    decision: 'var(--warn)',
   };
 
   const typeFilters = ['deadline', 'milestone', 'event', 'decision'];
@@ -56,14 +56,14 @@
           </div>
           {#each events as event}
             <div class="relative pl-8 pb-4">
-              <div class="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full {typeColors[event.type] ?? 'bg-gray-400'}"></div>
-              <div class="rounded-lg p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
+              <div class="absolute left-[-5px] top-1.5 w-2.5 h-2.5 rounded-full" style="background: {typeColors[event.type] ?? 'var(--text-ghost)'};"></div>
+              <div class="rounded-[var(--radius-round)] p-3 hover:opacity-80 transition border" style="background: var(--card-bg); border-color: var(--card-border);">
                 <div class="flex items-center gap-2 text-xs mb-1" style="color: var(--text-ghost);">
                   <span>{event.date}</span>
                   {#if event.dateEnd}
                     <span>— {event.dateEnd}</span>
                   {/if}
-                  <span class="px-1.5 py-0.5 rounded text-xs {typeColors[event.type]?.split(' ')[0] ?? ''} border bg-transparent">{event.type}</span>
+                  <span class="px-1.5 py-0.5 rounded text-xs border bg-transparent" style="border-color: {typeColors[event.type] ?? 'var(--card-border)'}; color: {typeColors[event.type] ?? 'var(--text-muted)'};">{event.type}</span>
                 </div>
                 <div class="text-sm font-medium">{event.title}</div>
                 {#if event.description}

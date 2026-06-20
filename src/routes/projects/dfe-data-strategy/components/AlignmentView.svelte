@@ -70,17 +70,17 @@
   .av-gauge-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .g-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 30px; line-height: 1; color: var(--ink); }
   .g-lab { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.55); text-align: center; margin-top: 3px; }
-  .g-b { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #3a5fa8; margin-top: 2px; }
+  .g-b { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); margin-top: 2px; }
   .av-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; min-width: 0; }
   .av-h { margin: 0 0 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.55); }
   .bar-row { display: grid; grid-template-columns: 78px 1fr 38px; align-items: center; gap: 7px; margin-bottom: 4px; }
   .br-lab { font-size: 11px; color: rgba(28,22,17,0.74); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .br-lab.linklike { background: none; border: none; text-align: left; padding: 0; cursor: pointer; }
-  .br-lab.linklike:hover { color: #2f6155; text-decoration: underline; }
-  .br-track { position: relative; height: 9px; border-radius: 5px; background: rgba(28,22,17,0.1); overflow: visible; }
-  .br-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 5px; background: #2f6155; transition: width 0.2s ease; }
-  .br-fill.cap { background: linear-gradient(90deg, #b4632e, #2f7d4f); }
-  .br-ghost { position: absolute; top: -2px; width: 2px; height: 13px; background: #3a5fa8; border-radius: 1px; }
+  .br-lab.linklike:hover { color: var(--accent-ink); text-decoration: underline; }
+  .br-track { position: relative; height: 9px; border-radius: var(--radius-round); background: rgba(28,22,17,0.1); overflow: visible; }
+  .br-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: var(--radius-round); background: var(--accent-ink); transition: width 0.2s ease; }
+  .br-fill.cap { background: linear-gradient(90deg, #b4632e, var(--success)); }
+  .br-ghost { position: absolute; top: -2px; width: 2px; height: 13px; background: var(--accent-ink); border-radius: var(--radius-sharp); }
   .br-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.6); text-align: right; }
   @media (max-width: 720px) { .av { grid-template-columns: 1fr; } .av-cols { grid-template-columns: 1fr; } }
 </style>

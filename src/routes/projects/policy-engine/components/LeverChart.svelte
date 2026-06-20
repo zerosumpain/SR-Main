@@ -102,11 +102,11 @@
   @media (max-width: 720px) { .lc-grid { grid-template-columns: 1fr; } }
   .lc-side { display: flex; flex-direction: column; gap: 10px; }
   .readout {
-    border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid #b4632e; border-radius: 7px;
+    border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid #b4632e; border-radius: var(--radius-round);
     background: rgba(255,255,255,0.45); padding: 8px 10px; display: flex; flex-direction: column; gap: 1px;
   }
   .ro-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
-  .ro-val { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; color: var(--ink, #1c1611); line-height: 1.05; }
+  .ro-val { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; color: var(--ink); line-height: 1.05; }
   .ro-val i { font-style: normal; font-size: 11px; opacity: 0.55; margin-left: 3px; }
   .ro-delta { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; margin-top: 2px; }
   .lc-levers { border-top: 1px solid rgba(28,22,17,0.1); padding-top: 6px; }

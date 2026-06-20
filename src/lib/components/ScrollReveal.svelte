@@ -39,11 +39,11 @@
   .sr-hidden {
     opacity: 0;
     transform: translateY(20px);
-    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    transition: opacity var(--t-slow) var(--ease-out), transform var(--t-slow) var(--ease-out);
   }
   .sr-visible {
     opacity: 1;
     transform: translateY(0);
-    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+    transition: opacity var(--t-slow) var(--ease-out), transform var(--t-slow) var(--ease-out);
   }
 </style>

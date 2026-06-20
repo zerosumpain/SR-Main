@@ -64,7 +64,7 @@
     justify-content: center;
     background: transparent;
     border: none;
-    border-radius: 0.3rem;
+    border-radius: var(--radius-sharp);
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 0.8rem;

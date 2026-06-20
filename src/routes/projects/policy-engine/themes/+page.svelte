@@ -97,9 +97,9 @@
   .th-kicker { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-soft, rgba(28,22,17,0.62)); margin-bottom: 7px; }
   .pe-lede { max-width: 80ch; }
   .th-jump { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .th-jump a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-family: 'DM Sans', system-ui, sans-serif; font-size: 12.5px; color: var(--ink, #1c1611); background: color-mix(in srgb, var(--c) 9%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: 20px; padding: 4px 12px; }
+  .th-jump a { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-family: 'DM Sans', system-ui, sans-serif; font-size: 12.5px; color: var(--ink); background: color-mix(in srgb, var(--c) 9%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: var(--radius-round); padding: 4px 12px; }
   .th-jump a:hover { background: color-mix(in srgb, var(--c) 18%, transparent); }
-  .tj-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .tj-dot { width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--c); }
 
   .theme { margin: 30px 0; padding-top: 18px; border-top: 1px solid rgba(28,22,17,0.12); scroll-margin-top: 120px; }
   .theme-head { border-left: 3px solid var(--c); padding-left: 12px; margin-bottom: 14px; }
@@ -114,7 +114,7 @@
   .recurs ul { margin: 0; padding-left: 16px; }
   .recurs li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.78); margin-bottom: 3px; }
   .recurs a { color: var(--c); text-decoration: none; font-weight: 600; border-bottom: 1px dashed currentColor; }
-  .dataask { border-left: 3px solid #4a7c7c; background: rgba(74,124,124,0.07); border-radius: 7px; padding: 8px 12px; }
+  .dataask { border-left: 3px solid var(--accent-ink); background: var(--accent-ink-tint-12); border-radius: var(--radius-round); padding: 8px 12px; }
   .dataask p { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.78); }
   .theme-data { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .theme-cx { margin-top: 14px; }

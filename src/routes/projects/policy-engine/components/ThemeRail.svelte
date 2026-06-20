@@ -30,10 +30,10 @@
   .tr-items { display: flex; flex-wrap: wrap; gap: 6px; }
   .tr-item {
     display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
-    font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; color: var(--ink, #1c1611);
+    font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; color: var(--ink);
     background: color-mix(in srgb, var(--c) 9%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
-    border-radius: 20px; padding: 2px 9px; transition: background 0.12s;
+    border-radius: var(--radius-round); padding: 2px 9px; transition: background 0.12s;
   }
   .tr-item:hover { background: color-mix(in srgb, var(--c) 18%, transparent); }
-  .tr-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c); }
+  .tr-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--c); }
 </style>

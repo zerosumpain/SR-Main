@@ -75,8 +75,8 @@
 </script>
 
 <section
-  class="rounded-lg p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border);"
+  class="p-5"
+  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
 >
   <h2
     class="text-sm uppercase tracking-wider mb-4"
@@ -189,7 +189,7 @@
         <span class="text-xs" style="color: var(--accent);">Saved.</span>
       {/if}
       {#if errorMsg}
-        <span class="text-xs" style="color: #ef4444;">{errorMsg}</span>
+        <span class="text-xs" style="color: var(--error);">{errorMsg}</span>
       {/if}
     </div>
   </div>

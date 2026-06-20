@@ -42,6 +42,6 @@
 <style>
   .sel { display: inline-flex; align-items: center; gap: 7px; }
   .sel-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
-  .sel-input { background: rgba(255,255,255,0.7); border: 1px solid rgba(28,22,17,0.25); border-radius: 7px; padding: 5px 9px;
-    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink, #1c1611); cursor: pointer; max-width: 240px; }
+  .sel-input { background: rgba(255,255,255,0.7); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); padding: 5px 9px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; max-width: 240px; }
 </style>

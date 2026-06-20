@@ -863,7 +863,7 @@
   .row-detail .kv > span:last-child { color: var(--text-primary); word-break: break-word; }
   .row-detail .raw { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); background: var(--bg-base); border: 1px solid var(--card-border); padding: 0.7rem; margin: 0.4rem 0; max-height: 400px; overflow: auto; }
 
-  .toggle-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--card-border); background: var(--bg-section); color: var(--text-muted); cursor: pointer; }
+  .toggle-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--card-border); background: var(--bg-section); color: var(--text-muted); cursor: pointer; }
   .toggle-btn.on { color: var(--success); border-color: var(--success-border); background: var(--success-bg); }
   .toggle-btn:hover { color: var(--text-primary); }
 

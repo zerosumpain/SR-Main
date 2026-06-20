@@ -381,7 +381,7 @@
 
   .epic-card {
     border: 1px solid var(--divider);
-    background: var(--card-bg, var(--bg));
+    background: var(--card-bg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -391,7 +391,7 @@
     position: relative;
     width: 100%;
     height: 320px;
-    background: var(--bg-section, rgba(0, 0, 0, 0.04));
+    background: var(--bg-section);
     border-bottom: 1px solid var(--divider);
     overflow: hidden;
     z-index: 0;
@@ -399,18 +399,18 @@
   .epic-trace :global(.leaflet-container) {
     width: 100%;
     height: 100%;
-    background: var(--bg-section, rgba(0, 0, 0, 0.04));
+    background: var(--bg-section);
     font-family: var(--font-mono);
   }
   .epic-trace :global(.leaflet-control-attribution) {
-    background: rgba(255, 255, 255, 0.8);
-    color: #444;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    color: var(--text-muted);
     font-size: 9px;
     letter-spacing: 0.04em;
     padding: 1px 6px;
   }
   .epic-trace :global(.leaflet-control-attribution a) {
-    color: #444;
+    color: var(--text-secondary);
     text-decoration: none;
   }
   .epic-svg-fallback {
@@ -460,7 +460,7 @@
     color: var(--accent);
   }
   .epic-dot {
-    color: var(--text-whisper, var(--text-ghost));
+    color: var(--text-ghost);
   }
 
   .epic-title {

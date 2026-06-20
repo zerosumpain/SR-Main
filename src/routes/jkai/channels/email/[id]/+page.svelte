@@ -99,14 +99,14 @@
   </div>
 
   <div
-    class="mb-4 px-4 py-3 rounded-lg border text-xs"
-    style="background: rgba(184, 134, 11, 0.08); border-color: #b8860b; color: #8a6508;"
+    class="mb-4 px-4 py-3 rounded-[var(--radius-round)] border text-xs"
+    style="background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn);"
   >
     Sending not yet wired up — configuration saved only. The email send implementation lands in a follow-up PR.
   </div>
 
   <div
-    class="p-5 rounded-xl border space-y-4"
+    class="p-5 rounded-[var(--radius-round)] border space-y-4"
     style="background: var(--card-bg); border-color: var(--card-border);"
   >
     <div>
@@ -182,12 +182,12 @@
     </div>
 
     {#if saveError}
-      <div class="text-xs px-3 py-2 rounded border" style="border-color: #b43232; color: #b43232;">
+      <div class="text-xs px-3 py-2 rounded border" style="border-color: var(--error); color: var(--error);">
         {saveError}
       </div>
     {/if}
     {#if saveSuccess}
-      <div class="text-xs px-3 py-2 rounded border" style="border-color: #2d7d46; color: #2d7d46;">
+      <div class="text-xs px-3 py-2 rounded border" style="border-color: var(--success); color: var(--success);">
         Saved.
       </div>
     {/if}
@@ -201,7 +201,7 @@
   </div>
 
   <div
-    class="mt-6 p-5 rounded-xl border space-y-3"
+    class="mt-6 p-5 rounded-[var(--radius-round)] border space-y-3"
     style="background: var(--card-bg); border-color: var(--card-border);"
   >
     <h2 class="text-sm font-medium" style="color: var(--text-primary);">Send test email</h2>
@@ -238,7 +238,7 @@
     {#if testResult}
       <div
         class="text-xs px-3 py-2 rounded border"
-        style="border-color: {testResult.sent ? '#2d7d46' : '#b43232'}; color: {testResult.sent ? '#2d7d46' : '#b43232'};"
+        style="border-color: {testResult.sent ? 'var(--success)' : 'var(--error)'}; color: {testResult.sent ? 'var(--success)' : 'var(--error)'};"
       >
         {#if testResult.sent}
           Sent.

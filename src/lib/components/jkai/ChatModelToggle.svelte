@@ -127,7 +127,7 @@
     </button>
 
     {#if error}
-      <span class="text-[10px] ml-2" style="color: #c44;">{error}</span>
+      <span class="text-[10px] ml-2" style="color: var(--error);">{error}</span>
     {/if}
   </div>
 {/if}
@@ -141,7 +141,7 @@
     min-width: 0;
   }
   .model-pill {
-    border-radius: 9999px;
+    border-radius: var(--radius-pill);
     padding: 4px 10px;
     font-size: 11px;
     line-height: 1.2;

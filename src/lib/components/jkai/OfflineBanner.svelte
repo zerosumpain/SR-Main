@@ -26,9 +26,9 @@
 	.jkai-offline-banner {
 		width: 100%;
 		padding: 0.5rem 1rem;
-		background: var(--nm-bg-muted, #f4ede4);
-		color: var(--nm-text, #0a0a0a);
-		border-bottom: 1px solid var(--nm-border, #d6cfc4);
+		background: var(--bg-section);
+		color: var(--text-primary);
+		border-bottom: 1px solid var(--divider);
 		font: 0.85rem/1.3 'JetBrains Mono', monospace;
 		text-align: center;
 	}
