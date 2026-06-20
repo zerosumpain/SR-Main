@@ -244,10 +244,13 @@
       for (let r = lo; r <= hi; r++) {
         charGrid[base + r] = nextGlyph();
       }
-      // Glyph size scales with the deflection magnitude: the flat baseline stays
-      // at the base size, the QRS spike comes out up to ~1.85× — that's the
-      // size fidelity on the peaks. Clamped to a byte for the Uint8Array.
-      colPx[c] = Math.min(255, Math.round(fontPx * (1 + Math.min(1.2, Math.abs(sig)) * 0.72)));
+      // Glyph size shrinks with the deflection magnitude: the flat baseline stays
+      // at the base size, and the harder the signal deflects the SMALLER the
+      // characters get — so the QRS peaks resolve into fine, distinct glyphs
+      // instead of a big overlapping blob. That finer grain is the peak fidelity.
+      // Floored so the peak text stays legible.
+      const defl = Math.min(1, Math.abs(sig)); // 0 on the flat baseline … 1 at the R peak
+      colPx[c] = Math.max(lite ? 9 : 7, Math.round(fontPx * (1 - defl * 0.45)));
       colY[c] = yRow;
       colT[c] = t;
       colSet[c] = 1;
@@ -313,7 +316,7 @@
       ctx.globalCompositeOperation = 'source-over';
 
       // Paint only the columns committed since the last frame. Each is sized by
-      // its deflection (colPx), so peaks come out in big bold characters; the
+      // its deflection (colPx), so peaks resolve into fine small characters; the
       // newest column is the hot leading edge, the rest fade behind it.
       if (pendingCols.length) {
         ctx.shadowColor = glow;
