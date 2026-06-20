@@ -9,6 +9,10 @@
   import { getRating, type Rating } from '../lib/ratings';
   import type { Mooring, MooringTier, Poi, PoiKind } from '../lib/types';
 
+  // parent supplies a camera-focus callback so setting the start centres the map
+  // (matches the other start-setters); only used when the map is free-roaming.
+  let { onStarted }: { onStarted?: (lat: number, lng: number) => void } = $props();
+
   const TIER_LABEL: Record<MooringTier, string> = {
     ba_free: 'BA 24h Free',
     ba_staffed: 'BA Staffed',
@@ -142,29 +146,50 @@
     {/if}
 
     {#if m.node_id}
+      {@const isStart = app.origin?.nodeId === m.node_id}
       {@const inTrip = app.itinerary.length > 0}
       {@const isLast = app.lastStopNodeId === m.node_id}
       {@const already = app.itinerary.includes(m.node_id)}
       {@const addLeg = inTrip && !isLast ? app.legFromLast(m.node_id) : null}
       <div class="actions">
-        {#if inTrip}
-          <!-- continue the trip from the last stop -->
-          <button class="btn btn-primary add-next" disabled={isLast || already}
-            onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>
-            {#if isLast}This is your last stop
-            {:else if already}Already in your trip
-            {:else}
-              <span class="add-line">＋ Add after {app.lastStopLabel}</span>
-              {#if addLeg && addLeg.edges.length}
-                <span class="leg-meta">{fmtTime(addLeg.time_s)} · {fmtDist(addLeg.distance_m, app.units)}{addLeg.crossesBreydon ? ' · tidal' : ''}</span>
-              {:else if addLeg}
-                <span class="leg-meta blocked">not reachable for this boat</span>
-              {/if}
-            {/if}
-          </button>
+        <!-- set this point as the trip's START (origin) — the primary thing you
+             want at a boatyard / hire base -->
+        {#if isStart}
+          <span class="is-start">◉ This is your start</span>
         {:else}
-          <button class="btn btn-primary" onclick={() => app.routeTo(m.node_id!)}>Route here</button>
-          <button class="btn btn-ghost" onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>＋ Start a trip</button>
+          <button class="btn btn-primary start-here"
+            onclick={() => {
+              const { lat, lng } = m;
+              app.setOriginNode(m.node_id!, m.name);
+              if (!app.mapLocked) onStarted?.(lat, lng); // locked map re-pins itself
+              app.closeSelection();
+            }}>
+            {inTrip ? '◉ Re-start trip here' : '◉ Start from here'}
+          </button>
+        {/if}
+
+        {#if !isStart}
+          {#if inTrip}
+            <!-- continue the trip from the last stop -->
+            <button class="btn btn-ghost add-next" disabled={isLast || already}
+              onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>
+              {#if isLast}This is your last stop
+              {:else if already}Already in your trip
+              {:else}
+                <span class="add-line">＋ Add after {app.lastStopLabel}</span>
+                {#if addLeg && addLeg.edges.length}
+                  <span class="leg-meta">{fmtTime(addLeg.time_s)} · {fmtDist(addLeg.distance_m, app.units)}{addLeg.crossesBreydon ? ' · tidal' : ''}</span>
+                {:else if addLeg}
+                  <span class="leg-meta blocked">not reachable for this boat</span>
+                {/if}
+              {/if}
+            </button>
+          {:else}
+            <!-- "Route here" = a direct route from your start; "Add to trip" =
+                 begin a multi-stop itinerary. Distinct from Start-from-here. -->
+            <button class="btn btn-ghost" onclick={() => { app.routeTo(m.node_id!); app.closeSelection(); }}>→ Route here</button>
+            <button class="btn btn-ghost" onclick={() => { app.addStop(m.node_id!); app.closeSelection(); }}>＋ Add to trip</button>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -302,11 +327,14 @@
   .btn-primary { background: var(--accent); color: #fff; border: none; }
   .btn-primary:hover { background: var(--accent-hover); }
   .btn:disabled { opacity: 0.55; cursor: default; }
+  /* "Start from here" is the headline action — its own full-width row */
+  .start-here { flex: 1 1 100%; }
+  .is-start { flex: 1 1 100%; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding: 0.4rem 0; }
   /* "Add after <last stop>" stacks the action over the leg it adds */
   .add-next { flex: 1 1 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
   .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
   .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
-  .leg-meta.blocked { color: #ffd9d0; }
+  .leg-meta.blocked { color: #c62828; }
   .btn-ghost { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
 </style>

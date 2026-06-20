@@ -313,7 +313,7 @@
   <!-- selection drawer -->
   {#if app.selected}
     <div class="bp-drawer">
-      {#if app.selected.kind === 'mooring'}<MooringCard />
+      {#if app.selected.kind === 'mooring'}<MooringCard onStarted={(lat, lng) => mapComp?.flyTo(lat, lng, 13)} />
       {:else if app.selected.kind === 'poi'}<PoiCard />
       {:else if app.selected.kind === 'bridge' || app.selected.kind === 'lock'}<RestrictionCallout />
       {/if}

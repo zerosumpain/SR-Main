@@ -222,11 +222,21 @@ export class AppState {
     const node = this.data.graph.nodes.find((n) => n.id === nodeId)!;
     this.origin = { lat: node.lat, lng: node.lng, nodeId, label };
     this.destinationNode = null;
+    this.dropFromItinerary(nodeId);
   }
 
   setOriginNode(nodeId: string, label: string) {
     const node = this.data?.graph.nodes.find((n) => n.id === nodeId);
-    if (node) { this.origin = { lat: node.lat, lng: node.lng, nodeId, label }; this.destinationNode = null; }
+    if (node) { this.origin = { lat: node.lat, lng: node.lng, nodeId, label }; this.destinationNode = null; this.dropFromItinerary(nodeId); }
+  }
+
+  /** Keep the origin out of the stop list: if the new start is also an itinerary
+   *  stop, drop it (else itineraryLegs would skip it and desync the per-stop
+   *  rows from their legs). */
+  dropFromItinerary(nodeId: string) {
+    if (!this.itinerary.includes(nodeId)) return;
+    this.itinerary = this.itinerary.filter((id) => id !== nodeId);
+    if (this.stopNotes[nodeId]) { const { [nodeId]: _drop, ...rest } = this.stopNotes; this.stopNotes = rest; }
   }
 
   routeTo(nodeId: string) {
