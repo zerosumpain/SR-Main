@@ -4,6 +4,7 @@
   import { app } from '../lib/appState.svelte';
   import { fmtClearance } from '../lib/format';
   import { bridgeVerdict } from '../lib/passability';
+  import { bridgeTideWindows, hasRealDataForDay, fmtTideTime } from '../lib/tide';
   import type { Bridge, Lock, Verdict } from '../lib/types';
 
   const VERDICT_COLOR: Record<Verdict, string> = { pass: 'var(--success)', marginal: 'var(--warn)', blocked: 'var(--error)' };
@@ -35,6 +36,13 @@
       ? fmtClearance(lo, app.units)
       : `${fmtClearance(lo, app.units)} to ${fmtClearance(hi, app.units)}`;
   }
+
+  // Local low-water (= max headroom) times at this bridge for the planner date.
+  const tideLows = $derived(bridge ? bridgeTideWindows(app.data?.tides ?? null, bridge, app.date) : []);
+  const tideReal = $derived(hasRealDataForDay(app.data?.tides ?? null, app.date));
+  const dayLabel = $derived(
+    app.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }),
+  );
 </script>
 
 {#if bridge || lock}
@@ -71,6 +79,23 @@
 
       {#if bridge.notes}
         <p class="notes">{bridge.notes}</p>
+      {/if}
+
+      {#if tideLows.length}
+        <div class="tide">
+          <span class="tide-label">
+            Best to pass · {dayLabel}
+            <span class="tide-sub">low water = max headroom</span>
+          </span>
+          <span class="tide-times">
+            {#each tideLows as l (l.at.getTime())}
+              <span class="tide-t" class:approx={l.approx}>{fmtTideTime(l.at)}</span>
+            {/each}
+          </span>
+          {#if !tideReal}
+            <span class="tide-approx">~ approximate (no published table for this date)</span>
+          {/if}
+        </div>
       {/if}
 
       <p class="safety">
@@ -212,6 +237,33 @@
     line-height: 1.5;
     color: var(--text-secondary);
   }
+
+  .tide {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: var(--radius-round);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 9%, var(--surface-elevated));
+  }
+  .tide-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .tide-sub { color: var(--text-muted); letter-spacing: 0.06em; }
+  .tide-times { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .tide-t { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+  .tide-t.approx { color: var(--text-muted); }
+  .tide-t.approx::after { content: '~'; font-size: 0.7em; vertical-align: super; }
+  .tide-approx { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted); }
 
   .spec { margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
   .spec-row {

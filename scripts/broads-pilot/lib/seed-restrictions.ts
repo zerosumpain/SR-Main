@@ -28,7 +28,7 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'potter-heigham-old', name: 'Potter Heigham (Old Road Bridge)', river: 'Thurne',
     attach_rivers: ['Thurne'],
-    clearance_ahw_m: 2.03, clearance_band_m: [1.98, 2.03], tide_dependent: true,
+    clearance_ahw_m: 1.98, clearance_band_m: [1.94, 1.98], tide_dependent: true,
     pilot: 'mandatory', opens_on_request: false, practically_closed: true, arch_width_m: 2.5,
     notes: 'Pilot mandatory (Phoenix Fleet, 01692 670460, ~£10). Low semicircular arch with steeply falling sides — effectively impassable for standard cruisers (0 boats through in 2024). Cross only near low water with the pilot.',
     lat: 52.7106, lng: 1.5818,
@@ -36,7 +36,7 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'wroxham-road', name: 'Wroxham (Road Bridge)', river: 'Bure',
     attach_rivers: ['Bure'],
-    clearance_ahw_m: 2.29, clearance_band_m: [2.21, 2.29], tide_dependent: true,
+    clearance_ahw_m: 2.21, clearance_band_m: [2.18, 2.21], tide_dependent: true,
     pilot: 'mandatory', opens_on_request: false, arch_width_m: 3.5,
     notes: 'Pilot mandatory for hire craft (07775 297 638, ~£15 return). 1619 arch, strong currents; height + tide affected.',
     lat: 52.7068, lng: 1.4072,
@@ -78,15 +78,15 @@ export const BRIDGES: SeedBridge[] = [
     attach_rivers: ['Waveney'],
     clearance_ahw_m: 1.98, clearance_band_m: [1.98, 1.98], tide_dependent: true,
     pilot: null, opens_on_request: false, arch_width_m: 3.0,
-    notes: 'Tied lowest arched road bridge. No pilot but care required; gives access to upper Beccles/Geldeston. The bypass road bridge alongside is ~4.27 m.',
+    notes: 'Tied lowest arched road bridge. No pilot but care required; gives access to upper Beccles/Geldeston. The bypass road bridge alongside is ~3.66 m (12 ft).',
     lat: 52.4585, lng: 1.5640,
   },
   {
     id: 'ludham-bridge', name: 'Ludham Bridge', river: 'Ant',
     attach_rivers: ['Ant'],
-    clearance_ahw_m: 2.6, clearance_band_m: [2.59, 2.60], tide_dependent: true,
+    clearance_ahw_m: 2.59, clearance_band_m: [2.55, 2.59], tide_dependent: true,
     pilot: null, opens_on_request: false,
-    notes: 'Tide-affected; pass with the canopy down. No pilot.',
+    notes: 'Tide-affected (~1 ft range); pass with the canopy down. No pilot. Sharp blind bend — keep right.',
     lat: 52.6992, lng: 1.5093,
   },
   {
@@ -108,7 +108,7 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'reedham-swing', name: 'Reedham Swing Bridge', river: 'Yare',
     attach_rivers: ['Yare'],
-    clearance_ahw_m: 3.05, clearance_band_m: [3.05, 3.16], tide_dependent: false,
+    clearance_ahw_m: 3.05, clearance_band_m: [3.05, 3.16], tide_dependent: true,
     pilot: null, opens_on_request: true,
     notes: 'Rail swing bridge — opens on request (3 long horn blasts / VHF Ch 12 / 0330 858 4655). 1 red flag = operational, 2 = out of service.',
     lat: 52.5587, lng: 1.5724,
@@ -116,20 +116,42 @@ export const BRIDGES: SeedBridge[] = [
   {
     id: 'somerleyton-swing', name: 'Somerleyton Swing Bridge', river: 'Waveney',
     attach_rivers: ['Waveney'],
-    clearance_ahw_m: 2.6, clearance_band_m: [2.60, 2.60], tide_dependent: false,
+    clearance_ahw_m: 2.59, clearance_band_m: [2.59, 2.59], tide_dependent: false,
     pilot: null, opens_on_request: true,
-    notes: 'Rail swing bridge — opens on request (3 long blasts / VHF Ch 12).',
+    notes: 'Rail swing bridge — 8 ft 6 in (2.59 m) closed clearance; opens on request (3 long blasts / VHF Ch 12).',
     lat: 52.5125, lng: 1.6465,
   },
   {
     id: 'thorpe-rail', name: 'Thorpe Railway Bridges (Norwich)', river: 'Yare',
     attach_rivers: ['Yare', 'Wensum'],
-    clearance_ahw_m: 1.83, clearance_band_m: [1.83, 1.83], tide_dependent: false,
+    clearance_ahw_m: 1.83, clearance_band_m: [1.83, 1.83], tide_dependent: true,
     pilot: null, opens_on_request: false,
     notes: 'Very low (~6 ft) — on the short Whitlingham dead-end above Norwich; not on the main route to Norwich Yacht Station.',
     lat: 52.6248, lng: 1.3360,
   },
 ];
+
+// Average tidal-time offset (minutes) of each bridge's local tide from the
+// Gorleston (Great Yarmouth) standard port — the figure norfolk-tides.com /
+// Reeds publish ("based on Gorleston with an average HW adjustment of +X min").
+// Applied to BOTH HW and LW so the planner can show the local low-water
+// (= maximum headroom) time at each tide-dependent bridge. Sources: norfolk-
+// tides.com per-location pages + Herbert Woods / Reeds Broads LW differences.
+// Omitted (no offset) = effectively non-tidal for routing (Wroxham rail high
+// bridge) or offset not reliably published (Thorpe dead-end).
+export const TIDE_OFFSET_MIN: Record<string, number> = {
+  'yarmouth-vauxhall': 60,
+  'yarmouth-acle-road': 60,
+  'breydon-bridge': 60,
+  'reedham-swing': 150,
+  'somerleyton-swing': 150, // approx — interpolated St Olaves↔Oulton on the Waveney
+  'acle-bridge': 210,
+  'ludham-bridge': 240,
+  'beccles-old': 240,
+  'wayford-bridge': 240, // approx — head of the Ant
+  'potter-heigham-old': 240,
+  'wroxham-road': 270,
+};
 
 export interface SeedLock {
   id: string; name: string; max_loa_m: number; max_beam_m: number; max_draft_m: number;

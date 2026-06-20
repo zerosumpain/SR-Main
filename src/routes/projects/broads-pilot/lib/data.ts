@@ -1,6 +1,6 @@
 // Loads the bundled datasets from static/broads-pilot/*.json once and caches
 // them. The service worker precaches these, so the planner works offline.
-import type { Datasets, WaterGraph, Restrictions, Broad, Mooring, Poi, MooringPois, Boat, Meta } from './types';
+import type { Datasets, WaterGraph, Restrictions, Broad, Mooring, Poi, MooringPois, Boat, TideTable, Meta } from './types';
 
 let cache: Datasets | null = null;
 let inflight: Promise<Datasets> | null = null;
@@ -22,7 +22,7 @@ export async function loadDatasets(fetchFn: typeof fetch = fetch): Promise<Datas
       try { const res = await fetchFn(`${BASE}/${name}.json`); return res.ok ? ((await res.json()) as T) : fallback; }
       catch { return fallback; }
     };
-    const [graph, restrictions, broadsDoc, moorings, pois, mooringPois, fleet, meta] = await Promise.all([
+    const [graph, restrictions, broadsDoc, moorings, pois, mooringPois, fleet, tides, meta] = await Promise.all([
       get<WaterGraph>('graph'),
       get<Restrictions>('restrictions'),
       getOpt<{ broads: Broad[] }>('broads', { broads: [] }),
@@ -30,9 +30,12 @@ export async function loadDatasets(fetchFn: typeof fetch = fetch): Promise<Datas
       get<Poi[]>('pois'),
       get<MooringPois>('mooring_pois'),
       get<Boat[]>('fleet'),
+      // tides.json is additive (tide-time advisories) — tolerate its absence on
+      // older cached deploys rather than failing the whole load.
+      getOpt<TideTable | null>('tides', null),
       get<Meta>('meta'),
     ]);
-    cache = { graph, restrictions, broads: broadsDoc.broads ?? [], moorings, pois, mooringPois, fleet, meta };
+    cache = { graph, restrictions, broads: broadsDoc.broads ?? [], moorings, pois, mooringPois, fleet, tides, meta };
     inflight = null;
     return cache;
   })();

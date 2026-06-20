@@ -41,6 +41,10 @@ export interface Bridge {
   opens_on_request: boolean;
   practically_closed?: boolean;
   arch_width_m?: number | null;
+  /** Average tidal-time offset (minutes) of this bridge's local tide from the
+   *  Gorleston standard port — applied to HW & LW. null = effectively non-tidal
+   *  for routing, or offset not reliably published. */
+  tide_offset_min?: number | null;
   notes: string;
   lat: number;
   lng: number;
@@ -67,6 +71,20 @@ export interface Restrictions {
   bridges: Bridge[];
   lock: Lock;
   zones: Zone[];
+}
+
+// ---------- tides ----------
+export interface TideEvent {
+  t: string; // UTC ISO instant of the extreme
+  type: 'low' | 'high';
+  h: number | null; // metres above chart datum
+}
+export interface TideTable {
+  station: string;
+  source: string;
+  datum?: string;
+  note?: string;
+  events: TideEvent[];
 }
 
 // ---------- broads (open-water polygons, for bold map highlighting) ----------
@@ -186,5 +204,6 @@ export interface Datasets {
   pois: Poi[];
   mooringPois: MooringPois;
   fleet: Boat[];
+  tides: TideTable | null;
   meta: Meta;
 }

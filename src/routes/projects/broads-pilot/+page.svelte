@@ -12,6 +12,7 @@
   import Reachability from './components/Reachability.svelte';
   import PlanPanel from './components/PlanPanel.svelte';
   import ItineraryBuilder from './components/ItineraryBuilder.svelte';
+  import TidePanel from './components/TidePanel.svelte';
   import CruiseBanner from './components/CruiseBanner.svelte';
   import MooringCard from './components/MooringCard.svelte';
   import PoiCard from './components/PoiCard.svelte';
@@ -293,6 +294,7 @@
       {#if app.mode === 'route'}<PlanPanel />
       {:else if app.mode === 'trip'}<ItineraryBuilder />
       {:else}{#if app.origin && app.boat}<Reachability />{/if}{/if}
+      <TidePanel />
     </PilotSheet>
   {/if}
 

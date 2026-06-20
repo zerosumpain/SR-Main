@@ -4,8 +4,14 @@
   // add-to-itinerary / clear actions.
   import { app } from '../lib/appState.svelte';
   import { fmtDist, fmtTime, fmtMoney, fmtClearance } from '../lib/format';
-  import { breydonAdvice } from '../lib/tide';
+  import { breydonAdvice, breydonCrossings, fmtTideTime } from '../lib/tide';
   import type { Verdict } from '../lib/types';
+
+  // Real slack-water crossing windows for the planner date (Gorleston-based).
+  const breydonWindows = $derived(breydonCrossings(app.data?.tides ?? null, app.date));
+  const breydonDay = $derived(
+    app.date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }),
+  );
 
   const VERDICT_COLOR: Record<Verdict, string> = { pass: 'var(--success)', marginal: 'var(--warn)', blocked: 'var(--error)' };
   const VERDICT_LABEL: Record<Verdict, string> = { pass: 'Pass', marginal: 'Marginal', blocked: 'Blocked' };
@@ -95,6 +101,14 @@
         <div class="callout callout-breydon" role="note">
           <span class="kicker callout-kicker">Breydon Water — tidal crossing</span>
           <p>{breydonAdvice()}</p>
+          {#if breydonWindows.length}
+            <p class="slack">
+              <span class="slack-label">Slack water · {breydonDay}</span>
+              {#each breydonWindows as w (w.mid.getTime())}
+                <span class="slack-t" class:approx={w.approx}>{fmtTideTime(w.mid)}</span>
+              {/each}
+            </p>
+          {/if}
         </div>
       {/if}
 
@@ -236,6 +250,11 @@
   }
   .callout p { margin: 0; font-family: var(--font-body); font-size: 0.84rem; line-height: 1.45; color: var(--text-primary); }
   .callout-kicker { color: var(--warn); margin-bottom: 0.3rem; }
+  .slack { margin-top: 0.4rem !important; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.55rem; }
+  .slack-label { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .slack-t { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--warn); }
+  .slack-t.approx { color: var(--text-muted); }
+  .slack-t.approx::after { content: '~'; font-size: 0.7em; vertical-align: super; }
 
   /* actions */
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }

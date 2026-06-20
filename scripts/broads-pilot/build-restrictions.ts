@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { haversine } from './lib/geo.ts';
 import { overpass, BROADS_BBOX, type OsmElement } from './lib/overpass.ts';
-import { BRIDGES, LOCK, ZONES, type SeedBridge } from './lib/seed-restrictions.ts';
+import { BRIDGES, LOCK, ZONES, TIDE_OFFSET_MIN, type SeedBridge } from './lib/seed-restrictions.ts';
 
 type LatLng = [number, number];
 interface Edge { id: string; river: string; geometry: LatLng[]; restriction_ids: string[] }
@@ -108,7 +108,7 @@ async function main() {
     assoc.push({ bridge: b.id, edge: s.id, dist_m: Math.round(s.d) });
     maxD = Math.max(maxD, s.d);
     const { attach_rivers, ...rest } = b;
-    return { ...rest, lat: s.p[0], lng: s.p[1] };
+    return { ...rest, tide_offset_min: TIDE_OFFSET_MIN[b.id] ?? null, lat: s.p[0], lng: s.p[1] };
   });
   console.table(assoc);
 
