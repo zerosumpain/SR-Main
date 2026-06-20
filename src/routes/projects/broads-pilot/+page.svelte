@@ -59,22 +59,30 @@
     mapComp?.flyTo(e.lat, e.lng, 14);
   }
 
+  // Capture the incoming URL params SYNCHRONOUSLY, before any await — the
+  // persistence effect below rewrites the URL once data loads, so reading
+  // window.location after `await app.load()` would see the stripped query.
+  let hydrated = $state(false);
+
   onMount(async () => {
+    const initialParams = new URL(window.location.href).searchParams;
     sheetSnap = window.matchMedia('(max-width: 759px)').matches ? 'peek' : 'half';
     logbook.load();
     await app.load();
-    const url = new URL(window.location.href);
-    if ([...url.searchParams.keys()].length) decodePlan(app, url.searchParams);
+    if ([...initialParams.keys()].length) decodePlan(app, initialParams);
     else {
       try { const saved = JSON.parse(localStorage.getItem('broads-pilot') || 'null'); if (saved) app.restore(saved); } catch { /* ignore */ }
     }
     // fall back to the Stalham home base only if nothing was restored — done here
     // (one synchronous pass) so the locked map pins once on the final origin.
     app.ensureDefaultOrigin();
+    hydrated = true; // now safe to persist/rewrite the URL
   });
 
   $effect(() => {
-    if (app.loading) return;
+    // wait until the initial restore/decode has run, else this strips the
+    // incoming ?from/&to/&stops before decodePlan reads them.
+    if (app.loading || !hydrated) return;
     const snap = app.snapshot();
     try { localStorage.setItem('broads-pilot', JSON.stringify(snap)); } catch { /* ignore */ }
     const target = '/projects/broads-pilot' + encodePlan(app);
@@ -158,9 +166,9 @@
 <div class="bp-planner">
   <BroadsMap bind:this={mapComp} />
 
-  <!-- top-left: feature search + home-base lock (lock hidden in live mode,
+  <!-- top-centre: feature search + home-base lock (lock hidden in live mode,
        where follow-the-boat owns the camera) -->
-  <div class="bp-topleft">
+  <div class="bp-topbar">
     <SearchBar onPick={handleSearchPick} />
     {#if !app.cruiseActive}
       <button
@@ -302,16 +310,18 @@
   .bp-planner { position: absolute; inset: 0; overflow: hidden; }
   .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
 
-  /* top-left: search box + home-base lock toggle. Kept below the 600-level
-     FABs/map-options so the search click-away backdrop never blocks them. */
-  .bp-topleft { position: absolute; top: 0.6rem; left: 0.6rem; z-index: 550; display: flex; align-items: flex-start; gap: 0.4rem; width: min(23rem, calc(100vw - 1.2rem)); }
-  .bp-topleft :global(.bp-search) { flex: 1; min-width: 0; }
+  /* top-centre: search box + home-base lock toggle. Mobile-first = full-width
+     bar; desktop centres it in the open map area (see the min-width rule, which
+     reserves space for the left sheet + the right map buttons). Kept below the
+     600-level FABs/map-options so the search click-away backdrop never blocks them. */
+  .bp-topbar { position: absolute; top: 0.6rem; left: 0.6rem; right: 0.6rem; z-index: 550; display: flex; align-items: flex-start; justify-content: center; gap: 0.4rem; }
+  .bp-topbar :global(.bp-search) { flex: 1 1 auto; min-width: 0; }
   .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 8px rgba(26, 16, 8, 0.15); font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
   .bp-lock.locked { border-color: var(--accent); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 12%, var(--surface-elevated)); }
   .bp-lock-ic { font-size: 0.9rem; }
 
-  /* route key — top-centre on desktop, just below the search bar on mobile */
-  .bp-legend-wrap { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 560; }
+  /* route key — centred just beneath the search bar */
+  .bp-legend-wrap { position: absolute; top: 3.7rem; left: 0.6rem; right: 0.6rem; z-index: 560; display: flex; justify-content: center; }
   .bp-error { color: var(--error, #c62828); }
 
   /* map options button + popover (top-right) */
@@ -370,11 +380,13 @@
     .bp-drawer { top: 0.6rem; right: 0.6rem; width: 23rem; max-height: calc(100% - 1.2rem); border-radius: 0.6rem; }
     .bp-fabs { bottom: 0.9rem; }
     .bp-mapopts { width: 22rem; }
+    /* centre the search/legend in the open map area: clear the left docked sheet
+       (~23.6rem) and the right map-buttons stack (~10rem) so neither overlaps. */
+    .bp-topbar { left: 24.2rem; right: 11rem; }
+    .bp-topbar :global(.bp-search) { flex: 0 1 26rem; }
+    .bp-legend-wrap { left: 24.2rem; right: 11rem; }
   }
   @media (max-width: 759px) {
     .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: 0.7rem 0.7rem 0 0; z-index: 800; }
-    /* search + lock span the top; the route key drops just beneath them */
-    .bp-topleft { left: 0.5rem; right: 0.5rem; top: 0.5rem; width: auto; }
-    .bp-legend-wrap { top: 3.6rem; left: 0.5rem; right: 0.5rem; transform: none; display: flex; justify-content: center; }
   }
 </style>

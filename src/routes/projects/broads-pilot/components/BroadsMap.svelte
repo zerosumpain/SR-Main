@@ -34,7 +34,7 @@
   };
   const VERDICT_COLOR: Record<Verdict, string> = { pass: '#2e7d32', marginal: '#e69500', blocked: '#c62828' };
   const POI_COLOR: Record<string, string> = { pub: '#b8860b', walk: '#2e7d32', attraction: '#7b4fb0', shop: '#8d6e63', fuel: '#555' };
-  const BASE = ['network', 'zones', 'moorings', 'pois', 'restrictions', 'origin'];
+  const BASE = ['broads', 'network', 'zones', 'moorings', 'pois', 'restrictions', 'origin'];
 
   // Speed-limit overlay: higher limit = greener (more open water), slower = redder.
   function limitColor(mph: number): string {
@@ -108,6 +108,18 @@
     // so you can bring pubs/walks/etc. into focus over a barely-there background.
     const shown = (on: boolean) => schematic || on;
     const op = (on: boolean) => (schematic ? (on ? 1 : 0.1) : 1);
+
+    // --- the broads themselves: bold open-water highlight (warm + nautical;
+    // drawn first so the network + markers sit on top). The schematic theme has
+    // its own treatment, so skip it there. ---
+    if (!schematic) {
+      const fill = app.mapTheme === 'nautical' ? '#1f8fd0' : '#2fa6cc';
+      const stroke = app.mapTheme === 'nautical' ? '#0a3d62' : '#0d5563';
+      for (const b of data.broads)
+        for (const ring of b.rings)
+          L.polygon(ring, { color: stroke, weight: 2.5, opacity: 0.95, fillColor: fill, fillOpacity: 0.55, lineJoin: 'round', interactive: false })
+            .addTo(groups.broads);
+    }
 
     // --- the waterway network ---
     if (schematic) {

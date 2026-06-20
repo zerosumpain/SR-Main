@@ -69,6 +69,14 @@ export interface Restrictions {
   zones: Zone[];
 }
 
+// ---------- broads (open-water polygons, for bold map highlighting) ----------
+export interface Broad {
+  id: string;
+  name: string;
+  rings: LatLng[][]; // one or more outer rings (a broad may be a multipolygon)
+  area_m2: number;
+}
+
 // ---------- moorings ----------
 export type MooringTier =
   | 'ba_free'
@@ -173,6 +181,7 @@ export interface Meta {
 export interface Datasets {
   graph: WaterGraph;
   restrictions: Restrictions;
+  broads: Broad[];
   moorings: Mooring[];
   pois: Poi[];
   mooringPois: MooringPois;
