@@ -106,14 +106,15 @@
 {/snippet}
 
 <section class="min-h-screen px-6 sm:px-10 md:px-16 py-8">
-  <div class="max-w-4xl mb-12">
-    <p class="text-base leading-relaxed max-w-lg" style="color: var(--text-secondary);">
-      A mix of things I've built — interactive field studies, games, and data tools. Some made by
-      hand, some developed autonomously by AI from a single prompt (those carry an "AI Built" mark).
+  <div class="max-w-2xl mx-auto mb-12 text-center">
+    <p class="text-base leading-relaxed" style="color: var(--text-secondary);">
+      Things I've built — interactive field studies, strategy games and data tools, several of them
+      digging into how government and education data fits together. Some made by hand, some built
+      autonomously by an AI agent from a single prompt (those carry an "AI Built" mark).
     </p>
   </div>
 
-  <div class="max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
     {#if showCard('broads-pilot')}
     <div class="project-card group">
       <a href="/projects/broads-pilot" class="absolute inset-0 z-0" aria-label="Open Broads Pilot"></a>
