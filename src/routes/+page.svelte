@@ -18,6 +18,7 @@
   import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
   import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
+  import EcgAscii from '$lib/components/shared/EcgAscii.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { roundPulse } from '$lib/biome/state';
@@ -30,6 +31,23 @@
 
   let mounted = $state(false);
   let bgMode = $state<'ecg' | 'biome'>('ecg');
+  // Render the live heartbeat as the glowing line ('line') or as a sweeping
+  // ASCII trace ('ascii'). Toggled from the footer, persisted in localStorage.
+  let ecgStyle = $state<'line' | 'ascii'>('line');
+
+  function setBgMode(mode: 'ecg' | 'biome') {
+    bgMode = mode;
+    localStorage.setItem('landing-bg', mode);
+    window.dispatchEvent(new CustomEvent('landing-bg-change', { detail: { mode } }));
+  }
+
+  function toggleEcgStyle() {
+    ecgStyle = ecgStyle === 'ascii' ? 'line' : 'ascii';
+    localStorage.setItem('ecg-style', ecgStyle);
+    // Switching to ASCII implies wanting to see the pulse — bring the ECG
+    // forward if the biome background is currently up.
+    if (ecgStyle === 'ascii' && bgMode !== 'ecg') setBgMode('ecg');
+  }
 
   // initialBiome is streamed, so it isn't in the SSR HTML — pre-mount uses
   // sensible defaults and the live store takes over once mounted (onMount seeds
@@ -83,6 +101,9 @@
     const stored = localStorage.getItem('landing-bg');
     if (stored === 'biome' || stored === 'ecg') bgMode = stored;
 
+    const storedStyle = localStorage.getItem('ecg-style');
+    if (storedStyle === 'ascii' || storedStyle === 'line') ecgStyle = storedStyle;
+
     function handleBgChange(e: Event) {
       bgMode = (e as CustomEvent<{ mode: 'ecg' | 'biome' }>).detail.mode;
     }
@@ -108,7 +129,11 @@
     <BiomeBackground {store} position="absolute" transparent />
   {:else}
     <div class="absolute inset-0 pointer-events-none">
-      <Ecg rhr={roundPulse(pulse)} showGrid={false} />
+      {#if ecgStyle === 'ascii'}
+        <EcgAscii rhr={roundPulse(pulse)} />
+      {:else}
+        <Ecg rhr={roundPulse(pulse)} showGrid={false} />
+      {/if}
     </div>
   {/if}
 
@@ -159,7 +184,13 @@
     class="relative z-10 flex justify-between items-center"
     style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted);"
   >
-    <span>Signature · {bgMode === 'biome' ? 'Biome' : 'Pulse'} · Live</span>
+    <span
+      >Signature · {bgMode === 'biome'
+        ? 'Biome'
+        : ecgStyle === 'ascii'
+          ? 'Pulse · ASCII'
+          : 'Pulse'} · Live</span
+    >
     {#if syncedText}<span>Synced {syncedText}</span>{/if}
   </div>
 </section>
@@ -170,7 +201,20 @@
 <!-- FOOTER — dense, utilitarian -->
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
   <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
-  <div class="flex gap-6">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+    <button
+      type="button"
+      class="ecg-toggle"
+      onclick={toggleEcgStyle}
+      aria-pressed={ecgStyle === 'ascii'}
+      title="Render the live heartbeat as a line or as sweeping ASCII characters"
+      aria-label="Toggle heartbeat ASCII rendering"
+    >
+      <span class="ecg-toggle-key">Pulse</span>
+      <span class="ecg-toggle-val" class:on={ecgStyle === 'ascii'}>
+        {ecgStyle === 'ascii' ? 'ASCII' : 'Line'}
+      </span>
+    </button>
     <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
     <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
     <a href="/health" class="nav-link">Health</a>
@@ -182,6 +226,51 @@
 <BackgroundToggle />
 
 <style>
+  /* Footer toggle for the heartbeat render mode (orange line ⇄ ASCII). */
+  .ecg-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    background: var(--card-bg);
+    cursor: pointer;
+    line-height: 1;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .ecg-toggle:hover {
+    border-color: var(--accent);
+  }
+  .ecg-toggle-key {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .ecg-toggle-val {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    min-width: 42px;
+    text-align: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(26, 16, 8, 0.05);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+  .ecg-toggle-val.on {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+
   /* Hero splits into copy (left) + live Vital Signs tiles (right) on wide
      viewports, and stacks the tiles below the copy under 1024px. */
   .hero-grid {

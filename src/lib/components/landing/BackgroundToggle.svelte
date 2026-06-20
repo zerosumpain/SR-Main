@@ -6,6 +6,14 @@
   onMount(() => {
     const stored = localStorage.getItem('landing-bg');
     if (stored === 'biome' || stored === 'ecg') mode = stored;
+
+    // Stay in sync when the background is switched elsewhere (e.g. the footer
+    // ASCII toggle brings the ECG forward).
+    function handleBgChange(e: Event) {
+      mode = (e as CustomEvent<{ mode: 'ecg' | 'biome' }>).detail.mode;
+    }
+    window.addEventListener('landing-bg-change', handleBgChange);
+    return () => window.removeEventListener('landing-bg-change', handleBgChange);
   });
 
   function toggle() {

@@ -1,6 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { prefersReducedMotion, clamp } from '$lib/components/health/v2/utils';
+  import { prefersReducedMotion } from '$lib/components/health/v2/utils';
+  import {
+    SWEEP_SEC,
+    LIFETIME,
+    complex,
+    baselineDrift,
+    clampBpm,
+    ampGain,
+    nextRR,
+    nextAmp,
+    fadeBand,
+    FADE_BANDS,
+  } from './ecg-signal';
 
   let {
     rhr = 64,
@@ -15,21 +27,9 @@
   const H = 320;
   const baseline = H * 0.56;
 
-  // Fixed "paper speed": seconds for the scan cursor to cross the full width.
-  // Real monitors sweep at a constant rate, so beats land where the heart puts
-  // them rather than being evenly spaced — that irregular spacing is half of
-  // what makes a trace read as a live signal instead of a looping graphic.
-  const SWEEP_SEC = 7;
-  // Phosphor lifetime (seconds): how long a drawn point lingers before it is
-  // completely gone. The trail is redrawn each frame from a time-stamped point
-  // buffer, so the fade hits exactly zero at this age (no never-quite-gone
-  // exponential ghost). Brightness follows a quadratic ease — it stays bright
-  // for most of the lifetime, giving a long tail, then cleanly to nothing.
-  const LIFETIME = 1.5;
-  const FADE_EXP = 2;
-  // Respiration frequency (Hz) ≈ 13 breaths/min. Drives both the baseline
-  // wander and the sinus-arrhythmia modulation of heart rate.
-  const RESP_HZ = 0.22;
+  // Paper speed, phosphor lifetime, PQRST morphology and beat-to-beat
+  // variability all live in the shared signal model (./ecg-signal) so the ASCII
+  // pen renders an identical trace.
 
   // svelte-ignore state_referenced_locally
   let bpm = $state(rhr);
@@ -55,34 +55,6 @@
     } catch {
       // ignore — keep last bpm
     }
-  }
-
-  const clampBpm = (v: number) => Math.max(36, Math.min(200, v));
-
-  // PQRST morphology as a sum of Gaussians keyed on seconds-since-beat-onset.
-  // Placing the lobes in real time (not as a fraction of the R–R interval)
-  // keeps the complex a constant shape while the gap between beats stretches
-  // and shrinks with the heart rate — which is how an ECG actually behaves.
-  const gauss = (t: number, mu: number, sigma: number) =>
-    Math.exp(-((t - mu) * (t - mu)) / (2 * sigma * sigma));
-  function complex(tau: number): number {
-    return (
-      0.10 * gauss(tau, 0.09, 0.021) + // P
-      -0.07 * gauss(tau, 0.205, 0.0085) + // Q
-      0.95 * gauss(tau, 0.225, 0.0095) + // R
-      -0.2 * gauss(tau, 0.25, 0.011) + // S
-      0.28 * gauss(tau, 0.36, 0.046) // T
-    );
-  }
-  // Slow, breathing-driven drift of the isoelectric line plus a tiny tremor —
-  // the gentle undulation you see on a real lead because the body is moving.
-  function baselineDrift(t: number): number {
-    return (
-      0.05 * Math.sin(2 * Math.PI * RESP_HZ * t + 0.6) +
-      0.018 * Math.sin(2 * Math.PI * 0.071 * t) +
-      0.006 * Math.sin(2 * Math.PI * 7.3 * t) +
-      0.004 * Math.sin(2 * Math.PI * 11.9 * t + 1.3)
-    );
   }
 
   function readAccent(): string {
@@ -125,7 +97,7 @@
     // Amplitude gain tracks heart rate: a resting heart shows a modest R
     // spike, a working one a taller, emphatic one (0.42x at rest → ~1.3x flat
     // out across 40–160 bpm). Returns pixels of full-scale deflection.
-    const ampPx = () => H * 0.34 * (0.42 + clamp((bpm - 40) / 120, 0, 1) * 0.9);
+    const ampPx = () => H * 0.34 * ampGain(bpm);
 
     let interval: ReturnType<typeof setInterval> | undefined;
 
@@ -166,25 +138,8 @@
     let last = performance.now();
     let raf = 0;
 
-    // Next beat's interval: mean from current HR, modulated by respiratory
-    // sinus arrhythmia (HR rises on inhale, falls on exhale) plus a little
-    // uncorrelated jitter — i.e. genuine beat-to-beat variability.
-    function nextRR(t: number): number {
-      const mean = 60 / clampBpm(bpm);
-      const rsa = 0.05 * Math.sin(2 * Math.PI * RESP_HZ * t);
-      const jitter = (Math.random() - 0.5) * 0.05;
-      return clamp(mean * (1 + rsa + jitter), 0.34, 1.7);
-    }
-    const nextAmp = () => 1 + (Math.random() - 0.5) * 0.12;
-
-    const BANDS = 28; // opacity quantisation for the fade gradient
-    // Age → opacity. Quadratic ease holds the trail bright for most of its
-    // life (a long tail) then falls to exactly 0 at LIFETIME (clean cut-off).
-    function bandOf(t: number): number {
-      const age = (clock - t) / LIFETIME;
-      if (age >= 1) return 0;
-      return Math.round((1 - Math.pow(age, FADE_EXP)) * BANDS);
-    }
+    // Age → opacity band, via the shared quadratic fade.
+    const bandOf = (t: number) => fadeBand((clock - t) / LIFETIME);
 
     function tick(now: number) {
       let dt = (now - last) / 1000;
@@ -202,7 +157,7 @@
         cardiac += sub;
         while (cardiac - beatOnset >= beatRR) {
           beatOnset += beatRR;
-          beatRR = nextRR(beatOnset);
+          beatRR = nextRR(bpm, beatOnset);
           beatAmp = nextAmp();
         }
         const tau = cardiac - beatOnset;
@@ -244,7 +199,7 @@
           k++;
           continue;
         }
-        ctx.globalAlpha = band / BANDS;
+        ctx.globalAlpha = band / FADE_BANDS;
         ctx.beginPath();
         ctx.moveTo(trail[k - 1].x, trail[k - 1].y);
         ctx.lineTo(trail[k].x, trail[k].y);
