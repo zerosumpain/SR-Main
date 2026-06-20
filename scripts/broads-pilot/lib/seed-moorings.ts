@@ -36,7 +36,9 @@ export const EXTRA: ExtraMooring[] = [
   { name: 'Ranworth Staithe', lat: 52.6677, lng: 1.4958, meta: { tier: 'ba_staffed', rate: { amount: 6, unit: 'night' }, facilities: F({ water: true, toilets: true }), capacity_caveat: true, last_verified: '2025' } },
   { name: 'Reedham Quay', lat: 52.5666, lng: 1.5712, meta: { tier: 'ba_staffed', rate: { amount: 12, unit: 'night' }, facilities: F({ water: true }), last_verified: '2025' } },
   { name: 'Norwich Yacht Station', lat: 52.6268, lng: 1.3108, meta: { tier: 'yacht_station', rate: { amount: 18, unit: 'night' }, facilities: F({ water: true, shore_power: true, toilets: true, showers: true, refuse: true }), last_verified: '2025' } },
-  { name: 'Great Yarmouth Yacht Station', lat: 52.6097, lng: 1.7288, meta: { tier: 'yacht_station', rate: { amount: 12, unit: 'night' }, facilities: F({ water: true, shore_power: true, toilets: true, showers: true }), last_verified: '2025' } },
+  // On the Bure UPSTREAM (north) of both low Yarmouth bridges — reachable from the
+  // north without a low bridge; snaps to the n-ys-yarmouth node from split-yarmouth.ts.
+  { name: 'Great Yarmouth Yacht Station', lat: 52.6129, lng: 1.7233, meta: { tier: 'yacht_station', rate: { amount: 12, unit: 'night' }, facilities: F({ water: true, shore_power: true, toilets: true, showers: true }), last_verified: '2025' } },
   { name: "St Benet's Abbey", lat: 52.6758, lng: 1.5258, meta: { tier: 'ba_free', rate: { amount: 0, unit: 'free' }, facilities: F({}), capacity: 60, capacity_caveat: true, last_verified: '2025' } },
   { name: 'How Hill', lat: 52.7092, lng: 1.4794, meta: { tier: 'ba_free', rate: { amount: 0, unit: 'free' }, facilities: F({}), capacity_caveat: true, last_verified: '2025' } },
   { name: 'Coltishall Common', lat: 52.7268, lng: 1.3760, meta: { tier: 'ba_free', rate: { amount: 0, unit: 'free' }, facilities: F({ water: true }), capacity_caveat: true, last_verified: '2025' } },
