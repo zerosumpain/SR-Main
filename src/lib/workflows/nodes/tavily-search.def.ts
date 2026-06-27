@@ -14,6 +14,7 @@ export const tavilySearchDef: NodeDefinition = {
       includeAnswer: { type: 'boolean', description: 'Include a Tavily-generated summary answer (default false)' },
       topic: { type: 'string', description: 'Search topic: "general" (default) or "news" — news biases results toward recent press coverage and enables the `days` recency filter.' },
       days: { type: 'number', description: 'Only return results from the last N days. Requires topic="news". Leave blank or 0 to disable.' },
+      excludeDomains: { type: 'string', description: 'Comma-separated domains to exclude from results (e.g. "example.com, spam.io")' },
     },
     required: ['query'],
   },
@@ -64,6 +65,10 @@ export const tavilySearchDef: NodeDefinition = {
       key: 'days', label: 'Recency (days)', type: 'slider',
       min: 0, max: 30, step: 1,
       description: 'Only return results from the last N days. 0 disables. Only applied when topic = "news".',
+    },
+    {
+      key: 'excludeDomains', label: 'Exclude Domains', type: 'text',
+      description: 'Comma-separated domains to block from results (e.g. "example.com, spam.io")',
     },
   ],
   llmDescription: 'Searches the web via Tavily. Returns { query, answer?, results: [{ title, url, content, score }], count }. Use this to find relevant URLs and snippets for a topic. Pair with web-scrape to read the full text of promising results. Each result has a short `content` snippet — for full article text, follow up with web-scrape on the URL. Set includeAnswer=true to also get a Tavily-generated summary answer. For news monitoring / briefing workflows, set topic="news" and days=N to restrict to recent press coverage (e.g. days=3 for a daily briefing).',

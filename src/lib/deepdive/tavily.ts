@@ -41,6 +41,7 @@ export async function search(
     includeAnswer?: boolean;
     topic?: 'general' | 'news';
     days?: number;
+    excludeDomains?: string[];
     signal?: AbortSignal;
   },
 ): Promise<TavilySearchResponse> {
@@ -61,6 +62,7 @@ export async function search(
         // `days` is only honoured by the Tavily API when topic='news'; sending
         // it otherwise is ignored by the server but harmless.
         ...(options?.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
+        ...(options?.excludeDomains?.length ? { exclude_domains: options.excludeDomains } : {}),
       }),
       signal: combineSignals(options?.signal, TAVILY_TIMEOUT_MS),
     });

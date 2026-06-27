@@ -26,8 +26,11 @@ export const tavilySearchExecutor: NodeExecutor = {
     const topic: 'general' | 'news' = topicRaw === 'news' ? 'news' : 'general';
     const daysNum = Number(config.days);
     const days = Number.isFinite(daysNum) && daysNum > 0 ? Math.min(Math.floor(daysNum), 30) : undefined;
+    const excludeDomains = typeof config.excludeDomains === 'string' && config.excludeDomains.trim()
+      ? config.excludeDomains.split(',').map((d: string) => d.trim()).filter(Boolean)
+      : undefined;
 
-    const response = await search(query, { maxResults, searchDepth, includeAnswer, topic, days });
+    const response = await search(query, { maxResults, searchDepth, includeAnswer, topic, days, excludeDomains });
 
     return {
       output: {
