@@ -19,6 +19,7 @@ const SUPPORTED_METRICS = [
   'body_mass',
   'apple_exercise_time',
   'apple_stand_hour',
+  'vo2_max',
 ];
 
 interface AppleHealthDataPoint {
