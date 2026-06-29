@@ -1,57 +1,41 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { HealthDay } from '$lib/health/series-30d-service';
-  import Ecg from '$lib/components/shared/Ecg.svelte';
-  import Orbit from './Orbit.svelte';
-  import Biome from './Biome.svelte';
+  import Readiness from './Readiness.svelte';
 
-  type Variant = 'ecg' | 'orbit' | 'biome';
+  type Factor = { value: number; weight: number };
+  type ReadinessData = {
+    score: number;
+    label: string;
+    recommendation: string;
+    factors: {
+      recovery: Factor;
+      hrvTrend: Factor & { direction: 'up' | 'down' | 'stable'; raw?: number; avg7d?: number };
+      sleepQuality: Factor;
+      loadBalance: Factor & { zone: string };
+    };
+  } | null;
 
   let {
-    series,
     today,
     headline,
     strap,
     todayDeltas,
+    rhrBaseline,
+    readiness,
+    onevidence,
   }: {
-    series: HealthDay[];
     today: HealthDay;
     headline: { primary: string; ghost: string };
     strap: string;
     todayDeltas: { recDelta: number; hrvDeltaPct: number; rhrDelta: number; sleepDelta: number };
+    rhrBaseline: number;
+    readiness: ReadinessData;
+    onevidence?: (id: string) => void;
   } = $props();
-
-  let variant = $state<Variant>('ecg');
-
-  onMount(() => {
-    try {
-      const stored = localStorage.getItem('sr.health.viz');
-      if (stored === 'ecg' || stored === 'orbit' || stored === 'biome') variant = stored;
-    } catch {
-      // ignore
-    }
-  });
-
-  function setVariant(v: Variant) {
-    variant = v;
-    try {
-      localStorage.setItem('sr.health.viz', v);
-    } catch {
-      // ignore
-    }
-  }
 
   const dateTag = new Date()
     .toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' })
     .toUpperCase();
-
-  const footMeta = $derived(
-    variant === 'ecg'
-      ? 'CH1 · 250 Hz · LIVE'
-      : variant === 'orbit'
-        ? 'TODAY vs 30d BASELINE'
-        : 'BIOME · AMBIENT',
-  );
 
   function fmtDelta(n: number, suffix = '', sign = true): string {
     if (n === 0) return `→ ${suffix}`;
@@ -69,108 +53,81 @@
   const sleepDeltaMin = $derived(todayDeltas.sleepDelta / 60);
   const sleepDeltaText = $derived(
     sleepDeltaMin === 0
-      ? '→ at baseline'
+      ? '→ at 7d avg'
       : (sleepDeltaMin > 0 ? '↑ ' : '↓ ') +
         Math.floor(Math.abs(sleepDeltaMin) / 60) +
         'h ' +
         Math.round(Math.abs(sleepDeltaMin) % 60) +
-        'm',
+        'm vs 7d',
   );
 </script>
 
 <section class="h-hero">
-  <div class="h-hero-bg">
-    {#if variant === 'ecg'}
-      <Ecg rhr={today.rhr || 64} />
-    {:else if variant === 'orbit'}
-      <Orbit {series} {today} />
-    {:else}
-      <Biome rhr={today.rhr || 64} />
-    {/if}
-  </div>
-
   <div class="h-hero-inner">
-    <div class="h-hero-left">
-      <p class="h-section-num">01 / TODAY · {dateTag}</p>
-      <h1 class="h-hero-headline">
-        {headline.primary}<br /><span class="ghost">{headline.ghost}</span>
-      </h1>
-      <p class="h-hero-strap">{strap}</p>
-      <div class="h-today">
-        <div class="h-today-cell">
-          <p class="h-today-label">RECOVERY</p>
-          <p class="h-today-value {recoveryClass(today.rec)}">
-            {today.rec}<span class="h-today-unit">%</span>
-          </p>
-          <p
-            class="h-today-delta"
-            class:up={todayDeltas.recDelta > 0}
-            class:down={todayDeltas.recDelta < 0}
-            class:flat={todayDeltas.recDelta === 0}
-          >
-            {fmtDelta(todayDeltas.recDelta, ' vs 7d avg')}
-          </p>
-        </div>
-        <div class="h-today-cell">
-          <p class="h-today-label">HRV</p>
-          <p class="h-today-value">{today.hrv}<span class="h-today-unit">ms</span></p>
-          <p
-            class="h-today-delta"
-            class:up={todayDeltas.hrvDeltaPct > 0}
-            class:down={todayDeltas.hrvDeltaPct < 0}
-            class:flat={todayDeltas.hrvDeltaPct === 0}
-          >
-            {fmtDelta(todayDeltas.hrvDeltaPct, '% overnight')}
-          </p>
-        </div>
-        <div class="h-today-cell">
-          <p class="h-today-label">RESTING HR</p>
-          <p class="h-today-value">{today.rhr}<span class="h-today-unit">bpm</span></p>
-          <p
-            class="h-today-delta"
-            class:up={todayDeltas.rhrDelta < 0}
-            class:down={todayDeltas.rhrDelta > 0}
-            class:flat={todayDeltas.rhrDelta === 0}
-          >
-            {fmtDelta(todayDeltas.rhrDelta, ' vs baseline')}
-          </p>
-        </div>
-        <div class="h-today-cell">
-          <p class="h-today-label">SLEEP</p>
-          <p class="h-today-value">
-            {today.slept.toFixed(1)}<span class="h-today-unit">h</span>
-          </p>
-          <p
-            class="h-today-delta"
-            class:up={sleepDeltaMin > 0}
-            class:down={sleepDeltaMin < 0}
-            class:flat={sleepDeltaMin === 0}
-          >
-            {sleepDeltaText}
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
+    <p class="h-section-num">01 / TODAY · {dateTag}</p>
 
-  <div class="h-hero-bg-foot">
-    <span class="h-foot-meta">SIGNATURE · {variant.toUpperCase()} · {footMeta}</span>
-    <div class="h-viz-tabs" role="tablist" aria-label="Hero visual">
-      <button
-        class="h-viz-tab"
-        aria-pressed={variant === 'ecg'}
-        onclick={() => setVariant('ecg')}>ECG</button
-      >
-      <button
-        class="h-viz-tab"
-        aria-pressed={variant === 'orbit'}
-        onclick={() => setVariant('orbit')}>Orbit</button
-      >
-      <button
-        class="h-viz-tab"
-        aria-pressed={variant === 'biome'}
-        onclick={() => setVariant('biome')}>Biome</button
-      >
+    {#if readiness}
+      <Readiness {readiness} {onevidence} />
+    {/if}
+
+    <p class="h-hero-editorial" class:lead={!readiness}>
+      <span class="h-hero-ed-headline">{headline.primary} {headline.ghost}</span>
+      <span class="h-hero-ed-strap">{strap}</span>
+    </p>
+
+    <div class="h-today">
+      <div class="h-today-cell">
+        <p class="h-today-label">RECOVERY</p>
+        <p class="h-today-value {recoveryClass(today.rec)}">
+          {today.rec}<span class="h-today-unit">%</span>
+        </p>
+        <p
+          class="h-today-delta"
+          class:up={todayDeltas.recDelta > 0}
+          class:down={todayDeltas.recDelta < 0}
+          class:flat={todayDeltas.recDelta === 0}
+        >
+          {fmtDelta(todayDeltas.recDelta, ' vs 7d avg')}
+        </p>
+      </div>
+      <div class="h-today-cell">
+        <p class="h-today-label">HRV</p>
+        <p class="h-today-value">{today.hrv}<span class="h-today-unit">ms</span></p>
+        <p
+          class="h-today-delta"
+          class:up={todayDeltas.hrvDeltaPct > 0}
+          class:down={todayDeltas.hrvDeltaPct < 0}
+          class:flat={todayDeltas.hrvDeltaPct === 0}
+        >
+          {fmtDelta(todayDeltas.hrvDeltaPct, '% vs yest')}
+        </p>
+      </div>
+      <div class="h-today-cell">
+        <p class="h-today-label">RESTING HR</p>
+        <p class="h-today-value">{today.rhr}<span class="h-today-unit">bpm</span></p>
+        <p
+          class="h-today-delta"
+          class:up={todayDeltas.rhrDelta < 0}
+          class:down={todayDeltas.rhrDelta > 0}
+          class:flat={todayDeltas.rhrDelta === 0}
+        >
+          {fmtDelta(todayDeltas.rhrDelta, ` vs base ${rhrBaseline}`)}
+        </p>
+      </div>
+      <div class="h-today-cell">
+        <p class="h-today-label">SLEEP</p>
+        <p class="h-today-value">
+          {today.slept.toFixed(1)}<span class="h-today-unit">h</span>
+        </p>
+        <p
+          class="h-today-delta"
+          class:up={sleepDeltaMin > 0}
+          class:down={sleepDeltaMin < 0}
+          class:flat={sleepDeltaMin === 0}
+        >
+          {sleepDeltaText}
+        </p>
+      </div>
     </div>
   </div>
 </section>
@@ -178,108 +135,54 @@
 <style>
   .h-hero {
     position: relative;
-    padding: 64px 32px 56px;
-    overflow: hidden;
+    padding: 56px 32px 44px;
     border-bottom: 1px solid var(--divider);
-    min-height: 680px;
-    display: flex;
-    flex-direction: column;
-  }
-  .h-hero-bg {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-  }
-  .h-hero-bg::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to right,
-      var(--bg) 0%,
-      rgba(237, 228, 212, 0.5) 25%,
-      rgba(237, 228, 212, 0.2) 60%,
-      rgba(237, 228, 212, 0.6) 100%
-    );
-    pointer-events: none;
-  }
-  .h-hero-bg-foot {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 32px;
-    z-index: 4;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    border-top: 1px solid var(--divider);
-    background: color-mix(in srgb, var(--bg) 80%, transparent);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  .h-foot-meta {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .h-hero-inner {
     position: relative;
-    z-index: 5;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
     max-width: 1480px;
     margin: 0 auto;
     width: 100%;
-    flex: 1;
-    align-items: stretch;
-  }
-  .h-hero-left {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding-bottom: 56px;
-    justify-content: flex-end;
-    max-width: 760px;
   }
   .h-section-num {
     font-family: var(--font-mono);
     font-size: 11px;
     letter-spacing: 0.15em;
     color: var(--text-ghost);
-    margin: 0 0 8px 0;
+    margin: 0;
     text-transform: uppercase;
   }
-  .h-hero-headline {
+  .h-hero-editorial {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    border-left: 3px solid var(--accent);
+    padding-left: 16px;
+  }
+  .h-hero-ed-headline {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: clamp(56px, 9vw, 132px);
-    line-height: 0.86;
+    font-size: clamp(28px, 4vw, 44px);
+    line-height: 0.95;
     letter-spacing: -0.03em;
     text-transform: uppercase;
-    margin: 0;
     color: var(--text-primary);
   }
-  .h-hero-headline :global(.ghost) {
-    color: var(--text-ghost);
-  }
-  .h-hero-strap {
-    font-size: 16px;
+  .h-hero-ed-strap {
+    font-family: var(--font-body);
+    font-size: 15px;
     line-height: 1.5;
-    max-width: 480px;
-    margin: 0;
     color: var(--text-secondary);
-    border-left: 3px solid var(--accent);
-    padding-left: 14px;
+    max-width: 560px;
+  }
+  /* When readiness is unavailable, the editorial line becomes the hero lead. */
+  .h-hero-editorial.lead .h-hero-ed-headline {
+    font-size: clamp(48px, 8vw, 104px);
+    line-height: 0.86;
   }
 
   .h-today {
@@ -288,7 +191,6 @@
     gap: 0;
     border-top: 2px solid var(--card-border);
     border-bottom: 2px solid var(--card-border);
-    margin-top: 24px;
   }
   @media (max-width: 720px) {
     .h-today {
@@ -301,10 +203,14 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    position: relative;
   }
   .h-today-cell:last-child {
     border-right: none;
+  }
+  @media (max-width: 720px) {
+    .h-today-cell:nth-child(2) {
+      border-right: none;
+    }
   }
   .h-today-label {
     font-family: var(--font-mono);
@@ -354,41 +260,9 @@
     color: var(--text-muted);
   }
 
-  .h-viz-tabs {
-    display: inline-flex;
-    gap: 0;
-    pointer-events: auto;
-  }
-  .h-viz-tab {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    background: transparent;
-    border: 1px solid var(--card-border);
-    padding: 4px 10px;
-    cursor: pointer;
-    margin-left: -1px;
-    transition: all 0.18s ease-out;
-    border-radius: 0;
-  }
-  .h-viz-tab:hover {
-    color: var(--text-primary);
-  }
-  .h-viz-tab[aria-pressed='true'] {
-    color: #fff;
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
   @media (max-width: 720px) {
     .h-hero {
-      padding: 48px 16px 80px;
-      min-height: 560px;
-    }
-    .h-hero-bg-foot {
-      padding: 10px 16px;
+      padding: 40px 16px 32px;
     }
   }
 </style>

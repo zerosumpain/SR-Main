@@ -425,3 +425,160 @@ a {
     animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
+
+
+/* ============================================================
+   /health v2 — shared analytic card + grid primitives.
+   Kept in the global sheet (not a standalone CSS import) so the
+   PWA injectManifest step keeps emitting the SvelteKit service worker.
+   ============================================================ */
+/*
+ * Canonical /health card + grid primitives, shared across the v2 analytic
+ * sections (Breakdown defines its own scoped copy; these globals match it 1:1
+ * so every new section is pixel-consistent). Values mirror Breakdown.svelte.
+ */
+
+.h-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 0;
+  border: 2px solid var(--card-border);
+}
+@media (max-width: 1100px) {
+  .h-detail-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .h-detail-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.h-card {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-right: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 220px;
+}
+.h-card.span-12 { grid-column: span 12; }
+.h-card.span-8 { grid-column: span 8; }
+.h-card.span-6 { grid-column: span 6; }
+.h-card.span-4 { grid-column: span 4; }
+.h-card.span-3 { grid-column: span 3; }
+@media (max-width: 1100px) {
+  .h-card.span-12,
+  .h-card.span-8,
+  .h-card.span-6,
+  .h-card.span-4 {
+    grid-column: span 6;
+  }
+  .h-card.span-3 { grid-column: span 3; }
+}
+@media (max-width: 700px) {
+  .h-card.span-12,
+  .h-card.span-8,
+  .h-card.span-6,
+  .h-card.span-4,
+  .h-card.span-3 {
+    grid-column: span 2;
+  }
+}
+.h-card.tinted {
+  background: var(--bg-section);
+}
+
+.h-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.h-card-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+.h-card-head-l {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.h-card-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.h-card-tag.good {
+  color: var(--accent);
+  border-color: rgba(196, 87, 10, 0.4);
+}
+.h-card-tag.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.h-card-tag.bad {
+  color: var(--trend-down);
+  border-color: color-mix(in srgb, var(--trend-down) 40%, transparent);
+}
+.h-card-tag.flat {
+  color: var(--text-muted);
+}
+
+.h-card-value {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 56px;
+  letter-spacing: -0.02em;
+  line-height: 0.9;
+  margin: 0;
+  color: var(--text-primary);
+}
+.h-card-value.accent { color: var(--accent); }
+.h-card-value.warn { color: var(--warn); }
+.h-card-value.bad { color: var(--trend-down); }
+.h-card-value.sm { font-size: 40px; }
+.h-card-unit {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.h-card-foot {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+  margin-top: auto;
+}
+.h-card-foot em {
+  color: var(--accent);
+  font-style: normal;
+}
+.h-card-foot.action {
+  color: var(--text-primary);
+  border-top: 1px solid var(--divider);
+  padding-top: 10px;
+}
+.h-card-foot.action::before {
+  content: '→ ';
+  color: var(--accent);
+}

@@ -33,12 +33,17 @@
   const recoveryTag = $derived(
     today.rec < 40 ? 'RED' : today.rec < 67 ? 'AMBER' : 'GREEN',
   );
+  // Traffic-light: red (<40) = bad, amber (40–66) = warn, green (>=67) = good.
   const recoveryTagClass = $derived(
-    today.rec < 67 ? 'bad' : 'good',
+    today.rec < 40 ? 'bad' : today.rec < 67 ? 'warn' : 'good',
   );
   const hrvTag = $derived(today.hrv < hrvAvg7 ? `↓ ${Math.round(((hrvAvg7 - today.hrv) / hrvAvg7) * 100)}%` : `↑ ${Math.round(((today.hrv - hrvAvg7) / hrvAvg7) * 100)}%`);
   const strainTag = $derived(yesterday.strain >= 14 ? 'HIGH' : yesterday.strain >= 10 ? 'MODERATE' : 'LIGHT');
-  const strainTagClass = $derived(yesterday.strain >= 14 ? 'good' : 'flat');
+  // Strain is load, not a verdict — never paint it 'good'. High = noteworthy (warn), else neutral.
+  const strainTagClass = $derived(yesterday.strain >= 14 ? 'warn' : 'flat');
+  const recoveryValueClass = $derived(
+    today.rec < 40 ? 'bad' : today.rec < 67 ? 'warn' : 'accent',
+  );
 
   // Sleep card
   const sleepStages = $derived(
@@ -55,21 +60,37 @@
   );
 
   function buildSleepBlocks(stages: { deep: number; rem: number; light: number; awake: number }): string[] {
+    const order = ['deep', 'rem', 'light', 'awake'] as const;
     const total = stages.deep + stages.rem + stages.light + stages.awake;
     const target = 20;
-    const counts = {
-      deep: Math.round((stages.deep / total) * target),
-      rem: Math.round((stages.rem / total) * target),
-      awake: Math.round((stages.awake / total) * target),
-      light: 0,
-    };
-    counts.light = target - counts.deep - counts.rem - counts.awake;
-    if (counts.light < 0) {
-      counts.light = 0;
-      const overflow = counts.deep + counts.rem + counts.awake - target;
-      counts.light = Math.max(0, target - counts.deep - counts.rem - counts.awake);
-      void overflow;
+    if (total <= 0) return Array(target).fill('light');
+
+    // Largest-remainder allocation with a floor of 1 block for any stage that
+    // actually occurred — so a short (e.g. 12-min deep) stage never rounds away.
+    const cells = order.map((k) => {
+      const ideal = (stages[k] / total) * target;
+      return { k, n: stages[k] > 0 ? Math.max(1, Math.floor(ideal)) : 0, frac: ideal - Math.floor(ideal) };
+    });
+    let used = cells.reduce((a, b) => a + b.n, 0);
+    if (used < target) {
+      const byFrac = [...cells].sort((a, b) => b.frac - a.frac);
+      for (let i = 0; i < target - used; i++) byFrac[i % byFrac.length].n++;
+    } else if (used > target) {
+      // The min-1 floors overshot — trim from the largest counts (never below 1).
+      let over = used - target;
+      const byN = [...cells].sort((a, b) => b.n - a.n);
+      let i = 0;
+      while (over > 0 && i < 200) {
+        const c = byN[i % byN.length];
+        if (c.n > 1) {
+          c.n--;
+          over--;
+        }
+        i++;
+      }
     }
+
+    const counts: Record<string, number> = Object.fromEntries(cells.map((c) => [c.k, c.n]));
     const out: string[] = [];
     for (let i = 0; i < counts.light; i++) out.push('light');
     for (let i = 0; i < counts.deep; i++) out.push('deep');
@@ -86,7 +107,11 @@
 
   // Activity rings — driven by Apple Health (Move kcal / Exercise min / Stand hours)
   const stepsToday = $derived(today.steps);
-  const stepsTotal30d = $derived(Math.round(series.reduce((a, b) => a + b.steps, 0) / 1000));
+  const stepsAvg30d = $derived(
+    series.length
+      ? series.reduce((a, b) => a + b.steps, 0) / series.length / 1000
+      : 0,
+  );
   const movePct = $derived(Math.min(1, rings.moveKcal / Math.max(1, rings.moveTarget)));
   const exercisePct = $derived(Math.min(1, rings.exerciseMin / Math.max(1, rings.exerciseTarget)));
   const standPct = $derived(Math.min(1, rings.standHours / Math.max(1, rings.standTarget)));
@@ -103,7 +128,7 @@
       <p class="h-card-name">RECOVERY · TODAY</p>
       <span class="h-card-tag {recoveryTagClass}">{recoveryTag}</span>
     </div>
-    <p class="h-card-value accent">{today.rec}<span class="h-card-unit">%</span></p>
+    <p class="h-card-value {recoveryValueClass}">{today.rec}<span class="h-card-unit">%</span></p>
     <Sparkline data={recovery} fill />
     <p class="h-card-foot">7d avg <em>{recAvg7}%</em>. Threshold for green: 67%.</p>
   </div>
@@ -236,16 +261,29 @@
             </p>
           </div>
           <div>
-            <p class="h-card-name h-activity-mini">30D · TOTAL</p>
+            <p class="h-card-name h-activity-mini">30D · DAILY AVG</p>
             <p class="h-card-value h-activity-mini-val">
-              {stepsTotal30d}<span class="h-card-unit">k</span>
+              {stepsAvg30d.toFixed(1)}<span class="h-card-unit">k/day</span>
             </p>
           </div>
         </div>
-        <p class="h-card-foot h-activity-foot">
-          Move <em>{rings.moveKcal} kcal</em> · Exercise <em>{rings.exerciseMin} min</em> · Stand
-          <em>{rings.standHours}/{rings.standTarget}h</em>.
-        </p>
+        <div class="h-rings-legend">
+          <span class="h-rings-leg-item">
+            <span class="h-rings-leg-sw" style="background:var(--accent)"></span>MOVE
+            <em>{rings.moveKcal}/{rings.moveTarget}</em>
+            <span class="h-rings-leg-pct">{fmtPct(movePct)}</span>
+          </span>
+          <span class="h-rings-leg-item">
+            <span class="h-rings-leg-sw" style="background:#8a3a08"></span>EXERCISE
+            <em>{rings.exerciseMin}/{rings.exerciseTarget}</em>
+            <span class="h-rings-leg-pct">{fmtPct(exercisePct)}</span>
+          </span>
+          <span class="h-rings-leg-item">
+            <span class="h-rings-leg-sw" style="background:#5a2f0a"></span>STAND
+            <em>{rings.standHours}/{rings.standTarget}</em>
+            <span class="h-rings-leg-pct">{fmtPct(standPct)}</span>
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -390,6 +428,10 @@
     color: var(--trend-down);
     border-color: color-mix(in srgb, var(--trend-down) 40%, transparent);
   }
+  .h-card-tag.warn {
+    color: var(--warn);
+    border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  }
   .h-card-tag.flat {
     color: var(--text-muted);
   }
@@ -404,6 +446,12 @@
   }
   .h-card-value.accent {
     color: var(--accent);
+  }
+  .h-card-value.warn {
+    color: var(--warn);
+  }
+  .h-card-value.bad {
+    color: var(--trend-down);
   }
   .h-card-unit {
     font-family: var(--font-mono);
@@ -537,6 +585,36 @@
   }
   .h-activity-foot {
     margin-top: 10px;
+  }
+  .h-rings-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+  }
+  .h-rings-leg-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .h-rings-leg-item em {
+    color: var(--text-primary);
+    font-style: normal;
+  }
+  .h-rings-leg-sw {
+    width: 8px;
+    height: 8px;
+    flex: none;
+  }
+  .h-rings-leg-pct {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 500;
   }
 
   .h-rings-svg {

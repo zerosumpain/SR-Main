@@ -13,56 +13,92 @@
     display: (d: HealthDay) => string;
   };
 
-  const rows: Row[] = [
-    {
-      key: 'rec',
-      name: 'RECOVERY',
-      meta: 'Whoop · %',
-      f: (d) => d.rec / 100,
-      raw: (d) => d.rec,
-      display: (d) => `${d.rec}%`,
-    },
-    {
-      key: 'hrv',
-      name: 'HRV',
-      meta: 'ms · 5d ema',
-      f: (d) => clamp((d.hrv - 25) / 50, 0, 1),
-      raw: (d) => d.hrv,
-      display: (d) => `${d.hrv}ms`,
-    },
-    {
-      key: 'rhr',
-      name: 'RESTING HR',
-      meta: 'bpm · inv',
-      f: (d) => clamp(1 - (d.rhr - 50) / 22, 0, 1),
-      raw: (d) => d.rhr,
-      display: (d) => `${d.rhr}bpm`,
-    },
-    {
-      key: 'slept',
-      name: 'SLEEP',
-      meta: 'hours',
-      f: (d) => clamp((d.slept - 5) / 4, 0, 1),
-      raw: (d) => d.slept,
-      display: (d) => `${d.slept.toFixed(1)}h`,
-    },
-    {
-      key: 'strain',
-      name: 'STRAIN',
-      meta: '0–21',
-      f: (d) => clamp(d.strain / 21, 0, 1),
-      raw: (d) => d.strain,
-      display: (d) => d.strain.toFixed(1),
-    },
-    {
-      key: 'steps',
-      name: 'STEPS',
-      meta: 'count · k',
-      f: (d) => clamp(d.steps / 16000, 0, 1),
-      raw: (d) => d.steps,
-      display: (d) => `${(d.steps / 1000).toFixed(1)}k`,
-    },
-  ];
+  const hasWeight = $derived(series.some((d) => d.weight > 0));
+  const weightExtent = $derived.by(() => {
+    const ws = series.map((d) => d.weight).filter((w) => w > 0);
+    if (!ws.length) return { min: 0, max: 1 };
+    const min = Math.min(...ws);
+    const max = Math.max(...ws);
+    return { min, max: max === min ? min + 1 : max };
+  });
+
+  const rows = $derived.by((): Row[] => {
+    const base: Row[] = [
+      {
+        key: 'rec',
+        name: 'RECOVERY',
+        meta: 'Whoop · %',
+        f: (d) => d.rec / 100,
+        raw: (d) => d.rec,
+        display: (d) => `${d.rec}%`,
+      },
+      {
+        key: 'hrv',
+        name: 'HRV',
+        meta: 'ms · 5d ema',
+        f: (d) => clamp((d.hrv - 25) / 50, 0, 1),
+        raw: (d) => d.hrv,
+        display: (d) => `${d.hrv}ms`,
+      },
+      {
+        key: 'rhr',
+        name: 'RESTING HR',
+        meta: 'bpm · inv',
+        f: (d) => clamp(1 - (d.rhr - 50) / 22, 0, 1),
+        raw: (d) => d.rhr,
+        display: (d) => `${d.rhr}bpm`,
+      },
+      {
+        key: 'slept',
+        name: 'SLEEP',
+        meta: 'hours',
+        f: (d) => clamp((d.slept - 5) / 4, 0, 1),
+        raw: (d) => d.slept,
+        display: (d) => `${d.slept.toFixed(1)}h`,
+      },
+      {
+        key: 'strain',
+        name: 'STRAIN',
+        meta: '0–21',
+        f: (d) => clamp(d.strain / 21, 0, 1),
+        raw: (d) => d.strain,
+        display: (d) => d.strain.toFixed(1),
+      },
+      {
+        key: 'steps',
+        name: 'STEPS',
+        meta: 'count · k',
+        f: (d) => clamp(d.steps / 16000, 0, 1),
+        raw: (d) => d.steps,
+        display: (d) => `${(d.steps / 1000).toFixed(1)}k`,
+      },
+    ];
+    if (hasWeight) {
+      const { min, max } = weightExtent;
+      base.push({
+        key: 'weight',
+        name: 'WEIGHT',
+        meta: 'kg',
+        f: (d) => (d.weight > 0 ? clamp((d.weight - min) / (max - min), 0, 1) : 0),
+        raw: (d) => d.weight,
+        display: (d) => `${d.weight.toFixed(1)}kg`,
+      });
+    }
+    return base;
+  });
+
+  // Per-row real value range (min–max over days with data) so colour→value is legible.
+  const ranges = $derived(
+    rows.map((r) => {
+      const vals = series.map((d) => r.raw(d)).filter((v) => v > 0);
+      if (!vals.length) return null;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      const fmt = (v: number) =>
+        r.key === 'slept' ? v.toFixed(1) : r.key === 'steps' ? `${(v / 1000).toFixed(0)}k` : Math.round(v).toString();
+      return `${fmt(lo)}–${fmt(hi)}`;
+    }),
+  );
 
   const labels = $derived(series.map((d) => dayLabel(d.date)));
   const lastIndex = $derived(series.length - 1);
@@ -105,7 +141,7 @@
   {#each rows as row, rowIdx (row.key)}
     <div class="h-pg-rowlabel">
       <p class="h-pg-row-name">{row.name}</p>
-      <p class="h-pg-row-meta">{row.meta}</p>
+      <p class="h-pg-row-meta">{row.meta}{ranges[rowIdx] ? ` · ${ranges[rowIdx]}` : ''}</p>
     </div>
     <div class="h-pg-row">
       {#each series as d, i (i)}
@@ -141,6 +177,16 @@
         {i === 0 || l.dom === 1 || i === lastIndex || i % 7 === 0 ? l.dom : ''}
       </div>
     {/each}
+  </div>
+
+  <div class="h-pg-legend">
+    <span class="h-pg-legend-scale">
+      LOWER
+      <span class="h-pg-legend-ramp" aria-hidden="true"></span>
+      HIGHER
+    </span>
+    <span class="h-pg-legend-key"><span class="h-pg-legend-ring" aria-hidden="true"></span>best day in window</span>
+    <span class="h-pg-legend-key">each row scaled to its own range · RHR inverted (lower = better)</span>
   </div>
 
   {#if tip}
@@ -294,6 +340,51 @@
     color: var(--text-ghost);
     text-align: center;
     padding: 6px 0;
+  }
+  .h-pg-legend {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 9px 14px;
+    border-top: 1px solid var(--divider);
+    background: rgba(26, 16, 8, 0.02);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .h-pg-legend-scale {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .h-pg-legend-ramp {
+    display: inline-block;
+    width: 76px;
+    height: 9px;
+    background: linear-gradient(
+      to right,
+      rgb(237, 228, 212),
+      rgb(232, 200, 158),
+      rgb(222, 142, 64),
+      rgb(196, 87, 10),
+      rgb(138, 58, 8)
+    );
+  }
+  .h-pg-legend-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .h-pg-legend-ring {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--text-primary);
+    box-shadow: inset 0 0 0 1px var(--bg);
   }
   .h-tip {
     position: absolute;

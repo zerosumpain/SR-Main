@@ -2,7 +2,7 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { HealthDay } from './series-30d-service';
 
-type Stats = {
+export type NarrativeStats = {
   recToday: number;
   recAvg7: number;
   hrvToday: number;
@@ -14,6 +14,7 @@ type Stats = {
   hardestDay: { day: string; strain: number } | null;
   stepsToday: number;
 };
+type Stats = NarrativeStats;
 
 function avg(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
@@ -94,7 +95,7 @@ function templated(stats: Stats): string {
 export async function getNarrative(
   series: HealthDay[],
   rhrBaseline: number,
-): Promise<{ tag: string; text: string }> {
+): Promise<{ tag: string; text: string; stats: NarrativeStats }> {
   const today = series[series.length - 1];
   const stats = buildStats(series, rhrBaseline);
   const key = cacheKey(stats, today.date);
@@ -102,7 +103,7 @@ export async function getNarrative(
   const hit = cache.get(key);
   const now = Date.now();
   if (hit && hit.expiresAt > now) {
-    return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text: hit.text };
+    return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text: hit.text, stats };
   }
 
   const fallback = templated(stats);
@@ -143,5 +144,5 @@ export async function getNarrative(
     cache.delete(oldestKey);
   }
 
-  return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text };
+  return { tag: 'THIS WEEK · IN PLAIN ENGLISH', text, stats };
 }

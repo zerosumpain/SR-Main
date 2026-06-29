@@ -14,7 +14,7 @@ export const METHODOLOGY: MethodologyEntry[] = [
     id: 'readiness',
     metric: 'Readiness',
     cite: 'composite',
-    formula: 'weighted mean of recovery (40%), HRV trend (20%), sleep quality (25%), load balance (15%) — clipped to 0–100',
+    formula: 'weighted mean of recovery (40%), HRV trend (20%), sleep quality (20%), load balance (20%) — clipped to 0–100',
     sourceData: 'Whoop recovery, Whoop HRV, Whoop sleep performance, ACWR (Whoop strain).',
     caveats: 'Composite score. The factor with the lowest value usually drives the colour band. See each factor for its own evidence.',
     reference: 'Internal composite. No single citation.',

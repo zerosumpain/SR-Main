@@ -55,7 +55,7 @@ export type HealthSeriesData = {
   workouts: Workout[];
   correlations: Correlation[];
   annotations: Annotation[];
-  narrative: { tag: string; text: string };
+  narrative: { tag: string; text: string; stats: import('./narrative-service').NarrativeStats };
   headline: { primary: string; ghost: string };
   strap: string;
   rhrBaseline: number;

@@ -48,7 +48,7 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export type PulseRowKey = 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps';
+export type PulseRowKey = 'rec' | 'hrv' | 'rhr' | 'slept' | 'strain' | 'steps' | 'weight';
 
 // Lower-is-better keys; everything else ranks max wins.
 const MIN_DIRECTION: ReadonlySet<PulseRowKey> = new Set(['rhr']);
