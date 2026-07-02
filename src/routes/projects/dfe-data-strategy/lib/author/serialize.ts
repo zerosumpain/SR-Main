@@ -52,6 +52,18 @@ export function htmlToMarkdown(html: string): string {
   return decodeEntities(s).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/** A whole strategy document → publishable markdown. */
+export function docToMarkdown(doc: { title: string; sections: { title: string; html: string }[] }): string {
+  const parts = [`# ${doc.title}`, ''];
+  for (const s of doc.sections) {
+    parts.push(`## ${s.title}`, '');
+    const body = htmlToMarkdown(s.html);
+    parts.push(body || '_Not written yet._', '');
+  }
+  parts.push('---', `_Drafted in Keystone (/projects/dfe-data-strategy/author) — a decision-support tool, not an official strategy._`);
+  return parts.join('\n');
+}
+
 /** Markdown (subset) → sanitizer-allowlist HTML (for inserting starter content). */
 export function markdownToHtml(md: string): string {
   const esc = escapeHtml(md);

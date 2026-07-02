@@ -116,6 +116,71 @@ describe('runHeuristics', () => {
   });
 });
 
+describe('plan engine', () => {
+  it('dateToQuarter maps months to quarters and rejects rubbish', async () => {
+    const { dateToQuarter } = await import('../plan');
+    expect(dateToQuarter('2026-09')).toBe('2026-Q3');
+    expect(dateToQuarter('2027-01')).toBe('2027-Q1');
+    expect(dateToQuarter('2027-12')).toBe('2027-Q4');
+    expect(dateToQuarter('nope')).toBeNull();
+    expect(dateToQuarter(undefined)).toBeNull();
+  });
+  it('suggestRisks turns statutory gaps and tensions into risks, skipping existing', async () => {
+    const { suggestRisks } = await import('../plan');
+    const tensions = [
+      { id: 't1', title: 'Sharing ahead of governance', severity: 'high' as const, explanation: 'x', resolution: 'Stand up governance first.', triggers: [] },
+    ];
+    const risks = suggestRisks({ items: [], gaps: [], statutoryGaps: [], score: 0 }, tensions, []);
+    expect(risks.length).toBe(1);
+    expect(risks[0].title).toContain('Sharing ahead of governance');
+    expect(risks[0].likelihood).toBe(4);
+    const none = suggestRisks({ items: [], gaps: [], statutoryGaps: [], score: 0 }, tensions, [
+      { id: 'r1', title: 'Strategy tension: Sharing ahead of governance', likelihood: 4, impact: 4, mitigation: '' },
+    ]);
+    expect(none.length).toBe(0);
+  });
+  it('measure library is well-formed', async () => {
+    const { MEASURE_LIBRARY } = await import('../plan');
+    expect(MEASURE_LIBRARY.length).toBeGreaterThanOrEqual(25);
+    expect(new Set(MEASURE_LIBRARY.map((m) => m.id)).size).toBe(MEASURE_LIBRARY.length);
+    for (const m of MEASURE_LIBRARY) {
+      expect(['strategy-health', 'estate', 'outcome']).toContain(m.kind);
+      expect(m.source.length, m.id).toBeGreaterThan(5);
+    }
+  });
+});
+
+describe('validateReview', () => {
+  it('clamps scores, drops unknown section ids and junk shapes', async () => {
+    const { validateReview } = await import('../reviewValidate');
+    const out = validateReview(
+      {
+        sections: [
+          { id: 'vision', score: 250, verdict: 'x'.repeat(400), strengths: ['a', 2, null], weaknesses: 'nope', suggestions: [{ point: 'use this' }] },
+          { id: 'not-sent', score: 50, verdict: 'dropped' },
+          { id: 'vision', score: 10, verdict: 'dup dropped' },
+        ],
+        document: { score: -4, verdict: 'ok', contradictions: ['c1'], topFixes: ['f1', 'f2', 'f3', 'f4'], missingComponents: [] },
+      },
+      ['vision', 'principles'],
+    );
+    expect(out.sections.length).toBe(1);
+    expect(out.sections[0].score).toBe(100);
+    expect(out.sections[0].verdict.length).toBeLessThanOrEqual(240);
+    expect(out.sections[0].strengths).toEqual(['a', '2']);
+    expect(out.sections[0].weaknesses).toEqual([]);
+    expect(out.sections[0].suggestions).toEqual(['use this']);
+    expect(out.document.score).toBe(0);
+    expect(out.document.topFixes.length).toBe(3);
+  });
+  it('survives total garbage', async () => {
+    const { validateReview } = await import('../reviewValidate');
+    const out = validateReview('not even an object', ['a']);
+    expect(out.sections).toEqual([]);
+    expect(out.document.score).toBe(0);
+  });
+});
+
 describe('templates', () => {
   it('exposes at least 12 templates with guidance and prompts, unique ids', () => {
     expect(SECTION_TEMPLATES.length).toBeGreaterThanOrEqual(12);
