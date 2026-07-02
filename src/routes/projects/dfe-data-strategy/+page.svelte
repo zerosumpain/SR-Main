@@ -1,100 +1,254 @@
 <script lang="ts">
   import { app } from './lib/appState.svelte';
   import { PRESSURES } from './lib/pressures';
-  import { CAPABILITY_AREAS } from './lib/capabilities';
-  import { POSTURE_AXES } from './lib/postures';
+  import { COMMITMENTS, DOCUMENTS, MUST_ANSWER } from './lib/commitments';
+  import { STRATEGIES } from './lib/strategies';
+  import { SECTOR_VOICES } from './lib/sectorVoices';
+  import { SECTION_TEMPLATES } from './lib/author/templates';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
   const eli = $derived(app.narrative === 'eli5');
-  const counts = {
-    cross: PRESSURES.filter((p) => p.origin === 'cross-government').length,
-    dfe: PRESSURES.filter((p) => p.origin === 'dfe-policy').length,
-    partners: PRESSURES.filter((p) => p.origin === 'partners').length,
-  };
+  const BASE = '/projects/dfe-data-strategy';
+  const flowCount = new Set(COMMITMENTS.flatMap((c) => c.flows.map((f) => `${f.from}→${f.to}`))).size;
 </script>
 
 <svelte:head>
-  <title>Keystone — a DfE data-strategy workbench</title>
-  <meta name="description" content="Understand the pressures on DfE's use of data — from across government, from policy, and from partners — and shape a strategy that can deliver against them. A research-grounded decision-support tool." />
+  <title>Keystone — write a DfE data strategy</title>
+  <meta
+    name="description"
+    content="A one-stop shop for writing a DfE data strategy: explore the pressures and white-paper commitments, draft the strategy in a verified editor, and track what changes."
+  />
 </svelte:head>
 
 <div class="pe-route">
   <span class="pe-eyebrow">A data-strategy workbench · companion to the Policy Engine</span>
-  <h1 class="pe-h1">What would it actually take for DfE to deliver on data?</h1>
+  <h1 class="pe-h1">Everything you need to write a DfE data strategy.</h1>
   <p class="pe-lede hero-lede">
     {#if eli}
-      Lots of forces pull on how the Department for Education uses data — the rest of government, its own policies, and the schools and councils it works with. This tool lays those pressures out, lets you test different strategies, and shows where they clash.
+      Writing a plan for how the Department for Education uses data is hard: promises from government, pressure from
+      schools and councils, and lots of law. Keystone puts it all in one place — learn the landscape, write the plan,
+      check it automatically, and watch for changes.
     {:else}
-      Every department is told to treat data as a strategic asset. But a DfE data-strategy lead has to answer to three things at once — the pressures from across government, the data demands of DfE's own policy agenda, and the realities of a vast partner system. Keystone maps those pressures, then lets you test a strategy against them: posture choices and investment trade-offs, scored for coverage, maturity and the tensions they create.
+      A data-strategy lead has to hold the whole field in view: {PRESSURES.length} live pressures, the white-paper
+      commitments the department is already bound to, the legal stack, and a sector with strong opinions. Keystone is
+      the one-stop shop — <b>understand</b> the landscape, <b>write</b> the strategy in a verified editor, and
+      <b>track</b> what changes underneath it.
     {/if}
   </p>
 
-  <div class="cta">
-    {#if data?.authed}
-      <a class="pe-next" href="/projects/dfe-data-strategy/workbench">Open the workbench →</a>
-    {/if}
-    <a class="pe-next ghost" href="/projects/dfe-data-strategy/landscape">See the pressures landscape →</a>
-    <a class="pe-next ghost" href="/projects/dfe-data-strategy/strategies">Which strategies should shape it? →</a>
-    <a class="pe-next ghost" href="/projects/dfe-data-strategy/policy-builder">Build &amp; pressure-test a policy →</a>
-  </div>
+  <ol class="path" aria-label="Suggested path">
+    <li><a href="{BASE}/commitments"><b>1 · Understand</b><span>what the department is already committed to</span></a></li>
+    <li><a href="{BASE}/author"><b>2 · Write</b><span>draft the strategy, section by section</span></a></li>
+    <li><a href="{BASE}/author?tab=verify"><b>3 · Verify</b><span>find the gaps before anyone else does</span></a></li>
+  </ol>
 
-  <div class="origins">
-    <a class="org" href="/projects/dfe-data-strategy/landscape" style="--c:#2f6155">
-      <span class="o-n">{counts.cross}</span>
-      <span class="o-l">pressures from across government</span>
-      <span class="o-d">National Data Strategy, the CDDO/DSIT roadmap, AI ambitions, data law.</span>
-    </a>
-    <a class="org" href="/projects/dfe-data-strategy/landscape" style="--c:#8a2d3a">
-      <span class="o-n">{counts.dfe}</span>
-      <span class="o-l">pressures from DfE policy</span>
-      <span class="o-d">The consistent child identifier, attendance, SEND, NEET — drawn from the Policy Engine.</span>
-    </a>
-    <a class="org" href="/projects/dfe-data-strategy/landscape" style="--c:#2f6f97">
-      <span class="o-n">{counts.partners}</span>
-      <span class="o-l">pressures from partners</span>
-      <span class="o-d">150+ local authorities, thousands of trusts, the arm's-length bodies, health & care.</span>
-    </a>
-  </div>
+  <div class="modes">
+    <section class="mode" style="--c:#2f6155">
+      <span class="m-kicker">Understand</span>
+      <p class="m-promise">The landscape the strategy must answer — mapped, sourced, explorable.</p>
+      <div class="m-stats">
+        <a href="{BASE}/commitments"><b>{COMMITMENTS.length}</b> commitments from {DOCUMENTS.length} documents</a>
+        <a href="{BASE}/landscape"><b>{PRESSURES.length}</b> pressures from three directions</a>
+        <a href="{BASE}/sector"><b>{SECTOR_VOICES.length}</b> sector voices</a>
+      </div>
+      <nav class="m-links">
+        <a href="{BASE}/commitments">Commitments</a>
+        <a href="{BASE}/landscape">Landscape</a>
+        <a href="{BASE}/strategies">Influence map</a>
+        <a href="{BASE}/frameworks">Frameworks</a>
+        <a href="{BASE}/legislation">Legislation</a>
+        <a href="{BASE}/dfe">DfE in context</a>
+        <a href="{BASE}/sector">Sector voices</a>
+      </nav>
+    </section>
 
-  <h2 class="pe-h2">How the workbench works</h2>
-  <div class="how">
-    <div class="pe-card">
-      <span class="h-step">1 · Take a position</span>
-      <p>Set your <b>posture</b> on {POSTURE_AXES.length} core tensions — centralise or federate, build or buy, open or secure, foundations or AI-first — and split a finite pot of effort across {CAPABILITY_AREAS.length} capability areas.</p>
-    </div>
-    <div class="pe-card">
-      <span class="h-step">2 · See the consequences</span>
-      <p>A transparent, evidence-weighted engine scores how well your strategy <b>covers the pressures</b>, advances <b>data maturity</b>, and where it creates <b>tensions</b> — incoherent, under-resourced or legally risky combinations.</p>
-    </div>
-    <div class="pe-card">
-      <span class="h-step">3 · Bring your own evidence</span>
-      <p>Upload an existing strategy, audit or data map (<b>.docx / .xlsx / .pdf</b>); the model synthesises it, detects maturity signals and the pressures you already address, and suggests where to adjust.</p>
-    </div>
+    <section class="mode write" style="--c:#8a2d3a">
+      <span class="m-kicker">Write</span>
+      <p class="m-promise">Draft the strategy in the product — and let the machine check it.</p>
+      <div class="m-stats">
+        <a href="{BASE}/author"><b>{SECTION_TEMPLATES.length}</b> guided sections, WYSIWYG</a>
+        <a href="{BASE}/author?tab=verify"><b>{MUST_ANSWER.length || COMMITMENTS.length}</b> obligations swept for coverage</a>
+      </div>
+      <nav class="m-links">
+        <a href="{BASE}/author" class="hot">✎ Author the strategy</a>
+        <a href="{BASE}/policy-builder">Policy builder</a>
+        {#if data?.authed}
+          <a href="{BASE}/workbench">◆ Workbench</a>
+          <a href="{BASE}/workbench/upload">◆ Upload</a>
+        {/if}
+      </nav>
+    </section>
+
+    <section class="mode" style="--c:#2f6f97">
+      <span class="m-kicker">Track</span>
+      <p class="m-promise">The landscape moves. A daily sweep scores what's new against the strategy.</p>
+      <div class="m-stats">
+        <a href="{BASE}/intel"><b>◉</b> daily GOV.UK intelligence sweep</a>
+        <a href="{BASE}/strategies"><b>{STRATEGIES.length}</b> strategies on the influence map</a>
+      </div>
+      <nav class="m-links">
+        <a href="{BASE}/intel">Intel radar</a>
+        <a href="{BASE}/method">How it works</a>
+      </nav>
+    </section>
   </div>
 
   <h2 class="pe-h2">Built on the work, not beside it</h2>
   <p class="pe-prose link-para">
-    Keystone is a companion to <a href="/projects/policy-engine">the Policy Engine</a> and <a href="/projects/dfe-data-estate">The Data Estate</a>. The DfE-policy pressures are drawn straight from the Policy Engine's field studies — the
-    <a href="/projects/policy-engine/monitor">data spine and consistent child identifier</a>, <a href="/projects/policy-engine/attendance">attendance data</a>,
-    <a href="/projects/policy-engine/send">SEND</a>, <a href="/projects/policy-engine/neet">NEET</a> and the <a href="/projects/policy-engine/jigsaw">multi-agency data-sharing</a> problem — so the strategy is tested against the real data demands the policy work surfaced.
+    Keystone is a companion to <a href="/projects/policy-engine">the Policy Engine</a> and
+    <a href="/projects/dfe-data-estate">The Data Estate</a>. The DfE-policy pressures are drawn straight from the
+    Policy Engine's field studies — the
+    <a href="/projects/policy-engine/monitor">data spine and consistent child identifier</a>,
+    <a href="/projects/policy-engine/attendance">attendance data</a>, <a href="/projects/policy-engine/send">SEND</a>,
+    <a href="/projects/policy-engine/neet">NEET</a> and the
+    <a href="/projects/policy-engine/jigsaw">multi-agency data-sharing</a> problem — and the commitments ledger is
+    synthesized from the 2024–26 white-paper landscape, verified against primary sources.
   </p>
 </div>
 
 <style>
-  .hero-lede { max-width: 70ch; margin-bottom: 18px; }
-  .cta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 26px; }
-  .pe-next.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(28,22,17,0.3); }
-  .pe-next.ghost:hover { background: rgba(28,22,17,0.06); }
-  .origins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 8px 0 6px; }
-  .org { display: flex; flex-direction: column; gap: 3px; border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid var(--c); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; text-decoration: none; }
-  .org:hover { background: rgba(255,255,255,0.7); }
-  .o-n { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 600; color: var(--c); line-height: 1; }
-  .o-l { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); }
-  .o-d { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.6); margin-top: 2px; }
-  .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .how .pe-card p { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); }
-  .h-step { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-ink); }
-  .link-para { max-width: 80ch; }
-  @media (max-width: 820px) { .origins, .how { grid-template-columns: 1fr; } }
+  .hero-lede {
+    max-width: 74ch;
+    margin-bottom: 20px;
+  }
+  .hero-lede b {
+    color: var(--ink);
+  }
+
+  .path {
+    list-style: none;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 22px;
+    padding: 0;
+    counter-reset: step;
+  }
+  .path li {
+    flex: 1 1 200px;
+  }
+  .path a {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 11px 15px;
+    border: 1px solid rgba(28, 22, 17, 0.2);
+    border-radius: var(--radius-round);
+    background: rgba(255, 255, 255, 0.55);
+    text-decoration: none;
+  }
+  .path a:hover {
+    background: rgba(28, 22, 17, 0.05);
+    border-color: rgba(28, 22, 17, 0.4);
+  }
+  .path b {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+  .path span {
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: rgba(28, 22, 17, 0.68);
+  }
+
+  .modes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 13px;
+    margin: 4px 0 8px;
+  }
+  .mode {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid rgba(28, 22, 17, 0.14);
+    border-top: 4px solid var(--c);
+    border-radius: var(--radius-round);
+    background: rgba(255, 255, 255, 0.45);
+    padding: 15px 17px 14px;
+  }
+  .m-kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--c);
+    font-weight: 600;
+  }
+  .m-promise {
+    margin: 0;
+    font-family: 'Fraunces', serif;
+    font-size: 16.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--ink);
+    min-height: 44px;
+  }
+  .m-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .m-stats a {
+    font-size: 12.5px;
+    color: rgba(28, 22, 17, 0.7);
+    text-decoration: none;
+  }
+  .m-stats a:hover {
+    color: var(--ink);
+  }
+  .m-stats b {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--c);
+    margin-right: 3px;
+  }
+  .m-links {
+    display: flex;
+    gap: 5px 7px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(28, 22, 17, 0.15);
+  }
+  .m-links a {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink);
+    text-decoration: none;
+    padding: 4px 10px;
+    border: 1px solid rgba(28, 22, 17, 0.2);
+    border-radius: var(--radius-round);
+    background: rgba(255, 255, 255, 0.5);
+  }
+  .m-links a:hover {
+    background: rgba(28, 22, 17, 0.06);
+    border-color: rgba(28, 22, 17, 0.4);
+  }
+  .m-links a.hot {
+    background: var(--c);
+    color: #fff;
+    border-color: var(--c);
+  }
+  .m-links a.hot:hover {
+    filter: brightness(0.9);
+  }
+
+  .link-para {
+    max-width: 80ch;
+  }
+  @media (max-width: 900px) {
+    .modes {
+      grid-template-columns: 1fr;
+    }
+    .m-promise {
+      min-height: 0;
+    }
+  }
 </style>

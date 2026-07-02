@@ -6,14 +6,16 @@
 
   const BASE = '/projects/dfe-data-strategy';
   const BRIEFING = [{ href: BASE, label: 'Briefing' }];
-  const STUDIES = [
+  const UNDERSTAND = [
     { href: `${BASE}/landscape`, label: 'Landscape' },
+    { href: `${BASE}/commitments`, label: 'Commitments' },
     { href: `${BASE}/strategies`, label: 'Influence map' },
     { href: `${BASE}/frameworks`, label: 'Frameworks' },
     { href: `${BASE}/legislation`, label: 'Legislation' },
     { href: `${BASE}/dfe`, label: 'DfE in context' },
     { href: `${BASE}/sector`, label: 'Sector voices' },
   ];
+  const AUTHOR = { href: `${BASE}/author`, label: 'Author' };
   const POLICYB = { href: `${BASE}/policy-builder`, label: 'Policy builder' };
   const INTEL = { href: `${BASE}/intel`, label: 'Intel radar' };
   const WORKBENCH = [
@@ -27,12 +29,12 @@
 
   const MENU_GROUPS = $derived([
     { label: '', items: BRIEFING },
-    { label: 'Field studies', items: STUDIES },
-    { label: 'Build & track', items: [POLICYB, INTEL] },
-    ...(authed ? [{ label: 'Workbench (private)', items: WORKBENCH }] : []),
+    { label: 'Understand', items: UNDERSTAND },
+    { label: 'Write', items: [AUTHOR, POLICYB, ...(authed ? WORKBENCH : [])] },
+    { label: 'Track', items: [INTEL] },
     { label: 'Reference', items: [METHOD] },
   ]);
-  const ALL = $derived([...BRIEFING, ...STUDIES, POLICYB, INTEL, ...(authed ? WORKBENCH : []), METHOD]);
+  const ALL = $derived([...BRIEFING, ...UNDERSTAND, AUTHOR, POLICYB, ...(authed ? WORKBENCH : []), INTEL, METHOD]);
   const current = $derived(ALL.find((n) => active(n.href))?.label ?? 'Sections');
   let menuOpen = $state(false);
 </script>
@@ -41,16 +43,18 @@
   <nav class="tabs" aria-label="Sections">
     {#each BRIEFING as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
-    <span class="grp-lab" aria-hidden="true">Field studies</span>
-    {#each STUDIES as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
+    <span class="grp-lab" aria-hidden="true">Understand</span>
+    {#each UNDERSTAND as n}<a class="tab" class:active={active(n.href)} href={n.href}>{n.label}</a>{/each}
     <span class="nav-sep" aria-hidden="true"></span>
-    <a class="tab pb" class:active={active(POLICYB.href)} href={POLICYB.href} title="Write headline policies and get a grounded appraisal">✎ {POLICYB.label}</a>
-    <a class="tab live" class:active={active(INTEL.href)} href={INTEL.href} title="Daily sweep of new intelligence, scored against the strategy">◉ {INTEL.label}</a>
+    <span class="grp-lab" aria-hidden="true">Write</span>
+    <a class="tab pb" class:active={active(AUTHOR.href)} href={AUTHOR.href} title="Write the data strategy itself — sectioned editor with automated verification">✎ {AUTHOR.label}</a>
+    <a class="tab pb" class:active={active(POLICYB.href)} href={POLICYB.href} title="Write headline policies and get a grounded appraisal">{POLICYB.label}</a>
     {#if authed}
-      <span class="nav-sep" aria-hidden="true"></span>
-      <span class="grp-lab" aria-hidden="true">Private</span>
       {#each WORKBENCH as n}<a class="tab wb" class:active={active(n.href)} href={n.href}>◆ {n.label}</a>{/each}
     {/if}
+    <span class="nav-sep" aria-hidden="true"></span>
+    <span class="grp-lab" aria-hidden="true">Track</span>
+    <a class="tab live" class:active={active(INTEL.href)} href={INTEL.href} title="Daily sweep of new intelligence, scored against the strategy">◉ {INTEL.label}</a>
     <span class="nav-sep" aria-hidden="true"></span>
     <a class="tab method" class:active={active(METHOD.href)} href={METHOD.href}>⚙ {METHOD.label}</a>
   </nav>
