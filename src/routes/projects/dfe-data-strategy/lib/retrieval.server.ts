@@ -12,12 +12,24 @@ import { POSTURE_AXES } from './postures';
 import { SECTOR_VOICES, SECTOR_THEMES } from './sectorVoices';
 import { STRATEGIES, TIER_META } from './strategies';
 import { POLICY_ENGINE_BRIEF } from './policy';
+import { COMMITMENTS, DOCUMENTS_BY_ID, STATUS_META, ROLE_META } from './commitments';
+import { COMPARATORS } from './comparators';
 import { getOpenRouterClient, getEmbeddingModel, hasOpenRouter } from '$lib/deepdive/keys';
 
 export interface Chunk {
   id: string;
   sourceKey: string;
-  sourceType: 'pressure' | 'framework' | 'legislation' | 'maturity' | 'capability' | 'posture' | 'strategy' | 'overview';
+  sourceType:
+    | 'pressure'
+    | 'framework'
+    | 'legislation'
+    | 'maturity'
+    | 'capability'
+    | 'posture'
+    | 'strategy'
+    | 'commitment'
+    | 'comparator'
+    | 'overview';
   title: string;
   url: string | null;
   text: string;
@@ -108,6 +120,30 @@ function buildCorpus(): Chunk[] {
       title: `Sector voice — ${v.who} (${v.stance})`,
       url: v.sourceUrl ?? '/projects/dfe-data-strategy/sector',
       text: `${v.who} (${v.group}, ${v.stance}): ${v.point}`,
+    });
+
+  // the commitments ledger — every white-paper/statutory commitment, with implications
+  for (const cm of COMMITMENTS) {
+    const doc = DOCUMENTS_BY_ID[cm.docId];
+    c.push({
+      id: `cm-${cm.id}`,
+      sourceKey: `commitment:${cm.theme}`,
+      sourceType: 'commitment',
+      title: `Commitment: ${cm.title} (${doc?.shortName ?? cm.docId})`,
+      url: cm.sourceUrls[0] ?? '/projects/dfe-data-strategy/commitments',
+      text: `${cm.title}. ${cm.what} From: ${doc?.title ?? cm.docId}${cm.quote ? ` — "${cm.quote}"` : ''}. Status: ${STATUS_META[cm.status].label}. DfE role: ${ROLE_META[cm.dfeRole].label}.${cm.timeframe ? ` Timeframe: ${cm.timeframe}.` : ''} What it means for the strategy: ${cm.strategyImplication}${cm.flows.length ? ` New data flows: ${cm.flows.map((f) => `${f.from} to ${f.to} (${f.what})`).join('; ')}.` : ''}${cm.identifiers.length ? ` Identifiers: ${cm.identifiers.join(', ')}.` : ''}${cm.standards.length ? ` Standards: ${cm.standards.join(', ')}.` : ''}`,
+    });
+  }
+
+  // comparator strategies — how other departments wrote theirs
+  for (const cp of COMPARATORS)
+    c.push({
+      id: `cmp-${cp.id}`,
+      sourceKey: 'comparator',
+      sourceType: 'comparator',
+      title: `Comparator strategy: ${cp.title} (${cp.org})`,
+      url: cp.url,
+      text: `${cp.title} — ${cp.org}, ${cp.date}. Sections: ${cp.sections.join('; ')}. Strengths: ${cp.strengths.join('; ')}. Weaknesses: ${cp.weaknesses.join('; ')}. Lesson: ${cp.lesson}`,
     });
 
   // the influence-map catalogue — every strategy/statute/programme with its verdict
