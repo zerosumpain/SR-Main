@@ -857,8 +857,8 @@ export const COMMITMENTS: Commitment[] = [
     "quote": "we will introduce a new duty that provides absolute clarity on the legal basis to share information for the purposes of safeguarding children",
     "theme": "data-sharing",
     "status": "legislated-not-commenced",
-    "timeframe": "Enacted April 2026; commencement aimed 2027 alongside child-protection provisions, with statutory guidance",
-    "timeframeDate": "2027-01",
+    "timeframe": "duty expected to commence September 2026",
+    "timeframeDate": "2026-09",
     "dfeRole": "owner",
     "flows": [
       {
@@ -930,7 +930,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "cwsa-cnis-registers",
     "docId": "cwsa-2026",
     "title": "Children Not in School: compulsory LA registers with national data flows to DfE",
-    "what": "Section 38 CWSA inserts sections 436B-436G into the Education Act 1996: every English LA must maintain a register of eligible children not in school (home-educated and otherwise), holding prescribed content including names, addresses, parents' details, providers used and flags such as SEND, child protection and looked-after status; parents must supply and update information within 15 days. New s.436F requires LAs to provide register information to the Secretary of State when directed — enabling a national CNIS collection — and permits sharing with safeguarding bodies and inspectorates, with a s.436T disclosure shield so authorised disclosures do not breach confidentiality.",
+    "what": "Section 38 CWSA inserts sections 436B-436G into the Education Act 1996: every English LA must maintain a register of eligible children not in school (home-educated and otherwise), holding prescribed content including names, addresses, parents' details, providers used and flags such as SEND, child protection and looked-after status; parents must supply and update information within 15 days. New s.436F requires LAs to provide register information to the Secretary of State when directed — enabling a national CNIS collection — and permits sharing with safeguarding bodies and inspectorates, with a s.436T (inserted by section 40) disclosure shield so authorised disclosures do not breach confidentiality.",
     "quote": "maintain a register of children who are eligible to be registered by the authority",
     "theme": "register",
     "status": "legislated-not-commenced",
@@ -1479,11 +1479,11 @@ export const COMMITMENTS: Commitment[] = [
     "docId": "school-accountability-reform-response",
     "title": "Digital school profiles service (one-stop shop for school information)",
     "what": "Following the 2025 accountability consultation, DfE confirmed it will build online school profiles as the central, parent-facing source of up-to-date information about every school, bringing together Ofsted report cards, attendance, attainment, enrichment and other performance data now spread across multiple services. A pilot ran in 2025/26; the White Paper commits to profiles giving parents 'a rounded picture', and DfE is considering extending profiles to FE providers.",
-    "quote": "introducing school profiles to give parents a rounded picture of their child's education",
+    "quote": "developing digital school profiles to provide parents and the public with clear, reliable information across a range of school performance indicators",
     "theme": "new-service",
     "status": "in-delivery",
-    "timeframe": "Pilot in 2025/26; rollout before the end of the Parliament",
-    "timeframeDate": "2029-06",
+    "timeframe": "pilot 2025/26; public launch 2026/27",
+    "timeframeDate": "2026-09",
     "dfeRole": "owner",
     "flows": [
       {
@@ -4042,7 +4042,6 @@ export const COMMITMENTS: Commitment[] = [
     "docId": "content-store-announcement",
     "title": "Education content store: curated government data to train education AI tools",
     "what": "DfE and DSIT committed £3m (August 2024) to a content store pooling curriculum guidance, teaching standards, lesson plans and anonymised pupil assessments as training/grounding data for education AI tools, plus £1m Innovate UK tool prizes. DfE published evidence that grounding models in this data raised accuracy from 67% to 92%. The store is live at aicontentstore.education.gov.uk with 16 edtech providers building on it, is cited by the AI Action Plan One Year On and NDL updates as exemplar national data infrastructure, and underpins the AI tutoring programme.",
-    "quote": "The content store will enable AI companies to produce highly accurate tools for the education sector in a more efficient way.",
     "theme": "ai",
     "status": "in-delivery",
     "timeframe": "Announced Aug 2024; prototype tested June 2025; operational and feeding AI tutoring co-creation from 2026",
@@ -5377,11 +5376,11 @@ export const COMMITMENTS: Commitment[] = [
     "id": "dhsc-single-patient-record",
     "docId": "ten-year-health-plan",
     "title": "The single patient record — one health record per child",
-    "what": "DHSC and NHS England are building a single, secure, authoritative patient record for every person — including every child — surfaced through the NHS App. For children it becomes the canonical health record any school-linked health service would read, making it the health-side anchor for education–health record joins.",
+    "what": "DHSC and NHS England are building a single, secure, authoritative patient record for every patient — children included — surfaced through the NHS App, with public access from 2028. The plan does not single children out; but read strategically, it is set to become the de facto canonical child health record, and therefore the natural health-side anchor for any education–health record join.",
     "quote": "give patients real control over a single, secure and authoritative account of their data",
     "theme": "infrastructure",
     "status": "in-delivery",
-    "timeframe": "phased over the plan decade; early delivery this Parliament",
+    "timeframe": "public access from 2028",
     "dfeRole": "partner",
     "flows": [
       {
@@ -5424,7 +5423,8 @@ export const COMMITMENTS: Commitment[] = [
     "sourceUrls": [
       "https://www.gov.uk/government/publications/10-year-health-plan-for-england-fit-for-the-future",
       "https://www.gov.uk/government/publications/10-year-health-plan-for-england-fit-for-the-future/fit-for-the-future-10-year-health-plan-for-england-executive-summary"
-    ]
+    ],
+    "timeframeDate": "2028-01"
   },
   {
     "id": "dhsc-my-children-red-book",
@@ -5583,12 +5583,12 @@ export const COMMITMENTS: Commitment[] = [
     "id": "mhclg-local-outcomes-framework",
     "docId": "local-outcomes-framework",
     "title": "The Local Outcomes Framework runs on DfE data",
-    "what": "MHCLG's first Local Outcomes Framework (February 2026) sets sixteen national priority outcomes for central-local delivery. Its three child-focused outcomes are measured almost entirely with DfE-sourced metrics — GLD, the FSM-GLD gap, disadvantage attainment gaps, absence, NEET and children's social care indicators — alongside MoJ and DHSC child metrics, with a supporting digital tool from April 2026.",
+    "what": "MHCLG's first Local Outcomes Framework (February 2026) sets sixteen national priority outcomes for central-local delivery. Four are child-focused — Best Start in Life, Every Child Achieving and Thriving, Keeping Children Safe, and Child Poverty — and are measured almost entirely with DfE-sourced metrics (GLD, the FSM-GLD gap, disadvantage attainment gaps, absence, NEET and children's social care indicators) alongside MoJ and DHSC child metrics. A supporting digital tool is intended during 2026 but was not yet live as of July 2026.",
     "quote": "Percentage point difference between the proportion of children eligible or not eligible for Free School Meals achieving a Good Level of Development",
     "theme": "accountability",
     "status": "in-delivery",
-    "timeframe": "first edition Feb 2026; digital tool from April 2026",
-    "timeframeDate": "2026-04",
+    "timeframe": "first edition Feb 2026; digital tool intended during 2026",
+    "timeframeDate": "2026-02",
     "dfeRole": "partner",
     "flows": [
       {
