@@ -68,6 +68,25 @@ export const WATCHES: IntelWatch[] = [
     queries: ['"Data (Use and Access) Act"', 'data protection reform government', 'smart data scheme'],
     mustMatch: ['data (use and access)', 'duaa', 'data protection', 'smart data', 'digital verification'],
   },
+  // ---- commitments-ledger watches: track the ledger's hardest-binding programmes ----
+  {
+    id: 'data-spine',
+    label: 'DfE data spine, GIAC & single view of a learner',
+    queries: ['"data spine" education', '"Get Information About Children"', 'DfE "single view" learner record'],
+    mustMatch: ['data spine', 'get information about children', 'single view'],
+  },
+  {
+    id: 'registers',
+    label: 'Children-not-in-school registers — commencement & data standard',
+    queries: ['"children not in school" registers', 'elective home education register statutory', 'CWSA commencement regulations'],
+    mustMatch: ['children not in school', 'home education', 'commencement'],
+  },
+  {
+    id: 'school-profiles',
+    label: 'School profiles & accountability data (report cards, RISE)',
+    queries: ['"school profiles" DfE service', 'Ofsted "report card" data', 'RISE regional improvement schools data'],
+    mustMatch: ['school profile', 'report card', 'rise'],
+  },
 ];
 export const WATCH_LABELS: Record<string, string> = Object.fromEntries(WATCHES.map((w) => [w.id, w.label]));
 

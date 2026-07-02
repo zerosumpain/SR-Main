@@ -42,7 +42,8 @@
   <span class="pe-eyebrow">Live · Intelligence radar</span>
   <h1 class="pe-h1">What just landed — and what it means for the strategy</h1>
   <p class="pe-lede intro">
-    A daily sweep reads new UK-government publications, news and policy, then weighs each against this strategy: <b>how</b> it influences which strategies and pressures, the <b>considerations</b> it raises, and any <b>misalignments</b> with the current direction. Intelligence, scored for relevance — not a feed to scroll.
+    A daily sweep reads new UK-government publications, news and policy, then weighs each against this strategy: <b>how</b> it influences which strategies and pressures, the <b>considerations</b> it raises, and any <b>misalignments</b> with the current direction. Intelligence, scored for relevance — not a feed to scroll. The named watches track the
+    <a href="/projects/dfe-data-strategy/commitments">commitment ledger's</a> hardest-binding programmes — the identifier, the data spine, the registers, school profiles.
   </p>
 
   <div class="bar">
