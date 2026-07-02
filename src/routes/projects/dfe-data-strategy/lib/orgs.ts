@@ -42,12 +42,14 @@ export const ORGS: Org[] = [
 
 export const ORG_BY_ID: Record<string, Org> = Object.fromEntries(ORGS.map((o) => [o.id, o]));
 
+// Colors validated (dataviz six-checks, light surface) 2026-07-02; DfE is the root
+// node in ink, not a series color.
 export const ORG_GROUP_META: Record<Org['group'], { label: string; color: string }> = {
   dfe: { label: 'DfE', color: '#1c1611' },
   alb: { label: "DfE arm's-length bodies", color: '#8a2d3a' },
-  delivery: { label: 'The delivery system', color: '#2f6155' },
-  department: { label: 'Other departments', color: '#2f6f97' },
-  centre: { label: 'Centre of government', color: '#5d4a82' },
+  delivery: { label: 'The delivery system', color: '#2f7a4f' },
+  department: { label: 'Other departments', color: '#2c6fa3' },
+  centre: { label: 'Centre of government', color: '#5d4696' },
   research: { label: 'Statistics & research', color: '#a06a1f' },
-  public: { label: 'The public', color: '#55606b' },
+  public: { label: 'The public', color: '#4d6ba8' },
 };

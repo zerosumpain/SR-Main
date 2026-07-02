@@ -7,19 +7,37 @@
 
 import type { Commitment, CommitmentStatus, CommitmentTheme, DfeRole, PolicyDocument } from './types';
 
+// Colors validated (dataviz six-checks, light surface) 2026-07-02: lightness band,
+// chroma floor, adjacent-pair CVD (with glyph/gap/label secondary encoding), contrast.
+// THEME_ORDER is the validated fixed legend/assignment order — never cycle or repaint.
+export const THEME_ORDER: CommitmentTheme[] = [
+  'identifiers',
+  'analytics',
+  'standards',
+  'accountability',
+  'safeguarding',
+  'data-sharing',
+  'funding',
+  'new-service',
+  'ai',
+  'workforce',
+  'infrastructure',
+  'register',
+];
+
 export const THEME_META: Record<CommitmentTheme, { label: string; color: string }> = {
   identifiers: { label: 'Identifiers', color: '#8a2d3a' },
-  'data-sharing': { label: 'Data sharing', color: '#2f6f97' },
-  'new-service': { label: 'New service', color: '#2f6155' },
-  register: { label: 'Registers', color: '#5d4a82' },
+  analytics: { label: 'Analytics & evidence', color: '#0086a3' },
   standards: { label: 'Standards', color: '#a06a1f' },
-  ai: { label: 'AI', color: '#7d3c78' },
-  analytics: { label: 'Analytics & evidence', color: '#1f7a8c' },
-  infrastructure: { label: 'Infrastructure', color: '#55606b' },
+  accountability: { label: 'Accountability', color: '#4558b2' },
   safeguarding: { label: 'Safeguarding', color: '#b04a2f' },
-  accountability: { label: 'Accountability', color: '#3f5d8a' },
-  workforce: { label: 'Workforce', color: '#6d7f3c' },
-  funding: { label: 'Funding & oversight', color: '#8a6d3b' },
+  'data-sharing': { label: 'Data sharing', color: '#2c6fa3' },
+  funding: { label: 'Funding & oversight', color: '#9a6416' },
+  'new-service': { label: 'New services', color: '#2f7a4f' },
+  ai: { label: 'AI', color: '#7d3c78' },
+  workforce: { label: 'Workforce', color: '#6f8034' },
+  infrastructure: { label: 'Infrastructure', color: '#4d6ba8' },
+  register: { label: 'Registers', color: '#8a63c9' },
 };
 
 export const STATUS_META: Record<CommitmentStatus, { label: string; short: string; rank: number }> = {
