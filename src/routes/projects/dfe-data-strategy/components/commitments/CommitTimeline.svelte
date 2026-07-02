@@ -170,11 +170,14 @@
     padding: 6px 4px;
     overflow-x: auto;
   }
-  svg {
+  .svg-wrap > svg {
     display: block;
     width: 100%;
     min-width: 720px;
     height: auto;
+  }
+  .lg svg {
+    flex: none;
   }
   .tick {
     font-family: 'JetBrains Mono', monospace;
