@@ -1,6 +1,9 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import TakeawayBar from '../components/TakeawayBar.svelte';
+  import NextStep from '../components/NextStep.svelte';
   import LegalRegistry from '../components/LegalRegistry.svelte';
+  import { LEGISLATION } from '../lib/legislation';
 </script>
 
 <svelte:head><title>Legal foundations & gateways — Keystone</title></svelte:head>
@@ -15,12 +18,22 @@
     askLabel="The three layers"
   />
 
+  <TakeawayBar
+    takeaway="A lawful basis is not a legal power. Every new data flow the commitments create needs all three layers named — basis, gateway, governance — or it will stall in legal review."
+    takeawayEli5="Being allowed to hold data isn't the same as being allowed to share it. Each new share needs three separate boxes ticked."
+    chips={[
+      { n: String(LEGISLATION.length), label: 'instruments in the registry' },
+      { n: '3', label: 'layers per flow' },
+    ]}
+  />
+
   <LegalRegistry />
 
-  <p class="foot-link">The workbench surfaces which of these your chosen posture brings into play. See it in the <a href="/projects/dfe-data-strategy/workbench">diagnostic</a>.</p>
+  <NextStep
+    links={[
+      { label: 'DfE in context — the partner web', href: '/projects/dfe-data-strategy/dfe', kind: 'primary' },
+      { label: 'Write the legal-basis section', href: '/projects/dfe-data-strategy/author' },
+      { label: 'The workbench diagnostic', href: '/projects/dfe-data-strategy/workbench' },
+    ]}
+  />
 </div>
-
-<style>
-  .foot-link { margin: 22px 0 0; font-size: 13px; color: rgba(28,22,17,0.65); }
-  .foot-link a { color: var(--accent-ink); }
-</style>

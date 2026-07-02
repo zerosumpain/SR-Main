@@ -2,6 +2,7 @@
   import { app } from '../lib/appState.svelte';
   import InfluenceMap from '../components/InfluenceMap.svelte';
   import StrategyTiers from '../components/StrategyTiers.svelte';
+  import NextStep from '../components/NextStep.svelte';
   import { STRATEGIES_BY_TIER } from '../lib/strategies';
   const eli = $derived(app.narrative === 'eli5');
 </script>
@@ -34,7 +35,13 @@
 
   <StrategyTiers />
 
-  <p class="foot-link">→ See how these pressures play out in the <a href="/projects/dfe-data-strategy/workbench">workbench</a>, or read the <a href="/projects/dfe-data-strategy/frameworks">frameworks</a> in full.</p>
+  <NextStep
+    links={[
+      { label: 'The frameworks in full', href: '/projects/dfe-data-strategy/frameworks', kind: 'primary' },
+      { label: 'The commitments ledger', href: '/projects/dfe-data-strategy/commitments' },
+      { label: 'Draft the strategy', href: '/projects/dfe-data-strategy/author' },
+    ]}
+  />
 </div>
 
 <style>

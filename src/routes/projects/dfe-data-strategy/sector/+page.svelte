@@ -1,7 +1,9 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import TakeawayBar from '../components/TakeawayBar.svelte';
+  import NextStep from '../components/NextStep.svelte';
   import SectorVoices from '../components/SectorVoices.svelte';
-  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND } from '../lib/sectorVoices';
+  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND, VOICE_GROUP_META } from '../lib/sectorVoices';
 
   const BG_LABEL: Record<string, string> = {
     schoolsweek: 'Schools Week',
@@ -28,7 +30,21 @@
     askLabel="What this page surfaces"
   />
 
-  <h2 class="pe-h2">The debates beneath the headlines</h2>
+  <TakeawayBar
+    takeaway="Support for joining up children's data is broad — but it is conditional: on funding, on safeguards, and on the sector getting something back for the data it gives."
+    takeawayEli5="Most groups want children's data joined up — but only if it's paid for, kept safe, and schools get something useful in return."
+    chips={[
+      { n: String(SECTOR_VOICES.length), label: 'cited voices', href: '#voices' },
+      { n: String(SECTOR_THEMES.length), label: 'live debates', href: '#debates' },
+      { n: String(Object.keys(VOICE_GROUP_META).length), label: 'camps' },
+    ]}
+    drill={[
+      { label: 'the debates', href: '#debates' },
+      { label: 'who’s saying what', href: '#voices' },
+    ]}
+  />
+
+  <h2 class="pe-h2" id="debates">The debates beneath the headlines</h2>
   <p class="pe-prose intro">Strip the noise back and the same eight arguments recur. Each is a genuine tension a strategy has to take a position on — not a problem with a tidy answer.</p>
   <div class="themes">
     {#each SECTOR_THEMES as t}
@@ -39,7 +55,7 @@
     {/each}
   </div>
 
-  <h2 class="pe-h2">Who’s saying what</h2>
+  <h2 class="pe-h2" id="voices">Who’s saying what</h2>
   <p class="pe-prose intro">Grouped by who’s speaking, with the balance of opinion in each camp. Filter by stance to see the spectrum — from the safeguarding case for joining data up, to the privacy case against.</p>
   <SectorVoices />
 
@@ -57,7 +73,13 @@
     </details>
   {/if}
 
-  <p class="foot-link">→ Weigh a policy against these voices in the <a href="/projects/dfe-data-strategy/policy-builder">Policy Builder</a>, or see how the pressures map in the <a href="/projects/dfe-data-strategy/landscape">landscape</a>.</p>
+  <NextStep
+    links={[
+      { label: 'Pressure-test a policy against these voices', href: '/projects/dfe-data-strategy/policy-builder', kind: 'primary' },
+      { label: 'Write the ethics & trust section', href: '/projects/dfe-data-strategy/author' },
+      { label: 'Back to the landscape', href: '/projects/dfe-data-strategy/landscape' },
+    ]}
+  />
 </div>
 
 <style>
