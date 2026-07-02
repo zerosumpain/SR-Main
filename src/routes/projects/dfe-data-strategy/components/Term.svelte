@@ -3,7 +3,7 @@
   import { GLOSSARY_BY_ID } from '../lib/glossary';
 
   let { id, children }: { id: string; children?: Snippet } = $props();
-  const g = GLOSSARY_BY_ID[id];
+  const g = $derived(GLOSSARY_BY_ID[id]);
 </script>
 
 {#if g}

@@ -53,6 +53,4 @@
   .pull blockquote { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(18px, 2.4vw, 24px); line-height: 1.3; font-weight: 500; color: var(--ink); font-style: italic; }
   .map-wrap { margin: 8px 0 10px; padding: 16px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.32); }
   .ed-transition { margin: 6px 0 26px; font-size: 14px; line-height: 1.55; color: rgba(28,22,17,0.66); max-width: 74ch; }
-  .foot-link { margin: 26px 0 0; font-size: 13px; color: rgba(28,22,17,0.65); }
-  .foot-link a { color: var(--accent-ink); }
 </style>

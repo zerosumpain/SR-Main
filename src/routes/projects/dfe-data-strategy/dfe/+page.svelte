@@ -30,7 +30,7 @@
 
 <div class="pe-route">
   <StoryMasthead
-    kicker="Field study · DfE in context"
+    kicker="Understand · DfE in context"
     title="The department, its estate and its partner web"
     thesis="DfE does not own most of the data it depends on. It sits at the centre of a vast, federated system of schools, trusts, councils, agencies and suppliers — each an autonomous data controller. That single fact shapes every strategic choice: you cannot simply mandate; you have to make it worth joining in."
     thesisEli5="DfE doesn’t hold most of the data it needs — schools, councils and others do. So its data strategy is really about getting lots of independent organisations to work together."
@@ -91,8 +91,5 @@
   .pe-link:hover { background: rgba(138,45,58,0.1); }
   .pl-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #8a2d3a; }
   .pl-note { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.66); }
-  .estate-cta { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin: 26px 0 0; padding: 16px 18px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); }
-  .estate-cta h3 { margin: 0 0 4px; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); }
-  .estate-cta p { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 64ch; }
   @media (max-width: 820px) { .web { grid-template-columns: 1fr; } .pe-links { grid-template-columns: 1fr; } }
 </style>

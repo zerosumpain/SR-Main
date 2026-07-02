@@ -12,7 +12,7 @@
 
 <div class="pe-route wide">
   <StoryMasthead
-    kicker="Field study · What good looks like"
+    kicker="Understand · What good looks like"
     title="How data strategy is done — and what should already exist"
     thesis="DfE is not starting from a blank page. Government has published a stack of frameworks for data quality, ethics, transparency and maturity; industry has spent two decades codifying what a serious data function looks like. A credible strategy borrows from both — and is measured against the government ones whether it likes it or not."
     thesisEli5="There are ready-made rulebooks for doing data well — some from government, some from industry. A good DfE strategy uses them rather than reinventing the wheel."

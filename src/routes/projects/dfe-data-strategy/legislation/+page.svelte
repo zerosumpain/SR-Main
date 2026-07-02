@@ -10,7 +10,7 @@
 
 <div class="pe-route wide">
   <StoryMasthead
-    kicker="Field study · Legal foundations & gateways"
+    kicker="Understand · Legal foundations & gateways"
     title="The legal stack a data-sharing strategy stands on"
     thesis="The single most common failure in public-sector data strategy is to confuse a lawful basis with a legal power. Having a UK GDPR basis to process data does not mean you have the statutory power (the vires) to share it — and even with both, the common-law duty of confidence and the right governance must be in place. This registry separates the three layers so the strategy can name each one."
     thesisEli5="There are three separate legal questions for sharing data: are we allowed to process it, do we have the legal power to share it, and have we set up the right controls? People mix these up. This page keeps them apart."
