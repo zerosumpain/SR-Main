@@ -1,7 +1,9 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import TakeawayBar from '../components/TakeawayBar.svelte';
+  import NextStep from '../components/NextStep.svelte';
   import SectorVoices from '../components/SectorVoices.svelte';
-  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND } from '../lib/sectorVoices';
+  import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND, VOICE_GROUP_META } from '../lib/sectorVoices';
 
   const BG_LABEL: Record<string, string> = {
     schoolsweek: 'Schools Week',
@@ -20,7 +22,7 @@
 
 <div class="pe-route wide">
   <StoryMasthead
-    kicker="Field study · Voices from the system"
+    kicker="Understand · Voices from the system"
     title="The data agenda doesn’t happen in a room — it happens across a system"
     thesis="A DfE data strategy lands on a noisy, opinionated system: trusts and councils stretched thin, charities desperate to stop children falling through the cracks, privacy campaigners warning of surveillance, and a centre promising more than it has funded. {SECTOR_VOICES.length} cited voices, grouped by who’s speaking — read them as the weather the strategy has to fly through."
     thesisEli5="Lots of groups have strong, different views on joining up children’s data — schools, councils, charities, privacy campaigners, and government. Here’s what they’re actually saying, and where they clash."
@@ -28,7 +30,21 @@
     askLabel="What this page surfaces"
   />
 
-  <h2 class="pe-h2">The debates beneath the headlines</h2>
+  <TakeawayBar
+    takeaway="Support for joining up children's data is broad — but it is conditional: on funding, on safeguards, and on the sector getting something back for the data it gives."
+    takeawayEli5="Most groups want children's data joined up — but only if it's paid for, kept safe, and schools get something useful in return."
+    chips={[
+      { n: String(SECTOR_VOICES.length), label: 'cited voices', href: '#voices' },
+      { n: String(SECTOR_THEMES.length), label: 'live debates', href: '#debates' },
+      { n: String(Object.keys(VOICE_GROUP_META).length), label: 'camps' },
+    ]}
+    drill={[
+      { label: 'the debates', href: '#debates' },
+      { label: 'who’s saying what', href: '#voices' },
+    ]}
+  />
+
+  <h2 class="pe-h2" id="debates">The debates beneath the headlines</h2>
   <p class="pe-prose intro">Strip the noise back and the same eight arguments recur. Each is a genuine tension a strategy has to take a position on — not a problem with a tidy answer.</p>
   <div class="themes">
     {#each SECTOR_THEMES as t}
@@ -39,7 +55,7 @@
     {/each}
   </div>
 
-  <h2 class="pe-h2">Who’s saying what</h2>
+  <h2 class="pe-h2" id="voices">Who’s saying what</h2>
   <p class="pe-prose intro">Grouped by who’s speaking, with the balance of opinion in each camp. Filter by stance to see the spectrum — from the safeguarding case for joining data up, to the privacy case against.</p>
   <SectorVoices />
 
@@ -57,7 +73,13 @@
     </details>
   {/if}
 
-  <p class="foot-link">→ Weigh a policy against these voices in the <a href="/projects/dfe-data-strategy/policy-builder">Policy Builder</a>, or see how the pressures map in the <a href="/projects/dfe-data-strategy/landscape">landscape</a>.</p>
+  <NextStep
+    links={[
+      { label: 'Pressure-test a policy against these voices', href: '/projects/dfe-data-strategy/policy-builder', kind: 'primary' },
+      { label: 'Write the ethics & trust section', href: '/projects/dfe-data-strategy/author' },
+      { label: 'Back to the landscape', href: '/projects/dfe-data-strategy/landscape' },
+    ]}
+  />
 </div>
 
 <style>
@@ -72,7 +94,5 @@
   .bg-grp h4 { margin: 0 0 5px; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); }
   .bg-grp ul { margin: 0; padding-left: 16px; }
   .bg-grp li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); margin-bottom: 4px; }
-  .foot-link { margin: 26px 0 0; font-size: 13px; color: rgba(28,22,17,0.65); }
-  .foot-link a { color: var(--accent-ink); }
   @media (max-width: 820px) { .themes { grid-template-columns: 1fr; } }
 </style>

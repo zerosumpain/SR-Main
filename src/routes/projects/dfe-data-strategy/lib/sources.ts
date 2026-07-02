@@ -1,7 +1,10 @@
 // sources.ts — the canonical source list shown in the footer and on /method.
-// Verified via the keystone-research workflow (2026-06-16) against primary sources.
+// Verified via the keystone-research workflow (2026-06-16) against primary sources;
+// the commitments-ledger documents (2026-07-02 sweep) are appended automatically so
+// the footer's "every input is research-backed" promise stays true.
 
 import type { SourceRef } from './types';
+import { DOCUMENTS } from './commitments';
 
 export const SOURCES: SourceRef[] = [
   { org: 'DCMS', what: 'National Data Strategy (2020)', url: 'https://www.gov.uk/government/publications/uk-national-data-strategy/national-data-strategy' },
@@ -25,4 +28,12 @@ export const SOURCES: SourceRef[] = [
   { org: 'DAMA International', what: 'DAMA-DMBOK (11 knowledge areas)', url: 'https://www.dama.org/cpages/body-of-knowledge' },
   { org: 'EDM Council', what: 'DCAM v3 & CDMC frameworks', url: 'https://edmcouncil.org/frameworks/dcam/' },
   { org: 'Martin Fowler', what: 'Data Mesh principles (Dehghani)', url: 'https://martinfowler.com/articles/data-mesh-principles.html' },
+  // the commitments-ledger documents (deduped by URL against the list above)
+  ...DOCUMENTS.filter((d, i, all) => all.findIndex((x) => x.url === d.url) === i)
+    .filter((d) => ![
+      'https://www.gov.uk/government/publications/a-blueprint-for-modern-digital-government',
+      'https://www.gov.uk/government/publications/ai-opportunities-action-plan',
+      'https://www.legislation.gov.uk/ukpga/2026/21/contents',
+    ].includes(d.url))
+    .map((d) => ({ org: d.publisher, what: `${d.shortName} (${d.date.slice(0, 4)}) — commitments ledger`, url: d.url })),
 ];

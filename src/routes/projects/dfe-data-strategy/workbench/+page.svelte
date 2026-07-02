@@ -159,6 +159,14 @@
   {:else}
     <p class="wb-up">Have an existing strategy or audit? <a href="/projects/dfe-data-strategy/workbench/upload">Upload it</a> and let the model synthesise it into this diagnostic.</p>
   {/if}
+
+  <div class="wb-author">
+    <div>
+      <h3>Happy with the posture? Now write it down.</h3>
+      <p>The diagnostic tests a stance; the <b>Author</b> turns it into the strategy document itself — sectioned drafting, automated gap checks against the commitments ledger, a roadmap and exports.</p>
+    </div>
+    <a class="pe-next" href="/projects/dfe-data-strategy/author">✎ Draft the strategy →</a>
+  </div>
 </div>
 
 <style>
@@ -178,4 +186,9 @@
   @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } }
   .wb-up { margin: 6px 0 0; font-size: 12.5px; color: rgba(28,22,17,0.6); }
   .wb-up a { color: var(--accent-ink); }
+  .wb-author { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin: 18px 0 0;
+    padding: 15px 18px; border: 1px solid var(--accent-ink-tint-35); border-left: 4px solid var(--accent-ink); border-radius: var(--radius-round); background: var(--accent-ink-tint-06); }
+  .wb-author h3 { margin: 0 0 4px; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); }
+  .wb-author p { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.7); max-width: 64ch; }
+  .wb-author p b { color: var(--ink); }
 </style>

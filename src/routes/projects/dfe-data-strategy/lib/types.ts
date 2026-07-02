@@ -131,6 +131,115 @@ export interface CoverageTraceTerm {
   weight: number;
 }
 
+// ---- the commitments ledger (white-paper landscape) ----
+
+/** The kind of source document a commitment comes from. */
+export type DocType =
+  | 'white-paper'
+  | 'act'
+  | 'bill'
+  | 'strategy'
+  | 'action-plan'
+  | 'review'
+  | 'consultation'
+  | 'roadmap'
+  | 'framework'
+  | 'guidance'
+  | 'blog'
+  | 'evidence';
+
+export type DocStatus = 'published' | 'enacted' | 'in-passage' | 'in-consultation' | 'announced';
+
+/** What kind of data obligation a commitment creates. */
+export type CommitmentTheme =
+  | 'identifiers'
+  | 'data-sharing'
+  | 'new-service'
+  | 'register'
+  | 'standards'
+  | 'ai'
+  | 'analytics'
+  | 'infrastructure'
+  | 'safeguarding'
+  | 'accountability'
+  | 'workforce'
+  | 'funding';
+
+/** How hard the commitment binds. */
+export type CommitmentStatus =
+  | 'statutory-duty'
+  | 'legislated-not-commenced'
+  | 'in-delivery'
+  | 'announced'
+  | 'proposed'
+  | 'consulting';
+
+/** DfE's part in delivering the commitment. */
+export type DfeRole = 'owner' | 'deliverer' | 'partner' | 'complier';
+
+/** A white paper / act / strategy the ledger draws commitments from. */
+export interface PolicyDocument {
+  id: string;
+  title: string;
+  shortName: string;
+  type: DocType;
+  publisher: string;
+  date: string; // YYYY-MM
+  url: string;
+  oneLiner: string;
+  status: DocStatus;
+}
+
+/** A new flow of data between two organisations that a commitment creates. */
+export interface DataFlow {
+  from: string; // org id
+  to: string; // org id
+  what: string;
+}
+
+/** A government commitment with data implications DfE must deliver, support or comply with. */
+export interface Commitment {
+  id: string;
+  docId: string;
+  title: string;
+  /** Plain-English: what has been committed to. */
+  what: string;
+  /** Short verbatim quote from the source (<30 words). */
+  quote?: string;
+  theme: CommitmentTheme;
+  status: CommitmentStatus;
+  timeframe?: string; // human-readable, e.g. 'from Sept 2026'
+  timeframeDate?: string; // YYYY-MM, for the timeline
+  dfeRole: DfeRole;
+  /** The new data flows this creates (the "new connections between partners"). */
+  flows: DataFlow[];
+  newServices: string[];
+  identifiers: string[];
+  standards: string[];
+  partners: string[];
+  /** What a DfE data strategy must say or do because of this. */
+  strategyImplication: string;
+  eli5?: string;
+  /** Capability areas (engine) this commitment demands. */
+  capabilityIds: string[];
+  /** Existing Keystone pressures this commitment evidences. */
+  pressureIds?: string[];
+  /** Match terms for the Author's coverage sweep. */
+  aliases: string[];
+  confidence: ConfidenceLevel;
+  sourceUrls: string[];
+}
+
+/** An organisation node in the data-flow map. */
+export interface Org {
+  id: string;
+  name: string;
+  short: string;
+  group: 'dfe' | 'alb' | 'delivery' | 'department' | 'centre' | 'public' | 'research';
+  ring: 0 | 1 | 2 | 3;
+  angle: number; // degrees, for the radial layout
+}
+
 /** The full output of the alignment engine. */
 export interface AlignmentResult {
   capability: Record<string, number>; // area id -> 0…1 effective strength

@@ -5,6 +5,34 @@
   import { MATURITY_DIMENSIONS } from '../lib/maturity';
   import { PRESSURES } from '../lib/pressures';
   import { SOURCES } from '../lib/sources';
+  import { COMMITMENTS, DOCUMENTS } from '../lib/commitments';
+  import { COMPARATORS } from '../lib/comparators';
+  import { GLOSSARY } from '../lib/glossary';
+  import Reveal from '../components/Reveal.svelte';
+
+  const FEATURE_SCORES: { f: string; s: number; v: string }[] = [
+    { f: 'Commitments explorer (4 lenses + drawer)', s: 95, v: 'built' },
+    { f: 'WYSIWYG strategy author (guided sections, starters)', s: 93, v: 'built' },
+    { f: 'Deterministic coverage sweep (statutory gaps first)', s: 92, v: 'built' },
+    { f: 'LLM deep review vs best-practice rubric', s: 88, v: 'built' },
+    { f: 'Coverage matrix (commitments × sections)', s: 86, v: 'built' },
+    { f: 'Completeness heuristics (six checks)', s: 84, v: 'built' },
+    { f: 'Delivery roadmap seeded from statutory deadlines', s: 77, v: 'built' },
+    { f: 'Comparator library (other departments’ strategies)', s: 77, v: 'built' },
+    { f: 'Measures picker (33 real DfE series)', s: 76, v: 'built' },
+    { f: 'RAG + Ask-the-model over the ledger', s: 74, v: 'built' },
+    { f: 'Risk register seeded from gaps + tensions', s: 72, v: 'built' },
+    { f: 'Journey restructure (Understand → Write → Track)', s: 71, v: 'built' },
+    { f: 'Stakeholder consultation tracker', s: 65, v: 'built' },
+    { f: 'Publish preview + md/docx/json export & import', s: 63, v: 'built' },
+    { f: 'Intel watches on ledger programmes', s: 63, v: 'built' },
+    { f: 'Version snapshots + restore', s: 62, v: 'built' },
+    { f: 'Live commitment-status auto-ingestion', s: 57, v: 'deferred — no authoritative source; watches cover it honestly' },
+    { f: 'Glossary + hover tooltips', s: 52, v: 'built' },
+    { f: 'LLM auto-drafting whole sections', s: 40, v: 'rejected — the machine checks, the human writes' },
+    { f: 'Multi-user collaboration', s: 35, v: 'deferred — no team auth model; .json hand-off instead' },
+    { f: 'Localisation / other departments', s: 27, v: 'under threshold' },
+  ];
 </script>
 
 <svelte:head><title>How it works — Keystone</title></svelte:head>
@@ -36,6 +64,39 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
     {/each}
   </div>
 
+  <h2 class="pe-h2">5 · The commitments ledger</h2>
+  <p class="pe-prose">
+    The <a href="/projects/dfe-data-strategy/commitments">ledger's</a> {COMMITMENTS.length} commitments across {DOCUMENTS.length} documents were synthesized on <b>2 July 2026</b> by a nine-agent research sweep of the 2024–26 white-paper landscape — schools, SEND &amp; AP, early years &amp; social care, post-16 &amp; skills, curriculum &amp; assessment, cross-government digital, DfE's own data programmes, cross-departmental interfaces, and data-strategy best practice — checked against primary sources (gov.uk, legislation.gov.uk, parliament.uk), then merged, de-duplicated and spot-verified before freeze. Every commitment carries: a short verbatim quote, source URLs, a status on the bindingness scale (statutory duty → consulting), DfE's role, the new data flows it creates, and a one-line reading of <i>what it demands of the strategy</i>. Each also carries a <b>research confidence</b> level — where the sweep could not verify a claim against a primary source, it says so rather than asserting it.
+  </p>
+  <p class="pe-prose">
+    The ledger powers more than its own page: it grounds the <a href="/projects/dfe-data-strategy/author">Author's</a> coverage sweep and deep review, seeds the roadmap and risk register, extends the Ask-the-model corpus, and sets the <a href="/projects/dfe-data-strategy/intel">Intel radar's</a> named watches.
+  </p>
+
+  <h2 class="pe-h2">6 · The Author's verification suite</h2>
+  <p class="pe-prose">
+    The <a href="/projects/dfe-data-strategy/author">Author</a> checks a draft three ways, cheapest first. The <b>coverage sweep</b> is deterministic: each commitment carries curated match terms; two distinct terms found at word boundaries = <i>addressed</i>, one = <i>touched</i>, none = <i>missing</i> — statutory gaps ranked first. The <b>completeness checks</b> are six transparent heuristics per section (substance, timeframes, ownership, measurability, evidence, plain English) — each states exactly what it looked for, so a false positive is easy to dismiss. The <b>deep review</b> sends the draft (as markdown) to the model with a rubric distilled from {COMPARATORS.length} comparator departmental strategies, the documented failure modes of real strategies, the must-answer commitments, and your declared workbench posture — and returns scored verdicts, contradictions and the top three fixes. Nothing is auto-written: <b>the machine checks; the human writes</b>.
+  </p>
+
+  <h2 class="pe-h2">7 · Feature scoring (the gap analysis)</h2>
+  <p class="pe-prose">This upgrade followed a scored gap analysis — <code>0.40·impact + 0.25·differentiation + 0.20·feasibility + 0.15·fit</code>, build everything over 30 unless folding it into another feature was more honest. The scores:</p>
+  <div class="ftable">
+    {#each FEATURE_SCORES as row}
+      <div class="frow" class:out={!row.v.startsWith('built')}>
+        <span class="f-n">{row.s}</span>
+        <span class="f-f">{row.f}</span>
+        <span class="f-v">{row.v}</span>
+      </div>
+    {/each}
+  </div>
+
+  <Reveal label="Jargon buster — {GLOSSARY.length} terms this field swims in">
+    <dl class="gloss">
+      {#each GLOSSARY as g}
+        <div><dt>{g.term}</dt><dd>{g.def}</dd></div>
+      {/each}
+    </dl>
+  </Reveal>
+
   <h2 class="pe-h2">What it is — and isn't</h2>
   <ul class="caveats">
     <li><b>It is</b> a structured way to test the coherence and coverage of a data strategy against a research-grounded map of pressures, frameworks and law.</li>
@@ -61,6 +122,16 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
   .cf-n { font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.66); }
   .caveats { max-width: 80ch; padding-left: 18px; }
   .caveats li { font-size: 13.5px; line-height: 1.55; color: rgba(28,22,17,0.74); margin-bottom: 6px; }
+  .ftable { display: flex; flex-direction: column; gap: 4px; max-width: 86ch; }
+  .frow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: baseline; padding: 5px 10px; border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); }
+  .frow.out { opacity: 0.6; }
+  .f-n { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--accent-ink); text-align: right; }
+  .f-f { font-size: 12.5px; color: var(--ink); }
+  .f-v { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.55); max-width: 300px; text-align: right; }
+  .gloss { margin: 4px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px 22px; }
+  .gloss div { break-inside: avoid; }
+  .gloss dt { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--accent-ink); }
+  .gloss dd { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
   .sources { columns: 2; column-gap: 28px; padding-left: 18px; }
   .sources li { font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.7); margin-bottom: 4px; break-inside: avoid; }
   .sources a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }

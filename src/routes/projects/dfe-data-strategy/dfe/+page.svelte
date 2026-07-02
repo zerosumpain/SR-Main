@@ -1,5 +1,7 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
+  import TakeawayBar from '../components/TakeawayBar.svelte';
+  import NextStep from '../components/NextStep.svelte';
   import EstateStrip from '../components/EstateStrip.svelte';
   import { app } from '../lib/appState.svelte';
   import type { PageData } from './$types';
@@ -28,7 +30,7 @@
 
 <div class="pe-route">
   <StoryMasthead
-    kicker="Field study · DfE in context"
+    kicker="Understand · DfE in context"
     title="The department, its estate and its partner web"
     thesis="DfE does not own most of the data it depends on. It sits at the centre of a vast, federated system of schools, trusts, councils, agencies and suppliers — each an autonomous data controller. That single fact shapes every strategic choice: you cannot simply mandate; you have to make it worth joining in."
     thesisEli5="DfE doesn’t hold most of the data it needs — schools, councils and others do. So its data strategy is really about getting lots of independent organisations to work together."
@@ -36,7 +38,17 @@
     askLabel="What this page maps"
   />
 
-  <h2 class="pe-h2">The partner web</h2>
+  <TakeawayBar
+    takeaway="DfE doesn't own most of the data it depends on. Every strategic choice has to make joining in worth it for schools, councils and suppliers — you cannot simply mandate."
+    takeawayEli5="Schools and councils hold most of the data, not DfE — so the plan has to make helping out worthwhile for them."
+    chips={[
+      { n: String(PARTNERS.length), label: 'partner groups', href: '#partner-web' },
+      { n: String(FROM_PE.length), label: 'live programmes', href: '#from-pe' },
+    ]}
+    drill={[{ label: 'the live estate', href: '#estate' }]}
+  />
+
+  <h2 class="pe-h2" id="partner-web">The partner web</h2>
   <p class="pe-prose intro">{eli ? 'The organisations DfE has to work with to get a full picture of a child or a school.' : 'Every arrow in a DfE data strategy crosses an organisational boundary. These are the partners whose data must be reached, and on whose cooperation delivery depends.'}</p>
   <div class="web">
     {#each PARTNERS as p}
@@ -44,7 +56,7 @@
     {/each}
   </div>
 
-  <h2 class="pe-h2">From the Policy Engine</h2>
+  <h2 class="pe-h2" id="from-pe">From the Policy Engine</h2>
   <p class="pe-prose intro">The DfE-specific pressures in this tool are drawn straight from the <a href="/projects/policy-engine">Policy Engine's</a> field studies — the real data demands that the policy modelling surfaced. Each one is an input to the strategy.</p>
   <div class="pe-links">
     {#each FROM_PE as l}
@@ -55,9 +67,17 @@
     {/each}
   </div>
 
-  <h2 class="pe-h2">The live estate</h2>
+  <h2 class="pe-h2" id="estate">The live estate</h2>
   <p class="pe-prose intro">{eli ? 'The actual data services DfE runs in public — with live numbers pulled from them right now.' : 'The strategy isn’t abstract — it sits on a real, running estate. These are the public-facing DfE data services, with figures pulled live from their APIs this minute (snapshot fallback if an upstream is slow).'}</p>
   <EstateStrip estate={data.estate} />
+
+  <NextStep
+    links={[
+      { label: 'What the sector says about all this', href: '/projects/dfe-data-strategy/sector', kind: 'primary' },
+      { label: 'The commitments creating new flows', href: '/projects/dfe-data-strategy/commitments' },
+      { label: 'Draft the strategy', href: '/projects/dfe-data-strategy/author' },
+    ]}
+  />
 </div>
 
 <style>
@@ -71,8 +91,5 @@
   .pe-link:hover { background: rgba(138,45,58,0.1); }
   .pl-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #8a2d3a; }
   .pl-note { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.66); }
-  .estate-cta { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; margin: 26px 0 0; padding: 16px 18px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); }
-  .estate-cta h3 { margin: 0 0 4px; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); }
-  .estate-cta p { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.66); max-width: 64ch; }
   @media (max-width: 820px) { .web { grid-template-columns: 1fr; } .pe-links { grid-template-columns: 1fr; } }
 </style>
