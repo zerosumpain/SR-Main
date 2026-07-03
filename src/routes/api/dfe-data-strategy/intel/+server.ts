@@ -8,15 +8,22 @@ import { env } from '$env/dynamic/private';
 import { runIntel, getIntelSnapshot } from '../../../projects/dfe-data-strategy/lib/intel.server';
 import type { RequestHandler } from './$types';
 
-function authorized(request: Request): boolean {
+async function authorized(event: Parameters<RequestHandler>[0]): Promise<boolean> {
   const secret = env.KEYSTONE_INTEL_SECRET;
   if (!secret) return true; // unset → open (dev convenience), same as policy-engine / DSD
-  return (request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
+  if ((event.request.headers.get('authorization') ?? '') === `Bearer ${secret}`) return true;
+  // the nav's on-demand "scan" button posts from the browser with a signed-in session
+  try {
+    const session = await event.locals.auth?.();
+    return !!session?.user;
+  } catch {
+    return false;
+  }
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-  if (!authorized(request)) throw error(401, 'unauthorized');
-  const body = (await request.json().catch(() => ({}))) as { classify?: boolean; force?: boolean };
+export const POST: RequestHandler = async (event) => {
+  if (!(await authorized(event))) throw error(401, 'unauthorized');
+  const body = (await event.request.json().catch(() => ({}))) as { classify?: boolean; force?: boolean };
   const summary = await runIntel({ classify: body.classify !== false, force: body.force === true });
   return json(summary);
 };

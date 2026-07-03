@@ -3,15 +3,23 @@
   import { app } from '../../lib/appState.svelte';
   import { TEMPLATE_BY_ID } from '../../lib/author/templates';
   import { startersFor } from '../../lib/author/starters';
+  import { suggestLines } from '../../lib/author/suggest';
   import { SECTION_COMPARATORS, COMPARATOR_BY_ID } from '../../lib/comparators';
   import { markdownToHtml } from '../../lib/author/serialize';
 
   const section = $derived(author.active);
   const template = $derived(section?.templateId ? (TEMPLATE_BY_ID[section.templateId] ?? null) : null);
   const starters = $derived(section ? startersFor(section, template?.prompts ?? []) : []);
+  const suggestions = $derived(
+    section ? suggestLines(section.templateId, { state: app.state, align: app.align, scenarioName: app.scenarioName }) : [],
+  );
   const comparators = $derived(section?.templateId ? (SECTION_COMPARATORS[section.templateId] ?? []) : []);
   const heur = $derived(author.heuristicsBySection[section?.id ?? ''] ?? []);
   let inserted = $state<string | null>(null);
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   function insert(id: string, html: string) {
     if (!section || !html) return;
@@ -60,6 +68,24 @@
     </div>
     <p class="hint">Starters insert findings and obligations from the ledger — scaffolding to edit, not prose to keep.</p>
   </section>
+
+  {#if suggestions.length}
+    <section class="blk">
+      <span class="blk-lab">Suggested lines</span>
+      <p class="sug-intro">Written from your <b>Diagnose</b> settings and the frameworks — they change live as you move the levers.</p>
+      {#each suggestions as s (s.id)}
+        <div class="sug">
+          <p class="sug-text">{s.text}</p>
+          <div class="sug-foot">
+            <span class="sug-src" class:fw={s.source === 'framework'}>{s.source === 'diagnostic' ? '◆' : '▣'} {s.label}</span>
+            <button class="sug-add" class:ok={inserted === s.id} onclick={() => insert(s.id, `<p>${escapeHtml(s.text)}</p>`)}>
+              {inserted === s.id ? '✓' : '+ insert'}
+            </button>
+          </div>
+        </div>
+      {/each}
+    </section>
+  {/if}
 
   {#if comparators.length}
     <section class="blk">
@@ -155,6 +181,63 @@
     font-size: 10.5px;
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.5);
+  }
+  .sug-intro {
+    margin: 0 0 8px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: rgba(28, 22, 17, 0.55);
+  }
+  .sug-intro b {
+    color: var(--accent-ink);
+  }
+  .sug {
+    border-top: 1px dashed rgba(28, 22, 17, 0.14);
+    padding: 8px 0 7px;
+  }
+  .sug:last-child {
+    padding-bottom: 0;
+  }
+  .sug-text {
+    margin: 0 0 5px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: rgba(28, 22, 17, 0.78);
+  }
+  .sug-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .sug-src {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+  .sug-src.fw {
+    color: #a06a1f;
+  }
+  .sug-add {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    padding: 2px 8px;
+    border: 1px solid var(--accent-ink-tint-35);
+    background: var(--accent-ink-tint-06);
+    border-radius: var(--radius-round);
+    color: var(--accent-ink);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sug-add:hover {
+    background: var(--accent-ink-tint-12);
+  }
+  .sug-add.ok {
+    border-color: #2f6155;
+    color: #2f6155;
+    background: rgba(47, 97, 85, 0.08);
   }
   .comp {
     margin: 0 0 8px;

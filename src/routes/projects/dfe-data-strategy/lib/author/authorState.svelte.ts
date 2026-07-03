@@ -10,7 +10,7 @@ import { runCoverage, type CoverageResult } from './coverage';
 import { runHeuristics, type HeuristicResult } from './heuristics';
 import { htmlToText } from './serialize';
 
-export type AuthorTab = 'draft' | 'verify' | 'plan' | 'export';
+export type AuthorTab = 'diagnose' | 'draft' | 'verify' | 'plan' | 'export';
 
 export interface Snapshot {
   id: string;
@@ -70,6 +70,22 @@ class AuthorState {
   activeId = $state<string>(SECTION_FALLBACK());
   tab = $state<AuthorTab>('draft');
   snapshots = $state<Snapshot[]>([]);
+
+  /** Switch workspace tab AND sync the URL's ?tab= param. The layout swaps between the
+   *  levers shell and the plain main around the Diagnose tab, which remounts the page —
+   *  onMount then re-applies ?tab from the URL, so the URL must never lag the store. */
+  setTab(t: AuthorTab) {
+    this.tab = t;
+    if (typeof location === 'undefined' || !/\/author\/?$/.test(location.pathname)) return;
+    try {
+      const url = new URL(location.href);
+      if (t === 'draft') url.searchParams.delete('tab');
+      else url.searchParams.set('tab', t);
+      history.replaceState(history.state, '', url);
+    } catch {
+      /* ignore */
+    }
+  }
   milestones = $state<Milestone[]>([]);
   risks = $state<Risk[]>([]);
   measures = $state<MeasureChoice[]>([]);

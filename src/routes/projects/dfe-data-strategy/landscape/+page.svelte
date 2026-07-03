@@ -3,6 +3,7 @@
   import TakeawayBar from '../components/TakeawayBar.svelte';
   import NextStep from '../components/NextStep.svelte';
   import Reveal from '../components/Reveal.svelte';
+  import IntelInline from '../components/IntelInline.svelte';
   import PressureMatrix from '../components/PressureMatrix.svelte';
   import PressureMap from '../components/PressureMap.svelte';
   import CapabilityDemand from '../components/CapabilityDemand.svelte';
@@ -37,6 +38,8 @@
       { label: 'where the load lands', href: '#load' },
     ]}
   />
+
+  <IntelInline section="landscape" note="items that bear on the pressures" />
 
   <section class="viz" id="shape">
     <div class="viz-head">

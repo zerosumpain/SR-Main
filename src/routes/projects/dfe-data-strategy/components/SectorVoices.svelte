@@ -72,7 +72,7 @@
   .g-blurb { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.6); max-width: 60ch; }
   .g-balance { display: flex; gap: 2px; align-items: center; min-width: 120px; height: 18px; }
   .bal { display: flex; align-items: center; justify-content: center; height: 100%; background: var(--bc); color: #fff; border-radius: var(--radius-sharp); font-family: 'JetBrains Mono', monospace; font-size: 9px; min-width: 16px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .vc { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--sc); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 11px 13px; display: flex; flex-direction: column; }
   .v-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
   .v-stance { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; color: #fff; padding: 2px 6px; border-radius: var(--radius-round); }

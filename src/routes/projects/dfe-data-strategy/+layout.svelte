@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { replaceState } from '$app/navigation';
   import { app } from './lib/appState.svelte';
+  import { author } from './lib/author/authorState.svelte';
   import { defaultState } from './lib/engine';
   import { encodeState, decodeState, tokenFromHash, loadSaved, persistSaved, mergeState } from './lib/scenarios';
   import { SOURCES } from './lib/sources';
@@ -20,7 +21,9 @@
   let topH = $state(0);
 
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
-  const isWorkbench = $derived(/\/workbench(\/|$)/.test(pathname + '/'));
+  // the levers shell shows on the old /workbench routes AND on the workspace's Diagnose tab
+  const isDiagnose = $derived(pathname.endsWith('/author') && author.tab === 'diagnose' && !!data?.authed);
+  const isWorkbench = $derived(/\/workbench(\/|$)/.test(pathname + '/') || isDiagnose);
   const defJson = JSON.stringify(defaultState());
 
   onMount(() => {
@@ -74,7 +77,7 @@
   });
 
   function copyLink() {
-    const url = `${location.origin}/projects/dfe-data-strategy/workbench#s=${encodeState(app.state)}`;
+    const url = `${location.origin}/projects/dfe-data-strategy/author?tab=diagnose#s=${encodeState(app.state)}`;
     const done = () => { copied = true; setTimeout(() => (copied = false), 1700); };
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done).catch(() => prompt('Copy this strategy link:', url));
     else prompt('Copy this strategy link:', url);
@@ -139,12 +142,11 @@
   {/if}
 
   <footer class="foot">
-    <p class="foot-personal"><b>A personal project.</b> Built by John Kelly in a personal capacity and in his own time. It does not
-      represent the Department for Education, any government or political party, or any official position, and takes no political stance.</p>
-    <details class="sources-foot"><summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
-      <ul>{#each SOURCES as s}<li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>{/each}</ul>
-    </details>
-    <p class="foot-disc">Keystone · <code>/projects/dfe-data-strategy</code> · a decision-support tool, <b>not an official strategy</b>. Grounded in published UK-government and industry sources (see the {SOURCES.length} sources and <a href="/projects/dfe-data-strategy/method">How it works</a>). Companion to the <a href="/projects/policy-engine">Policy Engine</a> and <a href="/projects/dfe-data-estate">The Data Estate</a>.</p>
+    <div class="foot-inner">
+      <p class="foot-personal"><b>A personal project.</b> Built by John Kelly in a personal capacity and in his own time. It does not
+        represent the Department for Education, any government or political party, or any official position, and takes no political stance.</p>
+      <p class="foot-disc">Keystone · <code>/projects/dfe-data-strategy</code> · a decision-support tool, <b>not an official strategy</b>. Grounded in published UK-government and industry sources — <a href="/projects/dfe-data-strategy/method#sources">all {SOURCES.length} sources</a> and the method are on <a href="/projects/dfe-data-strategy/method">How it works</a>. Companion to the <a href="/projects/policy-engine">Policy Engine</a> and <a href="/projects/dfe-data-estate">The Data Estate</a>.</p>
+    </div>
   </footer>
 
   {#if !askOpen}
@@ -233,19 +235,18 @@
   :global(.pe-next) { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--paper); background: var(--ink); padding: 9px 16px; border-radius: var(--radius-round); text-decoration: none; border: none; cursor: pointer; }
   :global(.pe-next:hover) { background: #000; }
   :global(.pe-card) { border: 1px solid rgba(28,22,17,0.12); background: rgba(255,255,255,0.45); border-radius: var(--radius-round); padding: 16px 18px; }
+  /* one grid geometry for every card wall in the project — equal tracks, equal gaps */
+  :global(.pe-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 
-  .foot { position: relative; z-index: 1; padding: 18px 28px 26px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); margin-top: 24px; }
+  /* footer content sits in the same centered container as the page content */
+  .foot { position: relative; z-index: 1; padding: 18px 32px 26px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); margin-top: 24px; }
+  .foot-inner { max-width: 1180px; margin: 0 auto; }
   .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--ink-soft); font-family: 'JetBrains Mono', monospace; }
-  .foot-personal { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); max-width: 96ch;
+  .foot-personal { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-soft);
     padding: 8px 12px; border-left: 3px solid rgba(28,22,17,0.3); background: rgba(28,22,17,0.035); border-radius: 0 var(--radius-round) var(--radius-round) 0; }
   .foot-personal b { color: var(--ink); }
-  .foot-disc { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 96ch; }
+  .foot-disc { margin: 10px 0 0; font-size: 11px; line-height: 1.55; color: rgba(28,22,17,0.58); }
   .foot-disc b { color: var(--ink-soft); } .foot-disc a { color: var(--accent-ink); }
-  .sources-foot { font-size: 11.5px; }
-  .sources-foot summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); padding: 4px 0; }
-  .sources-foot ul { margin: 8px 0 4px; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 4px 18px; list-style: square; }
-  .sources-foot li { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.7); }
-  .sources-foot a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; font-weight: 500; }
 
   @media (max-width: 760px) {
     .masthead { padding: 9px 14px 8px; gap: 6px 10px; } .scenebar { padding: 9px 14px; }

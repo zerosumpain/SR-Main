@@ -13,7 +13,7 @@
 
   <UploadSynth />
 
-  <p class="back"><a href="/projects/dfe-data-strategy/workbench">← Back to the diagnostic</a></p>
+  <p class="back"><a href="/projects/dfe-data-strategy/author?tab=diagnose">← Back to the diagnostic</a></p>
 </div>
 
 <style>

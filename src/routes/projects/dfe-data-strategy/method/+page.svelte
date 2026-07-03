@@ -69,7 +69,7 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
     The <a href="/projects/dfe-data-strategy/commitments">ledger's</a> {COMMITMENTS.length} commitments across {DOCUMENTS.length} documents were synthesized on <b>2 July 2026</b> by a nine-agent research sweep of the 2024–26 white-paper landscape — schools, SEND &amp; AP, early years &amp; social care, post-16 &amp; skills, curriculum &amp; assessment, cross-government digital, DfE's own data programmes, cross-departmental interfaces, and data-strategy best practice — checked against primary sources (gov.uk, legislation.gov.uk, parliament.uk), then merged, de-duplicated and spot-verified before freeze. Every commitment carries: a short verbatim quote, source URLs, a status on the bindingness scale (statutory duty → consulting), DfE's role, the new data flows it creates, and a one-line reading of <i>what it demands of the strategy</i>. Each also carries a <b>research confidence</b> level — where the sweep could not verify a claim against a primary source, it says so rather than asserting it.
   </p>
   <p class="pe-prose">
-    The ledger powers more than its own page: it grounds the <a href="/projects/dfe-data-strategy/author">Author's</a> coverage sweep and deep review, seeds the roadmap and risk register, extends the Ask-the-model corpus, and sets the <a href="/projects/dfe-data-strategy/intel">Intel radar's</a> named watches.
+    The ledger powers more than its own page: it grounds the <a href="/projects/dfe-data-strategy/author">Author's</a> coverage sweep and deep review, seeds the roadmap and risk register, extends the Ask-the-model corpus, and sets the named intelligence watches — a daily GOV.UK sweep whose finds surface as "newly arrived intelligence" inside the section they bear on (legislation on the <a href="/projects/dfe-data-strategy/legislation">legal page</a>, programmes on the <a href="/projects/dfe-data-strategy/commitments">ledger</a>), with an on-demand scan in the navigation bar.
   </p>
 
   <h2 class="pe-h2">6 · The Author's verification suite</h2>
@@ -104,7 +104,7 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
     <li>The pressures, frameworks and legal registry are grounded in the published sources below and verified through an automated research pass.</li>
   </ul>
 
-  <h2 class="pe-h2">Sources ({SOURCES.length})</h2>
+  <h2 class="pe-h2" id="sources">Sources ({SOURCES.length})</h2>
   <ul class="sources">
     {#each SOURCES as s}<li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>{/each}
   </ul>
@@ -112,6 +112,7 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
 
 <style>
   .intro { max-width: 76ch; }
+  h2[id] { scroll-margin-top: 130px; }
   .formula { background: rgba(28,22,17,0.05); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.6; color: rgba(28,22,17,0.8); overflow-x: auto; white-space: pre; }
   .pe-prose { max-width: 80ch; }
   .pe-prose code { background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: var(--radius-sharp); font-family: 'JetBrains Mono', monospace; font-size: 0.9em; }

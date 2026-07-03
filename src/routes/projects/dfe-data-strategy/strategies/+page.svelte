@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/appState.svelte';
+  import IntelInline from '../components/IntelInline.svelte';
   import InfluenceMap from '../components/InfluenceMap.svelte';
   import StrategyTiers from '../components/StrategyTiers.svelte';
   import NextStep from '../components/NextStep.svelte';
@@ -26,6 +27,8 @@
   <figure class="pull">
     <blockquote>“Aligning with everything is the same as aligning with nothing. {STRATEGIES_BY_TIER.shape.length} of these should shape the strategy. The other {STRATEGIES_BY_TIER.borrow.length + STRATEGIES_BY_TIER.watch.length + STRATEGIES_BY_TIER.context.length} should know their place.”</blockquote>
   </figure>
+
+  <IntelInline section="strategies" note="items that move this map" />
 
   <section class="map-wrap">
     <InfluenceMap />

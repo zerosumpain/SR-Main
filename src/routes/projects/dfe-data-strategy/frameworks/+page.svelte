@@ -3,6 +3,7 @@
   import TakeawayBar from '../components/TakeawayBar.svelte';
   import NextStep from '../components/NextStep.svelte';
   import Reveal from '../components/Reveal.svelte';
+  import IntelInline from '../components/IntelInline.svelte';
   import FrameworkGrid from '../components/FrameworkGrid.svelte';
   import FrameworkMap from '../components/FrameworkMap.svelte';
   import { STRATEGY_THEMES, FRAMEWORKS } from '../lib/frameworks';
@@ -30,6 +31,8 @@
     drill={[{ label: 'the themes checklist', href: '#themes' }]}
   />
 
+  <IntelInline section="frameworks" note="new or updated frameworks and standards" />
+
   <section class="viz">
     <div class="viz-head">
       <h2 class="pe-h2">Foundational, or specialist?</h2>
@@ -40,7 +43,7 @@
 
   <h2 class="pe-h2" id="themes">The themes that should already exist</h2>
   <p class="pe-prose theme-intro">Strip away the labels and the same nine themes recur across every credible data strategy. Use them as a checklist: a strategy that is silent on any of them has a gap.</p>
-  <div class="themes">
+  <div class="pe-grid themes">
     {#each STRATEGY_THEMES as t}
       <div class="theme">
         <span class="t-title">{t.title}</span>
@@ -68,9 +71,8 @@
   .viz { margin: 8px 0 26px; }
   .viz-head { max-width: 80ch; margin-bottom: 12px; }
   .viz-head .pe-h2 { margin-bottom: 4px; }
-  .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 6px; }
-  .theme { border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; }
+  .themes { margin: 8px 0 6px; }
+  .theme { border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; }
   .t-title { display: block; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
   .t-blurb { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.66); }
-  @media (max-width: 820px) { .themes { grid-template-columns: 1fr; } }
 </style>

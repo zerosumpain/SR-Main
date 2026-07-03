@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import NextStep from '../components/NextStep.svelte';
+  import IntelInline from '../components/IntelInline.svelte';
   import CommitFilters from '../components/commitments/CommitFilters.svelte';
   import CommitShelf from '../components/commitments/CommitShelf.svelte';
   import CommitTimeline from '../components/commitments/CommitTimeline.svelte';
@@ -56,6 +57,8 @@
     <div class="stat hard"><b>{statutory}</b><span>statutory or legislated</span></div>
     <div class="stat"><b>{MUST_ANSWER.length}</b><span>must-answer now</span></div>
   </div>
+
+  <IntelInline section="commitments" note="the watched programmes — spine, registers, profiles" />
 
   <nav class="lenses" aria-label="Ways to read the ledger">
     {#each LENSES as l}

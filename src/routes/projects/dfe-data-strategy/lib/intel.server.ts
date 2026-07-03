@@ -303,6 +303,7 @@ export async function runIntel(opts: { classify?: boolean; force?: boolean } = {
       }
     }
 
+    snapCache = null; // new rows / classifications → next snapshot read is live
     lastSummary = { ranAt: ranAt.toISOString(), found: src.candidates.length, new: newCount, classified, totalAvailable: src.total, ok: src.ok, error: src.error };
     try {
       await db.insert(keystoneIntelRuns).values({ runAt: ranAt, ok: src.ok, itemsFound: src.candidates.length, itemsNew: newCount, classified, error: src.error ?? null, durationMs: Date.now() - t0 });
@@ -325,6 +326,7 @@ export interface IntelItem {
   considerations: string[];
   misalignments: { point: string; severity: string }[];
   publishedAt: string | null;
+  firstSeenAt: string | null;
   watch: string | null;
   watchLabel: string | null;
 }
@@ -335,12 +337,22 @@ export interface IntelSnapshot {
   lastRun: { runAt: string; ok: boolean; itemsFound: number; itemsNew: number; classified: number; error: string | null } | null;
 }
 
+// Cached for a minute: the project layout now loads the snapshot on every navigation
+// (the items surface inline on section pages), so don't hit the DB per click.
+let snapCache: { at: number; data: IntelSnapshot } | null = null;
+export function bustIntelSnapshotCache() {
+  snapCache = null;
+}
+
 export async function getIntelSnapshot(): Promise<IntelSnapshot> {
+  if (snapCache && Date.now() - snapCache.at < 60_000) return snapCache.data;
   try {
-    return await readSnapshot();
+    const data = await readSnapshot();
+    snapCache = { at: Date.now(), data };
+    return data;
   } catch {
     // table not yet migrated (e.g. the homeserv dev DB) or transient DB error —
-    // the radar page should render empty, never 500.
+    // the pages should render without intel, never 500.
     return { items: [], watches: [], lastRun: null };
   }
 }
@@ -367,6 +379,7 @@ async function readSnapshot(): Promise<IntelSnapshot> {
     considerations: (r.considerations as any[]) ?? [],
     misalignments: (r.misalignments as any[]) ?? [],
     publishedAt: r.publishedAt ? (r.publishedAt instanceof Date ? r.publishedAt.toISOString() : String(r.publishedAt)) : null,
+    firstSeenAt: r.firstSeenAt ? (r.firstSeenAt instanceof Date ? r.firstSeenAt.toISOString() : String(r.firstSeenAt)) : null,
     watch: r.watch ?? null,
     watchLabel: r.watch ? WATCH_LABELS[r.watch] ?? r.watch : null,
   }));

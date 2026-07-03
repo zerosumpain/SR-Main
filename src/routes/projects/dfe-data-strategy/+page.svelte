@@ -69,26 +69,26 @@
       <div class="m-stats">
         <a href="{BASE}/author"><b>{SECTION_TEMPLATES.length}</b> guided sections, WYSIWYG</a>
         <a href="{BASE}/author?tab=verify"><b>{MUST_ANSWER.length || COMMITMENTS.length}</b> obligations swept for coverage</a>
+        {#if data?.authed}
+          <a href="{BASE}/author?tab=diagnose"><b>◆</b> diagnose → draft → verify → plan, one workspace</a>
+        {/if}
       </div>
       <nav class="m-links">
-        <a href="{BASE}/author" class="hot">✎ Author the strategy</a>
+        <a href="{BASE}/author" class="hot">✎ Open the workspace</a>
         <a href="{BASE}/policy-builder">Policy builder</a>
-        {#if data?.authed}
-          <a href="{BASE}/workbench">◆ Workbench</a>
-          <a href="{BASE}/workbench/upload">◆ Upload</a>
-        {/if}
       </nav>
     </section>
 
     <section class="mode" style="--c:#2f6f97">
       <span class="m-kicker">Track</span>
-      <p class="m-promise">The landscape moves. A daily sweep scores what's new against the strategy.</p>
+      <p class="m-promise">The landscape moves. New intelligence lands inside the section it changes.</p>
       <div class="m-stats">
-        <a href="{BASE}/intel"><b>◉</b> daily GOV.UK intelligence sweep</a>
+        <a href="{BASE}/legislation"><b>◉</b> daily GOV.UK sweep — new law on the legal page, programmes on the ledger</a>
         <a href="{BASE}/strategies"><b>{STRATEGIES.length}</b> strategies on the influence map</a>
       </div>
       <nav class="m-links">
-        <a href="{BASE}/intel">Intel radar</a>
+        <a href="{BASE}/legislation">Legislation</a>
+        <a href="{BASE}/commitments">Commitments</a>
         <a href="{BASE}/method">How it works</a>
       </nav>
     </section>

@@ -55,7 +55,7 @@
   .t-label { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(20px, 2.6vw, 26px); font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
   .t-count { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(28,22,17,0.4); }
   .t-blurb { margin: 6px 0 14px; font-size: 14px; line-height: 1.55; color: rgba(28,22,17,0.7); max-width: 80ch; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .card { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--c); border-radius: var(--radius-round); background: rgba(255,255,255,0.48); padding: 13px 15px; display: flex; flex-direction: column; }
   .c-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .c-kind { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.05em; color: #fff; padding: 2px 6px; border-radius: var(--radius-round); }

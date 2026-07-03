@@ -13,7 +13,7 @@
     <section class="grp">
       <h3 class="grp-h">{g.label}</h3>
       <p class="grp-sub">{g.blurb}</p>
-      <div class="cards">
+      <div class="pe-grid">
         {#each FRAMEWORKS_BY_TYPE[g.type] as f (f.id)}
           <div class="fc" class:gov={g.type === 'uk-gov'}>
             <div class="fc-head">
@@ -33,8 +33,7 @@
   .fg { display: flex; flex-direction: column; gap: 26px; }
   .grp-h { margin: 0 0 2px; font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; color: var(--ink); }
   .grp-sub { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 70ch; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .fc { border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid #b4632e; border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; }
+  .fc { border: 1px solid rgba(28,22,17,0.12); border-top: 3px solid #b4632e; border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; }
   .fc.gov { border-top-color: var(--accent-ink); }
   .fc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .fc-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 15.5px; font-weight: 600; color: var(--ink); }

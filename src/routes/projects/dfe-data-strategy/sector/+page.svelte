@@ -90,7 +90,7 @@
   .theme p { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
   .bg { margin: 26px 0 0; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); padding: 6px 14px; }
   .bg summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft, rgba(28,22,17,0.6)); padding: 8px 0; }
-  .bg-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; padding: 6px 0 12px; }
+  .bg-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 6px 0 12px; }
   .bg-grp h4 { margin: 0 0 5px; font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--ink); }
   .bg-grp ul { margin: 0; padding-left: 16px; }
   .bg-grp li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); margin-bottom: 4px; }

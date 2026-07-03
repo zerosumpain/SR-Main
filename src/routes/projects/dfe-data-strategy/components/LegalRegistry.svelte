@@ -13,7 +13,7 @@
         <h3>{LEGAL_LAYER_META[layer].name}</h3>
         <p>{LEGAL_LAYER_META[layer].blurb}</p>
       </div>
-      <div class="items">
+      <div class="pe-grid">
         {#each byLayer(layer) as l (l.id)}
           <article class="li" id={l.id}>
             <div class="li-head">
@@ -34,8 +34,7 @@
   .lr { display: flex; flex-direction: column; gap: 22px; }
   .layer-head h3 { margin: 0 0 2px; font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink); }
   .layer-head p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 72ch; }
-  .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 12px 14px; scroll-margin-top: 120px; }
+  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; scroll-margin-top: 120px; }
   .li-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
   .li-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--ink); }
   .li-cite { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }

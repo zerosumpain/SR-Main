@@ -5,16 +5,21 @@
   import SectionRail from '../components/author/SectionRail.svelte';
   import SectionEditor from '../components/author/SectionEditor.svelte';
   import GuidancePanel from '../components/author/GuidancePanel.svelte';
+  import DiagnosePanel from '../components/author/DiagnosePanel.svelte';
   import VerifyPanel from '../components/author/VerifyPanel.svelte';
   import PlanPanel from '../components/author/PlanPanel.svelte';
   import ExportPanel from '../components/author/ExportPanel.svelte';
 
-  const TABS: { id: AuthorTab; label: string; hint: string }[] = [
+  let { data } = $props();
+
+  const TABS = $derived<{ id: AuthorTab; label: string; hint: string }[]>([
+    // the diagnostic (the old private workbench) is the workspace's first step for the signed-in owner
+    ...(data?.authed ? [{ id: 'diagnose' as AuthorTab, label: '◆ Diagnose', hint: 'Test the posture against the pressures before writing' }] : []),
     { id: 'draft', label: '✎ Draft', hint: 'Write the strategy, section by section' },
     { id: 'verify', label: '◈ Verify', hint: 'Coverage sweep, completeness checks and the deep review' },
     { id: 'plan', label: '▤ Plan', hint: 'Roadmap, risks, measures and consultation' },
     { id: 'export', label: '↓ Export', hint: 'Preview, download, snapshots' },
-  ];
+  ]);
 
   let titleEditing = $state(false);
 
@@ -22,6 +27,7 @@
     author.load();
     const t = $page.url.searchParams.get('tab');
     if (t === 'draft' || t === 'verify' || t === 'plan' || t === 'export') author.tab = t;
+    else if (t === 'diagnose' && data?.authed) author.tab = 'diagnose';
   });
 
   // persist on any state change (cheap JSON writes, debounced by microtask batching)
@@ -41,12 +47,12 @@
   const verifyBadge = $derived(author.coverage.statutoryGaps.length);
 </script>
 
-<svelte:head><title>Author — Keystone</title></svelte:head>
+<svelte:head><title>Workspace — Keystone</title></svelte:head>
 
 <div class="pe-route wide au">
   <header class="au-head">
     <div class="au-title">
-      <span class="pe-eyebrow">Write · the strategy itself</span>
+      <span class="pe-eyebrow">The workspace · diagnose → draft → verify → plan</span>
       {#if titleEditing}
         <input
           class="title-in"
@@ -68,7 +74,7 @@
     </div>
     <nav class="au-tabs" aria-label="Author tools">
       {#each TABS as t}
-        <button class="au-tab" class:on={author.tab === t.id} title={t.hint} onclick={() => (author.tab = t.id)}>
+        <button class="au-tab" class:on={author.tab === t.id} class:diag={t.id === 'diagnose'} title={t.hint} onclick={() => author.setTab(t.id)}>
           {t.label}
           {#if t.id === 'verify' && verifyBadge > 0 && author.totalWords > 0}
             <i class="badge">{verifyBadge}</i>
@@ -78,7 +84,9 @@
     </nav>
   </header>
 
-  {#if author.tab === 'draft'}
+  {#if author.tab === 'diagnose' && data?.authed}
+    <DiagnosePanel />
+  {:else if author.tab === 'draft' || (author.tab === 'diagnose' && !data?.authed)}
     <div class="draft-grid">
       <div class="col-rail"><SectionRail /></div>
       <div class="col-ed">
@@ -164,6 +172,19 @@
     background: var(--ink);
     color: var(--paper, #f1ead6);
     border-color: var(--ink);
+  }
+  .au-tab.diag {
+    border-color: var(--accent-ink-tint-35);
+    color: var(--accent-ink);
+    background: var(--accent-ink-tint-06);
+  }
+  .au-tab.diag:hover {
+    background: var(--accent-ink-tint-12);
+  }
+  .au-tab.diag.on {
+    background: var(--accent-ink);
+    color: var(--paper, #f1ead6);
+    border-color: var(--accent-ink);
   }
   .badge {
     position: absolute;

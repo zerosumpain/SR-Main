@@ -2,6 +2,7 @@
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import TakeawayBar from '../components/TakeawayBar.svelte';
   import NextStep from '../components/NextStep.svelte';
+  import IntelInline from '../components/IntelInline.svelte';
   import LegalRegistry from '../components/LegalRegistry.svelte';
   import { LEGISLATION } from '../lib/legislation';
 </script>
@@ -27,13 +28,15 @@
     ]}
   />
 
+  <IntelInline section="legislation" note="new law, commencement and guidance" />
+
   <LegalRegistry />
 
   <NextStep
     links={[
       { label: 'DfE in context — the partner web', href: '/projects/dfe-data-strategy/dfe', kind: 'primary' },
       { label: 'Write the legal-basis section', href: '/projects/dfe-data-strategy/author' },
-      { label: 'The workbench diagnostic', href: '/projects/dfe-data-strategy/workbench' },
+      { label: 'Diagnose the posture', href: '/projects/dfe-data-strategy/author?tab=diagnose' },
     ]}
   />
 </div>
