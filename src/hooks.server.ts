@@ -14,6 +14,7 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
 import { isPublicPath } from '$lib/auth';
+import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
@@ -129,11 +130,7 @@ process.on('SIGINT', () => void gracefulShutdown());
 import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';
 registerDeliveryListener();
 
-// Allowed email addresses
-function getAllowedEmails(): string[] {
-  const emails = env.AUTH_ALLOWED_EMAILS || '';
-  return emails.split(',').map((e) => e.trim()).filter(Boolean);
-}
+// Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 
 // Cookie domain: in production, share across all *.strangeramblings.com
 // subdomains (main site + vnc.strangeramblings.com) so the VNC proxy can
@@ -181,11 +178,11 @@ const { handle: authHandle } = SvelteKitAuth({
   },
   callbacks: {
     async signIn({ user, profile }) {
-      const allowed = getAllowedEmails();
-      if (allowed.length === 0) return false;
       const email = (user?.email || (profile as any)?.email || '').toLowerCase();
-      console.log(`[auth] Sign-in attempt: ${email}`);
-      return allowed.some((a) => a.toLowerCase() === email);
+      // Owners (AUTH_ALLOWED_EMAILS) OR guests (allowed_user table) may sign in.
+      const ok = await isEmailAllowedToSignIn(email);
+      console.log(`[auth] Sign-in attempt: ${email} → ${ok ? 'allowed' : 'denied'}`);
+      return ok;
     },
     async session({ session }) {
       return session;
@@ -322,6 +319,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       });
     }
 
+    // The admin API is owner-only. A guest on the login allow-list has a valid
+    // session but must never reach /api/admin/* — that surface holds API keys,
+    // WebDAV credentials, blog publishing and the allow-list itself. Before
+    // guests existed a session implied owner, so these routes were only
+    // session-gated; introducing guests broke that equivalence, so gate the
+    // whole prefix here. (Service-authed /api/admin/hermes/* returns earlier via
+    // isPublicPath, and the homeserv LAN bypass returns earlier still — both
+    // never reach this check.)
+    if (pathname.startsWith('/api/admin/') && !isOwnerEmail(session.user.email)) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     // Rate-limit expensive endpoints per authenticated user.
     const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
     if (limit && event.request.method !== 'GET') {
@@ -358,6 +370,16 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (!session?.user) {
     const callbackUrl = encodeURIComponent(pathname + event.url.search);
     throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
+  }
+
+  // The admin console is owner-only. Guests on the login allow-list can use the
+  // authed site but must not reach /admin (which can edit that allow-list and
+  // hold API keys, scraper creds, etc.). The homeserv LAN bypass above returns
+  // earlier, so local admin on the box is unaffected.
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    if (!isOwnerEmail(session.user.email)) {
+      throw redirect(303, '/');
+    }
   }
 
   return resolve(event);

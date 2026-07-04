@@ -80,6 +80,12 @@
         { label: 'Pulse', href: '/admin/pulse' },
       ],
     },
+    {
+      label: 'Access',
+      items: [
+        { label: 'Login allow-list', href: '/admin/access' },
+      ],
+    },
   ];
 </script>
 

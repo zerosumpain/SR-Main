@@ -650,6 +650,18 @@ export const projectVisibility = pgTable('project_visibility', {
 
 export type ProjectVisibility = typeof projectVisibility.$inferSelect;
 
+// Guest login allow-list. Emails here may sign in with Google but are NOT site
+// owners — owners come from the AUTH_ALLOWED_EMAILS env var and get admin +
+// owner-only surfaces. Managed from /admin/access. See src/lib/server/access.ts.
+export const allowedUser = pgTable('allowed_user', {
+  email: text('email').primaryKey(), // always stored lower-cased
+  note: text('note'), // optional label, e.g. "partner", "colleague"
+  addedBy: text('added_by'), // owner email that granted access
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AllowedUser = typeof allowedUser.$inferSelect;
+
 // Secure per-project share links. A row grants access to ONE project page even
 // when it is private, via an unguessable token. We store only the sha256 of the
 // token (the raw token is shown once at creation); a row is live while revokedAt
