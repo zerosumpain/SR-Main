@@ -59,8 +59,8 @@ export interface PolicyDraft {
 
 /** Canonical stakeholders the model is nudged to choose from (free text also allowed). */
 export const STAKEHOLDERS = [
-  'DfE (policy & analysis)',
-  'DfE data/digital function (CDO)',
+  'The department (policy & analysis)',
+  'The department data/digital function (CDO)',
   'Schools & teachers',
   'Multi-academy trusts',
   'Local authorities / children’s services',
@@ -111,13 +111,13 @@ export function buildStrategyContext(): string {
 export function targetBrief(kind: string, id: string, label: string): string {
   if (kind === 'strategy') {
     const s = STRATEGIES.find((x) => x.id === id);
-    return s ? `STRATEGY: ${s.name} (verdict: ${s.tier}). "${s.take}" Why it matters to DfE: ${s.whyDfE}` : `STRATEGY: ${label}`;
+    return s ? `STRATEGY: ${s.name} (verdict: ${s.tier}). "${s.take}" Why it matters to the department: ${s.whyDfE}` : `STRATEGY: ${label}`;
   }
   if (kind === 'pressure') {
     const p = PRESSURES.find((x) => x.id === id);
     return p ? `PRESSURE (${p.origin}): ${p.title}. ${p.description} It demands: ${p.demands.join(', ')}.` : `PRESSURE: ${label}`;
   }
-  return `STAKEHOLDER GROUP: ${label}. Suggest policies that address what this group needs from, or fears about, DfE's data strategy.`;
+  return `STAKEHOLDER GROUP: ${label}. Suggest policies that address what this group needs from, or fears about, the department's data strategy.`;
 }
 
 /** Compact id→name index so the model can cite any pressure/strategy/law even when it

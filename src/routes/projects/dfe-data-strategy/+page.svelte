@@ -14,19 +14,19 @@
 </script>
 
 <svelte:head>
-  <title>Keystone — write a DfE data strategy</title>
+  <title>Keystone — write an education data strategy</title>
   <meta
     name="description"
-    content="A one-stop shop for writing a DfE data strategy: explore the pressures and white-paper commitments, draft the strategy in a verified editor, and track what changes."
+    content="A one-stop shop for writing an education data strategy: explore the pressures and white-paper commitments, draft the strategy in a verified editor, and track what changes."
   />
 </svelte:head>
 
 <div class="pe-route">
   <span class="pe-eyebrow">A data-strategy workbench · companion to the Policy Engine</span>
-  <h1 class="pe-h1">Everything you need to write a DfE data strategy.</h1>
+  <h1 class="pe-h1">Everything you need to write an education data strategy.</h1>
   <p class="pe-lede hero-lede">
     {#if eli}
-      Writing a plan for how the Department for Education uses data is hard: promises from government, pressure from
+      Writing a plan for how the education department uses data is hard: promises from government, pressure from
       schools and councils, and lots of law. Keystone puts it all in one place — learn the landscape, write the plan,
       check it automatically, and watch for changes.
     {:else}
@@ -58,7 +58,7 @@
         <a href="{BASE}/strategies">Influence map</a>
         <a href="{BASE}/frameworks">Frameworks</a>
         <a href="{BASE}/legislation">Legislation</a>
-        <a href="{BASE}/dfe">DfE in context</a>
+        <a href="{BASE}/dfe">Partner web</a>
         <a href="{BASE}/sector">Sector voices</a>
       </nav>
     </section>
@@ -97,7 +97,7 @@
   <h2 class="pe-h2">Built on the work, not beside it</h2>
   <p class="pe-prose link-para">
     Keystone is a companion to <a href="/projects/policy-engine">the Policy Engine</a> and
-    <a href="/projects/dfe-data-estate">The Data Estate</a>. The DfE-policy pressures are drawn straight from the
+    <a href="/projects/dfe-data-estate">The Data Estate</a>. The department-policy pressures are drawn straight from the
     Policy Engine's field studies — the
     <a href="/projects/policy-engine/monitor">data spine and consistent child identifier</a>,
     <a href="/projects/policy-engine/attendance">attendance data</a>, <a href="/projects/policy-engine/send">SEND</a>,

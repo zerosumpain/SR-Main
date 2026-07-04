@@ -18,11 +18,11 @@
   function buildBrief(): string {
     const a = app.align;
     const lines: string[] = [];
-    lines.push(`# DfE data strategy — diagnostic brief`);
+    lines.push(`# Education data strategy — diagnostic brief`);
     lines.push(`\n_Strategy: **${app.scenarioName}**. Generated with Keystone (a decision-support tool, not an official strategy)._\n`);
     lines.push(`## Headline\n`);
     lines.push(`- Overall pressure coverage: **${pct(a.overallCoverage)}** (severity-weighted)`);
-    lines.push(`- Cross-government: ${pct(a.coverageByOrigin['cross-government'])} · DfE policy: ${pct(a.coverageByOrigin['dfe-policy'])} · Partners: ${pct(a.coverageByOrigin.partners)}`);
+    lines.push(`- Cross-government: ${pct(a.coverageByOrigin['cross-government'])} · the department policy: ${pct(a.coverageByOrigin['dfe-policy'])} · Partners: ${pct(a.coverageByOrigin.partners)}`);
     lines.push(`\n## Strategic posture\n`);
     for (const id of Object.keys(app.state.postures)) {
       const v = app.state.postures[id];
@@ -82,7 +82,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dfe-data-strategy-brief-${app.scenarioName.replace(/\W+/g, '-').toLowerCase()}.md`;
+    a.download = `education-strategy-brief-${app.scenarioName.replace(/\W+/g, '-').toLowerCase()}.md`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -91,14 +91,14 @@
       const res = await fetch('/projects/dfe-data-strategy/synth?export=docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: buildBrief(), title: `DfE data strategy — ${app.scenarioName}` }),
+        body: JSON.stringify({ markdown: buildBrief(), title: `Education data strategy — ${app.scenarioName}` }),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `dfe-data-strategy-brief.docx`;
+      a.download = `education-strategy-brief.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -145,7 +145,7 @@
 
   <section class="card span">
     <h3 class="card-h">Data maturity</h3>
-    <p class="card-sub">Self-assess where DfE is now and where you want it to be. The green shape is where this strategy could get you.</p>
+    <p class="card-sub">Self-assess where the department is now and where you want it to be. The green shape is where this strategy could get you.</p>
     <MaturityRadar />
   </section>
 

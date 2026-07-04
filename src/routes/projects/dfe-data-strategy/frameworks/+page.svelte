@@ -14,9 +14,9 @@
   <StoryMasthead
     kicker="Understand · What good looks like"
     title="How data strategy is done — and what should already exist"
-    thesis="DfE is not starting from a blank page. Government has published a stack of frameworks for data quality, ethics, transparency and maturity; industry has spent two decades codifying what a serious data function looks like. A credible strategy borrows from both — and is measured against the government ones whether it likes it or not."
-    thesisEli5="There are ready-made rulebooks for doing data well — some from government, some from industry. A good DfE strategy uses them rather than reinventing the wheel."
-    asks={['The government frameworks DfE is held to', 'The industry canon it can borrow from', 'The recurring themes any mature strategy covers']}
+    thesis="The department is not starting from a blank page. Government has published a stack of frameworks for data quality, ethics, transparency and maturity; industry has spent two decades codifying what a serious data function looks like. A credible strategy borrows from both — and is measured against the government ones whether it likes it or not."
+    thesisEli5="There are ready-made rulebooks for doing data well — some from government, some from industry. A good the department strategy uses them rather than reinventing the wheel."
+    asks={['The government frameworks the department is held to', 'The industry canon it can borrow from', 'The recurring themes any mature strategy covers']}
     askLabel="What this page maps"
   />
 
@@ -35,7 +35,7 @@
   <section class="viz" id="framework-index">
     <div class="viz-head">
       <h2 class="pe-h2">The {FRAMEWORKS.length} frameworks, newest first</h2>
-      <p class="pe-prose">One index, one detail. Pick a framework on the left to read what it is, what it gives a DfE strategy, and where it leads — ordered by the date of the current version, most recent first, because the newer government publications supersede the older framing.</p>
+      <p class="pe-prose">One index, one detail. Pick a framework on the left to read what it is, what it gives an education data strategy, and where it leads — ordered by the date of the current version, most recent first, because the newer government publications supersede the older framing.</p>
     </div>
     <FrameworkExplorer />
   </section>
@@ -43,7 +43,7 @@
   <section class="viz">
     <div class="viz-head">
       <h2 class="pe-h2">Foundational, or specialist?</h2>
-      <p class="pe-prose">These frameworks are not equals. A handful are <b>foundational</b> — they should shape the strategy from page one; others are <b>specialist</b> tools to reach for when a narrow need arises. Positioned by how load-bearing each is for DfE, and split into UK-government and corporate.</p>
+      <p class="pe-prose">These frameworks are not equals. A handful are <b>foundational</b> — they should shape the strategy from page one; others are <b>specialist</b> tools to reach for when a narrow need arises. Positioned by how load-bearing each is for the department, and split into UK-government and corporate.</p>
     </div>
     <FrameworkMap />
   </section>

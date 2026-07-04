@@ -5,7 +5,7 @@
 
   const ORIGINS: { id: Origin; label: string }[] = [
     { id: 'cross-government', label: 'Cross-gov' },
-    { id: 'dfe-policy', label: 'DfE policy' },
+    { id: 'dfe-policy', label: 'The department policy' },
     { id: 'partners', label: 'Partners' },
   ];
 

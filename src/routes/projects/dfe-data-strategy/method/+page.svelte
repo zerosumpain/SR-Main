@@ -19,7 +19,7 @@
     { f: 'Completeness heuristics (six checks)', s: 84, v: 'built' },
     { f: 'Delivery roadmap seeded from statutory deadlines', s: 77, v: 'built' },
     { f: 'Comparator library (other departments’ strategies)', s: 77, v: 'built' },
-    { f: 'Measures picker (33 real DfE series)', s: 76, v: 'built' },
+    { f: 'Measures picker (33 real the department series)', s: 76, v: 'built' },
     { f: 'RAG + Ask-the-model over the ledger', s: 74, v: 'built' },
     { f: 'Risk register seeded from gaps + tensions', s: 72, v: 'built' },
     { f: 'Journey restructure (Understand → Write → Track)', s: 71, v: 'built' },
@@ -49,7 +49,7 @@ base[area] = 1 − exp( −{PARAMS.CAP_K} × share[area] × {CAPABILITY_AREAS.le
 postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MIN}, {PARAMS.MULT_MAX} )</pre>
 
   <h2 class="pe-h2">2 · From capability to coverage</h2>
-  <p class="pe-prose">Each of the {PRESSURES.length} pressures <b>demands</b> certain capabilities. Its coverage is the mean effective strength of those capabilities. The headline is the <b>severity-weighted</b> mean across all pressures; the same is computed per origin (cross-government / DfE policy / partners). The workbench shows the working for every pressure.</p>
+  <p class="pe-prose">Each of the {PRESSURES.length} pressures <b>demands</b> certain capabilities. Its coverage is the mean effective strength of those capabilities. The headline is the <b>severity-weighted</b> mean across all pressures; the same is computed per origin (cross-government / the department policy / partners). The workbench shows the working for every pressure.</p>
 
   <h2 class="pe-h2">3 · Maturity progress</h2>
   <p class="pe-prose">For each of the {MATURITY_DIMENSIONS.length} maturity dimensions, progress is the mean strength of the capabilities that drive it. The projected level is <code>current + (target − current) × progress</code> — with a penalty when an ambitious target is not backed by investment ({PARAM_NOTES.MATURITY_GAP_PENALTY}).</p>
@@ -66,7 +66,7 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
 
   <h2 class="pe-h2">5 · The commitments ledger</h2>
   <p class="pe-prose">
-    The <a href="/projects/dfe-data-strategy/commitments">ledger's</a> {COMMITMENTS.length} commitments across {DOCUMENTS.length} documents were synthesized on <b>2 July 2026</b> by a nine-agent research sweep of the 2024–26 white-paper landscape — schools, SEND &amp; AP, early years &amp; social care, post-16 &amp; skills, curriculum &amp; assessment, cross-government digital, DfE's own data programmes, cross-departmental interfaces, and data-strategy best practice — checked against primary sources (gov.uk, legislation.gov.uk, parliament.uk), then merged, de-duplicated and spot-verified before freeze. Every commitment carries: a short verbatim quote, source URLs, a status on the bindingness scale (statutory duty → consulting), DfE's role, the new data flows it creates, and a one-line reading of <i>what it demands of the strategy</i>. Each also carries a <b>research confidence</b> level — where the sweep could not verify a claim against a primary source, it says so rather than asserting it.
+    The <a href="/projects/dfe-data-strategy/commitments">ledger's</a> {COMMITMENTS.length} commitments across {DOCUMENTS.length} documents were synthesized on <b>2 July 2026</b> by a nine-agent research sweep of the 2024–26 white-paper landscape — schools, SEND &amp; AP, early years &amp; social care, post-16 &amp; skills, curriculum &amp; assessment, cross-government digital, the department's own data programmes, cross-departmental interfaces, and data-strategy best practice — checked against primary sources (gov.uk, legislation.gov.uk, parliament.uk), then merged, de-duplicated and spot-verified before freeze. Every commitment carries: a short verbatim quote, source URLs, a status on the bindingness scale (statutory duty → consulting), the department's role, the new data flows it creates, and a one-line reading of <i>what it demands of the strategy</i>. Each also carries a <b>research confidence</b> level — where the sweep could not verify a claim against a primary source, it says so rather than asserting it.
   </p>
   <p class="pe-prose">
     The ledger powers more than its own page: it grounds the <a href="/projects/dfe-data-strategy/author">Author's</a> coverage sweep and deep review, seeds the roadmap and risk register, extends the Ask-the-model corpus, and sets the named intelligence watches — a daily GOV.UK sweep whose finds surface as "newly arrived intelligence" inside the section they bear on (legislation on the <a href="/projects/dfe-data-strategy/legislation">legal page</a>, programmes on the <a href="/projects/dfe-data-strategy/commitments">ledger</a>), with an on-demand scan in the navigation bar.
@@ -100,7 +100,7 @@ postureMult[area] = clamp( 1 + Σ postureValue × affectWeight , {PARAMS.MULT_MI
   <h2 class="pe-h2">What it is — and isn't</h2>
   <ul class="caveats">
     <li><b>It is</b> a structured way to test the coherence and coverage of a data strategy against a research-grounded map of pressures, frameworks and law.</li>
-    <li><b>It is not</b> a prediction of outcomes, a budget model, or an official DfE position. The weights are reasoned, documented estimates, not measured elasticities.</li>
+    <li><b>It is not</b> a prediction of outcomes, a budget model, or an official the department position. The weights are reasoned, documented estimates, not measured elasticities.</li>
     <li>The pressures, frameworks and legal registry are grounded in the published sources below and verified through an automated research pass.</li>
   </ul>
 

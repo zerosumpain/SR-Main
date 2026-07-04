@@ -9,8 +9,8 @@
 </script>
 
 <svelte:head>
-  <title>The Influence Map — what should shape DfE's data strategy — Keystone</title>
-  <meta name="description" content="An editorial map of every strategy, statute and framework in the landscape — ranked by how much each should actually shape DfE's data strategy, from 'set the course' to 'context only'." />
+  <title>The Influence Map — what should shape the department's data strategy — Keystone</title>
+  <meta name="description" content="An editorial map of every strategy, statute and framework in the landscape — ranked by how much each should actually shape the department's data strategy, from 'set the course' to 'context only'." />
 </svelte:head>
 
 <div class="pe-route wide ed">
@@ -18,9 +18,9 @@
   <h1 class="pe-h1 ed-h1">Not every strategy deserves a seat at the table.</h1>
   <p class="pe-lede ed-lede">
     {#if eli}
-      There are dozens of government strategies, laws and industry rulebooks about data. Some should completely shape what DfE does. Others barely matter. This map sorts them — so the strategy listens to the right ones.
+      There are dozens of government strategies, laws and industry rulebooks about data. Some should completely shape what the department does. Others barely matter. This map sorts them — so the strategy listens to the right ones.
     {:else}
-      A data-strategy lead is handed a tottering pile of strategies, statutes, frameworks and roadmaps and told to "align" with all of them. That way lies a mission statement, not a strategy. The discipline is subtraction: deciding which of these should <em>set the course</em>, which to <em>borrow from</em>, which to merely <em>comply with</em> — and which are simply context. Here is the whole landscape, placed by how directly it bears on DfE and how hard it should pull.
+      A data-strategy lead is handed a tottering pile of strategies, statutes, frameworks and roadmaps and told to "align" with all of them. That way lies a mission statement, not a strategy. The discipline is subtraction: deciding which of these should <em>set the course</em>, which to <em>borrow from</em>, which to merely <em>comply with</em> — and which are simply context. Here is the whole landscape, placed by how directly it bears on the department and how hard it should pull.
     {/if}
   </p>
 

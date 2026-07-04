@@ -18,9 +18,9 @@
 <div class="pe-route wide">
   <StoryMasthead
     kicker="Understand · The pressures landscape"
-    title="The pressures a DfE data strategy must answer to"
+    title="The pressures an education data strategy must answer to"
     thesis="A data-strategy lead does not get to choose their pressures. They arrive from three directions at once — the centre of government, the department's own policy agenda, and a sprawling delivery system — and a credible strategy has to hold all three in view. These are the {PRESSURES.length} that shape the field."
-    thesisEli5="Lots of different forces push on how DfE uses data. They come from three places: the rest of government, DfE's own plans, and the schools and councils it works with. Here they all are."
+    thesisEli5="Lots of different forces push on how the department uses data. They come from three places: the rest of government, the department's own plans, and the schools and councils it works with. Here they all are."
     asks={['A clear read on where each pressure comes from and how hard it pushes', 'Which capabilities each one demands', 'A way to test whether a strategy actually answers them']}
     askLabel="What the lead needs"
   />
@@ -65,7 +65,7 @@
 
   <NextStep
     links={[
-      { label: 'The commitments ledger — what DfE is already bound to', href: '/projects/dfe-data-strategy/commitments', kind: 'primary' },
+      { label: 'The commitments ledger — what the department is already bound to', href: '/projects/dfe-data-strategy/commitments', kind: 'primary' },
       { label: 'Which strategies should shape it', href: '/projects/dfe-data-strategy/strategies' },
       { label: 'Draft the strategy', href: '/projects/dfe-data-strategy/author' },
     ]}

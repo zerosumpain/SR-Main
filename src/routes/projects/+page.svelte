@@ -250,10 +250,10 @@
         class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
         style="color: var(--text-primary);"
       >
-        Keystone — A DfE Data-Strategy Workbench
+        Keystone — An Education Strategy Workbench
       </h2>
       <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        Understand the pressures on the Department for Education's use of data — from across government, from
+        Understand the pressures on an education department's use of data — from across government, from
         its own policy agenda, and from a vast partner system — and shape a strategy that can deliver against
         them. A research-grounded landscape of pressures, frameworks and the data-sharing legal stack, plus a
         private workbench: set your posture and investment levers, and a transparent engine scores coverage,

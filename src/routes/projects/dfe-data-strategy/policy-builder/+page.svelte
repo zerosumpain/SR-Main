@@ -6,7 +6,7 @@
 
 <svelte:head>
   <title>Policy Builder — Keystone</title>
-  <meta name="description" content="Write headline policies for a DfE data strategy in plain English; an LLM weighs each against the pressures, the strategy landscape, the legal stack and the Policy Engine, surfacing pros, cons, tensions, trade-offs and the stakeholders affected." />
+  <meta name="description" content="Write headline policies for an education data strategy in plain English; an LLM weighs each against the pressures, the strategy landscape, the legal stack and the Policy Engine, surfacing pros, cons, tensions, trade-offs and the stakeholders affected." />
 </svelte:head>
 
 <div class="pe-route pb-route">

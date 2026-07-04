@@ -10,8 +10,8 @@
       <option value="all">Any status</option>
       {#each Object.entries(STATUS_META) as [id, m]}<option value={id}>{m.label}</option>{/each}
     </select>
-    <select class="cf-s" bind:value={ledger.role} aria-label="DfE role">
-      <option value="all">Any DfE role</option>
+    <select class="cf-s" bind:value={ledger.role} aria-label="The department role">
+      <option value="all">Any the department role</option>
       {#each Object.entries(ROLE_META) as [id, m]}<option value={id}>{m.label}</option>{/each}
     </select>
     {#if ledger.activeFilters > 0}

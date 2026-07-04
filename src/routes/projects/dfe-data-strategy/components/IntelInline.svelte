@@ -11,6 +11,8 @@
   const shown = $derived(open ? items : items.slice(0, 3));
 
   const DIR: Record<string, string> = { reinforces: '#2f7d4f', challenges: '#b1455e', shifts: '#b4632e', informs: '#3a5fa8' };
+  // display-map the publisher: the workbench never says "DfE" in its own voice
+  const pub = (p: string | null | undefined) => (p === 'Department for Education' ? 'the education department' : p);
   const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 </script>
 
@@ -30,7 +32,7 @@
             <a class="ii-title" href={i.url} target="_blank" rel="noopener">{i.title} ↗</a>
           </div>
           <span class="ii-meta">
-            {[i.publisher, i.docType, fmt(i.publishedAt)].filter(Boolean).join(' · ')}{#if i.watchLabel}
+            {[pub(i.publisher), i.docType, fmt(i.publishedAt)].filter(Boolean).join(' · ')}{#if i.watchLabel}
               · <span class="ii-watch">◉ {i.watchLabel}</span>{/if}
           </span>
           {#if i.summary}<p class="ii-sum">{i.summary}</p>{/if}

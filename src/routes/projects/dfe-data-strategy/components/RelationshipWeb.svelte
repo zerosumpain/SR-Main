@@ -2,7 +2,7 @@
   import { RELATIONSHIPS, REL_DYNAMICS, RELATIONSHIP_BY_ID } from '../lib/relationships';
 
   // How the relationships play out: pick a partner, and the two-way deal —
-  // what DfE takes, what it gives back, the mandate, the friction — stays
+  // what the department takes, what it gives back, the mandate, the friction — stays
   // right below the picker. Cross-cutting dynamics follow.
   let relId = $state<string>(RELATIONSHIPS[0]?.id ?? '');
   const rel = $derived(RELATIONSHIP_BY_ID[relId] ?? RELATIONSHIPS[0]);
@@ -30,7 +30,7 @@
       <p class="who">{rel.who}</p>
       <div class="flows">
         <section class="fcol in">
-          <h4><i>→</i> What DfE takes</h4>
+          <h4><i>→</i> What the department takes</h4>
           {#each rel.flowsIn as f}
             <div class="flow">
               <b>{f.what}</b>
@@ -39,7 +39,7 @@
           {/each}
         </section>
         <section class="fcol out">
-          <h4><i>←</i> What DfE gives back</h4>
+          <h4><i>←</i> What the department gives back</h4>
           {#each rel.flowsOut as f}
             <div class="flow">
               <b>{f.what}</b>

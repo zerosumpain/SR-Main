@@ -1,7 +1,7 @@
 // frameworks.ts — the frameworks gallery: how data strategy is done, in UK government and in
 // the corporate world. "What should already exist" in a credible data strategy. Facts verified
 // via the keystone-research workflow (2026-06-16). The /frameworks page renders these; the
-// /strategies influence map ranks the wider landscape (statutes, programmes) by relevance to DfE.
+// /strategies influence map ranks the wider landscape (statutes, programmes) by relevance to the department.
 
 import type { Framework } from './types';
 
@@ -65,12 +65,12 @@ export const FRAMEWORKS: Framework[] = [
     date: '2025-01',
     dateLabel: 'Jan 2025',
     summary:
-      'Matt Clifford’s plan (Jan 2025; government response CP 1242, 48/50 recommendations agreed) to scale public- and private-sector AI. It frames high-quality data as "the lifeblood of modern AI" and routes data-unlocking through the National Data Library; DfE is named a delivery partner.',
+      'Matt Clifford’s plan (Jan 2025; government response CP 1242, 48/50 recommendations agreed) to scale public- and private-sector AI. It frames high-quality data as "the lifeblood of modern AI" and routes data-unlocking through the National Data Library; the department is named a delivery partner.',
     keyElements: [
       'Data as the precondition for AI',
       'AI Research Resource (AIRR) expanded ≥20× by 2030; AI Growth Zones',
       'Public-sector adoption via "scan → pilot → scale"',
-      'DfE named as an accountable delivery partner',
+      'The department named as an accountable delivery partner',
     ],
     sourceUrl: 'https://www.gov.uk/government/publications/ai-opportunities-action-plan',
   },
@@ -195,7 +195,7 @@ export const FRAMEWORKS: Framework[] = [
   },
 ];
 
-// How load-bearing each framework is for a DfE data strategy — foundational ones
+// How load-bearing each framework is for an education data strategy — foundational ones
 // shape everything; specialist ones are reached for when their narrow need arises.
 const ROLE: Record<string, { role: 'foundational' | 'core' | 'specialist'; weight: number }> = {
   'modern-digital-government': { role: 'foundational', weight: 0.95 },

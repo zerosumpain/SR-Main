@@ -9,7 +9,7 @@
 
   const ORIGINS: { id: Origin; label: string }[] = [
     { id: 'cross-government', label: 'Cross-government' },
-    { id: 'dfe-policy', label: 'DfE policy' },
+    { id: 'dfe-policy', label: 'The department policy' },
     { id: 'partners', label: 'Partners' },
   ];
   const C = 2 * Math.PI * 52;

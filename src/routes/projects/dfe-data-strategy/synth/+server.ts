@@ -51,13 +51,13 @@ export const POST: RequestHandler = async (event) => {
     const body = await event.request.json().catch(() => ({}));
     // sized for a full generated strategy (15+ pages), not just the diagnostic brief
     const markdown = String(body?.markdown ?? '').slice(0, 140_000);
-    const title = String(body?.title ?? 'DfE data strategy brief').slice(0, 200);
+    const title = String(body?.title ?? 'Education data strategy brief').slice(0, 200);
     if (!markdown) throw error(400, 'No content.');
     const out = await synthesize({ format: 'docx', source: 'markdown', content: markdown, title });
     return new Response(out.buffer as any, {
       headers: {
         'Content-Type': out.mimeType,
-        'Content-Disposition': `attachment; filename="dfe-data-strategy-brief.${out.suggestedExtension}"`,
+        'Content-Disposition': `attachment; filename="education-strategy-brief.${out.suggestedExtension}"`,
         'Cache-Control': 'no-store',
       },
     });
@@ -80,7 +80,7 @@ export const POST: RequestHandler = async (event) => {
   const text = extracted.text.slice(0, 14_000);
   if (!text.trim()) throw error(422, 'No readable text found in that file.');
 
-  const sys = `You analyse an uploaded document for a DfE data-strategy lead and map it onto the Keystone framework. Return STRICT JSON only — no prose, no markdown fences — matching exactly:
+  const sys = `You analyse an uploaded document for an education data-strategy lead and map it onto the Keystone framework. Return STRICT JSON only — no prose, no markdown fences — matching exactly:
 {"summary": string (2-4 sentences),
  "maturitySignals": [{"dimension": <maturity id>, "level": 1-5, "note": string}],
  "addressedPressures": [<pressure id>],

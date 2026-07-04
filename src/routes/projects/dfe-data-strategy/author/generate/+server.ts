@@ -86,7 +86,7 @@ export const POST: RequestHandler = async (event) => {
 
   if (mode === 'outline') {
     const digest = digestAnswers(questions, answers) || '- (no answers given — write a balanced, evidence-led strategy)';
-    const sys = `You are the drafting engine for the Department for Education's data strategy. From the strategy lead's interview answers, produce the document spine that will keep ${skeleton.length} independently-drafted sections coherent. Return STRICT JSON only — no prose, no fences — exactly:
+    const sys = `You are the drafting engine for the department's data strategy. From the strategy lead's interview answers, produce the document spine that will keep ${skeleton.length} independently-drafted sections coherent. Return STRICT JSON only — no prose, no fences — exactly:
 {"title": string (a real strategy title, <90 chars, no colon-cliché if you can avoid it),
  "arc": string (2-3 sentences: the through-line of the document, in the register the answers imply),
  "shifts": [string, string, string] (the 2-4 big shifts, each <90 chars, consistent with the answers),
@@ -121,7 +121,7 @@ Provide a brief for EVERY section id.`;
       if (typeof b?.id === 'string' && skeleton.some((s) => s.id === b.id)) briefs[b.id] = String(b.brief ?? '').slice(0, 500);
     }
     return json({
-      title: String(parsed?.title ?? 'DfE data strategy').slice(0, 140),
+      title: String(parsed?.title ?? 'Education data strategy').slice(0, 140),
       arc: String(parsed?.arc ?? '').slice(0, 900),
       shifts: (Array.isArray(parsed?.shifts) ? parsed.shifts : []).map((s: any) => String(s).slice(0, 160)).slice(0, 4),
       briefs,
@@ -133,7 +133,7 @@ Provide a brief for EVERY section id.`;
   const section = skeleton.find((s) => s.id === sectionId);
   if (!section) throw error(400, 'Unknown section for this length.');
   const outline = {
-    title: String(body?.outline?.title ?? 'DfE data strategy').slice(0, 140),
+    title: String(body?.outline?.title ?? 'Education data strategy').slice(0, 140),
     arc: String(body?.outline?.arc ?? '').slice(0, 900),
     shifts: (Array.isArray(body?.outline?.shifts) ? body.outline.shifts : []).map((s: any) => String(s).slice(0, 160)).slice(0, 4),
     briefs: (typeof body?.outline?.briefs === 'object' && body.outline.briefs) || {},
@@ -164,7 +164,7 @@ Provide a brief for EVERY section id.`;
 
   const lo = Math.round(section.words * 0.8);
   const hi = Math.round(section.words * 1.25);
-  const sys = `You write sections of the Department for Education's data strategy — the real, publishable document. You are drafting ONE section; other sections are drafted separately, so stay inside this section's remit and trust the outline to carry the rest.
+  const sys = `You write sections of the department's data strategy — the real, publishable document. You are drafting ONE section; other sections are drafted separately, so stay inside this section's remit and trust the outline to carry the rest.
 
 ${STYLE}
 

@@ -34,7 +34,7 @@
 
   <NextStep
     links={[
-      { label: 'DfE in context — the partner web', href: '/projects/dfe-data-strategy/dfe', kind: 'primary' },
+      { label: 'The partner web — how the relationships play out', href: '/projects/dfe-data-strategy/dfe', kind: 'primary' },
       { label: 'Write the legal-basis section', href: '/projects/dfe-data-strategy/author' },
       { label: 'Diagnose the posture', href: '/projects/dfe-data-strategy/author?tab=diagnose' },
     ]}

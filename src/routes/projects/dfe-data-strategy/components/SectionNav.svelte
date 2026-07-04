@@ -14,7 +14,7 @@
     { href: `${BASE}/strategies`, label: 'Influence map' },
     { href: `${BASE}/frameworks`, label: 'Frameworks' },
     { href: `${BASE}/legislation`, label: 'Legislation' },
-    { href: `${BASE}/dfe`, label: 'DfE in context' },
+    { href: `${BASE}/dfe`, label: 'Partner web' },
     { href: `${BASE}/sector`, label: 'Sector voices' },
   ];
   const WRITE = [

@@ -1,4 +1,4 @@
-// plan.ts — the Plan tab's pure engine: a measures library grounded in real DfE
+// plan.ts — the Plan tab's pure engine: a measures library grounded in real the department
 // collections and statistics, plus suggesters that seed the roadmap from the
 // commitments' statutory deadlines and the risk register from coverage gaps and
 // workbench tensions. Everything editable by the writer; nothing invented at runtime.
@@ -16,14 +16,14 @@ export interface MeasureDef {
   note: string;
 }
 
-/** Measures a DfE data strategy could hold itself to — grouped by what they measure. */
+/** Measures an education data strategy could hold itself to — grouped by what they measure. */
 export const MEASURE_LIBRARY: MeasureDef[] = [
   // strategy-health: measures OF the strategy itself
   { id: 'dma-score', name: 'Data Maturity Assessment score', kind: 'strategy-health', source: 'DMA for Government self-assessment', note: 'The government-standard maturity baseline — rerun annually, publish the trajectory.' },
   { id: 'quality-slas', name: 'Critical datasets meeting quality SLAs', kind: 'strategy-health', source: 'Internal data-quality dashboard (Government Data Quality Framework)', note: 'Share of the named critical datasets meeting their accuracy/completeness/timeliness SLA.' },
   { id: 'time-to-dsa', name: 'Time from request to signed data-sharing agreement', kind: 'strategy-health', source: 'Internal information-governance pipeline', note: 'The single best proxy for whether governance enables or blocks.' },
-  { id: 'collection-burden', name: 'Data-collection burden hours on schools', kind: 'strategy-health', source: 'DfE data-burden assessments', note: 'The sector feels the strategy here first — count hours, publish the trend.' },
-  { id: 'api-adoption', name: 'Services consuming DfE APIs', kind: 'strategy-health', source: 'DfE API platform telemetry', note: 'Adoption of API-first access over bespoke extracts.' },
+  { id: 'collection-burden', name: 'Data-collection burden hours on schools', kind: 'strategy-health', source: 'The department data-burden assessments', note: 'The sector feels the strategy here first — count hours, publish the trend.' },
+  { id: 'api-adoption', name: 'Services consuming the department APIs', kind: 'strategy-health', source: 'The department API platform telemetry', note: 'Adoption of API-first access over bespoke extracts.' },
   { id: 'catalogue-coverage', name: 'Data assets catalogued with named owners', kind: 'strategy-health', source: 'Departmental data catalogue', note: 'Ownership and findability made countable.' },
   { id: 'atrs-entries', name: 'Algorithmic tools with published ATRS records', kind: 'strategy-health', source: 'Algorithmic Transparency Recording Standard register', note: 'The transparency bar for every algorithmic tool touching children\'s data.' },
   { id: 'identifier-match-rate', name: 'Cross-dataset identifier match rate', kind: 'strategy-health', source: 'Matching service telemetry', note: 'Whether the identifier layer actually joins records first time.' },
@@ -32,12 +32,12 @@ export const MEASURE_LIBRARY: MeasureDef[] = [
   { id: 'data-profession-fill', name: 'Data profession posts filled', kind: 'strategy-health', source: 'Workforce planning data', note: 'Capability on paper vs seats actually filled.' },
   { id: 'staff-literacy', name: 'Staff completing data-literacy training', kind: 'strategy-health', source: 'Internal L&D records', note: 'The culture shift, counted.' },
   // estate: measures of the data estate the strategy runs on
-  { id: 'attendance-feed-coverage', name: 'Schools on the daily attendance feed', kind: 'estate', source: 'DfE attendance data (statutory since Sept 2024)', note: 'The model for API-first collection — keep coverage near-universal.' },
+  { id: 'attendance-feed-coverage', name: 'Schools on the daily attendance feed', kind: 'estate', source: 'The department attendance data (statutory since Sept 2024)', note: 'The model for API-first collection — keep coverage near-universal.' },
   { id: 'ees-usage', name: 'Explore Education Statistics API usage', kind: 'estate', source: 'EES platform telemetry', note: 'Open-data reuse in practice.' },
   { id: 'gias-accuracy', name: 'GIAS record accuracy rate', kind: 'estate', source: 'Get Information about Schools', note: 'The register everything else joins to.' },
   { id: 'cnis-register-flow', name: 'LAs returning children-not-in-school data', kind: 'estate', source: 'CWSA 2026 registers (when commenced)', note: 'A brand-new statutory flow — track onboarding from day one.' },
   { id: 'sui-rollout', name: 'Records carrying the consistent identifier', kind: 'estate', source: 'Single unique identifier programme', note: 'The spine\'s reach across the estate.' },
-  { id: 'school-profiles-live', name: 'Schools with a live digital profile', kind: 'estate', source: 'DfE school profiles service', note: 'The accountability surface promised by the Schools White Paper.' },
+  { id: 'school-profiles-live', name: 'Schools with a live digital profile', kind: 'estate', source: 'The department school profiles service', note: 'The accountability surface promised by the Schools White Paper.' },
   // outcome: the sector outcomes better data is meant to serve
   { id: 'attendance-rate', name: 'Pupil attendance rate', kind: 'outcome', source: 'EES: pupil attendance in schools', note: 'The White Paper\'s 94% ambition — data-enabled, not data-delivered.' },
   { id: 'eyfsp-gld', name: 'Good level of development at age 5', kind: 'outcome', source: 'EES: early years foundation stage profile', note: 'The Plan for Change school-readiness milestone (75% by 2028).' },

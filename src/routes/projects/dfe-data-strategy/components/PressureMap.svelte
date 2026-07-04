@@ -4,7 +4,7 @@
   import type { Origin } from '../lib/types';
 
   const ORIGIN_COL: Record<Origin, string> = { 'cross-government': '#2f6155', 'dfe-policy': '#8a2d3a', partners: '#2f6f97' };
-  const ORIGIN_LABEL: Record<Origin, string> = { 'cross-government': 'Cross-government', 'dfe-policy': 'DfE policy', partners: 'Partners' };
+  const ORIGIN_LABEL: Record<Origin, string> = { 'cross-government': 'Cross-government', 'dfe-policy': 'The department policy', partners: 'Partners' };
 
   const W = 720, H = 480, L = 56, R = 30, T = 30, B = 52;
   const px = (sev: number) => L + ((sev - 0.5) / 5) * (W - L - R);

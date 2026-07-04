@@ -36,7 +36,7 @@
   <title>The commitments ledger — Keystone</title>
   <meta
     name="description"
-    content="Every data-relevant commitment in the 2024–26 white-paper landscape that DfE must deliver, support or comply with — explorable by document, timeline, data-flow map and strategic demand."
+    content="Every data-relevant commitment in the 2024–26 white-paper landscape that the department must deliver, support or comply with — explorable by document, timeline, data-flow map and strategic demand."
   />
 </svelte:head>
 
@@ -44,8 +44,8 @@
   <StoryMasthead
     kicker="Understand · The commitments ledger"
     title="What the department is already committed to"
-    thesis="Before anyone writes a line of strategy, government has already made the promises. Acts, white papers and cross-government mandates from 2024–26 commit DfE to new services, new registers, new identifiers and new flows of data between partners. This ledger holds every data-relevant commitment — sourced, dated, and interpreted for what it demands of the strategy."
-    thesisEli5="The government has already promised lots of things that need data — new IDs for children, new registers, new ways of sharing. This page lists every promise and what it means for DfE's data plan."
+    thesis="Before anyone writes a line of strategy, government has already made the promises. Acts, white papers and cross-government mandates from 2024–26 commit the department to new services, new registers, new identifiers and new flows of data between partners. This ledger holds every data-relevant commitment — sourced, dated, and interpreted for what it demands of the strategy."
+    thesisEli5="The government has already promised lots of things that need data — new IDs for children, new registers, new ways of sharing. This page lists every promise and what it means for the department's data plan."
     asks={['Every commitment, traced to its document and section', 'The new data flows and partnerships each one creates', 'What the strategy must say because of it']}
     askLabel="What the ledger holds"
   />

@@ -231,7 +231,7 @@ export const COMPARATORS: Comparator[] = [
     ],
     weaknesses: [
       'No standalone public data strategy could be found (verified 2026-07): data ambitions are scattered across the corporate strategy, statistics governance and blogs',
-      'As DfE’s key regulator counterpart, the lack of a published data strategy weakens system-level data planning in education',
+      'As the department’s key regulator counterpart, the lack of a published data strategy weakens system-level data planning in education',
     ],
     lesson:
       'Regulators and arm’s-length bodies in the same system often lack their own data strategies — a departmental strategy should state how it engages the wider system’s data estate.',
@@ -304,7 +304,7 @@ export const COMPARATORS: Comparator[] = [
   {
     id: 'dfe-childrens-social-care-data-digital-strategy',
     title: 'Children’s social care data and digital strategy',
-    org: 'Department for Education',
+    org: 'The education department',
     date: '2023-12',
     url: 'https://www.gov.uk/government/publications/childrens-social-care-data-and-digital-strategy/childrens-social-care-data-and-digital-strategy',
     sections: [
@@ -320,15 +320,15 @@ export const COMPARATORS: Comparator[] = [
       'Next steps',
     ],
     strengths: [
-      'DfE’s most recent data-strategy prior art — sector-facing, with concrete 2023–25 commitments: information-sharing agreement templates, open data and technology standards, an updated dashboard, a DfE–MoJ family courts data-linking pilot, an NHS Spine information-sharing test',
+      'The department’s most recent data-strategy prior art — sector-facing, with concrete 2023–25 commitments: information-sharing agreement templates, open data and technology standards, an updated dashboard, a family-courts data-linking pilot with the MoJ, an NHS Spine information-sharing test',
       'Grounded in an independent review evidence base and honest about sector challenges',
     ],
     weaknesses: [
-      'Covers only one sub-domain (children’s social care) with a two-year horizon — DfE has no published department-wide data strategy; its last general one was the 2012 open data strategy',
+      'Covers only one sub-domain (children’s social care) with a two-year horizon — The department has no published department-wide data strategy; its last general one was the 2012 open data strategy',
       'No funding line or measurement framework in the published document',
     ],
     lesson:
-      'DfE has strategy fragments (children’s social care, digital blog strategy, the EES platform) but no whole-department data strategy — the gap this workbench exists to fill.',
+      'The department has strategy fragments (children’s social care, digital blog strategy, the EES platform) but no whole-department data strategy — the gap this workbench exists to fill.',
   },
 ];
 
@@ -356,7 +356,7 @@ export const SECTION_COMPARATORS: Record<string, { comparatorId: string; note: s
   ],
   'commitments-obligations': [
     { comparatorId: 'dhsc-data-saves-lives', note: '102 dated commitments collected in an annex — the most audit-friendly commitments structure in government.' },
-    { comparatorId: 'dfe-childrens-social-care-data-digital-strategy', note: 'DfE’s own prior art: concrete two-year commitments (sharing-agreement templates, standards, cross-department pilots) tied to a review evidence base.' },
+    { comparatorId: 'dfe-childrens-social-care-data-digital-strategy', note: 'The department’s own prior art: concrete two-year commitments (sharing-agreement templates, standards, cross-department pilots) tied to a review evidence base.' },
   ],
   'architecture-platforms': [
     { comparatorId: 'home-office-ddat-2024', note: 'Names a target architecture — federated, with authoritative data stores owned by core business areas — an explicit, arguable choice.' },

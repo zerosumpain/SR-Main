@@ -89,7 +89,7 @@ export const POST: RequestHandler = async (event) => {
         send({ type: 'status', step: 'weigh', message: `Weighing the policy against ${evidence.length} sources…` });
 
         // 2. Appraise, grounded in the retrieved evidence; the index is only for citing ids.
-        const sys = `You are the Consideration Builder for Keystone, a DfE data-strategy workbench. A user proposes a HEADLINE POLICY. Ground a rigorous, balanced appraisal in the RETRIEVED EVIDENCE below; use the REFERENCE INDEX only to cite ids.
+        const sys = `You are the Consideration Builder for Keystone, an education strategy workbench. A user proposes a HEADLINE POLICY. Ground a rigorous, balanced appraisal in the RETRIEVED EVIDENCE below; use the REFERENCE INDEX only to cite ids.
 
 Return STRICT JSON only — no prose, no fences — exactly:
 {"headline": string (ONE punchy verdict sentence, <=160 chars),
@@ -108,7 +108,7 @@ Rules:
 - references: cite ONLY ids from the REFERENCE INDEX that you actually drew on.
 - headline: one decisive sentence a lead could read in isolation.
 - For stakeholders, prefer these names where they fit (free text allowed): ${STAKEHOLDERS.join('; ')}.
-- Be specific to DfE and children's data. 3-6 items per list. Neutral, expert tone.
+- Be specific to the department and children's data. 3-6 items per list. Neutral, expert tone.
 
 REFERENCE INDEX (valid ids to cite):
 ${referenceIndex()}

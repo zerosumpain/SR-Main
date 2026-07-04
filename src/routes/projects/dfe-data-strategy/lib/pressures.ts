@@ -1,6 +1,6 @@
-// pressures.ts — the pressures library: the forces a DfE data-strategy must answer to,
-// across government, from DfE's own policy agenda, and from its delivery partners.
-// Each is cited and confidence-rated; DfE-policy and partner pressures deep-link the
+// pressures.ts — the pressures library: the forces an education-department data-strategy must answer to,
+// across government, from the department's own policy agenda, and from its delivery partners.
+// Each is cited and confidence-rated; department-policy and partner pressures deep-link the
 // relevant policy-engine field study (the "deep integration" requirement).
 // NOTE: facts grounded in known UK-gov sources; the keystone-research workflow verifies
 // and sharpens citations.
@@ -16,7 +16,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Treat data as a strategic asset (National Data Strategy)',
     origin: 'cross-government',
     description:
-      'Government expects every department to treat data as a strategic asset — strong data foundations, skills, availability and responsible use. DfE must show its strategy advances all four pillars.',
+      'Government expects every department to treat data as a strategic asset — strong data foundations, skills, availability and responsible use. The department must show its strategy advances all four pillars.',
     demands: ['governance', 'quality', 'value', 'ethics'],
     severity: 4,
     urgency: 3,
@@ -30,7 +30,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Cross-government data standards & infrastructure (CDDO/DSIT roadmap)',
     origin: 'cross-government',
     description:
-      'The central digital & data roadmap commits government to common data standards, a data marketplace/exchange, an API catalogue, reference & master data and better data quality. DfE is expected to align.',
+      'The central digital & data roadmap commits government to common data standards, a data marketplace/exchange, an API catalogue, reference & master data and better data quality. The department is expected to align.',
     demands: ['interoperability', 'platform', 'quality'],
     severity: 4,
     urgency: 3,
@@ -71,7 +71,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Be transparent about algorithms (ATRS)',
     origin: 'cross-government',
     description:
-      'Public bodies are expected to record and publish the algorithmic tools they use in decisions through the Algorithmic Transparency Recording Standard — a direct constraint on how DfE deploys data-driven tools.',
+      'Public bodies are expected to record and publish the algorithmic tools they use in decisions through the Algorithmic Transparency Recording Standard — a direct constraint on how the department deploys data-driven tools.',
     demands: ['ethics', 'governance'],
     severity: 3,
     urgency: 3,
@@ -85,7 +85,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Connect to the National Data Library & DSIT mission data agenda',
     origin: 'cross-government',
     description:
-      'DSIT’s National Data Library (>£100m within a £1.9bn package; in discovery, five kickstarter pilots) is the centre’s flagship for unlocking and linking data for the national missions and for AI. DfE faces pressure to make priority education datasets discoverable, AI-ready and linkable.',
+      'DSIT’s National Data Library (>£100m within a £1.9bn package; in discovery, five kickstarter pilots) is the centre’s flagship for unlocking and linking data for the national missions and for AI. The department faces pressure to make priority education datasets discoverable, AI-ready and linkable.',
     demands: ['interoperability', 'platform', 'sharing', 'value'],
     severity: 4,
     urgency: 3,
@@ -98,7 +98,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Safe cross-government linkage (ONS IDS / Secure Research Service)',
     origin: 'cross-government',
     description:
-      'DfE already shares de-identified data for accredited research via the ONS Secure Research Service. The ONS Integrated Data Service is being wound down (the Integrated Data Programme closes by March 2026 after a RED rating and funding cuts) while the SRS is retained — so the strategy must back the durable route, not the closing one.',
+      'The department already shares de-identified data for accredited research via the ONS Secure Research Service. The ONS Integrated Data Service is being wound down (the Integrated Data Programme closes by March 2026 after a RED rating and funding cuts) while the SRS is retained — so the strategy must back the durable route, not the closing one.',
     demands: ['sharing', 'interoperability', 'ethics'],
     severity: 3,
     urgency: 3,
@@ -124,7 +124,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Adapt to data-law reform (Data (Use and Access) Act 2025)',
     origin: 'cross-government',
     description:
-      'The Data (Use and Access) Act 2025 (Royal Assent 19 June 2025; key provisions in force from 5 February 2026) reshapes the regime — a new "recognised legitimate interests" lawful basis, relaxed automated decision-making rules, Smart Data and digital verification, and the ICO replaced by the Information Commission. DfE must adapt its governance and lawful bases.',
+      'The Data (Use and Access) Act 2025 (Royal Assent 19 June 2025; key provisions in force from 5 February 2026) reshapes the regime — a new "recognised legitimate interests" lawful basis, relaxed automated decision-making rules, Smart Data and digital verification, and the ICO replaced by the Information Commission. The department must adapt its governance and lawful bases.',
     demands: ['governance', 'ethics', 'sharing'],
     severity: 3,
     urgency: 4,
@@ -137,7 +137,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Keep public trust in how children’s data is used',
     origin: 'cross-government',
     description:
-      'Trust is a binding constraint. In 2022 the ICO reprimanded DfE after a third party (Trustopia) gave gambling age-verification firms access to data on up to 28 million pupils via the Learning Records Service — proof that losing confidence can shut down legitimate uses overnight. The strategy must earn and keep a social licence.',
+      'Trust is a binding constraint. In 2022 the ICO reprimanded the department after a third party (Trustopia) gave gambling age-verification firms access to data on up to 28 million pupils via the Learning Records Service — proof that losing confidence can shut down legitimate uses overnight. The strategy must earn and keep a social licence.',
     demands: ['ethics', 'governance'],
     severity: 4,
     urgency: 3,
@@ -147,7 +147,7 @@ export const PRESSURES: Pressure[] = [
     eli5: 'If the public stops trusting how kids’ data is used, even good uses get shut down.',
   },
 
-  // ---------------- DfE policy (deep policy-engine integration) ----------------
+  // ---------------- the department policy (deep policy-engine integration) ----------------
   {
     id: 'consistent-child-identifier',
     title: 'Deliver the consistent child identifier',
@@ -265,7 +265,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Use AI responsibly in education delivery',
     origin: 'dfe-policy',
     description:
-      'Pressure to use AI for DfE’s own services and to support the sector (marking, content, casework) — all of which depend on governed, high-quality, ethically-handled data.',
+      'Pressure to use AI for the department’s own services and to support the sector (marking, content, casework) — all of which depend on governed, high-quality, ethically-handled data.',
     demands: ['value', 'ethics', 'quality'],
     severity: 3,
     urgency: 3,
@@ -307,7 +307,7 @@ export const PRESSURES: Pressure[] = [
     title: 'Coordinate the arm’s-length bodies',
     origin: 'partners',
     description:
-      'Ofqual and Ofsted (non-ministerial departments outside the DfE accounting group), the Standards & Testing Agency and the Teaching Regulation Agency each own data — while the ESFA closed on 31 March 2025, folding its data into the core department. A DfE strategy has to make these interoperate, not collide.',
+      'Ofqual and Ofsted (non-ministerial departments outside the department accounting group), the Standards & Testing Agency and the Teaching Regulation Agency each own data — while the ESFA closed on 31 March 2025, folding its data into the core department. A the department strategy has to make these interoperate, not collide.',
     demands: ['interoperability', 'governance', 'sharing'],
     severity: 3,
     urgency: 3,

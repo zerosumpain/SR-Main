@@ -100,7 +100,7 @@
       {#if isWorkbench}
         <button class="levers-btn" class:on={app.drawerOpen} onclick={() => app.toggleDrawer()} title="Show or hide the strategy levers">☰<span class="lbl">&nbsp;Levers</span></button>
       {/if}
-      <span class="tagline">A DfE DATA-STRATEGY WORKBENCH</span>
+      <span class="tagline">AN EDUCATION STRATEGY WORKBENCH</span>
     </header>
     <SectionNav authed={data?.authed} />
   </div>
@@ -143,8 +143,8 @@
 
   <footer class="foot">
     <div class="foot-inner">
-      <p class="foot-personal"><b>A personal project.</b> Built by John Kelly in a personal capacity and in his own time. It does not
-        represent the Department for Education, any government or political party, or any official position, and takes no political stance.</p>
+      <p class="foot-personal"><b>An independent project.</b> It does not represent any government department or political party,
+        nor any official position, and takes no political stance.</p>
       <p class="foot-disc">Keystone · <code>/projects/dfe-data-strategy</code> · a decision-support tool, <b>not an official strategy</b>. Grounded in published UK-government and industry sources — <a href="/projects/dfe-data-strategy/method#sources">all {SOURCES.length} sources</a> and the method are on <a href="/projects/dfe-data-strategy/method">How it works</a>. Companion to the <a href="/projects/policy-engine">Policy Engine</a> and <a href="/projects/dfe-data-estate">The Data Estate</a>.</p>
     </div>
   </footer>

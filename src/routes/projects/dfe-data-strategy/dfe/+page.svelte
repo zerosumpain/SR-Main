@@ -17,21 +17,21 @@
   const totalFlows = RELATIONSHIPS.reduce((a, r) => a + r.flowsIn.length + r.flowsOut.length, 0);
 </script>
 
-<svelte:head><title>DfE in context — Keystone</title></svelte:head>
+<svelte:head><title>The partner web — Keystone</title></svelte:head>
 
 <div class="pe-route wide">
   <StoryMasthead
-    kicker="Understand · DfE in context"
+    kicker="Understand · The partner web"
     title="The department and its partner web — how the relationships play out"
-    thesis="DfE does not own most of the data it depends on. It sits at the centre of a vast, federated system of schools, trusts, councils, agencies and suppliers — each an autonomous data controller. Every relationship is a deal: data flows in under a mandate, something flows back, and the friction in between is where strategies succeed or die. Here is each deal, researched and cited."
-    thesisEli5="DfE doesn’t hold most of the data it needs — schools, councils and others do. Each relationship is a deal: they send data in, DfE gives something back. This page shows every deal, both directions."
-    asks={['What DfE takes from each partner, and on what legal basis', 'What each partner gets back — and what they actually want', 'The friction in each relationship, and the patterns across them']}
+    thesis="The department does not own most of the data it depends on. It sits at the centre of a vast, federated system of schools, trusts, councils, agencies and suppliers — each an autonomous data controller. Every relationship is a deal: data flows in under a mandate, something flows back, and the friction in between is where strategies succeed or die. Here is each deal, researched and cited."
+    thesisEli5="The department doesn’t hold most of the data it needs — schools, councils and others do. Each relationship is a deal: they send data in, the department gives something back. This page shows every deal, both directions."
+    asks={['What the department takes from each partner, and on what legal basis', 'What each partner gets back — and what they actually want', 'The friction in each relationship, and the patterns across them']}
     askLabel="What this page maps"
   />
 
   <TakeawayBar
-    takeaway="DfE can compel collection but not goodwill. Every relationship below is a two-way deal — and the strategy's job is to make each one worth joining."
-    takeawayEli5="DfE can force people to send data, but not to care. Each deal has to be worth it for both sides."
+    takeaway="The department can compel collection but not goodwill. Every relationship below is a two-way deal — and the strategy's job is to make each one worth joining."
+    takeawayEli5="The department can force people to send data, but not to care. Each deal has to be worth it for both sides."
     chips={[
       { n: String(RELATIONSHIPS.length), label: 'relationships', href: '#relationships' },
       { n: String(totalFlows), label: 'documented flows', href: '#relationships' },
@@ -41,11 +41,11 @@
   />
 
   <h2 class="pe-h2" id="relationships">The relationships, deal by deal</h2>
-  <p class="pe-prose intro">{eli ? 'Pick a partner to see what they send DfE, what DfE sends back, the rule that makes it happen, and where it hurts.' : 'Pick a partner. What flows to DfE, what flows back, the instrument that mandates it, the friction the relationship actually runs on — verified against primary sources, cited underneath.'}</p>
+  <p class="pe-prose intro">{eli ? 'Pick a partner to see what they send the department, what the department sends back, the rule that makes it happen, and where it hurts.' : 'Pick a partner. What flows to the department, what flows back, the instrument that mandates it, the friction the relationship actually runs on — verified against primary sources, cited underneath.'}</p>
   <RelationshipWeb />
 
   <h2 class="pe-h2" id="from-pe">From the Policy Engine</h2>
-  <p class="pe-prose intro">The DfE-specific pressures in this tool are drawn straight from the <a href="/projects/policy-engine">Policy Engine's</a> field studies — the real data demands that the policy modelling surfaced. Each one is an input to the strategy.</p>
+  <p class="pe-prose intro">The department-specific pressures in this tool are drawn straight from the <a href="/projects/policy-engine">Policy Engine's</a> field studies — the real data demands that the policy modelling surfaced. Each one is an input to the strategy.</p>
   <div class="pe-links">
     {#each FROM_PE as l}
       <a class="pe-link" href={l.href}>

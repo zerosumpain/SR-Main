@@ -1,4 +1,4 @@
-// types.ts — the data model for Keystone, the DfE data-strategy workbench.
+// types.ts — the data model for Keystone, the education strategy workbench.
 // A strategy-design workbench (not a numeric forecaster): the lead manipulates
 // posture toggles + allocation sliders and a maturity self-assessment, and a
 // deterministic, evidence-weighted rubric (engine.ts) scores how well the chosen
@@ -89,7 +89,7 @@ export interface Framework {
   date: string;
   /** Human-readable dating, incl. lineage (e.g. "2018 · renamed Dec 2025"). */
   dateLabel: string;
-  /** How load-bearing for a DfE data strategy. */
+  /** How load-bearing for an education data strategy. */
   role?: 'foundational' | 'core' | 'specialist';
   /** 0–1 positioning weight (foundational ≈ 1, specialist ≈ 0.4). */
   weight?: number;
@@ -178,7 +178,7 @@ export type CommitmentStatus =
   | 'proposed'
   | 'consulting';
 
-/** DfE's part in delivering the commitment. */
+/** the department's part in delivering the commitment. */
 export type DfeRole = 'owner' | 'deliverer' | 'partner' | 'complier';
 
 /** A white paper / act / strategy the ledger draws commitments from. */
@@ -201,7 +201,7 @@ export interface DataFlow {
   what: string;
 }
 
-/** A government commitment with data implications DfE must deliver, support or comply with. */
+/** A government commitment with data implications the department must deliver, support or comply with. */
 export interface Commitment {
   id: string;
   docId: string;
@@ -221,7 +221,7 @@ export interface Commitment {
   identifiers: string[];
   standards: string[];
   partners: string[];
-  /** What a DfE data strategy must say or do because of this. */
+  /** What an education data strategy must say or do because of this. */
   strategyImplication: string;
   eli5?: string;
   /** Capability areas (engine) this commitment demands. */

@@ -42,7 +42,7 @@ export const POST: RequestHandler = async (event) => {
   if (rateLimited(ip)) throw error(429, 'Too many reviews — give it a minute.');
 
   const body = await event.request.json().catch(() => ({}));
-  const title = String(body?.title ?? 'DfE data strategy draft').slice(0, 200);
+  const title = String(body?.title ?? 'Education data strategy draft').slice(0, 200);
   const focus = typeof body?.focus === 'string' ? body.focus : null;
   const scenario = body?.scenario
     ? { name: String(body.scenario.name ?? '').slice(0, 120), postures: String(body.scenario.postures ?? '').slice(0, 900) }
@@ -99,7 +99,7 @@ export const POST: RequestHandler = async (event) => {
           .map((c) => `- ${c.title} (${DOCUMENTS_BY_ID[c.docId]?.shortName ?? c.docId}${c.timeframe ? `, ${c.timeframe}` : ''}): ${c.strategyImplication}`)
           .join('\n');
 
-        const sys = `You are the deep reviewer inside Keystone, a DfE data-strategy authoring workbench. The user is drafting the Department for Education's data strategy. Review their DRAFT rigorously against the RUBRIC, the FAILURE MODES seen in real departmental strategies, the MUST-ANSWER COMMITMENTS (statutory/in-delivery obligations from the 2024–26 white-paper landscape), and the RETRIEVED EVIDENCE. Be a demanding, constructive senior reviewer: specific, quotable, never generic.
+        const sys = `You are the deep reviewer inside Keystone, an education strategy authoring workbench. The user is drafting the department's data strategy. Review their DRAFT rigorously against the RUBRIC, the FAILURE MODES seen in real departmental strategies, the MUST-ANSWER COMMITMENTS (statutory/in-delivery obligations from the 2024–26 white-paper landscape), and the RETRIEVED EVIDENCE. Be a demanding, constructive senior reviewer: specific, quotable, never generic.
 
 Return STRICT JSON only — no prose, no fences — exactly:
 {"sections": [{"id": string (MUST be one of the given section ids), "score": number 0-100, "verdict": string (<=200 chars, decisive), "strengths": [string], "weaknesses": [string], "suggestions": [string (concrete edits, each naming WHERE)]}],

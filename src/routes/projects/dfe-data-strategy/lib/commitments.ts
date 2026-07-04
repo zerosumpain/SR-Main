@@ -1,5 +1,5 @@
 // commitments.ts — the commitments ledger. Every data-relevant commitment in the
-// 2024→2026 white-paper landscape that DfE must deliver, produce, support or comply
+// 2024→2026 white-paper landscape that the department must deliver, produce, support or comply
 // with, synthesized from a nine-agent research sweep of primary sources (gov.uk,
 // legislation.gov.uk, parliament.uk) on 2026-07-02, merged, de-duplicated and
 // verified before freeze. Integrity enforced by lib/__tests__/commitments.test.ts;
@@ -51,10 +51,10 @@ export const STATUS_META: Record<CommitmentStatus, { label: string; short: strin
 };
 
 export const ROLE_META: Record<DfeRole, { label: string; note: string }> = {
-  owner: { label: 'DfE owns it', note: 'DfE is accountable for delivering this commitment.' },
-  deliverer: { label: 'DfE delivers', note: 'DfE builds or runs a major part of it.' },
-  partner: { label: 'DfE partners', note: 'Another department leads; DfE must supply or receive data.' },
-  complier: { label: 'DfE complies', note: 'A cross-government mandate DfE must meet.' },
+  owner: { label: 'The department owns it', note: 'The department is accountable for delivering this commitment.' },
+  deliverer: { label: 'The department delivers', note: 'The department builds or runs a major part of it.' },
+  partner: { label: 'The department partners', note: 'Another department leads; the department must supply or receive data.' },
+  complier: { label: 'The department complies', note: 'A cross-government mandate the department must meet.' },
 };
 
 export const DOCUMENTS: PolicyDocument[] = [
@@ -63,7 +63,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "SEND and Alternative Provision Improvement Plan",
     "shortName": "SEND & AP Plan 2023",
     "type": "action-plan",
-    "publisher": "DfE / DHSC",
+    "publisher": "The department / DHSC",
     "date": "2023-03",
     "url": "https://www.gov.uk/government/publications/send-and-alternative-provision-improvement-plan",
     "oneLiner": "2023 response to the SEND green paper: national standards, standardised/digitised EHCPs, inclusion dashboards, tailored lists, AP performance framework — largely stalled and superseded by the 2026 white paper.",
@@ -74,10 +74,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Children's social care data and digital strategy",
     "shortName": "CSC Data Strategy",
     "type": "strategy",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2023-12",
     "url": "https://www.gov.uk/government/publications/childrens-social-care-data-and-digital-strategy/childrens-social-care-data-and-digital-strategy",
-    "oneLiner": "DfE's long-term plan for children's social care data: national dashboard, standard local dataset, open standards, automated collections, CP-IS improvement and NHS-number-as-identifier testing.",
+    "oneLiner": "The department's long-term plan for children's social care data: national dashboard, standard local dataset, open standards, automated collections, CP-IS improvement and NHS-number-as-identifier testing.",
     "status": "published"
   },
   {
@@ -85,7 +85,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Agency child and family social workers: data return and price caps",
     "shortName": "Agency SW Data Return",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2024-05",
     "url": "https://www.gov.uk/government/publications/agency-child-and-family-social-workers-data-return-and-price-caps",
     "oneLiner": "Operational guidance for the quarterly statutory data collection on agency child and family social worker use and pay, and regional price caps (price-cap data from Q4 2025).",
@@ -96,10 +96,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Teaching Record System (DFE-Digital/teaching-record-system)",
     "shortName": "TRS Repo",
     "type": "roadmap",
-    "publisher": "DfE Digital (GitHub)",
+    "publisher": "The department Digital (GitHub)",
     "date": "2024-06",
     "url": "https://github.com/DFE-Digital/teaching-record-system",
-    "oneLiner": "Public repo for the Teaching Record System — modernising the Database of Qualified Teachers into DfE's primary teacher record (TRN-keyed) with APIs for consuming services.",
+    "oneLiner": "Public repo for the Teaching Record System — modernising the Database of Qualified Teachers into the department's primary teacher record (TRN-keyed) with APIs for consuming services.",
     "status": "published"
   },
   {
@@ -107,7 +107,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Teachers to get more trustworthy AI tech (education content store announcement)",
     "shortName": "AI Content Store",
     "type": "blog",
-    "publisher": "DfE / DSIT",
+    "publisher": "The department / DSIT",
     "date": "2024-08",
     "url": "https://www.gov.uk/government/news/teachers-to-get-more-trustworthy-ai-tech-as-generative-tools-learn-from-new-bank-of-lesson-plans-and-curriculums-helping-them-mark-homework-and-save",
     "oneLiner": "£4m package: £3m DSIT-funded education content store pooling curriculum guidance, lesson plans and anonymised pupil assessments for AI training, plus £1m tool prizes.",
@@ -118,10 +118,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Share your daily school attendance data (attendance data solution)",
     "shortName": "Attendance Data Guidance",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2024-09",
     "url": "https://www.gov.uk/guidance/share-your-daily-school-attendance-data",
-    "oneLiner": "Statutory guidance for the daily attendance data solution: automated twice-daily extraction of pupil-level attendance from school MIS to DfE, mandatory since academic year 2024/25.",
+    "oneLiner": "Statutory guidance for the daily attendance data solution: automated twice-daily extraction of pupil-level attendance from school MIS to the department, mandatory since academic year 2024/25.",
     "status": "published"
   },
   {
@@ -129,10 +129,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "School attendance data collection: data protection impact assessment",
     "shortName": "Attendance DPIA",
     "type": "evidence",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2024-09",
     "url": "https://assets.publishing.service.gov.uk/media/66d83f677a73423428aa2f14/School_attendance_data_collection_DPIA.pdf",
-    "oneLiner": "DPIA for the automated daily attendance collection, documenting pupil-level flows from school MIS to DfE and stating the ambition to extend automated collection to other data.",
+    "oneLiner": "DPIA for the automated daily attendance collection, documenting pupil-level flows from school MIS to the department and stating the ambition to extend automated collection to other data.",
     "status": "published"
   },
   {
@@ -140,7 +140,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Get Britain Working White Paper",
     "shortName": "Get Britain Working",
     "type": "white-paper",
-    "publisher": "DWP (with DfE and DHSC)",
+    "publisher": "DWP (with the department and DHSC)",
     "date": "2024-11",
     "url": "https://www.gov.uk/government/publications/get-britain-working-white-paper/get-britain-working-white-paper",
     "oneLiner": "80% employment ambition (26 November 2024): Youth Guarantee for 18-21s and merger of Jobcentre Plus and the National Careers Service into a new jobs and careers service.",
@@ -151,7 +151,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Keeping children safe, helping families thrive (CP 1200)",
     "shortName": "KCSHFT 2024",
     "type": "strategy",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2024-11",
     "url": "https://www.gov.uk/government/publications/keeping-children-safe-helping-families-thrive",
     "oneLiner": "Policy statement setting the children's social care reform agenda: single unique identifier, information-sharing duty, multi-agency child protection teams, provider financial oversight — legislated via the CWSA 2026.",
@@ -176,7 +176,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "publisher": "Cabinet Office / No.10",
     "date": "2024-12",
     "url": "https://www.gov.uk/government/publications/plan-for-change",
-    "oneLiner": "No.10's Parliament milestones — the school-ready target rides on DfE's EYFSP collection.",
+    "oneLiner": "No.10's Parliament milestones — the school-ready target rides on the department's EYFSP collection.",
     "status": "published"
   },
   {
@@ -206,7 +206,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Generative AI: product safety expectations",
     "shortName": "GenAI Safety Expectations",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-01",
     "url": "https://www.gov.uk/government/publications/generative-ai-product-safety-expectations",
     "oneLiner": "Safety expectations for generative AI products in education (filtering, logging, security, data protection); expanded 19 Jan 2026 with cognitive-development, mental-health and manipulation standards.",
@@ -239,7 +239,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Families First Partnership programme guide",
     "shortName": "FFP Guide",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-03",
     "url": "https://www.gov.uk/government/publications/families-first-partnership-programme",
     "oneLiner": "Delivery guide for Family Help, multi-agency child protection and FGDM reforms from April 2025, with quarterly programme data collections and fully operational services expected by March 2027.",
@@ -250,10 +250,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "September 2025 early education and childcare entitlements expansion: local authority system guidance",
     "shortName": "Entitlements Expansion Guidance",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-05",
     "url": "https://assets.publishing.service.gov.uk/media/683981d4c99c4f37ab4e86e3/September_2025_early_education_and_childcare_entitlements_expansion_-_local_authority_system_guidance_May_2025.pdf",
-    "oneLiner": "System guidance for the 30-hours working-parent entitlement from September 2025: HMRC eligibility codes, DfE Eligibility Checking System verification, and a planned ECS replacement service.",
+    "oneLiner": "System guidance for the 30-hours working-parent entitlement from September 2025: HMRC eligibility codes, the department Eligibility Checking System verification, and a planned ECS replacement service.",
     "status": "published"
   },
   {
@@ -286,7 +286,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "publisher": "Cabinet Office",
     "date": "2025-06",
     "url": "https://www.gov.uk/government/publications/independent-review-of-the-performance-and-culture-of-the-office-for-national-statistics/independent-review-by-sir-robert-devereux-kcb-june-2025",
-    "oneLiner": "Found deep-seated ONS quality problems (incl. errors from departmental data supply); triggered leadership split, a recovery plan and planned UKSA legislation change — raising the bar for supplier departments like DfE.",
+    "oneLiner": "Found deep-seated ONS quality problems (incl. errors from departmental data supply); triggered leadership split, a recovery plan and planned UKSA legislation change — raising the bar for supplier departments like the department.",
     "status": "published"
   },
   {
@@ -294,7 +294,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Free school meals expansion to Universal Credit households",
     "shortName": "FSM Expansion",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-06",
     "url": "https://www.gov.uk/government/news/over-half-a-million-more-children-to-get-free-school-meals",
     "oneLiner": "From September 2026 all pupils in Universal Credit households become FSM-eligible, supported by a rebuilt eligibility checking service (all LAs from 1 June 2026) verified against DWP/HMRC data.",
@@ -305,10 +305,10 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Reception baseline assessment: administration guidance (2025 digital RBA)",
     "shortName": "Digital RBA Guidance",
     "type": "guidance",
-    "publisher": "Standards and Testing Agency / DfE",
+    "publisher": "Standards and Testing Agency / the department",
     "date": "2025-06",
     "url": "https://www.gov.uk/government/publications/reception-baseline-assessment-administration-guidance/2025-reception-baseline-assessment-administration-guidance",
-    "oneLiner": "Statutory guidance for the fully digital reception baseline assessment from September 2025, administered via two DfE Sign-in assessment services.",
+    "oneLiner": "Statutory guidance for the fully digital reception baseline assessment from September 2025, administered via two the department’s sign-in service assessment services.",
     "status": "published"
   },
   {
@@ -327,7 +327,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Giving every child the best start in life (CP 1362)",
     "shortName": "Best Start strategy",
     "type": "strategy",
-    "publisher": "DfE / DHSC",
+    "publisher": "The department / DHSC",
     "date": "2025-07",
     "url": "https://www.gov.uk/government/publications/giving-every-child-the-best-start-in-life/giving-every-child-the-best-start-in-life",
     "oneLiner": "Cross-government early years strategy: Best Start Family Hubs in every LA, a national Best Start digital service, workforce reform and a 75% good-level-of-development target by 2028.",
@@ -338,7 +338,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Explore education statistics API documentation",
     "shortName": "EES API Docs",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-07",
     "url": "https://api.education.gov.uk/statistics/docs/",
     "oneLiner": "REST API (v1) for programmatic access to EES open statistics datasets — summary, query and CSV-download endpoints; dataset coverage expanding.",
@@ -357,13 +357,13 @@ export const DOCUMENTS: PolicyDocument[] = [
   },
   {
     "id": "how-dfe-shares",
-    "title": "How DfE shares personal data",
-    "shortName": "DfE Data Sharing Guidance",
+    "title": "How the department shares personal data",
+    "shortName": "The department Data Sharing Guidance",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-09",
     "url": "https://www.gov.uk/guidance/data-protection-how-we-collect-and-share-research-data",
-    "oneLiner": "DfE's published approach to sharing personal data for research: ONS Secure Research Service as the default route; the ONS Integrated Data Service was removed as an access route in September 2025.",
+    "oneLiner": "The department's published approach to sharing personal data for research: ONS Secure Research Service as the default route; the ONS Integrated Data Service was removed as an access route in September 2025.",
     "status": "published"
   },
   {
@@ -382,7 +382,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "School accountability reform - school profiles, improvement and intervention: government consultation response",
     "shortName": "Accountability Reform Response",
     "type": "consultation",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-09",
     "url": "https://www.gov.uk/government/consultations/school-accountability-reform",
     "oneLiner": "September 2025 response confirming digital school profiles as the central source of school performance information, piloted in 2025/26, plus expanded RISE intervention.",
@@ -393,7 +393,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Post-16 Education and Skills White Paper (CP 1412)",
     "shortName": "Post-16 WP",
     "type": "white-paper",
-    "publisher": "DfE / DWP / DSIT",
+    "publisher": "The department / DWP / DSIT",
     "date": "2025-10",
     "url": "https://www.gov.uk/government/publications/post-16-education-and-skills-white-paper/post-16-education-and-skills-white-paper",
     "oneLiner": "Published 20 October 2025: three-part plan for skills, FE and HE — V Levels, Skills England data role, NEET tracking, LEO maximisation, HE regulation and franchising crackdown.",
@@ -415,7 +415,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Curriculum and Assessment Review Final Report: government response",
     "shortName": "C&A Review Response",
     "type": "strategy",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-11",
     "url": "https://www.gov.uk/government/publications/curriculum-and-assessment-review-final-report-government-response",
     "oneLiner": "Government's accepted programme: new machine-readable curriculum spring 2027 (first teaching Sept 2028), Year 8 reading test, EBacc removal, Progress 8 reform, on-screen assessment steer.",
@@ -426,7 +426,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Child Poverty Strategy",
     "shortName": "Child Poverty Strategy",
     "type": "strategy",
-    "publisher": "Cabinet Office / DWP / DfE",
+    "publisher": "Cabinet Office / DWP / the department",
     "date": "2025-11",
     "url": "https://www.gov.uk/government/news/over-half-a-million-children-to-be-lifted-out-of-poverty-as-government-unveils-historic-child-poverty-strategy",
     "oneLiner": "Cross-government strategy folding in the FSM Universal Credit expansion, breakfast clubs and crisis support; frames the education-poverty data agenda (eligibility data, take-up).",
@@ -448,7 +448,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Best Start Family Hubs and Healthy Babies: guidance for local authorities",
     "shortName": "BSFH Guidance",
     "type": "guidance",
-    "publisher": "DfE / DHSC",
+    "publisher": "The department / DHSC",
     "date": "2025-12",
     "url": "https://www.gov.uk/government/publications/best-start-family-hubs-and-healthy-babies-guidance-for-local-authorities",
     "oneLiner": "Guidance for delivering Best Start Family Hubs from April 2026, including quarterly management information, twice-yearly delivery returns and digital/data leadership expectations.",
@@ -459,7 +459,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "NCCIS Management Information Requirement 2026 to 2027",
     "shortName": "NCCIS MI 2026-27",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2025-12",
     "url": "https://assets.publishing.service.gov.uk/media/6943ca108f4636fa2c547e25/NCCIS_management_information_requirement_2026_to_2027.pdf",
     "oneLiner": "Specification of the mandatory participation-status data local authorities must record and return monthly on academic-age 16-17 year olds via the National Client Caseload Information System.",
@@ -481,7 +481,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "450,000 disadvantaged pupils could benefit from AI tutoring tools",
     "shortName": "AI Tutoring Announcement",
     "type": "blog",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-01",
     "url": "https://www.gov.uk/government/news/450000-disadvantaged-pupils-could-benefit-from-ai-tutoring-tools",
     "oneLiner": "26 Jan 2026 commitment to co-create, trial (autumn 2026) and roll out (end 2027) safe AI tutoring tools for FSM pupils in years 9-11, with quality/safety benchmarks.",
@@ -492,7 +492,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Government modernises exam records with new app",
     "shortName": "Education Record App",
     "type": "blog",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-01",
     "url": "https://www.gov.uk/government/news/government-modernises-exam-records-with-new-app",
     "oneLiner": "National rollout of the Education Record app: every Year 11 in England gets GCSE results digitally from summer 2026, with GOV.UK Wallet linkage underway.",
@@ -514,7 +514,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Special educational needs survey (SEN2 person level): guide 2026",
     "shortName": "SEN2 Guide 2026",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-01",
     "url": "https://assets.publishing.service.gov.uk/media/6937018aa6fc97b81e5743a7/Special_educational_needs_survey_guide_2026.pdf",
     "oneLiner": "Guidance for the statutory person-level SEN2 return; the 2026 collection makes DSCO, request-source and phase-transfer/annual-review date items compulsory.",
@@ -525,7 +525,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Key stage 4 performance measures and targeted RISE extension (consultation)",
     "shortName": "KS4 Measures Consultation",
     "type": "consultation",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-02",
     "url": "https://consult.education.gov.uk/school-accountability/key-stage-4-performance-measures-and-targeted-rise/",
     "oneLiner": "Consultation (closed 4 May 2026) on the improved Progress 8/Attainment 8 model with science and breadth slots, first applying to GCSEs sat in 2029.",
@@ -539,7 +539,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "publisher": "MHCLG",
     "date": "2026-02",
     "url": "https://www.gov.uk/government/publications/local-outcomes-framework/local-outcomes-framework",
-    "oneLiner": "Sixteen national priority outcomes for local government — the child outcomes measured almost entirely with DfE data.",
+    "oneLiner": "Sixteen national priority outcomes for local government — the child outcomes measured almost entirely with the department data.",
     "status": "published"
   },
   {
@@ -547,7 +547,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "The Neurodivergence Task and Finish Group: report",
     "shortName": "Neurodivergence TFG Report",
     "type": "review",
-    "publisher": "Neurodivergence Task and Finish Group (commissioned by DfE)",
+    "publisher": "Neurodivergence Task and Finish Group (commissioned by the department)",
     "date": "2026-02",
     "url": "https://www.gov.uk/government/publications/neurodivergence-task-and-finish-group-report",
     "oneLiner": "Independent expert report (published 23 Feb 2026 with the white paper) on supporting neurodivergent children in mainstream settings without diagnosis-dependency, calling for better local data linkage.",
@@ -558,7 +558,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Regional improvement for standards and excellence (RISE): policy statement",
     "shortName": "RISE Policy",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-02",
     "url": "https://www.gov.uk/government/publications/regional-improvement-for-standards-and-excellence-rise/regional-improvement-for-standards-and-excellence-rise",
     "oneLiner": "RISE teams: universal service on four national priorities plus targeted intervention for schools identified through Ofsted inspection data, with a published eligible-schools list.",
@@ -569,7 +569,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Every Child Achieving and Thriving (Schools White Paper, CP 1508)",
     "shortName": "Schools WP 2026",
     "type": "white-paper",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-02",
     "url": "https://www.gov.uk/government/publications/every-child-achieving-and-thriving",
     "oneLiner": "Ten-year schools and SEND reform vision (23 February 2026): attendance targets, AI-benchmarked expectations, school profiles, digital Individual Support Plans, tiered SEND support, analytics and evidence-based AI tools.",
@@ -580,7 +580,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "SEND reform: putting children and young people first",
     "shortName": "SEND Reform Consultation",
     "type": "consultation",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-02",
     "url": "https://www.gov.uk/government/consultations/send-reform-putting-children-and-young-people-first",
     "oneLiner": "Consultation published alongside the Schools White Paper (closed 18 May 2026) detailing the reformed 0-25 SEND system; government response pending as of July 2026.",
@@ -602,7 +602,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Children's Wellbeing and Schools Act 2026 (c. 21)",
     "shortName": "CWSA 2026",
     "type": "act",
-    "publisher": "UK Parliament (DfE sponsor)",
+    "publisher": "UK Parliament (The department sponsor)",
     "date": "2026-04",
     "url": "https://www.legislation.gov.uk/ukpga/2026/21/contents/enacted",
     "oneLiner": "Flagship children's social care and schools legislation (Royal Assent 29 April 2026): information-sharing duty, consistent identifier power, Children Not in School registers, MAT inspection, multi-agency child protection teams, provider financial oversight, admissions and FSM provisions.",
@@ -613,7 +613,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Lifelong learning entitlement: what it is and how it will work",
     "shortName": "LLE Overview",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-05",
     "url": "https://www.gov.uk/government/publications/lifelong-learning-entitlement-lle-overview/lifelong-learning-entitlement-overview",
     "oneLiner": "LLE policy overview: applications from September 2026 for courses/modules starting 1 January 2027; SLC-hosted personal account and standardised module transcripts.",
@@ -621,7 +621,7 @@ export const DOCUMENTS: PolicyDocument[] = [
   },
   {
     "id": "moj-data-first",
-    "title": "Ministry of Justice Data First — the MoJ–DfE linked dataset",
+    "title": "Ministry of Justice Data First — the MoJ–the department linked dataset",
     "shortName": "MoJ Data First",
     "type": "evidence",
     "publisher": "MoJ",
@@ -635,7 +635,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Post-16 pathways: implementation plan",
     "shortName": "Post-16 Pathways Plan",
     "type": "action-plan",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-05",
     "url": "https://www.gov.uk/government/publications/post-16-pathways-implementation-plan/post-16-pathways-implementation-plan",
     "oneLiner": "First V Levels taught from September 2027; every provider must submit a Strategic Transition Planning Statement by 6 July 2026; defunding list for 153 qualifications from August 2027.",
@@ -646,7 +646,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Franchise arrangements for higher education providers",
     "shortName": "HE Franchising Guidance",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-06",
     "url": "https://www.gov.uk/government/publications/franchise-arrangements-for-higher-education-providers/franchise-arrangements-for-higher-education-providers",
     "oneLiner": "Implements the 2025 consultation decision: franchised providers with 300+ students must register with OfS from AY 2028/29; complements OfS Condition E10 subcontracting transparency.",
@@ -679,7 +679,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Written ministerial statement HCWS115: single unique identifier implementation update",
     "shortName": "SUI Statement (Jun 2026)",
     "type": "roadmap",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-06",
     "url": "https://questions-statements.parliament.uk/written-statements/detail/2026-06-16/hcws115",
     "oneLiner": "16 June 2026 statement on implementing the consistent identifier: test-and-learn pilots from April 2025 (starting Wigan), NHS-number matching, regulations intended by end of Parliament.",
@@ -690,7 +690,7 @@ export const DOCUMENTS: PolicyDocument[] = [
     "title": "Inclusive mainstream fund for schools: methodology 2026 to 2027",
     "shortName": "IMF Methodology",
     "type": "guidance",
-    "publisher": "Department for Education",
+    "publisher": "The education department",
     "date": "2026-07",
     "url": "https://www.gov.uk/government/publications/inclusive-mainstream-fund-2026-to-2027/inclusive-mainstream-fund-for-schools-methodology-2026-to-2027",
     "oneLiner": "Published allocation methodology for the £500m+/yr Inclusive Mainstream Fund (census + APT low-prior-attainment formula) with the 31 December 2026 inclusion-strategy publication condition.",
@@ -747,7 +747,7 @@ export const COMMITMENTS: Commitment[] = [
       "police",
       "Wigan Council (pilot)"
     ],
-    "strategyImplication": "The single most consequential identifier decision in the children's system: DfE must govern NHS-number use outside health, sequence agency onboarding, and layer the identifier onto its UPN-based estate with matching services and data-quality remediation.",
+    "strategyImplication": "The single most consequential identifier decision in the children's system: The department must govern NHS-number use outside health, sequence agency onboarding, and layer the identifier onto its UPN-based estate with matching services and data-quality remediation.",
     "eli5": "Every child will get one shared number - probably their health number - so schools, doctors and councils all know they are talking about the same child.",
     "capabilityIds": [
       "interoperability",
@@ -780,7 +780,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "sui-pilots-implementation",
     "docId": "sui-statement-hcws115",
     "title": "Single unique identifier pilots, matching service and implementation roadmap",
-    "what": "DfE is running test-and-learn pilots (from April 2025, starting with Wigan, with NHS England and DHSC) testing the NHS number as the single unique identifier: LA access to NHS numbers and match rates between school census, children's social care and NHS Personal Demographic Service records. The programme's public architecture is a federated record-locator — a PDS-adapter matching service, get-an-identifier, find-a-record (record pointers, not case content) and fetch-a-record APIs — with LA dissemination anticipated during 2026 and regulations committed by end of Parliament.",
+    "what": "The department is running test-and-learn pilots (from April 2025, starting with Wigan, with NHS England and DHSC) testing the NHS number as the single unique identifier: LA access to NHS numbers and match rates between school census, children's social care and NHS Personal Demographic Service records. The programme's public architecture is a federated record-locator — a PDS-adapter matching service, get-an-identifier, find-a-record (record pointers, not case content) and fetch-a-record APIs — with LA dissemination anticipated during 2026 and regulations committed by end of Parliament.",
     "quote": "bring forward regulations at the earliest opportunity and by the end of this parliament",
     "theme": "identifiers",
     "status": "in-delivery",
@@ -823,7 +823,7 @@ export const COMMITMENTS: Commitment[] = [
       "DHSC",
       "Wigan Council and successor pilot LAs"
     ],
-    "strategyImplication": "A federated record-locator (pointers, not a central database) is DfE's emerging pattern for the child data spine; the strategy must reserve delivery capacity and legal gateways for rollout and decide how the census/NPD estate carries the NHS-number-based identifier alongside UPNs.",
+    "strategyImplication": "A federated record-locator (pointers, not a central database) is the department's emerging pattern for the child data spine; the strategy must reserve delivery capacity and legal gateways for rollout and decide how the census/NPD estate carries the NHS-number-based identifier alongside UPNs.",
     "eli5": "The government is testing, in a few places first, whether using each child's health number lets councils and schools find and connect a child's records without building one giant database.",
     "capabilityIds": [
       "interoperability",
@@ -899,7 +899,7 @@ export const COMMITMENTS: Commitment[] = [
       "childcare providers",
       "ICO"
     ],
-    "strategyImplication": "Shifts safeguarding data sharing from permissive to expected: schools become active parties to a legal duty, and DfE owns the guidance, the supplier standards work and the demand for standardised, identifier-keyed exchange infrastructure.",
+    "strategyImplication": "Shifts safeguarding data sharing from permissive to expected: schools become active parties to a legal duty, and the department owns the guidance, the supplier standards work and the demand for standardised, identifier-keyed exchange infrastructure.",
     "eli5": "People who work with children - teachers, doctors, police, social workers - will be required by law to tell each other things that help keep a child safe, instead of worrying about whether they are allowed to.",
     "capabilityIds": [
       "sharing",
@@ -929,7 +929,7 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "cwsa-cnis-registers",
     "docId": "cwsa-2026",
-    "title": "Children Not in School: compulsory LA registers with national data flows to DfE",
+    "title": "Children Not in School: compulsory LA registers with national data flows to the department",
     "what": "Section 38 CWSA inserts sections 436B-436G into the Education Act 1996: every English LA must maintain a register of eligible children not in school (home-educated and otherwise), holding prescribed content including names, addresses, parents' details, providers used and flags such as SEND, child protection and looked-after status; parents must supply and update information within 15 days. New s.436F requires LAs to provide register information to the Secretary of State when directed — enabling a national CNIS collection — and permits sharing with safeguarding bodies and inspectorates, with a s.436T (inserted by section 40) disclosure shield so authorised disclosures do not breach confidentiality.",
     "quote": "maintain a register of children who are eligible to be registered by the authority",
     "theme": "register",
@@ -972,7 +972,7 @@ export const COMMITMENTS: Commitment[] = [
       "Ofsted",
       "Welsh Government"
     ],
-    "strategyImplication": "Closes the biggest coverage gap in the education record — children outside school rolls — creating a wholly new statutory child-level dataset; DfE must specify the national data standard, collection mechanism and linkage into attendance, census and safeguarding data before commencement.",
+    "strategyImplication": "Closes the biggest coverage gap in the education record — children outside school rolls — creating a wholly new statutory child-level dataset; the department must specify the national data standard, collection mechanism and linkage into attendance, census and safeguarding data before commencement.",
     "eli5": "Councils will keep a list of every child who is not in school, such as children taught at home, so no child can disappear from view.",
     "capabilityIds": [
       "platform",
@@ -1001,7 +1001,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "cwsa-mat-inspections",
     "docId": "cwsa-2026",
     "title": "Ofsted inspection of academy trusts (academy proprietors)",
-    "what": "Section 57 CWSA provides for inspection of academy proprietors, giving Ofsted a role inspecting multi-academy trusts for the first time. This creates a new trust-level accountability dataset — inspection outcomes, evidence and management information about trusts rather than individual schools — that DfE oversight and intervention functions will consume.",
+    "what": "Section 57 CWSA provides for inspection of academy proprietors, giving Ofsted a role inspecting multi-academy trusts for the first time. This creates a new trust-level accountability dataset — inspection outcomes, evidence and management information about trusts rather than individual schools — that the department oversight and intervention functions will consume.",
     "quote": "Inspection of Academy proprietors",
     "theme": "accountability",
     "status": "legislated-not-commenced",
@@ -1082,7 +1082,7 @@ export const COMMITMENTS: Commitment[] = [
       "academy trusts",
       "Office of the Schools Adjudicator"
     ],
-    "strategyImplication": "DfE needs consistent, timely place-planning data (capacity, PANs, forecasts) shared across LA/trust boundaries; school capacity data should be treated as shared infrastructure rather than locally held spreadsheets.",
+    "strategyImplication": "The department needs consistent, timely place-planning data (capacity, PANs, forecasts) shared across LA/trust boundaries; school capacity data should be treated as shared infrastructure rather than locally held spreadsheets.",
     "eli5": "Schools and councils must work together and share their numbers on how many school places exist and who is applying, so every child can get a place.",
     "capabilityIds": [
       "sharing",
@@ -1149,7 +1149,7 @@ export const COMMITMENTS: Commitment[] = [
       "schools",
       "local authorities"
     ],
-    "strategyImplication": "Institutionalises multi-agency case data sharing at the sharpest end of the system; DfE must specify what MACPTs record and how their activity is monitored nationally.",
+    "strategyImplication": "Institutionalises multi-agency case data sharing at the sharpest end of the system; the department must specify what MACPTs record and how their activity is monitored nationally.",
     "eli5": "Social workers, police officers, health staff and schools will sit in one shared team in every area, looking at the same information when a child might be in danger.",
     "capabilityIds": [
       "sharing",
@@ -1175,7 +1175,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "cwsa-provider-financial-oversight",
     "docId": "cwsa-2026",
     "title": "Financial oversight scheme for difficult-to-replace care providers (plus profit-cap power)",
-    "what": "Sections 16-20 CWSA establish a DfE-run financial oversight scheme for the most 'difficult to replace' children's home and fostering providers: providers submit financial information and recovery-and-resolution plans, DfE can commission independent business reviews, must warn LAs of likely failure, and gains information-sharing provisions (s.20). Section 17 adds a backstop power to cap providers' profits, which would require ongoing profit and financial reporting; Ofsted also gains provider-group accountability and monetary penalty powers.",
+    "what": "Sections 16-20 CWSA establish a department-run financial oversight scheme for the most 'difficult to replace' children's home and fostering providers: providers submit financial information and recovery-and-resolution plans, the department can commission independent business reviews, must warn LAs of likely failure, and gains information-sharing provisions (s.20). Section 17 adds a backstop power to cap providers' profits, which would require ongoing profit and financial reporting; Ofsted also gains provider-group accountability and monetary penalty powers.",
     "quote": "The scheme will increase financial and corporate transparency among the most 'difficult to replace' providers",
     "theme": "accountability",
     "status": "legislated-not-commenced",
@@ -1199,7 +1199,7 @@ export const COMMITMENTS: Commitment[] = [
       }
     ],
     "newServices": [
-      "DfE financial oversight scheme (market-oversight analogue for children's social care)"
+      "The department financial oversight scheme (market-oversight analogue for children's social care)"
     ],
     "identifiers": [
       "provider-group / parent-undertaking identification"
@@ -1212,7 +1212,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "CMA (originating recommendation)"
     ],
-    "strategyImplication": "DfE becomes a market-oversight data regulator, needing corporate-structure, financial-risk and profit data on private providers — a wholly new data domain for the department.",
+    "strategyImplication": "The department becomes a market-oversight data regulator, needing corporate-structure, financial-risk and profit data on private providers — a wholly new data domain for the department.",
     "eli5": "The government will keep a close eye on the money and finances of big companies that run children's homes, so councils get a warning if one might collapse.",
     "capabilityIds": [
       "governance",
@@ -1235,7 +1235,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "cwsa-kinship-data-foundations",
     "docId": "cwsa-2026",
     "title": "Kinship and care-leaver data foundations: statutory definitions, local offers and the Kinship Allowance Pilot",
-    "what": "Section 5 CWSA creates a duty on LAs to publish a kinship local offer and puts statutory definitions of kinship care and kinship carers into law for the first time, enabling consistent categorisation in national data; sections 7-8 require Staying Close consideration for care leavers to 25 and strengthen the published care-leaver local offer. In parallel the £40m Kinship Allowance Pilot (Nov 2025 - Mar 2029, seven 'kinship zones') pays weekly allowances to eligible kinship carers, forcing LAs to enumerate kinship populations and giving DfE its first structured allowance-level dataset on this historically data-poor group.",
+    "what": "Section 5 CWSA creates a duty on LAs to publish a kinship local offer and puts statutory definitions of kinship care and kinship carers into law for the first time, enabling consistent categorisation in national data; sections 7-8 require Staying Close consideration for care leavers to 25 and strengthen the published care-leaver local offer. In parallel the £40m Kinship Allowance Pilot (Nov 2025 - Mar 2029, seven 'kinship zones') pays weekly allowances to eligible kinship carers, forcing LAs to enumerate kinship populations and giving the department its first structured allowance-level dataset on this historically data-poor group.",
     "quote": "The Kinship Allowance Pilot will fund selected local authorities to provide a weekly financial allowance to eligible kinship carers",
     "theme": "standards",
     "status": "in-delivery",
@@ -1265,7 +1265,7 @@ export const COMMITMENTS: Commitment[] = [
       "National Kinship Care Ambassador",
       "independent evaluators"
     ],
-    "strategyImplication": "Statutory definitions unlock countability: DfE can build kinship and care-leaver support measures into national collections on a consistent legal footing, with the pilot supplying the first allowance-level evidence base for national rollout decisions.",
+    "strategyImplication": "Statutory definitions unlock countability: The department can build kinship and care-leaver support measures into national collections on a consistent legal footing, with the pilot supplying the first allowance-level evidence base for national rollout decisions.",
     "eli5": "When grandparents or other relatives raise a child, the government is now defining that in law, telling councils to publish what help exists, and paying some of those families in a trial to learn what works.",
     "capabilityIds": [
       "quality",
@@ -1292,8 +1292,8 @@ export const COMMITMENTS: Commitment[] = [
     "id": "attendance-daily-collection",
     "docId": "attendance-data-guidance",
     "title": "Mandatory daily pupil-level attendance data collection (attendance data solution)",
-    "what": "Since academic year 2024/25 all state schools must share pupil-level attendance data with DfE daily, extracted automatically (twice daily) from school MIS via the Wonde-operated route under the amended 2013 pupil-information regulations. DfE, LAs and trusts get near-real-time reports (Monitor your school attendance; View Your Education Data) and DfE publishes fortnightly national statistics. This is the flagship operating data flow the White Paper's attendance ambitions build on and the template for census modernisation.",
-    "quote": "mandatory for schools to share their attendance data with the Department for Education",
+    "what": "Since academic year 2024/25 all state schools must share pupil-level attendance data with the department daily, extracted automatically (twice daily) from school MIS via the Wonde-operated route under the amended 2013 pupil-information regulations. The department, LAs and trusts get near-real-time reports (Monitor your school attendance; View Your Education Data) and the department publishes fortnightly national statistics. This is the flagship operating data flow the White Paper's attendance ambitions build on and the template for census modernisation.",
+    "quote": "mandatory for schools to share their attendance data with [the department]",
     "theme": "data-sharing",
     "status": "statutory-duty",
     "timeframe": "In force since September 2024; ongoing",
@@ -1334,7 +1334,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "multi-academy trusts"
     ],
-    "strategyImplication": "Daily attendance is DfE's proof-of-concept for near-real-time operational data: the strategy should codify this pattern (automated MIS-to-DfE flows, give-back dashboards) as the template for future collections.",
+    "strategyImplication": "Daily attendance is the department's proof-of-concept for near-real-time operational data: the strategy should codify this pattern (automated MIS-to-the department flows, give-back dashboards) as the template for future collections.",
     "eli5": "Every school's register is sent to the government computer twice a day automatically, and schools get useful charts back showing how their attendance compares.",
     "capabilityIds": [
       "sharing",
@@ -1389,7 +1389,7 @@ export const COMMITMENTS: Commitment[] = [
       "RISE teams",
       "schools and trusts"
     ],
-    "strategyImplication": "DfE's first at-scale AI-on-operational-data service: the strategy needs a published methodology, model governance and accuracy assurance for AI-set expectations schools will be measured against, plus clarity that they stay out of formal accountability.",
+    "strategyImplication": "The department's first at-scale AI-on-operational-data service: the strategy needs a published methodology, model governance and accuracy assurance for AI-set expectations schools will be measured against, plus clarity that they stay out of formal accountability.",
     "eli5": "A computer compares each school with similar schools and sets it a fair attendance goal, as part of a national push to get more children into class every day.",
     "capabilityIds": [
       "value",
@@ -1416,7 +1416,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "nccis-participation-tracking",
     "docId": "nccis-mi-2026-27",
     "title": "Mandatory participation-status tracking of 16-17 year olds (NCCIS)",
-    "what": "Local authorities have a statutory duty (Education and Skills Act 2008) to identify and support young people not participating in education or training, recording each young person's participation status and returning specified data monthly to DfE via the National Client Caseload Information System. The 2026-27 Management Information Requirement specifies the mandatory data items for academic-age 16 and 17 year olds.",
+    "what": "Local authorities have a statutory duty (Education and Skills Act 2008) to identify and support young people not participating in education or training, recording each young person's participation status and returning specified data monthly to the department via the National Client Caseload Information System. The 2026-27 Management Information Requirement specifies the mandatory data items for academic-age 16 and 17 year olds.",
     "quote": "collect information to identify young people who are not participating, or at risk of not doing so",
     "theme": "data-sharing",
     "status": "statutory-duty",
@@ -1478,7 +1478,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "school-profiles-service",
     "docId": "school-accountability-reform-response",
     "title": "Digital school profiles service (one-stop shop for school information)",
-    "what": "Following the 2025 accountability consultation, DfE confirmed it will build online school profiles as the central, parent-facing source of up-to-date information about every school, bringing together Ofsted report cards, attendance, attainment, enrichment and other performance data now spread across multiple services. A pilot ran in 2025/26; the White Paper commits to profiles giving parents 'a rounded picture', and DfE is considering extending profiles to FE providers.",
+    "what": "Following the 2025 accountability consultation, the department confirmed it will build online school profiles as the central, parent-facing source of up-to-date information about every school, bringing together Ofsted report cards, attendance, attainment, enrichment and other performance data now spread across multiple services. A pilot ran in 2025/26; the White Paper commits to profiles giving parents 'a rounded picture', and the department is considering extending profiles to FE providers.",
     "quote": "developing digital school profiles to provide parents and the public with clear, reliable information across a range of school performance indicators",
     "theme": "new-service",
     "status": "in-delivery",
@@ -1533,7 +1533,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ofsted-report-cards-contextual-data",
     "docId": "ofsted-eif-nov-2025",
     "title": "Ofsted report cards plus contextual data published alongside inspection outcomes",
-    "what": "From 10 November 2025, Ofsted inspections of state schools use report cards instead of single headline grades: a 5-point scale (including 'exceptional') across six evaluation areas, with safeguarding judged met/not met; outcomes feed DfE intervention triggers and school profiles. From September 2026 Ofsted also publishes data alongside inspection outcomes for the first time, using a new statistical model grouping similar schools to contextualise achievement over time.",
+    "what": "From 10 November 2025, Ofsted inspections of state schools use report cards instead of single headline grades: a 5-point scale (including 'exceptional') across six evaluation areas, with safeguarding judged met/not met; outcomes feed the department intervention triggers and school profiles. From September 2026 Ofsted also publishes data alongside inspection outcomes for the first time, using a new statistical model grouping similar schools to contextualise achievement over time.",
     "quote": "A new 5-point grading scale, including the new 'exceptional' grade",
     "theme": "accountability",
     "status": "in-delivery",
@@ -1569,10 +1569,10 @@ export const COMMITMENTS: Commitment[] = [
     ],
     "partners": [
       "Ofsted",
-      "DfE regions group / RISE",
-      "DfE statisticians"
+      "The department regions group / RISE",
+      "The department statisticians"
     ],
-    "strategyImplication": "DfE systems keyed to single Ofsted grades (eligibility rules, statistics, profiles) must be re-engineered around six graded areas, and Ofsted republishing DfE data demands one agreed similar-schools methodology and synchronised releases so services never show conflicting numbers for the same school.",
+    "strategyImplication": "The department systems keyed to single Ofsted grades (eligibility rules, statistics, profiles) must be re-engineered around six graded areas, and Ofsted republishing the department data demands one agreed similar-schools methodology and synchronised releases so services never show conflicting numbers for the same school.",
     "eli5": "Instead of one word like 'good', schools now get a report card with several grades, published alongside background numbers that help parents compare similar schools fairly.",
     "capabilityIds": [
       "quality",
@@ -1597,7 +1597,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "rise-data-targeting",
     "docId": "rise-policy",
     "title": "RISE teams: data-driven targeting and published eligibility statistics",
-    "what": "RISE teams provide universal support on four national priorities (attainment, inclusion, reception quality, attendance) and targeted intervention for 'stuck' schools identified through Ofsted inspection outcomes. DfE publishes the list of eligible schools as official statistics on Explore Education Statistics, updated from Ofsted management information; attendance-expectation progress will also be used to target RISE support.",
+    "what": "RISE teams provide universal support on four national priorities (attainment, inclusion, reception quality, attendance) and targeted intervention for 'stuck' schools identified through Ofsted inspection outcomes. The department publishes the list of eligible schools as official statistics on Explore Education Statistics, updated from Ofsted management information; attendance-expectation progress will also be used to target RISE support.",
     "quote": "Eligibility for targeted RISE intervention is determined through Ofsted inspections",
     "theme": "analytics",
     "status": "in-delivery",
@@ -1653,7 +1653,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "fsm-uc-expansion-ecs",
     "docId": "fsm-expansion-2026",
     "title": "FSM expansion to all Universal Credit households and rebuilt eligibility checking service",
-    "what": "From September 2026, all pupils in households receiving Universal Credit are eligible for free school meals (removing the £7,400 earned-income cap), an expansion of 500,000+ pupils legislatively supported by s.32 CWSA. A rebuilt FSM eligibility checking service is available to all LAs from 1 June 2026, with a flexible model letting schools run checks directly; eligibility splits into targeted and expanded FSM, verified against DWP, HMRC and Home Office data. DfE is working with DSIT and DWP on data and digital means to proactively identify eligible children from spring 2026.",
+    "what": "From September 2026, all pupils in households receiving Universal Credit are eligible for free school meals (removing the £7,400 earned-income cap), an expansion of 500,000+ pupils legislatively supported by s.32 CWSA. A rebuilt FSM eligibility checking service is available to all LAs from 1 June 2026, with a flexible model letting schools run checks directly; eligibility splits into targeted and expanded FSM, verified against DWP, HMRC and Home Office data. The department is working with DSIT and DWP on data and digital means to proactively identify eligible children from spring 2026.",
     "quote": "The new FSM eligibility checking service (ECS) will be available for all local authorities to use from 1 June 2026",
     "theme": "new-service",
     "status": "in-delivery",
@@ -1705,7 +1705,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "schools"
     ],
-    "strategyImplication": "FSM checking is DfE's largest cross-department benefits data flow; the strategy should treat the ECS as reusable eligibility infrastructure (for pupil premium, auto-enrolment options and poverty analytics) with clear DWP/HMRC data-sharing agreements.",
+    "strategyImplication": "FSM checking is the department's largest cross-department benefits data flow; the strategy should treat the ECS as reusable eligibility infrastructure (for pupil premium, auto-enrolment options and poverty analytics) with clear DWP/HMRC data-sharing agreements.",
     "eli5": "Any child whose family gets Universal Credit will qualify for free school lunches, and a new checking system talks to the benefits computers so families do not have to prove it themselves.",
     "capabilityIds": [
       "platform",
@@ -1764,7 +1764,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "CPAG / LGA (advocates)"
     ],
-    "strategyImplication": "The strategy should state a position on proactive-entitlement data use: the ECS plus UC expansion makes auto-enrolment technically feasible, so the blocker is policy/legal, and DfE should decide whether to build for it.",
+    "strategyImplication": "The strategy should state a position on proactive-entitlement data use: the ECS plus UC expansion makes auto-enrolment technically feasible, so the blocker is policy/legal, and the department should decide whether to build for it.",
     "eli5": "Instead of parents filling in a form for free school lunches, the government could use the information it already has to sign eligible children up automatically - it is thinking about it but has not promised.",
     "capabilityIds": [
       "sharing",
@@ -1829,7 +1829,7 @@ export const COMMITMENTS: Commitment[] = [
       "NHS/ICBs",
       "MIS and edtech suppliers"
     ],
-    "strategyImplication": "Digital ISPs are the biggest new child-level education data asset since the school census: DfE must own the data standard, hosting/interoperability model and the identifier that lets plans follow children between settings and into health — interoperability with MIS suppliers and LA systems is the design battleground.",
+    "strategyImplication": "Digital ISPs are the biggest new child-level education data asset since the school census: The department must own the data standard, hosting/interoperability model and the identifier that lets plans follow children between settings and into health — interoperability with MIS suppliers and LA systems is the design battleground.",
     "eli5": "Every child who needs extra help at school will get a digital plan that parents and teachers can both see, and it follows the child when they change schools.",
     "capabilityIds": [
       "platform",
@@ -1901,7 +1901,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "wp-analytics-ai-tools",
     "docId": "schools-white-paper-2026",
     "title": "School-facing analytics and evidence-based AI tools for teaching",
-    "what": "The White Paper commits DfE to giving schools a range of analytics so they can prioritise data-driven interventions (e.g. the Compare your GLD report already live), and to supporting safe AI tools for teaching and learning underpinned by an extensive evidence programme. This extends DfE's give-back model — returning benchmarked insight to schools from data DfE already collects.",
+    "what": "The White Paper commits the department to giving schools a range of analytics so they can prioritise data-driven interventions (e.g. the Compare your GLD report already live), and to supporting safe AI tools for teaching and learning underpinned by an extensive evidence programme. This extends the department's give-back model — returning benchmarked insight to schools from data the department already collects.",
     "quote": "range of analytics so that schools can prioritise data driven interventions with greatest impact",
     "theme": "analytics",
     "status": "announced",
@@ -1990,7 +1990,7 @@ export const COMMITMENTS: Commitment[] = [
       "special and mainstream schools",
       "independent expert panel"
     ],
-    "strategyImplication": "Standardised package definitions create, for the first time, comparable structured data on specialist provision and cost — enabling national analytics on need, provision and expenditure, but requiring a canonical reference-data set DfE must own and version.",
+    "strategyImplication": "Standardised package definitions create, for the first time, comparable structured data on specialist provision and cost — enabling national analytics on need, provision and expenditure, but requiring a canonical reference-data set the department must own and version.",
     "eli5": "For children with the most complex needs, support will come in standard well-tested packages, and their support plans will be digital instead of piles of paper.",
     "capabilityIds": [
       "interoperability",
@@ -2017,7 +2017,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "national-inclusion-standards",
     "docId": "schools-white-paper-2026",
     "title": "National Inclusion Standards with a funded evidence base",
-    "what": "DfE will invest up to £15m by 2028 to build the evidence base for, then publish, National Inclusion Standards setting out for the first time the support that should be available at each tier in every setting. These replace the 2023 plan's 'national standards' and will anchor Ofsted's inclusion judgements and updated school performance measures.",
+    "what": "The department will invest up to £15m by 2028 to build the evidence base for, then publish, National Inclusion Standards setting out for the first time the support that should be available at each tier in every setting. These replace the 2023 plan's 'national standards' and will anchor Ofsted's inclusion judgements and updated school performance measures.",
     "quote": "By 2028, we will have invested up to £15 million to build the evidence base for, and then provide, National Inclusion Standards",
     "theme": "standards",
     "status": "in-delivery",
@@ -2047,7 +2047,7 @@ export const COMMITMENTS: Commitment[] = [
       "research/evidence bodies",
       "schools and colleges"
     ],
-    "strategyImplication": "The standards become the reference framework against which inclusion data (ISPs, performance measures, inspection evidence) is coded — DfE needs a machine-readable publication of the standards to avoid divergent local encodings.",
+    "strategyImplication": "The standards become the reference framework against which inclusion data (ISPs, performance measures, inspection evidence) is coded — The department needs a machine-readable publication of the standards to avoid divergent local encodings.",
     "eli5": "The government is writing a clear national rulebook for what help every school must offer children who need extra support, and inspectors will check schools against it.",
     "capabilityIds": [
       "interoperability",
@@ -2132,7 +2132,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "imf-allocation-methodology",
     "docId": "imf-methodology-2026",
     "title": "Published data-driven allocation methodology for the Inclusive Mainstream Fund",
-    "what": "DfE has published the full allocation methodology for the Inclusive Mainstream Fund (over £500m/yr, £400m/yr to schools): a £3,000 lump sum plus per-pupil and low-prior-attainment rates with an area cost adjustment, computed from October 2025 school census counts and the 2025-26 authority proforma tool. This shifts early SEND support funding onto transparent, published formulae rather than opaque high-needs top-ups.",
+    "what": "The department has published the full allocation methodology for the Inclusive Mainstream Fund (over £500m/yr, £400m/yr to schools): a £3,000 lump sum plus per-pupil and low-prior-attainment rates with an area cost adjustment, computed from October 2025 school census counts and the 2025-26 authority proforma tool. This shifts early SEND support funding onto transparent, published formulae rather than opaque high-needs top-ups.",
     "quote": "We will use pupil counts from the October 2025 census and LPA proportions from the 2025 to 2026 authority proforma tool (APT)",
     "theme": "funding",
     "status": "in-delivery",
@@ -2157,7 +2157,7 @@ export const COMMITMENTS: Commitment[] = [
       "published funding formula (lump sum + per-pupil + LPA rates + area cost adjustment)"
     ],
     "partners": [
-      "ESFA/DfE funding teams",
+      "ESFA/the department funding teams",
       "local authorities",
       "schools"
     ],
@@ -2252,7 +2252,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "sen2-person-level-expansion",
     "docId": "sen2-guide-2026",
     "title": "SEN2 person-level statutory return expanded for 2026 (incl. mandatory DSCO reporting)",
-    "what": "SEN2, the statutory LA return covering every EHC plan and needs assessment (person-level since 2023), gains new compulsory items in 2026: source of EHC assessment request, date the draft amended plan was sent after annual review, phase-transfer review due date and final-plan-issued date. The Designated Social Care Officer indicator also moves from voluntary to mandatory, giving DfE national coverage data on whether social care is structurally wired into EHC decision-making — process-timeliness telemetry across the whole statutory EHCP journey.",
+    "what": "SEN2, the statutory LA return covering every EHC plan and needs assessment (person-level since 2023), gains new compulsory items in 2026: source of EHC assessment request, date the draft amended plan was sent after annual review, phase-transfer review due date and final-plan-issued date. The Designated Social Care Officer indicator also moves from voluntary to mandatory, giving the department national coverage data on whether social care is structurally wired into EHC decision-making — process-timeliness telemetry across the whole statutory EHCP journey.",
     "quote": "SEN2 is a statutory return that collects data about children and young people who the local authority is responsible for under section 24",
     "theme": "analytics",
     "status": "statutory-duty",
@@ -2280,7 +2280,7 @@ export const COMMITMENTS: Commitment[] = [
       "Council for Disabled Children",
       "ICBs (DMO/DCO counterparts)"
     ],
-    "strategyImplication": "SEN2 is quietly becoming the operational-performance dataset the inclusion dashboards never were — the new date fields let DfE measure annual-review and phase-transfer timeliness nationally and will baseline the 2029 reform transition; mandatory DSCO reporting is a soft lever to universalise the role without legislating.",
+    "strategyImplication": "SEN2 is quietly becoming the operational-performance dataset the inclusion dashboards never were — the new date fields let the department measure annual-review and phase-transfer timeliness nationally and will baseline the 2029 reform transition; mandatory DSCO reporting is a soft lever to universalise the role without legislating.",
     "eli5": "Councils already send the government details about every child with a special-needs plan; from 2026 they must also report key dates and whether a social care expert is involved, so delays can be spotted.",
     "capabilityIds": [
       "value",
@@ -2464,7 +2464,7 @@ export const COMMITMENTS: Commitment[] = [
       "HMRC",
       "local authorities"
     ],
-    "strategyImplication": "DfE becomes co-owner of a citizen-facing cross-government digital service whose value depends on health-education data interoperability and NHS App integration.",
+    "strategyImplication": "The department becomes co-owner of a citizen-facing cross-government digital service whose value depends on health-education data interoperability and NHS App integration.",
     "eli5": "Parents of babies and young children will get one trusted website and app - joined to the health service app - to find advice, local family hubs and free childcare checks.",
     "capabilityIds": [
       "platform",
@@ -2520,7 +2520,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "NHS/health visiting services"
     ],
-    "strategyImplication": "Creates a new recurring LA-to-DfE early-years MI pipeline; DfE needs collection infrastructure, definitions and publication plans (Family Hubs MI is already published as official statistics).",
+    "strategyImplication": "Creates a new recurring LA-to-the department early-years MI pipeline; the department needs collection infrastructure, definitions and publication plans (Family Hubs MI is already published as official statistics).",
     "eli5": "Councils running the new family hubs must send the government regular numbers on who they helped and what happened, in exchange for the funding.",
     "capabilityIds": [
       "value",
@@ -2576,7 +2576,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "schools"
     ],
-    "strategyImplication": "Elevates an existing DfE statistical measure into a cross-government accountability instrument, raising the bar on timeliness, granularity and comparability of early-years outcome data.",
+    "strategyImplication": "Elevates an existing the department statistical measure into a cross-government accountability instrument, raising the bar on timeliness, granularity and comparability of early-years outcome data.",
     "eli5": "The government wants three out of four five-year-olds ready for school by 2028, and every council will get its own legally set target measured with school readiness data.",
     "capabilityIds": [
       "quality",
@@ -2599,7 +2599,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ey-professional-register",
     "docId": "best-start-strategy",
     "title": "New professional register for the early years workforce",
-    "what": "DfE will work with the sector to co-design and introduce a professional register for early years workers, to raise status, create career-progression pathways and drive up standards. A register implies a new national dataset of practitioners, qualifications and settings, complementing existing early years workforce surveys and the Ofsted-held registers of providers.",
+    "what": "The department will work with the sector to co-design and introduce a professional register for early years workers, to raise status, create career-progression pathways and drive up standards. A register implies a new national dataset of practitioners, qualifications and settings, complementing existing early years workforce surveys and the Ofsted-held registers of providers.",
     "quote": "co-design and introduce a new professional register to put early years workers on a more professional footing",
     "theme": "register",
     "status": "announced",
@@ -2625,7 +2625,7 @@ export const COMMITMENTS: Commitment[] = [
       "early years sector bodies",
       "Ofsted"
     ],
-    "strategyImplication": "A new person-level register DfE must design, host and govern — the early-years analogue of the teacher record — with obvious linkage potential to workforce and quality data.",
+    "strategyImplication": "A new person-level register the department must design, host and govern — the early-years analogue of the teacher record — with obvious linkage potential to workforce and quality data.",
     "eli5": "People who work in nurseries and childminding will go on an official national list, like teachers and nurses have, showing their training and qualifications.",
     "capabilityIds": [
       "platform",
@@ -2646,7 +2646,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ofsted-ey-group-reporting",
     "docId": "best-start-strategy",
     "title": "Ofsted group-level reporting on nursery chains and faster inspection cycle",
-    "what": "DfE will fund Ofsted to inspect all new early years providers within 18 months of opening and move to inspecting all providers at least every four years (from six), and will work with Ofsted to introduce reporting on larger nursery chains so issues spanning a provider group can be addressed. Ofsted report cards for early years settings accompany this; it requires linking registered settings to parent groups in Ofsted's childcare registers.",
+    "what": "The department will fund Ofsted to inspect all new early years providers within 18 months of opening and move to inspecting all providers at least every four years (from six), and will work with Ofsted to introduce reporting on larger nursery chains so issues spanning a provider group can be addressed. Ofsted report cards for early years settings accompany this; it requires linking registered settings to parent groups in Ofsted's childcare registers.",
     "quote": "introduce reporting on larger nursery chains so issues that span a group of providers can be addressed",
     "theme": "accountability",
     "status": "in-delivery",
@@ -2696,9 +2696,9 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "childcare-entitlement-ecs-flows",
     "docId": "entitlements-expansion-guidance",
-    "title": "30-hours entitlement: HMRC-DfE-LA eligibility code flows and ECS replacement",
-    "what": "From September 2025 eligible working parents of children from 9 months get 30 funded hours. Parents apply via HMRC's digital Childcare Service; HMRC checks eligibility and issues an 11-digit code; local authorities and providers verify codes through DfE's Eligibility Checking System, with parents reconfirming every 3 months. DfE also committed to a replacement service for the ECS, migrating entitlement checks (starting with the Free School Meals Service) over 2025.",
-    "quote": "The local authority will continue to verify the code through DfE's Eligibility Checking System (ECS)",
+    "title": "30-hours entitlement: HMRC-department-LA eligibility code flows and ECS replacement",
+    "what": "From September 2025 eligible working parents of children from 9 months get 30 funded hours. Parents apply via HMRC's digital Childcare Service; HMRC checks eligibility and issues an 11-digit code; local authorities and providers verify codes through the department's Eligibility Checking System, with parents reconfirming every 3 months. The department also committed to a replacement service for the ECS, migrating entitlement checks (starting with the Free School Meals Service) over 2025.",
+    "quote": "The local authority will continue to verify the code through [the department]'s Eligibility Checking System (ECS)",
     "theme": "data-sharing",
     "status": "in-delivery",
     "timeframe": "Expansion live from 1 September 2025; ECS replacement migration began during 2025",
@@ -2736,7 +2736,7 @@ export const COMMITMENTS: Commitment[] = [
       "childcare providers",
       "software suppliers"
     ],
-    "strategyImplication": "One of DfE's highest-volume operational data exchanges with another department; the ECS replacement is live shared eligibility infrastructure that FSM and childcare checks will both ride on.",
+    "strategyImplication": "One of the department's highest-volume operational data exchanges with another department; the ECS replacement is live shared eligibility infrastructure that FSM and childcare checks will both ride on.",
     "eli5": "When parents apply for free childcare hours, the tax office checks they qualify and issues a code, which nurseries and councils verify through a government computer before the free hours start.",
     "capabilityIds": [
       "sharing",
@@ -2759,7 +2759,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ffp-quarterly-data",
     "docId": "ffp-guide",
     "title": "Families First Partnership quarterly programme data collections",
-    "what": "From April 2025 all LAs and safeguarding partners deliver Family Help, multi-agency child protection and family network reforms (including family group decision-making, now a CWSA duty to offer before care proceedings) under the FFP programme. LAs must return data quarterly on set-up, delivery and outcomes of reformed services — including FGDM offers and uptake; the 2026-27 collection was revised for reliability, headline indicators monitor fidelity, and from April 2026 DfE also surveys safeguarding partners' perceptions quarterly. Services must be fully operational by March 2027.",
+    "what": "From April 2025 all LAs and safeguarding partners deliver Family Help, multi-agency child protection and family network reforms (including family group decision-making, now a CWSA duty to offer before care proceedings) under the FFP programme. LAs must return data quarterly on set-up, delivery and outcomes of reformed services — including FGDM offers and uptake; the 2026-27 collection was revised for reliability, headline indicators monitor fidelity, and from April 2026 the department also surveys safeguarding partners' perceptions quarterly. Services must be fully operational by March 2027.",
     "quote": "required to return data on the set up, delivery and outcomes of reformed services through quarterly FFP programme data collections",
     "theme": "analytics",
     "status": "in-delivery",
@@ -2808,7 +2808,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "agency-social-worker-return",
     "docId": "agency-data-return",
     "title": "Quarterly statutory data return on agency child and family social workers",
-    "what": "Statutory guidance in force from 31 October 2024 requires LAs to submit quarterly data to DfE on the use and pay of agency child and family social workers (first return covered Jan-Mar 2025), via assignments and general data templates, with price-cap data from Q4 2025 and agreed regional price caps published in August 2025. CWSA s.21 provides regulation-making powers to extend agency-worker rules to the wider children's social care workforce.",
+    "what": "Statutory guidance in force from 31 October 2024 requires LAs to submit quarterly data to the department on the use and pay of agency child and family social workers (first return covered Jan-Mar 2025), via assignments and general data templates, with price-cap data from Q4 2025 and agreed regional price caps published in August 2025. CWSA s.21 provides regulation-making powers to extend agency-worker rules to the wider children's social care workforce.",
     "quote": "the quarterly statutory data collection on the use and pay of agency child and family social workers",
     "theme": "workforce",
     "status": "statutory-duty",
@@ -2832,7 +2832,7 @@ export const COMMITMENTS: Commitment[] = [
       "local authorities",
       "agencies/managed service providers"
     ],
-    "strategyImplication": "Extends DfE's workforce evidence base from annual census to quarterly operational monitoring, directly steering a price-cap intervention — a model for data-backed market rules.",
+    "strategyImplication": "Extends the department's workforce evidence base from annual census to quarterly operational monitoring, directly steering a price-cap intervention — a model for data-backed market rules.",
     "eli5": "Councils must report every three months how many temporary social workers they hire and what they pay, so the government can stop prices spiralling.",
     "capabilityIds": [
       "skills",
@@ -2854,7 +2854,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "csc-data-strategy-dashboard",
     "docId": "csc-data-digital-strategy",
     "title": "Children's social care dashboard, standard dataset and collection modernisation",
-    "what": "DfE's children's social care data and digital strategy (Dec 2023, reaffirmed by KCSHFT) commits to a national CSC dashboard bringing data together in one place; funding LAs to create a standard children's social care dataset for collaborative analysis (via Data to Insight / the Data and Digital Solutions Fund); developing open data and technology standards; exploring automated collections to cut burden; improving CP-IS; and piloting linkage of DfE data with MoJ family courts data. The annual CIN census and SSDA903 continue with iterative improvements; no consolidated single collection has been announced.",
+    "what": "The department's children's social care data and digital strategy (Dec 2023, reaffirmed by KCSHFT) commits to a national CSC dashboard bringing data together in one place; funding LAs to create a standard children's social care dataset for collaborative analysis (via Data to Insight / the Data and Digital Solutions Fund); developing open data and technology standards; exploring automated collections to cut burden; improving CP-IS; and piloting linkage of the department data with MoJ family courts data. The annual CIN census and SSDA903 continue with iterative improvements; no consolidated single collection has been announced.",
     "quote": "publish a children's social care dashboard which will bring children's social care data together in one place",
     "theme": "infrastructure",
     "status": "in-delivery",
@@ -2869,7 +2869,7 @@ export const COMMITMENTS: Commitment[] = [
       {
         "from": "moj",
         "to": "dfe",
-        "what": "family courts data (special guardianship, child arrangement orders) piloted for linkage with DfE data"
+        "what": "family courts data (special guardianship, child arrangement orders) piloted for linkage with the department data"
       }
     ],
     "newServices": [
@@ -2916,7 +2916,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "neet-risk-indicator-sharing",
     "docId": "post16-white-paper",
     "title": "NEET identification: 'Risk of NEET' indicator tools and reformed data sharing on young people",
-    "what": "DfE will enable local authorities, Strategic Authorities, schools and FE providers to identify, track and share data about young people more effectively, and will build new 'Risk of NEET' indicator (RONI-style) tools and guidance, explicitly using AI to enhance the approach. The December 2025 Youth Guarantee expansion attached £34m to the risk-indicator work, alongside automatic-enrolment pilots with FE providers for young people without a post-16 place; expanding Strategic Authorities' 16-19 powers is to be 'underpinned by reforms to data sharing'.",
+    "what": "The department will enable local authorities, Strategic Authorities, schools and FE providers to identify, track and share data about young people more effectively, and will build new 'Risk of NEET' indicator (RONI-style) tools and guidance, explicitly using AI to enhance the approach. The December 2025 Youth Guarantee expansion attached £34m to the risk-indicator work, alongside automatic-enrolment pilots with FE providers for young people without a post-16 place; expanding Strategic Authorities' 16-19 powers is to be 'underpinned by reforms to data sharing'.",
     "quote": "We will enable local authorities, Strategic Authorities, schools and further education providers to identify, track and share data about young people more effectively.",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -2955,7 +2955,7 @@ export const COMMITMENTS: Commitment[] = [
       "FE providers",
       "DWP"
     ],
-    "strategyImplication": "Creates a cross-tier young-person tracking layer (school to post-16) that any DfE data strategy must treat as a core data-sharing product, with AI/algorithmic-risk-scoring governance implications.",
+    "strategyImplication": "Creates a cross-tier young-person tracking layer (school to post-16) that any the department data strategy must treat as a core data-sharing product, with AI/algorithmic-risk-scoring governance implications.",
     "eli5": "Schools, colleges and councils will share information - helped by computer predictions - to spot teenagers likely to end up with no job or course, and step in early.",
     "capabilityIds": [
       "sharing",
@@ -3138,7 +3138,7 @@ export const COMMITMENTS: Commitment[] = [
       "HESA/Jisc",
       "devolved administrations"
     ],
-    "strategyImplication": "LEO is DfE's proof that cross-department person-level linkage works at scale and is positioned as the backbone outcomes asset; the strategy must fund its refresh cadence, cross-departmental legal gateways and researcher access model.",
+    "strategyImplication": "LEO is the department's proof that cross-department person-level linkage works at scale and is positioned as the backbone outcomes asset; the strategy must fund its refresh cadence, cross-departmental legal gateways and researcher access model.",
     "eli5": "The government connects school records with later tax and benefits records - with names removed for researchers - to learn which courses actually lead to good jobs.",
     "capabilityIds": [
       "platform",
@@ -3307,7 +3307,7 @@ export const COMMITMENTS: Commitment[] = [
       "Industrial Strategy Advisory Council",
       "Migration Advisory Committee"
     ],
-    "strategyImplication": "Establishes a recurring national skills-intelligence product that DfE data strategy must feed (ILR, apprenticeships, LEO) and consume (funding prioritisation, qualification approval) — and commits DfE's agency to production AI on third-party labour-market data, with provenance, licensing and assurance obligations.",
+    "strategyImplication": "Establishes a recurring national skills-intelligence product that the department data strategy must feed (ILR, apprenticeships, LEO) and consume (funding prioritisation, qualification approval) — and commits the department's agency to production AI on third-party labour-market data, with provenance, licensing and assurance obligations.",
     "eli5": "A government skills agency studies job adverts and industry data - with computer help - to predict which skills the country will need, and shares the answers with everyone planning courses.",
     "capabilityIds": [
       "value"
@@ -3388,7 +3388,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "youth-guarantee-data-flows",
     "docId": "get-britain-working",
     "title": "Youth Guarantee (18-21): cross-boundary data to identify and track young people",
-    "what": "The Youth Guarantee commits that all 18-21s in England can access education, training or help into work, delivered through eight £45m trailblazers led by Strategic Authorities. It explicitly rests on better local data: integrating DWP's Youth Offer data with DfE's September Guarantee data, and trailblazers building data sharing agreements to track young people into, through and out of the guarantee. The £820m December 2025 expansion added the Jobs Guarantee — funded six-month placements for young people on Universal Credit 18+ months, live in 6 areas from spring 2026 and 25 areas from autumn 2026, with DWP referral data flowing to delivery partners and outcome reporting back.",
+    "what": "The Youth Guarantee commits that all 18-21s in England can access education, training or help into work, delivered through eight £45m trailblazers led by Strategic Authorities. It explicitly rests on better local data: integrating DWP's Youth Offer data with the department's September Guarantee data, and trailblazers building data sharing agreements to track young people into, through and out of the guarantee. The £820m December 2025 expansion added the Jobs Guarantee — funded six-month placements for young people on Universal Credit 18+ months, live in 6 areas from spring 2026 and 25 areas from autumn 2026, with DWP referral data flowing to delivery partners and outcome reporting back.",
     "quote": "The government wants local areas to have improved data to understand local population needs",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -3425,7 +3425,7 @@ export const COMMITMENTS: Commitment[] = [
       "colleges and training providers",
       "employers"
     ],
-    "strategyImplication": "The clearest live test of DWP-DfE-local person-level data sharing for 18-21s — lessons here (legal gateways, matching quality) will shape any national participation data service; joining placement outcomes to education histories via LEO is the obvious evaluation ask.",
+    "strategyImplication": "The clearest live test of DWP-department-local person-level data sharing for 18-21s — lessons here (legal gateways, matching quality) will shape any national participation data service; joining placement outcomes to education histories via LEO is the obvious evaluation ask.",
     "eli5": "Job centres, councils and colleges are pooling what they know about 18 to 21 year olds so every young person gets offered training or work, and nobody gets lost between systems.",
     "capabilityIds": [
       "sharing",
@@ -3455,7 +3455,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "jobs-careers-service-digital",
     "docId": "get-britain-working",
     "title": "New jobs and careers service: Jobcentre Plus + National Careers Service merger with an AI-enabled digital offer",
-    "what": "Get Britain Working committed to merge Jobcentre Plus and the National Careers Service in England into a single jobs and careers service ('digital, universal and fully inclusive'), starting with a £55m pathfinder, and to test a radically improved digital offer using the latest technologies and AI for jobs and skills information. This moves careers data (a DfE-sponsored service) into a DWP-led digital platform. NCS contracts transferred DfE→DWP in April 2026; the merged service launches 1 October 2026 with real-time data access between work coaches and careers advisers (replacing the manual January-2025 data-sharing agreement), and the platform will generate real-time salary, skills and vacancy-location intelligence.",
+    "what": "Get Britain Working committed to merge Jobcentre Plus and the National Careers Service in England into a single jobs and careers service ('digital, universal and fully inclusive'), starting with a £55m pathfinder, and to test a radically improved digital offer using the latest technologies and AI for jobs and skills information. This moves careers data (a department-sponsored service) into a DWP-led digital platform. NCS contracts transferred the department→DWP in April 2026; the merged service launches 1 October 2026 with real-time data access between work coaches and careers advisers (replacing the manual January-2025 data-sharing agreement), and the platform will generate real-time salary, skills and vacancy-location intelligence.",
     "quote": "test, trial and develop a radically improved digital offer, using the latest technologies and AI to provide up to date information on jobs, skills",
     "theme": "new-service",
     "status": "in-delivery",
@@ -3480,10 +3480,10 @@ export const COMMITMENTS: Commitment[] = [
     "standards": [],
     "partners": [
       "DWP",
-      "DfE",
+      "The department",
       "Skills England (labour market intelligence)"
     ],
-    "strategyImplication": "DfE loses direct control of a citizen-facing careers data channel but must supply it (course outcomes, occupational maps) — interface contracts and shared standards with DWP become strategic; DfE should secure durable reciprocal access to the new real-time skills and salary intelligence before the October 2026 cutover.",
+    "strategyImplication": "The department loses direct control of a citizen-facing careers data channel but must supply it (course outcomes, occupational maps) — interface contracts and shared standards with DWP become strategic; the department should secure durable reciprocal access to the new real-time skills and salary intelligence before the October 2026 cutover.",
     "eli5": "The job centre and the careers advice service are becoming one modern service, with a smart website that helps people find jobs and the right training.",
     "capabilityIds": [
       "platform",
@@ -3627,7 +3627,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "he-franchising-oversight",
     "docId": "franchise-arrangements-guidance",
     "title": "HE franchising oversight: mandatory OfS registration (300+ students) and Condition E10 transparency",
-    "what": "Following NAO/PAC loan-fraud findings, franchised providers teaching 300+ students on designated courses must register with OfS as a condition of their students' access to public student finance from AY 2028/29 (applications due 1 July 2026), with thresholds determined by DfE using OfS 'subcontractual partnership size and shape' data. Complementing this, OfS Condition E10 (in force 31 March 2026) requires lead providers with 100+ subcontracted students to maintain a Subcontracting Information Source and disclose per-partnership average tuition-fee retention percentages in audited accounts.",
+    "what": "Following NAO/PAC loan-fraud findings, franchised providers teaching 300+ students on designated courses must register with OfS as a condition of their students' access to public student finance from AY 2028/29 (applications due 1 July 2026), with thresholds determined by the department using OfS 'subcontractual partnership size and shape' data. Complementing this, OfS Condition E10 (in force 31 March 2026) requires lead providers with 100+ subcontracted students to maintain a Subcontracting Information Source and disclose per-partnership average tuition-fee retention percentages in audited accounts.",
     "quote": "higher education providers delivering courses through franchise arrangements will be required to be registered with OfS where they have 300 or more franchised students",
     "theme": "register",
     "status": "in-delivery",
@@ -3667,7 +3667,7 @@ export const COMMITMENTS: Commitment[] = [
       "franchised delivery partners",
       "auditors"
     ],
-    "strategyImplication": "Closes the loan-fraud data blindspot by pulling most students at unregistered franchisees onto the OfS register and creating a public dataset on franchising money flows — register data becomes the gatekeeper for public funding, usable by DfE for risk analytics alongside SLC loan data.",
+    "strategyImplication": "Closes the loan-fraud data blindspot by pulling most students at unregistered franchisees onto the OfS register and creating a public dataset on franchising money flows — register data becomes the gatekeeper for public funding, usable by the department for risk analytics alongside SLC loan data.",
     "eli5": "Colleges that teach university courses on another university's behalf must now sign the official register and show where the tuition fee money goes, to stop fraud.",
     "capabilityIds": [
       "platform",
@@ -3724,7 +3724,7 @@ export const COMMITMENTS: Commitment[] = [
       "AQA, Pearson, OCR, WJEC/Eduqas",
       "schools and colleges"
     ],
-    "strategyImplication": "Creates a new high-stakes digital assessment data estate (item-level response data, school device/infrastructure readiness data) that DfE and Ofqual must standardise before scale-up; school connectivity and device data become delivery-critical.",
+    "strategyImplication": "Creates a new high-stakes digital assessment data estate (item-level response data, school device/infrastructure readiness data) that the department and Ofqual must standardise before scale-up; school connectivity and device data become delivery-critical.",
     "eli5": "Some GCSE and A level exams will eventually be taken on computers instead of paper, and the rules are being written now to make sure that is fair and secure.",
     "capabilityIds": [
       "platform",
@@ -3748,7 +3748,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "year8-reading-test-ks3-data",
     "docId": "car-government-response",
     "title": "Statutory Year 8 reading test plus a strengthened KS3 data layer (incl. KS2 question-level insights)",
-    "what": "A new statutory national test of reading fluency and comprehension for all Year 8 pupils, planned from the 2028-29 academic year. School-level results will not be published (phonics-check model), but schools receive their pupils' results with national/regional/LA benchmarks, and data is available to government and Ofsted. Schools will also be expected to assess Year 8 writing and maths using approved commercial tools, and DfE will test how schools can extract more value from KS2 test question-level data to strengthen KS2-to-KS3 transition — all part of the KS3 Alliance data programme.",
+    "what": "A new statutory national test of reading fluency and comprehension for all Year 8 pupils, planned from the 2028-29 academic year. School-level results will not be published (phonics-check model), but schools receive their pupils' results with national/regional/LA benchmarks, and data is available to government and Ofsted. Schools will also be expected to assess Year 8 writing and maths using approved commercial tools, and the department will test how schools can extract more value from KS2 test question-level data to strengthen KS2-to-KS3 transition — all part of the KS3 Alliance data programme.",
     "quote": "introduce a new statutory reading test for all children to be taken in Year 8, designed to check both fluency and comprehension",
     "theme": "analytics",
     "status": "announced",
@@ -3844,7 +3844,7 @@ export const COMMITMENTS: Commitment[] = [
       "Oak National Academy",
       "edtech and AI tool developers"
     ],
-    "strategyImplication": "Curriculum becomes a canonical open data asset — the reference dataset that AI lesson tools, the content store and assessment products will key against; DfE must own the schema, versioning and identifiers.",
+    "strategyImplication": "Curriculum becomes a canonical open data asset — the reference dataset that AI lesson tools, the content store and assessment products will key against; the department must own the schema, versioning and identifiers.",
     "eli5": "The national curriculum will be published in a format computers can read directly, so teaching apps and lesson tools always know exactly what children should learn.",
     "capabilityIds": [
       "interoperability"
@@ -3901,7 +3901,7 @@ export const COMMITMENTS: Commitment[] = [
       "Ofsted",
       "FFT/analytics sector consuming performance data"
     ],
-    "strategyImplication": "Every downstream consumer of KS4 performance data (compare-school-performance, MAT dashboards, researchers, RISE targeting) must re-base time series when the measure changes in 2029, and DfE must manage series discontinuation and archive continuity for the 2026 EBacc removal — a major versioning problem for DfE statistics.",
+    "strategyImplication": "Every downstream consumer of KS4 performance data (compare-school-performance, MAT dashboards, researchers, RISE targeting) must re-base time series when the measure changes in 2029, and the department must manage series discontinuation and archive continuity for the 2026 EBacc removal — a major versioning problem for the department statistics.",
     "eli5": "The main scoreboard used to judge secondary schools is being redesigned - one old measure disappears this year and a fairer new one arrives for exams taken in 2029.",
     "capabilityIds": [
       "quality",
@@ -3926,8 +3926,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "rba-digital-assessment",
     "docId": "rba-admin-guidance",
-    "title": "Fully digital reception baseline assessment via DfE assessment services",
-    "what": "From September 2025 the statutory reception baseline assessment is fully digital: schools administer it on a minimum of two devices using two DfE services ('Assessment service: start an assessment' and 'manage your school's assessments') accessed through DfE Sign-in, replacing the Baseline ePortal. Pupil responses are captured digitally and held by DfE to form the baseline for school-level KS2 progress measures; schools receive narrative statements rather than scores.",
+    "title": "Fully digital reception baseline assessment via departmental assessment services",
+    "what": "From September 2025 the statutory reception baseline assessment is fully digital: schools administer it on a minimum of two devices using two the department services ('Assessment service: start an assessment' and 'manage your school's assessments') accessed through the department’s sign-in service, replacing the Baseline ePortal. Pupil responses are captured digitally and held by the department to form the baseline for school-level KS2 progress measures; schools receive narrative statements rather than scores.",
     "quote": "statutory for all reception pupils registered at state-funded maintained schools",
     "theme": "new-service",
     "status": "statutory-duty",
@@ -3948,7 +3948,7 @@ export const COMMITMENTS: Commitment[] = [
     ],
     "newServices": [
       "Assessment service: start an assessment",
-      "Assessment service: manage your school's assessments (via DfE Sign-in)"
+      "Assessment service: manage your school's assessments (via the department’s sign-in service)"
     ],
     "identifiers": [
       "UPN-linked pupil records from age 4-5 forming the progress baseline cohort"
@@ -3959,9 +3959,9 @@ export const COMMITMENTS: Commitment[] = [
     "partners": [
       "Standards and Testing Agency",
       "schools",
-      "DfE Sign-in platform"
+      "The department’s sign-in service platform"
     ],
-    "strategyImplication": "First fully digital statutory assessment at national scale — a working precedent (device requirements, DfE Sign-in identity, central response capture) for later digitisation of other statutory tests and on-screen exams.",
+    "strategyImplication": "First fully digital statutory assessment at national scale — a working precedent (device requirements, the department’s sign-in service identity, central response capture) for later digitisation of other statutory tests and on-screen exams.",
     "eli5": "When children start school aged four, their first little check of words and numbers now happens on a tablet or computer, and the results go straight to the government system.",
     "capabilityIds": [
       "platform",
@@ -4041,7 +4041,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "education-content-store",
     "docId": "content-store-announcement",
     "title": "Education content store: curated government data to train education AI tools",
-    "what": "DfE and DSIT committed £3m (August 2024) to a content store pooling curriculum guidance, teaching standards, lesson plans and anonymised pupil assessments as training/grounding data for education AI tools, plus £1m Innovate UK tool prizes. DfE published evidence that grounding models in this data raised accuracy from 67% to 92%. The store is live at aicontentstore.education.gov.uk with 16 edtech providers building on it, is cited by the AI Action Plan One Year On and NDL updates as exemplar national data infrastructure, and underpins the AI tutoring programme.",
+    "what": "The department and DSIT committed £3m (August 2024) to a content store pooling curriculum guidance, teaching standards, lesson plans and anonymised pupil assessments as training/grounding data for education AI tools, plus £1m Innovate UK tool prizes. The department published evidence that grounding models in this data raised accuracy from 67% to 92%. The store is live at aicontentstore.education.gov.uk with 16 edtech providers building on it, is cited by the AI Action Plan One Year On and NDL updates as exemplar national data infrastructure, and underpins the AI tutoring programme.",
     "theme": "ai",
     "status": "in-delivery",
     "timeframe": "Announced Aug 2024; prototype tested June 2025; operational and feeding AI tutoring co-creation from 2026",
@@ -4075,7 +4075,7 @@ export const COMMITMENTS: Commitment[] = [
       "ImpactEd",
       "16 edtech providers"
     ],
-    "strategyImplication": "Positions DfE as curator of a sovereign education training-data asset and the pattern-setter for supplying government data to model builders; anonymisation standards, licensing and pupil-work provenance become core data-governance obligations, with civil-society scrutiny already active.",
+    "strategyImplication": "Positions the department as curator of a sovereign education training-data asset and the pattern-setter for supplying government data to model builders; anonymisation standards, licensing and pupil-work provenance become core data-governance obligations, with civil-society scrutiny already active.",
     "eli5": "The government built a library of lesson plans, curriculum documents and anonymous pupil work that companies can use to teach their education computer programs to be accurate.",
     "capabilityIds": [
       "value",
@@ -4107,7 +4107,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "genai-safety-expectations",
     "docId": "genai-product-safety",
     "title": "Generative AI product safety expectations for education suppliers",
-    "what": "DfE published (22 January 2025) outcome-focused expectations that generative AI products used in schools and colleges should meet: effective filtering of harmful content, robust activity logging, security against misuse, privacy/data protection and administrator permission controls. Updated 19 January 2026 with additional standards on cognitive development, emotional/social development, mental health and manipulation; government is also developing 'sovereign education benchmarks' to evaluate UK education AI tools. Referenced by KCSIE 2025 and procurement guidance.",
+    "what": "The department published (22 January 2025) outcome-focused expectations that generative AI products used in schools and colleges should meet: effective filtering of harmful content, robust activity logging, security against misuse, privacy/data protection and administrator permission controls. Updated 19 January 2026 with additional standards on cognitive development, emotional/social development, mental health and manipulation; government is also developing 'sovereign education benchmarks' to evaluate UK education AI tools. Referenced by KCSIE 2025 and procurement guidance.",
     "quote": "the capabilities and features that generative AI products and systems should meet to be considered safe",
     "theme": "safeguarding",
     "status": "in-delivery",
@@ -4135,7 +4135,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT",
       "safety-tech providers"
     ],
-    "strategyImplication": "A de facto assurance standard for AI products handling pupil data — the natural hook for any future DfE AI product register or certification scheme, the compliance baseline for AI tutoring procurement, and the lever shaping what pupil-interaction data edtech must capture and retain.",
+    "strategyImplication": "A de facto assurance standard for AI products handling pupil data — the natural hook for any future the department AI product register or certification scheme, the compliance baseline for AI tutoring procurement, and the lever shaping what pupil-interaction data edtech must capture and retain.",
     "eli5": "The government wrote safety rules for artificial intelligence programs used in classrooms - they must block harmful content, keep records of use and protect children's information.",
     "capabilityIds": [
       "ethics",
@@ -4162,7 +4162,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ai-tutoring-tools-benchmarks",
     "docId": "ai-tutoring-announcement",
     "title": "AI tutoring tools for disadvantaged pupils, with safety and quality benchmarks",
-    "what": "Announced 26 January 2026: DfE will co-create (with teachers, AI labs and eight 'Pioneer' companies), trial from autumn 2026, and make available to schools by end of 2027 AI tutoring tools offering one-to-one support in English, maths, science and MFL for up to 450,000 FSM pupils in years 9-11. The tools must align to the national curriculum, be robustly safety-tested, and government committed to robust benchmarks so parents and teachers can judge pupil-facing AI tools; a supplier invitation followed in April 2026.",
+    "what": "Announced 26 January 2026: The department will co-create (with teachers, AI labs and eight 'Pioneer' companies), trial from autumn 2026, and make available to schools by end of 2027 AI tutoring tools offering one-to-one support in English, maths, science and MFL for up to 450,000 FSM pupils in years 9-11. The tools must align to the national curriculum, be robustly safety-tested, and government committed to robust benchmarks so parents and teachers can judge pupil-facing AI tools; a supplier invitation followed in April 2026.",
     "quote": "Robust benchmarks will also be developed so parents and teachers can be confident that AI tools for use by pupils are high quality",
     "theme": "ai",
     "status": "in-delivery",
@@ -4197,7 +4197,7 @@ export const COMMITMENTS: Commitment[] = [
       "teachers/schools",
       "DSIT"
     ],
-    "strategyImplication": "The first DfE-run service processing pupil-level learning interaction data through commercial AI at national scale — demands DPIAs, FSM-based targeting governance, evaluation data pipelines and benchmark publication.",
+    "strategyImplication": "The first department-run service processing pupil-level learning interaction data through commercial AI at national scale — demands DPIAs, FSM-based targeting governance, evaluation data pipelines and benchmark publication.",
     "eli5": "Thousands of teenagers from lower-income families will get a carefully tested computer tutor for one-to-one help with subjects like maths and English.",
     "capabilityIds": [
       "value",
@@ -4225,7 +4225,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "oak-open-content-api",
     "docId": "car-government-response",
     "title": "Oak National Academy: curriculum-aligned open content, Aila and open API",
-    "what": "Government committed that Oak (a DfE arm's-length body) will provide fully adaptable digital curriculum materials for ages 5-16 updated to the refreshed curriculum, and continue developing AI tools including the Aila lesson assistant. Oak exposes its quality-assured, curriculum-aligned content (lessons, videos, quizzes, transcripts) as open educational resources through a free API for edtech and AI developers; an EEF Teacher Choices trial of Aila reports in autumn 2026.",
+    "what": "Government committed that Oak (an education-department arm's-length body) will provide fully adaptable digital curriculum materials for ages 5-16 updated to the refreshed curriculum, and continue developing AI tools including the Aila lesson assistant. Oak exposes its quality-assured, curriculum-aligned content (lessons, videos, quizzes, transcripts) as open educational resources through a free API for edtech and AI developers; an EEF Teacher Choices trial of Aila reports in autumn 2026.",
     "quote": "Oak will continue to develop a range of AI tools and curriculum materials",
     "theme": "ai",
     "status": "in-delivery",
@@ -4286,7 +4286,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "duaa-dvs-gateway",
     "docId": "data-use-access-act-2025",
     "title": "Operate within the statutory digital verification services (DVS) framework and its information gateway",
-    "what": "DUAA Part 2 (in force from 1 December 2025) puts the UK digital identity and attributes trust framework and a DVS provider register on a statutory footing, and creates an information gateway allowing public authorities to disclose personal data to registered DVS providers for identity and eligibility verification. As a major holder of citizen records (qualifications, teacher status, entitlements), DfE must decide how it will serve verification queries through this gateway and ensure disclosures follow the framework.",
+    "what": "DUAA Part 2 (in force from 1 December 2025) puts the UK digital identity and attributes trust framework and a DVS provider register on a statutory footing, and creates an information gateway allowing public authorities to disclose personal data to registered DVS providers for identity and eligibility verification. As a major holder of citizen records (qualifications, teacher status, entitlements), the department must decide how it will serve verification queries through this gateway and ensure disclosures follow the framework.",
     "quote": "commencement of most of the measures on digital verification services in Part 2",
     "theme": "identifiers",
     "status": "statutory-duty",
@@ -4295,7 +4295,7 @@ export const COMMITMENTS: Commitment[] = [
     "dfeRole": "complier",
     "flows": [],
     "newServices": [
-      "verification query interfaces against DfE-held records"
+      "verification query interfaces against department-held records"
     ],
     "identifiers": [
       "verified identity attributes; learner and workforce records used as authoritative evidence"
@@ -4307,7 +4307,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT (Office for Digital Identities and Attributes)",
       "certified DVS providers"
     ],
-    "strategyImplication": "A DfE data strategy must designate which DfE datasets are authoritative attribute sources for digital verification, and set the governance for gateway disclosures to registered DVS providers.",
+    "strategyImplication": "A the department data strategy must designate which the department datasets are authoritative attribute sources for digital verification, and set the governance for gateway disclosures to registered DVS providers.",
     "eli5": "Private identity-checking companies can now legally ask government for confirmation of facts about you - like your qualifications - so the education department must decide how to answer safely.",
     "capabilityIds": [
       "interoperability",
@@ -4330,7 +4330,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "duaa-recognised-legitimate-interests",
     "docId": "data-use-access-act-2025",
     "title": "Comply with (and exploit) the DUAA reforms to UK GDPR: recognised legitimate interests, research, ADM",
-    "what": "The majority of DUAA Part 5 data-protection changes commenced on 5 February 2026: a new 'recognised legitimate interests' lawful ground (covering safeguarding, crime prevention, emergencies), a clarified scientific-research regime with broad consent, relaxed purpose-limitation for compatible reuse, a more permissive automated-decision-making framework with safeguards, and reform of the ICO into an Information Commission. DfE must update its lawful-basis mapping, DPIAs, privacy notices and ADM controls, and can rely on the new grounds for safeguarding data shares and research reuse of education data.",
+    "what": "The majority of DUAA Part 5 data-protection changes commenced on 5 February 2026: a new 'recognised legitimate interests' lawful ground (covering safeguarding, crime prevention, emergencies), a clarified scientific-research regime with broad consent, relaxed purpose-limitation for compatible reuse, a more permissive automated-decision-making framework with safeguards, and reform of the ICO into an Information Commission. The department must update its lawful-basis mapping, DPIAs, privacy notices and ADM controls, and can rely on the new grounds for safeguarding data shares and research reuse of education data.",
     "quote": "the majority of the data protection and privacy provisions in Part 5",
     "theme": "data-sharing",
     "status": "statutory-duty",
@@ -4364,7 +4364,7 @@ export const COMMITMENTS: Commitment[] = [
       "Information Commissioner's Office / Information Commission",
       "DSIT"
     ],
-    "strategyImplication": "The strategy must re-baseline DfE's data-protection posture on the amended UK GDPR — refreshed lawful bases, ADM transparency for algorithmic decisions, and an explicit position on using the new research and safeguarding grounds.",
+    "strategyImplication": "The strategy must re-baseline the department's data-protection posture on the amended UK GDPR — refreshed lawful bases, ADM transparency for algorithmic decisions, and an explicit position on using the new research and safeguarding grounds.",
     "eli5": "The data protection law changed, making it clearly legal to share information to protect children or for research - so the education department must update its rulebooks and can share more confidently.",
     "capabilityIds": [
       "sharing",
@@ -4390,8 +4390,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "blueprint-join-up-once-only",
     "docId": "blueprint-modern-digital-government",
-    "title": "Join up DfE services with the rest of the public sector, including a 'once only' rule for citizen data",
-    "what": "The blueprint's first plank commits the whole public sector to joined-up, proactive services built around life events, including a 'once only' expectation that information given to government is reused across services with safeguards. For DfE this means its citizen- and provider-facing services (admissions data, teacher services, funding services) must be designed for cross-department reuse rather than departmental silos, responding to the State of Digital Government Review's finding of siloed data.",
+    "title": "Join up the department services with the rest of the public sector, including a 'once only' rule for citizen data",
+    "what": "The blueprint's first plank commits the whole public sector to joined-up, proactive services built around life events, including a 'once only' expectation that information given to government is reused across services with safeguards. For the department this means its citizen- and provider-facing services (admissions data, teacher services, funding services) must be designed for cross-department reuse rather than departmental silos, responding to the State of Digital Government Review's finding of siloed data.",
     "quote": "Join up public sector services",
     "theme": "new-service",
     "status": "in-delivery",
@@ -4407,11 +4407,11 @@ export const COMMITMENTS: Commitment[] = [
       {
         "from": "dfe",
         "to": "dsit",
-        "what": "DfE service content and data surfaced through GOV.UK App and Chat"
+        "what": "The department service content and data surfaced through GOV.UK App and Chat"
       }
     ],
     "newServices": [
-      "GOV.UK App and GOV.UK Chat surfaces for DfE content and services"
+      "GOV.UK App and GOV.UK Chat surfaces for the department content and services"
     ],
     "identifiers": [
       "GOV.UK One Login identity as the common citizen key"
@@ -4424,7 +4424,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT",
       "other departments sharing life-event journeys"
     ],
-    "strategyImplication": "Cross-government reuse becomes a design requirement — data models, consent and metadata that let DfE data be safely consumed by other services, and vice versa.",
+    "strategyImplication": "Cross-government reuse becomes a design requirement — data models, consent and metadata that let the department data be safely consumed by other services, and vice versa.",
     "eli5": "You should only have to tell the government something once - different departments will then reuse it carefully instead of asking you again and again.",
     "capabilityIds": [
       "platform",
@@ -4450,7 +4450,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "wallet-digital-credentials",
     "docId": "blueprint-modern-digital-government",
     "title": "Issue digital verified credentials (GOV.UK Wallet) alongside every paper credential by end of 2027",
-    "what": "The blueprint requires services issuing paper or card credentials or proofs of entitlement to also issue a digital verified credential in the GOV.UK Wallet by the end of 2027 (Wallet live with the Veteran Card since October 2025; driving licence in testing). DfE issues credential-like artefacts — QTS/induction certificates, exam certificates via awarding bodies, childcare entitlement codes — and work is already underway to link the Education Record to the Wallet so exam results sit alongside other government credentials.",
+    "what": "The blueprint requires services issuing paper or card credentials or proofs of entitlement to also issue a digital verified credential in the GOV.UK Wallet by the end of 2027 (Wallet live with the Veteran Card since October 2025; driving licence in testing). The department issues credential-like artefacts — QTS/induction certificates, exam certificates via awarding bodies, childcare entitlement codes — and work is already underway to link the Education Record to the Wallet so exam results sit alongside other government credentials.",
     "quote": "Require services to issue a digital verified credential alongside any paper/card based credential or proof of entitlement eligibility by the end of 2027",
     "theme": "identifiers",
     "status": "in-delivery",
@@ -4465,7 +4465,7 @@ export const COMMITMENTS: Commitment[] = [
       }
     ],
     "newServices": [
-      "DfE credential issuance into GOV.UK Wallet",
+      "The department credential issuance into GOV.UK Wallet",
       "education credentials (Education Record) in GOV.UK Wallet"
     ],
     "identifiers": [
@@ -4482,7 +4482,7 @@ export const COMMITMENTS: Commitment[] = [
       "awarding organisations",
       "DBS (Home Office)"
     ],
-    "strategyImplication": "The strategy needs an inventory of DfE-issued credentials/entitlements and a pipeline to make each issuable as a Wallet credential by end-2027, with the underlying registers treated as authoritative sources — qualifications become portable, verifiable credentials keyed to One Login identity.",
+    "strategyImplication": "The strategy needs an inventory of department-issued credentials/entitlements and a pipeline to make each issuable as a Wallet credential by end-2027, with the underlying registers treated as authoritative sources — qualifications become portable, verifiable credentials keyed to One Login identity.",
     "eli5": "Certificates the government gives you - like exam results or teaching qualifications - will also live in an official phone wallet app so you can prove them instantly.",
     "capabilityIds": [
       "interoperability",
@@ -4508,8 +4508,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "one-login-adoption",
     "docId": "roadmap-modern-digital-government-2026",
-    "title": "Adopt GOV.UK One Login as the single sign-in for all DfE citizen-facing services",
-    "what": "GDS has stated that by the end of 2027 One Login will become the only way to access central government services, with Government Gateway phased out (13m+ users across 120+ services as of January 2026; reported delivery pressure suggests some slippage to 2028). DfE committed from 2023-24 to replace DfE Sign-in and DfE Identity with One Login for citizen-facing services, starting with Teaching Regulation Agency services; organisation-facing DfE Sign-in continues in parallel for school/LA users.",
+    "title": "Adopt GOV.UK One Login as the single sign-in for all the department citizen-facing services",
+    "what": "GDS has stated that by the end of 2027 One Login will become the only way to access central government services, with Government Gateway phased out (13m+ users across 120+ services as of January 2026; reported delivery pressure suggests some slippage to 2028). The department committed from 2023-24 to replace the department’s sign-in service and the department Identity with One Login for citizen-facing services, starting with Teaching Regulation Agency services; organisation-facing the department’s sign-in service continues in parallel for school/LA users.",
     "quote": "GOV.UK One Login has been used by over 13 million people to access more than 120 government services",
     "theme": "identifiers",
     "status": "in-delivery",
@@ -4520,11 +4520,11 @@ export const COMMITMENTS: Commitment[] = [
       {
         "from": "dsit",
         "to": "dfe",
-        "what": "verified citizen identity assertions replacing service-specific accounts and DfE-held credentials"
+        "what": "verified citizen identity assertions replacing service-specific accounts and department-held credentials"
       }
     ],
     "newServices": [
-      "One Login-authenticated DfE citizen services (TRA services first)"
+      "One Login-authenticated the department citizen services (TRA services first)"
     ],
     "identifiers": [
       "One Login subject identifier as the common citizen identifier",
@@ -4539,7 +4539,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT",
       "Teaching Regulation Agency"
     ],
-    "strategyImplication": "The strategy must commit to a One Login migration path for every DfE citizen-facing service and plan for identity-matching between One Login identities and DfE's existing learner/workforce identifiers, while keeping organisational identity (DfE Sign-in) coherent alongside.",
+    "strategyImplication": "The strategy must commit to a One Login migration path for every the department citizen-facing service and plan for identity-matching between One Login identities and the department's existing learner/workforce identifiers, while keeping organisational identity (The department’s sign-in service) coherent alongside.",
     "eli5": "Everyone will use one single government username to sign in to all education services, instead of a different account for each website.",
     "capabilityIds": [
       "interoperability",
@@ -4552,7 +4552,7 @@ export const COMMITMENTS: Commitment[] = [
       "GOV.UK one login",
       "one login migration",
       "single sign-in for government",
-      "DfE sign-in replacement",
+      "The department sign-in replacement",
       "government gateway phase-out"
     ],
     "confidence": "medium",
@@ -4567,12 +4567,12 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "open-apis-by-default",
     "docId": "blueprint-modern-digital-government",
-    "title": "Open APIs by default: cross-government mandate plus DfE's single API management platform",
-    "what": "The blueprint mandates publication of standard APIs and events by public sector organisations, with an expectation that every new central-government service has an open API; common cross-government API standards are in development. DfE already runs public APIs (EES, Teaching Vacancies, GIAS) and its own technical standard (August 2025, annual conformance) mandates that all DfE APIs be accessed and managed within Find and Use an API — a single catalogue with subscription keys and sandbox/production environments.",
+    "title": "Open APIs by default: cross-government mandate plus the department's single API management platform",
+    "what": "The blueprint mandates publication of standard APIs and events by public sector organisations, with an expectation that every new central-government service has an open API; common cross-government API standards are in development. The department already runs public APIs (EES, Teaching Vacancies, GIAS) and its own technical standard (August 2025, annual conformance) mandates that all the department APIs be accessed and managed within Find and Use an API — a single catalogue with subscription keys and sandbox/production environments.",
     "quote": "Mandate the publication of a standard set of APIs and events by public sector organisations",
     "theme": "standards",
     "status": "in-delivery",
-    "timeframe": "Expectation applies to every new central-government service; DfE API Management standard effective August 2025; common standards development through 2026",
+    "timeframe": "Expectation applies to every new central-government service; the department API Management standard effective August 2025; common standards development through 2026",
     "timeframeDate": "2025-08",
     "dfeRole": "deliverer",
     "flows": [
@@ -4588,7 +4588,7 @@ export const COMMITMENTS: Commitment[] = [
       }
     ],
     "newServices": [
-      "open APIs and event streams on new DfE services by default",
+      "open APIs and event streams on new the department services by default",
       "Find and Use an API developer hub"
     ],
     "identifiers": [
@@ -4596,14 +4596,14 @@ export const COMMITMENTS: Commitment[] = [
     ],
     "standards": [
       "cross-government API and event standards",
-      "DfE API Management standard (annual conformance)"
+      "The department API Management standard (annual conformance)"
     ],
     "partners": [
       "GDS",
       "DSIT",
       "edtech and MIS suppliers as API consumers"
     ],
-    "strategyImplication": "DfE should adopt 'API by default' for its data assets with a published catalogue and conformance to emerging cross-government standards — the API front door is the precondition for an external data-access strategy and supplier integration at scale.",
+    "strategyImplication": "The department should adopt 'API by default' for its data assets with a published catalogue and conformance to emerging cross-government standards — the API front door is the precondition for an external data-access strategy and supplier integration at scale.",
     "eli5": "Government computer systems will offer standard plugs so other systems can connect automatically, and the education department is putting all its plugs in one well-labelled cabinet.",
     "capabilityIds": [
       "interoperability",
@@ -4631,7 +4631,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "blueprint-outcome-metrics",
     "docId": "blueprint-modern-digital-government",
     "title": "Publish annual metrics on service performance, value for money, resilience, digital inclusion and AI adoption",
-    "what": "The blueprint commits government to require departments to publish outcome metrics at least annually, covering service performance, value for money, resilience, digital inclusion and AI adoption; the January 2026 roadmap adds published product roadmaps for major products and consistent service-performance measurement. DfE will need instrumented services and a data pipeline to produce and publish these metrics.",
+    "what": "The blueprint commits government to require departments to publish outcome metrics at least annually, covering service performance, value for money, resilience, digital inclusion and AI adoption; the January 2026 roadmap adds published product roadmaps for major products and consistent service-performance measurement. The department will need instrumented services and a data pipeline to produce and publish these metrics.",
     "quote": "Require departments to publish metrics at least annually on the outcomes they achieve",
     "theme": "accountability",
     "status": "announced",
@@ -4651,7 +4651,7 @@ export const COMMITMENTS: Commitment[] = [
       }
     ],
     "newServices": [
-      "published DfE product roadmaps and performance dashboards"
+      "published the department product roadmaps and performance dashboards"
     ],
     "identifiers": [],
     "standards": [
@@ -4661,7 +4661,7 @@ export const COMMITMENTS: Commitment[] = [
       "GDS",
       "DSIT"
     ],
-    "strategyImplication": "The strategy needs a measurement layer: consistent service KPIs, AI-adoption tracking and publication pipelines so DfE can meet annual transparency reporting without bespoke effort each year.",
+    "strategyImplication": "The strategy needs a measurement layer: consistent service KPIs, AI-adoption tracking and publication pipelines so the department can meet annual transparency reporting without bespoke effort each year.",
     "eli5": "Every year the department must publish honest numbers on how well its digital services work, what they cost and how much they use artificial intelligence.",
     "capabilityIds": [
       "quality",
@@ -4683,7 +4683,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ai-governance-compliance",
     "docId": "ai-playbook-uk-government",
     "title": "Operate AI under the government assurance regime: AI Playbook principles plus mandatory ATRS records",
-    "what": "The AI Playbook (February 2025) gives departments 10 principles for lawful, secure, human-controlled AI use across the full lifecycle, combined with the Action Plan's Scan>Pilot>Scale adoption model. Separately, since the December 2024 mandatory scope policy, all ministerial departments must publish Algorithmic Transparency Recording Standard records for algorithmic tools that significantly influence decisions or interact with the public (125+ records published, backlog cleared by end 2025). DfE must run its AI experimentation (tutoring tools, ABIEs, casework assistants) within this assurance framework.",
+    "what": "The AI Playbook (February 2025) gives departments 10 principles for lawful, secure, human-controlled AI use across the full lifecycle, combined with the Action Plan's Scan>Pilot>Scale adoption model. Separately, since the December 2024 mandatory scope policy, all ministerial departments must publish Algorithmic Transparency Recording Standard records for algorithmic tools that significantly influence decisions or interact with the public (125+ records published, backlog cleared by end 2025). The department must run its AI experimentation (tutoring tools, ABIEs, casework assistants) within this assurance framework.",
     "quote": "You have meaningful human control at the right stages",
     "theme": "ai",
     "status": "in-delivery",
@@ -4709,7 +4709,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT (Responsible Technology Adoption Unit / AI Opportunities Unit)",
       "Incubator for AI (i.AI)"
     ],
-    "strategyImplication": "The strategy must embed the playbook as DfE's AI operating standard — an AI use-case register, lifecycle assurance, human-in-the-loop requirements — with a gating process so any new DfE model or AI tool triggers an ATRS record before beta/production.",
+    "strategyImplication": "The strategy must embed the playbook as the department's AI operating standard — an AI use-case register, lifecycle assurance, human-in-the-loop requirements — with a gating process so any new the department model or AI tool triggers an ATRS record before beta/production.",
     "eli5": "When the government uses artificial intelligence, it must follow safety rules, keep a human in charge, and publish a public note explaining what each computer tool does.",
     "capabilityIds": [
       "ethics",
@@ -4736,8 +4736,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "ndl-ai-ready-datasets",
     "docId": "ai-opportunities-action-plan",
-    "title": "Contribute DfE data to the National Data Library and release high-impact AI-ready datasets",
-    "what": "The AI Opportunities Action Plan commits government to rapidly identify at least five high-impact public datasets for AI researchers and innovators and to publish AI-ready data guidelines (now published). The NDL (>£100m from SR25) is being built as a 'trusted gateway' to public-sector data, mobilising departmental CDOs, running kickstarter projects, and relaunching data.gov.uk with curated collections; the January 2026 update showcases the DfE Content Store as exemplar infrastructure. DfE, holding some of government's richest longitudinal data, is expected to nominate, curate and expose high-value education datasets — though the June 2026 roadmap explicitly does not mandate publication.",
+    "title": "Contribute the department data to the National Data Library and release high-impact AI-ready datasets",
+    "what": "The AI Opportunities Action Plan commits government to rapidly identify at least five high-impact public datasets for AI researchers and innovators and to publish AI-ready data guidelines (now published). The NDL (>£100m from SR25) is being built as a 'trusted gateway' to public-sector data, mobilising departmental CDOs, running kickstarter projects, and relaunching data.gov.uk with curated collections; the January 2026 update showcases the department Content Store as exemplar infrastructure. The department, holding some of government's richest longitudinal data, is expected to nominate, curate and expose high-value education datasets — though the June 2026 roadmap explicitly does not mandate publication.",
     "quote": "Rapidly identify at least 5 high-impact public datasets it will seek to make available to AI researchers and innovators",
     "theme": "infrastructure",
     "status": "in-delivery",
@@ -4771,7 +4771,7 @@ export const COMMITMENTS: Commitment[] = [
       "cross-government CDO Council",
       "UKRI/research community"
     ],
-    "strategyImplication": "The strategy needs a dataset-release pipeline — candidate high-impact datasets, AI-readiness remediation, licensing positions and privacy safeguards — and should position DfE (via the Content Store) as an NDL exemplar rather than a passive supplier.",
+    "strategyImplication": "The strategy needs a dataset-release pipeline — candidate high-impact datasets, AI-readiness remediation, licensing positions and privacy safeguards — and should position the department (via the Content Store) as an NDL exemplar rather than a passive supplier.",
     "eli5": "The government is building one big trusted catalogue of public data, and the education department is expected to polish up its best datasets and put them on the shelves.",
     "capabilityIds": [
       "platform",
@@ -4799,7 +4799,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ndl-early-years-kickstarter",
     "docId": "ndl-plan-june-2026",
     "title": "NDL Early Years Kickstarter: linking health, education and childcare data for school-readiness",
-    "what": "Launched 4-5 June 2026 with Leeds City Council, LB Hammersmith & Fulham and Liverpool City Region, this GDS/DSIT-led kickstarter — with DfE involved — explores connecting health visiting, education and childcare data so professionals see a full picture of a child's development and children arrive school-ready (32% currently start school without basic skills). The NDL added an 'Early years' spotlight data collection alongside it.",
+    "what": "Launched 4-5 June 2026 with Leeds City Council, LB Hammersmith & Fulham and Liverpool City Region, this GDS/DSIT-led kickstarter — with the department involved — explores connecting health visiting, education and childcare data so professionals see a full picture of a child's development and children arrive school-ready (32% currently start school without basic skills). The NDL added an 'Early years' spotlight data collection alongside it.",
     "quote": "Too many children are arriving at school without the skills they need",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -4840,7 +4840,7 @@ export const COMMITMENTS: Commitment[] = [
       "LB Hammersmith & Fulham",
       "Liverpool City Region Combined Authority"
     ],
-    "strategyImplication": "DfE's strategy must make early-years data linkable across health and childcare boundaries (consistent child identifiers, sharing agreements), since this kickstarter is the template for national join-up of children's data.",
+    "strategyImplication": "The department's strategy must make early-years data linkable across health and childcare boundaries (consistent child identifiers, sharing agreements), since this kickstarter is the template for national join-up of children's data.",
     "eli5": "In three test areas, health visitors, nurseries and schools are joining up their records so grown-ups helping a young child can see the whole picture and get them ready for school.",
     "capabilityIds": [
       "sharing",
@@ -4865,8 +4865,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "sr25-digital-efficiencies",
     "docId": "spending-review-2025",
-    "title": "Deliver SR25 efficiency targets substantially through digital, data and AI (DfE: £248m/yr by 2028-29)",
-    "what": "SR25 requires all departments to deliver at least 5% savings and efficiencies by 2028-29 and cut administration budgets by at least 11% in real terms, with digital transformation and AI adoption as the principal lever; £1.9bn goes to DSIT for cross-cutting digital priorities including the NDL and GOV.UK Wallet/App. DfE's published efficiency plan commits to £248m of efficiencies per year by 2028-29, using AI and digital tools, contract aggregation and insourcing digital/data/technology roles.",
+    "title": "Deliver SR25 efficiency targets substantially through digital, data and AI (The department: £248m/yr by 2028-29)",
+    "what": "SR25 requires all departments to deliver at least 5% savings and efficiencies by 2028-29 and cut administration budgets by at least 11% in real terms, with digital transformation and AI adoption as the principal lever; £1.9bn goes to DSIT for cross-cutting digital priorities including the NDL and GOV.UK Wallet/App. The department's published efficiency plan commits to £248m of efficiencies per year by 2028-29, using AI and digital tools, contract aggregation and insourcing digital/data/technology roles.",
     "quote": "All departments will deliver at least 5% savings and efficiencies by 2028-29",
     "theme": "funding",
     "status": "in-delivery",
@@ -4875,7 +4875,7 @@ export const COMMITMENTS: Commitment[] = [
     "dfeRole": "deliverer",
     "flows": [],
     "newServices": [
-      "AI and automation tools replacing manual administrative processing in DfE"
+      "AI and automation tools replacing manual administrative processing in the department"
     ],
     "identifiers": [],
     "standards": [],
@@ -4906,8 +4906,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "evaluation-registry-mandate",
     "docId": "evaluation-registry-guidance",
-    "title": "Register all DfE evaluations on the public Evaluation Registry",
-    "what": "Since the Registry's public launch in March 2025, all ministerial departments must register every planned, live and completed evaluation signed off from 1 April 2024 onwards, entering plans no later than first data collection and publishing findings by default. For DfE this covers its extensive programme evaluations (tutoring, early years, skills) and creates a public accountability dataset about DfE's own evidence base.",
+    "title": "Register all the department evaluations on the public Evaluation Registry",
+    "what": "Since the Registry's public launch in March 2025, all ministerial departments must register every planned, live and completed evaluation signed off from 1 April 2024 onwards, entering plans no later than first data collection and publishing findings by default. For the department this covers its extensive programme evaluations (tutoring, early years, skills) and creates a public accountability dataset about the department's own evidence base.",
     "quote": "All planned, live, and completed Government evaluations from 1st April 2024 onwards must be registered on the Government Evaluation Registry",
     "theme": "accountability",
     "status": "in-delivery",
@@ -4930,7 +4930,7 @@ export const COMMITMENTS: Commitment[] = [
     "partners": [
       "Evaluation Task Force (Cabinet Office / HM Treasury)"
     ],
-    "strategyImplication": "The strategy's evidence chapter should wire Registry registration into DfE programme governance, and exploit the Registry as a discoverable index of DfE's evaluation data assets.",
+    "strategyImplication": "The strategy's evidence chapter should wire Registry registration into the department programme governance, and exploit the Registry as a discoverable index of the department's evaluation data assets.",
     "eli5": "Every time the department tests whether one of its programmes works, it must record the test and its results on a public list anyone can check.",
     "capabilityIds": [
       "quality",
@@ -4952,7 +4952,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ons-critical-data-supply",
     "docId": "devereux-review-ons",
     "title": "Meet tightened expectations as a critical data supplier to ONS and cross-government statistics",
-    "what": "The Devereux Review (June 2025) found ONS quality failures partly rooted in late or erroneous data supplied by departments, and an opportunity cost in the Integrated Data Service; the joint UKSA-Cabinet Office response accepted its recommendations, split ONS leadership roles, and signalled changes to UKSA's underpinning legislation. ONS's resulting end-to-end approach to critical data sources raises expectations on supplier departments — DfE supplies education, children's services and workforce data to ONS and shares de-identified data for accredited research.",
+    "what": "The Devereux Review (June 2025) found ONS quality failures partly rooted in late or erroneous data supplied by departments, and an opportunity cost in the Integrated Data Service; the joint UKSA-Cabinet Office response accepted its recommendations, split ONS leadership roles, and signalled changes to UKSA's underpinning legislation. ONS's resulting end-to-end approach to critical data sources raises expectations on supplier departments — The department supplies education, children's services and workforce data to ONS and shares de-identified data for accredited research.",
     "quote": "change the primary legislation underpinning the UKSA to adopt a more appropriate model of governance",
     "theme": "analytics",
     "status": "in-delivery",
@@ -4977,7 +4977,7 @@ export const COMMITMENTS: Commitment[] = [
       "UK Statistics Authority",
       "Cabinet Office"
     ],
-    "strategyImplication": "The strategy should formalise DfE's role as a statistical data supplier — named critical feeds to ONS with quality SLAs, and a position on expanding education data available for cross-government linkage.",
+    "strategyImplication": "The strategy should formalise the department's role as a statistical data supplier — named critical feeds to ONS with quality SLAs, and a position on expanding education data available for cross-government linkage.",
     "eli5": "The national statistics office got in trouble partly because departments sent it late or wrong numbers, so the education department now has to supply its data on time and correct.",
     "capabilityIds": [
       "quality",
@@ -5000,8 +5000,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "digital-workforce-leadership",
     "docId": "roadmap-modern-digital-government-2026",
-    "title": "Grow DfE's digital and data workforce (1-in-10 target) with board-level digital leadership",
-    "what": "The Prime Minister has set a target for one in ten civil servants to work in technology and digital roles by 2030, delivered through the Government Digital and Data profession, its capability framework (extended to senior roles including CDO briefs), a digital pay framework, and a Digital Workforce 2030 Delivery Plan due in 2026. The blueprint also requires a digital leader on every executive committee and a digital non-executive director on every board by 2026; DfE's efficiency plan commits to insourcing digital, data and technology managed services into permanent roles.",
+    "title": "Grow the department's digital and data workforce (1-in-10 target) with board-level digital leadership",
+    "what": "The Prime Minister has set a target for one in ten civil servants to work in technology and digital roles by 2030, delivered through the Government Digital and Data profession, its capability framework (extended to senior roles including CDO briefs), a digital pay framework, and a Digital Workforce 2030 Delivery Plan due in 2026. The blueprint also requires a digital leader on every executive committee and a digital non-executive director on every board by 2026; the department's efficiency plan commits to insourcing digital, data and technology managed services into permanent roles.",
     "quote": "one in 10 civil servants to work in technology and digital roles by 2030",
     "theme": "workforce",
     "status": "announced",
@@ -5021,7 +5021,7 @@ export const COMMITMENTS: Commitment[] = [
       "Cabinet Office",
       "DSIT"
     ],
-    "strategyImplication": "The strategy needs a workforce chapter — DfE's trajectory to the 1-in-10 ratio, adoption of GDD role standards including a senior data officer cadre, the insourcing plan — and should be explicitly owned at executive-committee level by the digital leader this mandate requires.",
+    "strategyImplication": "The strategy needs a workforce chapter — The department's trajectory to the 1-in-10 ratio, adoption of GDD role standards including a senior data officer cadre, the insourcing plan — and should be explicitly owned at executive-committee level by the digital leader this mandate requires.",
     "eli5": "By 2030 one in every ten government workers should have a technology job, and the education department must put a technology expert at its top leadership table.",
     "capabilityIds": [
       "skills",
@@ -5046,7 +5046,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "digital-id-scheme",
     "docId": "digital-id-scheme-consultation",
     "title": "Track and prepare for the national digital ID scheme and mandatory digital right-to-work checks",
-    "what": "Government consulted (spring 2026) on a national digital ID, free and voluntary for citizens after the mandatory-for-work plan was dropped in January 2026 — but it still intends to legislate so right-to-work evidence must be checked digitally, and to roll digital ID out by the end of the Parliament. DfE is affected as steward of the school and children's workforce (employment checks by schools/trusts) and as a service owner whose entitlement checks could consume the credential.",
+    "what": "Government consulted (spring 2026) on a national digital ID, free and voluntary for citizens after the mandatory-for-work plan was dropped in January 2026 — but it still intends to legislate so right-to-work evidence must be checked digitally, and to roll digital ID out by the end of the Parliament. The department is affected as steward of the school and children's workforce (employment checks by schools/trusts) and as a service owner whose entitlement checks could consume the credential.",
     "quote": "proposing to legislate so that evidence must be checked digitally as part of a prescribed right to work check",
     "theme": "identifiers",
     "status": "consulting",
@@ -5075,7 +5075,7 @@ export const COMMITMENTS: Commitment[] = [
       "Home Office",
       "DBS"
     ],
-    "strategyImplication": "The strategy should anticipate digital ID as a future common identifier in school workforce and entitlement processes, and position DfE guidance for schools as employers once digital checks become prescribed.",
+    "strategyImplication": "The strategy should anticipate digital ID as a future common identifier in school workforce and entitlement processes, and position the department guidance for schools as employers once digital checks become prescribed.",
     "eli5": "The country may get an official digital identity card on your phone, and schools would use it to check that new staff are who they say they are and allowed to work.",
     "capabilityIds": [
       "interoperability",
@@ -5098,7 +5098,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "education-record-app",
     "docId": "education-record-news",
     "title": "National rollout of the Education Record app — a digital education record for every Year 11",
-    "what": "Following pilots in Greater Manchester and the West Midlands, DfE committed (8 January 2026) that every Year 11 student in England can see GCSE results in the Education Record app from summer 2026. DfE creates a digital education record per pupil from school and awarding-body data, shared with post-16 providers via QR code to smooth enrolment (including SEND, FSM and English/maths continuation data).",
+    "what": "Following pilots in Greater Manchester and the West Midlands, the department committed (8 January 2026) that every Year 11 student in England can see GCSE results in the Education Record app from summer 2026. The department creates a digital education record per pupil from school and awarding-body data, shared with post-16 providers via QR code to smooth enrolment (including SEND, FSM and English/maths continuation data).",
     "quote": "This app will give young people instant access to their results whenever they need them.",
     "theme": "new-service",
     "status": "in-delivery",
@@ -5137,7 +5137,7 @@ export const COMMITMENTS: Commitment[] = [
       "colleges",
       "Association of Colleges"
     ],
-    "strategyImplication": "The closest thing to DfE's public 'single view of a learner' — a citizen-facing record built on DfE-held data, likely to expand beyond GCSEs to a lifelong learner record, and the natural anchor for Wallet credentials.",
+    "strategyImplication": "The closest thing to the department's public 'single view of a learner' — a citizen-facing record built on department-held data, likely to expand beyond GCSEs to a lifelong learner record, and the natural anchor for Wallet credentials.",
     "eli5": "Teenagers get their exam results in an official phone app and can show a code to their new college to prove their grades instantly.",
     "capabilityIds": [
       "platform",
@@ -5161,7 +5161,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "automated-collections-ambition",
     "docId": "attendance-dpia",
     "title": "Stated ambition to extend automated, attendance-style data collection to other school data",
-    "what": "In its published principles for requesting daily data from state-funded schools and the attendance DPIA, DfE frames daily attendance as the first step of a wider move to automated collections, stating an ambition to introduce more automated data collection in future to reduce burden versus census-style returns. No specific next collection has been formally announced.",
+    "what": "In its published principles for requesting daily data from state-funded schools and the attendance DPIA, the department frames daily attendance as the first step of a wider move to automated collections, stating an ambition to introduce more automated data collection in future to reduce burden versus census-style returns. No specific next collection has been formally announced.",
     "quote": "part of our ambition to introduce more automated data collection in the future",
     "theme": "infrastructure",
     "status": "announced",
@@ -5213,7 +5213,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "ees-open-data-api",
     "docId": "ees-api-docs",
     "title": "Explore Education Statistics public API for machine-readable official statistics",
-    "what": "DfE operates and is expanding a public REST API (v1) on its EES dissemination platform, giving programmatic access to published statistics datasets: dataset summaries, versioned queryable data and CSV downloads, with SDKs. Coverage is growing but not all EES datasets are API-accessible yet; the API is catalogued on DfE's Find and Use an API and the cross-government API catalogue.",
+    "what": "The department operates and is expanding a public REST API (v1) on its EES dissemination platform, giving programmatic access to published statistics datasets: dataset summaries, versioned queryable data and CSV downloads, with SDKs. Coverage is growing but not all EES datasets are API-accessible yet; the API is catalogued on the department's Find and Use an API and the cross-government API catalogue.",
     "quote": "a way to directly consume published data",
     "theme": "analytics",
     "status": "in-delivery",
@@ -5242,7 +5242,7 @@ export const COMMITMENTS: Commitment[] = [
     "partners": [
       "dfe-analytical-services (open source on GitHub)"
     ],
-    "strategyImplication": "DfE's concrete open-data commitment: statistics-as-a-service, making aggregate education data a dependable public data product rather than ad-hoc spreadsheet downloads.",
+    "strategyImplication": "The department's concrete open-data commitment: statistics-as-a-service, making aggregate education data a dependable public data product rather than ad-hoc spreadsheet downloads.",
     "eli5": "Anyone's computer program can now ask the government's education statistics website for numbers directly, instead of a person downloading spreadsheets by hand.",
     "capabilityIds": [
       "platform",
@@ -5265,8 +5265,8 @@ export const COMMITMENTS: Commitment[] = [
     "id": "teaching-record-system",
     "docId": "trs-repo",
     "title": "Modernise the Database of Qualified Teachers into the Teaching Record System",
-    "what": "DfE is transforming the legacy Database of Qualified Teachers (DQT) into the Teaching Record System (TRS), the primary source of teaching records keyed by the Teacher Reference Number (TRN), refactored into discrete digital services with APIs consumed by Check a Teacher's Record and Access Your Teaching Qualifications. Addresses the known gap that DfE lacks a single accurate database of all UK teachers (DQT only covers QTS holders).",
-    "quote": "the primary source of teaching records for DfE",
+    "what": "The department is transforming the legacy Database of Qualified Teachers (DQT) into the Teaching Record System (TRS), the primary source of teaching records keyed by the Teacher Reference Number (TRN), refactored into discrete digital services with APIs consumed by Check a Teacher's Record and Access Your Teaching Qualifications. Addresses the known gap that the department lacks a single accurate database of all UK teachers (DQT only covers QTS holders).",
+    "quote": "the primary source of teaching records for [the department]",
     "theme": "workforce",
     "status": "in-delivery",
     "timeframe": "Ongoing 2023-2026; incremental service-by-service migration",
@@ -5320,8 +5320,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "srs-default-research-route",
     "docId": "how-dfe-shares",
-    "title": "ONS Secure Research Service as the default route for sharing DfE personal data with researchers",
-    "what": "DfE's published data-sharing guidance establishes the ONS Secure Research Service as the default platform for researcher access to DfE personal data (NPD, LEO, HE data), with direct transfers as the exception. In the 11 September 2025 update DfE removed the ONS Integrated Data Service as an access route — a notable retreat from the cross-government IDS migration path.",
+    "title": "ONS Secure Research Service as the default route for sharing the department personal data with researchers",
+    "what": "The department's published data-sharing guidance establishes the ONS Secure Research Service as the default platform for researcher access to the department personal data (NPD, LEO, HE data), with direct transfers as the exception. In the 11 September 2025 update the department removed the ONS Integrated Data Service as an access route — a notable retreat from the cross-government IDS migration path.",
     "quote": "project applications are managed through the ONS Secure Research Service (SRS)",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -5352,7 +5352,7 @@ export const COMMITMENTS: Commitment[] = [
       "ONS",
       "ADR UK"
     ],
-    "strategyImplication": "DfE consolidating on SRS while dropping IDS signals caution about the cross-government Integrated Data Service — relevant to any strategy assuming IDS becomes the single analytical environment.",
+    "strategyImplication": "The department consolidating on SRS while dropping IDS signals caution about the cross-government Integrated Data Service — relevant to any strategy assuming IDS becomes the single analytical environment.",
     "eli5": "Researchers who want to study pupil data must use one locked-down government computer room where names are removed and nothing can be taken out.",
     "capabilityIds": [
       "sharing",
@@ -5405,7 +5405,7 @@ export const COMMITMENTS: Commitment[] = [
       "DSIT"
     ],
     "strategyImplication": "Treat the single patient record as fixed health-side architecture: design education–health joins (identifiers, consent, safeguarding views) against it rather than building parallel child records.",
-    "eli5": "The NHS is building one health record for every child. DfE should plan to connect to it, not copy it.",
+    "eli5": "The NHS is building one health record for every child. The department should plan to connect to it, not copy it.",
     "capabilityIds": [
       "interoperability",
       "sharing"
@@ -5454,7 +5454,7 @@ export const COMMITMENTS: Commitment[] = [
       "DHSC",
       "NHS England"
     ],
-    "strategyImplication": "The 2–2.5-year review and health-visiting data behind the digital red book is exactly what school-readiness work needs; DfE should negotiate the education-side view (with consent) rather than commissioning a rival record.",
+    "strategyImplication": "The 2–2.5-year review and health-visiting data behind the digital red book is exactly what school-readiness work needs; the department should negotiate the education-side view (with consent) rather than commissioning a rival record.",
     "eli5": "The paper red book parents get for babies is going digital in the NHS App — useful for knowing if children are on track before school.",
     "capabilityIds": [
       "sharing",
@@ -5528,8 +5528,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "cpt-poverty-monitoring-baseline",
     "docId": "child-poverty-strategy",
-    "title": "Child-poverty monitoring framework baselined on DfE indicators",
-    "what": "The Child Poverty Strategy commits to a cross-government monitoring and evaluation framework: two headline metrics (relative low income after housing costs plus a new deep material poverty measure), a baseline report in summer 2026 and annual reporting. Tracking the strategy's pillars needs DfE's FSM, early-years development and attainment-gap data joined with DWP and HMRC income data.",
+    "title": "Child-poverty monitoring framework baselined on the department indicators",
+    "what": "The Child Poverty Strategy commits to a cross-government monitoring and evaluation framework: two headline metrics (relative low income after housing costs plus a new deep material poverty measure), a baseline report in summer 2026 and annual reporting. Tracking the strategy's pillars needs the department's FSM, early-years development and attainment-gap data joined with DWP and HMRC income data.",
     "quote": "robust approach to monitoring and evaluation so that we can understand how well this is working",
     "theme": "accountability",
     "status": "announced",
@@ -5559,8 +5559,8 @@ export const COMMITMENTS: Commitment[] = [
       "HMRC",
       "ONS"
     ],
-    "strategyImplication": "DfE indicators become accountability lines in a No.10-visible framework from summer 2026 — agree definitions (especially the post-expansion FSM measure) before the baseline locks them in.",
-    "eli5": "Government will publish a yearly scorecard on child poverty, and several of its numbers come from DfE's data.",
+    "strategyImplication": "The department indicators become accountability lines in a No.10-visible framework from summer 2026 — agree definitions (especially the post-expansion FSM measure) before the baseline locks them in.",
+    "eli5": "Government will publish a yearly scorecard on child poverty, and several of its numbers come from the department's data.",
     "capabilityIds": [
       "value",
       "quality"
@@ -5582,8 +5582,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "mhclg-local-outcomes-framework",
     "docId": "local-outcomes-framework",
-    "title": "The Local Outcomes Framework runs on DfE data",
-    "what": "MHCLG's first Local Outcomes Framework (February 2026) sets sixteen national priority outcomes for central-local delivery. Four are child-focused — Best Start in Life, Every Child Achieving and Thriving, Keeping Children Safe, and Child Poverty — and are measured almost entirely with DfE-sourced metrics (GLD, the FSM-GLD gap, disadvantage attainment gaps, absence, NEET and children's social care indicators) alongside MoJ and DHSC child metrics. A supporting digital tool is intended during 2026 but was not yet live as of July 2026.",
+    "title": "The Local Outcomes Framework runs on the department data",
+    "what": "MHCLG's first Local Outcomes Framework (February 2026) sets sixteen national priority outcomes for central-local delivery. Four are child-focused — Best Start in Life, Every Child Achieving and Thriving, Keeping Children Safe, and Child Poverty — and are measured almost entirely with department-sourced metrics (GLD, the FSM-GLD gap, disadvantage attainment gaps, absence, NEET and children's social care indicators) alongside MoJ and DHSC child metrics. A supporting digital tool is intended during 2026 but was not yet live as of July 2026.",
     "quote": "Percentage point difference between the proportion of children eligible or not eligible for Free School Meals achieving a Good Level of Development",
     "theme": "accountability",
     "status": "in-delivery",
@@ -5615,8 +5615,8 @@ export const COMMITMENTS: Commitment[] = [
       "MoJ",
       "local authorities"
     ],
-    "strategyImplication": "DfE statistics are now local government's accountability dashboard: timely, LA-level, openly licensed feeds — and a DfE say in metric definitions — become obligations, not favours.",
-    "eli5": "Councils will be judged against a national scoreboard, and most of the children's numbers on it come from DfE.",
+    "strategyImplication": "The department statistics are now local government's accountability dashboard: timely, LA-level, openly licensed feeds — and a departmental say in metric definitions — become obligations, not favours.",
+    "eli5": "Councils will be judged against a national scoreboard, and most of the children's numbers on it come from the department.",
     "capabilityIds": [
       "value",
       "quality",
@@ -5641,7 +5641,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "mhclg-mayoral-data-council",
     "docId": "english-devolution-wp",
     "title": "Mayoral Data Council and central–local data partnership",
-    "what": "The English Devolution White Paper commits to a Mayoral Data Council bringing strategic-authority data leaders into central decision-making, co-developed data partnership principles for lawful central-local sharing, and broadened Digital Economy Act 2017 powers. Education and skills data is squarely what strategic authorities will ask DfE for.",
+    "what": "The English Devolution White Paper commits to a Mayoral Data Council bringing strategic-authority data leaders into central decision-making, co-developed data partnership principles for lawful central-local sharing, and broadened Digital Economy Act 2017 powers. Education and skills data is squarely what strategic authorities will ask the department for.",
     "quote": "Establish a new Mayoral Data Council to integrate senior data leaders from Mayoral Strategic Authorities",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -5691,7 +5691,7 @@ export const COMMITMENTS: Commitment[] = [
     "id": "mhclg-skills-devolution",
     "docId": "english-devolution-wp",
     "title": "Skills devolution: ILR-keyed data flows to strategic authorities",
-    "what": "The white paper — underpinned by the English Devolution and Community Empowerment Act 2026 (Royal Assent 29 April 2026) — devolves most of the Adult Skills Fund to mayoral strategic authorities, gives them joint ownership of Local Skills Improvement Plans, and moves funding into integrated settlements monitored through a single agreed outcomes framework. Each element needs recurring DfE data flows: learner records, provider performance, 16-19 destinations and NEET data.",
+    "what": "The white paper — underpinned by the English Devolution and Community Empowerment Act 2026 (Royal Assent 29 April 2026) — devolves most of the Adult Skills Fund to mayoral strategic authorities, gives them joint ownership of Local Skills Improvement Plans, and moves funding into integrated settlements monitored through a single agreed outcomes framework. Each element needs recurring the department data flows: learner records, provider performance, 16-19 destinations and NEET data.",
     "quote": "Strategic Authorities will take on joint ownership of the Local Skills Improvement Plan model",
     "theme": "data-sharing",
     "status": "in-delivery",
@@ -5726,8 +5726,8 @@ export const COMMITMENTS: Commitment[] = [
       "strategic authorities",
       "employer representative bodies"
     ],
-    "strategyImplication": "Devolution turns DfE from sole skills commissioner into data steward for ten-plus strategic authorities: ILR access, ULN-keyed outcome feeds and comparable LSIP evidence bases become core DfE data products.",
-    "eli5": "Regional authorities now run much of adult skills, so DfE has to supply them with learner and college data routinely.",
+    "strategyImplication": "Devolution turns the department from sole skills commissioner into data steward for ten-plus strategic authorities: ILR access, ULN-keyed outcome feeds and comparable LSIP evidence bases become core the department data products.",
+    "eli5": "Regional authorities now run much of adult skills, so the department has to supply them with learner and college data routinely.",
     "capabilityIds": [
       "sharing",
       "value"
@@ -5779,7 +5779,7 @@ export const COMMITMENTS: Commitment[] = [
       "police forces",
       "Operation Encompass charity"
     ],
-    "strategyImplication": "Schools now receive statutory police data daily with no common identifier or secure national channel — the education-side half of the interface (KCSIE guidance, secure transport, retention standards) is DfE's to specify.",
+    "strategyImplication": "Schools now receive statutory police data daily with no common identifier or secure national channel — the education-side half of the interface (KCSIE guidance, secure transport, retention standards) is the department's to specify.",
     "eli5": "If police attend a domestic-abuse incident at a child's home, they must tell the child's school by the next morning — by law.",
     "capabilityIds": [
       "sharing",
@@ -5801,8 +5801,8 @@ export const COMMITMENTS: Commitment[] = [
   {
     "id": "moj-dfe-linked-dataset",
     "docId": "moj-data-first",
-    "title": "The MoJ–DfE linked dataset keeps growing",
-    "what": "MoJ's Data First programme links criminal-history data (Police National Computer, courts, prisons) person-level with 23 DfE datasets — attainment, absence, exclusions, children in need, looked-after children — with new analytical outputs into 2026 and researcher access via the ONS Secure Research Service. It is the flagship model for cross-department person-level linkage of DfE data.",
+    "title": "The MoJ–the department linked dataset keeps growing",
+    "what": "MoJ's Data First programme links criminal-history data (Police National Computer, courts, prisons) person-level with 23 the department datasets — attainment, absence, exclusions, children in need, looked-after children — with new analytical outputs into 2026 and researcher access via the ONS Secure Research Service. It is the flagship model for cross-department person-level linkage of the department data.",
     "quote": "criminal history data from the Police National Computer (PNC) has been linked to education and social care data",
     "theme": "analytics",
     "status": "in-delivery",

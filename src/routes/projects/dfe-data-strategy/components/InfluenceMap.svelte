@@ -39,7 +39,7 @@
     <text x={L + 10} y={H - B - 8} text-anchor="start" class="q-lab" fill="rgba(28,22,17,0.45)">CONTEXT</text>
 
     <!-- axes -->
-    <text x={(L + (W - R)) / 2} y={H - 14} text-anchor="middle" class="axis">Relevance to DfE →</text>
+    <text x={(L + (W - R)) / 2} y={H - 14} text-anchor="middle" class="axis">Relevance to the department →</text>
     <text x={16} y={(T + (H - B)) / 2} text-anchor="middle" class="axis" transform="rotate(-90 16 {(T + (H - B)) / 2})">How much it should shape the strategy →</text>
 
     <!-- bubbles -->
@@ -76,7 +76,7 @@
       <span class="d-tier" style="color:{TIER_META[hov.tier].color}">{TIER_META[hov.tier].kicker}</span>
       <h4 class="d-name">{hov.name}</h4>
       <p class="d-take">{hov.take}</p>
-      <p class="d-why"><b>For DfE:</b> {hov.whyDfE}</p>
+      <p class="d-why"><b>For the department:</b> {hov.whyDfE}</p>
       {#each [voicesForStrategy(hov.id, 3)] as voices}
         {#if voices.length}
           <div class="d-voices">
@@ -95,7 +95,7 @@
         <button class="d-draft" onclick={() => app.openSuggest({ kind: 'strategy', id: hov.id, label: hov.short })}>✎ Draft policies</button>
       </div>
     {:else}
-      <span class="d-hint">Hover a point for the verdict; <b>click to pin it</b>, then draft policies. Position = relevance to DfE (→) × how much it should shape the strategy (↑). Colour = verdict.</span>
+      <span class="d-hint">Hover a point for the verdict; <b>click to pin it</b>, then draft policies. Position = relevance to the department (→) × how much it should shape the strategy (↑). Colour = verdict.</span>
     {/if}
   </div>
 

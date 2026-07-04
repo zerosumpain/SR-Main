@@ -24,7 +24,7 @@ describe('orgs registry', () => {
     expect(ORG_IDS.size).toBe(ORGS.length);
     for (const o of ORGS) expect(ORG_BY_ID[o.id]).toBe(o);
   });
-  it('places DfE at the centre (ring 0)', () => {
+  it('places the department at the centre (ring 0)', () => {
     expect(ORGS.filter((o) => o.ring === 0).map((o) => o.id)).toEqual(['dfe']);
   });
   it('keeps angles within 0–360 and rings 0–3', () => {

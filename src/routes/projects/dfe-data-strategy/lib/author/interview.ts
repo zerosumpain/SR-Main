@@ -127,7 +127,7 @@ export const INTERVIEW_QUESTIONS: InterviewQuestion[] = [
     text: 'What is the AI posture?',
     kind: 'single',
     options: [
-      { id: 'front-foot', label: 'Front foot', detail: 'Scale what works now; DfE is a named AI delivery partner.' },
+      { id: 'front-foot', label: 'Front foot', detail: 'Scale what works now; the department is a named AI delivery partner.' },
       { id: 'pilots', label: 'Measured pilots', detail: 'Real pilots with published evaluations before scale.' },
       { id: 'foundations', label: 'Foundations first', detail: 'Quality, linkage and licensing before models.' },
       { id: 'restraint', label: 'Deliberate restraint', detail: 'Children’s data demands a higher bar; assist, never decide.' },
@@ -139,7 +139,7 @@ export const INTERVIEW_QUESTIONS: InterviewQuestion[] = [
     tier: 1,
     topic: 'The sector deal',
     text: 'What deal does the strategy offer schools and councils?',
-    hint: 'DfE can compel collection but not goodwill — what makes joining in worth it?',
+    hint: 'The department can compel collection but not goodwill — what makes joining in worth it?',
     kind: 'single',
     options: [
       { id: 'burden-targets', label: 'Hard burden-reduction targets', detail: 'Published hours-saved targets; collections retired by name.' },
@@ -167,12 +167,12 @@ export const INTERVIEW_QUESTIONS: InterviewQuestion[] = [
     id: 'identifier-approach',
     tier: 2,
     topic: 'Identifier',
-    text: 'The consistent child identifier — how should DfE play it?',
+    text: 'The consistent child identifier — how should the department play it?',
     hint: 'CWSA 2026 creates the duty; the NHS-number pilot is running. The strategy has to pick a line.',
     kind: 'single',
     options: [
       { id: 'adopt', label: 'Adopt & map', detail: 'Back the NHS number; map UPN/ULN onto it as the pilot proves out.' },
-      { id: 'wrap', label: 'Wrap with a spine ID', detail: 'A DfE matching layer that joins NHS number, UPN and ULN without betting on one.' },
+      { id: 'wrap', label: 'Wrap with a spine ID', detail: 'A the department matching layer that joins NHS number, UPN and ULN without betting on one.' },
       { id: 'wait', label: 'Follow the evidence', detail: 'Commit to the duty, not the mechanism, until the pilot reports.' },
     ],
     sectionIds: ['identifiers', 'commitments-obligations'],
@@ -284,7 +284,7 @@ export const INTERVIEW_QUESTIONS: InterviewQuestion[] = [
     id: 'sector-giveback',
     tier: 3,
     topic: 'Give-back',
-    text: 'What should DfE actually give the sector back?',
+    text: 'What should the department actually give the sector back?',
     kind: 'multi',
     pick: 3,
     options: [

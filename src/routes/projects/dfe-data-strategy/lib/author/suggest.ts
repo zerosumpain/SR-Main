@@ -1,6 +1,6 @@
 // suggest.ts — suggested lines for each Author section, written deterministically from
 // two live sources: the workbench diagnostic (the posture, allocation, coverage, tensions
-// and maturity the lead has actually set) and the frameworks a DfE strategy should consider
+// and maturity the lead has actually set) and the frameworks an education-department strategy should consider
 // (weighted foundational → specialist). No LLM: every line quotes the lead's own numbers
 // or a named framework, is honest about where it came from, and is theirs to edit or bin.
 
@@ -250,7 +250,7 @@ const RULES: Record<string, LineBuilder> = {
       f(
         'std-cddo',
         'cddo-roadmap',
-        `We adopt before we invent: CDDO-lineage standards — the API catalogue, DCAT metadata, common reference data under a single data-ownership model — are the default, and a DfE-specific standard needs a written case.`,
+        `We adopt before we invent: CDDO-lineage standards — the API catalogue, DCAT metadata, common reference data under a single data-ownership model — are the default, and a department-specific standard needs a written case.`,
       ),
     );
     return out;
@@ -381,7 +381,7 @@ const RULES: Record<string, LineBuilder> = {
       f(
         'ai-opps',
         'ai-opportunities',
-        `DfE is a named delivery partner of the AI Opportunities Action Plan, which calls high-quality data "the lifeblood of modern AI" — our AI ambitions are therefore sequenced behind the data foundations they depend on, and say so.`,
+        `The department is a named delivery partner of the AI Opportunities Action Plan, which calls high-quality data "the lifeblood of modern AI" — our AI ambitions are therefore sequenced behind the data foundations they depend on, and say so.`,
       ),
     ];
   },
@@ -403,7 +403,7 @@ const RULES: Record<string, LineBuilder> = {
       f(
         'open-nds',
         'national-data-strategy',
-        `The National Data Strategy's availability mission still sets the test: data that is findable, well-described and fit for reuse across government — this section says which DfE datasets meet it, and when the rest will.`,
+        `The National Data Strategy's availability mission still sets the test: data that is findable, well-described and fit for reuse across government — this section says which the department datasets meet it, and when the rest will.`,
       ),
     ];
   },

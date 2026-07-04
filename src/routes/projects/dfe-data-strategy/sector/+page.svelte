@@ -19,14 +19,14 @@
 
 <svelte:head>
   <title>Voices from the system — Keystone</title>
-  <meta name="description" content="What the sector is actually saying about DfE's data agenda — Schools Week, Civil Service World, local authorities, trusts, children's charities and privacy campaigners. The rich tapestry of support, caution and dissent a data strategy has to navigate." />
+  <meta name="description" content="What the sector is actually saying about the department's data agenda — Schools Week, Civil Service World, local authorities, trusts, children's charities and privacy campaigners. The rich tapestry of support, caution and dissent a data strategy has to navigate." />
 </svelte:head>
 
 <div class="pe-route wide">
   <StoryMasthead
     kicker="Understand · Voices from the system"
     title="The data agenda doesn’t happen in a room — it happens across a system"
-    thesis="A DfE data strategy lands on a noisy, opinionated system: trusts and councils stretched thin, charities desperate to stop children falling through the cracks, privacy campaigners warning of surveillance, and a centre promising more than it has funded. {SECTOR_VOICES.length} cited voices, grouped by who’s speaking — read them as the weather the strategy has to fly through."
+    thesis="A the department data strategy lands on a noisy, opinionated system: trusts and councils stretched thin, charities desperate to stop children falling through the cracks, privacy campaigners warning of surveillance, and a centre promising more than it has funded. {SECTOR_VOICES.length} cited voices, grouped by who’s speaking — read them as the weather the strategy has to fly through."
     thesisEli5="Lots of groups have strong, different views on joining up children’s data — schools, councils, charities, privacy campaigners, and government. Here’s what they’re actually saying, and where they clash."
     asks={['Who supports the agenda, who’s wary, and who opposes it', 'The genuine debates beneath the headlines', 'How the sector’s capacity shapes what’s deliverable']}
     askLabel="What this page surfaces"

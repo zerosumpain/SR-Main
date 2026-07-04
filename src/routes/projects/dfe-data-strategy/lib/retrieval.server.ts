@@ -131,7 +131,7 @@ function buildCorpus(): Chunk[] {
       sourceType: 'commitment',
       title: `Commitment: ${cm.title} (${doc?.shortName ?? cm.docId})`,
       url: cm.sourceUrls[0] ?? '/projects/dfe-data-strategy/commitments',
-      text: `${cm.title}. ${cm.what} From: ${doc?.title ?? cm.docId}${cm.quote ? ` — "${cm.quote}"` : ''}. Status: ${STATUS_META[cm.status].label}. DfE role: ${ROLE_META[cm.dfeRole].label}.${cm.timeframe ? ` Timeframe: ${cm.timeframe}.` : ''} What it means for the strategy: ${cm.strategyImplication}${cm.flows.length ? ` New data flows: ${cm.flows.map((f) => `${f.from} to ${f.to} (${f.what})`).join('; ')}.` : ''}${cm.identifiers.length ? ` Identifiers: ${cm.identifiers.join(', ')}.` : ''}${cm.standards.length ? ` Standards: ${cm.standards.join(', ')}.` : ''}`,
+      text: `${cm.title}. ${cm.what} From: ${doc?.title ?? cm.docId}${cm.quote ? ` — "${cm.quote}"` : ''}. Status: ${STATUS_META[cm.status].label}. The department role: ${ROLE_META[cm.dfeRole].label}.${cm.timeframe ? ` Timeframe: ${cm.timeframe}.` : ''} What it means for the strategy: ${cm.strategyImplication}${cm.flows.length ? ` New data flows: ${cm.flows.map((f) => `${f.from} to ${f.to} (${f.what})`).join('; ')}.` : ''}${cm.identifiers.length ? ` Identifiers: ${cm.identifiers.join(', ')}.` : ''}${cm.standards.length ? ` Standards: ${cm.standards.join(', ')}.` : ''}`,
     });
   }
 
@@ -154,7 +154,7 @@ function buildCorpus(): Chunk[] {
       sourceType: 'strategy',
       title: `Strategy: ${s.name} — verdict: ${TIER_META[s.tier].label}`,
       url: s.sourceUrl ?? '/projects/dfe-data-strategy/strategies',
-      text: `${s.name} (${s.kind}, status: ${s.status}). Influence-map verdict: ${TIER_META[s.tier].label} — ${TIER_META[s.tier].kicker}. ${s.take} Why it matters to DfE: ${s.whyDfE} (relevance ${Math.round(s.relevance * 100)}%, leverage ${Math.round(s.leverage * 100)}%).`,
+      text: `${s.name} (${s.kind}, status: ${s.status}). Influence-map verdict: ${TIER_META[s.tier].label} — ${TIER_META[s.tier].kicker}. ${s.take} Why it matters to the department: ${s.whyDfE} (relevance ${Math.round(s.relevance * 100)}%, leverage ${Math.round(s.leverage * 100)}%).`,
     });
 
   // the Policy Engine's data conclusions (the deep-integration source)
@@ -174,7 +174,7 @@ function buildCorpus(): Chunk[] {
     sourceType: 'overview',
     title: 'About Keystone',
     url: '/projects/dfe-data-strategy',
-    text: 'Keystone is a DfE data-strategy workbench: a research-grounded decision-support tool that maps the pressures on the Department for Education’s use of data and lets a strategy lead test posture choices and investment trade-offs. It is a transparent rubric, not a numeric forecast. It is a companion to the Policy Engine and The Data Estate.',
+    text: 'Keystone is an education strategy workbench: a research-grounded decision-support tool that maps the pressures on the education department’s use of data and lets a strategy lead test posture choices and investment trade-offs. It is a transparent rubric, not a numeric forecast. It is a companion to the Policy Engine and The Data Estate.',
   });
   c.push({
     id: 'ov-origins',
@@ -182,7 +182,7 @@ function buildCorpus(): Chunk[] {
     sourceType: 'overview',
     title: 'The three origins of pressure',
     url: '/projects/dfe-data-strategy/landscape',
-    text: 'Pressures on a DfE data strategy come from three directions: cross-government (National Data Strategy, the CDDO/DSIT digital and data roadmap, AI ambitions, data law, ONS Integrated Data Service); DfE’s own policy agenda (the consistent child identifier and data spine, attendance, SEND, NEET, the National Pupil Database); and the partner web (150+ local authorities, thousands of schools and multi-academy trusts, arm’s-length bodies, health and social care, EdTech suppliers).',
+    text: 'Pressures on an education data strategy come from three directions: cross-government (National Data Strategy, the CDDO/DSIT digital and data roadmap, AI ambitions, data law, ONS Integrated Data Service); the department’s own policy agenda (the consistent child identifier and data spine, attendance, SEND, NEET, the National Pupil Database); and the partner web (150+ local authorities, thousands of schools and multi-academy trusts, arm’s-length bodies, health and social care, EdTech suppliers).',
   });
   c.push({
     id: 'ov-engine',
@@ -198,7 +198,7 @@ function buildCorpus(): Chunk[] {
     sourceType: 'overview',
     title: 'Link to the Policy Engine',
     url: '/projects/policy-engine/monitor',
-    text: 'The DfE-policy pressures are drawn from the Policy Engine field studies: the data spine and consistent child identifier (monitor), multi-agency data-sharing (jigsaw), attendance, SEND and NEET. The strategy is tested against the real data demands the policy modelling surfaced.',
+    text: 'The department-policy pressures are drawn from the Policy Engine field studies: the data spine and consistent child identifier (monitor), multi-agency data-sharing (jigsaw), attendance, SEND and NEET. The strategy is tested against the real data demands the policy modelling surfaced.',
   });
   return c;
 }

@@ -7,7 +7,7 @@
 
   const COLS: { id: Origin; label: string; blurb: string; color: string }[] = [
     { id: 'cross-government', label: 'From across government', blurb: 'What the centre and the wider system expect of every department’s data.', color: '#2f6155' },
-    { id: 'dfe-policy', label: 'From DfE’s own policy', blurb: 'What the department’s priorities demand of its data — drawn from the Policy Engine.', color: '#8a2d3a' },
+    { id: 'dfe-policy', label: 'From the department’s own policy', blurb: 'What the department’s priorities demand of its data — drawn from the Policy Engine.', color: '#8a2d3a' },
     { id: 'partners', label: 'From the partner web', blurb: 'What working through schools, trusts, councils and agencies requires.', color: '#2f6f97' },
   ];
   const eli = $derived(app.narrative === 'eli5');

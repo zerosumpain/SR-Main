@@ -8,7 +8,7 @@
   const FILTERS: { id: 'all' | Origin; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'cross-government', label: 'Cross-gov' },
-    { id: 'dfe-policy', label: 'DfE policy' },
+    { id: 'dfe-policy', label: 'The department policy' },
     { id: 'partners', label: 'Partners' },
   ];
   const list = $derived(

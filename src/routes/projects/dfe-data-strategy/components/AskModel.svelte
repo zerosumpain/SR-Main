@@ -11,7 +11,7 @@
   let busy = $state(false);
 
   const SUGGESTIONS = [
-    'What pressures should DfE’s data strategy prioritise?',
+    'What pressures should the department’s data strategy prioritise?',
     'What is the consistent child identifier and why does it matter?',
     'How do the legal gateways for data-sharing differ from a lawful basis?',
     'What does “data maturity” mean for a department?',
@@ -24,7 +24,7 @@
       .map(([id, v]) => `${v < 0 ? POSTURE_BY_ID[id]?.leftLabel : POSTURE_BY_ID[id]?.rightLabel} (${Math.round(Math.abs(v) * 100)}%)`)
       .join(', ');
     const tensions = a.tensions.map((t) => t.title).join('; ') || 'none';
-    return `Strategy "${app.scenarioName}". Posture leanings: ${postures || 'all balanced'}. Overall pressure coverage ${pct(a.overallCoverage)} (cross-gov ${pct(a.coverageByOrigin['cross-government'])}, DfE policy ${pct(a.coverageByOrigin['dfe-policy'])}, partners ${pct(a.coverageByOrigin.partners)}). Flagged tensions: ${tensions}.`;
+    return `Strategy "${app.scenarioName}". Posture leanings: ${postures || 'all balanced'}. Overall pressure coverage ${pct(a.overallCoverage)} (cross-gov ${pct(a.coverageByOrigin['cross-government'])}, the department policy ${pct(a.coverageByOrigin['dfe-policy'])}, partners ${pct(a.coverageByOrigin.partners)}). Flagged tensions: ${tensions}.`;
   }
 
   async function send(q?: string) {

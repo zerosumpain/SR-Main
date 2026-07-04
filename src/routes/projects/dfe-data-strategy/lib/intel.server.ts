@@ -71,8 +71,8 @@ export const WATCHES: IntelWatch[] = [
   // ---- commitments-ledger watches: track the ledger's hardest-binding programmes ----
   {
     id: 'data-spine',
-    label: 'DfE data spine, GIAC & single view of a learner',
-    queries: ['"data spine" education', '"Get Information About Children"', 'DfE "single view" learner record'],
+    label: 'The department data spine, GIAC & single view of a learner',
+    queries: ['"data spine" education', '"Get Information About Children"', 'The department "single view" learner record'],
     mustMatch: ['data spine', 'get information about children', 'single view'],
   },
   {
@@ -84,14 +84,14 @@ export const WATCHES: IntelWatch[] = [
   {
     id: 'school-profiles',
     label: 'School profiles & accountability data (report cards, RISE)',
-    queries: ['"school profiles" DfE service', 'Ofsted "report card" data', 'RISE regional improvement schools data'],
+    queries: ['"school profiles" the department service', 'Ofsted "report card" data', 'RISE regional improvement schools data'],
     mustMatch: ['school profile', 'report card', 'rise'],
   },
 ];
 export const WATCH_LABELS: Record<string, string> = Object.fromEntries(WATCHES.map((w) => [w.id, w.label]));
 
 // Precision matters more than recall: broad recency-ordered queries return loads
-// of unrelated new gov news. So: (1) DfE/DSIT org-filtered + "data" (newest first
+// of unrelated new gov news. So: (1) the department/DSIT org-filtered + "data" (newest first
 // — high precision), then (2) tight quoted-phrase queries across all of gov.
 const ORG_DFE = 'department-for-education';
 const ORG_DSIT = 'department-for-science-innovation-and-technology';
@@ -180,7 +180,7 @@ interface Classification {
 const DIRECTIONS = ['reinforces', 'challenges', 'shifts', 'informs'];
 
 async function classify(c: Candidate): Promise<Classification | null> {
-  const sys = `You are the intelligence analyst for a DfE data-strategy workbench ("Keystone"). Given a new UK-government item, judge its relevance to the data strategy and HOW it bears on it, using ONLY the strategy index below.
+  const sys = `You are the intelligence analyst for an education strategy workbench ("Keystone"). Given a new UK-government item, judge its relevance to the data strategy and HOW it bears on it, using ONLY the strategy index below.
 
 Return STRICT JSON only:
 {"relevance": 0-5,
@@ -189,7 +189,7 @@ Return STRICT JSON only:
  "considerations": ["<=140 chars", ...],
  "misalignments": [{"point":"where this item conflicts with / outpaces / contradicts the current strategy or its assumptions, <=160 chars","severity":"high"|"medium"|"low"}]}
 
-Rules: relevance 0 = irrelevant, 5 = directly reshapes the strategy. Only cite ids that appear in the index. 1-4 influences, 0-3 considerations, 0-3 misalignments. If irrelevant, return relevance 0 and empty arrays. Be precise and neutral.
+Rules: relevance 0 = irrelevant, 5 = directly reshapes the strategy. Only cite ids that appear in the index. 1-4 influences, 0-3 considerations, 0-3 misalignments. If irrelevant, return relevance 0 and empty arrays. Be precise and neutral. Refer to the Department for Education simply as "the department" — never "DfE".
 
 STRATEGY INDEX:
 ${strategyIndex()}`;

@@ -129,7 +129,7 @@ const TENSION_RULES: Array<(c: Ctx) => Tension | null> = [
           explanation:
             'You are centralising onto a single platform AND delegating delivery to partners at the same time. Centralising concentrates control; partner-led delivery disperses it — as set, the strategy reads as two strategies stapled together.',
           resolution:
-            'Decide whether DfE owns the platform (centralise + deliver in-house) or convenes a federated system (federate + partner-led), then make the other levers serve that choice.',
+            'Decide whether the department owns the platform (centralise + deliver in-house) or convenes a federated system (federate + partner-led), then make the other levers serve that choice.',
           triggers: ['operating-model = Centralise', 'delivery = Partner-led'],
         }
       : null,
@@ -142,7 +142,7 @@ const TENSION_RULES: Array<(c: Ctx) => Tension | null> = [
           id: 'centralise-vs-federation',
           title: 'Centralising collides with a federated estate',
           severity: 'high',
-          explanation: `A single central model runs straight into ${hit.map(ptitle).join(' and ')}. DfE doesn’t own most of this data — 150+ local authorities and thousands of autonomous trusts do — so "centralise" without the partner-sharing to back it leaves these stranded.`,
+          explanation: `A single central model runs straight into ${hit.map(ptitle).join(' and ')}. The department doesn’t own most of this data — 150+ local authorities and thousands of autonomous trusts do — so "centralise" without the partner-sharing to back it leaves these stranded.`,
           resolution: 'Either fund partner data-sharing & interoperability so centralisation is reachable, or move toward a federated, standards-led model.',
           triggers: ['operating-model = Centralise', ...hit.map((id) => `${ptitle(id)} under-covered`)],
         }
@@ -186,7 +186,7 @@ const TENSION_RULES: Array<(c: Ctx) => Tension | null> = [
           id: 'ai-ahead-of-foundations',
           title: 'AI ambition ahead of the foundations',
           severity: 'high',
-          explanation: `Chasing AI/use value while data quality is weak${(c.coverage['public-trust'] ?? 1) < 0.5 ? ` and ${ptitle('public-trust')} is under-covered` : ''} risks models built on poor data — and DfE has already been reprimanded by the ICO once over pupil data. AI on shaky foundations fails in public.`,
+          explanation: `Chasing AI/use value while data quality is weak${(c.coverage['public-trust'] ?? 1) < 0.5 ? ` and ${ptitle('public-trust')} is under-covered` : ''} risks models built on poor data — and the department has already been reprimanded by the ICO once over pupil data. AI on shaky foundations fails in public.`,
           resolution: 'Rebalance toward data quality, governance and ethics so the use-cases stand on solid, trusted ground.',
           triggers: ['ambition = AI / use first', 'quality weak or public trust exposed'],
         }

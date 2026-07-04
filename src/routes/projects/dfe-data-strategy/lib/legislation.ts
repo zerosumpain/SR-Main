@@ -14,7 +14,7 @@ export const LEGISLATION: Legislation[] = [
     summary:
       'The core data-protection regime. Article 6 provides six lawful bases (no hierarchy): consent, contract, legal obligation, vital interests, public task, legitimate interests. Special-category data needs a further Article 9 condition.',
     relevance:
-      'Every flow of pupil or child data needs a named Article 6 basis — usually "public task" for DfE — plus an Article 9 condition where health, ethnicity or similar is involved.',
+      'Every flow of pupil or child data needs a named Article 6 basis — usually "public task" for the department — plus an Article 9 condition where health, ethnicity or similar is involved.',
     sourceUrl: 'https://www.legislation.gov.uk/eur/2016/679/contents',
   },
   {
@@ -36,7 +36,7 @@ export const LEGISLATION: Legislation[] = [
     summary:
       'The government’s data reform (successor to the abandoned DPDI Bill). Amends — not replaces — UK GDPR/DPA. Adds a seventh Article 6 basis ("recognised legitimate interests", no balancing test), relaxes Article 22 automated decision-making with safeguards, enables digital verification and Smart Data, and replaces the ICO with a new Information Commission. Key provisions in force from 5 February 2026.',
     relevance:
-      'Reshapes the lawful-basis and access landscape DfE’s strategy must build on; the new recognised-legitimate-interests basis and ADM rules bear directly on data-driven services.',
+      'Reshapes the lawful-basis and access landscape the department’s strategy must build on; the new recognised-legitimate-interests basis and ADM rules bear directly on data-driven services.',
     sourceUrl: 'https://www.gov.uk/guidance/data-use-and-access-act-2025-data-protection-and-privacy-changes',
   },
   {
@@ -47,7 +47,7 @@ export const LEGISLATION: Legislation[] = [
     summary:
       'Part 5 Chapter 1 creates a Public Service Delivery data-sharing power for specified public authorities; further chapters cover debt, fraud and research/statistics. The gateways are permissive (not mandatory), do not override data-protection law, and the sharing arrangements are publicly registered.',
     relevance:
-      'A candidate statutory power for joining education data with other public services, and (via the research/statistics power) the gateway DfE already uses to share de-identified data through the ONS Secure Research Service.',
+      'A candidate statutory power for joining education data with other public services, and (via the research/statistics power) the gateway the department already uses to share de-identified data through the ONS Secure Research Service.',
     sourceUrl: 'https://www.legislation.gov.uk/ukpga/2017/30/part/5',
   },
   {
@@ -58,7 +58,7 @@ export const LEGISLATION: Legislation[] = [
     summary:
       'Section 4 inserts new ss. 16LA–16LD into the Children Act 2004: a consistent identifier (Single Unique Identifier) for every child that designated persons must use, a duty to share safeguarding information, and a power to set information standards. The government confirmed (Lords, 22 May 2025) it intends to use the NHS number as the identifier. Also creates Children Not in School registers.',
     relevance:
-      'The statutory basis for the consistent child identifier and the data spine — the single most consequential gateway for DfE’s data agenda, and the one that most engages quality, ethics and public trust.',
+      'The statutory basis for the consistent child identifier and the data spine — the single most consequential gateway for the department’s data agenda, and the one that most engages quality, ethics and public trust.',
     sourceUrl: 'https://www.legislation.gov.uk/ukpga/2026/21/contents',
   },
   {

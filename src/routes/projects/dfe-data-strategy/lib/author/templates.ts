@@ -64,10 +64,10 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
     id: 'users-needs',
     title: 'Users & their needs',
     guidance:
-      'Who the strategy serves, in their own terms: ministers and policy leads, DfE analysts, schools and trusts, local authorities, children and families, researchers, other departments. For each: what they need from data that they cannot get today, and the moments that matter (an admissions decision, a safeguarding referral, a funding allocation).',
+      'Who the strategy serves, in their own terms: ministers and policy leads, the department analysts, schools and trusts, local authorities, children and families, researchers, other departments. For each: what they need from data that they cannot get today, and the moments that matter (an admissions decision, a safeguarding referral, a funding allocation).',
     prompts: [
       'Which user is worst served by the current estate? What does it cost them?',
-      'What does a school get BACK for the data it gives DfE?',
+      'What does a school get BACK for the data it gives the department?',
       'Which needs are met by joining up existing data rather than collecting more?',
     ],
     heuristics: PROSE,
@@ -102,8 +102,8 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
     guidance:
       'How data joins up: the standards the department adopts (and mandates), API strategy, common reference data, metadata and cataloguing. Be specific about which standards are adopted verbatim, which are profiled for education, and how compliance is assured across a federated system of thousands of settings and suppliers.',
     prompts: [
-      'Which data standards will DfE mandate for suppliers (MIS vendors) and by when?',
-      'What is the API strategy — who can build on DfE data, and how do they discover it?',
+      'Which data standards will the department mandate for suppliers (MIS vendors) and by when?',
+      'What is the API strategy — who can build on the department data, and how do they discover it?',
       'How are standards governed — who decides, who assures, who funds adoption?',
     ],
     heuristics: ALL,
@@ -200,7 +200,7 @@ export const SECTION_TEMPLATES: SectionTemplate[] = [
     prompts: [
       'What is the default: which data is open, which safe-access, which closed — and why?',
       'How does a researcher get from question to safe data access, and how long does it take?',
-      'What does DfE contribute to the National Data Library, and on what terms?',
+      'What does the department contribute to the National Data Library, and on what terms?',
     ],
     heuristics: PROSE,
   },
@@ -261,7 +261,7 @@ export const TEMPLATE_BY_ID: Record<string, SectionTemplate> = Object.fromEntrie
 /** A fresh strategy document seeded with every core section, empty. */
 export function newDoc(): StrategyDoc {
   return {
-    title: 'DfE data strategy — working draft',
+    title: 'Education data strategy — working draft',
     sections: SECTION_TEMPLATES.map((t) => ({ id: t.id, templateId: t.id, title: t.title, html: '' })),
     updatedAt: 0,
   };

@@ -10,10 +10,10 @@
 
   const EXAMPLES = [
     'Every child should have a single consistent identifier used across education, social care and health.',
-    'DfE should default to open, reusable data standards for everything that isn’t personal data.',
+    'The department should default to open, reusable data standards for everything that isn’t personal data.',
     'We should build one central data platform rather than rely on local authority and trust systems.',
     'No new data collection from schools without retiring an existing one (a "collect once" rule).',
-    'All AI tools used in DfE decisions about children must be published on the ATRS before go-live.',
+    'All AI tools used in departmental decisions about children must be published on the ATRS before go-live.',
   ];
 
   // Auto-build queue: whenever a draft is waiting and nothing is in flight, build it.

@@ -68,7 +68,7 @@
         <h4>{hov.name}</h4>
         <p class="d-sum">{hov.summary}</p>
       {:else}
-        <span class="d-empty">Hover a framework. The further right, the more it should shape DfE’s strategy from the start; the left-hand ones are specialist tools for a narrow need.</span>
+        <span class="d-empty">Hover a framework. The further right, the more it should shape the department’s strategy from the start; the left-hand ones are specialist tools for a narrow need.</span>
       {/if}
     </div>
   </div>

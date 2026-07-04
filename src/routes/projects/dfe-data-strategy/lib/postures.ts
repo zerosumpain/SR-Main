@@ -76,7 +76,7 @@ export const POSTURE_AXES: PostureAxis[] = [
     leftLabel: 'Deliver in-house',
     rightLabel: 'Partner-led',
     description:
-      'Deliver through DfE itself, or through partners (LAs, MATs, agencies, ONS). Partner-led delivery unlocks cross-system sharing but adds coordination cost and dilutes control of quality.',
+      'Deliver through the department itself, or through partners (LAs, MATs, agencies, ONS). Partner-led delivery unlocks cross-system sharing but adds coordination cost and dilutes control of quality.',
     tension: 'Control & quality vs. reach across the system.',
     eli5: 'Do it ourselves, or work mostly through partners?',
     affects: [

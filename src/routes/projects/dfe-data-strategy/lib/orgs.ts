@@ -1,5 +1,5 @@
 // orgs.ts — the organisation registry behind the commitments flow map.
-// Rings give the radial layout its structure: DfE at the centre, its ALBs and
+// Rings give the radial layout its structure: The department at the centre, its ALBs and
 // agencies close in, the delivery system next, then the rest of government and
 // the public/research edge. Angles are hand-placed so related organisations sit
 // near each other (departments to the north, delivery to the south).
@@ -8,9 +8,9 @@ import type { Org } from './types';
 
 export const ORGS: Org[] = [
   // ring 0 — the centre
-  { id: 'dfe', name: 'Department for Education', short: 'DfE', group: 'dfe', ring: 0, angle: 0 },
+  { id: 'dfe', name: 'The education department', short: 'Dept', group: 'dfe', ring: 0, angle: 0 },
 
-  // ring 1 — DfE's arm's-length bodies and agencies
+  // ring 1 — The department's arm's-length bodies and agencies
   { id: 'ofsted', name: 'Ofsted', short: 'Ofsted', group: 'alb', ring: 1, angle: 200 },
   { id: 'ofqual', name: 'Ofqual', short: 'Ofqual', group: 'alb', ring: 1, angle: 245 },
   { id: 'skills-england', name: 'Skills England', short: 'Skills Eng.', group: 'alb', ring: 1, angle: 290 },
@@ -18,7 +18,7 @@ export const ORGS: Org[] = [
   { id: 'slc', name: 'Student Loans Company', short: 'SLC', group: 'alb', ring: 1, angle: 20 },
   { id: 'oak', name: 'Oak National Academy', short: 'Oak', group: 'alb', ring: 1, angle: 65 },
 
-  // ring 2 — the delivery system DfE works through
+  // ring 2 — the delivery system the department works through
   { id: 'schools', name: 'Schools & academy trusts', short: 'Schools', group: 'delivery', ring: 2, angle: 160 },
   { id: 'las', name: 'Local authorities', short: 'LAs', group: 'delivery', ring: 2, angle: 195 },
   { id: 'colleges', name: 'Colleges & training providers', short: 'Colleges', group: 'delivery', ring: 2, angle: 230 },
@@ -42,11 +42,11 @@ export const ORGS: Org[] = [
 
 export const ORG_BY_ID: Record<string, Org> = Object.fromEntries(ORGS.map((o) => [o.id, o]));
 
-// Colors validated (dataviz six-checks, light surface) 2026-07-02; DfE is the root
+// Colors validated (dataviz six-checks, light surface) 2026-07-02; the department is the root
 // node in ink, not a series color.
 export const ORG_GROUP_META: Record<Org['group'], { label: string; color: string }> = {
-  dfe: { label: 'DfE', color: '#1c1611' },
-  alb: { label: "DfE arm's-length bodies", color: '#8a2d3a' },
+  dfe: { label: 'The department', color: '#1c1611' },
+  alb: { label: "The department arm's-length bodies", color: '#8a2d3a' },
   delivery: { label: 'The delivery system', color: '#2f7a4f' },
   department: { label: 'Other departments', color: '#2c6fa3' },
   centre: { label: 'Centre of government', color: '#5d4696' },

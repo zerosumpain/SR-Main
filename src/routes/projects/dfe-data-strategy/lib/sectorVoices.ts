@@ -43,22 +43,22 @@ export const SECTOR_THEMES: SectorTheme[] = [
   {
     "id": "consistent-identifier",
     "title": "The consistent child identifier: safeguarding promise vs surveillance fear",
-    "summary": "The Children's Wellbeing and Schools Act introduces a single/consistent unique identifier for every child (DfE piloting the NHS number) plus a new duty to share information for welfare and safeguarding. This is the policy centre of gravity. Children's charities, the Children's Commissioner, local-government bodies and the DfE frame it as the way to stop children 'falling through the cracks'; privacy and civil-society groups (Defend Digital Me, Liberty, Reclaim Rights for Children, Open Rights Group) frame it as mission creep, an ever-expanding database and surveillance exceeding ContactPoint. "
+    "summary": "The Children's Wellbeing and Schools Act introduces a single/consistent unique identifier for every child (The department piloting the NHS number) plus a new duty to share information for welfare and safeguarding. This is the policy centre of gravity. Children's charities, the Children's Commissioner, local-government bodies and the department frame it as the way to stop children 'falling through the cracks'; privacy and civil-society groups (Defend Digital Me, Liberty, Reclaim Rights for Children, Open Rights Group) frame it as mission creep, an ever-expanding database and surveillance exceeding ContactPoint. "
   },
   {
     "id": "lawful-basis-vs-power",
     "title": "Governance, lawful basis, consent and scope creep",
-    "summary": "A recurring fault line is the distinction between a lawful basis to process data and a legal power to share it, plus consent, transparency and 'Henry VIII' delegated powers letting the secretary of state define key details later by secondary legislation. Critics point to pupil data handed monthly to the Home Office for immigration enforcement and shared with DWP, the National Pupil Database's 23m-28m records with indefinite retention and 2,385+ distributions since 2012 (including to police and commercial firms), and a 2020 ICO finding the DfE in breach of fundamental data-protection principles"
+    "summary": "A recurring fault line is the distinction between a lawful basis to process data and a legal power to share it, plus consent, transparency and 'Henry VIII' delegated powers letting the secretary of state define key details later by secondary legislation. Critics point to pupil data handed monthly to the Home Office for immigration enforcement and shared with DWP, the National Pupil Database's 23m-28m records with indefinite retention and 2,385+ distributions since 2012 (including to police and commercial firms), and a 2020 ICO finding the department in breach of fundamental data-protection principles"
   },
   {
     "id": "data-quality-readiness",
     "title": "Data quality and 'AI-readiness' as prerequisites",
-    "summary": "Across central government and schools, poor and fragmented data is named as the load-bearing constraint on any analytics or AI payoff. DSIT's State of Digital Government review found data severely fragmented with inconsistent quality and only ~27% of officials confident their infrastructure gives a comprehensive operational view; the PAC warned 'AI relies on high-quality data to learn' yet government data is poor and trapped in old systems. In schools, MIS-to-DfE sync errors silently propagate into accountability decisions (the disputed 16%-below-32.5-hours figure). Practitioners (Corbridge: '"
+    "summary": "Across central government and schools, poor and fragmented data is named as the load-bearing constraint on any analytics or AI payoff. DSIT's State of Digital Government review found data severely fragmented with inconsistent quality and only ~27% of officials confident their infrastructure gives a comprehensive operational view; the PAC warned 'AI relies on high-quality data to learn' yet government data is poor and trapped in old systems. In schools, MIS-to-the department sync errors silently propagate into accountability decisions (the disputed 16%-below-32.5-hours figure). Practitioners (Corbridge: '"
   },
   {
     "id": "census-to-realtime",
     "title": "From periodic census to continuous, MIS-scraped real-time data flows",
-    "summary": "The DfE wants to move from school-submitted census returns to continuous, automatically-extracted data flows, including a government MIS procurement framework schools will be 'expected' to use from September 2027 on a 'comply or explain' basis, plus benchmarking pilots from 2028. Consultants and trust leaders are cautiously supportive on burden reduction but insist success 'depends entirely on getting all MIS suppliers on board', that costs must not be passed to schools, and that MIS reliability must improve first. Sector-led platform Open Education AI already builds the cross-MIS aggregation-"
+    "summary": "The department wants to move from school-submitted census returns to continuous, automatically-extracted data flows, including a government MIS procurement framework schools will be 'expected' to use from September 2027 on a 'comply or explain' basis, plus benchmarking pilots from 2028. Consultants and trust leaders are cautiously supportive on burden reduction but insist success 'depends entirely on getting all MIS suppliers on board', that costs must not be passed to schools, and that MIS reliability must improve first. Sector-led platform Open Education AI already builds the cross-MIS aggregation-"
   },
   {
     "id": "deliverability-enforcement",
@@ -85,10 +85,10 @@ export const SECTOR_THEMES: SectorTheme[] = [
 export const SECTOR_VOICES: SectorVoice[] = [
   {
     "id": "v1",
-    "who": "Department for Education / Bridget Phillipson (Education Secretary)",
+    "who": "The education department / Bridget Phillipson (Education Secretary)",
     "group": "central",
     "stance": "supportive",
-    "point": "The Children's Wellbeing and Schools Act establishes a single unique identifier for every child across datasets with a new duty to share information for welfare and safeguarding; the DfE will run a regional pilot to test whether the NHS number can serve as the consistent identifier. Phillipson frames the Act as 'landmark legislation' providing 'critical new protections.'",
+    "point": "The Children's Wellbeing and Schools Act establishes a single unique identifier for every child across datasets with a new duty to share information for welfare and safeguarding; the department will run a regional pilot to test whether the NHS number can serve as the consistent identifier. Phillipson frames the Act as 'landmark legislation' providing 'critical new protections.'",
     "role": "Government owner of the data strategy and legislation",
     "sourceName": "Schools Week — Schools bill: All 39 proposed policies (and when they'll start), 20 Dec 2024",
     "sourceUrl": "https://schoolsweek.co.uk/schools-bill-all-39-proposed-policies-and-when-theyll-start/",
@@ -96,7 +96,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
   },
   {
     "id": "v2",
-    "who": "Department for Education (parents-facing explainer)",
+    "who": "The education department (parents-facing explainer)",
     "group": "central",
     "stance": "supportive",
     "point": "A single unique identifier (like an NHS number) stops children becoming invisible to the system, and a new information-sharing duty eases sharing between schools and social services with a clear legal basis for safeguarding; Royal Assent 29 April 2026, with the identifier piloted via the NHS number ahead of rollout.",
@@ -132,7 +132,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
     "who": "Defend Digital Me",
     "group": "third-sector",
     "stance": "critical",
-    "point": "Opposes mandating the NHS number as a single unique identifier as mission creep beyond its promised health-only use; warns the NPD holds 28m+ records indefinitely with 2,385+ distributions since 2012 (including to police and commercial firms), that a 2020 ICO audit found the DfE in breach of fundamental data-protection principles, and that in the deaths cited to justify the pol",
+    "point": "Opposes mandating the NHS number as a single unique identifier as mission creep beyond its promised health-only use; warns the NPD holds 28m+ records indefinitely with 2,385+ distributions since 2012 (including to police and commercial firms), that a 2020 ICO audit found the department in breach of fundamental data-protection principles, and that in the deaths cited to justify the pol",
     "role": "Children's digital-rights advocacy organisation",
     "sourceName": "Defend Digital Me — NHS number to be national ID mandated in Children's Wellbeing and Schools Bill, 14 Jun 2025",
     "sourceUrl": "https://defenddigitalme.org/2025/06/14/nhs-number-to-be-national-id-mandated-in-childrens-wellbeing-and-schools-bill/",
@@ -184,7 +184,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
   },
   {
     "id": "v10",
-    "who": "Bridget Phillipson / DfE (MIS procurement framework)",
+    "who": "Bridget Phillipson / the department (MIS procurement framework)",
     "group": "central",
     "stance": "supportive",
     "point": "Schools will be 'expected' to buy MIS through a government framework from September 2027 on a 'comply or explain' basis, to ensure data flows across schools/trusts/LAs/national level, ease trust-transfer data moves, protect pupil data and use the 'collective buying power of 22,000 schools'; Phillipson: 'We are stepping in to support them to drive down costs, protect pupils' dat",
@@ -198,7 +198,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
     "who": "Information Commissioner's Office (ICO)",
     "group": "central",
     "stance": "critical",
-    "point": "Classified the DfE's live daily-attendance tracker (data extracted from registers via edtech firm Wonde) as 'clearly in the high risk category', found the DfE had not completed a required data protection impact assessment before launch, ordered correction of a DfE claim about ICO involvement, and questioned holding sensitive pupil data (ethnicity, FSM, SEND) for 66 years and th",
+    "point": "Classified the department's live daily-attendance tracker (data extracted from registers via edtech firm Wonde) as 'clearly in the high risk category', found the department had not completed a required data protection impact assessment before launch, ordered correction of a departmental claim about ICO involvement, and questioned holding sensitive pupil data (ethnicity, FSM, SEND) for 66 years and th",
     "role": "Data protection regulator",
     "sourceName": "Schools Week — ICO sounds alarm over live school attendance tracker, 16 Sep 2022",
     "sourceUrl": "https://schoolsweek.co.uk/information-watchdog-sounds-alarm-over-live-school-attendance-tracker/",
@@ -220,7 +220,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
     "who": "Pepe Di'Iasio (ASCL) with Lift Schools, Harris Federation, Equals Trust, Bishop Hogarth Ca",
     "group": "mats",
     "stance": "critical",
-    "point": "Dispute the DfE finding that ~16% of schools (3,256 of 20,000) fall below the 32.5-hour week, saying figures were 'captured incorrectly between the DfE and the MIS' (implausible values like 8 or 52+ hours); Di'Iasio 'wouldn't be surprised if the 16 per cent figure is inaccurate' — a systemic MIS-to-DfE data-quality problem, not non-compliance.",
+    "point": "Dispute the department finding that ~16% of schools (3,256 of 20,000) fall below the 32.5-hour week, saying figures were 'captured incorrectly between the department and the MIS' (implausible values like 8 or 52+ hours); Di'Iasio 'wouldn't be surprised if the 16 per cent figure is inaccurate' — a systemic MIS-to-the department data-quality problem, not non-compliance.",
     "role": "School leaders' union and academy trusts",
     "sourceName": "Schools Week — Schools suggest DfE data on 32.5 hour week is 'inaccurate', 30 Jan 2026",
     "sourceUrl": "https://schoolsweek.co.uk/dodgy-dfe-data-shortens-schools-working-weeks/",
@@ -250,7 +250,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
   },
   {
     "id": "v16",
-    "who": "DfE / Bridget Phillipson (RISE, school profiles)",
+    "who": "The department / Bridget Phillipson (RISE, school profiles)",
     "group": "central",
     "stance": "supportive",
     "point": "RISE engages with schools showing 'concerning levels of pupil attainment, including large year-on-year declines' (bottom 25% at KS2/KS4 incl. disadvantaged pupils), and a new 'school profiles' digital service (launching 2025-26) will be a 'one-stop shop' of report cards, performance/exam data and census figures comparing schools with similar characteristics; Phillipson: 'I will",
@@ -261,10 +261,10 @@ export const SECTOR_VOICES: SectorVoice[] = [
   },
   {
     "id": "v17",
-    "who": "DfE AI toolkits / Bridget Phillipson",
+    "who": "The department AI toolkits / Bridget Phillipson",
     "group": "central",
     "stance": "mixed",
-    "point": "DfE AI toolkits warn schools must ensure AI complies with UK GDPR before use ('if a system stores, learns from, or shares the data, staff could be breaching data protection law'), that most free tools are unsuitable for student use, that tools must not train on pupil work, and that 'no decision that could adversely impact a student's outcomes is based purely on AI without human",
+    "point": "The department AI toolkits warn schools must ensure AI complies with UK GDPR before use ('if a system stores, learns from, or shares the data, staff could be breaching data protection law'), that most free tools are unsuitable for student use, that tools must not train on pupil work, and that 'no decision that could adversely impact a student's outcomes is based purely on AI without human",
     "role": "Government AI guidance for schools",
     "sourceName": "Schools Week — DfE school AI toolkits: 9 things leaders need to know, 10 Jun 2025",
     "sourceUrl": "https://schoolsweek.co.uk/school-ai-toolkits-9-things-leaders-need-to-know/",
@@ -440,7 +440,7 @@ export const SECTOR_VOICES: SectorVoice[] = [
     "who": "Confederation of School Trusts (Building Strong Trusts framework)",
     "group": "mats",
     "stance": "supportive",
-    "point": "Defines seven domains of a strong trust (strategic governance; expert ethical leadership; high-quality inclusive education; school improvement at scale; workforce resilience/wellbeing; finance/operations; public benefit/civic duty) — a framework that maps onto but differs from DfE descriptors and notably does not foreground data or interoperability standards.",
+    "point": "Defines seven domains of a strong trust (strategic governance; expert ethical leadership; high-quality inclusive education; school improvement at scale; workforce resilience/wellbeing; finance/operations; public benefit/civic duty) — a framework that maps onto but differs from the department descriptors and notably does not foreground data or interoperability standards.",
     "role": "Sector body quality framework",
     "sourceName": "CST — Building strong trusts (April 2023, updated September 2024)",
     "sourceUrl": "https://cstuk.org.uk/knowledge/discussion-and-policy-papers/building-strong-trusts/",
@@ -451,10 +451,10 @@ export const SECTOR_VOICES: SectorVoice[] = [
 export const SECTOR_BACKGROUND: Record<string, string[]> = {
   "schoolsweek": [
     "The Children's Wellbeing and Schools Bill was introduced in December 2024 and lists 39 proposed policies; the single unique identifier for every child is one of them, paired with a new statutory duty to share information for welfare and safeguarding.",
-    "The DfE is running a regional pilot to test whether the NHS number can serve as the consistent identifier across education, health and social-care datasets.",
-    "The DfE wants school MIS providers to allow real-time data extraction so it can make faster policy decisions and give schools earlier benchmarking (benchmarking pilots planned from 2028).",
+    "The department is running a regional pilot to test whether the NHS number can serve as the consistent identifier across education, health and social-care datasets.",
+    "The department wants school MIS providers to allow real-time data extraction so it can make faster policy decisions and give schools earlier benchmarking (benchmarking pilots planned from 2028).",
     "Schools will be 'expected' to buy MIS through a government procurement framework from September 2027 on a 'comply or explain' basis, using the collective buying power of about 22,000 schools.",
-    "The ICO previously found the DfE's live daily-attendance tracker (data extracted via edtech firm Wonde) 'clearly in the high risk category', launched without a completed data protection impact assessment, with the DfE having overstated ICO involvement.",
+    "The ICO previously found the department's live daily-attendance tracker (data extracted via edtech firm Wonde) 'clearly in the high risk category', launched without a completed data protection impact assessment, with the department having overstated ICO involvement.",
     "Defend Digital Me's Jen Persson cites that 69% of parents surveyed were unaware the National Pupil Database exists, that the NPD holds 23m+ records, and that pupil data is handed to the Home Office monthly for immigration enforcement and shared with the DWP."
   ],
   "civilserviceworld": [
@@ -462,8 +462,8 @@ export const SECTOR_BACKGROUND: Record<string, string[]> = {
     "The National Data Library is backed by over £100m within a £1.9bn digital programme; after a year-long discovery phase it emerged closer to a curated relaunch of data.gov.uk than a secure cross-government personal-data exchange.",
     "The Public Accounts Committee flagged that 21 of 72 red-rated legacy systems still lack remediation funding and warned 'AI relies on high-quality data to learn'.",
     "The Modern Digital Government roadmap (meant to unlock ~£45bn in savings) slipped from summer 2025 to December 2025 to January 2026.",
-    "The Children's Wellbeing and Schools Act introduces a consistent/single unique identifier for children with the DfE piloting the NHS number, justified by the Independent Review of Children's Social Care and tragic case reviews.",
-    "Defend Digital Me states the National Pupil Database records 28m+ people with indefinite retention and has seen 2,385+ data distributions since 2012, and that a 2020 ICO audit found the DfE in breach of fundamental data-protection principles."
+    "The Children's Wellbeing and Schools Act introduces a consistent/single unique identifier for children with the department piloting the NHS number, justified by the Independent Review of Children's Social Care and tragic case reviews.",
+    "Defend Digital Me states the National Pupil Database records 28m+ people with indefinite retention and has seen 2,385+ data distributions since 2012, and that a 2020 ICO audit found the department in breach of fundamental data-protection principles."
   ],
   "localAuthorities": [
     "The Children's Wellbeing and Schools Act 2026 introduces a consistent (single unique) child identifier, a new information-sharing duty, and children-not-in-school registers; Royal Assent reported variously around 29 April 2026.",
@@ -478,8 +478,8 @@ export const SECTOR_BACKGROUND: Record<string, string[]> = {
     "Of 417 trust CEOs surveyed (June-July 2024), 66% expect growth (81% in 20-plus-school trusts), conversions dominate (83%) but 39% see a merger as likely.",
     "Digital strategy is a rising trust priority (27%) but financial sustainability (66%, with 85% citing budget) and SEND dominate CEO concerns.",
     "CST's Building Strong Trusts framework defines seven domains of a strong trust and does not foreground data or interoperability standards.",
-    "The DfE frames the single unique identifier (like an NHS number) as stopping children becoming invisible to the system, with a new information-sharing duty giving a clear legal basis for safeguarding; Royal Assent 29 April 2026, with the identifier piloted via the NHS number ahead of rollout.",
-    "defenddigitalme opposes mandating the NHS number, citing scope creep, healthcare-disengagement risk (GMC warning), removal of Health and Social Care Act 2012 confidentiality protections, and a 2020 ICO finding that the DfE could not demonstrate GDPR compliance."
+    "The department frames the single unique identifier (like an NHS number) as stopping children becoming invisible to the system, with a new information-sharing duty giving a clear legal basis for safeguarding; Royal Assent 29 April 2026, with the identifier piloted via the NHS number ahead of rollout.",
+    "defenddigitalme opposes mandating the NHS number, citing scope creep, healthcare-disengagement risk (GMC warning), removal of Health and Social Care Act 2012 confidentiality protections, and a 2020 ICO finding that the department could not demonstrate GDPR compliance."
   ],
   "thirdSector": [
     "Children's charities and the Children's Commissioner broadly welcome the consistent identifier to stop children falling between services; NSPCC wants all relevant professionals enabled to use it and its purpose extended to evaluation/commissioning.",

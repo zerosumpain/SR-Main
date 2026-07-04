@@ -37,7 +37,7 @@
   </div>
   <h3 class="det-name">{f.name}</h3>
   {#if f.role}
-    <div class="det-role" title="How load-bearing this framework is for a DfE data strategy">
+    <div class="det-role" title="How load-bearing this framework is for an education data strategy">
       <span class="dr-lab">{ROLE_LABEL[f.role]}</span>
       <span class="dr-bar"><i style="width:{Math.round((f.weight ?? 0) * 100)}%"></i></span>
       <span class="dr-hint">{ROLE_HINT[f.role]}</span>

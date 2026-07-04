@@ -116,7 +116,7 @@ class AuthorState {
     this.doc = { ...this.doc, updatedAt: Date.now() };
   }
   setTitle(title: string) {
-    this.doc = { ...this.doc, title: title.trim() || 'DfE data strategy — working draft', updatedAt: Date.now() };
+    this.doc = { ...this.doc, title: title.trim() || 'Education data strategy — working draft', updatedAt: Date.now() };
   }
   setHtml(sectionId: string, html: string) {
     const i = this.doc.sections.findIndex((s) => s.id === sectionId);

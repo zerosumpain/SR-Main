@@ -14,7 +14,7 @@
     a.click();
     URL.revokeObjectURL(url);
   }
-  const slug = () => author.doc.title.replace(/\W+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'dfe-data-strategy';
+  const slug = () => author.doc.title.replace(/\W+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'education-strategy';
 
   function exportMd() {
     download(`${slug()}.md`, new Blob([docToMarkdown(author.doc)], { type: 'text/markdown' }));

@@ -1,6 +1,6 @@
 // suggest/+server.ts — "draft policies for this item". Given a strategy, pressure or
 // stakeholder from the influence map / landscape, suggest 4-6 candidate headline policies
-// DfE could include in its data strategy, grounded in the project's material. Small JSON,
+// the department could include in its data strategy, grounded in the project's material. Small JSON,
 // streamed (SSE) for the same edge-proxy reason as /consider. Public + rate-limited.
 
 import type { RequestHandler } from './$types';
@@ -29,12 +29,12 @@ export const POST: RequestHandler = async (event) => {
   const id = String(body?.id ?? '').slice(0, 80);
   const label = String(body?.label ?? '').slice(0, 160);
 
-  const sys = `You help a DfE data-strategy lead. Given ONE item from the strategy landscape, propose candidate HEADLINE POLICIES the data strategy could include in response to it — concrete, debatable positions (not platitudes), each something the lead could later pressure-test.
+  const sys = `You help an education data-strategy lead. Given ONE item from the strategy landscape, propose candidate HEADLINE POLICIES the data strategy could include in response to it — concrete, debatable positions (not platitudes), each something the lead could later pressure-test.
 
 Return STRICT JSON only — no prose, no fences:
 {"policies": [{"title": string (<= 8 words), "statement": string (one plain-English sentence, <= 40 words)}]}
 
-Rules: 4-6 distinct policies; specific to DfE and children's data; grounded in the STRATEGY CONTEXT; mix ambitious and cautious options where sensible. No commentary.
+Rules: 4-6 distinct policies; specific to the department and children's data; grounded in the STRATEGY CONTEXT; mix ambitious and cautious options where sensible. No commentary.
 
 STRATEGY CONTEXT:
 ${buildStrategyContext()}`;

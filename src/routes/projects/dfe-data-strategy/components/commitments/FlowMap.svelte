@@ -5,7 +5,7 @@
   import type { Commitment } from '../../lib/types';
 
   // the new connections between partners: every flow the filtered commitments create,
-  // DfE-centred radial layout, edge weight = number of commitments behind the flow
+  // department-centred radial layout, edge weight = number of commitments behind the flow
   const W = 940;
   const H = 640;
   const CX = W / 2;
@@ -158,7 +158,7 @@
           >
             <circle cx={p.x} cy={p.y} {r} fill={ORG_GROUP_META[o.group].color} stroke="#fdfaf2" stroke-width="2.5" />
             {#if o.id === 'dfe'}
-              <text x={p.x} y={p.y + 4} text-anchor="middle" class="dfe-lab">DfE</text>
+              <text x={p.x} y={p.y + 4} text-anchor="middle" class="dfe-lab">the department</text>
             {:else}
               <text x={p.x + (labelAnchor(o.id) === 'start' ? r + 5 : labelAnchor(o.id) === 'end' ? -r - 5 : 0)} y={labelAnchor(o.id) === 'middle' ? p.y + labelDY(o.id) : p.y + 3.5} text-anchor={labelAnchor(o.id)} class="lab">{o.short}</text>
             {/if}

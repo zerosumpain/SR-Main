@@ -140,7 +140,7 @@ export const FAILURE_MODES: string[] = [
   'Watch for misdiagnosing cultural barriers as legal ones — the IfG found existing law (DEA, UK GDPR) was not the pandemic-era blocker; incentives, risk appetite and relationships were',
   'Watch for no mechanism to measure the strategy itself — no baselined indicators, logic model or public reporting cadence (the NDS M&E framework is the exception that proves the rule)',
   'Watch for a strategy stale by publication — DWP’s 2023–2030 strategy appeared in January 2026, three years into its own period, turning commitments into retrospective narrative',
-  'Watch for fragmented partial strategies with no whole-department view — research-access-only, one sub-sector, or outward-facing digital, with nobody owning the whole estate (DfE’s last department-wide artefact dates from 2012)',
+  'Watch for fragmented partial strategies with no whole-department view — research-access-only, one sub-sector, or outward-facing digital, with nobody owning the whole estate (The department’s last department-wide artefact dates from 2012)',
 ];
 
 /** The canonical components of a strong departmental data strategy, weighted, for the missing-components check. */

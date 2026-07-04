@@ -155,7 +155,7 @@
     try {
       outline = await post({ mode: 'outline', depth, length, answers: answerList() });
     } catch (e: any) {
-      outline = { title: 'DfE data strategy', arc: '', shifts: [], briefs: {} };
+      outline = { title: 'Education data strategy', arc: '', shifts: [], briefs: {} };
     }
     for (let i = 0; i < results.length; i++) {
       if (phase !== 'generating') return; // user bailed
@@ -171,7 +171,7 @@
 
   // ---- outputs ----
   function assembleMarkdown(): string {
-    const head = `# ${outline?.title ?? 'DfE data strategy'}\n\n_A working draft generated in the Keystone workspace, ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Decision-support material, not an official strategy._\n`;
+    const head = `# ${outline?.title ?? 'Education data strategy'}\n\n_A working draft generated in the Keystone workspace, ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}. Decision-support material, not an official strategy._\n`;
     const body = results
       .filter((r) => r.status === 'done')
       .map((r) => `\n## ${r.title}\n\n${r.markdown}`)
@@ -180,7 +180,7 @@
   }
   function loadIntoDraft() {
     const ok = author.importDoc({
-      title: outline?.title ?? 'DfE data strategy — generated draft',
+      title: outline?.title ?? 'Education data strategy — generated draft',
       sections: results
         .filter((r) => r.status === 'done')
         .map((r) => ({ id: r.id, templateId: r.templateId, title: r.title, html: markdownToHtml(r.markdown) })),
@@ -198,7 +198,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'dfe-data-strategy-generated.md';
+    a.download = 'education-strategy-generated.md';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -207,14 +207,14 @@
       const res = await fetch('/projects/dfe-data-strategy/synth?export=docx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown: assembleMarkdown(), title: outline?.title ?? 'DfE data strategy' }),
+        body: JSON.stringify({ markdown: assembleMarkdown(), title: outline?.title ?? 'Education data strategy' }),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'dfe-data-strategy-generated.docx';
+      a.download = 'education-strategy-generated.docx';
       a.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -369,7 +369,7 @@
     <div class="done">
       <div class="done-head">
         <div>
-          <h3 class="rev-h">“{outline?.title ?? 'DfE data strategy'}”</h3>
+          <h3 class="rev-h">“{outline?.title ?? 'Education data strategy'}”</h3>
           <p class="rev-sub">{totalWords.toLocaleString()} words ≈ <b>{donePages} pages</b> · {results.filter((r) => r.status === 'done').length}/{results.length} sections{failedCount ? ` · ${failedCount} failed — regenerate below` : ''}</p>
         </div>
         <div class="done-acts">
