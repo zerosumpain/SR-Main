@@ -115,6 +115,44 @@
   </div>
 
   <div class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    {#if showCard('scs-earnings')}
+    <div class="project-card group">
+      <a href="/projects/scs-earnings/" class="absolute inset-0 z-0" aria-label="Open Senior Civil Servant Earnings"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №6
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Pay data
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Senior Civil Servant Earnings — Fifteen Years of Whitehall Pay
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        How many mandarins out-earn the Prime Minister? What is a digital director worth against a
+        policy one? Plot the pay of the 46,595 most senior posts across 25 government departments,
+        2010–2026 — by department, profession, grade and the DDaT-vs-policy split, in real terms or
+        nominal. Built entirely on gov.uk organogram transparency data, with a full glass-box method.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          gov.uk data · 46,595 posts · OGL
+        </span>
+        {@render visToggle('scs-earnings', '/projects/scs-earnings/', 'Senior Civil Servant Earnings')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('broads-pilot')}
     <div class="project-card group">
       <a href="/projects/broads-pilot" class="absolute inset-0 z-0" aria-label="Open Broads Pilot"></a>
