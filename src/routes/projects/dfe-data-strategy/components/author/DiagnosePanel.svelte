@@ -160,7 +160,10 @@
       <h3>Happy with the posture? Now write it down.</h3>
       <p>The diagnostic tests a stance; the <b>Draft</b> tab turns it into the strategy document itself — and its suggested lines quote this posture, coverage and maturity picture back to you, section by section.</p>
     </div>
-    <button class="pe-next" onclick={() => author.setTab('draft')}>✎ Draft the strategy →</button>
+    <div class="wb-cta">
+      <button class="pe-next" onclick={() => author.setTab('interview')}>✦ Interview me — write it for me →</button>
+      <button class="pe-next ghost" onclick={() => author.setTab('draft')}>✎ Draft it myself →</button>
+    </div>
   </div>
 </div>
 
@@ -185,4 +188,6 @@
   .wb-author h3 { margin: 0 0 4px; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); }
   .wb-author p { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.7); max-width: 64ch; }
   .wb-author p b { color: var(--ink); }
+  .wb-cta { display: flex; gap: 8px; flex-wrap: wrap; }
+  .wb-cta :global(.pe-next.ghost) { background: transparent; color: var(--accent-ink); border: 1px solid var(--accent-ink); }
 </style>

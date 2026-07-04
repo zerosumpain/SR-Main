@@ -85,6 +85,10 @@ export interface Framework {
   summary: string;
   keyElements: string[];
   sourceUrl?: string;
+  /** Sort key for date ordering (YYYY-MM of the current authoritative version). */
+  date: string;
+  /** Human-readable dating, incl. lineage (e.g. "2018 · renamed Dec 2025"). */
+  dateLabel: string;
   /** How load-bearing for a DfE data strategy. */
   role?: 'foundational' | 'core' | 'specialist';
   /** 0–1 positioning weight (foundational ≈ 1, specialist ≈ 0.4). */

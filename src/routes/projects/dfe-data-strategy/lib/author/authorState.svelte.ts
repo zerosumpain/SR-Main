@@ -10,7 +10,7 @@ import { runCoverage, type CoverageResult } from './coverage';
 import { runHeuristics, type HeuristicResult } from './heuristics';
 import { htmlToText } from './serialize';
 
-export type AuthorTab = 'diagnose' | 'draft' | 'verify' | 'plan' | 'export';
+export type AuthorTab = 'diagnose' | 'interview' | 'draft' | 'verify' | 'plan' | 'export';
 
 export interface Snapshot {
   id: string;

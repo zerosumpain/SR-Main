@@ -6,6 +6,7 @@
   import SectionEditor from '../components/author/SectionEditor.svelte';
   import GuidancePanel from '../components/author/GuidancePanel.svelte';
   import DiagnosePanel from '../components/author/DiagnosePanel.svelte';
+  import InterviewPanel from '../components/author/InterviewPanel.svelte';
   import VerifyPanel from '../components/author/VerifyPanel.svelte';
   import PlanPanel from '../components/author/PlanPanel.svelte';
   import ExportPanel from '../components/author/ExportPanel.svelte';
@@ -15,6 +16,7 @@
   const TABS = $derived<{ id: AuthorTab; label: string; hint: string }[]>([
     // the diagnostic (the old private workbench) is the workspace's first step for the signed-in owner
     ...(data?.authed ? [{ id: 'diagnose' as AuthorTab, label: '◆ Diagnose', hint: 'Test the posture against the pressures before writing' }] : []),
+    ...(data?.authed ? [{ id: 'interview' as AuthorTab, label: '✦ Interview', hint: 'Answer the questions; a full strategy is written from them' }] : []),
     { id: 'draft', label: '✎ Draft', hint: 'Write the strategy, section by section' },
     { id: 'verify', label: '◈ Verify', hint: 'Coverage sweep, completeness checks and the deep review' },
     { id: 'plan', label: '▤ Plan', hint: 'Roadmap, risks, measures and consultation' },
@@ -27,7 +29,7 @@
     author.load();
     const t = $page.url.searchParams.get('tab');
     if (t === 'draft' || t === 'verify' || t === 'plan' || t === 'export') author.tab = t;
-    else if (t === 'diagnose' && data?.authed) author.tab = 'diagnose';
+    else if ((t === 'diagnose' || t === 'interview') && data?.authed) author.tab = t;
   });
 
   // persist on any state change (cheap JSON writes, debounced by microtask batching)
@@ -52,7 +54,7 @@
 <div class="pe-route wide au">
   <header class="au-head">
     <div class="au-title">
-      <span class="pe-eyebrow">The workspace · diagnose → draft → verify → plan</span>
+      <span class="pe-eyebrow">The workspace · diagnose → interview → draft → verify → plan</span>
       {#if titleEditing}
         <input
           class="title-in"
@@ -74,7 +76,7 @@
     </div>
     <nav class="au-tabs" aria-label="Author tools">
       {#each TABS as t}
-        <button class="au-tab" class:on={author.tab === t.id} class:diag={t.id === 'diagnose'} title={t.hint} onclick={() => author.setTab(t.id)}>
+        <button class="au-tab" class:on={author.tab === t.id} class:diag={t.id === 'diagnose' || t.id === 'interview'} title={t.hint} onclick={() => author.setTab(t.id)}>
           {t.label}
           {#if t.id === 'verify' && verifyBadge > 0 && author.totalWords > 0}
             <i class="badge">{verifyBadge}</i>
@@ -86,7 +88,9 @@
 
   {#if author.tab === 'diagnose' && data?.authed}
     <DiagnosePanel />
-  {:else if author.tab === 'draft' || (author.tab === 'diagnose' && !data?.authed)}
+  {:else if author.tab === 'interview' && data?.authed}
+    <InterviewPanel />
+  {:else if author.tab === 'draft' || ((author.tab === 'diagnose' || author.tab === 'interview') && !data?.authed)}
     <div class="draft-grid">
       <div class="col-rail"><SectionRail /></div>
       <div class="col-ed">

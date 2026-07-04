@@ -49,7 +49,8 @@ export const POST: RequestHandler = async (event) => {
   // ---- export mode ----
   if (event.url.searchParams.get('export') === 'docx') {
     const body = await event.request.json().catch(() => ({}));
-    const markdown = String(body?.markdown ?? '').slice(0, 60_000);
+    // sized for a full generated strategy (15+ pages), not just the diagnostic brief
+    const markdown = String(body?.markdown ?? '').slice(0, 140_000);
     const title = String(body?.title ?? 'DfE data strategy brief').slice(0, 200);
     if (!markdown) throw error(400, 'No content.');
     const out = await synthesize({ format: 'docx', source: 'markdown', content: markdown, title });

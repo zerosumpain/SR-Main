@@ -2,9 +2,8 @@
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import TakeawayBar from '../components/TakeawayBar.svelte';
   import NextStep from '../components/NextStep.svelte';
-  import Reveal from '../components/Reveal.svelte';
   import IntelInline from '../components/IntelInline.svelte';
-  import FrameworkGrid from '../components/FrameworkGrid.svelte';
+  import FrameworkExplorer from '../components/FrameworkExplorer.svelte';
   import FrameworkMap from '../components/FrameworkMap.svelte';
   import { STRATEGY_THEMES, FRAMEWORKS } from '../lib/frameworks';
 </script>
@@ -25,13 +24,21 @@
     takeaway="Nine themes recur in every credible data strategy. A draft that is silent on any of them has a gap — and the Author's checks will say so."
     takeawayEli5="Every good data plan covers the same nine topics. If yours misses one, that's a gap."
     chips={[
-      { n: String(FRAMEWORKS.length), label: 'frameworks', href: '#framework-grid' },
+      { n: String(FRAMEWORKS.length), label: 'frameworks', href: '#framework-index' },
       { n: String(STRATEGY_THEMES.length), label: 'recurring themes', href: '#themes' },
     ]}
     drill={[{ label: 'the themes checklist', href: '#themes' }]}
   />
 
   <IntelInline section="frameworks" note="new or updated frameworks and standards" />
+
+  <section class="viz" id="framework-index">
+    <div class="viz-head">
+      <h2 class="pe-h2">The {FRAMEWORKS.length} frameworks, newest first</h2>
+      <p class="pe-prose">One index, one detail. Pick a framework on the left to read what it is, what it gives a DfE strategy, and where it leads — ordered by the date of the current version, most recent first, because the newer government publications supersede the older framing.</p>
+    </div>
+    <FrameworkExplorer />
+  </section>
 
   <section class="viz">
     <div class="viz-head">
@@ -52,12 +59,6 @@
     {/each}
   </div>
 
-  <div id="framework-grid">
-    <Reveal label="Show all {FRAMEWORKS.length} frameworks in full — what each covers and where it leads">
-      <FrameworkGrid />
-    </Reveal>
-  </div>
-
   <NextStep
     links={[
       { label: 'The legal stack', href: '/projects/dfe-data-strategy/legislation', kind: 'primary' },
@@ -68,7 +69,7 @@
 
 <style>
   .theme-intro { max-width: 78ch; }
-  .viz { margin: 8px 0 26px; }
+  .viz { margin: 8px 0 30px; }
   .viz-head { max-width: 80ch; margin-bottom: 12px; }
   .viz-head .pe-h2 { margin-bottom: 4px; }
   .themes { margin: 8px 0 6px; }

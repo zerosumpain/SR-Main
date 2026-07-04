@@ -3,6 +3,8 @@
   import TakeawayBar from '../components/TakeawayBar.svelte';
   import NextStep from '../components/NextStep.svelte';
   import SectorVoices from '../components/SectorVoices.svelte';
+  import VoiceThemeExplorer from '../components/VoiceThemeExplorer.svelte';
+  import Reveal from '../components/Reveal.svelte';
   import { SECTOR_THEMES, SECTOR_VOICES, SECTOR_BACKGROUND, VOICE_GROUP_META } from '../lib/sectorVoices';
 
   const BG_LABEL: Record<string, string> = {
@@ -44,20 +46,15 @@
     ]}
   />
 
-  <h2 class="pe-h2" id="debates">The debates beneath the headlines</h2>
-  <p class="pe-prose intro">Strip the noise back and the same eight arguments recur. Each is a genuine tension a strategy has to take a position on — not a problem with a tidy answer.</p>
-  <div class="themes">
-    {#each SECTOR_THEMES as t}
-      <div class="theme">
-        <h3>{t.title}</h3>
-        <p>{t.summary}</p>
-      </div>
-    {/each}
-  </div>
+  <h2 class="pe-h2" id="debates">Pick a debate — hear the voices</h2>
+  <p class="pe-prose intro">Strip the noise back and the same eight arguments recur. Pick one and the cited voices arrange themselves around it — who backs it, who says <i>yes, but</i>, and who pushes back. Each is a genuine tension a strategy has to take a position on, in the speakers' own (faithfully paraphrased) words.</p>
+  <VoiceThemeExplorer />
 
-  <h2 class="pe-h2" id="voices">Who’s saying what</h2>
-  <p class="pe-prose intro">Grouped by who’s speaking, with the balance of opinion in each camp. Filter by stance to see the spectrum — from the safeguarding case for joining data up, to the privacy case against.</p>
-  <SectorVoices />
+  <div id="voices" class="all-voices">
+    <Reveal label="Browse all {SECTOR_VOICES.length} voices by who's speaking — with the balance of opinion in each camp">
+      <SectorVoices />
+    </Reveal>
+  </div>
 
   {#if bgKeys.length}
     <details class="bg">
@@ -84,10 +81,7 @@
 
 <style>
   .intro { max-width: 80ch; }
-  .themes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 6px 0 8px; }
-  .theme { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid #8a2d3a; border-radius: var(--radius-round); background: rgba(255,255,255,0.42); padding: 12px 14px; }
-  .theme h3 { margin: 0 0 5px; font-family: 'Fraunces', serif; font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
-  .theme p { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.7); }
+  .all-voices { margin-top: 26px; }
   .bg { margin: 26px 0 0; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); padding: 6px 14px; }
   .bg summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft, rgba(28,22,17,0.6)); padding: 8px 0; }
   .bg-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; padding: 6px 0 12px; }

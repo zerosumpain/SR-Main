@@ -11,6 +11,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'national-data-strategy',
     name: 'National Data Strategy (2020)',
     type: 'uk-gov',
+    date: '2020-09',
+    dateLabel: 'Sep 2020',
     summary:
       'The DCMS strategy (launched September 2020) framing data as a strategic asset. Not formally withdrawn, but operational ambition has since moved to the digital-and-data roadmap, DSIT mission-led work and the National Data Library.',
     keyElements: [
@@ -26,6 +28,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'cddo-roadmap',
     name: 'Transforming for a Digital Future (2022–25 roadmap)',
     type: 'uk-gov',
+    date: '2022-06',
+    dateLabel: 'Jun 2022',
     summary:
       'The CDDO cross-government roadmap (June 2022), underpinned by £8bn of investment, with six missions. Mission 3 — "Better data to power decision making" — drove a Data Marketplace, an API catalogue and common data standards.',
     keyElements: [
@@ -42,6 +46,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'modern-digital-government',
     name: 'Blueprint & Roadmap for Modern Digital Government',
     type: 'uk-gov',
+    date: '2026-01',
+    dateLabel: 'Blueprint Jan 2025 · roadmap Jan 2026',
     summary:
       'The current strategic direction. DSIT/GDS published "A Blueprint for Modern Digital Government" (Jan 2025) and "A Roadmap for Modern Digital Government" (Jan 2026, horizon 2030), reframing the data agenda around a National Data Library and a "Digital Backbone". The 2025 State of Digital Government Review found £45bn/yr of unrealised savings and that ~70% of leaders say data is poorly coordinated.',
     keyElements: [
@@ -56,6 +62,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'ai-opportunities',
     name: 'AI Opportunities Action Plan (2025)',
     type: 'uk-gov',
+    date: '2025-01',
+    dateLabel: 'Jan 2025',
     summary:
       'Matt Clifford’s plan (Jan 2025; government response CP 1242, 48/50 recommendations agreed) to scale public- and private-sector AI. It frames high-quality data as "the lifeblood of modern AI" and routes data-unlocking through the National Data Library; DfE is named a delivery partner.',
     keyElements: [
@@ -70,6 +78,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'dma-government',
     name: 'Data Maturity Assessment for Government',
     type: 'uk-gov',
+    date: '2023-03',
+    dateLabel: 'Mar 2023',
     summary:
       'A self-assessment framework (GDS + CDDO; developed by the ONS Data Quality Hub; published 27 March 2023; adapted from the Data Orchard model). A matrix of ten topics across six themes — Leadership, Culture, Skills, Tools, Data, Uses — scored on a five-level scale (Beginning → Mastering).',
     keyElements: [
@@ -84,6 +94,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'gov-data-quality',
     name: 'Government Data Quality Framework',
     type: 'uk-gov',
+    date: '2020-12',
+    dateLabel: 'Dec 2020',
     summary:
       'Principles and practices for managing data quality across government (GDS + Data Standards Authority + ONS Data Quality Hub, Dec 2020), with six DAMA-UK quality dimensions and a culture of measuring and communicating quality.',
     keyElements: [
@@ -97,6 +109,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'data-ethics-framework',
     name: 'Data and AI Ethics Framework',
     type: 'uk-gov',
+    date: '2025-12',
+    dateLabel: '2018 · renamed & expanded Dec 2025',
     summary:
       'Non-statutory guidance for the ethical use of data and AI in the public sector. First published (as the Data Ethics Framework) in 2018; updated and renamed the Data and AI Ethics Framework in December 2025, expanding to seven overarching principles and adding a self-assessment tool. Complements UK GDPR, the Equality Act and sector regulation.',
     keyElements: [
@@ -111,6 +125,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'atrs',
     name: 'Algorithmic Transparency Recording Standard',
     type: 'uk-gov',
+    date: '2024-03',
+    dateLabel: 'Nov 2021 · mandatory from Mar 2024',
     summary:
       'The cross-government standard for recording and publishing how and why public bodies use algorithmic / AI tools. Two-tier records, published to a central GOV.UK repository. Mandatory rollout to central government began in phases from March 2024.',
     keyElements: [
@@ -127,6 +143,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'dama-dmbok',
     name: 'DAMA-DMBOK',
     type: 'corporate',
+    date: '2017-07',
+    dateLabel: '2017 (DMBOK2) · 3.0 in development',
     summary:
       'The Data Management Body of Knowledge — the canonical industry framework, organising data management into 11 knowledge areas around a Data Governance hub (the "DAMA Wheel"). DMBOK2 is current; DMBOK 3.0 is in development.',
     keyElements: [
@@ -141,6 +159,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'dcam',
     name: 'EDM Council DCAM',
     type: 'corporate',
+    date: '2025-06',
+    dateLabel: 'Jun 2025 (v3)',
     summary:
       'The Data Management Capability Assessment Model — an industry standard for assessing and benchmarking enterprise data-management capability. DCAM v3 (June 2025): 8 components, 34 capabilities and 101 sub-capabilities, scored on Engagement, Process and Evidence.',
     keyElements: [
@@ -155,6 +175,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'cdmc',
     name: 'Cloud Data Management Capabilities (CDMC)',
     type: 'corporate',
+    date: '2021-09',
+    dateLabel: 'Sep 2021',
     summary:
       'An EDM Council framework for managing data in cloud and hybrid environments: 6 components, 14 capabilities and 37 sub-capabilities, with 14 Key Controls for protecting and governing sensitive data.',
     keyElements: ['6 components / 14 capabilities / 37 sub-capabilities', 'Cataloguing & classification', '14 automated Key Controls for data protection', 'Cloud governance & accountability'],
@@ -164,6 +186,8 @@ export const FRAMEWORKS: Framework[] = [
     id: 'data-mesh',
     name: 'Data Mesh',
     type: 'corporate',
+    date: '2020-12',
+    dateLabel: '2019 concept · principles Dec 2020',
     summary:
       'A decentralised, domain-oriented approach (coined by Zhamak Dehghani, 2019): treat data as a product owned by domains, on self-serve platform infrastructure, under federated computational governance. Increasingly paired with data fabric (the connective metadata layer).',
     keyElements: ['Domain-oriented ownership', 'Data as a product', 'Self-serve data platform', 'Federated computational governance'],
@@ -196,6 +220,9 @@ export const FRAMEWORKS_BY_TYPE = {
   'uk-gov': FRAMEWORKS.filter((f) => f.type === 'uk-gov'),
   corporate: FRAMEWORKS.filter((f) => f.type === 'corporate'),
 };
+
+/** Default presentation order: date of the current authoritative version, newest first. */
+export const FRAMEWORKS_BY_DATE = [...FRAMEWORKS].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 /** Recurring themes a mature data strategy is expected to cover ("what should already exist"). */
 export const STRATEGY_THEMES: { title: string; blurb: string }[] = [
