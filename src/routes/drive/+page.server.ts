@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { workflowFiles, webdavCredentials } from '$lib/db/schema';
-import { desc, isNull } from 'drizzle-orm';
+import { workflowFiles } from '$lib/db/schema';
+import { desc } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 
 // Endpoint's own per-file cap (see /api/files/upload). The effective client-side
@@ -21,22 +21,9 @@ function parseBytes(raw: string | undefined, fallback: number): number {
 }
 
 export const load: PageServerLoad = async () => {
-  const [files, credentials] = await Promise.all([
-    db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt)),
-    db
-      .select({
-        id: webdavCredentials.id,
-        label: webdavCredentials.label,
-        ownerEmail: webdavCredentials.ownerEmail,
-        lastUsedAt: webdavCredentials.lastUsedAt,
-        createdAt: webdavCredentials.createdAt,
-      })
-      .from(webdavCredentials)
-      .where(isNull(webdavCredentials.revokedAt))
-      .orderBy(desc(webdavCredentials.createdAt)),
-  ]);
+  const files = await db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt));
   // adapter-node default is '512K' when BODY_SIZE_LIMIT is unset.
   const bodyLimit = parseBytes(env.BODY_SIZE_LIMIT, 512 * 1024);
   const maxUploadBytes = Math.min(bodyLimit, MAX_BYTES);
-  return { files, credentials, maxUploadBytes };
+  return { files, maxUploadBytes };
 };

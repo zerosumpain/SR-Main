@@ -3,6 +3,10 @@
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
+  import InteractModelModal from '$lib/components/drive/InteractModelModal.svelte';
+  import RagChatPanel from '$lib/components/drive/RagChatPanel.svelte';
+  import type { RagCollection } from '$lib/db/schema';
 
   let { data } = $props();
 
@@ -51,12 +55,14 @@
     files.filter((f) => {
       if (isMarker(f.name)) return false;
       const rem = underCurrent(f.name);
-      return rem !== null && !rem.includes('/');
+      return rem !== null && !rem.includes('/') && matchesQuery(f.name);
     }),
   );
 
-  // Immediate subfolders of the current folder, with real-file counts
+  // Immediate subfolders of the current folder, with real-file counts. When a
+  // search query is active, only folders whose name matches are shown.
   const subfolders = $derived.by(() => {
+    const q = query.trim().toLowerCase();
     const counts = new Map<string, number>();
     for (const f of files) {
       const rem = underCurrent(f.name);
@@ -69,6 +75,7 @@
     }
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count }))
+      .filter(({ name }) => !q || name.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
   });
 
@@ -105,19 +112,13 @@
     moveOpen = false;
   }
 
-  type Credential = {
-    id: string;
-    label: string;
-    ownerEmail: string;
-    lastUsedAt: string | Date | null;
-    createdAt: string | Date;
-  };
-  let credentials = $state<Credential[]>(data.credentials as Credential[]);
-  let credLabel = $state('');
-  let credBusy = $state(false);
-  let credError = $state<string | null>(null);
-  let newCredSecret = $state<{ id: string; label: string; secret: string } | null>(null);
-  let showSecret = $state(false);
+  // ——— Live search filter (scoped to the current folder) ———
+  let query = $state('');
+  function matchesQuery(name: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return baseName(name).toLowerCase().includes(q);
+  }
 
   let fileInput: HTMLInputElement | null = $state(null);
   let folderInput: HTMLInputElement | null = $state(null);
@@ -134,16 +135,25 @@
 
   // ——— Multi-select / download state ———
   let selected = $state<Record<string, boolean>>({});
-  const selectedFiles = $derived(files.filter((f) => selected[f.id]));
+  // Scope to visibleFiles (current folder + active search) so bulk actions —
+  // download, move, interact — never operate on files hidden by the filter.
+  const selectedFiles = $derived(visibleFiles.filter((f) => selected[f.id]));
   const allSelected = $derived(visibleFiles.length > 0 && visibleFiles.every((f) => selected[f.id]));
   let zipBusy = $state(false);
 
   // ——— View mode (list | grid) — grid by default, persisted per browser ———
   let viewMode = $state<'list' | 'grid'>('grid');
+  let onboardDismissed = $state(true); // assume dismissed until localStorage says otherwise (avoids SSR flash)
   onMount(() => {
     const v = localStorage.getItem('drive:view');
     if (v === 'grid' || v === 'list') viewMode = v;
+    onboardDismissed = localStorage.getItem('drive:onboarded') === '1';
+    loadCollections();
   });
+  function dismissOnboard() {
+    onboardDismissed = true;
+    try { localStorage.setItem('drive:onboarded', '1'); } catch { /* ignore */ }
+  }
   function setView(v: 'list' | 'grid') {
     viewMode = v;
     try { localStorage.setItem('drive:view', v); } catch { /* ignore */ }
@@ -468,46 +478,62 @@
     }
   }
 
-  async function refreshCredentials() {
-    const res = await fetch('/api/admin/webdav-credentials');
-    if (res.ok) {
-      const body = await res.json();
-      credentials = body.credentials;
-    }
+  // ——— File viewer (double-click preview) ———
+  let viewerFile = $state<FileRow | null>(null);
+  function openViewer(f: FileRow) {
+    viewerFile = f;
   }
 
-  async function createCredential(ev: SubmitEvent) {
-    ev.preventDefault();
-    credError = null;
-    if (!credLabel.trim()) { credError = 'Label required.'; return; }
-    credBusy = true;
+  // ——— "Interact using model" — RAG collections ———
+  let interactOpen = $state(false);
+  let chatCollection = $state<RagCollection | null>(null);
+  let collections = $state<RagCollection[]>([]);
+  let collectionsLoaded = $state(false);
+
+  async function loadCollections() {
     try {
-      const res = await fetch('/api/admin/webdav-credentials', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ label: credLabel.trim() }),
-      });
-      const body = await res.json();
-      if (!res.ok) { credError = body.error || `HTTP ${res.status}`; return; }
-      newCredSecret = { id: body.id, label: body.label, secret: body.secret };
-      showSecret = false;
-      credLabel = '';
-      await refreshCredentials();
+      const res = await fetch('/api/files/rag');
+      if (res.ok) {
+        const body = await res.json();
+        collections = body.collections ?? [];
+      }
     } finally {
-      credBusy = false;
+      collectionsLoaded = true;
     }
   }
 
-  async function revokeCredential(c: Credential) {
-    if (!confirm(`Revoke "${c.label}"? Devices using this credential will stop working immediately.`)) return;
-    const res = await fetch(`/api/admin/webdav-credentials/${c.id}`, { method: 'DELETE' });
-    if (!res.ok) { alert(`Revoke failed (${res.status})`); return; }
-    credentials = credentials.filter((x) => x.id !== c.id);
+  function onCollectionCreated(c: RagCollection) {
+    interactOpen = false;
+    collections = [c, ...collections.filter((x) => x.id !== c.id)];
+    chatCollection = c;
+    selected = {};
   }
 
-  function copySecret() {
-    if (!newCredSecret) return;
-    navigator.clipboard.writeText(newCredSecret.secret).catch(() => {});
+  function onCollectionChanged(c: RagCollection) {
+    collections = collections.map((x) => (x.id === c.id ? c : x));
+  }
+
+  async function reindexCollection(c: RagCollection) {
+    const res = await fetch(`/api/files/rag/${c.id}/reindex`, { method: 'POST' });
+    if (!res.ok) { alert(`Reindex failed (${res.status})`); return; }
+    const next = { ...c, status: 'indexing' } as RagCollection;
+    collections = collections.map((x) => (x.id === c.id ? next : x));
+    loadCollections();
+  }
+
+  async function deleteCollection(c: RagCollection) {
+    if (!confirm(`Delete knowledge base "${c.name}"? The index is removed; the source files stay.`)) return;
+    const res = await fetch(`/api/files/rag/${c.id}`, { method: 'DELETE' });
+    if (!res.ok) { alert(`Delete failed (${res.status})`); return; }
+    collections = collections.filter((x) => x.id !== c.id);
+    if (chatCollection?.id === c.id) chatCollection = null;
+  }
+
+  function ragStatusLabel(c: RagCollection): string {
+    if (c.status === 'ready') return `${c.chunkCount} chunks`;
+    if (c.status === 'indexing' || c.status === 'pending') return 'indexing…';
+    if (c.status === 'error') return 'failed';
+    return c.status;
   }
 
   async function deleteRow(f: FileRow) {
@@ -532,6 +558,38 @@
   <PageHeader title="Drive" />
 
   <main class="drive-wrap">
+    {#if !onboardDismissed}
+      <section class="onboard" aria-label="What you can do in Drive">
+        <button type="button" class="onboard-x" onclick={dismissOnboard} aria-label="Dismiss">✕</button>
+        <div class="onboard-hd">
+          <span class="onboard-kicker">Your files, on the server</span>
+          <h2 class="onboard-title">Store it, preview it, ask about it.</h2>
+        </div>
+        <div class="onboard-grid">
+          <div class="onboard-step">
+            <span class="onboard-num">01</span>
+            <strong>Drop to upload</strong>
+            <p>Drag files (or a whole folder) onto the zone below, or click to browse. Organise them into folders.</p>
+          </div>
+          <div class="onboard-step">
+            <span class="onboard-num">02</span>
+            <strong>Double-click to preview</strong>
+            <p>Images, PDFs, video, audio, Word docs, Markdown and code all open in place — syntax-highlighted, no download needed.</p>
+          </div>
+          <div class="onboard-step">
+            <span class="onboard-num">03</span>
+            <strong>Interact using model</strong>
+            <p>Select a few documents and build a knowledge base, then chat with them — answers are grounded in your files and cite their sources.</p>
+          </div>
+          <div class="onboard-step">
+            <span class="onboard-num">04</span>
+            <strong>Search &amp; grab</strong>
+            <p>Filter instantly by name, download a selection as a zip, or drag files straight back out to your desktop.</p>
+          </div>
+        </div>
+      </section>
+    {/if}
+
     <!-- ——— Drag-and-drop upload zone ——— -->
     <div
       class="dropzone"
@@ -628,9 +686,27 @@
             {/if}
           {/each}
         </nav>
-        <span class="nm-sec-meta">
-          {subfolders.length ? `${subfolders.length} folder${subfolders.length === 1 ? '' : 's'} · ` : ''}{visibleFiles.length} {visibleFiles.length === 1 ? 'file' : 'files'}
-        </span>
+        <div class="hd-right">
+          <div class="drive-search">
+            <svg class="search-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <circle cx="6" cy="6" r="4.2" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M9.3 9.3L12.5 12.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
+            </svg>
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search files…"
+              bind:value={query}
+              aria-label="Search files by name"
+            />
+            {#if query}
+              <button type="button" class="search-clear" onclick={() => (query = '')} aria-label="Clear search">✕</button>
+            {/if}
+          </div>
+          <span class="nm-sec-meta">
+            {subfolders.length ? `${subfolders.length} folder${subfolders.length === 1 ? '' : 's'} · ` : ''}{visibleFiles.length} {visibleFiles.length === 1 ? 'file' : 'files'}
+          </span>
+        </div>
       </div>
 
       {#snippet permChips(f: FileRow)}
@@ -641,6 +717,7 @@
       {/snippet}
 
       {#snippet fileActions(f: FileRow)}
+        <button type="button" class="row-link" onclick={() => openViewer(f)}>Preview</button>
         <a href={`/api/files/${f.id}/download`} class="row-link" download={baseName(f.name)}>Download</a>
         {#if canExtract(f.mimeType, f.name)}
           <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => runExtract(f)}>
@@ -703,6 +780,10 @@
         </label>
         {#if selectedFiles.length > 0}
           <span class="sel-count">{selectedFiles.length} selected</span>
+          <button type="button" class="nm-save-btn rag-interact-btn" onclick={() => (interactOpen = true)} title="Build a knowledge base from the selected files and chat with them">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1.5l1.4 3.1 3.1 1.4-3.1 1.4L7 12.5 5.6 7.4 2.5 6l3.1-1.4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+            Interact using model
+          </button>
           <button type="button" class="nm-save-btn sel-dl" onclick={downloadSelected} disabled={zipBusy}>
             {zipBusy ? 'Zipping…' : selectedFiles.length > 1 ? `Download ${selectedFiles.length} (.zip)` : 'Download'}
           </button>
@@ -775,7 +856,8 @@
                 role="listitem"
                 draggable="true"
                 ondragstart={(e) => onFileDragStart(e, f)}
-                title={f.name}
+                ondblclick={() => openViewer(f)}
+                title={`${f.name} — double-click to preview`}
               >
                 <label class="tile-check" title="Select">
                   <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
@@ -827,7 +909,8 @@
                 role="listitem"
                 draggable="true"
                 ondragstart={(e) => onFileDragStart(e, f)}
-                title="Drag out to copy to your desktop"
+                ondblclick={() => openViewer(f)}
+                title="Double-click to preview · drag out to copy to your desktop"
               >
                 <label class="file-check" title="Select">
                   <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
@@ -859,130 +942,39 @@
       {/if}
     </section>
 
-    <!-- ——— WebDAV access ——— -->
+    <!-- ——— Knowledge bases (RAG "Interact using model") ——— -->
     <section class="nm-sec">
       <div class="nm-sec-hd">
-        <span class="sr-label-tight">WebDAV access</span>
-        <span class="nm-sec-meta">{credentials.length} {credentials.length === 1 ? 'credential' : 'credentials'}</span>
+        <span class="sr-label-tight">Knowledge bases</span>
+        <span class="nm-sec-meta">{collections.length} {collections.length === 1 ? 'base' : 'bases'}</span>
       </div>
 
-      <p class="dav-blurb">
-        Mount this file store as a network drive. Files dropped into the mount appear here under the
-        <code>drive/</code> prefix; workflow files outside <code>drive/</code> stay invisible to the mount.
-      </p>
-
-      <details class="dav-howto">
-        <summary>How to mount</summary>
-        <div class="howto-body">
-
-          <div class="howto-os">
-            <strong>Windows 10 / 11</strong>
-            <p>
-              Windows ships two settings that block HTTPS WebDAV by default. Do these once before mounting:
-            </p>
-            <ol>
-              <li><strong>Start the WebClient service.</strong> Press <kbd>Win</kbd>+<kbd>R</kbd> → <code>services.msc</code> → find <em>WebClient</em> → right-click → <em>Properties</em> → set <em>Startup type</em> to <strong>Automatic</strong> → click <em>Start</em> → OK.</li>
-              <li><strong>Enable Basic Auth on HTTPS.</strong> Open PowerShell as Administrator and run:<br>
-                <code class="block">reg add "HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" /v BasicAuthLevel /t REG_DWORD /d 2 /f</code><br>
-                Then restart the service:<br>
-                <code class="block">net stop webclient &amp;&amp; net start webclient</code>
-              </li>
-            </ol>
-            <p>Now mount it. Either path works:</p>
-            <p><strong>Option A — Map network drive (recommended, gives you a Z: drive).</strong></p>
-            <ol>
-              <li>Open <em>File Explorer</em> → <em>This PC</em> → ribbon <em>Map network drive</em>.</li>
-              <li>Drive letter: any free letter (e.g. <code>Z:</code>).</li>
-              <li>Folder: <code>https://strangeramblings.com/dav/</code></li>
-              <li>Tick <em>Connect using different credentials</em> and <em>Reconnect at sign-in</em>.</li>
-              <li>Click <em>Finish</em>. Username = the device label, password = the secret.</li>
-            </ol>
-            <p><strong>Option B — single command in an elevated terminal:</strong></p>
-            <code class="block">net use Z: https://strangeramblings.com/dav/ /user:LABEL "SECRET" /persistent:yes</code>
-            <p>Replace <code>LABEL</code> and <code>SECRET</code> with the values from this page.</p>
-          </div>
-
-          <div class="howto-os">
-            <strong>macOS</strong>
-            <p>Finder → <kbd>⌘</kbd>+<kbd>K</kbd> → <code>https://strangeramblings.com/dav/</code> → username = the device label, password = the secret. Tick <em>Remember this password in my keychain</em> for persistence.</p>
-          </div>
-
-          <div class="howto-os">
-            <strong>Linux</strong>
-            <p>Quick: <code>gio mount davs://strangeramblings.com/dav/</code></p>
-            <p>Persistent (<code>davfs2</code>): add to <code>/etc/fstab</code>:</p>
-            <code class="block">https://strangeramblings.com/dav/  /mnt/sr-drive  davfs  user,rw,_netdev  0  0</code>
-            <p>Store credentials in <code>~/.davfs2/secrets</code>:</p>
-            <code class="block">/mnt/sr-drive  LABEL  SECRET</code>
-          </div>
-
-          <div class="howto-warn">
-            <strong>Common Windows errors:</strong>
-            <ul>
-              <li><em>"The folder you entered does not appear to be valid"</em> — almost always <code>BasicAuthLevel</code> is still 1. Re-run step 2 above and restart the WebClient service.</li>
-              <li><em>"0x80070043 – the network name cannot be found"</em> — WebClient service isn't running, or you typed <code>http://</code> instead of <code>https://</code>.</li>
-              <li><em>50 MB upload limit</em> — Windows caps WebDAV at 50 MB out of the box. Raise it: <code>reg add "HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" /v FileSizeLimitInBytes /t REG_DWORD /d 0xffffffff /f</code> then restart WebClient.</li>
-            </ul>
-          </div>
-
-          <div class="howto-warn"><em>Permissions reminder:</em> the per-file R/W/A/D map shown in the file list gates workflow nodes only. The mount has full read/write regardless.</div>
-        </div>
-      </details>
-
-      {#if newCredSecret}
-        <div class="secret-card">
-          <div class="secret-hd">
-            <strong>Secret for "{newCredSecret.label}" — copy now, this is shown only once.</strong>
-            <button type="button" class="row-link" onclick={() => (newCredSecret = null)}>Done</button>
-          </div>
-          <div class="secret-row">
-            <code class="secret-val">{showSecret ? newCredSecret.secret : '•'.repeat(43)}</code>
-            <button type="button" class="row-link" onclick={() => (showSecret = !showSecret)}>
-              {showSecret ? 'Hide' : 'Show'}
-            </button>
-            <button type="button" class="row-link" onclick={copySecret}>Copy</button>
-          </div>
-        </div>
-      {/if}
-
-      <form class="form" onsubmit={createCredential}>
-        <div class="row">
-          <label class="field">
-            <span class="sr-label-tight">Device label <em>— e.g. "MacBook", "iPhone Files"</em></span>
-            <input type="text" bind:value={credLabel} placeholder="MacBook" class="nm-text-input" maxlength="64" />
-          </label>
-          <div class="field cred-submit">
-            <span class="sr-label-tight">&nbsp;</span>
-            <button type="submit" class="nm-save-btn" disabled={credBusy || !credLabel.trim()}>
-              {credBusy ? 'Generating…' : 'Generate credential'}
-            </button>
-          </div>
-        </div>
-        {#if credError}<div class="err-line">{credError}</div>{/if}
-      </form>
-
-      {#if credentials.length > 0}
-        <div class="cred-list">
-          {#each credentials as c (c.id)}
-            <div class="cred-card">
-              <div class="cred-main">
-                <div class="cred-label">{c.label}</div>
-                <div class="cred-meta">
-                  <span>{c.ownerEmail}</span>
+      {#if collections.length > 0}
+        <div class="kb-list">
+          {#each collections as c (c.id)}
+            <div class="kb-card">
+              <button type="button" class="kb-main" onclick={() => (chatCollection = c)} title="Open chat">
+                <span class="kb-name">{c.name}</span>
+                <span class="kb-meta">
+                  <span class="kb-status kb-{c.status}">{ragStatusLabel(c)}</span>
                   <span class="dot">·</span>
-                  <span>Created {fmtDate(c.createdAt)}</span>
-                  <span class="dot">·</span>
-                  {#if c.lastUsedAt}
-                    <span>Last used {fmtDate(c.lastUsedAt)}</span>
-                  {:else}
-                    <span class="cred-muted">Never used</span>
-                  {/if}
-                </div>
+                  <span>{(c.fileNames ?? []).length} file{(c.fileNames ?? []).length === 1 ? '' : 's'}</span>
+                  {#if c.embeddingModel}<span class="dot">·</span><span>{c.embeddingModel.replace('openai/', '')}</span>{/if}
+                </span>
+              </button>
+              <div class="kb-actions">
+                <button type="button" class="row-link" onclick={() => (chatCollection = c)}>Open chat</button>
+                <button type="button" class="row-link" disabled={c.status === 'indexing' || c.status === 'pending'} onclick={() => reindexCollection(c)}>Reindex</button>
+                <button type="button" class="row-link danger" onclick={() => deleteCollection(c)}>Delete</button>
               </div>
-              <button type="button" class="row-link danger" onclick={() => revokeCredential(c)}>Revoke</button>
             </div>
           {/each}
         </div>
+      {:else}
+        <p class="kb-empty">
+          Select one or more documents above and hit <strong>Interact using model</strong> to build your first
+          knowledge base — then chat with your files and get answers cited from the source.
+        </p>
       {/if}
     </section>
   </main>
@@ -1028,6 +1020,26 @@
       <button class="row-link" onclick={() => (convertModalFor = null)}>Cancel</button>
     </div>
   </section>
+{/if}
+
+{#if viewerFile}
+  <FileViewerModal file={viewerFile} onClose={() => (viewerFile = null)} />
+{/if}
+
+{#if interactOpen}
+  <InteractModelModal
+    files={selectedFiles.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType }))}
+    onClose={() => (interactOpen = false)}
+    onCreated={onCollectionCreated}
+  />
+{/if}
+
+{#if chatCollection}
+  <RagChatPanel
+    collection={chatCollection}
+    onClose={() => (chatCollection = null)}
+    onChanged={onCollectionChanged}
+  />
 {/if}
 
 <style>
@@ -1195,10 +1207,7 @@
   }
 
   /* ——— Form (WebDAV + edit) ——— */
-  .form { display: grid; gap: 0.9rem; }
   .field { display: grid; gap: 0.35rem; min-width: 0; }
-  .field em { color: var(--text-ghost); font-style: normal; font-weight: 400; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
   @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
 
   /* ——— Permission toggles ——— */
@@ -1672,163 +1681,178 @@
     color: var(--text-muted);
   }
 
-  /* ——— WebDAV section ——— */
-  .dav-blurb {
-    margin: 0 0 0.6rem;
-    font-size: 12px;
+  /* ——— Onboarding ——— */
+  .onboard {
+    position: relative;
+    border: 1px solid var(--card-border);
+    background: linear-gradient(180deg, var(--accent-tint-08, color-mix(in srgb, var(--accent) 6%, transparent)), transparent);
+    padding: 20px 22px 18px;
+    margin-bottom: 1.1rem;
+  }
+  .onboard-x {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 7px;
+  }
+  .onboard-x:hover { color: var(--accent); border-color: var(--accent); }
+  .onboard-kicker {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+  }
+  .onboard-title {
+    font-family: var(--font-display);
+    font-size: clamp(19px, 3.4vw, 25px);
+    line-height: 1.12;
+    color: var(--text-primary);
+    margin: 4px 0 14px;
+  }
+  .onboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px 20px;
+  }
+  .onboard-step {
+    display: grid;
+    gap: 3px;
+  }
+  .onboard-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+  }
+  .onboard-step strong {
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+  .onboard-step p {
+    margin: 2px 0 0;
+    font-size: 12.5px;
     line-height: 1.5;
     color: var(--text-secondary);
   }
-  .dav-howto {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 0.6rem;
-    padding: 6px 10px;
-    background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
-  }
-  .dav-howto summary {
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-primary);
-  }
-  .howto-body {
-    display: grid;
-    gap: 0.4rem;
-    margin-top: 0.5rem;
-    font-family: var(--font-body);
-    font-size: 12px;
-    line-height: 1.55;
-    color: var(--text-secondary);
-  }
-  .howto-body code {
-    font-size: 11px;
-  }
-  .howto-body code.block {
-    display: block;
-    padding: 6px 8px;
-    margin: 4px 0;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
-    overflow-x: auto;
-    white-space: nowrap;
-    user-select: all;
-  }
-  .howto-os {
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--card-border);
-  }
-  .howto-os:last-of-type { border-bottom: none; }
-  .howto-os > strong {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-primary);
-    margin-bottom: 0.3rem;
-  }
-  .howto-os p { margin: 0.3rem 0; }
-  .howto-os ol, .howto-os ul {
-    margin: 0.3rem 0 0.4rem 1.2rem;
-    padding: 0;
-  }
-  .howto-os li { margin-bottom: 0.2rem; }
-  .howto-warn ul {
-    margin: 0.3rem 0 0 1.2rem;
-    padding: 0;
-  }
-  .howto-warn li { margin-bottom: 0.25rem; }
-  .howto-body kbd {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    border: 1px solid var(--card-border);
-    border-bottom-width: 2px;
-    padding: 1px 5px;
-    background: var(--bg);
-    color: var(--text-primary);
-  }
-  .howto-warn {
-    color: var(--text-muted);
-    font-size: 11px;
-    margin-top: 0.15rem;
-  }
-  .secret-card {
-    border: 1px solid var(--accent);
-    background: var(--accent-tint-08);
-    padding: 0.75rem 0.9rem;
-    margin-bottom: 0.7rem;
-  }
-  .secret-hd {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.6rem;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-  }
-  .secret-row {
+
+  /* ——— Search ——— */
+  .hd-right {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 5px 8px;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .drive-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
     background: var(--bg);
     border: 1px solid var(--card-border);
+    min-width: 180px;
   }
-  .secret-val {
+  .drive-search:focus-within { border-color: var(--accent); }
+  .search-icon { color: var(--text-muted); flex-shrink: 0; }
+  .search-input {
     flex: 1;
     min-width: 0;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    border: none;
     background: none;
-    padding: 0;
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-primary);
   }
-  .cred-submit { align-self: end; }
-  .cred-list {
+  .search-input:focus { outline: none; }
+  .search-clear {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .search-clear:hover { color: var(--accent); }
+
+  /* ——— Interact-using-model button ——— */
+  .rag-interact-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ——— Knowledge bases ——— */
+  .kb-list {
     display: grid;
     gap: 0.5rem;
-    margin-top: 0.7rem;
+    margin-top: 0.3rem;
   }
-  .cred-card {
+  .kb-card {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem 1rem;
+    padding: 0.6rem 0.9rem;
     background: var(--bg);
     border: 1px solid var(--card-border);
   }
-  .cred-card:hover { border-color: var(--text-primary); }
-  .cred-label {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
+  .kb-card:hover { border-color: var(--accent); }
+  .kb-main {
+    display: grid;
+    gap: 3px;
+    text-align: left;
+    border: none;
+    background: none;
+    cursor: pointer;
+    min-width: 0;
+    padding: 0;
   }
-  .cred-meta {
+  .kb-name {
+    font-family: var(--font-body);
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kb-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
     align-items: center;
-    margin-top: 0.3rem;
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text-muted);
   }
-  .cred-meta .dot { color: var(--text-ghost); }
-  .cred-muted { font-style: italic; color: var(--text-ghost); }
+  .kb-meta .dot { color: var(--text-ghost); }
+  .kb-status { text-transform: uppercase; letter-spacing: 0.06em; }
+  .kb-status.kb-ready { color: var(--success, #2d7a3a); }
+  .kb-status.kb-indexing,
+  .kb-status.kb-pending { color: var(--warn, #b0892a); }
+  .kb-status.kb-error { color: var(--error); }
+  .kb-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+  .kb-empty {
+    margin: 0.2rem 0 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
 
   @media (max-width: 640px) {
-    .cred-card { grid-template-columns: 1fr; }
-    .cred-submit { align-self: stretch; }
+    .kb-card { grid-template-columns: 1fr; }
   }
 
   /* ——— Extract / convert panels ——— */
