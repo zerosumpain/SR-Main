@@ -12,6 +12,7 @@ import { extractPlainText } from './text';
 import { extractMarkdown } from './markdown';
 import { extractPdf } from './pdf';
 import { extractDocx } from './docx';
+import { extractPptx } from './pptx';
 import { extractSpreadsheet } from './spreadsheet';
 import { extractAudio } from './audio';
 import { extractVideo } from './video';
@@ -40,6 +41,7 @@ export async function extractText(
     case 'pdf': return extractPdf(buffer, options);
     case 'docx':
     case 'doc': return extractDocx(buffer);
+    case 'pptx': return extractPptx(buffer);
     case 'markdown': return extractMarkdown(buffer);
     case 'text': return extractPlainText(buffer);
     case 'spreadsheet': return extractSpreadsheet(buffer, mimeType, filename);

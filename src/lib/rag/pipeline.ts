@@ -17,7 +17,7 @@ import type { RagChunk, RagCitation } from './types';
 
 // Kinds we index. Audio/video are excluded — their "extraction" is ffmpeg+whisper
 // transcription (heavy/slow) and not what "chat over my documents" implies.
-const INDEXABLE_KINDS = new Set(['pdf', 'docx', 'doc', 'markdown', 'spreadsheet', 'text']);
+const INDEXABLE_KINDS = new Set(['pdf', 'docx', 'doc', 'pptx', 'markdown', 'spreadsheet', 'text']);
 
 export type BuildResult = {
   chunkCount: number;

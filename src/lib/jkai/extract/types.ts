@@ -4,6 +4,7 @@ export type ExtractKind =
   | 'pdf'
   | 'docx'
   | 'doc'
+  | 'pptx'
   | 'markdown'
   | 'text'
   | 'audio'
@@ -13,6 +14,7 @@ export type ExtractKind =
 export type ExtractMeta =
   | { kind: 'pdf'; pageCount: number; pages: Array<{ index: number; text: string; error?: string }> }
   | { kind: 'docx'; headings: Array<{ level: number; text: string }>; warnings: string[] }
+  | { kind: 'pptx'; slideCount: number; slides: Array<{ index: number; text: string }> }
   | { kind: 'markdown'; headings: Array<{ level: number; text: string }> }
   | { kind: 'text'; encoding: 'utf-8' | 'latin-1' }
   | { kind: 'audio'; durationSec?: number; segments?: Array<{ start: number; end: number; text: string }>; language?: string }
@@ -72,6 +74,7 @@ export function kindFromMime(mimeType: string, filename = ''): ExtractKind | nul
   if (m === 'application/pdf') return 'pdf';
   if (m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
   if (m === 'application/msword') return 'doc';
+  if (m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || lowerName.endsWith('.pptx')) return 'pptx';
   if (m === 'text/markdown' || m === 'text/x-markdown' || lowerName.endsWith('.md')) return 'markdown';
   if (m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || m === 'application/vnd.ms-excel') return 'spreadsheet';
   if (m === 'text/csv' || lowerName.endsWith('.csv')) return 'spreadsheet';
@@ -84,6 +87,7 @@ export function kindFromMime(mimeType: string, filename = ''): ExtractKind | nul
     if (lowerName.endsWith('.pdf')) return 'pdf';
     if (lowerName.endsWith('.docx')) return 'docx';
     if (lowerName.endsWith('.doc')) return 'doc';
+    if (lowerName.endsWith('.pptx')) return 'pptx';
     if (lowerName.endsWith('.md')) return 'markdown';
     if (lowerName.endsWith('.xlsx')) return 'spreadsheet';
     if (lowerName.endsWith('.csv')) return 'spreadsheet';
