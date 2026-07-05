@@ -1329,6 +1329,60 @@ export const intelRelationships = pgTable('intel_relationships', {
 
 export type IntelRelationship = typeof intelRelationships.$inferSelect;
 
+// ==========================================
+// RAG — "Interact using model" over Drive files
+// One row per built index. The heavy embeddings are serialized to Azure Blob
+// (via file-store/storage.ts under a `rag-index/` prefix), NOT pgvector — so
+// this table has NO `vector` column and drizzle-kit push never depends on the
+// pgvector extension for it, and a quality 3072-dim embedding model has a home.
+// ==========================================
+export const ragCollections = pgTable(
+  'rag_collections',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    name: text('name').notNull(),
+    owner: text('owner').notNull(), // email; the whole authed area is owner-only
+    status: text('status').notNull().default('pending'), // 'pending'|'indexing'|'ready'|'error'
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingDim: integer('embedding_dim').notNull().default(0),
+    fileIds: jsonb('file_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    fileNames: jsonb('file_names').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    chunkCount: integer('chunk_count').notNull().default(0),
+    indexBlobKey: text('index_blob_key'), // rag-index/<id>.ndjson; null until built
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ ownerIdx: index('rag_collections_owner_idx').on(t.owner) }),
+);
+
+export type RagCollection = typeof ragCollections.$inferSelect;
+export type NewRagCollection = typeof ragCollections.$inferInsert;
+
+// One row per chat turn against a collection. Kept deliberately separate from
+// jkai_conversations/orchestrator_chats so the RAG feature is self-contained
+// and does not show up in the jkai cost/metrics ledgers.
+export const ragMessages = pgTable(
+  'rag_messages',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => ragCollections.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // 'user'|'assistant'
+    content: text('content').notNull(),
+    citations: jsonb('citations')
+      .$type<Array<{ n: number; source: string; ord: number }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byCollection: index('rag_messages_collection_idx').on(t.collectionId) }),
+);
+
+export type RagMessage = typeof ragMessages.$inferSelect;
+export type NewRagMessage = typeof ragMessages.$inferInsert;
+
 export const intelNoteEntities = pgTable('intel_note_entities', {
   noteId: text('note_id').notNull().references(() => intelNotes.id, { onDelete: 'cascade' }),
   entityId: text('entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
