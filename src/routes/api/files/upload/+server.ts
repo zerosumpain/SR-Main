@@ -3,7 +3,8 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { newDiskPath, saveBuffer } from '$lib/file-store/storage';
+import { newDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
+import { reindexFileInBackground } from '$lib/file-index/store';
 
 const MAX_BYTES = 50 * 1024 * 1024; // 50 MB per file — plenty for text / csv / images
 
@@ -54,18 +55,39 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const session = await locals.auth();
   const uploadedBy = session?.user?.email ?? null;
 
-  const [inserted] = await db
-    .insert(workflowFiles)
-    .values({
-      name,
-      description,
-      mimeType: file.type || 'application/octet-stream',
-      sizeBytes: buf.byteLength,
-      diskPath,
-      permissions,
-      uploadedBy,
-    })
-    .returning();
+  let inserted: typeof workflowFiles.$inferSelect | undefined;
+  try {
+    [inserted] = await db
+      .insert(workflowFiles)
+      .values({
+        name,
+        description,
+        mimeType: file.type || 'application/octet-stream',
+        sizeBytes: buf.byteLength,
+        diskPath,
+        permissions,
+        uploadedBy,
+      })
+      .returning();
+  } catch (err: unknown) {
+    // The line-40 existence check is not atomic; a concurrent upload of the same
+    // name races here. Catch the UNIQUE violation, remove the orphaned blob we
+    // just wrote, and return the same clean 409 as the sequential path.
+    await deleteFile(diskPath).catch(() => {});
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/workflow_files_name_idx|unique|duplicate key|23505/i.test(msg)) {
+      return json({ error: `file with name "${name}" already exists` }, { status: 409 });
+    }
+    return json({ error: `insert failed: ${msg}` }, { status: 500 });
+  }
+  if (!inserted) {
+    await deleteFile(diskPath).catch(() => {});
+    return json({ error: 'insert failed' }, { status: 500 });
+  }
+
+  // Auto-embed the new file's content into the global @files index (background;
+  // hash-gated + idempotent, so it never blocks the upload response).
+  reindexFileInBackground(inserted.id);
 
   return json({
     file: {

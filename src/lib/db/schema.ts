@@ -1549,6 +1549,7 @@ export const workflowFiles = pgTable(
     diskPath: text('disk_path').notNull(),           // absolute path under WORKFLOW_FILES_ROOT
     permissions: jsonb('permissions').notNull().default(sql`'{"read":true,"write":false,"append":false,"delete":false}'::jsonb`),
     uploadedBy: text('uploaded_by'),                 // email of uploader, nullable for system-generated
+    contentHash: text('content_hash'),               // sha256 hex of the current bytes; gates re-embedding (null = never embedded)
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1566,6 +1567,42 @@ export type WorkflowFilePermissions = {
   append: boolean;
   delete: boolean;
 };
+
+// Global, always-on semantic index over the CONTENT of every /drive file — one
+// row per chunk. Populated automatically on upload/edit (see $lib/file-index),
+// keyed on the stable workflow_files.id (never the mutable name). Text files are
+// chunked from extracted text; images are captioned+OCR'd; audio is transcribed;
+// each chunk is embedded with text-embedding-3-small (1536-dim) so the existing
+// pgvector `vector(1536)` type + `<=>` cosine operator work directly. Deleting a
+// file cascades away its chunks. This is the backing store for the `@files`
+// search tool in /jkai, distinct from the per-collection RAG (rag_collections).
+export const fileEmbeddings = pgTable(
+  'file_embeddings',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    contentHash: text('content_hash').notNull(),     // hash of the bytes this chunk was embedded from
+    chunkOrd: integer('chunk_ord').notNull(),         // 0-based ordinal within the file
+    source: text('source').notNull(),                 // file name at embed time (display/citation)
+    modality: text('modality').notNull(),             // 'text' | 'image' | 'audio' — how the text was derived
+    text: text('text').notNull(),                     // the chunk text that was embedded
+    charStart: integer('char_start').notNull(),
+    charEnd: integer('char_end').notNull(),
+    embeddingModel: text('embedding_model').notNull(),
+    embeddingDim: integer('embedding_dim').notNull(),
+    embedding: vector('embedding').notNull(),         // unit-normalized 1536-dim vector
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    byFile: index('file_embeddings_file_idx').on(table.fileId),
+    uniqChunk: uniqueIndex('file_embeddings_file_chunk_idx').on(table.fileId, table.chunkOrd),
+  }),
+);
+
+export type FileEmbedding = typeof fileEmbeddings.$inferSelect;
+export type NewFileEmbedding = typeof fileEmbeddings.$inferInsert;
 
 // One row per provisioned WebDAV mount credential. The mount client uses
 // HTTP Basic Auth — username is informational (we use the label), password

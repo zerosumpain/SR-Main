@@ -1147,6 +1147,8 @@
     // index can never point past the freshly-filtered list.
     paletteDismissed = false;
     paletteIndex = 0;
+    mentionDismissed = false;
+    mentionIndex = 0;
   }
 
   function selectPaletteCommand(cmd: { command: string; mode: 'send' | 'insert' }) {
@@ -1158,6 +1160,30 @@
       input = cmd.command + ' ';
       tick().then(() => textareaEl?.focus());
     }
+  }
+
+  // "@" mention typeahead — currently one mention, @files, which searches the
+  // content of everything in /drive (text, image visuals + OCR, audio transcripts)
+  // and answers with citations. Triggers on an @-token being typed at the end of
+  // the input (the common case), mirroring the slash palette.
+  const MENTION_OPTIONS: { token: string; hint: string }[] = [
+    { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
+  ];
+  const MENTION_RE = /(^|\s)@(\w*)$/;
+  let mentionIndex = $state(0);
+  let mentionDismissed = $state(false);
+  const mentionMatches = $derived.by(() => {
+    const m = input.match(MENTION_RE);
+    if (!m) return [];
+    const q = m[2].toLowerCase();
+    return MENTION_OPTIONS.filter((o) => o.token.slice(1).toLowerCase().startsWith(q));
+  });
+  const mentionOpen = $derived(mentionMatches.length > 0 && !mentionDismissed);
+
+  function selectMention(opt: { token: string }) {
+    mentionDismissed = true;
+    input = input.replace(MENTION_RE, (_full, pre) => `${pre}${opt.token} `);
+    tick().then(() => textareaEl?.focus());
   }
 
   // Skill picker — pins a jkai domain skill for the conversation (general chat),
@@ -1319,6 +1345,13 @@
     }];
     scrollToBottom();
 
+    // An "@files" mention routes this turn to the Files skill so the orchestrator
+    // reaches for the file_search tool (semantic search over /drive content —
+    // text, image visuals/OCR, audio transcripts), unless the user has already
+    // pinned a specific skill.
+    const mentionsFiles = /(^|\s)@files\b/i.test(text);
+    const effectivePinnedSkill = pinnedSkill ?? (mentionsFiles ? 'jkai-files' : undefined);
+
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -1328,7 +1361,7 @@
           conversationId,
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           useIntelContext,
-          pinnedSkill: pinnedSkill ?? undefined,
+          pinnedSkill: effectivePinnedSkill,
         }),
       });
 
@@ -1434,6 +1467,29 @@
       if (e.key === 'Escape') {
         e.preventDefault();
         paletteDismissed = true;
+        return;
+      }
+    }
+    if (mentionOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mentionIndex = (mentionIndex + 1) % mentionMatches.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mentionIndex = (mentionIndex - 1 + mentionMatches.length) % mentionMatches.length;
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const opt = mentionMatches[mentionIndex];
+        if (opt) selectMention(opt);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        mentionDismissed = true;
         return;
       }
     }
@@ -1974,6 +2030,25 @@
               >
                 <span class="cmd-name">{cmd.command}</span>
                 <span class="cmd-hint">{cmd.hint}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if mentionOpen}
+          <div class="cmd-palette" role="listbox" aria-label="Mentions">
+            {#each mentionMatches as opt, i (opt.token)}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === mentionIndex}
+                class="cmd-row"
+                class:active={i === mentionIndex}
+                onmousedown={(e) => { e.preventDefault(); selectMention(opt); }}
+                onmouseenter={() => (mentionIndex = i)}
+              >
+                <span class="cmd-name">{opt.token}</span>
+                <span class="cmd-hint">{opt.hint}</span>
               </button>
             {/each}
           </div>

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { Readable } from 'node:stream';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
+import { reindexFileInBackground } from '$lib/file-index/store';
 import { and, eq, like, sql } from 'drizzle-orm';
 import {
   newDiskPath,
@@ -298,10 +299,12 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
       })
       .where(eq(workflowFiles.id, existing.id));
     void deleteFile(existing.diskPath).catch(() => {});
+    // Content changed — re-embed into the global @files index (hash-gated).
+    reindexFileInBackground(existing.id);
     return new Response(null, { status: 204 });
   }
 
-  await db.insert(workflowFiles).values({
+  const [inserted] = await db.insert(workflowFiles).values({
     name,
     description: null,
     mimeType: mime,
@@ -309,7 +312,8 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
     diskPath: newDisk,
     permissions: { read: true, write: true, append: true, delete: true },
     uploadedBy: owner,
-  });
+  }).returning({ id: workflowFiles.id });
+  if (inserted) reindexFileInBackground(inserted.id);
   return new Response(null, { status: 201, headers: { 'content-length': '0' } });
 };
 
@@ -511,7 +515,7 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
     } else {
       const newDisk = newDiskPath(dest.rel);
       await copyFile(srcRow.diskPath, newDisk);
-      await db.insert(workflowFiles).values({
+      const [copied] = await db.insert(workflowFiles).values({
         name: destName,
         description: srcRow.description,
         mimeType: srcRow.mimeType,
@@ -519,7 +523,9 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
         diskPath: newDisk,
         permissions: srcRow.permissions,
         uploadedBy: srcRow.uploadedBy,
-      });
+      }).returning({ id: workflowFiles.id });
+      // Copies are new rows with their own id — embed the copy into @files too.
+      if (copied) reindexFileInBackground(copied.id);
     }
     return new Response(null, { status: replaced ? 204 : 201 });
   }
@@ -547,7 +553,7 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
     const newRel = newName.slice(DRIVE_PREFIX.length);
     const newDisk = newDiskPath(newRel);
     await copyFile(r.diskPath, newDisk);
-    await db.insert(workflowFiles).values({
+    const [copied] = await db.insert(workflowFiles).values({
       name: newName,
       description: r.description,
       mimeType: r.mimeType,
@@ -555,7 +561,8 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
       diskPath: newDisk,
       permissions: r.permissions,
       uploadedBy: r.uploadedBy,
-    });
+    }).returning({ id: workflowFiles.id });
+    if (copied) reindexFileInBackground(copied.id);
   }
   return new Response(null, { status: 201 });
 }

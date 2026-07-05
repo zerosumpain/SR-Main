@@ -5,6 +5,7 @@ import { jkaiAttachments } from '$lib/db/schema';
 import { fileTypeFromBuffer } from 'file-type';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { kindFromMime, extensionForMime, isAllowedMime } from '$lib/jkai/media/mime';
+import { mirrorJkaiAttachmentToDrive } from '$lib/file-index/jkai-mirror';
 
 const LIMITS_BY_KIND: Record<string, number> = {
   image: 15 * 1024 * 1024,
@@ -70,6 +71,13 @@ export const POST: RequestHandler = async ({ request }) => {
     duration: null,
     metadata: null,
   }).returning();
+
+  // Mirror genuine user uploads (not agent-generated output) into /drive under a
+  // `jkai/` folder and embed them, so chat attachments are browsable in /drive
+  // and searchable via @files. Best-effort — never blocks or fails the upload.
+  if (source === 'web') {
+    void mirrorJkaiAttachmentToDrive({ buf, originalName: file.name, mimeType: mime });
+  }
 
   return json(row);
 };

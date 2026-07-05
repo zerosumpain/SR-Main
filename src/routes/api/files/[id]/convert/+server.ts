@@ -6,6 +6,7 @@ import { workflowFiles } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { readBuffer, saveBuffer, newDiskPath } from '$lib/file-store/storage';
 import { synthesize, ExtractError, type SynthesizeFormat, type SynthesizeSource } from '$lib/jkai/extract';
+import { reindexFileInBackground } from '$lib/file-index/store';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const id = params.id;
@@ -30,6 +31,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
     const name = outputName?.trim() || `${row.name}${result.suggestedExtension}`;
     const file = await upsertFile(name, result.buffer, result.mimeType, uploadedBy);
+    reindexFileInBackground(file.id);
     return json({ file });
   } catch (err) {
     if (err instanceof ExtractError) {

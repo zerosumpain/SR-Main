@@ -4,6 +4,7 @@ import { workflowFiles } from '$lib/db/schema';
 import { eq, like, desc } from 'drizzle-orm';
 import { readBuffer } from '$lib/file-store/storage';
 import { extractText, ExtractError, kindFromMime } from '$lib/jkai/extract';
+import { searchFiles } from '$lib/file-index/search';
 
 const MAX_INLINE_TEXT_BYTES = 200 * 1024;
 
@@ -110,5 +111,55 @@ register({
         truncated,
       },
     };
+  },
+});
+
+register({
+  name: 'file_search',
+  description:
+    'Semantic search across the CONTENT of every file in the /drive store — not just filenames. ' +
+    'Text documents are searched by meaning; images are searched by their VISUAL content (people, ' +
+    'clothing, colours, objects, scene) and any text in them (OCR); audio is searched by transcript. ' +
+    'Use this whenever the user asks to find files by what they contain or depict — e.g. ' +
+    '"anything referring to a blue shirt and glasses", "the invoice that mentions refunds", ' +
+    '"photos of the garden". Returns ranked passages, each with the source file name, its id, the ' +
+    'modality (text/image/audio) and a relevance score. Follow up with file_read for a full file. ' +
+    'When the user writes "@files" in their message, use this tool.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Natural-language description of what to find (what the file contains or depicts).' },
+      limit: { type: 'number', description: 'Max passages to return (default 8, max 30).' },
+    },
+    required: ['query'],
+  },
+  category: 'Files',
+  toolset: 'files',
+  handler: async (args) => {
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    if (!query) return { success: false, error: 'query is required' };
+    const limit = args.limit !== undefined ? Number(args.limit) : undefined;
+    try {
+      const hits = await searchFiles(query, { topK: limit });
+      return {
+        success: true,
+        data: {
+          query,
+          count: hits.length,
+          hits: hits.map((h) => ({
+            fileId: h.fileId,
+            source: h.source,
+            modality: h.modality,
+            score: h.score,
+            passage: h.passage,
+          })),
+          note: hits.length === 0
+            ? 'No indexed content matched. The file store may still be embedding, or nothing relevant exists.'
+            : undefined,
+        },
+      };
+    } catch (err) {
+      return { success: false, error: `file_search failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
   },
 });
