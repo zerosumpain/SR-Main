@@ -11,6 +11,7 @@
     nextRR,
     nextAmp,
   } from './ecg-signal';
+  import { createAsciiGlRenderer, type AsciiGlRenderer } from './ecg-ascii-gl';
 
   let {
     rhr = 64,
@@ -100,14 +101,11 @@
   onMount(() => {
     refreshLiveHr();
 
-    const ctx0 = canvasEl.getContext('2d');
-    if (!ctx0) return;
-    const ctx = ctx0;
-
     const accentRgb = toRgb(readAccent());
     const accent = rgba(accentRgb, 1);
     const glow = rgba(accentRgb, 0.55);
-    const hot = rgba(lighten(accentRgb, 80), 1);
+    const hotRgb = lighten(accentRgb, 80);
+    const hot = rgba(hotRgb, 1);
 
     // Touch / small screens get a lighter render: lower DPR, coarser grid,
     // fewer fps, and no per-glyph shadow blur. The full-bleed canvas at a
@@ -116,6 +114,48 @@
       typeof window !== 'undefined' &&
       (window.matchMedia?.('(pointer: coarse)').matches ||
         Math.min(window.innerWidth, window.innerHeight) < 640);
+
+    const reduced = prefersReducedMotion();
+
+    // Pen selection. The GPU pen (WebGL2 instanced glyph atlas — see
+    // ./ecg-ascii-gl) renders the whole trail in one instanced draw call with
+    // the phosphor fade computed per-fragment, so the per-frame main-thread
+    // cost collapses to near-zero. The 2D pen remains as the fallback (no
+    // WebGL2 / context-creation failure) and for the reduced-motion static
+    // frame. Debug escape hatch: localStorage 'ecg-ascii-force' = '2d'.
+    let force2d = false;
+    try {
+      force2d = localStorage.getItem('ecg-ascii-force') === '2d';
+    } catch {
+      // storage unavailable — keep the default pen
+    }
+    let glr: AsciiGlRenderer | null = null;
+    if (!reduced && !force2d) {
+      glr = createAsciiGlRenderer(canvasEl, {
+        hot: hotRgb,
+        glow: accentRgb,
+        glowAlpha: lite ? 0 : 0.55,
+      });
+    }
+    let ctx: CanvasRenderingContext2D | null = null;
+    if (!glr) {
+      ctx = canvasEl.getContext('2d');
+      if (!ctx) {
+        // The GL pen claimed the webgl2 context but failed mid-init, which
+        // permanently blocks 2d on that element — swap in a fresh canvas so
+        // the fallback pen still has somewhere to draw.
+        const fresh = canvasEl.cloneNode(false) as HTMLCanvasElement;
+        canvasEl.replaceWith(fresh);
+        canvasEl = fresh;
+        ctx = canvasEl.getContext('2d');
+      }
+      if (!ctx) return;
+    }
+    canvasEl.dataset.renderer = glr ? 'webgl2' : '2d';
+
+    // Font metrics are measured off-DOM so both pens share the exact same
+    // grid maths (the GL canvas can't hand out a 2D context).
+    const measCtx = document.createElement('canvas').getContext('2d');
 
     // Cache code→char so the draw loop never allocates a string per cell/frame.
     const glyphCache: string[] = new Array(256);
@@ -145,10 +185,11 @@
     // The actual characters: one ASCII code per cell (COLS*ROWS, 0 = empty),
     // indexed col-major as charGrid[col * ROWS + row]. Each cell is picked ONCE
     // when the pen draws it and never changes again — the trail only fades.
+    // (2D pen only — the GL pen keeps its cells in the instance buffer.)
     let charGrid = new Uint8Array(1);
 
-    // Columns committed since the last draw — the incremental renderer paints
-    // only these each frame, then fades the rest of the canvas (see draw()).
+    // Columns committed since the last draw — the incremental 2D renderer
+    // paints only these each frame, then fades the rest of the canvas.
     const pendingCols: number[] = [];
     // Cache font strings by pixel size so per-column sizing never re-parses.
     const fontByPx = new Map<number, string>();
@@ -174,9 +215,6 @@
       const dpr = Math.min(lite ? 1.5 : 2, window.devicePixelRatio || 1);
       cssW = Math.max(1, canvasEl.clientWidth);
       cssH = Math.max(1, canvasEl.clientHeight);
-      canvasEl.width = Math.round(cssW * dpr);
-      canvasEl.height = Math.round(cssH * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Desktop: small, dense cells — a fine field of characters. Touch: bigger,
       // fewer cells (far lighter to draw, and the vitals read better on a small
@@ -184,15 +222,28 @@
       fontPx = lite
         ? Math.max(12, Math.min(16, Math.round(cssW / 30)))
         : Math.max(9, Math.min(13, Math.round(cssW / 135)));
-      ctx.font = fontStack(fontPx);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      cellW = ctx.measureText('M').width || fontPx * 0.6;
+      if (measCtx) {
+        measCtx.font = fontStack(fontPx);
+        cellW = measCtx.measureText('M').width || fontPx * 0.6;
+      } else {
+        cellW = fontPx * 0.6;
+      }
       lineH = fontPx * 1.05;
 
       COLS = Math.max(8, Math.floor(cssW / cellW));
       ROWS = Math.max(6, Math.floor(cssH / lineH));
       baselineRow = Math.round(ROWS * 0.56);
+
+      if (glr) {
+        glr.layout({ cssW, cssH, dpr, cellW, lineH });
+      } else if (ctx) {
+        canvasEl.width = Math.round(cssW * dpr);
+        canvasEl.height = Math.round(cssH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.font = fontStack(fontPx);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+      }
 
       colY = new Float32Array(COLS);
       colT = new Float64Array(COLS);
@@ -227,30 +278,38 @@
       return code === 32 ? 0 : code; // 32 = space → blank cell
     }
 
-    // Draw a column ONCE, when the pen first crosses into it: clear any old
-    // glyphs there, then fill the waveform cells (the vertical run connecting
-    // the previous sample to this one — that's what gives the spike its height)
-    // with the next letters of the narrative, top-to-bottom. Stored in charGrid,
-    // so a cell never changes after it's drawn; the trail only fades.
+    // Draw a column ONCE, when the pen first crosses into it: fill the waveform
+    // cells (the vertical run connecting the previous sample to this one —
+    // that's what gives the spike its height) with the next letters of the
+    // narrative, top-to-bottom. A cell never changes after it's drawn; the
+    // trail only fades.
     function commitColumn(c: number, yRow: number, sig: number, wrapped: boolean, t: number) {
-      const base = c * ROWS;
-      for (let r = 0; r < ROWS; r++) charGrid[base + r] = 0;
       const pc = (c - 1 + COLS) % COLS;
       const linked = !wrapped && !!colSet[pc] && (t - colT[pc]) / LIFETIME < 1;
       const rCur = clampRow(Math.round(yRow));
       const rPrev = linked ? clampRow(Math.round(colY[pc])) : rCur;
       const lo = Math.min(rCur, rPrev);
       const hi = Math.max(rCur, rPrev);
-      for (let r = lo; r <= hi; r++) {
-        charGrid[base + r] = nextGlyph();
-      }
       // Glyph size shrinks with the deflection magnitude: the flat baseline stays
       // at the base size, and the harder the signal deflects the SMALLER the
       // characters get — so the QRS peaks resolve into fine, distinct glyphs
       // instead of a big overlapping blob. That finer grain is the peak fidelity.
       // Floored so the peak text stays legible.
       const defl = Math.min(1, Math.abs(sig)); // 0 on the flat baseline … 1 at the R peak
-      colPx[c] = Math.max(lite ? 9 : 7, Math.round(fontPx * (1 - defl * 0.45)));
+      const px = Math.max(lite ? 9 : 7, Math.round(fontPx * (1 - defl * 0.45)));
+      if (glr) {
+        for (let r = lo; r <= hi; r++) {
+          const code = nextGlyph();
+          if (code) glr.commitCell(c, r, code, px, t);
+        }
+      } else {
+        const base = c * ROWS;
+        for (let r = 0; r < ROWS; r++) charGrid[base + r] = 0;
+        for (let r = lo; r <= hi; r++) {
+          charGrid[base + r] = nextGlyph();
+        }
+      }
+      colPx[c] = px;
       colY[c] = yRow;
       colT[c] = t;
       colSet[c] = 1;
@@ -269,7 +328,9 @@
     let last = performance.now();
     let lastDraw = 0;
     let raf = 0;
-    const DRAW_MS = lite ? 50 : 33; // ~20fps on touch, ~30fps on desktop
+    // 2D pen redraw throttle (~20fps touch / ~30fps desktop). The GL pen draws
+    // every rAF — its per-frame cost is one instanced draw call.
+    const DRAW_MS = lite ? 50 : 33;
 
     function advance(dt: number) {
       const colsPerSec = COLS / SWEEP_SEC;
@@ -300,16 +361,17 @@
           commitColumn(c, yRow, sig, wrapped, clock - (subSteps - 1 - s) * sub);
           lastCol = c;
           headCol = c;
-          pendingCols.push(c);
+          if (!glr) pendingCols.push(c);
         }
       }
     }
 
     function draw() {
+      if (!ctx) return;
       // Phosphor decay: knock down the alpha of everything already on the canvas
       // toward transparent — one fillRect, O(1) — instead of clearing and
-      // redrawing the whole trail every frame. THIS is the performance fix: the
-      // per-frame cost is now ~O(new columns), not O(every lit cell).
+      // redrawing the whole trail every frame. The per-frame cost is
+      // ~O(new columns), not O(every lit cell).
       ctx.globalCompositeOperation = 'destination-out';
       ctx.fillStyle = fadeWipe;
       ctx.fillRect(0, 0, cssW, cssH);
@@ -343,6 +405,7 @@
     }
 
     function drawStatic() {
+      if (!ctx) return;
       // Reduced-motion: one deterministic screen of beats at full opacity.
       ctx.clearRect(0, 0, cssW, cssH);
       ctx.textAlign = 'center';
@@ -374,7 +437,7 @@
     let ro: ResizeObserver | undefined;
     let interval: ReturnType<typeof setInterval> | undefined;
 
-    if (prefersReducedMotion()) {
+    if (reduced) {
       if (cursorEl) cursorEl.style.display = 'none'; // no live sweep ⇒ no cursor
       drawStatic();
       ro = new ResizeObserver(() => {
@@ -413,7 +476,12 @@
       if (dt > 0.1) dt = 0.1; // guard against huge jumps after a tab refocus
       clock += dt;
       advance(dt);
-      if (now - lastDraw >= DRAW_MS) {
+      if (glr) {
+        // The whole trail (fade included) is re-rendered on the GPU each rAF;
+        // the main thread only uploads the handful of new cells.
+        glr.draw(clock);
+        if (cursorEl) cursorEl.style.transform = `translateX(${Math.round(xMid(headCol))}px)`;
+      } else if (now - lastDraw >= DRAW_MS) {
         lastDraw = now;
         draw();
       }
@@ -457,6 +525,7 @@
       document.removeEventListener('visibilitychange', onVisibility);
       ro?.disconnect();
       if (interval) clearInterval(interval);
+      glr?.destroy();
     };
   });
 </script>
