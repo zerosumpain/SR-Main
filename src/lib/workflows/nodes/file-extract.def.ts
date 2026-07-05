@@ -119,7 +119,7 @@ export const fileExtractDef: NodeDefinition = {
       key: 'persist',
       label: 'Save to file store',
       type: 'dropdown',
-      description: 'When on, the result becomes a new workflow file (browseable in /admin/connections/files).',
+      description: 'When on, the result becomes a new workflow file (browseable in /drive).',
       options: [
         { value: 'false', label: 'No (in-memory only)' },
         { value: 'true', label: 'Yes' },

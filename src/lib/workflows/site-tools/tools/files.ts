@@ -10,7 +10,7 @@ const MAX_INLINE_TEXT_BYTES = 200 * 1024;
 register({
   name: 'file_list',
   description:
-    'List files in the workflow file store (uploaded via /admin/connections/files). Returns id, name, mimeType, sizeBytes, description, and updatedAt for each. Use file_read to read a specific file by id or name.',
+    'List files in the workflow file store (uploaded via /drive). Returns id, name, mimeType, sizeBytes, description, and updatedAt for each. Use file_read to read a specific file by id or name.',
   parameters: {
     type: 'object',
     properties: {

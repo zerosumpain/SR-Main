@@ -47,7 +47,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     match: (p) => p.startsWith('/admin/connections'),
     items: [
       { label: 'Health', href: '/admin/connections/health' },
-      { label: 'Files', href: '/admin/connections/files' },
       { label: 'Gmail', href: '/admin/connections/gmail' },
       { label: 'Scraper', href: '/admin/connections/scraper' },
       { label: 'Credentials', href: '/admin/connections/credentials' },
@@ -115,7 +114,8 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   '/admin/hero': '/admin/content/hero',
   '/admin/biome': '/admin/content/effects',
   '/admin/health': '/admin/connections/health',
-  '/admin/files': '/admin/connections/files',
+  '/admin/files': '/drive',
+  '/admin/connections/files': '/drive',
   '/admin/gmail': '/admin/connections/gmail',
   '/admin/scraper': '/admin/connections/scraper',
   '/admin/integrations': '/admin/connections/credentials',

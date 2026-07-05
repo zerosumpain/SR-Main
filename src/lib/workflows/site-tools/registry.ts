@@ -86,7 +86,7 @@ export function getToolsetManifest(): Array<{
     visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Leaflet), and tables directly in the chat',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
-    files: 'Workflow file store — list and read files uploaded via /admin/connections/files. PDFs, DOCX, audio, and video are auto-extracted to text on read.',
+    files: 'Workflow file store — list and read files uploaded via /drive. PDFs, DOCX, audio, and video are auto-extracted to text on read.',
     gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
   };

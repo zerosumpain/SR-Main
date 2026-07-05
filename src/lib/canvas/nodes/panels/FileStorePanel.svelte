@@ -156,9 +156,9 @@
           {#if filesLoading}
             <p class="fs-picker-empty">Loading…</p>
           {:else if fileError}
-            <p class="fs-picker-empty fs-picker-err">Couldn't load file list: {fileError}. <a href="/admin/connections/files" target="_blank" rel="noopener">Open /admin/connections/files →</a></p>
+            <p class="fs-picker-empty fs-picker-err">Couldn't load file list: {fileError}. <a href="/drive" target="_blank" rel="noopener">Open /drive →</a></p>
           {:else if !fileList || fileList.length === 0}
-            <p class="fs-picker-empty">No files in store yet. <a href="/admin/connections/files" target="_blank" rel="noopener">Upload one →</a></p>
+            <p class="fs-picker-empty">No files in store yet. <a href="/drive" target="_blank" rel="noopener">Upload one →</a></p>
           {:else if filteredFiles.length === 0}
             <p class="fs-picker-empty">No files match "{pickerQuery}".</p>
           {:else}

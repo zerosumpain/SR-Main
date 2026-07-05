@@ -10,6 +10,7 @@
     { href: '/health', label: 'Health' },
     { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },
+    { href: '/drive', label: 'Drive' },
   ];
 
   let {

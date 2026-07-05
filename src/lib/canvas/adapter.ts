@@ -746,7 +746,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     label: 'File store',
     kind: 'output',
     group: 'Integrations',
-    description: 'Read, write, append, delete, or list files managed at /admin/connections/files. Permissions are enforced per file.',
+    description: 'Read, write, append, delete, or list files managed at /drive. Permissions are enforced per file.',
     defaultConfig: { operation: 'read', fileName: '', encoding: 'utf8' },
     handles: {
       inputs: [{ id: 'in', kinds: ['any'] }],

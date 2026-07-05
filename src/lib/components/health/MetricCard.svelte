@@ -47,7 +47,7 @@
     font-style: italic;
     margin: 0;
   }
-  /* row-link is canonical from /admin/connections/files; redefine here so this component
+  /* row-link is canonical from /drive; redefine here so this component
    * is self-contained when used outside /health. */
   .row-link {
     font-family: var(--font-mono);

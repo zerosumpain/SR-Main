@@ -131,12 +131,12 @@
       {:else if fileError}
         <p class="fp-picker-empty fp-picker-err">
           Couldn't load file list: {fileError}.
-          <a href="/admin/connections/files" target="_blank" rel="noopener">Open /admin/connections/files →</a>
+          <a href="/drive" target="_blank" rel="noopener">Open /drive →</a>
         </p>
       {:else if !fileList || fileList.length === 0}
         <p class="fp-picker-empty">
           No files in store yet.
-          <a href="/admin/connections/files" target="_blank" rel="noopener">Upload one →</a>
+          <a href="/drive" target="_blank" rel="noopener">Upload one →</a>
         </p>
       {:else if filteredFiles.length === 0}
         <p class="fp-picker-empty">No files match "{pickerQuery}".</p>
