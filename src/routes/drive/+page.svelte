@@ -1,5 +1,6 @@
 <svelte:head><title>Drive — Strange Ramblings</title></svelte:head>
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
 
@@ -51,6 +52,26 @@
   const selectedFiles = $derived(files.filter((f) => selected[f.id]));
   const allSelected = $derived(files.length > 0 && selectedFiles.length === files.length);
   let zipBusy = $state(false);
+
+  // ——— View mode (list | grid) — persisted per browser ———
+  let viewMode = $state<'list' | 'grid'>('list');
+  onMount(() => {
+    const v = localStorage.getItem('drive:view');
+    if (v === 'grid' || v === 'list') viewMode = v;
+  });
+  function setView(v: 'list' | 'grid') {
+    viewMode = v;
+    try { localStorage.setItem('drive:view', v); } catch { /* ignore */ }
+  }
+  function isImage(mime: string): boolean {
+    return mime.startsWith('image/');
+  }
+  function extBadge(name: string): string {
+    const parts = name.split('.');
+    if (parts.length < 2) return 'FILE';
+    const ext = parts.pop()!.toUpperCase();
+    return ext.length <= 5 ? ext : ext.slice(0, 4);
+  }
 
   let editingId = $state<string | null>(null);
   let editDraft = $state<{
@@ -442,6 +463,69 @@
         <span class="nm-sec-meta">{files.length} {files.length === 1 ? 'file' : 'files'}</span>
       </div>
 
+      {#snippet permChips(f: FileRow)}
+        <span class="perm-chip" class:on={f.permissions?.read !== false}>R</span>
+        <span class="perm-chip" class:on={!!f.permissions?.write}>W</span>
+        <span class="perm-chip" class:on={!!f.permissions?.append}>A</span>
+        <span class="perm-chip" class:on={!!f.permissions?.delete}>D</span>
+      {/snippet}
+
+      {#snippet fileActions(f: FileRow)}
+        <a href={`/api/files/${f.id}/download`} class="row-link" download={baseName(f.name)}>Download</a>
+        {#if canExtract(f.mimeType, f.name)}
+          <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => runExtract(f)}>
+            {busyId === f.id ? 'Extracting…' : 'Extract'}
+          </button>
+        {/if}
+        <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => (convertModalFor = { id: f.id, name: f.name })}>Convert</button>
+        <button type="button" class="row-link" onclick={() => startEdit(f)}>Edit</button>
+        <button type="button" class="row-link danger" onclick={() => deleteRow(f)}>Delete</button>
+      {/snippet}
+
+      {#snippet editCard()}
+        {#if editDraft}
+          <div class="file-card editing">
+            <div class="edit-grid">
+              <label class="field">
+                <span class="sr-label-tight">Name</span>
+                <input type="text" bind:value={editDraft.name} class="nm-text-input" />
+              </label>
+              <label class="field">
+                <span class="sr-label-tight">Description</span>
+                <input type="text" bind:value={editDraft.description} class="nm-text-input" />
+              </label>
+              <div class="field">
+                <span class="sr-label-tight">Permissions</span>
+                <div class="perm-row">
+                  <label class="perm-toggle" class:on={editDraft.permissions.read}>
+                    <input type="checkbox" bind:checked={editDraft.permissions.read} />
+                    <span class="perm-code">R</span><span class="perm-name">Read</span>
+                  </label>
+                  <label class="perm-toggle" class:on={editDraft.permissions.write}>
+                    <input type="checkbox" bind:checked={editDraft.permissions.write} />
+                    <span class="perm-code">W</span><span class="perm-name">Write</span>
+                  </label>
+                  <label class="perm-toggle" class:on={editDraft.permissions.append}>
+                    <input type="checkbox" bind:checked={editDraft.permissions.append} />
+                    <span class="perm-code">A</span><span class="perm-name">Append</span>
+                  </label>
+                  <label class="perm-toggle" class:on={editDraft.permissions.delete}>
+                    <input type="checkbox" bind:checked={editDraft.permissions.delete} />
+                    <span class="perm-code">D</span><span class="perm-name">Delete</span>
+                  </label>
+                </div>
+              </div>
+              <div class="edit-actions">
+                <button type="button" class="nm-save-btn" onclick={saveEdit} disabled={editBusy}>
+                  {editBusy ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" class="btn-ghost" onclick={cancelEdit}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        {/if}
+      {/snippet}
+
       {#if files.length === 0}
         <div class="empty">No files yet — drop some above.</div>
       {:else}
@@ -459,110 +543,98 @@
           {:else}
             <span class="sel-hint">Select files to download, or drag a file straight out to your desktop.</span>
           {/if}
+          <div class="view-toggle" role="group" aria-label="View mode">
+            <button type="button" class="vt-btn" class:on={viewMode === 'list'} aria-pressed={viewMode === 'list'} title="List view" onclick={() => setView('list')}>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 3h10M2 7h10M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
+              <span>List</span>
+            </button>
+            <button type="button" class="vt-btn" class:on={viewMode === 'grid'} aria-pressed={viewMode === 'grid'} title="Grid view" onclick={() => setView('grid')}>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="1.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/></svg>
+              <span>Grid</span>
+            </button>
+          </div>
         </div>
 
-        <div class="file-list" role="list">
-          {#each files as f (f.id)}
-            {#if editingId === f.id && editDraft}
-              <div class="file-card editing">
-                <div class="edit-grid">
-                  <label class="field">
-                    <span class="sr-label-tight">Name</span>
-                    <input type="text" bind:value={editDraft.name} class="nm-text-input" />
+        {#if viewMode === 'grid'}
+          <div class="file-grid" role="list">
+            {#each files as f (f.id)}
+              {#if editingId === f.id && editDraft}
+                <div class="grid-edit">{@render editCard()}</div>
+              {:else}
+                <div
+                  class="file-tile"
+                  class:sel={selected[f.id]}
+                  role="listitem"
+                  draggable="true"
+                  ondragstart={(e) => onFileDragStart(e, f)}
+                  title={f.name}
+                >
+                  <label class="tile-check" title="Select">
+                    <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
                   </label>
-                  <label class="field">
-                    <span class="sr-label-tight">Description</span>
-                    <input type="text" bind:value={editDraft.description} class="nm-text-input" />
-                  </label>
-                  <div class="field">
-                    <span class="sr-label-tight">Permissions</span>
-                    <div class="perm-row">
-                      <label class="perm-toggle" class:on={editDraft.permissions.read}>
-                        <input type="checkbox" bind:checked={editDraft.permissions.read} />
-                        <span class="perm-code">R</span><span class="perm-name">Read</span>
-                      </label>
-                      <label class="perm-toggle" class:on={editDraft.permissions.write}>
-                        <input type="checkbox" bind:checked={editDraft.permissions.write} />
-                        <span class="perm-code">W</span><span class="perm-name">Write</span>
-                      </label>
-                      <label class="perm-toggle" class:on={editDraft.permissions.append}>
-                        <input type="checkbox" bind:checked={editDraft.permissions.append} />
-                        <span class="perm-code">A</span><span class="perm-name">Append</span>
-                      </label>
-                      <label class="perm-toggle" class:on={editDraft.permissions.delete}>
-                        <input type="checkbox" bind:checked={editDraft.permissions.delete} />
-                        <span class="perm-code">D</span><span class="perm-name">Delete</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="edit-actions">
-                    <button type="button" class="nm-save-btn" onclick={saveEdit} disabled={editBusy}>
-                      {editBusy ? 'Saving…' : 'Save'}
-                    </button>
-                    <button type="button" class="btn-ghost" onclick={cancelEdit}>Cancel</button>
-                  </div>
-                </div>
-              </div>
-            {:else}
-              <div
-                class="file-card"
-                class:sel={selected[f.id]}
-                role="listitem"
-                draggable="true"
-                ondragstart={(e) => onFileDragStart(e, f)}
-                title="Drag out to copy to your desktop"
-              >
-                <label class="file-check" title="Select">
-                  <input
-                    type="checkbox"
-                    checked={!!selected[f.id]}
-                    onchange={(e) => (selected[f.id] = e.currentTarget.checked)}
-                  />
-                </label>
-
-                <div class="file-main">
-                  <div class="file-title">
-                    <span class="file-name-text">{f.name}</span>
-                    <span class="file-mime"><code>{f.mimeType}</code></span>
-                  </div>
-                  {#if f.description}
-                    <div class="file-desc">{f.description}</div>
-                  {/if}
-                  <div class="file-meta">
-                    <span>{fmtSize(f.sizeBytes)}</span>
-                    <span class="dot">·</span>
-                    <span>Updated {fmtDate(f.updatedAt)}</span>
-                    {#if f.uploadedBy}
-                      <span class="dot">·</span>
-                      <span>by {f.uploadedBy}</span>
+                  <div class="tile-thumb">
+                    {#if isImage(f.mimeType)}
+                      <img src={`/api/files/${f.id}/download?inline=1`} alt={f.name} loading="lazy" />
+                    {:else}
+                      <svg class="tile-icon" width="38" height="46" viewBox="0 0 38 46" fill="none" aria-hidden="true">
+                        <path d="M5 1.5h19L36 13v30.5a1.5 1.5 0 01-1.5 1.5h-29A1.5 1.5 0 014 43.5V3A1.5 1.5 0 015.5 1.5z" stroke="currentColor" stroke-width="1.4"/>
+                        <path d="M24 1.5V13h12" stroke="currentColor" stroke-width="1.4"/>
+                      </svg>
+                      <span class="tile-ext">{extBadge(f.name)}</span>
                     {/if}
                   </div>
+                  <div class="tile-name">{baseName(f.name)}</div>
+                  <div class="tile-meta">
+                    <span>{fmtSize(f.sizeBytes)}</span>
+                    <span class="tile-chips">{@render permChips(f)}</span>
+                  </div>
+                  <div class="tile-actions">{@render fileActions(f)}</div>
                 </div>
-
-                <div class="file-perms">
-                  <span class="perm-chip" class:on={f.permissions?.read !== false}>R</span>
-                  <span class="perm-chip" class:on={!!f.permissions?.write}>W</span>
-                  <span class="perm-chip" class:on={!!f.permissions?.append}>A</span>
-                  <span class="perm-chip" class:on={!!f.permissions?.delete}>D</span>
+              {/if}
+            {/each}
+          </div>
+        {:else}
+          <div class="file-list" role="list">
+            {#each files as f (f.id)}
+              {#if editingId === f.id && editDraft}
+                {@render editCard()}
+              {:else}
+                <div
+                  class="file-card"
+                  class:sel={selected[f.id]}
+                  role="listitem"
+                  draggable="true"
+                  ondragstart={(e) => onFileDragStart(e, f)}
+                  title="Drag out to copy to your desktop"
+                >
+                  <label class="file-check" title="Select">
+                    <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
+                  </label>
+                  <div class="file-main">
+                    <div class="file-title">
+                      <span class="file-name-text">{f.name}</span>
+                      <span class="file-mime"><code>{f.mimeType}</code></span>
+                    </div>
+                    {#if f.description}
+                      <div class="file-desc">{f.description}</div>
+                    {/if}
+                    <div class="file-meta">
+                      <span>{fmtSize(f.sizeBytes)}</span>
+                      <span class="dot">·</span>
+                      <span>Updated {fmtDate(f.updatedAt)}</span>
+                      {#if f.uploadedBy}
+                        <span class="dot">·</span>
+                        <span>by {f.uploadedBy}</span>
+                      {/if}
+                    </div>
+                  </div>
+                  <div class="file-perms">{@render permChips(f)}</div>
+                  <div class="file-actions">{@render fileActions(f)}</div>
                 </div>
-
-                <div class="file-actions">
-                  <a href={`/api/files/${f.id}/download`} class="row-link" download={baseName(f.name)}>Download</a>
-                  {#if canExtract(f.mimeType, f.name)}
-                    <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => runExtract(f)}>
-                      {busyId === f.id ? 'Extracting…' : 'Extract'}
-                    </button>
-                  {/if}
-                  <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => (convertModalFor = { id: f.id, name: f.name })}>
-                    Convert
-                  </button>
-                  <button type="button" class="row-link" onclick={() => startEdit(f)}>Edit</button>
-                  <button type="button" class="row-link danger" onclick={() => deleteRow(f)}>Delete</button>
-                </div>
-              </div>
-            {/if}
-          {/each}
-        </div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
       {/if}
     </section>
 
@@ -1119,6 +1191,139 @@
     }
     .file-perms, .file-actions { justify-content: flex-start; grid-column: 2; }
   }
+
+  /* ——— View toggle ——— */
+  .view-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    border: 1px solid var(--card-border);
+    flex-shrink: 0;
+  }
+  .vt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 100ms ease, color 100ms ease;
+  }
+  .vt-btn + .vt-btn { border-left: 1px solid var(--card-border); }
+  .vt-btn:hover { color: var(--text-primary); }
+  .vt-btn.on { background: var(--accent); color: var(--bg); }
+  .vt-btn svg { display: block; }
+
+  /* ——— Grid (Windows-Explorer-esque) view ——— */
+  .file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.6rem;
+  }
+  .grid-edit { grid-column: 1 / -1; }
+  .file-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 1rem 0.75rem 0.85rem;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    text-align: center;
+    min-width: 0;
+  }
+  .file-tile:hover { border-color: var(--text-primary); }
+  .file-tile[draggable="true"] { cursor: grab; }
+  .file-tile[draggable="true"]:active { cursor: grabbing; }
+  .file-tile.sel { border-color: var(--accent); background: var(--accent-tint-08); }
+  .tile-check {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: inline-flex;
+    opacity: 0;
+    transition: opacity 100ms ease;
+  }
+  .file-tile:hover .tile-check,
+  .file-tile.sel .tile-check { opacity: 1; }
+  .tile-check input { accent-color: var(--accent); cursor: pointer; width: 15px; height: 15px; }
+  .tile-thumb {
+    width: 100%;
+    height: 68px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    color: var(--text-muted);
+  }
+  .tile-thumb img {
+    max-width: 100%;
+    max-height: 68px;
+    object-fit: contain;
+    border: 1px solid var(--card-border);
+  }
+  .tile-icon { color: var(--text-muted); }
+  .tile-ext {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 1px 4px;
+  }
+  .tile-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.3;
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    width: 100%;
+  }
+  .tile-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+  .tile-chips { display: inline-flex; gap: 2px; }
+  .tile-chips .perm-chip { width: 16px; height: 16px; font-size: 8px; }
+  .tile-actions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 6px;
+    background: var(--surface-elevated);
+    border-top: 1px solid var(--card-border);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 100ms ease;
+  }
+  .file-tile:hover .tile-actions,
+  .file-tile.sel .tile-actions { opacity: 1; visibility: visible; }
 
   /* ——— WebDAV section ——— */
   .dav-blurb {
