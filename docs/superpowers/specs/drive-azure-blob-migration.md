@@ -85,3 +85,24 @@ Three fs↔Azure parity findings applied after go-live:
    don't clobber each other.
 3. **fs readStream `stat` guard** — fs branch `stat`s before `createReadStream` so a missing file
    throws before headers are committed (Azure already did via the `download()` round-trip). Dev-path fix.
+
+## Second store — jkai media → Azure Blob + Cool tier (2026-07-05)
+
+Same dispatch pattern applied to `src/lib/jkai/media/storage.ts` (attachments, intel, generated
+media). The Azure primitives were extracted into a shared **container-parameterized core**
+`src/lib/storage/azure-blob.ts`; `file-store/azure-blob.ts` and `jkai/media/azure-blob.ts` are now
+thin bindings (containers `drive` / `media`, via `AZURE_BLOB_CONTAINER` / `AZURE_MEDIA_CONTAINER`).
+media `diskPath` is already a relative key (`yyyy/mm/uuid.ext`) → used directly as the blob name.
+Migrated via `scripts/migrate-media-to-azure.mjs` (walks `JKAI_MEDIA_ROOT`; idempotent; 4 files).
+
+**Cost (per John — "cool not cold"):** account default access tier set **Hot → Cool** (halves storage
+cost; higher read/txn cost + 30-day min retention). All blobs infer Cool from the account default
+(`Standard_LRS`, cheapest redundancy; verified via `az storage blob show`).
+
+**Known follow-up (pre-existing, out of scope):** the WhatsApp *delegated* outbound-media path
+(`whatsapp/service.ts` `sendAttachment`) POSTs a bare `filePath` to the Hermes bridge, which reads it
+from local disk — designed for the homeserv→homeserv same-fs case. It was already non-functional from
+the VPS (cross-host: homeserv has 0 media files, can't resolve VPS relative paths; no `/send-media`
+activity in VPS logs), so Azure media does not regress it. Proper fix if delegated media-from-VPS is
+ever wanted: have the bridge accept bytes (base64/multipart) and send `readBuffer(diskPath)` bytes
+instead of a path. Inbound media processing (OCR/transcribe/multimodal via `readBuffer`) works on Azure.
