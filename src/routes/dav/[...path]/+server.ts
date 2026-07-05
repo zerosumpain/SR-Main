@@ -1,14 +1,17 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { stat, unlink, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { and, eq, like, sql } from 'drizzle-orm';
-import { newDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
+import {
+  newDiskPath,
+  saveBuffer,
+  deleteFile,
+  saveStream,
+  readStream,
+  copyFile,
+} from '$lib/file-store/storage';
 import {
   urlToRel,
   relToName,
@@ -221,7 +224,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
   // Stream file from disk to avoid buffering big files in RAM.
   let stream: Readable;
   try {
-    stream = createReadStream(row!.diskPath);
+    stream = await readStream(row!.diskPath);
   } catch {
     throw error(410, 'file content missing');
   }
@@ -258,29 +261,26 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
   const mime = request.headers.get('content-type')?.split(';')[0]?.trim() || guessMime(rel);
   const newDisk = newDiskPath(rel);
 
-  // Make sure the per-file UUID directory exists before streaming. saveBuffer
-  // does this internally; pipeline() to createWriteStream does not.
-  await mkdir(dirname(newDisk), { recursive: true });
-
   // Empty body fast-path (Office apps PUT a 0-byte placeholder before the
-  // real save). Buffer write is fine here.
+  // real save).
+  let finalSize: number;
   if (declaredLen === 0 && !request.body) {
     await saveBuffer(newDisk, Buffer.alloc(0));
+    finalSize = 0;
   } else {
     try {
-      await pipeline(
+      finalSize = await saveStream(
+        newDisk,
         Readable.fromWeb(request.body as unknown as import('node:stream/web').ReadableStream),
-        createWriteStream(newDisk),
       );
     } catch (err) {
-      try { await unlink(newDisk); } catch {}
+      await deleteFile(newDisk).catch(() => {});
       return new Response(`write failed: ${(err as Error).message}`, { status: 500 });
     }
   }
 
-  const finalSize = (await stat(newDisk)).size;
   if (finalSize > MAX_BYTES) {
-    try { await unlink(newDisk); } catch {}
+    await deleteFile(newDisk).catch(() => {});
     return new Response('too large', { status: 413 });
   }
 
@@ -510,8 +510,7 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
       await db.update(workflowFiles).set({ name: destName, updatedAt: new Date() }).where(eq(workflowFiles.id, srcRow.id));
     } else {
       const newDisk = newDiskPath(dest.rel);
-      await mkdir(dirname(newDisk), { recursive: true });
-      await pipeline(createReadStream(srcRow.diskPath), createWriteStream(newDisk));
+      await copyFile(srcRow.diskPath, newDisk);
       await db.insert(workflowFiles).values({
         name: destName,
         description: srcRow.description,
@@ -547,8 +546,7 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
     const newName = newPrefix2 + r.name.slice(oldPrefix2.length);
     const newRel = newName.slice(DRIVE_PREFIX.length);
     const newDisk = newDiskPath(newRel);
-    await mkdir(dirname(newDisk), { recursive: true });
-    await pipeline(createReadStream(r.diskPath), createWriteStream(newDisk));
+    await copyFile(r.diskPath, newDisk);
     await db.insert(workflowFiles).values({
       name: newName,
       description: r.description,
