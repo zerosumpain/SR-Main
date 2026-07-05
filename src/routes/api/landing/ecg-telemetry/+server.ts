@@ -22,6 +22,8 @@ export const POST: RequestHandler = async ({ request }) => {
     const d = JSON.parse(raw) as Record<string, unknown>;
     const line = {
       r: String(d.r ?? '?').slice(0, 16), // renderer: webgl2 | 2d
+      why: d.why ? String(d.why).slice(0, 16) : undefined, // GL refusal reason
+      skip: Number(d.skip ?? -1), // adaptive presentation skip (-1 = 2D pen)
       fps: Number(d.fps ?? 0),
       p95: Number(d.p95 ?? 0), // frame ms
       max: Number(d.max ?? 0),

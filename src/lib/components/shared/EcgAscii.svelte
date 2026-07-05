@@ -11,7 +11,11 @@
     nextRR,
     nextAmp,
   } from './ecg-signal';
-  import { createAsciiGlRenderer, type AsciiGlRenderer } from './ecg-ascii-gl';
+  import {
+    createAsciiGlRenderer,
+    type AsciiGlRenderer,
+    type AsciiGlRefusal,
+  } from './ecg-ascii-gl';
 
   let {
     rhr = 64,
@@ -130,12 +134,17 @@
       // storage unavailable — keep the default pen
     }
     let glr: AsciiGlRenderer | null = null;
+    let glWhy: AsciiGlRefusal | 'forced' | '' = force2d ? 'forced' : '';
     if (!reduced && !force2d) {
-      glr = createAsciiGlRenderer(canvasEl, {
-        hot: hotRgb,
-        glow: accentRgb,
-        glowAlpha: lite ? 0 : 0.55,
-      });
+      glr = createAsciiGlRenderer(
+        canvasEl,
+        {
+          hot: hotRgb,
+          glow: accentRgb,
+          glowAlpha: lite ? 0 : 0.55,
+        },
+        (why) => (glWhy = why),
+      );
     }
     let ctx: CanvasRenderingContext2D | null = null;
     if (!glr) {
@@ -328,9 +337,14 @@
     let last = performance.now();
     let lastDraw = 0;
     let raf = 0;
-    // 2D pen redraw throttle (~20fps touch / ~30fps desktop). The GL pen draws
-    // every rAF — its per-frame cost is one instanced draw call.
+    // 2D pen redraw throttle (~20fps touch / ~30fps desktop). The GL pen
+    // presents every rAF until the adaptive throttle in tick() says the
+    // device can't keep up (see there).
     const DRAW_MS = lite ? 50 : 33;
+    let glSkip = 0; // rAFs skipped between GL presentations (adaptive)
+    let glSinceDraw = 0;
+    let glWinFrames = 0;
+    let glWinSlow = 0;
 
     function advance(dt: number) {
       const colsPerSec = COLS / SWEEP_SEC;
@@ -488,6 +502,8 @@
       const mean = ds.reduce((a, b) => a + b, 0) / ds.length;
       const payload = JSON.stringify({
         r: canvasEl.dataset.renderer,
+        why: glWhy || undefined, // why the GL pen was refused, if it was
+        skip: glr ? glSkip : -1, // adaptive presentation skip (rAFs)
         fps: Math.round(10000 / mean) / 10,
         p95: Math.round(ds[Math.floor(ds.length * 0.95)] * 10) / 10,
         max: Math.round(ds[ds.length - 1] * 10) / 10, // dt is clamped: 100 = "≥100"
@@ -524,10 +540,35 @@
       rumRecord(dt * 1000);
       advance(dt);
       if (glr) {
-        // The whole trail (fade included) is re-rendered on the GPU each rAF;
-        // the main thread only uploads the handful of new cells.
-        glr.draw(clock);
-        if (cursorEl) cursorEl.style.transform = `translateX(${Math.round(xMid(headCol))}px)`;
+        // The whole trail (fade included) is re-rendered on the GPU per
+        // presentation; the main thread only uploads the handful of new
+        // cells. PRESENTING a full-viewport GL canvas is the dominant cost
+        // on slow WebKit compositors, and a wall-time throttle cannot help
+        // there: when one presentation costs ~50ms, every rAF arrives past
+        // any interval, so every rAF presents and the page locks at ~18fps
+        // (measured). Skipping a COUNT of rAFs between presentations breaks
+        // that loop — intermediate frames run free. Healthy devices never
+        // degrade (John's iPhone holds 60fps at skip 0); a ~1-3s window
+        // with >30% dropped frames steps skip 0 → 1 → 2 (present every
+        // 2nd/3rd frame; at a healthy 60Hz that's the old pen's cadence).
+        glWinFrames++;
+        if (dt > 0.034) glWinSlow++;
+        if (glWinFrames >= 60) {
+          const ratio = glWinSlow / glWinFrames;
+          if (ratio > 0.5) glSkip = 2; // clearly struggling — jump to every 3rd
+          else if (ratio > 0.3 && glSkip < 2) glSkip++;
+          glWinFrames = 0;
+          glWinSlow = 0;
+        }
+        glSinceDraw++;
+        if (glSinceDraw > glSkip) {
+          glSinceDraw = 0;
+          glr.draw(clock);
+          // Cursor moves only on presentations — a per-rAF style write forces
+          // a compositor pass on slow WebKit even when the canvas doesn't
+          // present (the old 2D pen also only moved it on draws).
+          if (cursorEl) cursorEl.style.transform = `translateX(${Math.round(xMid(headCol))}px)`;
+        }
       } else if (now - lastDraw >= DRAW_MS) {
         lastDraw = now;
         draw();

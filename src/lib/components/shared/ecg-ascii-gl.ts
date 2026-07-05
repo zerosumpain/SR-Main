@@ -172,9 +172,12 @@ function bakeAtlas(colors: AsciiGlColors): HTMLCanvasElement {
   return cvs;
 }
 
+export type AsciiGlRefusal = 'no-webgl2' | 'software-gl' | 'init-fail';
+
 export function createAsciiGlRenderer(
   canvas: HTMLCanvasElement,
   colors: AsciiGlColors,
+  onRefuse?: (reason: AsciiGlRefusal) => void,
 ): AsciiGlRenderer | null {
   // Probe on a throwaway canvas BEFORE claiming the real one (a canvas that
   // has handed out a webgl2 context can never hand out a 2d one, and the
@@ -183,12 +186,19 @@ export function createAsciiGlRenderer(
   // SwiftShader renders this scene at ~6fps).
   try {
     const probe = document.createElement('canvas').getContext('webgl2');
-    if (!probe) return null;
+    if (!probe) {
+      onRefuse?.('no-webgl2');
+      return null;
+    }
     const dbg = probe.getExtension('WEBGL_debug_renderer_info');
     const rs = String(probe.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : probe.RENDERER));
     probe.getExtension('WEBGL_lose_context')?.loseContext();
-    if (/swiftshader|llvmpipe|softpipe|software/i.test(rs)) return null;
+    if (/swiftshader|llvmpipe|softpipe|software/i.test(rs)) {
+      onRefuse?.('software-gl');
+      return null;
+    }
   } catch {
+    onRefuse?.('no-webgl2');
     return null;
   }
 
