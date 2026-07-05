@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { ArchGroup, ArchNode, ArchEdge, HealthStatus } from '$lib/architecture/topology';
 
   let {
@@ -102,53 +103,129 @@
   const hoveredNode = $derived(nodes.find((n) => n.id === hovered) ?? null);
   const isEdgeActive = (e: ArchEdge) => !hovered || e.from === hovered || e.to === hovered;
   const isNodeDim = (id: string) => !!hovered && !connected?.has(id);
+
+  // ── zoom + full screen ─────────────────────────────────────────────────
+  let zoom = $state(0.72);
+  let expanded = $state(false);
+  let userZoomed = false; // plain let (pitfalls rule 1): read only in handlers
+  let scrollEl: HTMLDivElement | undefined;
+  let panelEl: HTMLDivElement | undefined;
+
+  const clampZoom = (z: number) => Math.min(3, Math.max(0.25, z));
+  function zoomBy(f: number) {
+    zoom = clampZoom(zoom * f);
+    userZoomed = true;
+  }
+  function fit() {
+    if (!scrollEl) return;
+    const pad = 28;
+    const zw = (scrollEl.clientWidth - pad) / layout.W;
+    const zh = (scrollEl.clientHeight - pad) / layout.H;
+    zoom = clampZoom(Math.min(zw, zh));
+    userZoomed = false;
+  }
+  function onWheel(e: WheelEvent) {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      zoomBy(e.deltaY < 0 ? 1.12 : 0.89);
+    }
+  }
+  function toggleExpand() {
+    expanded = !expanded;
+    if (expanded) {
+      panelEl?.requestFullscreen?.().catch(() => {});
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    setTimeout(fit, 90);
+  }
+
+  onMount(() => {
+    fit();
+    const onFsChange = () => {
+      // Escape out of true fullscreen also closes the overlay.
+      if (!document.fullscreenElement && expanded) expanded = false;
+      setTimeout(fit, 60);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && expanded) {
+        expanded = false;
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      }
+    };
+    const onResize = () => {
+      if (!userZoomed) fit();
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+    };
+  });
 </script>
 
-<div class="arch">
-  <div class="map-scroll">
-    <div class="map-inner">
-      <svg viewBox="0 0 {layout.W} {layout.H}" width="100%" role="img" aria-label="System architecture map">
-        <!-- group boxes -->
-        {#each layout.groups as g (g.id)}
-          <g class="grp">
-            <rect x={g.x} y={g.y} width={g.w} height={g.h} rx="10"
-              fill="color-mix(in srgb, {PROVIDER_COLOR[g.provider]} 5%, transparent)"
-              stroke="color-mix(in srgb, {PROVIDER_COLOR[g.provider]} 40%, transparent)" stroke-width="1" />
-            <rect x={g.x} y={g.y} width="9" height="9" rx="2" transform="translate(11,9)" fill={PROVIDER_COLOR[g.provider]} />
-            <text x={g.x + 26} y={g.y + 16} class="grp-lab">{g.label}</text>
-          </g>
-        {/each}
+<div class="arch" class:expanded bind:this={panelEl}>
+  <div class="map-col">
+    <div class="toolbar">
+      <div class="zoom-ctl">
+        <button class="tb-btn" onclick={() => zoomBy(1 / 1.2)} title="Zoom out" aria-label="Zoom out">−</button>
+        <span class="zval" title="Zoom level">{Math.round(zoom * 100)}%</span>
+        <button class="tb-btn" onclick={() => zoomBy(1.2)} title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="tb-btn wide" onclick={fit} title="Fit to view">Fit</button>
+      </div>
+      <button class="tb-btn wide" onclick={toggleExpand} title={expanded ? 'Exit full screen (Esc)' : 'Full screen'}>
+        {expanded ? '✕ Close' : '⤢ Full screen'}
+      </button>
+    </div>
 
-        <!-- edges -->
-        {#each layout.edges as e (e.from + '>' + e.to)}
-          <path d={e.path} class="edge edge-{e.kind ?? 'plain'}" class:dim={!isEdgeActive(e)} class:hot={hovered && isEdgeActive(e)} />
-          {#if e.label && (!hovered || isEdgeActive(e))}
-            <text x={e.mx} y={e.my - 4} class="edge-lab" class:show={hovered && isEdgeActive(e)}>{e.label}</text>
-          {/if}
-        {/each}
+    <div class="map-scroll" bind:this={scrollEl} onwheel={onWheel}>
+      <div class="zoom-layer" style="width:{Math.round(layout.W * zoom)}px; height:{Math.round(layout.H * zoom)}px">
+        <svg viewBox="0 0 {layout.W} {layout.H}" width="100%" height="100%" role="img" aria-label="System architecture map">
+          <!-- group boxes -->
+          {#each layout.groups as g (g.id)}
+            <g class="grp">
+              <rect x={g.x} y={g.y} width={g.w} height={g.h} rx="10"
+                fill="color-mix(in srgb, {PROVIDER_COLOR[g.provider]} 5%, transparent)"
+                stroke="color-mix(in srgb, {PROVIDER_COLOR[g.provider]} 40%, transparent)" stroke-width="1" />
+              <rect x={g.x} y={g.y} width="9" height="9" rx="2" transform="translate(11,9)" fill={PROVIDER_COLOR[g.provider]} />
+              <text x={g.x + 26} y={g.y + 16} class="grp-lab">{g.label}</text>
+            </g>
+          {/each}
 
-        <!-- nodes -->
-        {#each nodes as n (n.id)}
-          {@const p = layout.nodePos[n.id]}
-          {#if p}
-            {@const st = statusOf(n)}
-            <foreignObject x={p.x} y={p.y} width={NW} height={NH}
-              onmouseenter={() => (hovered = n.id)} onmouseleave={() => (hovered = null)}>
-              <div xmlns="http://www.w3.org/1999/xhtml" class="node" class:dim={isNodeDim(n.id)} class:hl={hovered === n.id}
-                style="--pc:{PROVIDER_COLOR[providerOf(n.group)]}">
-                <div class="node-top">
-                  <span class="node-lab" title={n.label}>{n.label}</span>
-                  {#if st !== 'static'}
-                    <span class="dot" style="background:{STATUS_COLOR[st]}" title={STATUS_LABEL[st]}
-                      class:pulse={st === 'up'}></span>
-                  {/if}
+          <!-- edges -->
+          {#each layout.edges as e (e.from + '>' + e.to)}
+            <path d={e.path} class="edge edge-{e.kind ?? 'plain'}" class:dim={!isEdgeActive(e)} class:hot={hovered && isEdgeActive(e)} />
+            {#if e.label && (!hovered || isEdgeActive(e))}
+              <text x={e.mx} y={e.my - 4} class="edge-lab" class:show={hovered && isEdgeActive(e)}>{e.label}</text>
+            {/if}
+          {/each}
+
+          <!-- nodes -->
+          {#each nodes as n (n.id)}
+            {@const p = layout.nodePos[n.id]}
+            {#if p}
+              {@const st = statusOf(n)}
+              <foreignObject x={p.x} y={p.y} width={NW} height={NH}
+                onmouseenter={() => (hovered = n.id)} onmouseleave={() => (hovered = null)}>
+                <div xmlns="http://www.w3.org/1999/xhtml" class="node" class:dim={isNodeDim(n.id)} class:hl={hovered === n.id}
+                  style="--pc:{PROVIDER_COLOR[providerOf(n.group)]}">
+                  <div class="node-top">
+                    <span class="node-lab" title={n.label}>{n.label}</span>
+                    {#if st !== 'static'}
+                      <span class="dot" style="background:{STATUS_COLOR[st]}" title={STATUS_LABEL[st]}
+                        class:pulse={st === 'up'}></span>
+                    {/if}
+                  </div>
+                  {#if n.note}<span class="node-note" title={n.note}>{n.note}</span>{/if}
                 </div>
-                {#if n.note}<span class="node-note" title={n.note}>{n.note}</span>{/if}
-              </div>
-            </foreignObject>
-          {/if}
-        {/each}
-      </svg>
+              </foreignObject>
+            {/if}
+          {/each}
+        </svg>
+      </div>
     </div>
   </div>
 
@@ -194,9 +271,53 @@
     gap: 18px;
     align-items: start;
   }
-  .map-scroll { overflow-x: auto; scrollbar-width: thin; }
-  .map-inner { min-width: 900px; }
-  svg { display: block; overflow: visible; }
+  .map-col { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .zoom-ctl { display: inline-flex; align-items: center; gap: 4px; }
+  .tb-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--divider);
+    background: var(--surface-elevated, transparent);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 5px;
+  }
+  .tb-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .tb-btn.wide { min-width: auto; padding: 0 10px; letter-spacing: 0.02em; }
+  .zval {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    min-width: 40px;
+    text-align: center;
+  }
+
+  .map-scroll {
+    overflow: auto;
+    scrollbar-width: thin;
+    height: clamp(340px, 56vh, 620px);
+    border: 1px solid var(--divider);
+    border-radius: 8px;
+    background:
+      radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-ghost) 24%, transparent) 1px, transparent 0) 0 0 / 22px 22px;
+  }
+  .zoom-layer { transform-origin: 0 0; }
+  svg { display: block; }
 
   .grp-lab {
     font-family: var(--font-mono);
@@ -260,7 +381,7 @@
     text-overflow: ellipsis;
   }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .dot.pulse { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pc) 0%, transparent); animation: p 2.4s ease-out infinite; }
+  .dot.pulse { animation: p 2.4s ease-out infinite; }
   @keyframes p {
     0% { box-shadow: 0 0 0 0 rgba(63, 178, 127, 0.5); }
     70%, 100% { box-shadow: 0 0 0 5px rgba(63, 178, 127, 0); }
@@ -293,6 +414,33 @@
   .lg-hd { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
   .lg { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); }
   .lg i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* ── full-screen overlay ─────────────────────────────────────────────── */
+  .arch.expanded {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: block;
+    background: var(--bg);
+    padding: 14px 18px 18px;
+    gap: 0;
+  }
+  .arch.expanded .map-col { height: 100%; }
+  .arch.expanded .map-scroll { height: calc(100vh - 66px); }
+  .arch.expanded .side {
+    position: absolute;
+    right: 26px;
+    bottom: 24px;
+    width: 218px;
+    z-index: 2;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(6px);
+    padding: 8px;
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+  }
+  .arch.expanded .detail { min-height: 0; background: transparent; border: none; padding: 4px 6px; }
+  .arch.expanded .legend { border: none; padding: 4px 6px; }
 
   @media (max-width: 860px) {
     .arch { grid-template-columns: 1fr; }
