@@ -276,8 +276,13 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
-  // Public API routes — read-only, used by public pages.
-  const PUBLIC_API_PATHS = ['/api/biome/state', '/api/family-presence/stats'];
+  // Public API routes — read-only, used by public pages (plus the write-only
+  // heartbeat-renderer telemetry beacon, which stores nothing).
+  const PUBLIC_API_PATHS = [
+    '/api/biome/state',
+    '/api/family-presence/stats',
+    '/api/landing/ecg-telemetry',
+  ];
   if (PUBLIC_API_PATHS.some((p) => pathname === p)) {
     return resolve(event);
   }

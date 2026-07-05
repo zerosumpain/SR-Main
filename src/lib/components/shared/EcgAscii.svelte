@@ -465,6 +465,52 @@
     let pageVisible = typeof document === 'undefined' || !document.hidden;
     const canRun = () => inView && pageVisible;
 
+    // One-shot real-user telemetry: after a short warm-up, sample ~6s of
+    // frame cadence and beacon it to /api/landing/ecg-telemetry — the mobile
+    // slowness report can't be reproduced on hardware we can emulate from
+    // homeserv, so the component measures itself on real devices. Nothing is
+    // stored server-side beyond a journal line.
+    const RUM_WARMUP = 120; // ticks skipped (~2s at 60fps)
+    const RUM_SAMPLES = 360; // ~6s at 60fps
+    let rumSkipped = 0;
+    let rumDeltas: number[] | null = [];
+    function rumRecord(dtMs: number) {
+      if (!rumDeltas) return;
+      if (rumSkipped < RUM_WARMUP) {
+        rumSkipped++;
+        return;
+      }
+      rumDeltas.push(dtMs);
+      if (rumDeltas.length < RUM_SAMPLES) return;
+      const ds = rumDeltas;
+      rumDeltas = null; // one-shot
+      ds.sort((a, b) => a - b);
+      const mean = ds.reduce((a, b) => a + b, 0) / ds.length;
+      const payload = JSON.stringify({
+        r: canvasEl.dataset.renderer,
+        fps: Math.round(10000 / mean) / 10,
+        p95: Math.round(ds[Math.floor(ds.length * 0.95)] * 10) / 10,
+        max: Math.round(ds[ds.length - 1] * 10) / 10, // dt is clamped: 100 = "≥100"
+        over34pct: Math.round((ds.filter((d) => d > 34).length / ds.length) * 1000) / 10,
+        dpr: window.devicePixelRatio || 1,
+        lite,
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+        ua: navigator.userAgent.slice(0, 160),
+      });
+      try {
+        if (!navigator.sendBeacon?.('/api/landing/ecg-telemetry', payload)) {
+          fetch('/api/landing/ecg-telemetry', {
+            method: 'POST',
+            body: payload,
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch {
+        // diagnostics only — never let telemetry break the trace
+      }
+    }
+
     function tick(now: number) {
       if (!canRun()) {
         running = false;
@@ -475,6 +521,7 @@
       last = now;
       if (dt > 0.1) dt = 0.1; // guard against huge jumps after a tab refocus
       clock += dt;
+      rumRecord(dt * 1000);
       advance(dt);
       if (glr) {
         // The whole trail (fade included) is re-rendered on the GPU each rAF;

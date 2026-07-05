@@ -27,6 +27,9 @@ const PUBLIC_PATHS = [
   // live-walk + published-project data — never prompts, conversation ids, or
   // canvas slugs. See src/routes/api/landing/vitals/+server.ts.
   '/api/landing/vitals',
+  // Write-only frame-rate telemetry beacon from the landing heartbeat — logs a
+  // single line to stdout, stores nothing. See its +server.ts for rationale.
+  '/api/landing/ecg-telemetry',
   '/projects',
   '/heart',
   // Public leaderboard for the Terminal Descent game (/projects/terminal-descent).
