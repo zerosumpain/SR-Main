@@ -1,9 +1,7 @@
 import type { RequestHandler } from './$types';
 import { json } from '@sveltejs/kit';
-import { writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { BLOG_IMAGE_ROOT } from '$lib/blog/upload-paths';
+import { saveBlogImage } from '$lib/blog/image-store';
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -30,15 +28,11 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const safePostId = String(postId ?? 'uncategorized').replace(/[^a-zA-Z0-9_-]/g, '_') || 'uncategorized';
-  const dir = join(BLOG_IMAGE_ROOT, safePostId);
-  await mkdir(dir, { recursive: true });
-
   const ext = MIME_TO_EXT[file.type] ?? 'bin';
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
-  const filepath = join(dir, filename);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(filepath, buffer);
+  await saveBlogImage(safePostId, filename, buffer);
 
   return json({ url: `/api/blog/images/${safePostId}/${filename}` });
 };
