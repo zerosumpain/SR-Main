@@ -5,6 +5,7 @@
 
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { isOwnerEmail } from '$lib/server/access';
 import { runIntel, getIntelSnapshot } from '../../../projects/dfe-data-strategy/lib/intel.server';
 import type { RequestHandler } from './$types';
 
@@ -12,10 +13,12 @@ async function authorized(event: Parameters<RequestHandler>[0]): Promise<boolean
   const secret = env.KEYSTONE_INTEL_SECRET;
   if (!secret) return true; // unset → open (dev convenience), same as policy-engine / DSD
   if ((event.request.headers.get('authorization') ?? '') === `Bearer ${secret}`) return true;
-  // the nav's on-demand "scan" button posts from the browser with a signed-in session
+  // the nav's on-demand "scan" button posts from the browser with the owner's
+  // session (this route bypasses the hook's owner gate as a service endpoint, so
+  // gate on owner here — a guest session must not trigger sweeps).
   try {
     const session = await event.locals.auth?.();
-    return !!session?.user;
+    return isOwnerEmail(session?.user?.email);
   } catch {
     return false;
   }

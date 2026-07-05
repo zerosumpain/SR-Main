@@ -5,6 +5,7 @@ import { projectVisibility } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isProjectPublic } from './visibility';
 import { shareCookieName, validateProjectShare } from './shares';
+import { isOwnerEmail } from '$lib/server/access';
 
 /** The bits of a SvelteKit request the guard needs (load events and +server
  *  handlers both satisfy this). */
@@ -36,9 +37,11 @@ export async function requireProjectPublic(
   const map = vis ? { [vis.projectKey]: vis.isPublic } : {};
   if (isProjectPublic(map, key)) return { authedPrivate: false, viaShare: false };
 
-  // Private from here. The signed-in owner can always preview it.
+  // Private from here. The site OWNER can always preview it; a signed-in guest
+  // (login allow-list, non-owner) is treated like the public — private projects
+  // are owner-only. A valid share token still grants access without sign-in.
   const session = await ctx.locals.auth();
-  if (session?.user) return { authedPrivate: true, viaShare: false };
+  if (isOwnerEmail(session?.user?.email)) return { authedPrivate: true, viaShare: false };
 
   // Otherwise a valid share token grants access without sign-in.
   if (await resolveShareToken(key, ctx)) return { authedPrivate: false, viaShare: true };

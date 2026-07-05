@@ -51,3 +51,15 @@ const PUBLIC_PATHS = [
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
+
+// Authed pages AND authed APIs are owner-only by DEFAULT (see hooks.server.ts).
+// A signed-in guest (on the allowed_user login allow-list, but not an owner) may
+// reach the public paths above plus any prefix listed here — nothing else.
+// /jkai, /admin, /live, /deepdive, the canvas, etc. are all owner-only.
+// To grant guests a specific surface later, add its prefix here (e.g. '/live').
+// Empty = guests can sign in but see only public content.
+const GUEST_ALLOWED_PREFIXES: string[] = [];
+
+export function isGuestAllowedPath(pathname: string): boolean {
+  return GUEST_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}

@@ -2,11 +2,14 @@ import { db } from '$lib/db';
 import { jkaiBuilds, projectVisibility } from '$lib/db/schema';
 import { isNotNull, desc } from 'drizzle-orm';
 import { resolveVisibilityMap, isProjectPublic } from '$lib/projects/visibility';
+import { isOwnerEmail } from '$lib/server/access';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
   const session = await locals.auth();
-  const authenticated = !!session?.user;
+  // Only the owner sees private projects + the visibility/remove controls; a
+  // signed-in guest (non-owner) sees the same public listing as the public.
+  const authenticated = isOwnerEmail(session?.user?.email);
 
   const [published, visRows] = await Promise.all([
     db

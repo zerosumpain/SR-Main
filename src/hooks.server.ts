@@ -13,7 +13,7 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
-import { isPublicPath } from '$lib/auth';
+import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -319,15 +319,16 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       });
     }
 
-    // The admin API is owner-only. A guest on the login allow-list has a valid
-    // session but must never reach /api/admin/* — that surface holds API keys,
-    // WebDAV credentials, blog publishing and the allow-list itself. Before
-    // guests existed a session implied owner, so these routes were only
-    // session-gated; introducing guests broke that equivalence, so gate the
-    // whole prefix here. (Service-authed /api/admin/hermes/* returns earlier via
-    // isPublicPath, and the homeserv LAN bypass returns earlier still — both
-    // never reach this check.)
-    if (pathname.startsWith('/api/admin/') && !isOwnerEmail(session.user.email)) {
+    // Authed APIs are owner-only by default. A guest on the login allow-list has
+    // a valid session but may only reach the guest-allowed surface (none, by
+    // default). The genuinely public / service-to-service APIs (biome, agent,
+    // jkai proxy, space-lander, scraper, mcp, policy-engine, admin/hermes, …)
+    // already returned earlier via isPublicPath and the explicit bypasses above,
+    // so they never reach here. This subsumes the old /api/admin/* gate. Before
+    // guests existed a session implied owner; introducing guests broke that
+    // equivalence for every authed API, so gate them all here. (The homeserv LAN
+    // bypass returns earlier still, so local access on the box is unaffected.)
+    if (!isOwnerEmail(session.user.email) && !isGuestAllowedPath(pathname)) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },
@@ -372,14 +373,13 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
   }
 
-  // The admin console is owner-only. Guests on the login allow-list can use the
-  // authed site but must not reach /admin (which can edit that allow-list and
-  // hold API keys, scraper creds, etc.). The homeserv LAN bypass above returns
-  // earlier, so local admin on the box is unaffected.
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    if (!isOwnerEmail(session.user.email)) {
-      throw redirect(303, '/');
-    }
+  // Authed pages are owner-only by default. A guest on the login allow-list can
+  // sign in but only reach public pages plus any guest-allowed prefix
+  // (isGuestAllowedPath — empty by default). /jkai, /admin, /live, /deepdive, the
+  // canvas, etc. are all owner-only. The homeserv LAN bypass above returns
+  // earlier, so local access on the box is unaffected.
+  if (!isOwnerEmail(session.user.email) && !isGuestAllowedPath(pathname)) {
+    throw redirect(303, '/');
   }
 
   return resolve(event);

@@ -93,7 +93,7 @@
   <PageHeader
     kicker="Access"
     title="Login allow-list"
-    sub="Grant a Google account permission to sign in. Guests can use the signed-in site but are not owners — the admin console and owner-only tools stay yours."
+    sub="Grant a Google account permission to sign in. The signed-in site is owner-only, so guests are recognised but currently see only public pages — they can't reach admin, /jkai, /live or your private tools."
   />
 
   <!-- Owners (read-only) -->

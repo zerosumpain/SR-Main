@@ -5,6 +5,7 @@ import { projectVisibility } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isProjectPublic } from '$lib/projects/visibility';
 import { resolveShareToken } from '$lib/projects/guard';
+import { isOwnerEmail } from '$lib/server/access';
 import { readFile, stat } from 'fs/promises';
 import { join, extname } from 'path';
 
@@ -66,8 +67,8 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   const isPublic = isProjectPublic(visMap, params.slug);
   if (!isPublic) {
     const session = await locals.auth();
-    const authed = !!session?.user;
-    if (!authed && !(await resolveShareToken(params.slug, { locals, url, cookies }))) {
+    const owner = isOwnerEmail(session?.user?.email);
+    if (!owner && !(await resolveShareToken(params.slug, { locals, url, cookies }))) {
       return new Response('Not found', { status: 404 });
     }
   }

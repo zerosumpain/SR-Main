@@ -8,6 +8,7 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { extractText, synthesize } from '$lib/jkai/extract';
+import { isOwnerEmail } from '$lib/server/access';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { MATURITY_DIMENSIONS } from '../lib/maturity';
 import { PRESSURES } from '../lib/pressures';
@@ -16,7 +17,7 @@ import { CAPABILITY_AREAS } from '../lib/capabilities';
 
 async function requireOwner(event: Parameters<RequestHandler>[0]) {
   const session = await event.locals.auth();
-  if (!session?.user) throw error(404, 'Not found');
+  if (!isOwnerEmail(session?.user?.email)) throw error(404, 'Not found');
 }
 
 const MATURITY_IDS = new Set(MATURITY_DIMENSIONS.map((d) => d.id));

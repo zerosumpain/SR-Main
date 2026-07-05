@@ -1,5 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { requireProjectPublic } from '$lib/projects/guard';
+import { isOwnerEmail } from '$lib/server/access';
 import { getIntelSnapshot } from './lib/intel.server';
 import type { IntelLayoutData } from './lib/intelTargets';
 
@@ -10,7 +11,9 @@ import type { IntelLayoutData } from './lib/intelTargets';
 export const load: LayoutServerLoad = async (event) => {
   const { authedPrivate, viaShare } = await requireProjectPublic('dfe-data-strategy', event);
   const session = await event.locals.auth();
-  const authed = !!session?.user;
+  // `authed` reveals the owner-only Author tabs — gate on owner, not just any
+  // signed-in guest.
+  const authed = isOwnerEmail(session?.user?.email);
   const noStore = authedPrivate || viaShare;
   event.setHeaders({
     'cache-control': noStore ? 'private, no-store' : 'public, max-age=0, s-maxage=600',

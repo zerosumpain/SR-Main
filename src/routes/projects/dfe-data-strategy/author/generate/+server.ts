@@ -11,6 +11,7 @@ import type { RequestHandler } from './$types';
 import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireProjectPublic } from '$lib/projects/guard';
+import { isOwnerEmail } from '$lib/server/access';
 import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
 import { retrieve } from '../../lib/retrieval.server';
 import { coerceJson } from '../../lib/jsonsafe';
@@ -68,7 +69,7 @@ export const POST: RequestHandler = async (event) => {
   let ok = !secret || (event.request.headers.get('authorization') ?? '') === `Bearer ${secret}`;
   if (!ok) {
     const session = await event.locals.auth?.();
-    ok = !!session?.user;
+    ok = isOwnerEmail(session?.user?.email);
   }
   if (!ok) throw error(404, 'Not found');
   const ip = event.getClientAddress?.() ?? 'unknown';
