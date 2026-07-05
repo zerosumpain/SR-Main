@@ -17,6 +17,11 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
+  // Read-only public serving of blog post images — referenced by <img src> on the
+  // public /blog pages, so it must be reachable by anonymous readers. The UPLOAD
+  // endpoint (/api/admin/blog/upload-image) stays owner-gated; this serves only
+  // already-public image bytes and is path-traversal guarded in blogImageKey().
+  '/api/blog/images',
   // Public, read-only aggregator for the landing-page "Vital Signs" tiles.
   // Exposes only safe aggregate counts / derived build stage / already-public
   // live-walk + published-project data — never prompts, conversation ids, or

@@ -3,13 +3,13 @@ import { isPublicPath, isGuestAllowedPath } from './auth';
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
-    for (const p of ['/', '/projects', '/projects/broads-pilot', '/blog', '/blog/x', '/api/landing/vitals', '/api/space-lander/scores']) {
+    for (const p of ['/', '/projects', '/projects/broads-pilot', '/blog', '/blog/x', '/api/landing/vitals', '/api/space-lander/scores', '/api/blog/images/9/x.png']) {
       expect(isPublicPath(p)).toBe(true);
     }
   });
 
   it('does NOT treat authed surfaces as public', () => {
-    for (const p of ['/jkai', '/admin', '/admin/access', '/live', '/api/admin/access', '/api/jkai/chat']) {
+    for (const p of ['/jkai', '/admin', '/admin/access', '/live', '/api/admin/access', '/api/jkai/chat', '/api/admin/blog/upload-image']) {
       expect(isPublicPath(p)).toBe(false);
     }
   });
