@@ -20,6 +20,91 @@
 
   let files = $state<FileRow[]>(data.files as FileRow[]);
 
+  // Effective upload cap = min(server BODY_SIZE_LIMIT, endpoint MAX_BYTES), from the load.
+  const maxUploadBytes = (data.maxUploadBytes as number | undefined) ?? 20 * 1024 * 1024;
+  function fmtLimit(): string {
+    return `${Math.floor(maxUploadBytes / 1024 / 1024)} MB`;
+  }
+
+  // ——— Folders (virtual — derived from '/' in file names; empty folders keep a .keep marker) ———
+  const FOLDER_MARKER = '.keep';
+  let currentPath = $state(''); // '' = root
+  let newFolderName = $state('');
+  let creatingFolder = $state(false);
+  let moveOpen = $state(false);
+
+  function isMarker(name: string): boolean {
+    return name === FOLDER_MARKER || name.endsWith('/' + FOLDER_MARKER);
+  }
+  function joinPath(dir: string, name: string): string {
+    return dir ? `${dir}/${name}` : name;
+  }
+  // remainder of a file name below currentPath, or null if it isn't under it
+  function underCurrent(name: string): string | null {
+    if (!currentPath) return name;
+    const p = currentPath + '/';
+    return name.startsWith(p) ? name.slice(p.length) : null;
+  }
+
+  // Files shown directly in the current folder (exclude markers + deeper subfolder contents)
+  const visibleFiles = $derived(
+    files.filter((f) => {
+      if (isMarker(f.name)) return false;
+      const rem = underCurrent(f.name);
+      return rem !== null && !rem.includes('/');
+    }),
+  );
+
+  // Immediate subfolders of the current folder, with real-file counts
+  const subfolders = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const f of files) {
+      const rem = underCurrent(f.name);
+      if (rem === null) continue;
+      const slash = rem.indexOf('/');
+      if (slash <= 0) continue; // a file directly here (or empty remainder)
+      const seg = rem.slice(0, slash);
+      if (!counts.has(seg)) counts.set(seg, 0);
+      if (!isMarker(f.name)) counts.set(seg, (counts.get(seg) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  const crumbs = $derived.by(() => {
+    const segs = currentPath ? currentPath.split('/') : [];
+    const out: { label: string; path: string }[] = [{ label: 'Drive', path: '' }];
+    let acc = '';
+    for (const s of segs) {
+      acc = acc ? `${acc}/${s}` : s;
+      out.push({ label: s, path: acc });
+    }
+    return out;
+  });
+
+  // Every folder path in the store, for the Move-to picker
+  const allFolders = $derived.by(() => {
+    const set = new Set<string>();
+    for (const f of files) {
+      if (!f.name.includes('/')) continue;
+      const dir = f.name.slice(0, f.name.lastIndexOf('/'));
+      const segs = dir.split('/');
+      let acc = '';
+      for (const s of segs) {
+        acc = acc ? `${acc}/${s}` : s;
+        set.add(acc);
+      }
+    }
+    return [...set].sort();
+  });
+
+  function navigate(path: string) {
+    currentPath = path;
+    selected = {};
+    moveOpen = false;
+  }
+
   type Credential = {
     id: string;
     label: string;
@@ -50,11 +135,11 @@
   // ——— Multi-select / download state ———
   let selected = $state<Record<string, boolean>>({});
   const selectedFiles = $derived(files.filter((f) => selected[f.id]));
-  const allSelected = $derived(files.length > 0 && selectedFiles.length === files.length);
+  const allSelected = $derived(visibleFiles.length > 0 && visibleFiles.every((f) => selected[f.id]));
   let zipBusy = $state(false);
 
-  // ——— View mode (list | grid) — persisted per browser ———
-  let viewMode = $state<'list' | 'grid'>('list');
+  // ——— View mode (list | grid) — grid by default, persisted per browser ———
+  let viewMode = $state<'list' | 'grid'>('grid');
   onMount(() => {
     const v = localStorage.getItem('drive:view');
     if (v === 'grid' || v === 'list') viewMode = v;
@@ -173,30 +258,103 @@
     return { ok: true };
   }
 
-  // Upload a batch immediately (drop or picker). Folder picks keep their relative path as the name.
+  // Upload a batch immediately into the current folder (drop or picker). Folder picks keep
+  // their relative path. Oversize files are rejected client-side so the server's body limit
+  // never returns an opaque 500.
   async function uploadFiles(list: FileList | File[] | null) {
     const arr = list ? Array.from(list) : [];
     if (arr.length === 0) return;
     uploadError = null;
     uploadFailures = [];
+    const ok: File[] = [];
+    for (const f of arr) {
+      if (f.size > maxUploadBytes) {
+        uploadFailures = [...uploadFailures, { name: f.name, error: `too large (max ${fmtLimit()})` }];
+      } else {
+        ok.push(f);
+      }
+    }
+    if (ok.length === 0) {
+      uploadError = `Nothing uploaded — file(s) exceed the ${fmtLimit()} limit.`;
+      return;
+    }
     uploadBusy = true;
-    uploadProgress = { done: 0, total: arr.length, current: '' };
+    uploadProgress = { done: 0, total: ok.length, current: '' };
     try {
-      for (let i = 0; i < arr.length; i++) {
-        const f = arr[i];
+      for (let i = 0; i < ok.length; i++) {
+        const f = ok[i];
         const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || '';
-        const name = rel || f.name;
-        uploadProgress = { done: i, total: arr.length, current: name };
+        const name = joinPath(currentPath, rel || f.name);
+        uploadProgress = { done: i, total: ok.length, current: name };
         const result = await uploadOne(f, name);
         if (!result.ok) uploadFailures = [...uploadFailures, { name, error: result.error }];
       }
-      uploadProgress = { done: arr.length, total: arr.length, current: '' };
+      uploadProgress = { done: ok.length, total: ok.length, current: '' };
       await refresh();
-      if (uploadFailures.length > 0) uploadError = `${uploadFailures.length} of ${arr.length} failed.`;
+      if (uploadFailures.length > 0) uploadError = `${uploadFailures.length} file(s) skipped or failed.`;
     } finally {
       uploadBusy = false;
       setTimeout(() => { if (!uploadBusy) uploadProgress = null; }, 1800);
     }
+  }
+
+  // ——— Folder actions ———
+  async function createFolder() {
+    const raw = newFolderName.trim().replace(/[\\/]+/g, '-');
+    if (!raw) return;
+    const path = joinPath(currentPath, raw);
+    creatingFolder = true;
+    try {
+      const fd = new FormData();
+      fd.append('file', new File([''], FOLDER_MARKER, { type: 'application/x-directory' }));
+      fd.append('name', `${path}/${FOLDER_MARKER}`);
+      fd.append('permissions', JSON.stringify({ read: true, write: true, append: true, delete: true }));
+      const res = await fetch('/api/files/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const m = await res.json().catch(() => ({}));
+        alert(m.error || `Create folder failed (${res.status})`);
+        return;
+      }
+      newFolderName = '';
+      await refresh();
+    } finally {
+      creatingFolder = false;
+    }
+  }
+
+  async function moveSelected(target: string) {
+    const picks = selectedFiles;
+    moveOpen = false;
+    if (picks.length === 0) return;
+    const failures: string[] = [];
+    for (const f of picks) {
+      const newName = joinPath(target, baseName(f.name));
+      if (newName === f.name) continue;
+      const res = await fetch(`/api/files/${f.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (!res.ok) {
+        const m = await res.json().catch(() => ({}));
+        failures.push(`${baseName(f.name)}: ${m.error || res.status}`);
+      }
+    }
+    selected = {};
+    await refresh();
+    if (failures.length) alert(`Some files could not be moved:\n${failures.join('\n')}`);
+  }
+
+  async function deleteFolder(seg: string) {
+    const path = joinPath(currentPath, seg);
+    const prefix = path + '/';
+    const inFolder = files.filter((f) => f.name === path || f.name.startsWith(prefix));
+    const realCount = inFolder.filter((f) => !isMarker(f.name)).length;
+    if (!confirm(`Delete folder "${seg}"${realCount ? ` and its ${realCount} file(s)` : ''}? This cannot be undone.`)) return;
+    for (const f of inFolder) {
+      await fetch(`/api/files/${f.id}`, { method: 'DELETE' });
+    }
+    await refresh();
   }
 
   function onDrop(e: DragEvent) {
@@ -216,8 +374,9 @@
 
   // ——— Selection + copy-out ———
   function toggleAll() {
-    const next: Record<string, boolean> = {};
-    if (!allSelected) for (const f of files) next[f.id] = true;
+    const next = { ...selected };
+    if (allSelected) for (const f of visibleFiles) delete next[f.id];
+    else for (const f of visibleFiles) next[f.id] = true;
     selected = next;
   }
   function clearSelection() {
@@ -401,7 +560,7 @@
         <path d="M12 15V4M12 4L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" />
         <path d="M4 15v3.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V15" stroke="currentColor" stroke-width="1.6" stroke-linecap="square" />
       </svg>
-      <div class="dz-title">{dragActive ? 'Drop to upload' : 'Drop files here'}</div>
+      <div class="dz-title">{dragActive ? 'Drop to upload' : currentPath ? `Drop into ${currentPath.split('/').pop()}` : 'Drop files here'}</div>
       <div class="dz-sub">
         or <span class="dz-link">browse</span>
         <span class="dz-dot">·</span>
@@ -459,8 +618,19 @@
     <!-- ——— Files ——— -->
     <section class="nm-sec">
       <div class="nm-sec-hd">
-        <span class="sr-label-tight">Files</span>
-        <span class="nm-sec-meta">{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+        <nav class="crumbs" aria-label="Folder path">
+          {#each crumbs as c, i (c.path)}
+            {#if i < crumbs.length - 1}
+              <button type="button" class="crumb crumb-link" onclick={() => navigate(c.path)}>{c.label}</button>
+              <span class="crumb-sep">/</span>
+            {:else}
+              <span class="crumb crumb-current">{c.label}</span>
+            {/if}
+          {/each}
+        </nav>
+        <span class="nm-sec-meta">
+          {subfolders.length ? `${subfolders.length} folder${subfolders.length === 1 ? '' : 's'} · ` : ''}{visibleFiles.length} {visibleFiles.length === 1 ? 'file' : 'files'}
+        </span>
       </div>
 
       {#snippet permChips(f: FileRow)}
@@ -526,115 +696,166 @@
         {/if}
       {/snippet}
 
-      {#if files.length === 0}
-        <div class="empty">No files yet — drop some above.</div>
-      {:else}
-        <div class="select-bar">
-          <label class="select-all">
-            <input type="checkbox" checked={allSelected} onchange={toggleAll} />
-            <span>Select all</span>
-          </label>
-          {#if selectedFiles.length > 0}
-            <span class="sel-count">{selectedFiles.length} selected</span>
-            <button type="button" class="nm-save-btn sel-dl" onclick={downloadSelected} disabled={zipBusy}>
-              {zipBusy ? 'Zipping…' : selectedFiles.length > 1 ? `Download ${selectedFiles.length} (.zip)` : 'Download'}
-            </button>
-            <button type="button" class="row-link" onclick={clearSelection}>Clear</button>
-          {:else}
-            <span class="sel-hint">Select files to download, or drag a file straight out to your desktop.</span>
-          {/if}
-          <div class="view-toggle" role="group" aria-label="View mode">
-            <button type="button" class="vt-btn" class:on={viewMode === 'list'} aria-pressed={viewMode === 'list'} title="List view" onclick={() => setView('list')}>
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 3h10M2 7h10M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
-              <span>List</span>
-            </button>
-            <button type="button" class="vt-btn" class:on={viewMode === 'grid'} aria-pressed={viewMode === 'grid'} title="Grid view" onclick={() => setView('grid')}>
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="1.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/></svg>
-              <span>Grid</span>
-            </button>
+      <div class="select-bar">
+        <label class="select-all" class:disabled={visibleFiles.length === 0}>
+          <input type="checkbox" checked={allSelected} disabled={visibleFiles.length === 0} onchange={toggleAll} />
+          <span>Select all</span>
+        </label>
+        {#if selectedFiles.length > 0}
+          <span class="sel-count">{selectedFiles.length} selected</span>
+          <button type="button" class="nm-save-btn sel-dl" onclick={downloadSelected} disabled={zipBusy}>
+            {zipBusy ? 'Zipping…' : selectedFiles.length > 1 ? `Download ${selectedFiles.length} (.zip)` : 'Download'}
+          </button>
+          <div class="move-wrap">
+            <button type="button" class="row-link" aria-expanded={moveOpen} onclick={() => (moveOpen = !moveOpen)}>Move to…</button>
+            {#if moveOpen}
+              <div class="move-menu">
+                <button type="button" class="move-item" onclick={() => moveSelected('')}>Drive (root)</button>
+                {#each allFolders as folder (folder)}
+                  <button type="button" class="move-item" onclick={() => moveSelected(folder)}>{folder}</button>
+                {/each}
+              </div>
+            {/if}
           </div>
-        </div>
-
-        {#if viewMode === 'grid'}
-          <div class="file-grid" role="list">
-            {#each files as f (f.id)}
-              {#if editingId === f.id && editDraft}
-                <div class="grid-edit">{@render editCard()}</div>
-              {:else}
-                <div
-                  class="file-tile"
-                  class:sel={selected[f.id]}
-                  role="listitem"
-                  draggable="true"
-                  ondragstart={(e) => onFileDragStart(e, f)}
-                  title={f.name}
-                >
-                  <label class="tile-check" title="Select">
-                    <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
-                  </label>
-                  <div class="tile-thumb">
-                    {#if isImage(f.mimeType)}
-                      <img src={`/api/files/${f.id}/download?inline=1`} alt={f.name} loading="lazy" />
-                    {:else}
-                      <svg class="tile-icon" width="38" height="46" viewBox="0 0 38 46" fill="none" aria-hidden="true">
-                        <path d="M5 1.5h19L36 13v30.5a1.5 1.5 0 01-1.5 1.5h-29A1.5 1.5 0 014 43.5V3A1.5 1.5 0 015.5 1.5z" stroke="currentColor" stroke-width="1.4"/>
-                        <path d="M24 1.5V13h12" stroke="currentColor" stroke-width="1.4"/>
-                      </svg>
-                      <span class="tile-ext">{extBadge(f.name)}</span>
-                    {/if}
-                  </div>
-                  <div class="tile-name">{baseName(f.name)}</div>
-                  <div class="tile-meta">
-                    <span>{fmtSize(f.sizeBytes)}</span>
-                    <span class="tile-chips">{@render permChips(f)}</span>
-                  </div>
-                  <div class="tile-actions">{@render fileActions(f)}</div>
-                </div>
-              {/if}
-            {/each}
-          </div>
+          <button type="button" class="row-link" onclick={clearSelection}>Clear</button>
         {:else}
-          <div class="file-list" role="list">
-            {#each files as f (f.id)}
-              {#if editingId === f.id && editDraft}
-                {@render editCard()}
-              {:else}
-                <div
-                  class="file-card"
-                  class:sel={selected[f.id]}
-                  role="listitem"
-                  draggable="true"
-                  ondragstart={(e) => onFileDragStart(e, f)}
-                  title="Drag out to copy to your desktop"
-                >
-                  <label class="file-check" title="Select">
-                    <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
-                  </label>
-                  <div class="file-main">
-                    <div class="file-title">
-                      <span class="file-name-text">{f.name}</span>
-                      <span class="file-mime"><code>{f.mimeType}</code></span>
-                    </div>
-                    {#if f.description}
-                      <div class="file-desc">{f.description}</div>
-                    {/if}
-                    <div class="file-meta">
-                      <span>{fmtSize(f.sizeBytes)}</span>
-                      <span class="dot">·</span>
-                      <span>Updated {fmtDate(f.updatedAt)}</span>
-                      {#if f.uploadedBy}
-                        <span class="dot">·</span>
-                        <span>by {f.uploadedBy}</span>
-                      {/if}
-                    </div>
-                  </div>
-                  <div class="file-perms">{@render permChips(f)}</div>
-                  <div class="file-actions">{@render fileActions(f)}</div>
-                </div>
-              {/if}
-            {/each}
-          </div>
+          <span class="sel-hint">Drop files to add them here · select to download · drag out to your desktop. Max {fmtLimit()}.</span>
         {/if}
+        <div class="newfolder">
+          <input
+            class="nm-text-input nf-input"
+            placeholder="New folder…"
+            bind:value={newFolderName}
+            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createFolder(); } }}
+          />
+          <button type="button" class="row-link" onclick={createFolder} disabled={creatingFolder || !newFolderName.trim()}>
+            {creatingFolder ? 'Adding…' : '+ Folder'}
+          </button>
+        </div>
+        <div class="view-toggle" role="group" aria-label="View mode">
+          <button type="button" class="vt-btn" class:on={viewMode === 'list'} aria-pressed={viewMode === 'list'} title="List view" onclick={() => setView('list')}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 3h10M2 7h10M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
+            <span>List</span>
+          </button>
+          <button type="button" class="vt-btn" class:on={viewMode === 'grid'} aria-pressed={viewMode === 'grid'} title="Grid view" onclick={() => setView('grid')}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="1.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="1.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/><rect x="8.5" y="8.5" width="4" height="4" stroke="currentColor" stroke-width="1.3"/></svg>
+            <span>Grid</span>
+          </button>
+        </div>
+      </div>
+
+      {#if subfolders.length === 0 && visibleFiles.length === 0}
+        <div class="empty">This folder is empty — drop files above{currentPath ? '.' : ', or add a folder.'}</div>
+      {:else if viewMode === 'grid'}
+        <div class="file-grid" role="list">
+          {#each subfolders as fol (fol.name)}
+            <div
+              class="folder-tile"
+              role="button"
+              tabindex="0"
+              title={`Open ${fol.name}`}
+              onclick={() => navigate(joinPath(currentPath, fol.name))}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(joinPath(currentPath, fol.name)); } }}
+            >
+              <button type="button" class="folder-del" title="Delete folder" aria-label={`Delete folder ${fol.name}`} onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>×</button>
+              <svg class="folder-icon" width="46" height="38" viewBox="0 0 46 38" fill="none" aria-hidden="true">
+                <path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/>
+              </svg>
+              <div class="tile-name">{fol.name}</div>
+              <div class="tile-meta"><span>{fol.count} item{fol.count === 1 ? '' : 's'}</span></div>
+            </div>
+          {/each}
+          {#each visibleFiles as f (f.id)}
+            {#if editingId === f.id && editDraft}
+              <div class="grid-edit">{@render editCard()}</div>
+            {:else}
+              <div
+                class="file-tile"
+                class:sel={selected[f.id]}
+                role="listitem"
+                draggable="true"
+                ondragstart={(e) => onFileDragStart(e, f)}
+                title={f.name}
+              >
+                <label class="tile-check" title="Select">
+                  <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
+                </label>
+                <div class="tile-thumb">
+                  {#if isImage(f.mimeType)}
+                    <img src={`/api/files/${f.id}/download?inline=1`} alt={f.name} loading="lazy" />
+                  {:else}
+                    <svg class="tile-icon" width="38" height="46" viewBox="0 0 38 46" fill="none" aria-hidden="true">
+                      <path d="M5 1.5h19L36 13v30.5a1.5 1.5 0 01-1.5 1.5h-29A1.5 1.5 0 014 43.5V3A1.5 1.5 0 015.5 1.5z" stroke="currentColor" stroke-width="1.4"/>
+                      <path d="M24 1.5V13h12" stroke="currentColor" stroke-width="1.4"/>
+                    </svg>
+                    <span class="tile-ext">{extBadge(f.name)}</span>
+                  {/if}
+                </div>
+                <div class="tile-name">{baseName(f.name)}</div>
+                <div class="tile-meta">
+                  <span>{fmtSize(f.sizeBytes)}</span>
+                  <span class="tile-chips">{@render permChips(f)}</span>
+                </div>
+                <div class="tile-actions">{@render fileActions(f)}</div>
+              </div>
+            {/if}
+          {/each}
+        </div>
+      {:else}
+        <div class="file-list" role="list">
+          {#each subfolders as fol (fol.name)}
+            <div
+              class="folder-row"
+              role="button"
+              tabindex="0"
+              onclick={() => navigate(joinPath(currentPath, fol.name))}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(joinPath(currentPath, fol.name)); } }}
+            >
+              <svg class="folder-icon-sm" width="22" height="18" viewBox="0 0 46 38" fill="none" aria-hidden="true"><path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/></svg>
+              <span class="folder-row-name">{fol.name}</span>
+              <span class="folder-row-count">{fol.count} item{fol.count === 1 ? '' : 's'}</span>
+              <button type="button" class="row-link danger" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
+            </div>
+          {/each}
+          {#each visibleFiles as f (f.id)}
+            {#if editingId === f.id && editDraft}
+              {@render editCard()}
+            {:else}
+              <div
+                class="file-card"
+                class:sel={selected[f.id]}
+                role="listitem"
+                draggable="true"
+                ondragstart={(e) => onFileDragStart(e, f)}
+                title="Drag out to copy to your desktop"
+              >
+                <label class="file-check" title="Select">
+                  <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
+                </label>
+                <div class="file-main">
+                  <div class="file-title">
+                    <span class="file-name-text">{baseName(f.name)}</span>
+                    <span class="file-mime"><code>{f.mimeType}</code></span>
+                  </div>
+                  {#if f.description}
+                    <div class="file-desc">{f.description}</div>
+                  {/if}
+                  <div class="file-meta">
+                    <span>{fmtSize(f.sizeBytes)}</span>
+                    <span class="dot">·</span>
+                    <span>Updated {fmtDate(f.updatedAt)}</span>
+                    {#if f.uploadedBy}
+                      <span class="dot">·</span>
+                      <span>by {f.uploadedBy}</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="file-perms">{@render permChips(f)}</div>
+                <div class="file-actions">{@render fileActions(f)}</div>
+              </div>
+            {/if}
+          {/each}
+        </div>
       {/if}
     </section>
 
@@ -1324,6 +1545,132 @@
   }
   .file-tile:hover .tile-actions,
   .file-tile.sel .tile-actions { opacity: 1; visibility: visible; }
+
+  /* ——— Breadcrumbs ——— */
+  .crumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .crumb {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+  .crumb-link {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .crumb-link:hover { text-decoration: underline; }
+  .crumb-current { color: var(--text-primary); font-weight: 500; }
+  .crumb-sep { color: var(--text-ghost); }
+
+  /* ——— New folder + Move-to ——— */
+  .newfolder {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .nf-input {
+    width: 130px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .select-all.disabled { opacity: 0.4; }
+  .move-wrap { position: relative; }
+  .move-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 30;
+    min-width: 180px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
+    display: flex;
+    flex-direction: column;
+  }
+  .move-item {
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--divider);
+    padding: 7px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .move-item:last-child { border-bottom: none; }
+  .move-item:hover { background: var(--accent-tint-08); color: var(--text-primary); }
+
+  /* ——— Folder entries ——— */
+  .folder-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 1rem 0.75rem 0.85rem;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    text-align: center;
+    cursor: pointer;
+    min-width: 0;
+  }
+  .folder-tile:hover { border-color: var(--accent); }
+  .folder-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .folder-icon { color: var(--accent); }
+  .folder-del {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    background: none;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1;
+    color: var(--text-ghost);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 100ms ease, color 100ms ease;
+  }
+  .folder-tile:hover .folder-del { opacity: 1; }
+  .folder-del:hover { color: var(--error); }
+
+  .folder-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.7rem 1rem;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+  }
+  .folder-row:hover { border-color: var(--accent); }
+  .folder-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .folder-icon-sm { color: var(--accent); flex-shrink: 0; }
+  .folder-row-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+  }
+  .folder-row-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
 
   /* ——— WebDAV section ——— */
   .dav-blurb {
