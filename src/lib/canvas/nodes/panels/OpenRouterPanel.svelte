@@ -135,7 +135,7 @@
       onChange={(v) => set('model', v)}
       fetcher={fetchOpenRouterModels}
       placeholder="pick an OpenRouter model"
-      emptyHint="No OpenRouter models cached — refresh from /admin/models or type a slashed ID."
+      emptyHint="No OpenRouter models cached — refresh from /admin/ai/models or type a slashed ID."
       hint="Loaded live from the OpenRouter catalogue. Leave blank to use the admin-configured alt model. All IDs are slashed <code>provider/model</code> values."
     />
 

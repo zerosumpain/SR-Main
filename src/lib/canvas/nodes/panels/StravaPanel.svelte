@@ -150,7 +150,7 @@
       </select>
       <span class="st-hint">
         DB endpoints query the local <code>strava_activities</code> mirror. API endpoints
-        require Strava connected in <code>/admin/health</code>.
+        require Strava connected in <code>/admin/connections/health</code>.
       </span>
     </label>
   </section>

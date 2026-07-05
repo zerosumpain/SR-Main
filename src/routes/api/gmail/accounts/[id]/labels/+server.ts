@@ -33,7 +33,7 @@ export const GET: RequestHandler = async ({ params }) => {
 
   if (acct.status === 'auth_expired') {
     return json(
-      { error: 'auth_expired', message: 'Account needs to be reconnected at /admin/gmail.' },
+      { error: 'auth_expired', message: 'Account needs to be reconnected at /admin/connections/gmail.' },
       { status: 410 },
     );
   }
@@ -65,7 +65,7 @@ export const GET: RequestHandler = async ({ params }) => {
     const msg = err instanceof Error ? err.message : String(err);
     if (/invalid_grant|auth_expired/i.test(msg)) {
       return json(
-        { error: 'auth_expired', message: 'Account needs to be reconnected at /admin/gmail.' },
+        { error: 'auth_expired', message: 'Account needs to be reconnected at /admin/connections/gmail.' },
         { status: 410 },
       );
     }

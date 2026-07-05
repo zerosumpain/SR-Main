@@ -12,7 +12,7 @@
     status = 'loading';
     lastError = null;
     try {
-      const res = await fetch(`/admin/integrations/${encodeURIComponent(id)}/status`);
+      const res = await fetch(`/admin/connections/credentials/${encodeURIComponent(id)}/status`);
       if (!res.ok) {
         status = 'failed';
         lastError = `Status fetch ${res.status}`;

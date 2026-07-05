@@ -6,7 +6,7 @@
   // round-trip as strings).
   //
   // Encapsulates the "⚠ pick an account" warning and the link to
-  // /admin/gmail so panels don't each re-implement this section.
+  // /admin/connections/gmail so panels don't each re-implement this section.
 
   import ResourcePicker from '../shared/ResourcePicker.svelte';
   import { fetchGmailAccountOptions } from '../shared/gmailAccounts';
@@ -55,12 +55,12 @@
     fetcher={fetchGmailAccountOptions}
     onChange={setAccount}
     {placeholder}
-    emptyHint="No connected accounts — connect one at /admin/gmail."
+    emptyHint="No connected accounts — connect one at /admin/connections/gmail."
   />
   {#if showAdminLink}
     <span class="gap-hint">
       Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+      <a href="/admin/connections/gmail" target="_blank" rel="noreferrer"><code>/admin/connections/gmail</code></a>.
     </span>
   {/if}
 </section>

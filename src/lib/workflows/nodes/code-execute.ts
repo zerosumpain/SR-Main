@@ -6,9 +6,9 @@ import { getOpenRouterApiKey } from '$lib/server/models/settings';
 export { codeExecuteDef } from './code-execute.def';
 
 /**
- * Collect API keys from /admin/keys storage (keys.json file + app_settings DB)
+ * Collect API keys from /admin/ai/keys storage (keys.json file + app_settings DB)
  * and map them to conventional env-var names so sandbox code can reference them
- * (e.g. `process.env.TAVILY_API_KEY`). Single source of truth: /admin/keys.
+ * (e.g. `process.env.TAVILY_API_KEY`). Single source of truth: /admin/ai/keys.
  */
 async function collectSandboxEnv(): Promise<Record<string, string>> {
   const keys = loadKeys();

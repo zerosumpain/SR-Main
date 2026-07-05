@@ -147,7 +147,7 @@ export const goldenExemplars: GoldenExemplar[] = [
       { id: 'label', type: 'gmail-label', config: `accountId: 1, messageId: "{{trigger.output.messageId}}", add: ["Label_boss"]` },
     ],
     edges: ['gmail-trigger → full', 'full → draft', 'draft → reply', 'reply → label'],
-    note: 'gmail-trigger only yields a snippet — gmail-fetch gets the full body (input.subject/input.bodyText/input.rfc822MessageId). gmail-reply REQUIRES accountId, to, threadId, inReplyTo and subject, and the body goes in bodyText (or bodyHtml) — there is no plain `body` key. gmail-label uses `add`/`remove` arrays of label IDs (custom label IDs like "Label_boss", looked up at /admin/gmail), not action/labelName.',
+    note: 'gmail-trigger only yields a snippet — gmail-fetch gets the full body (input.subject/input.bodyText/input.rfc822MessageId). gmail-reply REQUIRES accountId, to, threadId, inReplyTo and subject, and the body goes in bodyText (or bodyHtml) — there is no plain `body` key. gmail-label uses `add`/`remove` arrays of label IDs (custom label IDs like "Label_boss", looked up at /admin/connections/gmail), not action/labelName.',
   },
   {
     request: 'Classify each incoming support email as "urgent" or "normal"; reply immediately to urgent ones, otherwise just label it.',

@@ -53,13 +53,13 @@
     </div>
   </div>
 
-  <!-- Section grid -->
+  <!-- Section grid — mirrors the top-nav sections -->
   <div class="tiles">
     <!-- Content -->
     <div class="tile-group">
       <div class="tile-group-label">Content</div>
       <div class="tile-row">
-        <a class="nm-tile" href={`/admin/blog${t}`}>
+        <a class="nm-tile" href={`/admin/content/blog${t}`}>
           <div class="nm-tile-eyebrow">Blog</div>
           <div class="nm-tile-title">Posts</div>
           <div class="nm-tile-sub">Write, edit, publish.</div>
@@ -68,24 +68,27 @@
             <span>→</span>
           </div>
         </a>
-        <a class="nm-tile" href={`/admin/files${t}`}>
-          <div class="nm-tile-eyebrow">Files</div>
-          <div class="nm-tile-title">File Store</div>
-          <div class="nm-tile-sub">Upload, permissions, extract, convert.</div>
-          <div class="nm-tile-foot">
-            <span>{data.files} {data.files === 1 ? 'file' : 'files'}</span>
-            <span>→</span>
-          </div>
+        <a class="nm-tile" href={`/admin/content/hero${t}`}>
+          <div class="nm-tile-eyebrow">Hero</div>
+          <div class="nm-tile-title">Landing Hero</div>
+          <div class="nm-tile-sub">Generate + curate the homepage hero banner pool.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/content/effects${t}`}>
+          <div class="nm-tile-eyebrow">Effects</div>
+          <div class="nm-tile-title">Visual Effects</div>
+          <div class="nm-tile-sub">Particle density, fog, weather, blood vessels, shudder, dream mode.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
       </div>
     </div>
 
-    <!-- Health -->
+    <!-- Connections -->
     <div class="tile-group">
-      <div class="tile-group-label">Health</div>
+      <div class="tile-group-label">Connections</div>
       <div class="tile-row">
-        <a class="nm-tile" href={`/admin/health${t}`}>
-          <div class="nm-tile-eyebrow">Connections</div>
+        <a class="nm-tile" href={`/admin/connections/health${t}`}>
+          <div class="nm-tile-eyebrow">Health</div>
           <div class="nm-tile-title">Strava · Whoop · Apple</div>
           <div class="nm-tile-sub">Sync state, range backfills, on-demand pulls.</div>
           <div class="nm-tile-foot">
@@ -97,14 +100,16 @@
             <span>→</span>
           </div>
         </a>
-      </div>
-    </div>
-
-    <!-- Channels -->
-    <div class="tile-group">
-      <div class="tile-group-label">Channels</div>
-      <div class="tile-row">
-        <a class="nm-tile" href={`/admin/gmail${t}`}>
+        <a class="nm-tile" href={`/admin/connections/files${t}`}>
+          <div class="nm-tile-eyebrow">Files</div>
+          <div class="nm-tile-title">File Store</div>
+          <div class="nm-tile-sub">Upload, permissions, extract, convert, WebDAV.</div>
+          <div class="nm-tile-foot">
+            <span>{data.files} {data.files === 1 ? 'file' : 'files'}</span>
+            <span>→</span>
+          </div>
+        </a>
+        <a class="nm-tile" href={`/admin/connections/gmail${t}`}>
           <div class="nm-tile-eyebrow">Gmail</div>
           <div class="nm-tile-title">Inbox watches</div>
           <div class="nm-tile-sub">Connect accounts, configure query watches, test fetches.</div>
@@ -113,7 +118,7 @@
             <span>→</span>
           </div>
         </a>
-        <a class="nm-tile" href={`/admin/scraper${t}`}>
+        <a class="nm-tile" href={`/admin/connections/scraper${t}`}>
           <div class="nm-tile-eyebrow">Scraper</div>
           <div class="nm-tile-title">Stealth Browsing</div>
           <div class="nm-tile-sub">Credentials, profiles, target knowledge, interactive sessions.</div>
@@ -122,15 +127,58 @@
             <span>→</span>
           </div>
         </a>
+        <a class="nm-tile" href={`/admin/connections/credentials${t}`}>
+          <div class="nm-tile-eyebrow">Credentials</div>
+          <div class="nm-tile-title">Integrations</div>
+          <div class="nm-tile-sub">Encrypted third-party credentials referenced by workflow nodes.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
       </div>
     </div>
 
-    <!-- Agent -->
+    <!-- AI -->
     <div class="tile-group">
-      <div class="tile-group-label">Agent</div>
+      <div class="tile-group-label">AI</div>
       <div class="tile-row">
-        <a class="nm-tile" href={`/admin/agent${t}`}>
-          <div class="nm-tile-eyebrow">Dashboard</div>
+        <a class="nm-tile" href={`/admin/ai/keys${t}`}>
+          <div class="nm-tile-eyebrow">Keys</div>
+          <div class="nm-tile-title">API Providers</div>
+          <div class="nm-tile-sub">Z.AI, OpenRouter, ElevenLabs, Tavily — one place to update them all.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ai/models${t}`}>
+          <div class="nm-tile-eyebrow">Models</div>
+          <div class="nm-tile-title">Defaults &amp; Catalogue</div>
+          <div class="nm-tile-sub">Pick chat default + alt OpenRouter model, browse catalogue, refresh.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ai/tools${t}`}>
+          <div class="nm-tile-eyebrow">Tools</div>
+          <div class="nm-tile-title">Primitives, Site, Custom</div>
+          <div class="nm-tile-sub">Inspect, disable, or delete tools the assistant has built.</div>
+          <div class="nm-tile-foot"><span>{data.tools.enabled} enabled</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ai/approvals${t}`}>
+          <div class="nm-tile-eyebrow">Approvals</div>
+          <div class="nm-tile-title">Agent Guardrails</div>
+          <div class="nm-tile-sub">Review + approve gated actions the assistant proposes.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ai/config${t}`}>
+          <div class="nm-tile-eyebrow">Config</div>
+          <div class="nm-tile-title">Prompt &amp; Memory</div>
+          <div class="nm-tile-sub">System prompt + persistent memory for the assistant.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Ops -->
+    <div class="tile-group">
+      <div class="tile-group-label">Ops</div>
+      <div class="tile-row">
+        <a class="nm-tile" href={`/admin/ops/agent${t}`}>
+          <div class="nm-tile-eyebrow">Agent</div>
           <div class="nm-tile-title">JKAI Activity</div>
           <div class="nm-tile-sub">Live event feed, active tasks, daily cost.</div>
           <div class="nm-tile-foot">
@@ -138,60 +186,41 @@
             <span>→</span>
           </div>
         </a>
-        <a class="nm-tile" href={`/admin/agent/tasks${t}`}>
+        <a class="nm-tile" href={`/admin/ops/tasks${t}`}>
           <div class="nm-tile-eyebrow">Tasks</div>
           <div class="nm-tile-title">Queue</div>
           <div class="nm-tile-sub">Pending, planning, active, completed.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
-        <a class="nm-tile" href={`/admin/agent/costs${t}`}>
+        <a class="nm-tile" href={`/admin/ops/costs${t}`}>
           <div class="nm-tile-eyebrow">Costs</div>
           <div class="nm-tile-title">Spend</div>
           <div class="nm-tile-sub">By model, by tool, by day.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
-        <a class="nm-tile" href={`/admin/agent/config${t}`}>
-          <div class="nm-tile-eyebrow">Config</div>
-          <div class="nm-tile-title">Prompt &amp; Memory</div>
-          <div class="nm-tile-sub">System prompt, persistent memory, cron / pulse.</div>
+        <a class="nm-tile" href={`/admin/ops/engine${t}`}>
+          <div class="nm-tile-eyebrow">Engine</div>
+          <div class="nm-tile-title">Hermes Console</div>
+          <div class="nm-tile-sub">Engine status, sessions inspector, cron authoring.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ops/live${t}`}>
+          <div class="nm-tile-eyebrow">Live</div>
+          <div class="nm-tile-title">Pulse Activity</div>
+          <div class="nm-tile-sub">Real-time heartbeats, event feed, scheduled runs.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
       </div>
     </div>
 
-    <!-- AI Config -->
+    <!-- Access -->
     <div class="tile-group">
-      <div class="tile-group-label">AI Config</div>
+      <div class="tile-group-label">Access</div>
       <div class="tile-row">
-        <a class="nm-tile" href={`/admin/keys${t}`}>
-          <div class="nm-tile-eyebrow">API Keys</div>
-          <div class="nm-tile-title">Providers</div>
-          <div class="nm-tile-sub">Z.AI, OpenRouter, ElevenLabs, Tavily — one place to update them all.</div>
-          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
-        </a>
-        <a class="nm-tile" href={`/admin/models${t}`}>
-          <div class="nm-tile-eyebrow">LLM Models</div>
-          <div class="nm-tile-title">Defaults &amp; Catalogue</div>
-          <div class="nm-tile-sub">Pick chat default + alt OpenRouter model, browse catalogue, refresh.</div>
-          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
-        </a>
-        <a class="nm-tile" href={`/admin/tools${t}`}>
-          <div class="nm-tile-eyebrow">Tools</div>
-          <div class="nm-tile-title">Primitives, Site, Custom</div>
-          <div class="nm-tile-sub">Inspect, disable, or delete tools the assistant has built.</div>
-          <div class="nm-tile-foot"><span>{data.tools.enabled} enabled</span><span>→</span></div>
-        </a>
-      </div>
-    </div>
-
-    <!-- Site -->
-    <div class="tile-group">
-      <div class="tile-group-label">Site</div>
-      <div class="tile-row">
-        <a class="nm-tile" href={`/admin/biome${t}`}>
-          <div class="nm-tile-eyebrow">Biome</div>
-          <div class="nm-tile-title">Visual Effects</div>
-          <div class="nm-tile-sub">Particle density, fog, weather, blood vessels, shudder, dream mode.</div>
+        <a class="nm-tile" href={`/admin/access${t}`}>
+          <div class="nm-tile-eyebrow">Access</div>
+          <div class="nm-tile-title">Login Allow-list</div>
+          <div class="nm-tile-sub">Guest sign-in allow-list, separate from owner emails.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
       </div>

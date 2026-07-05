@@ -1,6 +1,6 @@
 /**
  * Homeserv-local Hermes cron surface (engine scheduled jobs — distinct from the
- * Postgres workflow scheduler at /admin/pulse + /admin/scheduled).
+ * Postgres workflow scheduler at /admin/ops/live + /admin/ops/cron).
  *
  * Reads come straight from the authoritative `cron/jobs.json` (the `hermes cron
  * list` CLI only renders a Rich table — no JSON). Writes go through the

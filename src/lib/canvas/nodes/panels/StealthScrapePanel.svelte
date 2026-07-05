@@ -535,7 +535,7 @@
       fetcher={fetchCredentials}
       onChange={(v) => { credentialId = v; emit(); }}
       placeholder="select a credential"
-      emptyHint="No credentials saved — leave blank, or add one in /admin/scraper."
+      emptyHint="No credentials saved — leave blank, or add one in /admin/connections/scraper."
     />
   </section>
 

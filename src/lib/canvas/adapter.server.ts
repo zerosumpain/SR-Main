@@ -35,7 +35,7 @@ export type {
   CanvasSummary,
 } from './adapter';
 
-/** Pull the model catalogue the user configured on /admin/models. */
+/** Pull the model catalogue the user configured on /admin/ai/models. */
 export async function loadModelCatalogue(): Promise<ModelCatalogue> {
   const [glmSetting, orAltSetting, orModels] = await Promise.all([
     getSetting<{ modelId?: string }>('jkai.chat.default_glm_model'),

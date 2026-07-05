@@ -59,5 +59,5 @@ export const GET: RequestHandler = async ({ params, url }) => {
     },
   });
 
-  throw redirect(303, `/admin/integrations?credential=${id}`);
+  throw redirect(303, `/admin/connections/credentials?credential=${id}`);
 };

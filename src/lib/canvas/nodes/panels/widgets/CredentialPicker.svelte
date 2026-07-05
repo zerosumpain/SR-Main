@@ -67,7 +67,7 @@
     <select class="cp-select" disabled><option>No credentials for {integrationType}</option></select>
     <span class="cp-hint">
       No connected credentials.
-      <a href="/admin/integrations" target="_blank" rel="noreferrer">Add one at /admin/integrations</a>.
+      <a href="/admin/connections/credentials" target="_blank" rel="noreferrer">Add one at /admin/connections/credentials</a>.
     </span>
   {:else}
     <div class="cp-row">
@@ -88,7 +88,7 @@
 
   <span class="cp-hint">
     Manage credentials at
-    <a href="/admin/integrations" target="_blank" rel="noreferrer"><code>/admin/integrations</code></a>.
+    <a href="/admin/connections/credentials" target="_blank" rel="noreferrer"><code>/admin/connections/credentials</code></a>.
   </span>
 </div>
 

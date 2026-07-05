@@ -58,7 +58,7 @@ function detectCodeExecuteIssues(code: string): string[] {
   const INJECTED = new Set(['TAVILY_API_KEY', 'OPENROUTER_API_KEY', 'ZAI_API_KEY', 'ELEVENLABS_API_KEY']);
   for (const m of code.matchAll(/process\.env\.([A-Z_][A-Z0-9_]*)/g)) {
     if (!INJECTED.has(m[1])) {
-      problems.push(`reads process.env.${m[1]} — the sandbox only injects ${[...INJECTED].join(', ')} from /admin/keys. For other secrets, add a new key via admin or use a dedicated integration node instead of code-execute.`);
+      problems.push(`reads process.env.${m[1]} — the sandbox only injects ${[...INJECTED].join(', ')} from /admin/ai/keys. For other secrets, add a new key via admin or use a dedicated integration node instead of code-execute.`);
       break; // one warning per unknown key is enough
     }
   }

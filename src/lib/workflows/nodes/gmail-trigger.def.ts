@@ -21,7 +21,7 @@ export const gmailTriggerDef: NodeDefinition = {
       key: 'accountId',
       label: 'Gmail Account',
       type: 'number',
-      description: 'The gmail_accounts row id for the account to watch. Configure accounts at /admin/gmail.',
+      description: 'The gmail_accounts row id for the account to watch. Configure accounts at /admin/connections/gmail.',
     },
     {
       key: 'watchId',

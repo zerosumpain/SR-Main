@@ -683,7 +683,7 @@
   .status-dot[data-status='running'] { background: var(--accent); }
   .status-dot[data-status='pending'] { background: var(--text-muted); }
 
-  /* Delete as discreet row-link in corner, matches /admin/files */
+  /* Delete as discreet row-link in corner, matches /admin/connections/files */
   .row-link {
     font-family: var(--font-mono);
     font-size: 10px;

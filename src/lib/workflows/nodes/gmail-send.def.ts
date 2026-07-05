@@ -39,7 +39,7 @@ export const gmailSendDef: NodeDefinition = {
       bcc: { type: 'string', description: 'BCC address(es)' },
     },
   },
-  llmDescription: 'Composes and sends a new Gmail message (fresh thread, not a reply). Use for outbound notifications, alerts, or forwarding content to a recipient. All fields support {{input.x}} templates. Use gmail-reply instead when you need to reply in an existing thread — gmail-send always starts a new conversation. Output: { messageId, threadId, success }. Pitfall: if accountId is wrong or the account\'s OAuth token is expired, the node will fail — check /admin/gmail to confirm the account is connected.',
+  llmDescription: 'Composes and sends a new Gmail message (fresh thread, not a reply). Use for outbound notifications, alerts, or forwarding content to a recipient. All fields support {{input.x}} templates. Use gmail-reply instead when you need to reply in an existing thread — gmail-send always starts a new conversation. Output: { messageId, threadId, success }. Pitfall: if accountId is wrong or the account\'s OAuth token is expired, the node will fail — check /admin/connections/gmail to confirm the account is connected.',
   llmExamples: [
     {
       accountId: 1,

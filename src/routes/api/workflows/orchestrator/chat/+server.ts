@@ -595,7 +595,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
   }
 
   // Workflow-context chats (workflowId present, or explicit generate/modify mode)
-  // use the builder model set in /admin/models. General /jkai chats use the chat model.
+  // use the builder model set in /admin/ai/models. General /jkai chats use the chat model.
   const isWorkflowContext = !!workflowId || mode === 'generate' || mode === 'modify';
   const defaultKind: 'chat' | 'builder' = isWorkflowContext ? 'builder' : 'chat';
 

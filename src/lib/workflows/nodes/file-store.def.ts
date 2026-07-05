@@ -89,7 +89,7 @@ export const fileStoreDef: NodeDefinition = {
     },
   ],
   llmDescription:
-    'Use the file-store node to persist or retrieve files that live outside a single run. Files are uploaded/managed via the /admin/files admin page. Reads return { content, name, mimeType, sizeBytes }. Writes/appends take content from input.content (or the whole input). Each file has per-operation permissions; the node throws if the operation is not permitted on the target file.',
+    'Use the file-store node to persist or retrieve files that live outside a single run. Files are uploaded/managed via the /admin/connections/files admin page. Reads return { content, name, mimeType, sizeBytes }. Writes/appends take content from input.content (or the whole input). Each file has per-operation permissions; the node throws if the operation is not permitted on the target file.',
   llmExamples: [
     { operation: 'read', fileName: 'config.json', encoding: 'utf8' },
     { operation: 'write', fileName: 'out.txt', encoding: 'utf8', contentPath: 'result.text' },

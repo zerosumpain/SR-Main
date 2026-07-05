@@ -37,7 +37,7 @@ function looksForeign(m: string): boolean {
  *   - otherwise (bare id like "glm-5-turbo") → admin default's provider,
  *     with the given modelId (lets users pick any z.ai model without a '/')
  *
- * This keeps /admin/models as the source of truth for the default provider,
+ * This keeps /admin/ai/models as the source of truth for the default provider,
  * while still letting config override the specific modelId with a real one.
  */
 export async function resolveLLMClient(

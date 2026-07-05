@@ -123,11 +123,11 @@
       fetcher={fetchGmailAccountOptions}
       onChange={setAccount}
       placeholder="pick an account"
-      emptyHint="No connected accounts — connect one at /admin/gmail."
+      emptyHint="No connected accounts — connect one at /admin/connections/gmail."
     />
     <span class="gt-hint">
       Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+      <a href="/admin/connections/gmail" target="_blank" rel="noreferrer"><code>/admin/connections/gmail</code></a>.
     </span>
   </section>
 
@@ -146,12 +146,12 @@
           fetcher={watchesFetcher}
           onChange={setWatchValue}
           placeholder="any watch on this account"
-          emptyHint="No watches configured — set them up at /admin/gmail."
+          emptyHint="No watches configured — set them up at /admin/connections/gmail."
         />
       {/key}
       <span class="gt-hint">
         Manage watches at
-        <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+        <a href="/admin/connections/gmail" target="_blank" rel="noreferrer"><code>/admin/connections/gmail</code></a>.
         Pick "any watch" to fire on every watch attached to this account.
       </span>
     {/if}

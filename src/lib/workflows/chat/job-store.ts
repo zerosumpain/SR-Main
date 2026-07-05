@@ -254,7 +254,7 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
 // detection miss an edge?" bugs.
 const HEARTBEAT_INTERVAL_MS = 5_000;
 
-// Ring buffer of recent pulse events across all jobs. Used by /admin/pulse to
+// Ring buffer of recent pulse events across all jobs. Used by /admin/ops/live to
 // render the live tick stream. Cap so a long-lived process doesn't grow it
 // unbounded. Each tick includes the jobId so the page can group by job.
 export interface PulseEvent {

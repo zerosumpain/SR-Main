@@ -107,7 +107,7 @@ export const GET: RequestHandler = async ({ url }) => {
       summary: `${sync.status}${sync.recordsSynced ? ` — ${sync.recordsSynced} records` : ''}${sync.errorMessage ? `: ${sync.errorMessage.slice(0, 80)}` : ''}`,
       status: sync.status,
       durationMs: null,
-      link: '/admin/health',
+      link: '/admin/connections/health',
       raw: {
         lastSyncAt: sync.lastSyncAt,
         lastSuccessfulSyncAt: sync.lastSuccessfulSyncAt,

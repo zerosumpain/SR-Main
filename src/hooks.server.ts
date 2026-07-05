@@ -14,6 +14,7 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
+import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -197,6 +198,23 @@ const { handle: authHandle } = SvelteKitAuth({
 // Route protection
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
+
+  // Admin consolidation (2026-07): the /admin route tree was reorganised into
+  // six sections. 308-redirect the old flat URLs to their new homes (preserving
+  // any sub-path + query so ?token= and /blog/[id] survive). Only page routes
+  // are in the map — /api/admin/* endpoints did not move and never match here.
+  {
+    const target = resolveAdminRedirect(pathname);
+    if (target) {
+      const search = event.url.search; // '' or '?...'
+      const suffix = target.includes('?')
+        ? search
+          ? '&' + search.slice(1)
+          : ''
+        : search;
+      throw redirect(308, target + suffix);
+    }
+  }
 
   // Local-network bypass for admin access on homeserv. The dev server (and
   // the homeserv systemd prod build when AUTH_BYPASS=1) are reachable only

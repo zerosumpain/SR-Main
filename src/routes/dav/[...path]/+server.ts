@@ -173,7 +173,7 @@ async function renderCollectionIndex(rel: string): Promise<string> {
   .parent { font-family: ui-monospace, Menlo, monospace; }
 </style></head><body>
 <h1>/dav/${htmlEscape(rel)}</h1>
-<div class="hint">This URL is a WebDAV mount, not a browser destination. Mount it in Finder (⌘K), Windows Explorer (Add a network location), or <code>davs://strangeramblings.com/dav/</code> in Linux. Manage credentials at <a href="/admin/files">/admin/files</a>.</div>
+<div class="hint">This URL is a WebDAV mount, not a browser destination. Mount it in Finder (⌘K), Windows Explorer (Add a network location), or <code>davs://strangeramblings.com/dav/</code> in Linux. Manage credentials at <a href="/admin/connections/files">/admin/connections/files</a>.</div>
 <div class="crumb">${breadcrumb}</div>
 ${parentLink ? `<div class="parent">${parentLink}</div>` : ''}
 <table>

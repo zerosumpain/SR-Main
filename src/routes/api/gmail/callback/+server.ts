@@ -11,13 +11,13 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   if (!session?.user) throw redirect(302, '/login');
 
   const code = url.searchParams.get('code');
-  if (!code) throw redirect(302, '/admin/gmail?error=no_code');
+  if (!code) throw redirect(302, '/admin/connections/gmail?error=no_code');
 
   const redirectUri = `${url.origin}/api/gmail/callback`;
   const oauth = new google.auth.OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET, redirectUri);
   const { tokens } = await oauth.getToken(code);
   if (!tokens.refresh_token) {
-    throw redirect(302, '/admin/gmail?error=no_refresh_token');
+    throw redirect(302, '/admin/connections/gmail?error=no_refresh_token');
   }
   oauth.setCredentials(tokens);
 
@@ -46,5 +46,5 @@ export const GET: RequestHandler = async ({ url, locals }) => {
       status: 'active',
     });
   }
-  throw redirect(302, '/admin/gmail?connected=' + encodeURIComponent(email));
+  throw redirect(302, '/admin/connections/gmail?connected=' + encodeURIComponent(email));
 };

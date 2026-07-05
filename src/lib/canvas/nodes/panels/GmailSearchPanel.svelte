@@ -89,11 +89,11 @@
       fetcher={fetchGmailAccountOptions}
       onChange={setAccount}
       placeholder="pick an account"
-      emptyHint="No connected accounts — connect one at /admin/gmail."
+      emptyHint="No connected accounts — connect one at /admin/connections/gmail."
     />
     <span class="gx-hint">
       Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+      <a href="/admin/connections/gmail" target="_blank" rel="noreferrer"><code>/admin/connections/gmail</code></a>.
     </span>
   </section>
 

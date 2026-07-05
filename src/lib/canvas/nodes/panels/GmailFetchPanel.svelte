@@ -90,11 +90,11 @@
       fetcher={fetchGmailAccountOptions}
       onChange={setAccount}
       placeholder="inherit from upstream (input.accountId)"
-      emptyHint="No connected accounts — connect one at /admin/gmail, or leave blank to inherit."
+      emptyHint="No connected accounts — connect one at /admin/connections/gmail, or leave blank to inherit."
     />
     <span class="gf-hint">
       Manage connected accounts at
-      <a href="/admin/gmail" target="_blank" rel="noreferrer"><code>/admin/gmail</code></a>.
+      <a href="/admin/connections/gmail" target="_blank" rel="noreferrer"><code>/admin/connections/gmail</code></a>.
       Leave blank to inherit from the upstream node’s output (e.g. directly after gmail-trigger or gmail-search).
     </span>
   </section>

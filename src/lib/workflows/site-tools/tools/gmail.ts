@@ -40,7 +40,7 @@ async function resolveAccount(args: Record<string, unknown>): Promise<GmailAccou
   if (!acct) {
     return {
       error:
-        'No active Gmail accounts connected. Connect one at /admin/gmail or pass accountId/email.',
+        'No active Gmail accounts connected. Connect one at /admin/connections/gmail or pass accountId/email.',
     };
   }
   return acct;
@@ -103,7 +103,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -146,7 +146,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -175,7 +175,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -202,7 +202,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -231,7 +231,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -271,7 +271,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -298,7 +298,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -324,7 +324,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -358,7 +358,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -386,7 +386,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -424,7 +424,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -455,7 +455,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -486,7 +486,7 @@ register({
     if (acct.status === 'auth_expired') {
       return {
         success: false,
-        error: `Account ${acct.email} needs re-authentication at /admin/gmail.`,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
       };
     }
 
@@ -505,7 +505,7 @@ register({
       if (isAuthExpiredError(err)) {
         return {
           success: false,
-          error: `Account ${acct.email} auth expired. Reconnect at /admin/gmail.`,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
         };
       }
       return { success: false, error: err instanceof Error ? err.message : String(err) };

@@ -1,7 +1,7 @@
 /**
  * Homeserv-local Hermes control surface: gateway health, systemd service state,
  * version, curator status, and the restart/update actions. Extracted from
- * routes/admin/hermes/+page.server.ts so the `/api/admin/hermes/{status,service}`
+ * routes/admin/ops/engine/+page.server.ts so the `/api/admin/hermes/{status,service}`
  * proxy endpoints and the page share one implementation.
  *
  * Everything here shells the local `hermes` CLI / systemctl / gateway socket, so
