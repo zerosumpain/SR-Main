@@ -35,7 +35,9 @@
       ['docx', 'doc', 'odt', 'rtf'].includes(ext) ||
       mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       mime === 'application/vnd.ms-excel' ||
-      ['xlsx', 'xls'].includes(ext)
+      ['xlsx', 'xls'].includes(ext) ||
+      mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+      ['pptx', 'ppt'].includes(ext)
     )
       return 'doc';
     if (mime.startsWith('text/') || mime === 'application/json' || mime.includes('xml') || mime.includes('yaml') || ext in CODE_EXT) return 'code';

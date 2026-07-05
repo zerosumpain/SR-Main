@@ -411,10 +411,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  // Default policy: deny framing across the site. The jkai build proxy is
-  // explicitly designed to be embedded by our own canvas/build views, so it
-  // gets SAMEORIGIN — same-origin only, still blocks cross-origin embeds.
-  if (event.url.pathname.startsWith('/api/jkai/proxy/')) {
+  // Default policy: deny framing across the site. Two carve-outs get SAMEORIGIN
+  // (same-origin only — still blocks cross-origin embeds): the jkai build proxy
+  // (embedded by our canvas/build views), and file downloads (the /drive file
+  // viewer renders PDFs in a same-origin <iframe> via /api/files/<id>/download).
+  if (
+    event.url.pathname.startsWith('/api/jkai/proxy/') ||
+    (event.url.pathname.startsWith('/api/files/') && event.url.pathname.endsWith('/download'))
+  ) {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   } else {
     response.headers.set('X-Frame-Options', 'DENY');
