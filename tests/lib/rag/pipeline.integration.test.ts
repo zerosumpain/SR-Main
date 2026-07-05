@@ -83,7 +83,14 @@ d('RAG pipeline (integration)', () => {
     // 6. A second grounded fact.
     const res2 = await answer(collectionId, 'Who is the lead maintenance engineer?');
     expect(res2.text.toLowerCase()).toContain('valdgren');
-  }, 120_000);
+
+    // 7. Model override — answer with an explicit OpenRouter model (the picker
+    //    feature) routes through getLLMClient and still grounds in the docs.
+    const res3 = await answer(collectionId, 'What is the Zephyr-9 reactor cooled by?', {
+      model: { provider: 'openrouter', modelId: 'openai/gpt-4o-mini' },
+    });
+    expect(res3.text.toLowerCase()).toContain('gallium');
+  }, 180_000);
 });
 
 afterAll(async () => {

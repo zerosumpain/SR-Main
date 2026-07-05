@@ -2,6 +2,9 @@
   import { onMount, tick } from 'svelte';
   import { Marked } from 'marked';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
+  import ModelPicker from '$lib/components/jkai/ModelPicker.svelte';
+  import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+  import type { ModelContext } from '$lib/server/models/types';
   import type { RagCollection } from '$lib/db/schema';
 
   type Citation = { n: number; source: string; ord: number };
@@ -20,6 +23,12 @@
   let input = $state('');
   let sending = $state(false);
   let loadError = $state<string | null>(null);
+
+  // Generation model for the chat (separate from the collection's embedding
+  // model). Defaults to the site GLM chat model; the choice persists locally.
+  let chatModel = $state<ModelContext>({ provider: 'zai', modelId: DEFAULT_GLM_MODEL_ID });
+  const MODEL_KEY = 'drive:rag:chatModel';
+  let modelLoaded = false;
 
   // Non-reactive handles (never $state — see svelte5-pitfalls §1).
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -76,6 +85,16 @@
   }
 
   onMount(() => {
+    try {
+      const saved = localStorage.getItem(MODEL_KEY);
+      if (saved) {
+        const m = JSON.parse(saved);
+        if (m && (m.provider === 'zai' || m.provider === 'openrouter') && typeof m.modelId === 'string') {
+          chatModel = m;
+        }
+      }
+    } catch { /* ignore */ }
+    modelLoaded = true;
     loadDetail();
     if (initial.status === 'pending' || initial.status === 'indexing') schedulePoll();
     return () => {
@@ -83,6 +102,14 @@
       if (pollTimer) clearTimeout(pollTimer);
       abort?.abort();
     };
+  });
+
+  // Persist the model choice once loaded (guard avoids clobbering the saved
+  // value with the default on the first effect run before onMount reads it).
+  $effect(() => {
+    const m = chatModel;
+    if (!modelLoaded) return;
+    try { localStorage.setItem(MODEL_KEY, JSON.stringify(m)); } catch { /* ignore */ }
   });
 
   async function send() {
@@ -100,7 +127,7 @@
       const res = await fetch(`/api/files/rag/${collection.id}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, model: chatModel }),
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
@@ -248,6 +275,12 @@
       {/if}
     </div>
 
+    <div class="rc-modelrow">
+      <span class="rc-modellabel">Model</span>
+      <div class="rc-modelpicker">
+        <ModelPicker bind:value={chatModel} label="" />
+      </div>
+    </div>
     <div class="rc-composer">
       <textarea
         class="rc-input"
@@ -466,11 +499,50 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .rc-modelrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px 0;
+    background: var(--bg);
+    border-top: 1px solid var(--card-border);
+    padding-top: 10px;
+  }
+  .rc-modellabel {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .rc-modelpicker {
+    flex: 1;
+    min-width: 0;
+  }
+  /* ModelPicker renders <label><select> — flatten and skin the select to match. */
+  .rc-modelpicker :global(label) {
+    gap: 0;
+  }
+  .rc-modelpicker :global(select) {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 8px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
+    color: var(--text-secondary);
+    border-radius: var(--radius-sharp, 2px);
+    cursor: pointer;
+  }
+  .rc-modelpicker :global(select):focus {
+    outline: none;
+    border-color: var(--accent);
+  }
   .rc-composer {
     display: flex;
     gap: 8px;
-    padding: 12px 14px;
-    border-top: 1px solid var(--card-border);
+    padding: 8px 14px 12px;
     background: var(--bg);
   }
   .rc-input {

@@ -6,7 +6,9 @@ import { db } from '$lib/db';
 import { workflowFiles, ragCollections } from '$lib/db/schema';
 import { readBuffer } from '$lib/file-store/storage';
 import { extractText, kindFromMime } from '$lib/jkai/extract';
-import { streamCompletion } from '$lib/deepdive/ai';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import type { ModelContext } from '$lib/server/models/types';
 import { chunkText } from './chunk';
 import { embedBatch, embedQuery } from './embed';
 import { saveIndex, readIndex, deleteIndex } from './index-store';
@@ -149,13 +151,75 @@ Rules:
 export type AnswerResult = { text: string; citations: RagCitation[]; usedContext: boolean };
 
 /**
+ * Stream a chat completion through the canonical LLM gateway (getLLMClient),
+ * which handles both z.ai (GLM) and OpenRouter providers — so the caller can
+ * pick ANY model the site's ModelPicker offers. GLM burns reasoning from
+ * max_tokens, so thinking is disabled for z.ai (feedback_glm_reasoning_tokens).
+ */
+const STREAM_IDLE_TIMEOUT_MS = 45_000; // reasoning models can be slow to first token
+
+async function streamAnswer(
+  ctx: ModelContext,
+  system: string,
+  user: string,
+  opts: { onToken?: (t: string) => void; signal?: AbortSignal },
+): Promise<string> {
+  const { client, model } = await getLLMClient(ctx);
+  const isGlm = ctx.provider === 'zai';
+
+  // Idle watchdog: abort if no token arrives within the timeout, so a stuck
+  // provider can't hang the request forever (getLLMClient has no built-in one).
+  const idleAc = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => idleAc.abort(new Error('stream idle timeout')), STREAM_IDLE_TIMEOUT_MS);
+  };
+  if (opts.signal) {
+    if (opts.signal.aborted) idleAc.abort(opts.signal.reason);
+    else opts.signal.addEventListener('abort', () => idleAc.abort(opts.signal!.reason), { once: true });
+  }
+  resetIdle();
+
+  try {
+    const stream = (await (client.chat.completions.create as never as (...a: unknown[]) => Promise<AsyncIterable<{ choices: Array<{ delta?: { content?: string } }> }>>)(
+      {
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0.3,
+        max_tokens: 3000,
+        stream: true,
+        ...(isGlm ? { thinking: { type: 'disabled' } } : {}),
+      },
+      { signal: idleAc.signal },
+    ));
+    let text = '';
+    for await (const chunk of stream) {
+      resetIdle();
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        text += delta;
+        opts.onToken?.(delta);
+      }
+    }
+    return text;
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+  }
+}
+
+/**
  * Answer a question over a built collection. Streams tokens via onToken and
- * returns the full text + the citations that were injected.
+ * returns the full text + the citations that were injected. `model` chooses
+ * the generation model (defaults to the site chat model).
  */
 export async function answer(
   collectionId: string,
   question: string,
-  opts: { onToken?: (t: string) => void; signal?: AbortSignal } = {},
+  opts: { onToken?: (t: string) => void; signal?: AbortSignal; model?: ModelContext } = {},
 ): Promise<AnswerResult> {
   const [col] = await db.select().from(ragCollections).where(eq(ragCollections.id, collectionId)).limit(1);
   if (!col) throw new Error('collection not found');
@@ -170,13 +234,8 @@ export async function answer(
     ? `${block}\n\n--- Question ---\n${question}`
     : `The document index returned no relevant excerpts for this question.\n\n--- Question ---\n${question}`;
 
-  const { text } = await streamCompletion(SYSTEM_PROMPT, userPrompt, {
-    maxTokens: 3000,
-    temperature: 0.3,
-    disableThinking: true, // GLM burns reasoning from max_tokens (feedback_glm_reasoning_tokens)
-    onToken: opts.onToken,
-    signal: opts.signal,
-  });
+  const ctx = opts.model ?? (await resolveDefaultModel('chat'));
+  const text = await streamAnswer(ctx, SYSTEM_PROMPT, userPrompt, { onToken: opts.onToken, signal: opts.signal });
 
   return { text, citations: block ? citations : [], usedContext: !!block };
 }

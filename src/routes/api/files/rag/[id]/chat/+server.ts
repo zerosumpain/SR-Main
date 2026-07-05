@@ -18,6 +18,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   const question = typeof body.question === 'string' ? body.question.trim() : '';
   if (!question) return json({ error: 'question required' }, { status: 400 });
 
+  // Optional generation-model override (from the chat's ModelPicker). Validate the
+  // shape; anything malformed falls back to the site default inside answer().
+  const m = body.model;
+  const model =
+    m && (m.provider === 'zai' || m.provider === 'openrouter') && typeof m.modelId === 'string' && m.modelId
+      ? { provider: m.provider as 'zai' | 'openrouter', modelId: m.modelId }
+      : undefined;
+
   // Persist the user turn immediately so the transcript survives a disconnect.
   await db.insert(ragMessages).values({ collectionId: col.id, role: 'user', content: question });
 
@@ -35,6 +43,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       try {
         const { text, citations } = await answer(col.id, question, {
           signal: request.signal,
+          model,
           onToken: (token) => send({ type: 'token', token }),
         });
         const finalText = text.trim() || 'Sorry — I could not generate an answer for that. Try rephrasing.';
