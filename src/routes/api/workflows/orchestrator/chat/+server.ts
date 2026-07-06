@@ -232,7 +232,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // session topic + web source, so the chat UI can render clickable "sources"
   // chips linking to the source URL or the /deepdive session.
   type ResearchRef = {
-    factId: string; sessionId: string; sessionTopic: string;
+    factId: string; sourceId: string | null; sessionId: string; sessionTopic: string;
     sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
     score: number; passage: string;
   };
@@ -365,6 +365,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             seenResearchRefs.add(h.factId);
             turnResearchRefs.push({
               factId: h.factId,
+              sourceId: typeof h.sourceId === 'string' ? h.sourceId : null,
               sessionId: h.sessionId,
               sessionTopic: typeof h.sessionTopic === 'string' ? h.sessionTopic : '',
               sourceTitle: typeof h.sourceTitle === 'string' ? h.sourceTitle : null,

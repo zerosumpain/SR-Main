@@ -19,6 +19,7 @@
   import FileReferenceChips from './FileReferenceChips.svelte';
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
+  import ResearchSourceModal from './ResearchSourceModal.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import BuildPill from './BuildPill.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
@@ -1214,11 +1215,12 @@
     fileId: string; source: string; modality: string; score: number;
     chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
   };
-  // @research (research_search) refs — a fact cited from a deep-dive session,
-  // with its web source. Rendered as "research" chips linking to the source URL
-  // or the /deepdive session (see ResearchReferenceChips).
+  // @research (research_search) refs — a fact/passage cited from a deep-dive
+  // session, with its web source. Rendered as "research" chips that open the
+  // source's page material in a rich reader modal (see ResearchSourceModal /
+  // ResearchReferenceChips). `sourceId` keys the source reconstruction endpoint.
   type ResearchSearchRef = {
-    factId: string; sessionId: string; sessionTopic: string;
+    factId: string; sourceId: string | null; sessionId: string; sessionTopic: string;
     sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
     score: number; passage: string;
   };
@@ -1234,6 +1236,13 @@
       file: { id: ref.fileId, name: ref.source, mimeType: '' },
       highlight: { passage: ref.passage, charStart: ref.charStart, charEnd: ref.charEnd, modality: ref.modality },
     };
+  }
+
+  // @research chips → open the source's reconstructed page material in the rich
+  // reader modal (ResearchSourceModal), rather than leaving the app for the URL.
+  let researchModal = $state<ResearchSearchRef | null>(null);
+  function openResearchRef(ref: ResearchSearchRef) {
+    researchModal = ref;
   }
 
   // Skill picker — pins a jkai domain skill for the conversation (general chat),
@@ -2049,7 +2058,7 @@
                 <FileReferenceChips refs={msg.fileRefs} onOpen={openFileRef} />
               {/if}
               {#if msg.role === 'assistant' && msg.researchRefs && msg.researchRefs.length > 0}
-                <ResearchReferenceChips refs={msg.researchRefs} />
+                <ResearchReferenceChips refs={msg.researchRefs} onOpen={openResearchRef} />
               {/if}
             </div>
           {/if}
@@ -2165,6 +2174,10 @@
 
   {#if refModal}
     <FileViewerModal file={refModal.file} highlight={refModal.highlight} onClose={() => (refModal = null)} />
+  {/if}
+
+  {#if researchModal}
+    <ResearchSourceModal ref={researchModal} onClose={() => (researchModal = null)} />
   {/if}
 </div>
 

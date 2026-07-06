@@ -15,6 +15,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   const body = await request.json().catch(() => ({}));
   const language = typeof body.language === 'string' ? body.language : undefined;
+  // Preview mode: the file-viewer modal just wants the rendered content, not a
+  // pair of `.extracted.txt/.json` files littering the drive on every preview.
+  const preview = body.preview === true;
 
   const session = await locals.auth();
   const uploadedBy = session?.user?.email ?? row.uploadedBy ?? null;
@@ -31,11 +34,18 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     return json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 
+  // Read-only preview: return the rich rendering without persisting derived files.
+  if (preview) {
+    return json({ text: result.text, html: result.html ?? null, meta: result.meta });
+  }
+
   const txtName = `${row.name}.extracted.txt`;
   const jsonName = `${row.name}.extracted.json`;
 
   const txtBuf = Buffer.from(result.text, 'utf8');
-  const jsonBuf = Buffer.from(JSON.stringify(result, null, 2), 'utf8');
+  // Persist only text + meta in the derived `.extracted.json` (the rich `html` is a
+  // preview-render concern, not extracted data — keeps the derived file as before).
+  const jsonBuf = Buffer.from(JSON.stringify({ text: result.text, meta: result.meta }, null, 2), 'utf8');
 
   const derivedFiles = [
     await upsertFile(txtName, txtBuf, 'text/plain', uploadedBy),
@@ -44,6 +54,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   return json({
     text: result.text,
+    html: result.html ?? null,
     meta: result.meta,
     derivedFiles,
   });

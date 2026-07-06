@@ -23,6 +23,9 @@ export async function extractDocx(buffer: Buffer): Promise<ExtractResult> {
 
   return {
     text: textResult.value,
+    // mammoth already produced formatted HTML above — surface it for rich preview
+    // rather than discarding it (headings, lists, tables, inline images as data:).
+    html: htmlResult.value,
     meta: {
       kind: 'docx',
       headings,
