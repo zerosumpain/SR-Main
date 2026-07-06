@@ -5,6 +5,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
+import { indexSourceContent } from './source-index';
 import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
@@ -149,6 +150,15 @@ export async function runPhase2(
 
     if (!content) return 0;
     throwIfStopped(sessionId);
+
+    // Index the full source content into source_chunk so @research can retrieve
+    // raw source passages the fact extractor doesn't distil into a fact. Non-fatal:
+    // a failure here must never abort fact/entity extraction for this source.
+    try {
+      await indexSourceContent(sessionId, source, content);
+    } catch (err) {
+      console.warn('[deepdive] source-content indexing failed:', (err as Error).message);
+    }
 
     const contentSlice = content.slice(0, 6000);
     const isShortContent = content.length < 1000;

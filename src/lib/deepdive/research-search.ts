@@ -13,6 +13,9 @@ import { generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
 
 export type ResearchSearchHit = {
+  /** 'fact' = a distilled claim; 'source' = a raw passage from the source material. */
+  kind: 'fact' | 'source';
+  /** Id of the matched row — a fact id or a source_chunk id per `kind`. Opaque; used for dedup/keys. */
   factId: string;
   passage: string;
   score: number; // cosine similarity in [-1, 1]; higher = more relevant
@@ -84,39 +87,66 @@ export async function searchResearch(
   const embedding = await generateEmbedding(q);
   const vectorStr = toVectorLiteral(embedding); // validates finite numbers before string-building
 
-  const sessionFilter = options.sessionId
-    ? sql`AND f.session_id = ${options.sessionId}`
-    : sql``;
+  const factSessionFilter = options.sessionId ? sql`AND f.session_id = ${options.sessionId}` : sql``;
+  const chunkSessionFilter = options.sessionId ? sql`AND sc.session_id = ${options.sessionId}` : sql``;
 
-  // Cosine distance via `<=>`; similarity = 1 - distance (normalization-invariant,
-  // so no unit-normalization of the query is needed — matches deepdive chat).
+  // Search BOTH the distilled facts and the raw source-material chunks in one
+  // ranked pass. Both were embedded with the same model, so their cosine
+  // similarities to the query are directly comparable. `kind` distinguishes them
+  // for the caller. similarity = 1 - `<=>` (cosine distance; normalization-
+  // invariant, so no unit-normalization of the query is needed).
   const rows = await db.execute(sql`
-    SELECT
-      f.id           AS fact_id,
-      f.content      AS content,
-      f.confidence   AS confidence,
-      f.session_id   AS session_id,
-      rs.topic       AS session_topic,
-      s.id           AS source_id,
-      s.title        AS source_title,
-      s.url          AS source_url,
-      s.domain       AS domain,
-      1 - (f.embedding <=> ${vectorStr}::vector) AS similarity
-    FROM fact f
-    JOIN research_session rs ON rs.id = f.session_id
-    LEFT JOIN source s ON s.id = f.source_id
-    WHERE f.embedding IS NOT NULL
-      AND NOT f.is_counterfactual
-      ${sessionFilter}
-      AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
-    ORDER BY f.embedding <=> ${vectorStr}::vector
+    SELECT * FROM (
+      SELECT
+        'fact'::text   AS kind,
+        f.id           AS row_id,
+        f.content      AS content,
+        f.confidence   AS confidence,
+        f.session_id   AS session_id,
+        rs.topic       AS session_topic,
+        s.id           AS source_id,
+        s.title        AS source_title,
+        s.url          AS source_url,
+        s.domain       AS domain,
+        1 - (f.embedding <=> ${vectorStr}::vector) AS similarity
+      FROM fact f
+      JOIN research_session rs ON rs.id = f.session_id
+      LEFT JOIN source s ON s.id = f.source_id
+      WHERE f.embedding IS NOT NULL
+        AND NOT f.is_counterfactual
+        ${factSessionFilter}
+        AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
+
+      UNION ALL
+
+      SELECT
+        'source'::text AS kind,
+        sc.id          AS row_id,
+        sc.text        AS content,
+        0::double precision AS confidence,
+        sc.session_id  AS session_id,
+        rs2.topic      AS session_topic,
+        s2.id          AS source_id,
+        s2.title       AS source_title,
+        s2.url         AS source_url,
+        s2.domain      AS domain,
+        1 - (sc.embedding <=> ${vectorStr}::vector) AS similarity
+      FROM source_chunk sc
+      JOIN research_session rs2 ON rs2.id = sc.session_id
+      JOIN source s2 ON s2.id = sc.source_id
+      WHERE sc.embedding IS NOT NULL
+        ${chunkSessionFilter}
+        AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}
+    ) u
+    ORDER BY u.similarity DESC
     LIMIT ${topK}
   `);
 
   return (rows.rows as Record<string, unknown>[]).map((r) => {
     const content = String(r.content ?? '');
     return {
-      factId: String(r.fact_id),
+      kind: r.kind === 'source' ? ('source' as const) : ('fact' as const),
+      factId: String(r.row_id),
       passage: content.length > MAX_PASSAGE_CHARS ? content.slice(0, MAX_PASSAGE_CHARS) + '…' : content,
       score: Math.round(Number(r.similarity ?? 0) * 1000) / 1000,
       confidence: Number(r.confidence ?? 0),

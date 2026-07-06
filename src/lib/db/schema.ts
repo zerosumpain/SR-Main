@@ -433,6 +433,36 @@ export const facts = pgTable('fact', {
 
 export type Fact = typeof facts.$inferSelect;
 
+// Semantic index over the SOURCE MATERIALS of a research session — the fetched
+// page content, chunked. Complements `fact` (distilled claims): a source chunk
+// is raw source text the extractor may not have turned into a fact, so @research
+// can retrieve passages the fact layer skipped. Populated during phase 2 (see
+// $lib/deepdive/source-index). Embedded with the SAME model as fact.embedding
+// (deepdive getEmbeddingModel — text-embedding-3-small, 1536-dim) so
+// searchResearch can UNION facts + chunks against one query vector.
+export const sourceChunks = pgTable(
+  'source_chunk',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sessionId: text('session_id').notNull().references(() => researchSessions.id),
+    sourceId: text('source_id').notNull().references(() => sources.id),
+    chunkOrd: integer('chunk_ord').notNull(), // 0-based ordinal within the source
+    text: text('text').notNull(),             // the chunk text that was embedded
+    charStart: integer('char_start').notNull(),
+    charEnd: integer('char_end').notNull(),
+    embedding: vector('embedding'),           // 1536-dim, same space as fact.embedding (null if embed failed)
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    bySource: index('source_chunk_source_idx').on(table.sourceId),
+    bySession: index('source_chunk_session_idx').on(table.sessionId),
+    uniqChunk: uniqueIndex('source_chunk_source_ord_idx').on(table.sourceId, table.chunkOrd),
+  }),
+);
+
+export type SourceChunk = typeof sourceChunks.$inferSelect;
+export type NewSourceChunk = typeof sourceChunks.$inferInsert;
+
 export const entities = pgTable('entity', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   sessionId: text('session_id').notNull().references(() => researchSessions.id),

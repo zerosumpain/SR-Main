@@ -367,13 +367,15 @@ register({
 register({
   name: 'research_search',
   description:
-    'Semantic search across the MATERIALS of ALL deep-dive research sessions at once — ' +
-    'the extracted facts gathered from web sources, searched by meaning (not keywords). ' +
-    'Use this to ground an answer in what past research actually found, when the user does ' +
-    "not name a specific session — e.g. \"what has my research turned up about X\", " +
-    '"pull anything from my research on Y". Returns ranked passages, each with the source ' +
-    'title/url, the research session it came from, and a relevance score. To ask a question ' +
-    'of ONE known session use research_query instead. ' +
+    'Semantic search across the MATERIALS of ALL deep-dive research sessions at once, ' +
+    'searched by meaning (not keywords). Covers BOTH the extracted facts (distilled claims) ' +
+    'AND the raw source-material passages the sources contained — so it can surface detail ' +
+    'the fact layer never distilled. Use this to ground an answer in what past research ' +
+    'actually found, when the user does not name a specific session — e.g. "what has my ' +
+    'research turned up about X", "pull anything from my research on Y". Returns ranked ' +
+    'passages, each with a `kind` ("fact" = distilled claim, "source" = raw source passage), ' +
+    'the source title/url, the research session it came from, and a relevance score. To ask a ' +
+    'question of ONE known session use research_query instead. ' +
     'When the user writes "@research" in their message, use this tool.',
   parameters: {
     type: 'object',

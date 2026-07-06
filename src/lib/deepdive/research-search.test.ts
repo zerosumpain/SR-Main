@@ -25,11 +25,12 @@ describe('searchResearch', () => {
     expect(mockExecute).not.toHaveBeenCalled();
   });
 
-  it('embeds the trimmed query and maps rows into hits', async () => {
+  it('embeds the trimmed query and maps fact + source rows into hits with kind', async () => {
     mockExecute.mockResolvedValue({
       rows: [
         {
-          fact_id: 'f1',
+          kind: 'fact',
+          row_id: 'f1',
           content: 'The scheme cut NEET rates by 4pp over three years.',
           confidence: 0.82,
           session_id: 's1',
@@ -40,26 +41,41 @@ describe('searchResearch', () => {
           domain: 'gov.uk',
           similarity: 0.7134,
         },
+        {
+          kind: 'source',
+          row_id: 'sc1',
+          content: 'Raw passage from the source page the extractor never distilled.',
+          confidence: 0,
+          session_id: 's1',
+          session_topic: 'NEET interventions',
+          source_id: 'src1',
+          source_title: 'DfE evaluation',
+          source_url: 'https://gov.uk/x',
+          domain: 'gov.uk',
+          similarity: 0.55,
+        },
       ],
     });
 
     const hits = await searchResearch('  what works to reduce NEET  ');
     expect(mockEmbed).toHaveBeenCalledWith('what works to reduce NEET');
     expect(mockExecute).toHaveBeenCalledTimes(1);
-    expect(hits).toEqual([
-      {
-        factId: 'f1',
-        passage: 'The scheme cut NEET rates by 4pp over three years.',
-        score: 0.713,
-        confidence: 0.82,
-        sessionId: 's1',
-        sessionTopic: 'NEET interventions',
-        sourceId: 'src1',
-        sourceTitle: 'DfE evaluation',
-        sourceUrl: 'https://gov.uk/x',
-        domain: 'gov.uk',
-      },
-    ]);
+    expect(hits[0]).toEqual({
+      kind: 'fact',
+      factId: 'f1',
+      passage: 'The scheme cut NEET rates by 4pp over three years.',
+      score: 0.713,
+      confidence: 0.82,
+      sessionId: 's1',
+      sessionTopic: 'NEET interventions',
+      sourceId: 'src1',
+      sourceTitle: 'DfE evaluation',
+      sourceUrl: 'https://gov.uk/x',
+      domain: 'gov.uk',
+    });
+    expect(hits[1].kind).toBe('source');
+    expect(hits[1].factId).toBe('sc1');
+    expect(hits[1].passage).toContain('Raw passage');
   });
 
   it('tolerates a fact with no source (LEFT JOIN nulls) and truncates long passages', async () => {
@@ -67,7 +83,7 @@ describe('searchResearch', () => {
     mockExecute.mockResolvedValue({
       rows: [
         {
-          fact_id: 'f2',
+          row_id: 'f2',
           content: long,
           confidence: 0.5,
           session_id: 's2',
@@ -92,17 +108,17 @@ describe('searchResearch', () => {
     mockExecute.mockResolvedValue({
       rows: [
         {
-          fact_id: 'f3', content: 'x', confidence: 0.5, session_id: 's3', session_topic: 'T',
+          row_id: 'f3', content: 'x', confidence: 0.5, session_id: 's3', session_topic: 'T',
           source_id: 'src3', source_title: 'Evil', source_url: 'javascript:alert(document.cookie)',
           domain: 'evil', similarity: 0.9,
         },
         {
-          fact_id: 'f4', content: 'y', confidence: 0.5, session_id: 's3', session_topic: 'T',
+          row_id: 'f4', content: 'y', confidence: 0.5, session_id: 's3', session_topic: 'T',
           source_id: 'src4', source_title: 'Data', source_url: 'data:text/html,<script>1</script>',
           domain: null, similarity: 0.8,
         },
         {
-          fact_id: 'f5', content: 'z', confidence: 0.5, session_id: 's3', session_topic: 'T',
+          row_id: 'f5', content: 'z', confidence: 0.5, session_id: 's3', session_topic: 'T',
           source_id: 'src5', source_title: 'Good', source_url: 'https://gov.uk/ok',
           domain: 'gov.uk', similarity: 0.7,
         },

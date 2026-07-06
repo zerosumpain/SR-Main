@@ -321,3 +321,34 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
+/** Max chars per input — well under the model's per-input token limit. */
+const EMBED_MAX_INPUT_CHARS = 24000;
+/** Inputs per request — keeps total request tokens bounded (mirrors file-index). */
+const EMBED_BATCH_SIZE = 48;
+
+/**
+ * Batch-embed many texts with the SAME model as generateEmbedding (deepdive's
+ * getEmbeddingModel), so the vectors share the fact/query vector space and can be
+ * compared directly (used to embed source-material chunks). Returns one vector
+ * per input, in order. Fails loud on a short response so vectors never misalign.
+ */
+export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!texts.length) return [];
+  const client = getOpenRouterClient();
+  const model = getEmbeddingModel();
+  const out: number[][] = [];
+  for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
+    const inputs = texts.slice(i, i + EMBED_BATCH_SIZE).map((t) => t.slice(0, EMBED_MAX_INPUT_CHARS));
+    const response = await withRetry(
+      () => client.embeddings.create({ model, input: inputs }),
+      'generateEmbeddings',
+    );
+    const sorted = [...response.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    if (sorted.length !== inputs.length) {
+      throw new Error(`generateEmbeddings count mismatch: got ${sorted.length} for ${inputs.length} inputs`);
+    }
+    for (const d of sorted) out.push(d.embedding as number[]);
+  }
+  return out;
+}
+
