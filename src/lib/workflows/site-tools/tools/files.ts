@@ -151,6 +151,9 @@ register({
             source: h.source,
             modality: h.modality,
             score: h.score,
+            chunkOrd: h.chunkOrd,
+            charStart: h.charStart,
+            charEnd: h.charEnd,
             passage: h.passage,
           })),
           note: hits.length === 0

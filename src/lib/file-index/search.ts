@@ -13,6 +13,8 @@ export type FileSearchHit = {
   source: string;
   modality: string;
   chunkOrd: number;
+  charStart: number;
+  charEnd: number;
   passage: string;
   score: number; // cosine similarity in [-1, 1]; higher = more relevant
 };
@@ -45,6 +47,8 @@ export async function searchFiles(query: string, options: FileSearchOptions = {}
       source: fileEmbeddings.source,
       modality: fileEmbeddings.modality,
       chunkOrd: fileEmbeddings.chunkOrd,
+      charStart: fileEmbeddings.charStart,
+      charEnd: fileEmbeddings.charEnd,
       text: fileEmbeddings.text,
       distance,
     })
@@ -58,6 +62,8 @@ export async function searchFiles(query: string, options: FileSearchOptions = {}
     source: r.source,
     modality: r.modality,
     chunkOrd: r.chunkOrd,
+    charStart: r.charStart,
+    charEnd: r.charEnd,
     passage: r.text.length > MAX_PASSAGE_CHARS ? r.text.slice(0, MAX_PASSAGE_CHARS) + '…' : r.text,
     score: Math.round((1 - Number(r.distance)) * 1000) / 1000,
   }));

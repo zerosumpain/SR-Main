@@ -4,8 +4,12 @@
   import ShikiCodeBlock from '$lib/canvas/nodes/ShikiCodeBlock.svelte';
 
   type ViewFile = { id: string; name: string; mimeType: string; sizeBytes?: number };
+  // When opened from a citation, `highlight` carries the cited chunk so the viewer
+  // can jump to and mark the referenced passage (text) or surface the matched
+  // caption (image). `passage` is the chunk text; char offsets are a fallback.
+  type Highlight = { passage: string; charStart?: number; charEnd?: number; modality?: string };
 
-  let { file, onClose }: { file: ViewFile; onClose: () => void } = $props();
+  let { file, onClose, highlight }: { file: ViewFile; onClose: () => void; highlight?: Highlight } = $props();
 
   const marked = new Marked({ gfm: true, breaks: true });
 
@@ -110,6 +114,48 @@
     kind === 'markdown' && textContent != null ? sanitizeChatHtml(marked.parse(textContent) as string) : '',
   );
 
+  // ── Citation highlight ──────────────────────────────────────────────────────
+  // Text kinds render as a plain "reader" (pre-wrap) view when arriving via a
+  // citation, so the cited passage can be reliably marked + scrolled to (the rich
+  // markdown/Shiki DOM doesn't map cleanly to source char offsets). The normal
+  // /drive open (no highlight) keeps the rich rendering.
+  let markEl = $state<HTMLElement | null>(null);
+  const readerMode = $derived(!!highlight && (kind === 'code' || kind === 'markdown' || kind === 'doc'));
+
+  // Locate the cited passage in the loaded text. Anchor on a distinctive prefix
+  // (robust to whitespace/offset drift between extracted and displayed text);
+  // fall back to char offsets; else no highlight.
+  const highlightParts = $derived.by(() => {
+    if (!highlight || textContent == null) return null;
+    const text = textContent;
+    const passage = highlight.passage.replace(/…\s*$/, '').trim();
+    if (!passage) return null;
+    const anchor = passage.slice(0, 60);
+    let start = text.toLowerCase().indexOf(anchor.toLowerCase());
+    let end: number;
+    if (start >= 0) {
+      end = Math.min(start + passage.length, text.length);
+    } else if (
+      typeof highlight.charStart === 'number' &&
+      typeof highlight.charEnd === 'number' &&
+      highlight.charStart >= 0 &&
+      highlight.charEnd <= text.length &&
+      highlight.charEnd > highlight.charStart
+    ) {
+      start = highlight.charStart;
+      end = highlight.charEnd;
+    } else {
+      return null;
+    }
+    return { before: text.slice(0, start), match: text.slice(start, end), after: text.slice(end) };
+  });
+
+  // Scroll the mark into view once the reader has rendered it. Read-only in the
+  // effect (no state writes) — safe under Svelte 5 runes.
+  $effect(() => {
+    if (markEl && highlightParts) markEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+  });
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onClose();
   }
@@ -149,17 +195,25 @@
       </div>
     </header>
 
-    <div class="fv-body" class:fv-body-pad={kind === 'markdown' || kind === 'doc' || kind === 'unknown'}>
+    <div class="fv-body" class:fv-body-pad={(kind === 'markdown' || kind === 'doc' || kind === 'unknown') && !readerMode}>
       {#if kind === 'image'}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-        <img
-          class="fv-img"
-          class:fv-img-zoom={imgZoom}
-          src={contentUrl}
-          alt={file.name}
-          onclick={() => (imgZoom = !imgZoom)}
-          title={imgZoom ? 'Click to fit' : 'Click to zoom'}
-        />
+        <div class="fv-image-view">
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+          <img
+            class="fv-img"
+            class:fv-img-zoom={imgZoom}
+            src={contentUrl}
+            alt={file.name}
+            onclick={() => (imgZoom = !imgZoom)}
+            title={imgZoom ? 'Click to fit' : 'Click to zoom'}
+          />
+          {#if highlight?.passage}
+            <div class="fv-caption">
+              <span class="fv-caption-label">matched</span>
+              <span class="fv-caption-text">{highlight.passage}</span>
+            </div>
+          {/if}
+        </div>
       {:else if kind === 'video'}
         <!-- svelte-ignore a11y_media_has_caption -->
         <video class="fv-media" src={contentUrl} controls></video>
@@ -171,6 +225,12 @@
         <div class="fv-status">Loading…</div>
       {:else if loadError}
         <div class="fv-status fv-error">Could not open this file: {loadError}</div>
+      {:else if readerMode && textContent != null}
+        <!-- Citation reader: plain pre-wrap text with the cited passage marked +
+             scrolled into view. Reliable across doc/markdown/code source. -->
+        <div class="fv-reader">
+          {#if highlightParts}{highlightParts.before}<mark class="fv-mark" bind:this={markEl}>{highlightParts.match}</mark>{highlightParts.after}{:else}{textContent}{/if}
+        </div>
       {:else if kind === 'markdown'}
         <div class="fv-prose">{@html renderedMarkdown}</div>
       {:else if kind === 'doc'}
@@ -380,4 +440,60 @@
   .fv-prose :global(table) { border-collapse: collapse; }
   .fv-prose :global(td),
   .fv-prose :global(th) { border: 1px solid var(--card-border); padding: 4px 8px; }
+
+  /* ── Citation views ── */
+  .fv-image-view {
+    margin: auto;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: clamp(8px, 2vw, 20px);
+  }
+  .fv-caption {
+    max-width: min(760px, 100%);
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    padding: 8px 12px;
+    background: var(--surface-overlay);
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--accent);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+  .fv-caption-label {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    padding-top: 2px;
+  }
+  .fv-reader {
+    width: 100%;
+    max-width: 82ch;
+    margin: 0 auto;
+    padding: clamp(14px, 3vw, 32px);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text-primary);
+  }
+  .fv-mark {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--text-primary);
+    border-radius: 2px;
+    padding: 1px 2px;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+    scroll-margin: 40vh;
+  }
 </style>
