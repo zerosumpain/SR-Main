@@ -3,9 +3,25 @@
   import ThinkingTimeline from './ThinkingTimeline.svelte';
   import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
   import QueuedMessageBadge from './QueuedMessageBadge.svelte';
+  import FileReferenceChips from './FileReferenceChips.svelte';
+  import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
+  import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
+
+  // @files / @research references cited by this reply. Their in-prose mentions
+  // are linkified into clickable citations (see citation-linkify); any source the
+  // model didn't name is shown in a compact fallback chip row below the reply.
+  type FileRef = {
+    fileId: string; source: string; modality: string; score: number;
+    chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
+  };
+  type ResearchRef = {
+    factId: string; sourceId: string | null; sessionId: string; sessionTopic: string;
+    sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
+    score: number; passage: string;
+  };
 
   let {
     role,
@@ -18,6 +34,10 @@
     isLatest = false,
     createdAt,
     queued = false,
+    fileRefs = [],
+    researchRefs = [],
+    onOpenFileRef,
+    onOpenResearchRef,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -35,6 +55,15 @@
     onSilentSend?: (command: string) => void | Promise<void>;
     approvalUi?: ApprovalUiSettings;
     isLatest?: boolean;
+    /** @files hits cited by this reply — mentions are linkified inline; the rest
+     *  fall back to a chip row. */
+    fileRefs?: FileRef[];
+    /** @research hits cited by this reply. Same lifecycle as fileRefs. */
+    researchRefs?: ResearchRef[];
+    /** Open the file viewer at a cited @files passage (from an inline link or chip). */
+    onOpenFileRef?: (ref: FileRef) => void;
+    /** Open the research source reader for a cited @research passage. */
+    onOpenResearchRef?: (ref: ResearchRef) => void;
     /** ISO timestamp the bubble was created. Drives the "10:42:13" wall-clock
      *  mark that fades in under each bubble on hover. */
     createdAt?: string;
@@ -86,6 +115,47 @@
       : ''
   );
 
+  // Turn each cited source into anchor candidates, then linkify its first in-prose
+  // mention into a clickable citation. `matched` tells us which refs got linked so
+  // the rest can fall back to chips. Pure string transform over already-sanitised
+  // HTML → SSR-safe, and it can only inject the fixed cite-link markup.
+  let citeTargets: CiteTarget[] = $derived([
+    ...fileRefs.map((r, idx) => ({ kind: 'file' as const, idx, anchors: fileAnchors(r.source) })),
+    ...researchRefs.map((r, idx) => ({ kind: 'research' as const, idx, anchors: researchAnchors(r) })),
+  ]);
+  let linkified = $derived(
+    role === 'assistant'
+      ? linkifyCitations(renderedContent, citeTargets)
+      : { html: renderedContent, matched: new Set<string>() },
+  );
+  // Sources the model didn't name in prose still get a chip so nothing is lost.
+  let unmatchedFileRefs = $derived(fileRefs.filter((_, idx) => !linkified.matched.has(`file:${idx}`)));
+  let unmatchedResearchRefs = $derived(researchRefs.filter((_, idx) => !linkified.matched.has(`research:${idx}`)));
+
+  function citeFromEvent(target: EventTarget | null): HTMLElement | null {
+    const el = target as HTMLElement | null;
+    return el?.closest?.('a.cite-link') ?? null;
+  }
+  function openCite(a: HTMLElement) {
+    const kind = a.getAttribute('data-cite-kind');
+    const idx = Number(a.getAttribute('data-cite-idx'));
+    if (kind === 'file' && fileRefs[idx]) onOpenFileRef?.(fileRefs[idx]);
+    else if (kind === 'research' && researchRefs[idx]) onOpenResearchRef?.(researchRefs[idx]);
+  }
+  function onCiteClick(e: MouseEvent) {
+    const a = citeFromEvent(e.target);
+    if (!a) return;
+    e.preventDefault();
+    openCite(a);
+  }
+  function onCiteKey(e: KeyboardEvent) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const a = citeFromEvent(e.target);
+    if (!a) return;
+    e.preventDefault();
+    openCite(a);
+  }
+
   let isUser = $derived(role === 'user');
   let thinkingOpen = $state(true);
   let hasThinking = $derived(thinking && thinking.steps && thinking.steps.length > 0);
@@ -123,7 +193,14 @@
     {#if isUser}
       <p class="whitespace-pre-wrap">{content}</p>
     {:else}
-      <div class="chat-markdown">{@html renderedContent}</div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="chat-markdown" onclick={onCiteClick} onkeydown={onCiteKey}>{@html linkified.html}</div>
+      {#if unmatchedFileRefs.length > 0 && onOpenFileRef}
+        <FileReferenceChips refs={unmatchedFileRefs} onOpen={onOpenFileRef} />
+      {/if}
+      {#if unmatchedResearchRefs.length > 0 && onOpenResearchRef}
+        <ResearchReferenceChips refs={unmatchedResearchRefs} onOpen={onOpenResearchRef} />
+      {/if}
       {#if onSilentSend}
         <SlashCommandButtonBar
           {content}
@@ -258,6 +335,28 @@
   .chat-markdown :global(a) {
     color: var(--accent);
     text-decoration: underline;
+  }
+  /* Inline source citation — a mention of an @files / @research source that the
+     reply named, turned into a click target that opens its viewer. Kept quiet
+     (dotted underline + citation glyph) so it reads as a reference, not a link. */
+  .chat-markdown :global(a.cite-link) {
+    color: var(--accent);
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    font-style: normal;
+  }
+  .chat-markdown :global(a.cite-link)::after {
+    content: '\2197'; /* ↗ */
+    font-size: 0.7em;
+    vertical-align: super;
+    margin-left: 1px;
+    opacity: 0.6;
+  }
+  .chat-markdown :global(a.cite-link:hover) {
+    text-decoration-style: solid;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
   .chat-markdown :global(hr) {
     border: none;

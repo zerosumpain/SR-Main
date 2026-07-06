@@ -122,30 +122,35 @@
   );
 
   // ── Citation highlight ──────────────────────────────────────────────────────
-  // Text kinds render as a plain "reader" (pre-wrap) view when arriving via a
-  // citation, so the cited passage can be reliably marked + scrolled to (the rich
-  // markdown/Shiki DOM doesn't map cleanly to source char offsets). The normal
-  // /drive open (no highlight) keeps the rich rendering.
+  // The "reader" is a plain pre-wrap view that marks + scrolls to the cited
+  // passage (the rich markdown/Shiki/doc DOM doesn't map cleanly to source char
+  // offsets, so highlighting only works in the reader).
   let markEl = $state<HTMLElement | null>(null);
-  const readerMode = $derived(!!highlight && (kind === 'code' || kind === 'markdown' || kind === 'doc'));
 
-  // ── Rich document rendering (docx/pptx/xlsx) ────────────────────────────────
-  // A normal /drive open (no citation) shows the rich HTML. A citation open (has
-  // `highlight`) defaults to the reader (so the cited passage can be marked), with
-  // a one-click Reader⇄Rich toggle. `userRich` is the explicit override; it resets
-  // whenever the file changes so a toggle doesn't leak across opens.
+  // ── Rich vs reader ──────────────────────────────────────────────────────────
+  // A rich/formatted rendering exists for docx/pptx/xlsx (mammoth HTML), markdown
+  // (rendered) and code (Shiki). The viewer DEFAULTS to that rich rendering — even
+  // on a citation open — with the passage-highlighting reader one click away via
+  // the toggle. `userReader` is the explicit override (true = reader, false =
+  // rich, null = default); it resets whenever the file changes so a toggle doesn't
+  // leak across opens. A normal /drive open (no highlight) is unchanged: rich, no
+  // toggle (there's no cited passage to switch to).
   const hasRichDoc = $derived(kind === 'doc' && htmlContent != null);
-  let userRich = $state<boolean | null>(null);
-  const richView = $derived(hasRichDoc && (userRich ?? !highlight));
+  const hasRichForm = $derived(
+    hasRichDoc || ((kind === 'markdown' || kind === 'code') && textContent != null),
+  );
+  let userReader = $state<boolean | null>(null);
+  const readerMode = $derived(!!highlight && hasRichForm && (userReader ?? false));
+  const richView = $derived(hasRichDoc && !readerMode);
   const renderedDocHtml = $derived(hasRichDoc ? sanitizePreviewHtml(htmlContent as string) : '');
-  const canToggleRich = $derived(hasRichDoc && !!highlight);
+  const canToggleRich = $derived(!!highlight && hasRichForm);
   // Spreadsheets get the full modal width (many columns); docx/pptx keep the measured
   // text column. Detected from the generated markup rather than threading meta.kind.
   const isSheet = $derived(!!htmlContent && htmlContent.includes('class="xlsx-book"'));
   $effect(() => {
     file.id; // reset the explicit rich/reader choice when the viewed file changes
     untrack(() => {
-      userRich = null;
+      userReader = null;
     });
   });
 
@@ -221,9 +226,9 @@
           <button
             type="button"
             class="fv-btn"
-            onclick={() => (userRich = !richView)}
-            title={richView ? 'Show the reader with the cited passage highlighted' : 'Show the formatted document'}
-          >{richView ? 'reader' : 'rich'}</button>
+            onclick={() => (userReader = !readerMode)}
+            title={readerMode ? 'Show the formatted view' : 'Show the reader with the cited passage highlighted'}
+          >{readerMode ? 'rich' : 'reader'}</button>
         {/if}
         <a class="fv-btn" href={`/api/files/${file.id}/download`} download title="Download">download</a>
         <button type="button" class="fv-btn fv-close" onclick={onClose} title="Close (Esc)" aria-label="Close">✕</button>

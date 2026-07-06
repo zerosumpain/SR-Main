@@ -16,8 +16,6 @@
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import MessageAttachments from './MessageAttachments.svelte';
-  import FileReferenceChips from './FileReferenceChips.svelte';
-  import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import ResearchSourceModal from './ResearchSourceModal.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
@@ -2047,18 +2045,16 @@
                 isLatest={msgIndex === lastAssistantMessageIndex}
                 createdAt={msg.createdAt}
                 queued={msg.queued === true}
+                fileRefs={msg.role === 'assistant' ? (msg.fileRefs ?? []) : []}
+                researchRefs={msg.role === 'assistant' ? (msg.researchRefs ?? []) : []}
+                onOpenFileRef={openFileRef}
+                onOpenResearchRef={openResearchRef}
               />
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />
               {/if}
               {#if buildIdFromMessage(msg)}
                 <BuildPill buildId={buildIdFromMessage(msg)!} variant="inline" />
-              {/if}
-              {#if msg.role === 'assistant' && msg.fileRefs && msg.fileRefs.length > 0}
-                <FileReferenceChips refs={msg.fileRefs} onOpen={openFileRef} />
-              {/if}
-              {#if msg.role === 'assistant' && msg.researchRefs && msg.researchRefs.length > 0}
-                <ResearchReferenceChips refs={msg.researchRefs} onOpen={openResearchRef} />
               {/if}
             </div>
           {/if}
