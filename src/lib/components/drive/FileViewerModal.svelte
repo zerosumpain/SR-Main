@@ -139,6 +139,9 @@
   const richView = $derived(hasRichDoc && (userRich ?? !highlight));
   const renderedDocHtml = $derived(hasRichDoc ? sanitizePreviewHtml(htmlContent as string) : '');
   const canToggleRich = $derived(hasRichDoc && !!highlight);
+  // Spreadsheets get the full modal width (many columns); docx/pptx keep the measured
+  // text column. Detected from the generated markup rather than threading meta.kind.
+  const isSheet = $derived(!!htmlContent && htmlContent.includes('class="xlsx-book"'));
   $effect(() => {
     file.id; // reset the explicit rich/reader choice when the viewed file changes
     untrack(() => {
@@ -261,7 +264,7 @@
         <!-- Rich formatted rendering for docx (mammoth), pptx (slide cards) and
              xlsx (tables). Sanitised with the preview profile (allows inline
              document images). -->
-        <div class="fv-prose fv-rich">{@html renderedDocHtml}</div>
+        <div class="fv-prose fv-rich" class:fv-wide={isSheet}>{@html renderedDocHtml}</div>
       {:else if readerMode && textContent != null}
         <!-- Citation reader: plain pre-wrap text with the cited passage marked +
              scrolled into view. Reliable across doc/markdown/code source. -->
@@ -431,84 +434,119 @@
   }
   .fv-prose {
     width: 100%;
-    max-width: 78ch;
+    max-width: 80ch;
     margin: 0 auto;
     font-family: var(--font-body);
     font-size: 15px;
-    line-height: 1.7;
+    line-height: 1.72;
     color: var(--text-primary);
   }
+  /* Spreadsheets use the full modal width (many columns); prose text stays measured. */
+  .fv-prose.fv-wide { max-width: 100%; }
+  .fv-prose > :global(:first-child) { margin-top: 0; }
   .fv-prose :global(h1),
   .fv-prose :global(h2),
-  .fv-prose :global(h3) {
+  .fv-prose :global(h3),
+  .fv-prose :global(h4) {
     font-family: var(--font-display);
-    line-height: 1.2;
-    margin: 1.2em 0 0.5em;
+    line-height: 1.18;
+    margin: 1.5em 0 0.55em;
   }
-  .fv-prose :global(h1) { font-size: 1.6em; }
-  .fv-prose :global(h2) { font-size: 1.35em; }
-  .fv-prose :global(h3) { font-size: 1.15em; }
-  .fv-prose :global(p) { margin: 0 0 0.9em; }
-  .fv-prose :global(pre) {
-    background: var(--code-bg);
-    color: var(--code-text);
-    padding: 12px 14px;
-    overflow-x: auto;
-    font-family: var(--font-mono);
-    font-size: 0.85em;
+  .fv-prose :global(h1) { font-size: 1.5em; }
+  .fv-prose :global(h2) { font-size: 1.28em; }
+  .fv-prose :global(h3) { font-size: 1.12em; }
+  .fv-prose :global(h4) { font-size: 1em; }
+  .fv-prose :global(p) { margin: 0 0 0.95em; }
+  .fv-prose :global(a) { color: var(--accent); text-underline-offset: 2px; }
+  .fv-prose :global(ul),
+  .fv-prose :global(ol) { margin: 0.5em 0 1em; padding-left: 1.4em; }
+  .fv-prose :global(li) { margin: 0.3em 0; }
+  .fv-prose :global(blockquote) {
+    border-left: 3px solid var(--accent-tint-35, var(--card-border));
+    padding: 0.1em 0 0.1em 1em;
+    margin: 1em 0;
+    color: var(--text-secondary);
   }
+  .fv-prose :global(hr) { border: 0; border-top: 1px solid var(--divider); margin: 1.6em 0; }
+  .fv-prose :global(img) { max-width: 100%; height: auto; border-radius: 2px; margin: 0.4em 0; }
   .fv-prose :global(code) {
     font-family: var(--font-mono);
     font-size: 0.85em;
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
+    border-radius: 2px;
+  }
+  .fv-prose :global(pre) {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 12px 14px;
+    overflow-x: auto;
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
   }
   .fv-prose :global(pre code) { background: none; padding: 0; color: inherit; }
-  .fv-prose :global(a) { color: var(--accent); }
-  .fv-prose :global(ul),
-  .fv-prose :global(ol) { margin: 0.5em 0; padding-left: 1.5em; }
-  .fv-prose :global(blockquote) {
-    border-left: 3px solid var(--card-border);
-    padding-left: 1em;
-    margin: 0.8em 0;
+
+  /* ── Tables: compact cells, header row, row rules, numeric right-align ── */
+  .fv-prose :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.1em 0 1.6em;
+    font-size: 0.92em;
+    font-variant-numeric: tabular-nums;
+  }
+  .fv-prose :global(th),
+  .fv-prose :global(td) {
+    padding: 7px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--divider);
+    text-align: left;
+    vertical-align: top;
+  }
+  .fv-prose :global(td > p),
+  .fv-prose :global(th > p) { margin: 0; }
+  .fv-prose :global(td > p + p),
+  .fv-prose :global(th > p + p) { margin-top: 0.35em; }
+  .fv-prose :global(.num) { text-align: right; white-space: nowrap; }
+  /* Word tables carry no <thead>; style their bold first row as the header. */
+  .fv-prose :global(table:not(:has(thead)) tr:first-child td) {
+    background: var(--surface-overlay);
+    border-bottom: 2px solid var(--card-border);
+    font-weight: 600;
     color: var(--text-secondary);
   }
-  .fv-prose :global(img) { max-width: 100%; height: auto; }
-  .fv-prose :global(table) { border-collapse: collapse; }
-  .fv-prose :global(td),
-  .fv-prose :global(th) { border: 1px solid var(--card-border); padding: 4px 8px; }
 
   /* ── Rich doc: PowerPoint slide cards ── */
   .fv-rich :global(.pptx-deck) {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 16px;
   }
   .fv-rich :global(.pptx-slide) {
     border: 1px solid var(--card-border);
     border-radius: var(--radius-md, 4px);
     background: var(--surface-overlay);
-    padding: 18px 20px;
+    padding: 20px 22px;
   }
   .fv-rich :global(.pptx-slide-no) {
     font-family: var(--font-mono);
     font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
   .fv-rich :global(.pptx-title) {
     font-family: var(--font-display);
-    font-size: 1.25em;
-    line-height: 1.25;
-    margin: 0 0 0.5em;
+    font-size: 1.3em;
+    line-height: 1.2;
+    margin: 0 0 0.6em;
   }
-  .fv-rich :global(.pptx-body) { margin: 0; padding-left: 1.3em; }
-  .fv-rich :global(.pptx-body li) { margin: 0.3em 0; }
+  .fv-rich :global(.pptx-body) { margin: 0; padding-left: 1.2em; }
+  .fv-rich :global(.pptx-body li) { margin: 0.35em 0; }
   .fv-rich :global(.pptx-notes) {
-    margin-top: 12px;
-    padding-top: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
     border-top: 1px dashed var(--card-border);
     color: var(--text-secondary);
     font-size: 0.9em;
@@ -520,7 +558,7 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
-    margin-bottom: 4px;
+    margin-bottom: 5px;
   }
   .fv-rich :global(.pptx-notes p) { margin: 0.2em 0; }
 
@@ -528,7 +566,7 @@
   .fv-rich :global(.xlsx-book) {
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 26px;
   }
   .fv-rich :global(.xlsx-sheet-name) {
     font-family: var(--font-mono);
@@ -536,18 +574,28 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
-    margin: 0 0 8px;
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--card-border);
   }
-  .fv-rich :global(.xlsx-scroll) { overflow-x: auto; }
-  .fv-rich :global(.xlsx-sheet table) { font-size: 0.85em; min-width: 100%; }
-  .fv-rich :global(.xlsx-sheet th) {
-    background: var(--surface-overlay);
-    text-align: left;
-    white-space: nowrap;
+  .fv-rich :global(.xlsx-scroll) {
+    overflow-x: auto;
+    border: 1px solid var(--divider);
+    border-radius: 2px;
+  }
+  .fv-rich :global(.xlsx-sheet table) { font-size: 0.85em; min-width: 100%; margin: 0; }
+  .fv-rich :global(.xlsx-sheet thead th) {
+    background: var(--surface-elevated);
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--card-border);
   }
-  .fv-rich :global(.xlsx-sheet td) { white-space: nowrap; }
+  .fv-rich :global(.xlsx-sheet tbody tr:nth-child(even) td) { background: var(--surface-overlay); }
+  .fv-rich :global(.xlsx-sheet td),
+  .fv-rich :global(.xlsx-sheet th) { white-space: nowrap; }
 
   /* ── Citation views ── */
   .fv-image-view {

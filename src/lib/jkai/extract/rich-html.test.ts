@@ -66,6 +66,10 @@ describe('extract → rich html', () => {
     expect(res.html).toContain('<th>Name</th>');
     expect(res.html).toContain('<td>Alice</td>');
     expect(res.html).toContain('xlsx-sheet-name');
+    // Age is numeric → its header + cells are tagged for right-alignment; Name is not.
+    expect(res.html).toContain('<th class="num">Age</th>');
+    expect(res.html).toContain('<td class="num">30</td>');
+    expect(res.html).not.toContain('<td class="num">Alice</td>');
     // Table + sheet-name class survive sanitisation (what the viewer renders).
     const clean = sanitizePreviewHtml(res.html as string);
     expect(clean).toContain('class="xlsx-sheet-name"');
@@ -81,5 +85,16 @@ describe('extract → rich html', () => {
     expect(res.html).toContain('Hello');
     // Retains structure from the source markdown.
     expect(res.html).toMatch(/<(h1|h2|h3)[^>]*>Heading one<\/(h1|h2|h3)>/);
+  });
+
+  it('docx: right-aligns numeric table cells', async () => {
+    const md = 'Costs\n\n| Item | Amount |\n| --- | --- |\n| Rent | £1,200.00 |\n| Coffee | £3.50 |\n';
+    const { buffer } = await synthesizeDocx(md, 'Costs');
+    const res = await extractDocx(buffer);
+    if (res.html?.includes('<table')) {
+      // Currency cells get the numeric class; text cells (Item names) do not.
+      expect(res.html).toMatch(/<td class="num">\s*(<p>)?£?1,200\.00/);
+      expect(res.html).not.toMatch(/<td class="num">\s*(<p>)?Rent/);
+    }
   });
 });

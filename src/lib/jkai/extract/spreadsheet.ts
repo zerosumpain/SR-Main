@@ -63,14 +63,44 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/** True if a cell value reads as a number (currency, %, thousands, negatives). */
+function isNumericCell(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  // Strip currency symbols, %, thousands separators and parenthesised negatives.
+  const cleaned = t.replace(/^\(|\)$/g, '').replace(/[£$€%,\s]/g, '');
+  return /^[-+]?\d*\.?\d+$/.test(cleaned);
+}
+
+/** Column indices whose body cells are predominantly numeric → right-align them. */
+function numericColumns(rows: string[][], colCount: number): boolean[] {
+  const flags: boolean[] = [];
+  for (let c = 0; c < colCount; c++) {
+    let seen = 0;
+    let numeric = 0;
+    for (const r of rows) {
+      const v = r[c];
+      if (v == null || v.trim() === '') continue;
+      seen++;
+      if (isNumericCell(v)) numeric++;
+    }
+    flags[c] = seen >= 2 && numeric / seen >= 0.7;
+  }
+  return flags;
+}
+
 /** Render one sheet as a titled HTML table (header row + body rows). */
 function sheetHtml(name: string, columns: string[], rows: string[][]): string {
+  const colCount = Math.max(columns.length, ...rows.map((r) => r.length), 0);
+  const num = numericColumns(rows, colCount);
+  const cell = (tag: 'th' | 'td', val: string, i: number) =>
+    `<${tag}${num[i] ? ' class="num"' : ''}>${escapeHtml(val)}</${tag}>`;
   const head =
     columns.length > 0
-      ? `<thead><tr>${columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>`
+      ? `<thead><tr>${columns.map((c, i) => cell('th', c, i)).join('')}</tr></thead>`
       : '';
   const body = `<tbody>${rows
-    .map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`)
+    .map((r) => `<tr>${r.map((c, i) => cell('td', c, i)).join('')}</tr>`)
     .join('')}</tbody>`;
   return `<section class="xlsx-sheet"><h3 class="xlsx-sheet-name">${escapeHtml(name)}</h3><div class="xlsx-scroll"><table>${head}${body}</table></div></section>`;
 }
