@@ -309,7 +309,7 @@
               <button
                 type="button"
                 class="row-link add-link"
-                onclick={() => startConnect(adapter.integrationType, adapter.manualCredential)}
+                onclick={() => startConnect(adapter.integrationType, adapter.manualCredential!)}
               >+ Connect</button>
             {/if}
           </div>

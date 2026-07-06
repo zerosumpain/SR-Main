@@ -1,4 +1,4 @@
-import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
+import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { interpolateTemplate } from './template';
 import { getHomeAssistantService } from '../homeassistant/service';
 import type { HAOperation, HAOperationResult } from '../homeassistant/types';
@@ -185,10 +185,10 @@ export const homeAssistantExecutor: NodeExecutor = {
     return { type: 'object', description: 'Used for template interpolation in config fields' };
   },
 
-  getOutputSchema(config: Record<string, unknown>) {
+  getOutputSchema(config: Record<string, unknown>): JsonSchema {
     const op = config?.operation;
     if (op === 'query_state' || op === 'get_history') {
-      const entityProps: Record<string, unknown> =
+      const entityProps: Record<string, JsonSchema> =
         op === 'get_history'
           ? { entity_id: { type: 'string' }, domain: { type: 'string' }, area_id: { type: 'string' }, area_name: { type: 'string' }, friendly_name: { type: 'string' }, history: { type: 'array' } }
           : { entity_id: { type: 'string' }, domain: { type: 'string' }, area_id: { type: 'string' }, area_name: { type: 'string' }, friendly_name: { type: 'string' }, state: { type: 'string' }, attributes: { type: 'object' } };

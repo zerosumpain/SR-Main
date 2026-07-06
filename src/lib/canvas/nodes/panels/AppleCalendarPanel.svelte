@@ -47,7 +47,7 @@
       <ResourcePicker
         placeholder="pick a calendar"
         emptyHint="No calendars found — check your iCloud credential."
-        value={config.calendar as string | undefined}
+        value={(config.calendar as string | undefined) ?? ''}
         onChange={(v) => set('calendar', v)}
         fetcher={async () => {
           const res = await fetch(`/api/integrations/options/apple-calendar/calendar?credentialId=${encodeURIComponent(config.credentialId as string)}`);
@@ -76,11 +76,11 @@
   <h3>Date range</h3>
   <div class="field">
     <label>From</label>
-    <TemplatedInput value={(config.dateRangeStart as string | undefined) ?? ''} placeholder="ISO date or {{template}}" {upstreamFields} onChange={(v) => set('dateRangeStart', v)} />
+    <TemplatedInput value={(config.dateRangeStart as string | undefined) ?? ''} placeholder={'ISO date or {{template}}'} {upstreamFields} onChange={(v) => set('dateRangeStart', v)} />
   </div>
   <div class="field">
     <label>To</label>
-    <TemplatedInput value={(config.dateRangeEnd as string | undefined) ?? ''} placeholder="ISO date or {{template}}" {upstreamFields} onChange={(v) => set('dateRangeEnd', v)} />
+    <TemplatedInput value={(config.dateRangeEnd as string | undefined) ?? ''} placeholder={'ISO date or {{template}}'} {upstreamFields} onChange={(v) => set('dateRangeEnd', v)} />
   </div>
 </section>
 {/if}

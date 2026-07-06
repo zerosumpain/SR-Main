@@ -47,7 +47,7 @@ export const appleCalendarExecutor: NodeExecutor = {
               return { id: obj.url, title: '', location: '', start: '', end: '', description: '' };
             }
           });
-          return { events };
+          return { output: { events }, rowCount: events.length };
         }
         if (config.operation === 'create') {
           const uid = crypto.randomUUID();
@@ -65,7 +65,7 @@ export const appleCalendarExecutor: NodeExecutor = {
             filename: uid + '.ics',
             iCalString: icalStr,
           });
-          return { id: uid, url: resp.headers?.get('Location') || uid };
+          return { output: { id: uid, url: resp.headers?.get('Location') || uid }, rowCount: 1 };
         }
         if (config.operation === 'update') {
           const uid = crypto.randomUUID();
@@ -81,13 +81,13 @@ export const appleCalendarExecutor: NodeExecutor = {
           const resp = await client.updateCalendarObject({
             calendarObject: { url: config.eventId, etag: '*', data: icalStr },
           });
-          return { id: config.eventId };
+          return { output: { id: config.eventId }, rowCount: 1 };
         }
         if (config.operation === 'delete') {
           await client.deleteCalendarObject({
             calendarObject: { url: config.eventId, etag: '*' },
           });
-          return { id: config.eventId };
+          return { output: { id: config.eventId }, rowCount: 1 };
         }
         throw new Error('Unknown operation: ' + config.operation);
   },
