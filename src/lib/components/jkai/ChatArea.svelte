@@ -119,6 +119,9 @@
     isProgress?: boolean;
     progressSteps?: string[];
     toolSteps?: ToolStep[];
+    /** @files (file_search) references for clickable "sources" chips. Populated
+     *  live from the `done` event and on reload from persisted metadata. */
+    fileRefs?: FileSearchRef[];
     source?: string;
     /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
      *  reloaded history, `new Date().toISOString()` stamped at the moment
@@ -648,7 +651,7 @@
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
     messages = initialMessages.map((m) => {
-      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string } | undefined;
+      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[] } | undefined;
       const raw = m as Record<string, unknown>;
       return {
         id: m.id,
@@ -659,6 +662,8 @@
         source: meta?.source ?? m.source,
         // Hydrate tool steps from stored metadata so the drawer persists across reloads
         toolSteps: meta?.toolSteps,
+        // Hydrate @files references so the "sources" chips persist across reloads
+        fileRefs: meta?.fileRefs ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
         // mark + an inter-bubble gap. Falls back to undefined for legacy
@@ -1014,6 +1019,7 @@
           workflow?: unknown;
           thinking?: OrchestratorThinking;
           attachments?: Message['attachments'];
+          fileRefs?: FileSearchRef[];
         };
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
@@ -1026,6 +1032,7 @@
           isProgress: false,
           source: 'web',
           toolSteps: prior?.toolSteps,
+          fileRefs: result.fileRefs ?? undefined,
           attachments: result.attachments ?? undefined,
           createdAt: prior?.createdAt ?? new Date().toISOString(),
         };
@@ -1189,41 +1196,15 @@
   }
 
   // ── @files references ───────────────────────────────────────────────────────
-  // Collect the file_search hits from an assistant message's tool steps so they can
-  // render as clickable "sources" chips → open the file viewer at the cited passage.
+  // file_search hits render as clickable "sources" chips → open the file viewer at
+  // the cited passage. Refs are attached to the assistant message server-side
+  // (msg.fileRefs), populated live from the `done` event and on reload from
+  // persisted metadata (tool steps aren't persisted on the Hermes branch, so
+  // scraping them client-side was unreliable).
   type FileSearchRef = {
     fileId: string; source: string; modality: string; score: number;
     chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
   };
-  function fileSearchRefsForMessage(msg: Message): FileSearchRef[] {
-    const steps = msg.toolSteps ?? [];
-    const out: FileSearchRef[] = [];
-    const seen = new Set<string>();
-    for (const step of steps) {
-      if (step.tool !== 'file_search' || step.status === 'error') continue;
-      const res = step.result as { success?: boolean; data?: { hits?: unknown[] } } | undefined;
-      const hits = res?.data?.hits;
-      if (!res?.success || !Array.isArray(hits)) continue;
-      for (const raw of hits) {
-        const h = raw as Record<string, unknown>;
-        if (!h || typeof h.fileId !== 'string' || typeof h.source !== 'string') continue;
-        const key = h.fileId + ':' + (h.chunkOrd ?? '');
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push({
-          fileId: h.fileId,
-          source: h.source,
-          modality: typeof h.modality === 'string' ? h.modality : 'text',
-          score: typeof h.score === 'number' ? h.score : 0,
-          chunkOrd: typeof h.chunkOrd === 'number' ? h.chunkOrd : undefined,
-          charStart: typeof h.charStart === 'number' ? h.charStart : undefined,
-          charEnd: typeof h.charEnd === 'number' ? h.charEnd : undefined,
-          passage: typeof h.passage === 'string' ? h.passage : '',
-        });
-      }
-    }
-    return out;
-  }
 
   let refModal = $state<{
     file: { id: string; name: string; mimeType: string };
@@ -2043,11 +2024,8 @@
               {#if buildIdFromMessage(msg)}
                 <BuildPill buildId={buildIdFromMessage(msg)!} variant="inline" />
               {/if}
-              {#if msg.role === 'assistant'}
-                {@const fileRefs = fileSearchRefsForMessage(msg)}
-                {#if fileRefs.length > 0}
-                  <FileReferenceChips refs={fileRefs} onOpen={openFileRef} />
-                {/if}
+              {#if msg.role === 'assistant' && msg.fileRefs && msg.fileRefs.length > 0}
+                <FileReferenceChips refs={msg.fileRefs} onOpen={openFileRef} />
               {/if}
             </div>
           {/if}

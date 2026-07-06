@@ -216,6 +216,17 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // final `done` event's `result.attachments` so MessageAttachments renders
   // them inline.
   const turnAttachments: AssistantAttachment[] = [];
+  // @files (file_search) hits promoted onto this turn so the chat UI can render
+  // clickable "sources" chips. Mirrors turnAttachments: collected from the
+  // file_search tool result, emitted on `done`, and persisted in the assistant
+  // message metadata so they survive a reload. (Tool steps themselves are not
+  // persisted on the Hermes branch, so scraping toolSteps client-side is unreliable.)
+  type FileRef = {
+    fileId: string; source: string; modality: string; score: number;
+    chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
+  };
+  const turnFileRefs: FileRef[] = [];
+  const seenFileRefs = new Set<string>();
 
   // Per-turn LLM usage captured from the Hermes finalize frame's
   // `metadata.usage`. Populated inside the stream pump; consumed after
@@ -289,6 +300,37 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               originalName: row.originalName != null ? String(row.originalName) : null,
               sizeBytes: typeof row.sizeBytes === 'number' ? row.sizeBytes : 0,
               source: (String(row.source ?? 'generated') as AssistantAttachment['source']),
+            });
+          }
+        }
+      }
+
+      // Promote @files (file_search) hits into turnFileRefs for clickable "sources".
+      // On prod, file_search is invoked via the jkai_extended meta-tool. The
+      // COMPLETED bus event does NOT carry `args` (only `started` does), so we
+      // can't gate on args.name here — instead detect file_search by tool name +
+      // the distinctive result shape (data.hits of {fileId, source, passage}).
+      // The per-hit validation below rejects any other jkai_extended result.
+      const maybeFileSearch = e.tool === 'file_search' || e.tool === 'jkai_extended';
+      if (maybeFileSearch && result.success) {
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        const hits = data.hits;
+        if (Array.isArray(hits)) {
+          for (const raw of hits) {
+            const h = raw as Record<string, unknown>;
+            if (!h || typeof h.fileId !== 'string' || typeof h.source !== 'string') continue;
+            const key = h.fileId + ':' + (typeof h.chunkOrd === 'number' ? h.chunkOrd : '');
+            if (seenFileRefs.has(key) || turnFileRefs.length >= 12) continue;
+            seenFileRefs.add(key);
+            turnFileRefs.push({
+              fileId: h.fileId,
+              source: h.source,
+              modality: typeof h.modality === 'string' ? h.modality : 'text',
+              score: typeof h.score === 'number' ? h.score : 0,
+              chunkOrd: typeof h.chunkOrd === 'number' ? h.chunkOrd : undefined,
+              charStart: typeof h.charStart === 'number' ? h.charStart : undefined,
+              charEnd: typeof h.charEnd === 'number' ? h.charEnd : undefined,
+              passage: typeof h.passage === 'string' ? h.passage.slice(0, 800) : '',
             });
           }
         }
@@ -422,6 +464,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             workflow: null,
             message: finalMessage,
             attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+            fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
           };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
@@ -437,6 +480,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           workflow: null,
           message: job.partialResponse || '',
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
+          fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
         };
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
       }
@@ -449,13 +493,17 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         (job.result && typeof (job.result as Record<string, unknown>).message === 'string'
           ? ((job.result as Record<string, unknown>).message as string)
           : '') || job.partialResponse || '';
-      const shouldPersist = (finalText || turnAttachments.length > 0) && (conversationId || workflowId);
+      const shouldPersist =
+        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0) && (conversationId || workflowId);
       if (shouldPersist) {
         try {
           const assistantMeta: Record<string, unknown> = {};
           if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
           if (turnAttachments.length > 0) {
             assistantMeta.attachments = turnAttachments.map((a) => a.id);
+          }
+          if (turnFileRefs.length > 0) {
+            assistantMeta.fileRefs = turnFileRefs;
           }
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
           const [insertedAssistant] = await db.insert(orchestratorChats).values({
