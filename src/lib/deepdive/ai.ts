@@ -305,6 +305,13 @@ export async function streamCompletion(
   }
 }
 
+// Target dimensionality for the research embedding space. text-embedding-3-large
+// is 3072-dim natively; we request 1536 via the `dimensions` param so the vectors
+// drop straight into the existing pgvector(1536) columns (fact.embedding,
+// source_chunk.embedding) with better retrieval than 3-small at the same width.
+// (No-op for a 1536-native model, so it's safe if EMBEDDING_MODEL is overridden.)
+export const EMBEDDING_DIM = 1536;
+
 export async function generateEmbedding(text: string): Promise<number[]> {
   const client = getOpenRouterClient();
   const model = getEmbeddingModel();
@@ -314,11 +321,19 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       client.embeddings.create({
         model,
         input: text,
+        dimensions: EMBEDDING_DIM,
       }),
     'generateEmbedding',
   );
 
-  return response.data[0].embedding;
+  const vec = response.data[0].embedding;
+  // Fail loud on a wrong-width vector rather than writing it to a vector(1536)
+  // column (which errors per-row) or comparing across spaces: catches a provider
+  // that ignores/rejects `dimensions` or a model swap that changed the width.
+  if (vec.length !== EMBEDDING_DIM) {
+    throw new Error(`embedding width ${vec.length} != expected ${EMBEDDING_DIM} (model ${model})`);
+  }
+  return vec;
 }
 
 /** Max chars per input — well under the model's per-input token limit. */
@@ -340,14 +355,20 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
     const inputs = texts.slice(i, i + EMBED_BATCH_SIZE).map((t) => t.slice(0, EMBED_MAX_INPUT_CHARS));
     const response = await withRetry(
-      () => client.embeddings.create({ model, input: inputs }),
+      () => client.embeddings.create({ model, input: inputs, dimensions: EMBEDDING_DIM }),
       'generateEmbeddings',
     );
     const sorted = [...response.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     if (sorted.length !== inputs.length) {
       throw new Error(`generateEmbeddings count mismatch: got ${sorted.length} for ${inputs.length} inputs`);
     }
-    for (const d of sorted) out.push(d.embedding as number[]);
+    for (const d of sorted) {
+      const vec = d.embedding as number[];
+      if (vec.length !== EMBEDDING_DIM) {
+        throw new Error(`embedding width ${vec.length} != expected ${EMBEDDING_DIM} (model ${model})`);
+      }
+      out.push(vec);
+    }
   }
   return out;
 }

@@ -17,6 +17,7 @@ import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
+import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
@@ -328,6 +329,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     if (clientAddr === '127.0.0.1' || clientAddr === '::1') {
+      return resolve(event);
+    }
+  }
+
+  // Maintenance endpoints (research re-index / source backfill) are driven by a
+  // one-off run from the box (VPS loopback) carrying a shared secret, with no
+  // user session — so they can't pass the owner-gate below. Let a valid
+  // secret + loopback through here; the endpoint re-checks the secret
+  // (defence-in-depth). An owner browser (no secret) falls through to the normal
+  // owner-gate and still works.
+  if (pathname === '/api/deepdive/index-sources' || pathname === '/api/deepdive/reindex-facts') {
+    let clientAddr = '';
+    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
+    const isLoopback = clientAddr === '127.0.0.1' || clientAddr === '::1';
+    if (isLoopback && hasMaintenanceSecret(event.request)) {
       return resolve(event);
     }
   }

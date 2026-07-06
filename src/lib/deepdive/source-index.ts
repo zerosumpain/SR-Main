@@ -8,11 +8,11 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { sourceChunks, sources, type NewSourceChunk, type Source } from '$lib/db/schema';
+import { sourceChunks, sources, facts, globalEntities, type NewSourceChunk, type Source } from '$lib/db/schema';
 import { chunkText } from '$lib/rag/chunk';
 import { generateEmbeddings } from './ai';
 import { extractContent } from './extract-content';
-import { loadKeys } from './keys';
+import { loadKeys, getEmbeddingModel } from './keys';
 
 // Cap the content we chunk per source. phase 2 already slices fetched content to
 // ~10k chars; this is a hard ceiling for any other caller (e.g. backfill).
@@ -43,6 +43,7 @@ export async function indexSourceContent(
   if (!pieces.length) return { status: 'skipped', reason: 'no-chunks' };
 
   const vectors = await generateEmbeddings(pieces.map((p) => p.text));
+  const model = getEmbeddingModel();
 
   const rows: NewSourceChunk[] = pieces.map((p, i) => ({
     sessionId,
@@ -52,6 +53,7 @@ export async function indexSourceContent(
     charStart: p.charStart,
     charEnd: p.charEnd,
     embedding: vectors[i],
+    embeddingModel: model,
   }));
 
   // Replace-in-place under a transaction so a re-index can't leave a half-written
@@ -120,4 +122,95 @@ export async function indexedSourceCount(): Promise<number> {
     .select({ n: sql<number>`count(distinct ${sourceChunks.sourceId})::int` })
     .from(sourceChunks);
   return r?.n ?? 0;
+}
+
+export type ReembedResult = { scanned: number; embedded: number; errors: number; model: string };
+
+/**
+ * Re-embed facts into the CURRENT embedding space. Targets facts whose stored
+ * `embedding_model` differs from the current model (or is null) and that have
+ * usable content — i.e. facts embedded under an old model, plus never-embedded
+ * facts. Idempotent + resumable: a completed fact is stamped with the model, so a
+ * repeat run skips it. Bounded by `limit`; loop until `scanned` is 0.
+ * Used to migrate the corpus when getEmbeddingModel() changes.
+ */
+export async function reembedFacts(opts: { limit?: number } = {}): Promise<ReembedResult> {
+  const model = getEmbeddingModel();
+  const result: ReembedResult = { scanned: 0, embedded: 0, errors: 0, model };
+  if (!embeddingsAvailable()) return result;
+
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 1000);
+  const rows = await db
+    .select({ id: facts.id, content: facts.content })
+    .from(facts)
+    .where(sql`
+      length(coalesce(${facts.content}, '')) >= 10
+      AND (${facts.embeddingModel} IS DISTINCT FROM ${model} OR ${facts.embedding} IS NULL)
+    `)
+    .limit(limit);
+
+  if (!rows.length) return result;
+  result.scanned = rows.length;
+
+  // Batch-embed all this page's contents in one space, then stamp each row.
+  const vectors = await generateEmbeddings(rows.map((r) => r.content));
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      await db
+        .update(facts)
+        .set({ embedding: vectors[i], embeddingModel: model })
+        .where(eq(facts.id, rows[i].id));
+      result.embedded++;
+    } catch (err) {
+      result.errors++;
+      console.warn(`[source-index] reembed fact ${rows[i].id} failed: ${(err as Error).message}`);
+    }
+  }
+  return result;
+}
+
+/**
+ * Re-embed the global cross-session entity index into the current space. These
+ * vectors gate cross-session entity dedup at a 0.85 cosine threshold, so after an
+ * embedding-model change they must move to the new space or every entity reads as
+ * new (duplicate global entities). Only rows that currently HAVE an embedding are
+ * touched (that's the set the matcher compares against). One pass, capped; the
+ * embed text mirrors cross-session.ts's `${name}: ${description ?? type}`.
+ */
+export async function reembedGlobalEntities(opts: { limit?: number } = {}): Promise<{ scanned: number; embedded: number; errors: number }> {
+  const result = { scanned: 0, embedded: 0, errors: 0 };
+  if (!embeddingsAvailable()) return result;
+  const limit = Math.min(Math.max(opts.limit ?? 1000, 1), 5000);
+
+  const rows = await db
+    .select({ id: globalEntities.id, name: globalEntities.canonicalName, type: globalEntities.type, description: globalEntities.description })
+    .from(globalEntities)
+    .where(sql`${globalEntities.embedding} IS NOT NULL`)
+    .limit(limit);
+  if (!rows.length) return result;
+  result.scanned = rows.length;
+
+  const vectors = await generateEmbeddings(rows.map((r) => `${r.name}: ${r.description ?? r.type}`));
+  for (let i = 0; i < rows.length; i++) {
+    try {
+      await db.update(globalEntities).set({ embedding: vectors[i] }).where(eq(globalEntities.id, rows[i].id));
+      result.embedded++;
+    } catch (err) {
+      result.errors++;
+      console.warn(`[source-index] reembed global_entity ${rows[i].id} failed: ${(err as Error).message}`);
+    }
+  }
+  return result;
+}
+
+/** Count of facts embedded under the current model (observability). */
+export async function factsInCurrentSpace(): Promise<{ current: number; total: number; model: string }> {
+  const model = getEmbeddingModel();
+  const [r] = await db
+    .select({
+      current: sql<number>`count(*) FILTER (WHERE ${facts.embeddingModel} = ${model})::int`,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(facts);
+  return { current: r?.current ?? 0, total: r?.total ?? 0, model };
 }

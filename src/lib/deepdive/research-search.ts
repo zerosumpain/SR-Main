@@ -10,6 +10,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { generateEmbedding } from './ai';
+import { getEmbeddingModel } from './keys';
 import { toVectorLiteral } from './vector';
 
 export type ResearchSearchHit = {
@@ -87,6 +88,12 @@ export async function searchResearch(
   const embedding = await generateEmbedding(q);
   const vectorStr = toVectorLiteral(embedding); // validates finite numbers before string-building
 
+  // Only compare rows embedded in the CURRENT model's space. The query vector is
+  // in getEmbeddingModel()'s space, so a fact/chunk embedded under an older model
+  // would rank on a meaningless cross-space cosine. Gating here keeps retrieval
+  // correct at every instant of a corpus re-embed (un-migrated rows just don't
+  // appear yet) rather than only after it completes.
+  const model = getEmbeddingModel();
   const factSessionFilter = options.sessionId ? sql`AND f.session_id = ${options.sessionId}` : sql``;
   const chunkSessionFilter = options.sessionId ? sql`AND sc.session_id = ${options.sessionId}` : sql``;
 
@@ -113,6 +120,7 @@ export async function searchResearch(
       JOIN research_session rs ON rs.id = f.session_id
       LEFT JOIN source s ON s.id = f.source_id
       WHERE f.embedding IS NOT NULL
+        AND f.embedding_model = ${model}
         AND NOT f.is_counterfactual
         ${factSessionFilter}
         AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
@@ -135,6 +143,7 @@ export async function searchResearch(
       JOIN research_session rs2 ON rs2.id = sc.session_id
       JOIN source s2 ON s2.id = sc.source_id
       WHERE sc.embedding IS NOT NULL
+        AND sc.embedding_model = ${model}
         ${chunkSessionFilter}
         AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}
     ) u

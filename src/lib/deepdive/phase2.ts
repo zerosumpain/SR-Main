@@ -6,6 +6,7 @@ import { jsonCompletion, generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
 import { indexSourceContent } from './source-index';
+import { getEmbeddingModel } from './keys';
 import { search as tavilySearch } from './tavily';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
@@ -241,6 +242,7 @@ export async function runPhase2(
             confidence: Math.max(0, Math.min(1, blendedConfidence)),
             tags: f.tags ?? [],
             embedding,
+            embeddingModel: embedding ? getEmbeddingModel() : null,
           })
           .returning();
 

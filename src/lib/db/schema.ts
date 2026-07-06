@@ -420,6 +420,7 @@ export const facts = pgTable('fact', {
   refutesFactId: text('refutes_fact_id').references((): any => facts.id),
   tags: jsonb('tags').notNull().default(sql`'[]'::jsonb`),
   embedding: vector('embedding'),
+  embeddingModel: text('embedding_model'), // which model produced `embedding` (provenance + re-embed gate)
   noveltyScore: doublePrecision('novelty_score'),
   sourceAgreement: integer('source_agreement'),
   // --- Research Desk (canvas) additive columns ---
@@ -451,6 +452,7 @@ export const sourceChunks = pgTable(
     charStart: integer('char_start').notNull(),
     charEnd: integer('char_end').notNull(),
     embedding: vector('embedding'),           // 1536-dim, same space as fact.embedding (null if embed failed)
+    embeddingModel: text('embedding_model'),  // which model produced `embedding` (provenance)
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

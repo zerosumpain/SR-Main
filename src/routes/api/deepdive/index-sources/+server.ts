@@ -13,16 +13,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { backfillSourceChunks, indexedSourceCount } from '$lib/deepdive/source-index';
+import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 
-export const GET: RequestHandler = async ({ locals }) => {
-  const session = await locals.auth();
-  if (!session?.user?.email) return json({ error: 'unauthorized' }, { status: 401 });
+export const GET: RequestHandler = async ({ locals, request }) => {
+  if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
   return json({ indexedSources: await indexedSourceCount() });
 };
 
-export const POST: RequestHandler = async ({ locals, url }) => {
-  const session = await locals.auth();
-  if (!session?.user?.email) return json({ error: 'unauthorized' }, { status: 401 });
+export const POST: RequestHandler = async ({ locals, url, request }) => {
+  if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
 
   const refetch = url.searchParams.get('refetch') === '1' || url.searchParams.get('refetch') === 'true';
   const sessionId = url.searchParams.get('sessionId') ?? undefined;

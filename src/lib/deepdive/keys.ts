@@ -77,9 +77,15 @@ export function getOpenRouterClient(): OpenAI {
   });
 }
 
+// Research embedding space: text-embedding-3-large reduced to 1536 dims via the
+// `dimensions` param (see EMBEDDING_DIM in ./ai). 3-large@1536 out-retrieves
+// 3-small@1536 while keeping the existing pgvector(1536) columns. This is the
+// SHARED space for facts + source chunks + queries — changing it requires
+// re-embedding the whole research corpus. (Distinct from the @files index, which
+// pins its own model in $lib/file-index/embed.)
 export function getEmbeddingModel(): string {
   const keys = loadKeys();
-  return keys.embeddingModel || 'openai/text-embedding-3-small';
+  return keys.embeddingModel || 'openai/text-embedding-3-large';
 }
 
 /** Returns the OpenRouter model to use as a rate-limit fallback for z.ai calls. */
@@ -109,6 +115,6 @@ export function getKeysStatus(): {
     elevenlabsConfigured: !!keys.elevenlabsApiKey,
     zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
     zaiModel: keys.zaiModel || 'glm-5.1',
-    embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-small',
+    embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-large',
   };
 }
