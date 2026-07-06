@@ -227,6 +227,17 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   };
   const turnFileRefs: FileRef[] = [];
   const seenFileRefs = new Set<string>();
+  // @research (research_search) hits promoted onto this turn, mirroring
+  // turnFileRefs. Each cites a fact from a deep-dive research session, with its
+  // session topic + web source, so the chat UI can render clickable "sources"
+  // chips linking to the source URL or the /deepdive session.
+  type ResearchRef = {
+    factId: string; sessionId: string; sessionTopic: string;
+    sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
+    score: number; passage: string;
+  };
+  const turnResearchRefs: ResearchRef[] = [];
+  const seenResearchRefs = new Set<string>();
 
   // Per-turn LLM usage captured from the Hermes finalize frame's
   // `metadata.usage`. Populated inside the stream pump; consumed after
@@ -330,6 +341,36 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               chunkOrd: typeof h.chunkOrd === 'number' ? h.chunkOrd : undefined,
               charStart: typeof h.charStart === 'number' ? h.charStart : undefined,
               charEnd: typeof h.charEnd === 'number' ? h.charEnd : undefined,
+              passage: typeof h.passage === 'string' ? h.passage.slice(0, 800) : '',
+            });
+          }
+        }
+      }
+
+      // Promote @research (research_search) hits into turnResearchRefs. Same
+      // shape/rationale as file_search above: on prod the tool is invoked via
+      // jkai_extended, whose COMPLETED event carries no args, so detect by the
+      // distinctive hit shape (factId + sessionId). The two promotions coexist
+      // on a jkai_extended result — each validates its own key so they can't
+      // cross-contaminate (file hits have fileId, research hits have factId).
+      const maybeResearchSearch = e.tool === 'research_search' || e.tool === 'jkai_extended';
+      if (maybeResearchSearch && result.success) {
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        const hits = data.hits;
+        if (Array.isArray(hits)) {
+          for (const raw of hits) {
+            const h = raw as Record<string, unknown>;
+            if (!h || typeof h.factId !== 'string' || typeof h.sessionId !== 'string') continue;
+            if (seenResearchRefs.has(h.factId) || turnResearchRefs.length >= 12) continue;
+            seenResearchRefs.add(h.factId);
+            turnResearchRefs.push({
+              factId: h.factId,
+              sessionId: h.sessionId,
+              sessionTopic: typeof h.sessionTopic === 'string' ? h.sessionTopic : '',
+              sourceTitle: typeof h.sourceTitle === 'string' ? h.sourceTitle : null,
+              sourceUrl: typeof h.sourceUrl === 'string' ? h.sourceUrl : null,
+              domain: typeof h.domain === 'string' ? h.domain : null,
+              score: typeof h.score === 'number' ? h.score : 0,
               passage: typeof h.passage === 'string' ? h.passage.slice(0, 800) : '',
             });
           }
@@ -465,6 +506,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             message: finalMessage,
             attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
             fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
+            researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
           };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
@@ -481,6 +523,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           message: job.partialResponse || '',
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
+          researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
         };
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
       }
@@ -494,7 +537,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           ? ((job.result as Record<string, unknown>).message as string)
           : '') || job.partialResponse || '';
       const shouldPersist =
-        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0) && (conversationId || workflowId);
+        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0 || turnResearchRefs.length > 0) && (conversationId || workflowId);
       if (shouldPersist) {
         try {
           const assistantMeta: Record<string, unknown> = {};
@@ -504,6 +547,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
           if (turnFileRefs.length > 0) {
             assistantMeta.fileRefs = turnFileRefs;
+          }
+          if (turnResearchRefs.length > 0) {
+            assistantMeta.researchRefs = turnResearchRefs;
           }
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
           const [insertedAssistant] = await db.insert(orchestratorChats).values({

@@ -2,6 +2,7 @@ import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { researchSessions } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
+import { searchResearch } from '$lib/deepdive/research-search';
 
 // ==========================================
 // Existing Tools (moved)
@@ -360,5 +361,51 @@ register({
         results: summarised,
       },
     };
+  },
+});
+
+register({
+  name: 'research_search',
+  description:
+    'Semantic search across the MATERIALS of ALL deep-dive research sessions at once — ' +
+    'the extracted facts gathered from web sources, searched by meaning (not keywords). ' +
+    'Use this to ground an answer in what past research actually found, when the user does ' +
+    "not name a specific session — e.g. \"what has my research turned up about X\", " +
+    '"pull anything from my research on Y". Returns ranked passages, each with the source ' +
+    'title/url, the research session it came from, and a relevance score. To ask a question ' +
+    'of ONE known session use research_query instead. ' +
+    'When the user writes "@research" in their message, use this tool.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Natural-language description of what to find across the research materials.' },
+      limit: { type: 'number', description: 'Max passages to return (default 8, max 30).' },
+      sessionId: { type: 'string', description: 'Optional — restrict the search to a single research session id.' },
+    },
+    required: ['query'],
+  },
+  category: 'Deep Dive Research',
+  toolset: 'research',
+  handler: async (args) => {
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    if (!query) return { success: false, error: 'query is required' };
+    const limit = args.limit !== undefined ? Number(args.limit) : undefined;
+    const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
+    try {
+      const hits = await searchResearch(query, { topK: limit, sessionId });
+      return {
+        success: true,
+        data: {
+          query,
+          count: hits.length,
+          hits,
+          note: hits.length === 0
+            ? 'No embedded research materials matched. Sessions may still be running, or nothing relevant has been gathered yet.'
+            : undefined,
+        },
+      };
+    } catch (err) {
+      return { success: false, error: `research_search failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
   },
 });

@@ -17,6 +17,7 @@
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import MessageAttachments from './MessageAttachments.svelte';
   import FileReferenceChips from './FileReferenceChips.svelte';
+  import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import BuildPill from './BuildPill.svelte';
@@ -122,6 +123,9 @@
     /** @files (file_search) references for clickable "sources" chips. Populated
      *  live from the `done` event and on reload from persisted metadata. */
     fileRefs?: FileSearchRef[];
+    /** @research (research_search) references for clickable "research" chips.
+     *  Same lifecycle as fileRefs. */
+    researchRefs?: ResearchSearchRef[];
     source?: string;
     /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
      *  reloaded history, `new Date().toISOString()` stamped at the moment
@@ -651,7 +655,7 @@
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
     messages = initialMessages.map((m) => {
-      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[] } | undefined;
+      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[] } | undefined;
       const raw = m as Record<string, unknown>;
       return {
         id: m.id,
@@ -664,6 +668,8 @@
         toolSteps: meta?.toolSteps,
         // Hydrate @files references so the "sources" chips persist across reloads
         fileRefs: meta?.fileRefs ?? undefined,
+        // Hydrate @research references so the "research" chips persist across reloads
+        researchRefs: meta?.researchRefs ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
         // mark + an inter-bubble gap. Falls back to undefined for legacy
@@ -1020,6 +1026,7 @@
           thinking?: OrchestratorThinking;
           attachments?: Message['attachments'];
           fileRefs?: FileSearchRef[];
+          researchRefs?: ResearchSearchRef[];
         };
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
@@ -1033,6 +1040,7 @@
           source: 'web',
           toolSteps: prior?.toolSteps,
           fileRefs: result.fileRefs ?? undefined,
+          researchRefs: result.researchRefs ?? undefined,
           attachments: result.attachments ?? undefined,
           createdAt: prior?.createdAt ?? new Date().toISOString(),
         };
@@ -1171,12 +1179,13 @@
     }
   }
 
-  // "@" mention typeahead — currently one mention, @files, which searches the
-  // content of everything in /drive (text, image visuals + OCR, audio transcripts)
-  // and answers with citations. Triggers on an @-token being typed at the end of
-  // the input (the common case), mirroring the slash palette.
+  // "@" mention typeahead — @files searches /drive file content, @research
+  // searches the materials (facts) of your deep-dive research sessions. Each
+  // routes the turn to its domain skill and answers with citations. Triggers on
+  // an @-token being typed at the end of the input, mirroring the slash palette.
   const MENTION_OPTIONS: { token: string; hint: string }[] = [
     { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
+    { token: '@research', hint: 'Search your deep-dive research materials by meaning' },
   ];
   const MENTION_RE = /(^|\s)@(\w*)$/;
   let mentionIndex = $state(0);
@@ -1204,6 +1213,14 @@
   type FileSearchRef = {
     fileId: string; source: string; modality: string; score: number;
     chunkOrd?: number; charStart?: number; charEnd?: number; passage: string;
+  };
+  // @research (research_search) refs — a fact cited from a deep-dive session,
+  // with its web source. Rendered as "research" chips linking to the source URL
+  // or the /deepdive session (see ResearchReferenceChips).
+  type ResearchSearchRef = {
+    factId: string; sessionId: string; sessionTopic: string;
+    sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
+    score: number; passage: string;
   };
 
   let refModal = $state<{
@@ -1379,11 +1396,15 @@
     scrollToBottom();
 
     // An "@files" mention routes this turn to the Files skill so the orchestrator
-    // reaches for the file_search tool (semantic search over /drive content —
-    // text, image visuals/OCR, audio transcripts), unless the user has already
-    // pinned a specific skill.
+    // reaches for the file_search tool (semantic search over /drive content); an
+    // "@research" mention routes to the Research skill for research_search
+    // (semantic search over deep-dive research materials). An explicit pinned
+    // skill wins; if both mentions appear, @files takes precedence (a turn pins
+    // one skill).
     const mentionsFiles = /(^|\s)@files\b/i.test(text);
-    const effectivePinnedSkill = pinnedSkill ?? (mentionsFiles ? 'jkai-files' : undefined);
+    const mentionsResearch = /(^|\s)@research\b/i.test(text);
+    const effectivePinnedSkill =
+      pinnedSkill ?? (mentionsFiles ? 'jkai-files' : mentionsResearch ? 'jkai-research' : undefined);
 
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
@@ -2026,6 +2047,9 @@
               {/if}
               {#if msg.role === 'assistant' && msg.fileRefs && msg.fileRefs.length > 0}
                 <FileReferenceChips refs={msg.fileRefs} onOpen={openFileRef} />
+              {/if}
+              {#if msg.role === 'assistant' && msg.researchRefs && msg.researchRefs.length > 0}
+                <ResearchReferenceChips refs={msg.researchRefs} />
               {/if}
             </div>
           {/if}

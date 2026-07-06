@@ -171,13 +171,14 @@ describe('listMcpTools() env-flag behaviour', () => {
     expect(tools.find((t) => t.name === 'blog_list')).toBeTruthy();
   });
 
-  it('with flag "1" returns 6 essentials + the jkai_extended dispatcher', async () => {
+  it('with flag "1" returns the essentials + the jkai_extended dispatcher', async () => {
     process.env.JKAI_MCP_META_TOOL = '1';
     try {
       const tools = await listMcpTools();
-      // 6 essentials (assuming all are registered) + 1 meta = 7.
-      // Use a loose upper bound in case an essential isn't registered.
-      expect(tools.length).toBeLessThanOrEqual(7);
+      // Manifest stays tiny under the meta-tool: at most the registered essentials
+      // + the jkai_extended dispatcher. Bound tracks ESSENTIAL_TOOL_NAMES so adding
+      // an essential doesn't silently balloon the MCP prefill without updating this.
+      expect(tools.length).toBeLessThanOrEqual(ESSENTIAL_TOOL_NAMES.size + 1);
       expect(tools.length).toBeGreaterThan(1);
       expect(tools.find((t) => t.name === 'jkai_extended')).toBeTruthy();
       expect(tools.find((t) => t.name === 'save_memory')).toBeTruthy();
