@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Marked } from 'marked';
-  import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
+  import { untrack } from 'svelte';
+  import { sanitizeChatHtml, sanitizePreviewHtml } from '$lib/security/sanitize-chat';
   import ShikiCodeBlock from '$lib/canvas/nodes/ShikiCodeBlock.svelte';
 
   type ViewFile = { id: string; name: string; mimeType: string; sizeBytes?: number };
@@ -52,6 +53,7 @@
 
   // ── Content loading for text/code/markdown/doc ──────────────────────────────
   let textContent = $state<string | null>(null);
+  let htmlContent = $state<string | null>(null); // rich HTML for doc kinds (docx/pptx/xlsx)
   let loading = $state(false);
   let loadError = $state<string | null>(null);
   let imgZoom = $state(false);
@@ -63,6 +65,7 @@
     const currentExt = ext;
     if (k !== 'code' && k !== 'markdown' && k !== 'doc') {
       textContent = null;
+      htmlContent = null;
       loadError = null;
       loading = false;
       return;
@@ -71,19 +74,23 @@
     loading = true;
     loadError = null;
     textContent = null;
+    htmlContent = null;
     (async () => {
       try {
         let text: string;
         if (k === 'doc') {
-          // Word/Excel: extract readable text server-side (mammoth/ExcelJS).
+          // Word/PowerPoint/Excel: server-side extract returns readable `text`
+          // plus a rich `html` rendering (mammoth / slide cards / tables). `preview`
+          // keeps this read-only — no `.extracted.*` files written to the drive.
           const res = await fetch(`/api/files/${id}/extract`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: '{}',
+            body: JSON.stringify({ preview: true }),
           });
           if (!res.ok) throw new Error(`extract failed (${res.status})`);
           const data = await res.json();
           text = String(data.text ?? '');
+          if (!cancelled && typeof data.html === 'string' && data.html.trim()) htmlContent = data.html;
         } else {
           const res = await fetch(url);
           if (!res.ok) throw new Error(`load failed (${res.status})`);
@@ -121,6 +128,23 @@
   // /drive open (no highlight) keeps the rich rendering.
   let markEl = $state<HTMLElement | null>(null);
   const readerMode = $derived(!!highlight && (kind === 'code' || kind === 'markdown' || kind === 'doc'));
+
+  // ── Rich document rendering (docx/pptx/xlsx) ────────────────────────────────
+  // A normal /drive open (no citation) shows the rich HTML. A citation open (has
+  // `highlight`) defaults to the reader (so the cited passage can be marked), with
+  // a one-click Reader⇄Rich toggle. `userRich` is the explicit override; it resets
+  // whenever the file changes so a toggle doesn't leak across opens.
+  const hasRichDoc = $derived(kind === 'doc' && htmlContent != null);
+  let userRich = $state<boolean | null>(null);
+  const richView = $derived(hasRichDoc && (userRich ?? !highlight));
+  const renderedDocHtml = $derived(hasRichDoc ? sanitizePreviewHtml(htmlContent as string) : '');
+  const canToggleRich = $derived(hasRichDoc && !!highlight);
+  $effect(() => {
+    file.id; // reset the explicit rich/reader choice when the viewed file changes
+    untrack(() => {
+      userRich = null;
+    });
+  });
 
   // Locate the cited passage in the loaded text. Anchor on a distinctive prefix
   // (robust to whitespace/offset drift between extracted and displayed text);
@@ -190,12 +214,20 @@
         <span class="fv-meta">{kind === 'unknown' ? mime || 'file' : kind}{file.sizeBytes ? ` · ${fmtSize(file.sizeBytes)}` : ''}</span>
       </div>
       <div class="fv-actions">
+        {#if canToggleRich}
+          <button
+            type="button"
+            class="fv-btn"
+            onclick={() => (userRich = !richView)}
+            title={richView ? 'Show the reader with the cited passage highlighted' : 'Show the formatted document'}
+          >{richView ? 'reader' : 'rich'}</button>
+        {/if}
         <a class="fv-btn" href={`/api/files/${file.id}/download`} download title="Download">download</a>
         <button type="button" class="fv-btn fv-close" onclick={onClose} title="Close (Esc)" aria-label="Close">✕</button>
       </div>
     </header>
 
-    <div class="fv-body" class:fv-body-pad={(kind === 'markdown' || kind === 'doc' || kind === 'unknown') && !readerMode}>
+    <div class="fv-body" class:fv-body-pad={richView || ((kind === 'markdown' || kind === 'doc' || kind === 'unknown') && !readerMode)}>
       {#if kind === 'image'}
         <div class="fv-image-view">
           <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
@@ -225,6 +257,11 @@
         <div class="fv-status">Loading…</div>
       {:else if loadError}
         <div class="fv-status fv-error">Could not open this file: {loadError}</div>
+      {:else if richView}
+        <!-- Rich formatted rendering for docx (mammoth), pptx (slide cards) and
+             xlsx (tables). Sanitised with the preview profile (allows inline
+             document images). -->
+        <div class="fv-prose fv-rich">{@html renderedDocHtml}</div>
       {:else if readerMode && textContent != null}
         <!-- Citation reader: plain pre-wrap text with the cited passage marked +
              scrolled into view. Reliable across doc/markdown/code source. -->
@@ -436,10 +473,81 @@
     margin: 0.8em 0;
     color: var(--text-secondary);
   }
-  .fv-prose :global(img) { max-width: 100%; }
+  .fv-prose :global(img) { max-width: 100%; height: auto; }
   .fv-prose :global(table) { border-collapse: collapse; }
   .fv-prose :global(td),
   .fv-prose :global(th) { border: 1px solid var(--card-border); padding: 4px 8px; }
+
+  /* ── Rich doc: PowerPoint slide cards ── */
+  .fv-rich :global(.pptx-deck) {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .fv-rich :global(.pptx-slide) {
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-md, 4px);
+    background: var(--surface-overlay);
+    padding: 18px 20px;
+  }
+  .fv-rich :global(.pptx-slide-no) {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .fv-rich :global(.pptx-title) {
+    font-family: var(--font-display);
+    font-size: 1.25em;
+    line-height: 1.25;
+    margin: 0 0 0.5em;
+  }
+  .fv-rich :global(.pptx-body) { margin: 0; padding-left: 1.3em; }
+  .fv-rich :global(.pptx-body li) { margin: 0.3em 0; }
+  .fv-rich :global(.pptx-notes) {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--card-border);
+    color: var(--text-secondary);
+    font-size: 0.9em;
+  }
+  .fv-rich :global(.pptx-notes-label) {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .fv-rich :global(.pptx-notes p) { margin: 0.2em 0; }
+
+  /* ── Rich doc: Excel sheets ── */
+  .fv-rich :global(.xlsx-book) {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .fv-rich :global(.xlsx-sheet-name) {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+  }
+  .fv-rich :global(.xlsx-scroll) { overflow-x: auto; }
+  .fv-rich :global(.xlsx-sheet table) { font-size: 0.85em; min-width: 100%; }
+  .fv-rich :global(.xlsx-sheet th) {
+    background: var(--surface-overlay);
+    text-align: left;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+  .fv-rich :global(.xlsx-sheet td) { white-space: nowrap; }
 
   /* ── Citation views ── */
   .fv-image-view {

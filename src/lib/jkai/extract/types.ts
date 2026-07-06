@@ -24,6 +24,14 @@ export type ExtractMeta =
 export interface ExtractResult {
   text: string;
   meta: ExtractMeta;
+  /**
+   * Optional rich, formatted HTML rendering of the document, for preview surfaces
+   * that want more than the flat `text` (docx via mammoth, pptx slide cards, xlsx
+   * tables). Already sanitiser-friendly structure; callers still sanitise before
+   * `{@html}`. Absent for formats with no rich path (rtf/odt/pdf/audio/…), where
+   * consumers fall back to `text`.
+   */
+  html?: string;
 }
 
 export interface ExtractOptions {

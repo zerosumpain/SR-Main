@@ -2,10 +2,12 @@
   // A row of clickable source chips for @research (research_search) references.
   // Mirrors FileReferenceChips: the data comes from the research_search tool
   // result promoted onto the assistant turn (see ChatArea). Each chip cites a
-  // fact drawn from a deep-dive research session — clicking opens the web source
-  // in a new tab when known, else the /deepdive session page.
+  // fact/passage drawn from a deep-dive research session — clicking opens the
+  // source's page material in an in-app rich reader modal (ResearchSourceModal),
+  // which itself offers "open original ↗".
   export type ResearchRef = {
     factId: string;
+    sourceId: string | null;
     sessionId: string;
     sessionTopic: string;
     sourceTitle: string | null;
@@ -15,31 +17,12 @@
     passage: string;
   };
 
-  let { refs = [] }: { refs: ResearchRef[] } = $props();
+  let { refs = [], onOpen }: { refs: ResearchRef[]; onOpen: (ref: ResearchRef) => void } = $props();
 
   // Label preference: source title → domain → session topic. Keeps chips
   // legible when a fact's source lacks a title.
   function label(ref: ResearchRef): string {
     return ref.sourceTitle?.trim() || ref.domain?.trim() || ref.sessionTopic?.trim() || 'source';
-  }
-  // Source URLs originate from scraped web content. searchResearch already
-  // http(s)-filters them, but re-validate here (the sink) so a persisted/older
-  // ref can never render a javascript:/data: href in the strangeramblings origin.
-  function safeExternal(ref: ResearchRef): string | null {
-    const s = ref.sourceUrl?.trim();
-    if (!s) return null;
-    try {
-      const u = new URL(s);
-      return u.protocol === 'http:' || u.protocol === 'https:' ? s : null;
-    } catch {
-      return null;
-    }
-  }
-  function href(ref: ResearchRef): string {
-    return safeExternal(ref) ?? `/deepdive/${ref.sessionId}`;
-  }
-  function isExternal(ref: ResearchRef): boolean {
-    return safeExternal(ref) !== null;
   }
 </script>
 
@@ -48,17 +31,16 @@
     <span class="refs-label">research</span>
     <div class="refs-row">
       {#each refs as ref, i (ref.factId + ':' + i)}
-        <a
+        <button
+          type="button"
           class="ref-chip"
-          href={href(ref)}
-          target={isExternal(ref) ? '_blank' : undefined}
-          rel={isExternal(ref) ? 'noopener noreferrer' : undefined}
+          onclick={() => onOpen(ref)}
           title={`${ref.sessionTopic ? ref.sessionTopic + ' — ' : ''}${ref.passage}`}
         >
           <span class="ref-icon" aria-hidden="true">🔎</span>
           <span class="ref-name">{label(ref)}</span>
           <span class="ref-score">{Math.round(ref.score * 100)}%</span>
-        </a>
+        </button>
       {/each}
     </div>
   </div>
