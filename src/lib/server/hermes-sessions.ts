@@ -248,6 +248,77 @@ export interface Telemetry {
 
 const COST = 'COALESCE(actual_cost_usd, estimated_cost_usd, 0)';
 
+// ── Tool-call forensic audit (which tools, how often, when, errors) ──────────
+export interface ToolAuditCount { tool: string; calls: number; }
+export interface ToolAuditDay { day: string; calls: number; }
+export interface ToolAuditHour { hour: number; calls: number; }
+export interface ToolAudit {
+  days: number;
+  totalCalls: number;
+  uniqueTools: number;
+  tools: ToolAuditCount[];        // full ranking as the engine records it (tool_name)
+  jkaiTools: ToolAuditCount[];    // jkai sub-tools resolved from jkai_extended invocations
+  perDay: ToolAuditDay[];         // total tool calls per day (trend)
+  byHour: ToolAuditHour[];        // hour-of-day distribution (0–23)
+}
+
+export async function getToolAudit(daysIn = 30): Promise<ToolAudit> {
+  const days = clampDays(daysIn);
+  const since = `strftime('%s','now') - ${days} * 86400`;
+  const toolWhere = `tool_name IS NOT NULL AND tool_name != '' AND timestamp >= ${since}`;
+
+  const tools = await querySqlite<ToolAuditCount>(
+    `SELECT tool_name tool, count(*) calls FROM messages
+     WHERE ${toolWhere} GROUP BY tool_name ORDER BY calls DESC LIMIT 100;`,
+  );
+  const perDay = await querySqlite<ToolAuditDay>(
+    `SELECT date(timestamp,'unixepoch') day, count(*) calls FROM messages
+     WHERE ${toolWhere} GROUP BY day ORDER BY day;`,
+  );
+  const byHour = await querySqlite<ToolAuditHour>(
+    `SELECT cast(strftime('%H',timestamp,'unixepoch') AS INTEGER) hour, count(*) calls FROM messages
+     WHERE ${toolWhere} GROUP BY hour ORDER BY hour;`,
+  );
+  // Resolve jkai sub-tools: the jkai_extended meta-tool masks the real tool
+  // (file_search, research_search, …) inside the call arguments. Parse the
+  // assistant tool_calls in JS (SQLite JSON-in-JSON array handling is fiddly).
+  const rawCalls = await querySqlite<{ tool_calls: string }>(
+    `SELECT tool_calls FROM messages
+     WHERE role='assistant' AND tool_calls IS NOT NULL AND tool_calls LIKE '%jkai_extended%'
+       AND timestamp >= ${since};`,
+  );
+  const subCounts = new Map<string, number>();
+  for (const row of rawCalls) {
+    try {
+      const calls = JSON.parse(row.tool_calls) as Array<{ function?: { name?: string; arguments?: string } }>;
+      for (const call of calls) {
+        const fn = call.function;
+        if (!fn?.name || !fn.name.includes('jkai_extended') || !fn.arguments) continue;
+        const args = JSON.parse(fn.arguments) as { operation?: string; name?: string };
+        if (args.operation === 'invoke' && args.name) {
+          subCounts.set(args.name, (subCounts.get(args.name) ?? 0) + 1);
+        }
+      }
+    } catch { /* skip malformed tool_calls */ }
+  }
+  const jkaiTools = [...subCounts.entries()]
+    .map(([tool, calls]) => ({ tool, calls }))
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 100);
+
+  const num = (v: unknown) => Number(v ?? 0) || 0;
+  const normTools = tools.map((t) => ({ tool: t.tool, calls: num(t.calls) }));
+  return {
+    days,
+    totalCalls: normTools.reduce((s, t) => s + t.calls, 0),
+    uniqueTools: normTools.length,
+    tools: normTools,
+    jkaiTools,
+    perDay: perDay.map((d) => ({ day: d.day, calls: num(d.calls) })),
+    byHour: byHour.map((h) => ({ hour: num(h.hour), calls: num(h.calls) })),
+  };
+}
+
 export async function getTelemetry(daysIn = 30): Promise<Telemetry> {
   const days = clampDays(daysIn);
   const since = `strftime('%s','now') - ${days} * 86400`; // started_at/timestamp are REAL epoch seconds

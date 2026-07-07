@@ -12,7 +12,7 @@
  */
 import { env } from '$env/dynamic/private';
 import os from 'node:os';
-import type { Telemetry, HermesSessionRow, SearchHit, SessionDetail } from './hermes-sessions';
+import type { Telemetry, ToolAudit, HermesSessionRow, SearchHit, SessionDetail } from './hermes-sessions';
 import type { HermesStatus, ActionResult, ServiceAction } from './hermes-control';
 import type { CronJob, CronOp, CronOpResult } from './hermes-cron';
 
@@ -86,6 +86,13 @@ export async function rTelemetry(days: number): Promise<Telemetry> {
     return getTelemetry(days);
   }
   return proxyGet<Telemetry>(`/telemetry?days=${days}`);
+}
+export async function rToolAudit(days: number): Promise<ToolAudit> {
+  if (IS_HOMESERV) {
+    const { getToolAudit } = await import('./hermes-sessions');
+    return getToolAudit(days);
+  }
+  return proxyGet<ToolAudit>(`/toolaudit?days=${days}`);
 }
 export async function rStatus(): Promise<HermesStatus> {
   if (IS_HOMESERV) {

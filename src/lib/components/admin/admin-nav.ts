@@ -76,6 +76,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Actions', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Engine', href: '/admin/ops/engine', match: (p) => p === '/admin/ops/engine' },
+      { label: 'Tool usage', href: '/admin/ops/tool-usage' },
       { label: 'Sessions', href: '/admin/ops/sessions' },
       { label: 'Cron', href: '/admin/ops/cron' },
       { label: 'Live', href: '/admin/ops/live' },
