@@ -18,7 +18,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools } from './server';
 import { executeTool } from '$lib/workflows/site-tools/registry';
 import { publishToolStep } from '$lib/jkai/tool-step-bus';
-import { summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
 // Phase 1.5: all 132 registered tools are exposed via MCP. Hermes' skill
@@ -233,14 +233,18 @@ export async function dispatchJsonRpc(
           args.workflow_id ?? args.workflowId ?? meta.chat_id ?? '',
         );
         const stepId = `step_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        const startSummary = busKey ? summarizeRunningTool(name, args) : '';
+        // The UI card should show the *real* tool, not the `jkai_extended`
+        // meta-dispatcher or an `mcp_<server>_` prefix. Resolve it once for
+        // every publish below (execution still uses the original name/args).
+        const disp = resolveDisplayTool(name, args);
+        const startSummary = busKey ? summarizeRunningTool(disp.tool, disp.args) : '';
         if (busKey) {
           publishToolStep({
             workflowId: busKey,
             stepId,
             phase: 'started',
-            tool: name,
-            args,
+            tool: disp.tool,
+            args: disp.args,
             summary: startSummary || undefined,
             ts: Date.now(),
           });
@@ -270,7 +274,7 @@ export async function dispatchJsonRpc(
                 workflowId: busKey,
                 stepId,
                 phase: 'progress',
-                tool: name,
+                tool: disp.tool,
                 summary: text,
                 ts: Date.now(),
               });
@@ -293,9 +297,9 @@ export async function dispatchJsonRpc(
             const status: 'done' | 'error' =
               out && typeof out === 'object' && 'error' in (out as Record<string, unknown>) ? 'error' : 'done';
             const completionSummary = summarizeToolResult({
-              tool: name,
+              tool: disp.tool,
               toolCallId: stepId,
-              args,
+              args: disp.args,
               result: out,
               status,
             });
@@ -321,7 +325,7 @@ export async function dispatchJsonRpc(
               workflowId: busKey,
               stepId,
               phase: status === 'error' ? 'failed' : 'completed',
-              tool: name,
+              tool: disp.tool,
               resultPreview: preview,
               result: out,
               error: failedMessage,
@@ -350,7 +354,7 @@ export async function dispatchJsonRpc(
               workflowId: busKey,
               stepId,
               phase: 'failed',
-              tool: name,
+              tool: disp.tool,
               error: message,
               ts: Date.now(),
             });

@@ -30,8 +30,15 @@ const MAX_MESSAGE_LEN = 20_000;
 // duplicate Hermes `tool` SSE frame for them (see the frame handler in
 // handleWithHermes). Hermes built-ins / skills / other MCP servers aren't in
 // here, so their frames still render.
-const isBusServedTool = (toolName: string): boolean =>
-  toolName === JKAI_EXTENDED_TOOL.name || isRegisteredTool(toolName);
+const isBusServedTool = (toolName: string): boolean => {
+  // Hermes namespaces MCP tools as `mcp_<server>_<tool>` (e.g.
+  // `mcp_jkai_jkai_extended`). Strip that before the registry check so the
+  // prefixed name is recognised as bus-served and its duplicate Hermes `tool`
+  // frame is dropped — otherwise every jkai call renders twice (a raw-blob
+  // Hermes card alongside the richer bus card).
+  const bare = toolName.replace(/^mcp_[^_]+_/, '');
+  return bare === JKAI_EXTENDED_TOOL.name || isRegisteredTool(bare) || toolName === JKAI_EXTENDED_TOOL.name || isRegisteredTool(toolName);
+};
 
 // jkai domain skills a user may pin from the composer (general chat only). When
 // pinned, the turn is sent as kind='skill' with the name in kindId so the Hermes

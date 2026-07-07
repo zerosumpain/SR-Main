@@ -18,19 +18,7 @@
  */
 import type { SseFrame, SseFrameToolCall } from '$lib/jkai/hermes-client';
 import type { JobEvent, DelegateChild } from '$lib/workflows/chat/job-store';
-
-const RESULT_PREVIEW_MAX = 400;
-
-/** Best-effort one-line preview of a tool result for the UI/summary. */
-function previewResult(result: unknown): string {
-  if (result == null) return '';
-  if (typeof result === 'string') return result.slice(0, RESULT_PREVIEW_MAX);
-  try {
-    return JSON.stringify(result).slice(0, RESULT_PREVIEW_MAX);
-  } catch {
-    return String(result).slice(0, RESULT_PREVIEW_MAX);
-  }
-}
+import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 
 /**
  * Extract the tool-call payload from a frame, tolerating the three shapes the
@@ -94,19 +82,30 @@ export function adaptToolFrameToJobEvents(
     (typeof tc.id === 'string' && tc.id) ||
     undefined;
   const summary = typeof tc.summary === 'string' ? tc.summary : undefined;
+  const rawArgs =
+    tc.args && typeof tc.args === 'object'
+      ? (tc.args as Record<string, unknown>)
+      : tc.arguments && typeof tc.arguments === 'object'
+        ? (tc.arguments as Record<string, unknown>)
+        : {};
+  // Surviving frames here are Hermes built-ins / skills / other MCP servers the
+  // bus never covers (bus-served tools were dropped above). Show the real tool
+  // (strip any `mcp_<server>_` prefix) and a *worded* outcome — not a raw JSON
+  // blob — when Hermes didn't supply its own `summary`.
+  const disp = resolveDisplayTool(toolName, rawArgs);
 
   switch (tc.phase) {
     case 'started': {
       // A start frame with no tool name is unusable — skip rather than emit a
       // nameless tool bubble.
       if (!toolName) return [];
-      const args =
-        tc.args && typeof tc.args === 'object'
-          ? (tc.args as Record<string, unknown>)
-          : tc.arguments && typeof tc.arguments === 'object'
-            ? (tc.arguments as Record<string, unknown>)
-            : {};
-      return [{ type: 'tool_start', tool: toolName, args, toolCallId, summary }];
+      return [{
+        type: 'tool_start',
+        tool: disp.tool,
+        args: disp.args,
+        toolCallId,
+        summary: summary ?? (summarizeRunningTool(disp.tool, disp.args) || undefined),
+      }];
     }
     case 'progress':
       // Mid-call free-text progress → status bubble (parity with the bus's
@@ -119,22 +118,22 @@ export function adaptToolFrameToJobEvents(
       const children = Array.isArray(tc.children) ? (tc.children as DelegateChild[]) : undefined;
       return [{
         type: 'tool_result',
-        tool: toolName,
+        tool: disp.tool,
         result: tc.result ?? null,
         status: 'done',
         toolCallId,
-        summary: summary ?? (previewResult(tc.result) || undefined),
+        summary: summary ?? (summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: tc.result ?? null, status: 'done' }) || undefined),
         ...(children && children.length ? { children } : {}),
       }];
     }
     case 'failed':
       return [{
         type: 'tool_result',
-        tool: toolName,
+        tool: disp.tool,
         result: { error: tc.error ?? 'unknown error' },
         status: 'error',
         toolCallId,
-        summary: summary ?? tc.error,
+        summary: summary ?? summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: { error: tc.error ?? 'unknown error' }, status: 'error' }),
       }];
     default:
       // Unknown phase — ignore rather than throw.

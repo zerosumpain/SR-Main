@@ -1,5 +1,6 @@
 <script lang="ts">
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
+  import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
 
   export interface SubAgentStep {
     toolCallId: string;
@@ -45,6 +46,8 @@
   {#if agent.toolSteps.length > 0}
     <ul class="sa-steps">
       {#each agent.toolSteps as step (step.toolCallId)}
+        {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+        {@const stepCat = categorizeTool(dTool)}
         <li class="sa-step" data-status={step.status}>
           <header class="sa-step-hdr">
             <span class="sa-step-status" data-status={step.status}>
@@ -53,8 +56,8 @@
               {:else}✓
               {/if}
             </span>
-            <span class="sa-step-tool">{step.tool}</span>
-            <span class="sa-step-summary">{step.summary ?? (step.status === 'running' ? '…' : '')}</span>
+            <span class="sa-step-cat" data-cat={stepCat}>{stepCat}</span>
+            <span class="sa-step-summary">{step.summary || dTool.replace(/_/g, ' ')}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
             {#if step.result !== undefined || Object.keys(step.args).length > 0}
               <button
                 type="button"
@@ -173,8 +176,25 @@
   .sa-step-status[data-status="error"]   { color: var(--status-error); }
   .sa-step-status[data-status="done"]    { color: var(--status-success); }
   .sa-step-tool { color: var(--text-primary); flex-shrink: 0; }
+  .sa-step-cat {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 0 4px;
+    border-radius: var(--radius-sharp);
+    border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+    color: var(--text-muted);
+  }
+  .sa-step-cat[data-cat="WEB"],
+  .sa-step-cat[data-cat="MAIL"],
+  .sa-step-cat[data-cat="AGENT"] { color: var(--accent-ink); }
+  .sa-step-cat[data-cat="RUN"] { color: var(--accent); }
+  .sa-step-cat[data-cat="HOME"] { color: var(--status-success); }
   .sa-step-summary {
-    color: var(--text-secondary);
+    color: var(--text-primary);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;

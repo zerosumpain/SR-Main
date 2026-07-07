@@ -15,6 +15,7 @@
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
+  import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
   import MessageAttachments from './MessageAttachments.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import ResearchSourceModal from './ResearchSourceModal.svelte';
@@ -844,6 +845,7 @@
       if (data.type === 'tool_start') {
         heartbeat = null;
         const newStep: ToolStep = {
+          id: data.toolCallId,
           tool: data.tool,
           args: data.args || {},
           status: 'running',
@@ -862,6 +864,16 @@
         messages = messages.map((m) => {
           if (m.id !== progressId || !m.toolSteps) return m;
           const idx = (() => {
+            // Prefer an exact id match — the bus + Hermes frames carry a stable
+            // toolCallId, so concurrent calls of the SAME tool (e.g. many
+            // parallel web_search / fetch_url) never write into each other's
+            // card. Fall back to the most-recent running same-named step only
+            // when no id is present (older/native frames).
+            if (data.toolCallId) {
+              for (let i = m.toolSteps.length - 1; i >= 0; i--) {
+                if (m.toolSteps[i].id === data.toolCallId && m.toolSteps[i].status === 'running') return i;
+              }
+            }
             for (let i = m.toolSteps.length - 1; i >= 0; i--) {
               if (m.toolSteps[i].tool === data.tool && m.toolSteps[i].status === 'running') return i;
             }
@@ -1807,6 +1819,8 @@
                         </div>
                       </li>
                     {:else}
+                      {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+                      {@const stepCat = categorizeTool(dTool)}
                       <li class="step-card" data-status={step.status}>
                         <header class="step-card-hdr">
                           <span class="step-status" data-status={step.status} aria-label={step.status}>
@@ -1818,8 +1832,8 @@
                               ✓
                             {/if}
                           </span>
-                          <span class="step-tool">{friendlyToolName(step.tool)}</span>
-                          <span class="step-summary">{step.summary ?? (step.status === 'running' ? '…' : '')}</span>
+                          <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
+                          <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
                           {#if step.result !== undefined || Object.keys(step.args).length > 0}
                             <button
                               type="button"
@@ -1964,18 +1978,20 @@
                       {failedTools > 0 ? '✗' : '✓'}
                     </span>
                     <span class="ta-count">{toolSteps.length} {toolSteps.length === 1 ? 'tool' : 'tools'}</span>
-                    <span class="ta-names">{toolSteps.map((s) => friendlyToolName(s.tool)).join(' · ')}</span>
+                    <span class="ta-names">{toolSteps.map((s) => friendlyToolName(resolveDisplayTool(s.tool, s.args).tool)).join(' · ')}</span>
                     <span class="ta-chev" aria-hidden="true">▸</span>
                   </summary>
                   <ul class="step-cards ta-steps">
                     {#each toolSteps as step}
+                      {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+                      {@const stepCat = categorizeTool(dTool)}
                       <li class="step-card" data-status={step.status}>
                         <header class="step-card-hdr">
                           <span class="step-status" data-status={step.status} aria-label={step.status}>
                             {step.status === 'error' ? '✗' : '✓'}
                           </span>
-                          <span class="step-tool">{friendlyToolName(step.tool)}</span>
-                          <span class="step-summary">{step.summary ?? ''}</span>
+                          <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
+                          <span class="step-summary">{step.summary || friendlyToolName(dTool)}</span>
                         </header>
                         {#if Object.keys(step.args).length > 0 || step.result !== undefined}
                           <div class="step-card-body">
@@ -2662,8 +2678,29 @@
     color: var(--text-primary);
     flex-shrink: 0;
   }
+  /* One-word category chip leading each step line. Colour is identity-stable
+     (category → token, never rank → hue) and drawn only from design tokens. */
+  .step-cat {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: var(--radius-sharp);
+    border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+    background: color-mix(in srgb, currentColor 9%, transparent);
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .step-cat[data-cat="WEB"],
+  .step-cat[data-cat="MAIL"],
+  .step-cat[data-cat="AGENT"] { color: var(--accent-ink); }
+  .step-cat[data-cat="RUN"] { color: var(--accent); }
+  .step-cat[data-cat="HOME"] { color: var(--status-success); }
   .step-summary {
-    color: var(--text-secondary);
+    color: var(--text-primary);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
