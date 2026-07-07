@@ -112,3 +112,38 @@ describe('heartbeat', () => {
     }
   });
 });
+
+describe('watchdog — delegations are busy, not idle', () => {
+  it('does NOT reap a job past the 4-min idle limit while a delegate_task is in flight', () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId, job } = createJob('test');
+      publishJobEvent(jobId, { type: 'tool_start', tool: 'delegate_task', args: { goal: 'x' } });
+      expect(job.activeDelegations).toBe(1);
+      expect(job.phase).toBe('subagent');
+      // 5 min of parent silence — well past IDLE_TIMEOUT_MS (4 min).
+      vi.advanceTimersByTime(300_000);
+      expect(job.status).toBe('running');
+      expect(job.abortController.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reverts to the normal idle limit once the delegation resolves', () => {
+    vi.useFakeTimers();
+    try {
+      const { jobId, job } = createJob('test');
+      publishJobEvent(jobId, { type: 'tool_start', tool: 'delegate_task', args: { goal: 'x' } });
+      publishJobEvent(jobId, { type: 'tool_result', tool: 'delegate_task', result: 'ok', status: 'done' });
+      expect(job.activeDelegations).toBe(0);
+      expect(job.phase).toBe('thinking');
+      // Now silent with no delegation → the normal 4-min watchdog applies.
+      vi.advanceTimersByTime(300_000);
+      expect(job.status).toBe('error');
+      expect(job.abortController.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

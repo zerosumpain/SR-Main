@@ -118,6 +118,22 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
     const job = jobs.get(jobId);
     if (job) job.lastEventAt = Date.now();
   }
+  // Track in-flight delegations so the watchdog treats the ensuing parent
+  // silence as "sub-agent working", not "stuck", and the heartbeat says so.
+  if (event.type === 'tool_start' && event.tool === 'delegate_task') {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.activeDelegations += 1;
+      job.phase = 'subagent';
+    }
+  } else if (event.type === 'tool_result' && event.tool === 'delegate_task') {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.activeDelegations = Math.max(0, job.activeDelegations - 1);
+      // Parent has the child summary and is reasoning over it again.
+      if (job.activeDelegations === 0 && job.phase === 'subagent') job.phase = 'thinking';
+    }
+  }
   for (const sub of stream.subscribers) {
     try { sub(event); } catch { /* ignore broken subscriber */ }
   }
@@ -194,6 +210,14 @@ export interface OrchestratorJob {
   // the watchdog applies WAITER_IDLE_TIMEOUT_MS instead of IDLE_TIMEOUT_MS
   // so an unattended user-input gate doesn't reap the job after 4 min.
   waiterOpenedAt: number | null;
+  // Count of in-flight `delegate_task` calls (started but not yet resolved).
+  // A synchronous delegation is BUSY, not idle — Hermes runs the child agents
+  // in worker threads and, by design, does not stream their intermediate tool
+  // calls back to the parent, so the parent's SSE stream goes silent for the
+  // whole delegation. Without this the 4-min idle watchdog reaps a perfectly
+  // healthy job mid-delegation ("likely stuck"). While >0 the watchdog applies
+  // the delegation limits below instead of the normal idle limit.
+  activeDelegations: number;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -212,6 +236,13 @@ const HARD_TIMEOUT_MS = 600_000; // 10 min total
 // this just stops the watchdog from killing the conversation mid-wait.
 const WAITER_IDLE_TIMEOUT_MS = 24 * 60 * 60_000; // 24 h
 const WAITER_HARD_TIMEOUT_MS = 48 * 60 * 60_000; // 48 h total cap with waiter open
+// A `delegate_task` runs child agents that are busy but silent on the parent
+// stream (Hermes surfaces only their final summary). Tolerate a long quiet spell
+// — a node-builder sub-agent can churn for many minutes — while still keeping a
+// generous hard cap so a genuinely wedged child is eventually reaped, not hung
+// forever.
+const DELEGATION_IDLE_TIMEOUT_MS = 30 * 60_000; // 30 min of parent silence while delegating
+const DELEGATION_HARD_TIMEOUT_MS = 45 * 60_000; // 45 min total while a delegation is active
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {
   job.watchdog = setInterval(() => {
@@ -225,8 +256,16 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     const now = Date.now();
     const idle = now - job.lastEventAt;
     const elapsed = now - job.startedAt;
-    const idleLimit = job.waiterOpenedAt ? WAITER_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
-    const hardLimit = job.waiterOpenedAt ? WAITER_HARD_TIMEOUT_MS : HARD_TIMEOUT_MS;
+    // Precedence: an open user-input waiter (longest) > an active delegation >
+    // the normal idle limit. A delegation is busy-but-silent, so it must not be
+    // reaped at the 4-min idle mark.
+    const delegating = job.activeDelegations > 0;
+    const idleLimit = job.waiterOpenedAt
+      ? WAITER_IDLE_TIMEOUT_MS
+      : delegating ? DELEGATION_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
+    const hardLimit = job.waiterOpenedAt
+      ? WAITER_HARD_TIMEOUT_MS
+      : delegating ? DELEGATION_HARD_TIMEOUT_MS : HARD_TIMEOUT_MS;
     if (idle > idleLimit || elapsed > hardLimit) {
       const phaseLabel = `${job.phase}${job.currentStep ? `: ${job.currentStep}` : ''}`;
       const reason = elapsed > hardLimit
@@ -363,6 +402,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     phase: 'starting',
     partialResponse: '',
     waiterOpenedAt: null,
+    activeDelegations: 0,
   };
   jobs.set(jobId, job);
   recordPulse({ ts: now, jobId, kind: 'job_start', phase: 'starting', summary: message.slice(0, 140), elapsedMs: 0 });
