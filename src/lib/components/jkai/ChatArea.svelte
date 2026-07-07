@@ -12,7 +12,7 @@
   import SlashCommandButtonBar from '$lib/components/jkai/SlashCommandButtonBar.svelte';
   import { approvalAffordance } from '$lib/jkai/slash-commands';
   import type { DelegateChild } from '$lib/workflows/chat/job-store';
-  import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
+  import WorkerTray from '$lib/components/jkai/WorkerTray.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
@@ -109,6 +109,7 @@
     summary?: string;
     liveTokens: string;
     toolSteps: SubAgentStep[];
+    startedAt: number;
   }
 
   interface Message {
@@ -978,6 +979,7 @@
           status: 'running',
           liveTokens: '',
           toolSteps: [],
+          startedAt: Date.now(),
         };
         heartbeat = null;
         return;
@@ -990,6 +992,13 @@
         if (ev.type === 'token') {
           a.liveTokens += ev.delta;
         } else if (ev.type === 'tool_start') {
+          // Hermes only relays child tool *starts* (completions are swallowed),
+          // and children run their tools sequentially — so the arrival of the
+          // next tool means the previous one finished. Close it out so the row
+          // shows ✓ rather than an eternal spinner.
+          for (let i = a.toolSteps.length - 1; i >= 0; i--) {
+            if (a.toolSteps[i].status === 'running') { a.toolSteps[i].status = 'done'; break; }
+          }
           a.toolSteps.push({
             toolCallId: ev.toolCallId ?? crypto.randomUUID(),
             tool: ev.tool,
@@ -1016,9 +1025,11 @@
       if (data.type === 'subagent_done') {
         const a = subAgents[data.agentId];
         if (a) {
-          a.status = 'done';
+          a.status = data.summary === 'failed' ? 'error' : 'done';
           a.summary = data.summary;
           a.liveTokens = '';
+          // Close any still-running tool step (the last one has no completion frame).
+          for (const s of a.toolSteps) if (s.status === 'running') s.status = 'done';
         }
         return;
       }
@@ -1718,6 +1729,9 @@
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
           {:else if msg.isProgress}
+            <!-- Live delegate_task workers — self-hides when there are none, and
+                 renders above both the tool-progress box and the typing state. -->
+            <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
               <div class="progress-bubble mb-3">
@@ -1785,9 +1799,6 @@
                     <span>{connectionWarning}</span>
                   </div>
                 {/if}
-                {#each Object.values(subAgents) as agent (agent.agentId)}
-                  <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
-                {/each}
                 {#if thinkingByBubble.has(msg.id)}
                   {@const t = thinkingByBubble.get(msg.id)!}
                   <div class="reasoning-panel">
@@ -1920,9 +1931,6 @@
                 />
               {/if}
               <div class="hb-wrap">{@render heartbeatLine()}</div>
-              {#each Object.values(subAgents) as agent (agent.agentId)}
-                <SubAgentBubble {agent} onToggleStep={toggleSubAgentStep} />
-              {/each}
               {#if thinkingByBubble.has(msg.id)}
                 {@const t = thinkingByBubble.get(msg.id)!}
                 <div class="reasoning-panel mb-3">

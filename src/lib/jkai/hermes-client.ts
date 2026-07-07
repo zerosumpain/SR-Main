@@ -102,6 +102,30 @@ export interface SseFrameApproval {
   session_key?: string;
 }
 
+/** Payload for a `kind: 'subagent'` frame — live activity relayed from a
+ *  `delegate_task` child agent. Emitted by the plugin's `send_subagent` (wired
+ *  from the gateway's child tool_progress relay). Rides in `metadata.subagent`.
+ *  `event_type` is one of `subagent.start` / `subagent.tool` / `subagent.thinking`
+ *  / `subagent.progress` / `subagent.complete`; `identity` carries the sub-agent
+ *  id + goal + task index so the UI can group per-worker. */
+export interface SseFrameSubagent {
+  event_type: string;
+  tool?: string | null;
+  preview?: string | null;
+  args?: Record<string, unknown> | null;
+  identity?: {
+    subagent_id?: string;
+    parent_id?: string;
+    task_index?: number;
+    task_count?: number;
+    goal?: string;
+    tool_count?: number;
+    model?: string | null;
+    status?: string;
+    [k: string]: unknown;
+  };
+}
+
 export interface SseFrame {
   /** `send`/`replace`/`finalize` are text-bubble frames; `thinking` carries
    *  a reasoning-delta for the collapsible Reasoning panel (rendered
@@ -112,7 +136,7 @@ export interface SseFrame {
    *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
    *  back to; `tool` carries per-tool-call telemetry (see `SseFrameToolCall`)
    *  surfaced onto the tool-step panel. */
-  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool' | 'approval';
+  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool' | 'approval' | 'subagent';
   chat_id: string;
   message_id: string;
   content: string;

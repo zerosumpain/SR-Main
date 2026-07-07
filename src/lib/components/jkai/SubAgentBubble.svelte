@@ -19,6 +19,7 @@
     summary?: string;
     liveTokens: string;
     toolSteps: SubAgentStep[];
+    startedAt?: number;
   }
 
   let { agent, onToggleStep }: {

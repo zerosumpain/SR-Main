@@ -16,7 +16,7 @@
  *               is folded into `result.attachments` on `done` by the
  *               caller; per-frame JobEvent is not emitted.
  */
-import type { SseFrame, SseFrameToolCall } from '$lib/jkai/hermes-client';
+import type { SseFrame, SseFrameToolCall, SseFrameSubagent } from '$lib/jkai/hermes-client';
 import type { JobEvent, DelegateChild } from '$lib/workflows/chat/job-store';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 
@@ -137,6 +137,67 @@ export function adaptToolFrameToJobEvents(
       }];
     default:
       // Unknown phase — ignore rather than throw.
+      return [];
+  }
+}
+
+/**
+ * Translate a Hermes `subagent` frame (live `delegate_task` child activity,
+ * relayed via the gateway's child tool_progress bridge → the plugin's
+ * `send_subagent`) into the `subagent_start` / `subagent_event` / `subagent_done`
+ * JobEvents the chat UI's sub-agent visualizer (ChatArea `subAgents` state +
+ * `SubAgentBubble`) already consumes. Hermes swallows per-child tool
+ * *completions* and only surfaces tool *starts* + a final `subagent.complete`,
+ * so each child tool renders as a start; ChatArea marks the prior step done when
+ * the next one arrives and closes any lingering step on `subagent_done`.
+ *
+ * Defensive by contract: a frame missing `metadata.subagent` or a sub-agent id
+ * yields `[]` so a malformed frame never crashes the stream.
+ */
+export function adaptSubagentFrameToJobEvents(frame: SseFrame): JobEvent[] {
+  if (frame.kind !== 'subagent') return [];
+  const raw = (frame.metadata as Record<string, unknown> | undefined)?.['subagent'];
+  if (!raw || typeof raw !== 'object') return [];
+  const sub = raw as SseFrameSubagent;
+  const id = sub.identity?.subagent_id
+    ?? (sub.identity?.task_index != null ? `sub-${sub.identity.task_index}` : undefined);
+  if (!id) return [];
+
+  const preview = typeof sub.preview === 'string' ? sub.preview : undefined;
+  switch (sub.event_type) {
+    case 'subagent.start':
+      return [{
+        type: 'subagent_start',
+        agentId: id,
+        parentStepId: null,
+        task: (sub.identity?.goal && String(sub.identity.goal)) || preview || 'sub-agent',
+      }];
+    case 'subagent.tool': {
+      const toolName = typeof sub.tool === 'string' ? sub.tool : '';
+      if (!toolName) return [];
+      const rawArgs = sub.args && typeof sub.args === 'object' ? sub.args : {};
+      const disp = resolveDisplayTool(toolName, rawArgs);
+      return [{
+        type: 'subagent_event',
+        agentId: id,
+        event: {
+          type: 'tool_start',
+          tool: disp.tool,
+          args: disp.args,
+          summary: summarizeRunningTool(disp.tool, disp.args) || preview,
+        },
+      }];
+    }
+    case 'subagent.complete':
+      return [{
+        type: 'subagent_done',
+        agentId: id,
+        summary: preview || (sub.identity?.status === 'error' ? 'failed' : 'done'),
+        result: {},
+      }];
+    // subagent.thinking / subagent.progress are batched free-text with no
+    // structural home in the visualizer — skip rather than emit noise.
+    default:
       return [];
   }
 }

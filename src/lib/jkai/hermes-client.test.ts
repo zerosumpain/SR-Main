@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HermesClient, type SseFrame } from './hermes-client';
-import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents } from './sse-adapter';
+import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from './sse-adapter';
 
 describe('HermesClient', () => {
   let originalFetch: typeof fetch;
@@ -147,6 +147,66 @@ describe('adaptFrameToCanvasSse — thinking frame', () => {
       ts: 2,
     };
     expect(adaptFrameToCanvasSse(frame)).toEqual([]);
+  });
+});
+
+describe('adaptSubagentFrameToJobEvents — live delegate_task child activity', () => {
+  const frame = (subagent: unknown): SseFrame => ({
+    kind: 'subagent',
+    chat_id: 'c1',
+    message_id: 'sub:c1',
+    content: '',
+    metadata: { subagent },
+    ts: 1,
+  });
+
+  it('maps subagent.start → subagent_start with the goal as the task', () => {
+    const ev = adaptSubagentFrameToJobEvents(frame({
+      event_type: 'subagent.start',
+      identity: { subagent_id: 'w1', goal: 'compare 3 e-bikes', task_index: 0 },
+    }));
+    expect(ev).toEqual([{ type: 'subagent_start', agentId: 'w1', parentStepId: null, task: 'compare 3 e-bikes' }]);
+  });
+
+  it('maps subagent.tool → a resolved tool_start subagent_event', () => {
+    const ev = adaptSubagentFrameToJobEvents(frame({
+      event_type: 'subagent.tool',
+      tool: 'web_search',
+      preview: 'Amflow stock',
+      args: { query: 'Amflow PR Carbon L' },
+      identity: { subagent_id: 'w1' },
+    }));
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ type: 'subagent_event', agentId: 'w1' });
+    const inner = (ev[0] as { event: { type: string; tool: string; summary?: string } }).event;
+    expect(inner.type).toBe('tool_start');
+    expect(inner.tool).toBe('web_search');
+    expect(inner.summary).toBe('“Amflow PR Carbon L”');
+  });
+
+  it('unwraps a jkai_extended sub-tool name in child tools too', () => {
+    const ev = adaptSubagentFrameToJobEvents(frame({
+      event_type: 'subagent.tool',
+      tool: 'jkai_extended',
+      args: { operation: 'invoke', name: 'fetch_url', args: { url: 'https://x.co' } },
+      identity: { subagent_id: 'w2' },
+    }));
+    expect((ev[0] as { event: { tool: string } }).event.tool).toBe('fetch_url');
+  });
+
+  it('maps subagent.complete → subagent_done', () => {
+    expect(adaptSubagentFrameToJobEvents(frame({
+      event_type: 'subagent.complete', preview: 'found 3 in stock', identity: { subagent_id: 'w1' },
+    }))).toEqual([{ type: 'subagent_done', agentId: 'w1', summary: 'found 3 in stock', result: {} }]);
+  });
+
+  it('falls back to sub-<index> when no subagent_id, and skips noise/malformed', () => {
+    expect(adaptSubagentFrameToJobEvents(frame({ event_type: 'subagent.start', identity: { task_index: 2, goal: 'x' } }))[0])
+      .toMatchObject({ agentId: 'sub-2' });
+    expect(adaptSubagentFrameToJobEvents(frame({ event_type: 'subagent.thinking', preview: 'hmm', identity: { subagent_id: 'w1' } }))).toEqual([]);
+    expect(adaptSubagentFrameToJobEvents(frame({ event_type: 'subagent.tool', identity: { subagent_id: 'w1' } }))).toEqual([]); // no tool name
+    expect(adaptSubagentFrameToJobEvents(frame(undefined))).toEqual([]);
+    expect(adaptSubagentFrameToJobEvents(frame({ event_type: 'subagent.start', identity: {} }))).toEqual([]); // no id, no index
   });
 });
 

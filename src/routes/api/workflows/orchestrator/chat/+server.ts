@@ -16,7 +16,7 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
-import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents } from '$lib/jkai/sse-adapter';
+import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
@@ -443,6 +443,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         // built-ins / skills / other MCP servers. It also returns [] for any
         // non-tool or malformed frame, so this is a no-op for text/media frames
         // and can never crash the stream.
+        // Live delegate_task child activity → sub-agent visualizer JobEvents.
+        // These also naturally reset the job's idle watchdog (defence in depth
+        // alongside the activeDelegations tracking in job-store).
+        if (frame.kind === 'subagent') {
+          for (const ev of adaptSubagentFrameToJobEvents(frame)) publishJobEvent(jobId, ev);
+          continue;
+        }
         if (frame.kind === 'tool') {
           for (const ev of adaptToolFrameToJobEvents(frame, isBusServedTool)) {
             // Mirror the bus subscriber: promote inline attachments returned
