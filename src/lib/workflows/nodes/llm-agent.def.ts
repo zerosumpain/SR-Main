@@ -76,6 +76,7 @@ export const llmAgentDef: NodeDefinition = {
       options: [
         { value: '', label: 'Default (site setting)' },
         { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
+        { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI' },
         { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },

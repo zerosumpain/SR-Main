@@ -24,6 +24,7 @@ const PER_MILLION = 1_000_000;
 
 // z.ai GLM family — coding paas endpoint. Prices as of 2026-05.
 const ZAI_PRICES: Record<string, ModelPricing> = {
+  'glm-5.2': { inputPerMillion: 0.6, outputPerMillion: 2.2 }, // est. — mirrors glm-5.1 (same tier)
   'glm-5.1': { inputPerMillion: 0.6, outputPerMillion: 2.2 },
   'glm-5-turbo': { inputPerMillion: 0.1, outputPerMillion: 0.3 },
   'glm-5-air': { inputPerMillion: 0.2, outputPerMillion: 0.6 },

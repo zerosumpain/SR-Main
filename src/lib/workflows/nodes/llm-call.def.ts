@@ -48,6 +48,7 @@ export const llmCallDef: NodeDefinition = {
       options: [
         { value: '', label: 'Default (site setting)' },
         { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (direct)' },
+        { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI (direct)' },
         { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI (direct)' },
       ],
     },
