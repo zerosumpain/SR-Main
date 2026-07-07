@@ -31,6 +31,12 @@ const PUBLIC_PATHS = [
   // single line to stdout, stores nothing. See its +server.ts for rationale.
   '/api/landing/ecg-telemetry',
   '/projects',
+  // Read-only shared jkai conversations. The /jkai/shared/<token> route
+  // self-gates on shareVisibility ('public' → anyone; 'users' → requires a
+  // signed-in session; else 404), so the hook must let anonymous visitors
+  // reach it. Only shared conversations are exposed — the rest of /jkai stays
+  // owner-only (isPublicPath('/jkai') remains false: this prefix is /jkai/shared).
+  '/jkai/shared',
   '/heart',
   // Public leaderboard for the Terminal Descent game (/projects/terminal-descent).
   // Anonymous read (GET scores) + write (POST session + score). No OAuth — the

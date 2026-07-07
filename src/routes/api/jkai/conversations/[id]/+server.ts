@@ -97,15 +97,36 @@ export const DELETE: RequestHandler = async ({ params }) => {
 export const PATCH: RequestHandler = async ({ params, request }) => {
 	const body = await request.json();
 
-	// Rename / pin — allowed at any time (unlike the model change, these are
-	// not locked after the first message).
-	if ('title' in body || 'pinned' in body) {
-		const set: Partial<{ title: string | null; pinned: boolean }> = {};
+	// Rename / pin / share — allowed at any time (unlike the model change,
+	// these are not locked after the first message).
+	if ('title' in body || 'pinned' in body || 'shareVisibility' in body) {
+		const set: Partial<{ title: string | null; pinned: boolean; shareVisibility: string; shareToken: string }> = {};
 		if ('title' in body) {
 			const t = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
 			set.title = t.length > 0 ? t : null;
 		}
 		if ('pinned' in body) set.pinned = !!body.pinned;
+		if ('shareVisibility' in body) {
+			const vis = body.shareVisibility;
+			if (vis !== 'private' && vis !== 'users' && vis !== 'public') {
+				throw error(400, 'shareVisibility must be private, users, or public');
+			}
+			set.shareVisibility = vis;
+			// Mint the share token the first time a conversation is shared; keep
+			// it on unshare so re-sharing reuses the same link.
+			if (vis !== 'private') {
+				const [existing] = await db
+					.select({ shareToken: conversations.shareToken })
+					.from(conversations)
+					.where(eq(conversations.id, params.id))
+					.limit(1);
+				if (!existing) throw error(404, 'conversation not found');
+				if (!existing.shareToken) {
+					const { randomBytes } = await import('node:crypto');
+					set.shareToken = randomBytes(18).toString('base64url');
+				}
+			}
+		}
 		const [updated] = await db
 			.update(conversations)
 			.set(set)

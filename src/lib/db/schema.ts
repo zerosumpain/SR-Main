@@ -1011,6 +1011,11 @@ export const conversations = pgTable('jkai_conversations', {
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
   pinned: boolean('pinned').notNull().default(false),
+  // Read-only sharing. shareVisibility: 'private' (owner only) | 'users' (any
+  // signed-in user with the link) | 'public' (anyone with the link). shareToken
+  // is the unguessable link id, minted when first shared, kept on unshare.
+  shareToken: text('share_token').unique(),
+  shareVisibility: text('share_visibility').notNull().default('private'),
 });
 
 export type Conversation = typeof conversations.$inferSelect;

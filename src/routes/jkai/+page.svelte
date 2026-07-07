@@ -1,5 +1,6 @@
 <script lang="ts">
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
+  import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import type { ModelContext } from '$lib/server/models/types';
@@ -206,6 +207,21 @@
     }
   }
 
+  // --- Conversation sharing ---
+  type ShareConv = { id: string; title: string | null; shareToken?: string | null; shareVisibility?: string | null };
+  let shareModalConv = $state<ShareConv | null>(null);
+  function openShare(c: ShareConv) {
+    shareModalConv = { id: c.id, title: c.title, shareToken: c.shareToken, shareVisibility: c.shareVisibility };
+  }
+  function handleShareUpdate(id: string, visibility: string, shareToken: string | null) {
+    conversationList = conversationList.map((c) =>
+      c.id === id ? { ...c, shareVisibility: visibility, shareToken } : c,
+    );
+    if (shareModalConv?.id === id) {
+      shareModalConv = { ...shareModalConv, shareVisibility: visibility, shareToken };
+    }
+  }
+
   async function togglePinConversation(id: string, pinned: boolean) {
     // Optimistic: flip locally + re-sort pinned-first, then persist.
     conversationList = conversationList
@@ -273,6 +289,7 @@
         onDelete={deleteConversation}
         onRename={renameConversation}
         onTogglePin={togglePinConversation}
+        onShare={openShare}
         collapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapsed}
         {liveConversationIds}
@@ -305,6 +322,7 @@
             onDelete={deleteConversation}
             onRename={renameConversation}
             onTogglePin={togglePinConversation}
+        onShare={openShare}
             collapsed={false}
             onToggleCollapse={() => { sidebarOpen = false; }}
             {liveConversationIds}
@@ -339,6 +357,14 @@
     </div>
   </div>
 </div>
+
+{#if shareModalConv}
+  <ShareConversationModal
+    conversation={shareModalConv}
+    onClose={() => (shareModalConv = null)}
+    onUpdate={handleShareUpdate}
+  />
+{/if}
 
 <style>
   .hermes-admin-link {

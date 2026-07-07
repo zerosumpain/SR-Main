@@ -13,6 +13,8 @@ export async function getConversationList() {
       updatedAt: conversations.updatedAt,
       costUsd: conversations.costUsd,
       pinned: conversations.pinned,
+      shareToken: conversations.shareToken,
+      shareVisibility: conversations.shareVisibility,
       modelProvider: conversations.modelProvider,
       modelId: conversations.modelId,
       messageCount: sql<number>`(

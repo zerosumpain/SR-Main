@@ -18,6 +18,8 @@
     messageCount: number;
     costUsd?: string | number | null;
     pinned?: boolean;
+    shareToken?: string | null;
+    shareVisibility?: string | null;
   }
 
   interface WhatsAppThread {
@@ -36,6 +38,7 @@
     onDelete,
     onRename,
     onTogglePin,
+    onShare,
     collapsed = false,
     onToggleCollapse,
     liveConversationIds = [],
@@ -51,6 +54,7 @@
     onDelete: (id: string) => void;
     onRename?: (id: string, title: string) => void;
     onTogglePin?: (id: string, pinned: boolean) => void;
+    onShare?: (c: ConversationItem) => void;
     collapsed?: boolean;
     onToggleCollapse: () => void;
     liveConversationIds?: string[];
@@ -141,6 +145,12 @@
   function togglePin(e: Event, c: ConversationItem) {
     e.stopPropagation();
     onTogglePin?.(c.id, !c.pinned);
+  }
+
+  // --- Share ---
+  function share(e: Event, c: ConversationItem) {
+    e.stopPropagation();
+    onShare?.(c);
   }
 
   // --- Delete (inline confirm, no browser alert) ---
@@ -356,6 +366,11 @@
           <svg class="pin-badge" width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2l1.9 4.9L17 7.5l-3.8 3 1.3 5-4.5-2.9L5.5 15.5l1.3-5L3 7.5l5.1-.6z"/></svg>
         {/if}
         <span class="row-title">{c.title || 'New conversation'}</span>
+        {#if c.shareVisibility && c.shareVisibility !== 'private'}
+          <span class="shared-badge" title={`Shared · ${c.shareVisibility === 'public' ? 'anyone with the link' : 'signed-in users'}`} aria-label="Shared">
+            <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="15" cy="5" r="2"/><circle cx="5" cy="10" r="2"/><circle cx="15" cy="15" r="2"/><path d="M13.1 6.1 6.9 8.9M6.9 11.1l6.2 2.8"/></svg>
+          </span>
+        {/if}
         <span class="row-time">{relativeTime(c.updatedAt)}</span>
       </div>
       {#if c.lastMessage}
@@ -377,6 +392,9 @@
           </button>
           <button class="act" onclick={(e) => startRename(e, c)} title="Rename" aria-label="Rename">
             <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 13.5V16h2.5L14 8.5 11.5 6z"/><path d="M11.5 6L14 8.5"/></svg>
+          </button>
+          <button class="act" onclick={(e) => share(e, c)} title="Share" aria-label="Share">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="15" cy="5" r="2.2"/><circle cx="5" cy="10" r="2.2"/><circle cx="15" cy="15" r="2.2"/><path d="M12.9 6.2 7.1 8.8M7.1 11.2l5.8 2.6"/></svg>
           </button>
           <button class="act danger" onclick={(e) => askDelete(e, c)} title="Delete" aria-label="Delete">
             <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
@@ -500,6 +518,7 @@
   .row-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex-shrink: 0; }
   .row-prev { font-size: 11.5px; color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; line-height: 1.3; }
   .pin-badge { color: var(--accent-ink); flex-shrink: 0; }
+  .shared-badge { color: var(--accent-ink); flex-shrink: 0; display: inline-flex; opacity: 0.75; }
   .live {
     width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--wa-green); flex-shrink: 0;
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent);

@@ -3,7 +3,7 @@ import { isPublicPath, isGuestAllowedPath } from './auth';
 
 describe('isPublicPath', () => {
   it('allows known public pages and APIs', () => {
-    for (const p of ['/', '/projects', '/projects/broads-pilot', '/blog', '/blog/x', '/api/landing/vitals', '/api/space-lander/scores', '/api/blog/images/9/x.png']) {
+    for (const p of ['/', '/projects', '/projects/broads-pilot', '/blog', '/blog/x', '/api/landing/vitals', '/api/space-lander/scores', '/api/blog/images/9/x.png', '/jkai/shared', '/jkai/shared/tok_abc123']) {
       expect(isPublicPath(p)).toBe(true);
     }
   });
