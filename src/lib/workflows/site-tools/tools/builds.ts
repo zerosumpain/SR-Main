@@ -65,6 +65,7 @@ register({
 
 register({
   name: 'build_control',
+  destructive: true,
   description: 'Control a JKAI build: pause, resume, stop, or publish it',
   parameters: {
     type: 'object',
@@ -501,6 +502,7 @@ register({
 
 register({
   name: 'build_delete',
+  destructive: true,
   description: 'Delete a build and all its iterations, logs, and workspace files',
   parameters: {
     type: 'object',

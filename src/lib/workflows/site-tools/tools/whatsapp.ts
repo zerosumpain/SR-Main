@@ -2,6 +2,7 @@ import { register } from '../registry-internal';
 
 register({
   name: 'whatsapp_send',
+  destructive: true,
   description: 'Send a WhatsApp message to a phone number. Use this to proactively message the user or send alerts/notifications.',
   parameters: {
     type: 'object',

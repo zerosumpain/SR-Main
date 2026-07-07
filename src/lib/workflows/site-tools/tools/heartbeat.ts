@@ -38,7 +38,7 @@ register({
     required: ['conversation_id', 'name', 'goal', 'prompt', 'cadence_seconds'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'heartbeat',
   handler: async (args) => {
     const name = String(args.name);
     const cadence = Math.max(30, Math.min(86400, Math.round(Number(args.cadence_seconds))));
@@ -124,7 +124,7 @@ register({
     required: ['name'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'heartbeat',
   handler: async (args) => {
     const name = String(args.name);
     const reason = (args.reason as string | undefined) ?? null;
@@ -157,7 +157,7 @@ register({
     },
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'heartbeat',
   handler: async (args) => {
     const includeCompleted = (args.include_completed as boolean) ?? false;
     const conversationId = args.conversation_id as string | undefined;

@@ -26,12 +26,16 @@ export interface MetaToolInput {
 interface ExtendedToolListEntry {
   name: string;
   description: string;
+  /** True when the tool has a side effect that should be confirmed first. */
+  destructive?: boolean;
 }
 
 interface ExtendedToolSchemaEntry {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** True when the tool has a side effect that should be confirmed first. */
+  destructive?: boolean;
 }
 
 interface MetaErrorResult {
@@ -138,6 +142,7 @@ export async function dispatchMetaTool(
     return filtered.map((t) => ({
       name: t.name,
       description: t.description ?? '',
+      ...(t.destructive ? { destructive: true } : {}),
     }));
   }
 
@@ -152,6 +157,7 @@ export async function dispatchMetaTool(
         type: 'object',
         properties: {},
       },
+      ...(tool.destructive ? { destructive: true } : {}),
     };
   }
 

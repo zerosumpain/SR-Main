@@ -210,6 +210,7 @@ register({
 
 register({
   name: 'node_builder_commit_and_deploy',
+  destructive: true,
   description:
     'GATED: commits codegen-managed paths with the supplied message, pushes to origin/master, runs scripts/deploy.sh, and verifies the deployed site responds. REFUSES if any staged file is outside the codegen path allowlist. Only call after explicit user approval in the current turn.',
   parameters: {

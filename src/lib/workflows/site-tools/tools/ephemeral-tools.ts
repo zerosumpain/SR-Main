@@ -52,7 +52,7 @@ register({
   name: 'author_ephemeral_tool',
   description:
     'Author and run a one-shot tool for this turn only. Use when no existing tool fits and the task needs data fetching / transformation before rendering. Handler receives (args, fetch, platform) where platform.call invokes any registered tool (e.g. render_chart). Return an ArtifactToolData envelope `{ artifact, summary }` for multimedia responses.',
-  toolset: 'visualise',
+  toolset: 'custom-tools',
   category: 'Visualise',
   parameters: {
     type: 'object',
@@ -145,7 +145,7 @@ register({
   name: 'promote_ephemeral_tool',
   description:
     'Persist a previously-run ephemeral tool into the reusable custom tools registry. Use only after an ephemeral tool has run successfully in this conversation.',
-  toolset: 'visualise',
+  toolset: 'custom-tools',
   category: 'Visualise',
   parameters: {
     type: 'object',
@@ -154,7 +154,7 @@ register({
       toolCallId: { type: 'string', description: 'The step id (or tool name if id absent) within that message\'s toolSteps.' },
       name: { type: 'string', description: 'Override name. Defaults to sidecar.proposedName.' },
       description: { type: 'string', description: 'Override description. Defaults to sidecar.proposedDescription.' },
-      toolset: { type: 'string', description: 'Optional toolset. Defaults to "visualise".' },
+      toolset: { type: 'string', description: 'Optional toolset. Defaults to "custom-tools".' },
     },
     required: ['messageId', 'toolCallId'],
   },
@@ -163,7 +163,7 @@ register({
     const toolCallId = args.toolCallId as string;
     const nameOverride = args.name as string | undefined;
     const descOverride = args.description as string | undefined;
-    const toolsetName = (args.toolset as string | undefined) ?? 'visualise';
+    const toolsetName = (args.toolset as string | undefined) ?? 'custom-tools';
 
     if (!messageId) return { success: false, error: 'messageId is required' };
     if (!toolCallId) return { success: false, error: 'toolCallId is required' };

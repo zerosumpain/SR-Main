@@ -47,6 +47,15 @@ export interface ToolDefinition {
   };
   category: string;
   toolset: string;
+  /**
+   * Marks a tool whose call has a real, user-visible side effect that should
+   * be confirmed before it runs (publishes public content, sends a message,
+   * deploys to production, deletes/wipes data). This is the single source of
+   * truth for destructive-action gating: `isDestructive()` reads it, and the
+   * MCP layer surfaces it to Hermes as `annotations.destructiveHint` so the
+   * live (Hermes) path can gate too. Omit for read-only / low-stakes tools.
+   */
+  destructive?: boolean;
   handler: (
     args: Record<string, unknown>,
     ctx?: ToolExecContext,

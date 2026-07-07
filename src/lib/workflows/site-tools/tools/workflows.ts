@@ -691,6 +691,7 @@ register({
 
 register({
   name: 'workflow_delete',
+  destructive: true,
   description:
     'Permanently delete a workflow by ID. This CASCADES — all nodes, edges, run history, chat messages and audit log for the canvas are wiped and CANNOT be recovered. ' +
     'Only call this when the user has explicitly asked to delete that specific workflow by name or id. ' +
@@ -1619,6 +1620,7 @@ register({
 
 register({
   name: 'workflow_clear_data_store',
+  destructive: true,
   description:
     'Clear entries from a workflow\'s data store. Use this to enable smoother test runs of pipelines that dedupe via stored "seen" keys. ' +
     'Three modes (pick one): pass `keys` to wipe specific keys (e.g. ["seen_urls"]), `all: true` to wipe every key for the workflow, ' +

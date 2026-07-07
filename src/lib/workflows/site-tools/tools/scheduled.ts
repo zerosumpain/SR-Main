@@ -50,7 +50,7 @@ register({
     required: ['conversation_id', 'name', 'text'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'schedule',
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
@@ -87,11 +87,23 @@ register({
     required: ['name', 'tool_name', 'args'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'schedule',
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
     const toolName = String(args.tool_name);
+    // Gate-bypass guard: a deferred call fires with no LLM round and no
+    // confirmation UI, so it must not be allowed to run a destructive tool
+    // behind the confirmation gate. Refuse to schedule those — the caller
+    // should invoke them directly (so they can be confirmed) or defer a
+    // reply / orchestrator-turn instead.
+    const { getTool } = await import('../registry');
+    if (getTool(toolName)?.destructive) {
+      return {
+        success: false,
+        error: `Cannot defer "${toolName}" — it is a destructive action that must be confirmed at call time. Call it directly, or schedule a reply/orchestrator-turn instead.`,
+      };
+    }
     const toolArgs = (args.args as Record<string, unknown>) ?? {};
     const conversationId = (args.conversation_id as string) ?? null;
     const name = String(args.name);
@@ -123,7 +135,7 @@ register({
     required: ['conversation_id', 'name', 'message'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'schedule',
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
@@ -151,7 +163,7 @@ register({
     required: ['name'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'schedule',
   handler: async (args) => {
     const name = String(args.name);
     const [row] = await db
@@ -175,7 +187,7 @@ register({
     },
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'schedule',
   handler: async (args) => {
     const includeFired = !!args.include_fired;
     const conversationId = args.conversation_id as string | undefined;

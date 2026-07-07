@@ -23,7 +23,7 @@ register({
     required: ['conversation_id', 'task_type', 'task_id', 'completion_prompt'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'followups',
   handler: async (args) => {
     const taskType = args.task_type as string;
     const taskId = args.task_id as string;
@@ -66,7 +66,7 @@ register({
   description: 'Check the current follow-up queue — see what background tasks are being tracked.',
   parameters: { type: 'object', properties: {} },
   category: 'System',
-  toolset: 'system',
+  toolset: 'followups',
   handler: async () => {
     const items = getQueueStatus();
     return { success: true, data: { pending: items.length, items } };
@@ -84,7 +84,7 @@ register({
     required: ['id'],
   },
   category: 'System',
-  toolset: 'system',
+  toolset: 'followups',
   handler: async (args) => {
     const cancelled = cancelFollowUp(args.id as string);
     return { success: cancelled, data: { cancelled } };

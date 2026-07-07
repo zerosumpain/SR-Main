@@ -30,6 +30,7 @@ import './tools/files';
 import './tools/gmail';
 import './tools/web';
 import './tools/node-builder';
+import './tools/site-signals';
 
 // --- Public API ---
 
@@ -81,7 +82,9 @@ export function getToolsetManifest(): Array<{
     home: 'Home Assistant smart home — query state, control devices, history, templates',
     whatsapp: 'WhatsApp messaging — send messages and notifications',
     diagnostics: 'System diagnostics — scheduler status, run history, service logs',
-    system: 'Follow-up scheduling — track background tasks, get notified when they complete',
+    followups: 'Follow-up queue — schedule/track background tasks and get notified when they complete',
+    heartbeat: 'Heartbeat actions — register periodic agent check-ins on a long-running task and mark them complete',
+    schedule: 'Scheduled callbacks — one-shot time-based fires (a fixed reply, a direct tool call, or a re-engagement) at a specific time',
     memory: 'Persistent memory — save, recall, and forget facts about the user',
     visualise: 'Inline visual responses — render charts (Vega-Lite), maps (Leaflet), and tables directly in the chat',
     media: 'Media generation — create downloadable files (markdown, code, CSV, JSON, text) as conversation attachments',
@@ -89,6 +92,9 @@ export function getToolsetManifest(): Array<{
     files: 'Workflow file store — list, read, and semantically SEARCH files uploaded via /drive (file_search finds files by their content, including image visuals/OCR and audio transcripts). PDFs, DOCX, audio, and video are auto-extracted to text on read.',
     gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
+    'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
+    'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
+    'site-signals': 'Live site signals (read-only) — current GPS walk/ride status, family presence (who is home), and DfE policy-engine tracking indicators',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({

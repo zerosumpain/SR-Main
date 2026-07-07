@@ -136,9 +136,10 @@ export async function handlePublishPage(args: PublishArgs): Promise<ToolResult> 
 
 register({
   name: 'publish_page',
+  destructive: true,
   description:
     'Publish a static HTML or markdown page at https://strangeramblings.com/projects/<slug>/. Use this whenever the user asks for a URL/endpoint to view a report, analysis, or summary — it is faster and more reliable than editing the repo or copying files via ssh/scp. Pages are served live on the next request, no rebuild or restart required.',
-  toolset: 'media',
+  toolset: 'builds',
   category: 'media',
   parameters: {
     type: 'object',

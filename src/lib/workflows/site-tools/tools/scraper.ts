@@ -49,6 +49,7 @@ register({
 
 register({
   name: 'scraper_script_save',
+  destructive: true,
   description:
     'Write (create or overwrite) a scrape script for a profile. The `code` is the body of an `async` ' +
     'Python function that receives `page` (a Playwright Page, persistent context, stealth-patched) ' +
@@ -101,6 +102,7 @@ register({
 
 register({
   name: 'scraper_script_delete',
+  destructive: true,
   description:
     'Remove a saved scrape script for a profile. After this, the next stealth-scrape run will ' +
     'either fall through to the playbook path or re-author a new script (if `goal` is set on the node).',

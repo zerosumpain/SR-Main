@@ -19,6 +19,13 @@ export interface McpTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /**
+   * MCP standard tool annotations. `destructiveHint` mirrors the site-tool's
+   * `destructive` flag so the Hermes agent can require user confirmation
+   * before invoking it — the live-path equivalent of the in-repo
+   * confirmation gate (which only covers the legacy general-chat engine).
+   */
+  annotations?: { destructiveHint?: boolean };
 }
 
 export interface McpCallRequest {
@@ -39,6 +46,7 @@ function toolToMcp(def: ToolDefinition): McpTool {
       type: 'object',
       properties: {},
     },
+    ...(def.destructive ? { annotations: { destructiveHint: true } } : {}),
   };
 }
 

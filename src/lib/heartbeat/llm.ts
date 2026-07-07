@@ -88,15 +88,19 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
     })
     .returning({ id: orchestratorChats.id });
 
-  // Optional tool surface. The system toolset (heartbeat, scheduled,
-  // followup tools) is always available when toolsEnabled=true. Only one
-  // toolset is loaded — heartbeat agent turns shouldn't go on a tool
-  // shopping spree; they should act tightly on what was asked.
+  // Optional tool surface. The background-task toolsets (heartbeat, schedule,
+  // followups) are always available when toolsEnabled=true. Kept tight —
+  // heartbeat agent turns shouldn't go on a tool shopping spree; they should
+  // act on what was asked. (Formerly a single 'system' toolset.)
   let toolDefs: Array<{ type: 'function'; function: { name: string; description: string; parameters: unknown } }> | undefined;
   let toolsCalled: string[] = [];
   if (opts.toolsEnabled) {
     const { getToolsetDefinitions } = await import('$lib/workflows/site-tools/llm-tools');
-    toolDefs = getToolsetDefinitions('system');
+    toolDefs = [
+      ...getToolsetDefinitions('followups'),
+      ...getToolsetDefinitions('heartbeat'),
+      ...getToolsetDefinitions('schedule'),
+    ];
     // Add 'home' if the conversation context already references it. The
     // heartbeat shouldn't auto-load arbitrary toolsets, but home + system
     // covers the bulk of "do X at time Y" cases (lights, scenes, etc.).

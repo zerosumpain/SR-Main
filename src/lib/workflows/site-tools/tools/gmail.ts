@@ -334,6 +334,7 @@ register({
 
 register({
   name: 'gmail_send',
+  destructive: true,
   description:
     'Send a new Gmail message from a connected account. Destructive — orchestrator will prompt the user for confirmation before this runs.',
   parameters: {
@@ -396,6 +397,7 @@ register({
 
 register({
   name: 'gmail_reply',
+  destructive: true,
   description:
     'Reply on an existing Gmail thread. Threads via In-Reply-To/References + threadId so the reply appears in the same conversation. Destructive — orchestrator will prompt before sending.',
   parameters: {

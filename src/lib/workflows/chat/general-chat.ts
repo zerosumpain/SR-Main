@@ -679,12 +679,15 @@ export async function generalChat(
   const activeTools: Array<any> = [...META_TOOL_DEFINITIONS];
   const activatedToolsets = new Set<string>();
 
-  // Always-on system toolset: heartbeat actions + follow-up scheduling.
-  // These need to be reachable on every turn so any "I'll check in" promise
-  // can be backed by an actual scheduled action without forcing the model
-  // to call activate_toolset first.
-  activeTools.push(...getToolsetDefinitions('system'));
-  activatedToolsets.add('system');
+  // Always-on background-task toolsets: follow-up queue, heartbeat actions,
+  // and one-shot scheduled callbacks. These need to be reachable on every
+  // turn so any "I'll check in" promise can be backed by an actual scheduled
+  // action without forcing the model to call activate_toolset first.
+  // (Formerly a single 'system' toolset — split into three for clarity.)
+  for (const ts of ['followups', 'heartbeat', 'schedule']) {
+    activeTools.push(...getToolsetDefinitions(ts));
+    activatedToolsets.add(ts);
+  }
 
   // Include agent_spawn as a meta-tool available in all chats — but ONLY
   // when this IS a top-level orchestrator call (not itself a sub-agent).
@@ -739,6 +742,14 @@ export async function generalChat(
   if (!activatedToolsets.has('visualise')) {
     activeTools.push(...getToolsetDefinitions('visualise'));
     activatedToolsets.add('visualise');
+  }
+
+  // Custom-tools meta-tools (author/promote ephemeral tools) are always
+  // available — these were previously reachable via the 'visualise' toolset
+  // before being moved to their own 'custom-tools' toolset.
+  if (!activatedToolsets.has('custom-tools')) {
+    activeTools.push(...getToolsetDefinitions('custom-tools'));
+    activatedToolsets.add('custom-tools');
   }
 
   const baseCtx = options.modelContext;
