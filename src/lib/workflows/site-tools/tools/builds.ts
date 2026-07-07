@@ -312,6 +312,10 @@ register({
   },
   category: 'JKAI Builder',
   toolset: 'builds',
+  // Resuming a build is a long-running job — auto-attach (re-arm) the durable
+  // heartbeat watcher so the user hears about the tweak's outcome, same as
+  // build_create. Idempotent: re-arms the existing watch-build-<id> action.
+  producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     await orchestrator.continueBuild(args.id as string, args.instruction as string);

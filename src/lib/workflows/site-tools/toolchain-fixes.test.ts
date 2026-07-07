@@ -54,6 +54,24 @@ describe('toolset restructure', () => {
   });
 });
 
+describe('long-running auto-heartbeat is universal across spawner tools', () => {
+  it('every long-job spawner declares producesLongRunningTask with a known kind', () => {
+    const expected: Record<string, string> = {
+      build_create: 'build',
+      build_tweak: 'build',
+      research_start: 'research',
+      research_branch: 'research',
+      workflow_run: 'workflow_run',
+    };
+    for (const [name, kind] of Object.entries(expected)) {
+      const p = getTool(name)?.producesLongRunningTask;
+      expect(p, `${name} should auto-attach a heartbeat`).toBeDefined();
+      expect(p?.kind).toBe(kind);
+      expect(p?.idPath).toBeTruthy();
+    }
+  });
+});
+
 describe('site-signals coverage toolset', () => {
   it('registers the three read-only signal tools', () => {
     const names = getToolsByToolset('site-signals').map((t) => t.name).sort();

@@ -243,6 +243,11 @@ register({
   },
   category: 'Deep Dive Research',
   toolset: 'research',
+  // A branched session is a fresh long-running research job — auto-attach the
+  // durable heartbeat watcher (new session id → its own watch), same as
+  // research_start, so the branch's completion is reported without the model
+  // having to remember to watch it.
+  producesLongRunningTask: { kind: 'research', idPath: 'id', cadenceSeconds: 60 },
   handler: async (args) => {
     const parentId = args.parentId as string;
     const [parent] = await db.select().from(researchSessions).where(eq(researchSessions.id, parentId)).limit(1);

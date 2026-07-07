@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 
 register({
   name: 'followup_schedule',
-  description: 'Schedule a follow-up check on a background task. The system will periodically check the task status and message the user when it completes. Use this after starting async operations like research sessions or builds.',
+  description: 'Schedule an in-memory follow-up check on a background task (research/build only). NOTE: you usually do NOT need this — builds and research sessions (build_create/build_tweak, research_start/research_branch) and workflow_run now auto-attach a DURABLE watcher the moment they start, which survives restarts. For a durable custom watch on anything else, or a "when it finishes, do X" action, prefer register_heartbeat_action. This queue is in-memory and is lost on restart; use it only for a lightweight one-off check.',
   parameters: {
     type: 'object',
     properties: {
