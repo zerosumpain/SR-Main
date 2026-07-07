@@ -12,7 +12,9 @@ import type { ToolProgressStep } from './job-store';
 
 export type ToolCategory =
   | 'WEB' | 'FILE' | 'MAIL' | 'HOME' | 'CANVAS'
-  | 'DATA' | 'MSG' | 'AGENT' | 'MEM' | 'RUN' | 'TOOL';
+  | 'DATA' | 'MSG' | 'AGENT' | 'MEM' | 'RUN'
+  // Finer buckets that used to be lumped as the generic TOOL:
+  | 'SCHED' | 'FORGE' | 'SETUP' | 'TOOL';
 
 /**
  * Un-mask the tool a step should be *displayed* as, plus the args that describe
@@ -76,8 +78,14 @@ export function categorizeTool(tool: string): ToolCategory {
     )
   )
     return 'WEB';
-  // activate_toolset / jkai_help / list_custom_tools / create_tool / status_update
-  // and any unknown tool fall through to the neutral bucket.
+  // Finer split of what used to be the generic TOOL bucket, by the *type* of
+  // meta-tool. Order matters: scheduling wins over the generic `list_` setup
+  // check (e.g. list_scheduled_callbacks / list_heartbeat_actions).
+  if (/schedul|followup|heartbeat|cron/.test(t)) return 'SCHED';           // timers / callbacks
+  if (t.endsWith('_tool') || t.includes('ephemeral')) return 'FORGE';      // create/delete/promote a tool
+  if (startsAny('activate_toolset', 'jkai_help', 'jkai_extended', 'list_')) return 'SETUP'; // load/discover capabilities
+  // status_update is special-cased in the UI (not a card); genuine unknowns
+  // fall through to the neutral bucket.
   return 'TOOL';
 }
 
@@ -123,6 +131,28 @@ function host(u: unknown): string | undefined {
 }
 
 const trim = (s: string, n = 60) => (s.length > n ? s.slice(0, n) + '…' : s);
+
+/**
+ * What a `delegate_task` call is trying to achieve, from its args. Hermes takes
+ * either a single `goal` (+ optional context/toolsets) or a batch `tasks:[…]`
+ * (each a goal string or `{goal|task|prompt}` object). Returns the lead goal
+ * text + how many sub-agents were requested.
+ */
+function delegationGoal(a: Record<string, unknown>): { text?: string; count: number } {
+  const asGoal = (v: unknown): string | undefined => {
+    if (typeof v === 'string' && v) return v;
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      const g = o.goal ?? o.task ?? o.prompt ?? o.description;
+      if (typeof g === 'string' && g) return g;
+    }
+    return undefined;
+  };
+  if (typeof a.goal === 'string' && a.goal) return { text: a.goal, count: 1 };
+  if (Array.isArray(a.tasks) && a.tasks.length) return { text: asGoal(a.tasks[0]), count: a.tasks.length };
+  const single = asGoal(a.goal) ?? asGoal(a.task) ?? asGoal(a.prompt);
+  return { text: single, count: single ? 1 : 0 };
+}
 
 /**
  * Args-derived label shown on a tool step while it's still running. Lets the user
@@ -200,6 +230,11 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       return str('id') ? `post ${str('id')}` : 'working with a post';
     case 'recall_memories': return str('query') ? `“${trim(str('query')!, 40)}”` : 'recalling memory';
     case 'save_memory': return 'saving a memory';
+    case 'delegate_task': {
+      const g = delegationGoal(a);
+      if (g.count > 1) return `delegating ${g.count} parallel tasks${g.text ? ` — ${trim(g.text, 44)}` : ''}`;
+      return g.text ? `delegating: ${trim(g.text, 56)}` : 'delegating a task to a sub-agent';
+    }
     case 'render_chart':
     case 'render_map':
     case 'render_table':
@@ -252,6 +287,21 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       else if (typeof d.workflowId === 'string') parts.push((d.workflowId).slice(0, 8));
       if (typeof d.nodeCount === 'number') parts.push(`${d.nodeCount} node${d.nodeCount === 1 ? '' : 's'}`);
       return `Built canvas${parts.length ? ` ${parts.join(' · ')}` : ''}`;
+    }
+    case 'delegate_task': {
+      const g = delegationGoal(args);
+      const kids = step.children;
+      if (kids && kids.length) {
+        const done = kids.filter((k) => k.status === 'completed' || k.status === 'done').length;
+        const failed = kids.length - done;
+        const tail = failed > 0 ? `${done}/${kids.length} done` : `${kids.length} done`;
+        // Lead with the goal so history still says what it was for; then the count.
+        return g.text
+          ? `Delegated “${trim(g.text, 40)}” — ${tail}`
+          : `Delegated ${kids.length} task${kids.length === 1 ? '' : 's'} — ${tail}`;
+      }
+      if (g.text) return g.count > 1 ? `Delegated ${g.count} tasks — ${trim(g.text, 40)}` : `Delegated: ${trim(g.text, 56)}`;
+      return 'Delegated task to a sub-agent';
     }
     case 'workflow_modify':
       return 'Updated canvas';

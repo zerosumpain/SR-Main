@@ -122,7 +122,7 @@ export function adaptToolFrameToJobEvents(
         result: tc.result ?? null,
         status: 'done',
         toolCallId,
-        summary: summary ?? (summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: tc.result ?? null, status: 'done' }) || undefined),
+        summary: summary ?? (summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: tc.result ?? null, status: 'done', ...(children && children.length ? { children } : {}) }) || undefined),
         ...(children && children.length ? { children } : {}),
       }];
     }

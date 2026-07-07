@@ -193,6 +193,7 @@
   .sa-step-cat[data-cat="AGENT"] { color: var(--accent-ink); }
   .sa-step-cat[data-cat="RUN"] { color: var(--accent); }
   .sa-step-cat[data-cat="HOME"] { color: var(--status-success); }
+  .sa-step-cat[data-cat="SCHED"] { color: var(--warn); }
   .sa-step-summary {
     color: var(--text-primary);
     flex: 1;

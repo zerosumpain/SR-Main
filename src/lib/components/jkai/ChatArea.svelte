@@ -2699,6 +2699,7 @@
   .step-cat[data-cat="AGENT"] { color: var(--accent-ink); }
   .step-cat[data-cat="RUN"] { color: var(--accent); }
   .step-cat[data-cat="HOME"] { color: var(--status-success); }
+  .step-cat[data-cat="SCHED"] { color: var(--warn); }
   .step-summary {
     color: var(--text-primary);
     flex: 1;
