@@ -109,9 +109,18 @@
     );
   }
 
+  // Wrap GFM tables in a horizontal-scroll container so a wide comparison
+  // table doesn't overflow the chat column. Runs post-sanitise so the wrapper
+  // survives (marked emits a bare `<table>` — confirmed).
+  function wrapTables(html: string): string {
+    return html
+      .replace(/<table>/g, '<div class="md-table-wrap"><table>')
+      .replace(/<\/table>/g, '</table></div>');
+  }
+
   let renderedContent = $derived(
     role === 'assistant'
-      ? injectConvParam(sanitizeChatHtml(marked.parse(content) as string), conversationId)
+      ? wrapTables(injectConvParam(sanitizeChatHtml(marked.parse(content) as string), conversationId))
       : ''
   );
 
@@ -363,6 +372,48 @@
     border-top: 1px solid var(--card-border);
     margin: 0.5em 0;
   }
+  /* Tables — GFM tables wrapped in .md-table-wrap for horizontal scroll.
+     Warm-brutalist: hard 1px borders, mono uppercase header, subtle zebra. */
+  .chat-markdown :global(.md-table-wrap) {
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 0.7em 0;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+  }
+  .chat-markdown :global(.md-table-wrap table) {
+    border-collapse: collapse;
+    width: auto;
+    min-width: 100%;
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .chat-markdown :global(.md-table-wrap th),
+  .chat-markdown :global(.md-table-wrap td) {
+    padding: 6px 11px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--card-border);
+    border-right: 1px solid var(--card-border);
+  }
+  .chat-markdown :global(.md-table-wrap th:last-child),
+  .chat-markdown :global(.md-table-wrap td:last-child) { border-right: none; }
+  .chat-markdown :global(.md-table-wrap tbody tr:last-child td) { border-bottom: none; }
+  .chat-markdown :global(.md-table-wrap thead th) {
+    background: var(--bg-section);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .chat-markdown :global(.md-table-wrap tbody tr:nth-child(even)) {
+    background: color-mix(in srgb, var(--card-border) 7%, transparent);
+  }
+  .chat-markdown :global(.md-table-wrap td) { color: var(--text-primary); }
 
   /* Heartbeat-source message styling */
   .hb-msg {
