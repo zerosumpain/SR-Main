@@ -166,37 +166,14 @@
     }
   }
 
-  async function selectWhatsApp() {
-    if (!whatsappThread?.phoneNumber) return;
-
-    try {
-      const res = await fetch('/api/jkai/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'whatsapp-continuation',
-          whatsappPhoneNumber: whatsappThread.phoneNumber,
-          title: 'WhatsApp continuation',
-        }),
-      });
-      if (res.ok) {
-        const conv = await res.json();
-        conversationList = [
-          { ...conv, messageCount: 0, lastMessage: null },
-          ...conversationList,
-        ];
-        activeConversationId = conv.id;
-        rememberConversation(conv.id);
-        sidebarOpen = false;
-        const detailRes = await fetch(`/api/jkai/conversations/${conv.id}`);
-        if (detailRes.ok) {
-          const detail = await detailRes.json();
-          activeMessages = detail.messages || [];
-        }
-      }
-    } catch (err) {
-      console.error('Failed to create WhatsApp continuation:', err);
-    }
+  // The WhatsApp thread IS a real conversation (source 'whatsapp') whose full
+  // history lives in orchestrator_chats. Open it directly so the continuation
+  // carries the WhatsApp history (visible + as model context); typing on web
+  // appends to the same unified thread. (Formerly this spun up a separate,
+  // empty 'whatsapp-continuation' conversation.)
+  function selectWhatsApp() {
+    if (!whatsappThread?.id) return;
+    selectConversation(whatsappThread.id);
   }
 
   async function deleteConversation(id: string) {

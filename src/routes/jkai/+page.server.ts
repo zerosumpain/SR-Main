@@ -47,7 +47,7 @@ export const load: PageServerLoad = async () => {
     .orderBy(desc(conversations.updatedAt))
     .limit(1);
 
-  let whatsappThread: { phoneNumber: string; messages: any[] } | null = null;
+  let whatsappThread: { id: string; phoneNumber: string; messages: any[] } | null = null;
   if (latestWaConv?.phoneNumber) {
     const waMessages = await db
       .select({
@@ -60,7 +60,7 @@ export const load: PageServerLoad = async () => {
       .where(eq(orchestratorChats.conversationId, latestWaConv.id))
       .orderBy(asc(orchestratorChats.createdAt));
 
-    whatsappThread = { phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
+    whatsappThread = { id: latestWaConv.id, phoneNumber: latestWaConv.phoneNumber, messages: waMessages };
   }
 
   // LLM spend per window (day / week / month / lifetime) — the top-bar metric

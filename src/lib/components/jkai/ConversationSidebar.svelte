@@ -21,6 +21,7 @@
   }
 
   interface WhatsAppThread {
+    id: string | null;
     phoneNumber: string | null;
     messages: Array<{ id: string; role: string; content: string; createdAt: string }>;
   }
@@ -72,7 +73,11 @@
     );
   }
 
-  const visible = $derived(conversations.filter(matches));
+  // The raw WhatsApp thread (source 'whatsapp') has its own dedicated row
+  // below and opens the real conversation with its full history — keep it out
+  // of the normal buckets so it isn't listed twice.
+  const base = $derived(conversations.filter((c) => c.source !== 'whatsapp'));
+  const visible = $derived(base.filter(matches));
   const pinned = $derived(visible.filter((c) => c.pinned));
   const unpinned = $derived(visible.filter((c) => !c.pinned));
 
@@ -173,7 +178,7 @@
   }
 
   // Recent conversations for the collapsed rail dots (cap for tidiness).
-  const railDots = $derived(conversations.slice(0, 9));
+  const railDots = $derived(base.slice(0, 9));
 </script>
 
 {#if collapsed}
@@ -241,7 +246,7 @@
       {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0 && !searching}
         <button
           class="wa"
-          class:active={activeConversationId === 'whatsapp'}
+          class:active={activeConversationId === whatsappThread.id}
           onclick={onWhatsAppSelect}
         >
           <span class="wa-tag">WA</span>
@@ -317,10 +322,6 @@
     <!-- Footer -->
     <div class="foot">
       <MetricsStrip {metrics} {spendByPeriod} />
-      <a class="foot-link" href="/jkai/intel">
-        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2l7 4v8l-7 4-7-4V6z"/></svg>
-        Intel dashboard
-      </a>
     </div>
   </div>
 {/if}
@@ -560,15 +561,7 @@
   /* footer */
   .foot {
     border-top: 1px solid var(--card-border); padding: 9px 12px;
-    display: flex; flex-direction: column; gap: 8px;
   }
-  .foot-link {
-    display: flex; align-items: center; gap: 7px;
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
-    color: var(--text-secondary); text-decoration: none; padding: 2px 0;
-    transition: color 0.12s;
-  }
-  .foot-link:hover { color: var(--accent); }
 
   /* ---- collapsed rail ---- */
   .rail {
