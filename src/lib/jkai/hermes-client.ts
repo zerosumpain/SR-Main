@@ -1,4 +1,15 @@
 import { mintBridgeToken, type TokenKind, type TokenScope } from '$lib/mcp/auth';
+import { Agent } from 'undici';
+
+// Hermes' `/out` SSE stream stays open for the whole turn. For a `delegate_task`
+// that can be 10-20 min while child agents grind through silent LLM loops that
+// emit no frames — a gap far longer than undici's default 300s `bodyTimeout`,
+// which would abort the read mid-delegation and strand the turn on a stale
+// "⏳ Working…" partial (the real result never arrives). Give this one long-lived
+// stream a dispatcher with the idle body-timeout disabled; ordinary fetches keep
+// undici's safe defaults. `headersTimeout` stays bounded so a dead connection at
+// connect still fails fast — only the between-frames body idle is unbounded.
+const streamDispatcher = new Agent({ bodyTimeout: 0, headersTimeout: 60_000 });
 
 export interface HermesClientConfig {
   baseUrl: string;
@@ -190,12 +201,19 @@ export class HermesClient {
     return { accepted: Boolean(body.accepted), chatId: body.chat_id };
   }
 
-  async *openStream(ctx: SessionContext): AsyncGenerator<SseFrame, void, undefined> {
+  async *openStream(ctx: SessionContext, opts?: { signal?: AbortSignal }): AsyncGenerator<SseFrame, void, undefined> {
     const token = this.mintToken(ctx);
     const url = new URL(`${this.config.baseUrl}/platforms/jkai/out`);
     url.searchParams.set('chat_id', ctx.chatId);
 
-    const resp = await fetch(url, { headers: { 'Bridge-Token': token } });
+    // `dispatcher` is an undici (Node fetch) extension not in the DOM RequestInit
+    // type; `signal` propagates job cancellation so a killed/cancelled turn tears
+    // the upstream connection down instead of leaking it.
+    const resp = await fetch(url, {
+      headers: { 'Bridge-Token': token },
+      signal: opts?.signal,
+      dispatcher: streamDispatcher,
+    } as RequestInit & { dispatcher: Agent });
     if (!resp.ok) throw new Error(`hermes stream returned ${resp.status}`);
     if (!resp.body) throw new Error('hermes stream has no body');
 
@@ -203,24 +221,36 @@ export class HermesClient {
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-      let idx: number;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const frame = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
-        if (!dataLine) continue;
-        try {
-          const payload = JSON.parse(dataLine.slice(5).trim()) as SseFrame;
-          yield payload;
-        } catch {
-          // skip malformed frame
+        let idx: number;
+        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
+          if (!dataLine) continue;
+          try {
+            const payload = JSON.parse(dataLine.slice(5).trim()) as SseFrame;
+            yield payload;
+          } catch {
+            // skip malformed frame
+          }
         }
       }
+    } catch (err) {
+      // A job abort/cancel surfaces here as an AbortError — that's an intentional
+      // teardown, not a stream failure, so end the generator quietly and let the
+      // caller finalize on its own `signal.aborted` check.
+      if (opts?.signal?.aborted) return;
+      throw err;
+    } finally {
+      // The consumer (chat route) breaks its `for await` on job abort; make sure
+      // the upstream connection is torn down rather than left dangling.
+      try { await reader.cancel(); } catch { /* already closed */ }
     }
   }
 }

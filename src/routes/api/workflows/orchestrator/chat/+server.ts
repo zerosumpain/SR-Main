@@ -423,7 +423,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         kind,
         kindId,
         sessionId,
-      })) {
+      }, { signal: abortController.signal })) {
         if (abortController.signal.aborted) break;
         if (
           (frame.kind === 'send' || frame.kind === 'replace') &&
