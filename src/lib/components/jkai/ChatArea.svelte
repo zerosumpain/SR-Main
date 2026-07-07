@@ -13,6 +13,7 @@
   import { approvalAffordance } from '$lib/jkai/slash-commands';
   import type { DelegateChild } from '$lib/workflows/chat/job-store';
   import WorkerTray from '$lib/components/jkai/WorkerTray.svelte';
+  import DelegateChildren from '$lib/components/jkai/DelegateChildren.svelte';
   import type { PlanPayload, ClarifyQuestion } from '$lib/workflows/chat/job-store';
   import { parsePromoteMarkers, stripPromoteMarkers } from '$lib/jkai/promote-marker';
   import { categorizeTool, resolveDisplayTool } from '$lib/workflows/chat/tool-summary';
@@ -1857,29 +1858,7 @@
                           {/if}
                         </header>
                         {#if step.children?.length}
-                          <ul class="subagents">
-                            {#each step.children as child (child.index)}
-                              <li class="subagent" data-status={child.status}>
-                                <div class="sa-hdr">
-                                  <span class="sa-badge" data-status={child.status}>
-                                    {child.status === 'completed' ? '✓' : (child.status === 'error' || child.status === 'failed') ? '✗' : '·'}
-                                  </span>
-                                  <span class="sa-title">sub-agent {child.index + 1}</span>
-                                  <span class="sa-meta mono">
-                                    {#if child.model}{child.model}{/if}
-                                    {#if child.apiCalls != null} · {child.apiCalls} calls{/if}
-                                    {#if child.durationSeconds != null} · {child.durationSeconds.toFixed(1)}s{/if}
-                                  </span>
-                                </div>
-                                {#if child.toolTrace?.length}
-                                  <div class="sa-trace mono">
-                                    {#each child.toolTrace as t, ti (ti)}<span class="sa-tool" data-status={t.status}>{t.tool}{#if t.status === 'error' || t.status === 'failed'}✗{/if}</span>{#if ti < child.toolTrace.length - 1}<span class="sa-arrow">→</span>{/if}{/each}
-                                  </div>
-                                {/if}
-                                {#if child.summary}<div class="sa-summary">{child.summary}</div>{/if}
-                              </li>
-                            {/each}
-                          </ul>
+                          <DelegateChildren children={step.children} />
                         {/if}
                         {#if step.expanded}
                           <div class="step-card-body">
@@ -2734,20 +2713,7 @@
     gap: 6px;
   }
 
-  /* ── Sub-agent rows under a delegate_task step (sub-agent visualizer) ── */
-  .subagents { list-style: none; margin: 7px 0 0; padding: 0 0 0 12px; display: flex; flex-direction: column; gap: 7px; border-left: 2px solid var(--card-border); }
-  .subagent { font-size: 11px; }
-  .sa-hdr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  .sa-badge { font-size: 10px; flex-shrink: 0; color: var(--text-muted); }
-  .sa-badge[data-status='completed'] { color: var(--status-success); }
-  .sa-badge[data-status='error'], .sa-badge[data-status='failed'] { color: var(--status-error); }
-  .sa-title { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
-  .sa-meta { font-size: 9px; color: var(--text-muted); }
-  .sa-trace { margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 10px; }
-  .sa-tool { background: var(--bg-section); border-radius: var(--radius-sharp); padding: 0 4px; color: var(--text-secondary); }
-  .sa-tool[data-status='error'], .sa-tool[data-status='failed'] { color: var(--status-error); }
-  .sa-arrow { color: var(--text-ghost, var(--text-muted)); }
-  .sa-summary { margin-top: 4px; font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 9rem; overflow-y: auto; }
+  /* Sub-agent rows under a delegate_task step now live in DelegateChildren.svelte. */
   .step-body-label {
     font-family: var(--font-mono);
     font-size: 9px;
