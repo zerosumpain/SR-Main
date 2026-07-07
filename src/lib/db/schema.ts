@@ -1010,6 +1010,7 @@ export const conversations = pgTable('jkai_conversations', {
   completionTokens: bigint('completion_tokens', { mode: 'number' }).notNull().default(0),
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
+  pinned: boolean('pinned').notNull().default(false),
 });
 
 export type Conversation = typeof conversations.$inferSelect;

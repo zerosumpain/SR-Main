@@ -96,6 +96,25 @@ export const DELETE: RequestHandler = async ({ params }) => {
  */
 export const PATCH: RequestHandler = async ({ params, request }) => {
 	const body = await request.json();
+
+	// Rename / pin — allowed at any time (unlike the model change, these are
+	// not locked after the first message).
+	if ('title' in body || 'pinned' in body) {
+		const set: Partial<{ title: string | null; pinned: boolean }> = {};
+		if ('title' in body) {
+			const t = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
+			set.title = t.length > 0 ? t : null;
+		}
+		if ('pinned' in body) set.pinned = !!body.pinned;
+		const [updated] = await db
+			.update(conversations)
+			.set(set)
+			.where(eq(conversations.id, params.id))
+			.returning();
+		if (!updated) throw error(404, 'conversation not found');
+		return json(updated);
+	}
+
 	const { modelProvider, modelId } = body;
 
 	if (modelProvider !== 'zai' && modelProvider !== 'openrouter') {

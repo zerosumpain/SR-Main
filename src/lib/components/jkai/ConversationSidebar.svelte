@@ -1,10 +1,6 @@
 <script lang="ts">
-  import { formatGbp } from '$lib/canvas/stats/costFormat';
   import DraftsPanel from './DraftsPanel.svelte';
   import MetricsStrip from './MetricsStrip.svelte';
-  import { fade } from 'svelte/transition';
-  import { flip } from 'svelte/animate';
-  import { dur } from '$lib/motion';
 
   interface SpendByPeriod {
     day: number;
@@ -21,6 +17,7 @@
     lastMessage: string | null;
     messageCount: number;
     costUsd?: string | number | null;
+    pinned?: boolean;
   }
 
   interface WhatsAppThread {
@@ -36,6 +33,8 @@
     onNew,
     onWhatsAppSelect,
     onDelete,
+    onRename,
+    onTogglePin,
     collapsed = false,
     onToggleCollapse,
     liveConversationIds = [],
@@ -49,6 +48,8 @@
     onNew: () => void;
     onWhatsAppSelect: () => void;
     onDelete: (id: string) => void;
+    onRename?: (id: string, title: string) => void;
+    onTogglePin?: (id: string, pinned: boolean) => void;
     collapsed?: boolean;
     onToggleCollapse: () => void;
     liveConversationIds?: string[];
@@ -58,15 +59,28 @@
 
   const liveSet = $derived(new Set(liveConversationIds));
 
+  // --- Search ---
+  let search = $state('');
+  const q = $derived(search.trim().toLowerCase());
+  const searching = $derived(q.length > 0);
+
+  function matches(c: ConversationItem): boolean {
+    if (!q) return true;
+    return (
+      (c.title ?? '').toLowerCase().includes(q) ||
+      (c.lastMessage ?? '').toLowerCase().includes(q)
+    );
+  }
+
+  const visible = $derived(conversations.filter(matches));
+  const pinned = $derived(visible.filter((c) => c.pinned));
+  const unpinned = $derived(visible.filter((c) => !c.pinned));
+
+  // --- Recency buckets (non-search view) ---
   type Bucket = 'today' | 'yesterday' | 'last_week' | 'older';
-
   const BUCKET_LABELS: Record<Bucket, string> = {
-    today: 'Today',
-    yesterday: 'Yesterday',
-    last_week: 'Last 7 days',
-    older: 'Older',
+    today: 'Today', yesterday: 'Yesterday', last_week: 'Last 7 days', older: 'Older',
   };
-
   const BUCKET_ORDER: Bucket[] = ['today', 'yesterday', 'last_week', 'older'];
 
   function getBucket(date: string | Date): Bucket {
@@ -81,23 +95,69 @@
     return 'older';
   }
 
-  // Group conversations into buckets (order preserved from the incoming list,
-  // which is already updatedAt desc).
-  let grouped = $derived.by(() => {
-    const g: Record<Bucket, ConversationItem[]> = {
-      today: [], yesterday: [], last_week: [], older: [],
-    };
-    for (const c of conversations) g[getBucket(c.updatedAt)].push(c);
+  const grouped = $derived.by(() => {
+    const g: Record<Bucket, ConversationItem[]> = { today: [], yesterday: [], last_week: [], older: [] };
+    for (const c of unpinned) g[getBucket(c.updatedAt)].push(c);
     return g;
   });
 
-  // Only today is expanded by default
   let expanded = $state<Record<Bucket, boolean>>({
     today: true, yesterday: false, last_week: false, older: false,
   });
+  let pinnedExpanded = $state(true);
 
   function toggleBucket(b: Bucket) {
     expanded = { ...expanded, [b]: !expanded[b] };
+  }
+
+  // --- Rename ---
+  let renamingId = $state<string | null>(null);
+  let renameDraft = $state('');
+
+  function startRename(e: Event, c: ConversationItem) {
+    e.stopPropagation();
+    renamingId = c.id;
+    renameDraft = c.title ?? '';
+    confirmingDeleteId = null;
+  }
+  function commitRename() {
+    if (renamingId) onRename?.(renamingId, renameDraft.trim());
+    renamingId = null;
+  }
+  function cancelRename() {
+    renamingId = null;
+  }
+  function focusSelect(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  // --- Pin ---
+  function togglePin(e: Event, c: ConversationItem) {
+    e.stopPropagation();
+    onTogglePin?.(c.id, !c.pinned);
+  }
+
+  // --- Delete (inline confirm, no browser alert) ---
+  let confirmingDeleteId = $state<string | null>(null);
+  function askDelete(e: Event, c: ConversationItem) {
+    e.stopPropagation();
+    confirmingDeleteId = c.id;
+    renamingId = null;
+  }
+  function confirmDelete(e: Event, c: ConversationItem) {
+    e.stopPropagation();
+    confirmingDeleteId = null;
+    onDelete(c.id);
+  }
+  function cancelDelete(e: Event) {
+    e.stopPropagation();
+    confirmingDeleteId = null;
+  }
+
+  function selectConv(id: string) {
+    confirmingDeleteId = null;
+    onSelect(id);
   }
 
   function relativeTime(iso: string | Date): string {
@@ -107,197 +167,428 @@
     if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
     return `${Math.floor(ms / 86400000)}d`;
   }
-
   function truncate(text: string | null, len: number): string {
     if (!text) return '';
-    return text.length > len ? text.slice(0, len) + '...' : text;
+    return text.length > len ? text.slice(0, len) + '…' : text;
   }
 
-  function confirmAndDelete(e: MouseEvent | KeyboardEvent, conv: ConversationItem) {
-    e.stopPropagation();
-    const label = conv.title || truncate(conv.lastMessage, 40) || 'this conversation';
-    if (confirm(`Delete "${label}"? This cannot be undone.`)) {
-      onDelete(conv.id);
-    }
-  }
+  // Recent conversations for the collapsed rail dots (cap for tidiness).
+  const railDots = $derived(conversations.slice(0, 9));
 </script>
 
 {#if collapsed}
-  <button
-    onclick={onToggleCollapse}
-    class="px-2 py-4 border-r flex items-center"
-    style="border-color: var(--card-border); color: var(--text-ghost);"
-    title="Expand sidebar"
-  >
-    <span class="text-sm">&#9654;</span>
-  </button>
+  <div class="rail" style="border-color: var(--card-border);">
+    <button class="rbtn primary" onclick={onNew} title="New chat" aria-label="New chat">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
+    </button>
+    <button class="rbtn" onclick={onToggleCollapse} title="Search / expand" aria-label="Expand sidebar">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <div class="rail-dots">
+      {#each railDots as c (c.id)}
+        <button
+          class="cdot"
+          class:active={activeConversationId === c.id}
+          class:live={liveSet.has(c.id)}
+          onclick={() => selectConv(c.id)}
+          title={c.title || 'Conversation'}
+          aria-label={c.title || 'Conversation'}
+        ></button>
+      {/each}
+    </div>
+    <div class="rail-spacer"></div>
+    <button class="rbtn" onclick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar">
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 5l5 5-5 5"/></svg>
+    </button>
+  </div>
 {:else}
-  <div
-    class="w-full sm:w-64 flex-shrink-0 border-r flex flex-col h-full"
-    style="border-color: var(--card-border);"
-  >
+  <div class="sb" style="border-color: var(--card-border);">
     <!-- Header -->
-    <div class="px-3 py-3 flex items-center justify-between border-b" style="border-color: var(--card-border);">
-      <span class="text-xs uppercase tracking-wider font-medium" style="color: var(--text-secondary);">
-        Conversations
-      </span>
-      <button
-        onclick={onToggleCollapse}
-        class="text-sm px-1"
-        style="color: var(--text-ghost);"
-        title="Collapse sidebar"
-      >
-        &#9664;
+    <div class="sb-hd">
+      <span class="sb-eyebrow">Conversations</span>
+      <button class="icon-btn" onclick={onToggleCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5l-5 5 5 5"/></svg>
       </button>
     </div>
 
-    <!-- Scrollable list -->
-    <div class="flex-1 overflow-y-auto">
-      <!-- WhatsApp thread indicator -->
-      {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0}
+    <!-- New chat (primary) -->
+    <button class="newchat" onclick={onNew}>
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
+      New chat
+    </button>
+
+    <!-- Search -->
+    <div class="search">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+      <input
+        type="text"
+        placeholder="Search conversations…"
+        bind:value={search}
+        onkeydown={(e) => { if (e.key === 'Escape') search = ''; }}
+        aria-label="Search conversations"
+      />
+      {#if search}
+        <button class="search-clear" onclick={() => (search = '')} title="Clear" aria-label="Clear search">
+          <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+      {/if}
+    </div>
+
+    <!-- List -->
+    <div class="list">
+      <!-- WhatsApp thread -->
+      {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0 && !searching}
         <button
+          class="wa"
+          class:active={activeConversationId === 'whatsapp'}
           onclick={onWhatsAppSelect}
-          class="w-full text-left px-3 py-3 border-b transition-colors"
-          style="border-color: var(--card-border); background: {activeConversationId === 'whatsapp' ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
         >
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-[10px] px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--wa-green) 15%, transparent); color: var(--wa-green);">
-              WA
-            </span>
-            <span class="text-xs font-medium" style="color: var(--text-primary);">
-              WhatsApp thread
-            </span>
-          </div>
-          <p class="text-[11px] line-clamp-1" style="color: var(--text-ghost);">
-            {truncate(whatsappThread.messages[whatsappThread.messages.length - 1]?.content, 40)}
-          </p>
+          <span class="wa-tag">WA</span>
+          <span class="wa-body">
+            <span class="wa-title">WhatsApp thread</span>
+            <span class="wa-prev">{truncate(whatsappThread.messages[whatsappThread.messages.length - 1]?.content, 38)}</span>
+          </span>
         </button>
       {/if}
 
-      <!-- Bucketed conversations -->
-      {#each BUCKET_ORDER as bucket}
-        {#if grouped[bucket].length > 0}
-          <div>
-            <button
-              onclick={() => toggleBucket(bucket)}
-              class="w-full flex items-center justify-between px-3 py-2 transition-colors hover:opacity-80"
-              style="background: color-mix(in srgb, var(--card-border) 25%, transparent);"
-            >
-              <span class="flex items-center gap-1.5">
-                <span class="text-[9px] w-2 inline-block" style="color: var(--text-ghost);">
-                  {expanded[bucket] ? '▾' : '▸'}
-                </span>
-                <span class="text-[10px] uppercase tracking-wider font-medium" style="color: var(--text-secondary);">
-                  {BUCKET_LABELS[bucket]}
-                </span>
+      {#if searching}
+        {#if visible.length === 0}
+          <div class="empty">
+            <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" style="opacity:.5"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+            <div class="empty-big">No conversations match “{search.trim()}”.</div>
+            <div class="empty-sm">Try a different term, or start a new chat.</div>
+          </div>
+        {:else}
+          {#each [...pinned, ...unpinned] as c (c.id)}
+            {@render row(c)}
+          {/each}
+        {/if}
+      {:else if conversations.length === 0}
+        <div class="empty">
+          <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" style="opacity:.5"><path d="M4 5h12v8H8l-4 3z"/></svg>
+          <div class="empty-big">No conversations yet.</div>
+          <div class="empty-sm">Start a new chat to begin.</div>
+        </div>
+      {:else}
+        <!-- Pinned -->
+        {#if pinned.length > 0}
+          <button class="sec-hd pin" onclick={() => (pinnedExpanded = !pinnedExpanded)}>
+            <span class="sec-l">
+              <span class="chev" class:open={pinnedExpanded}>
+                <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l5 4-5 4z"/></svg>
               </span>
-              <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                {grouped[bucket].length}
-              </span>
-            </button>
+              <span class="sec-lbl">Pinned</span>
+            </span>
+            <span class="sec-cnt">{pinned.length}</span>
+          </button>
+          {#if pinnedExpanded}
+            {#each pinned as c (c.id)}
+              {@render row(c)}
+            {/each}
+          {/if}
+        {/if}
 
+        <!-- Recency buckets -->
+        {#each BUCKET_ORDER as bucket}
+          {#if grouped[bucket].length > 0}
+            <button class="sec-hd" onclick={() => toggleBucket(bucket)}>
+              <span class="sec-l">
+                <span class="chev" class:open={expanded[bucket]}>
+                  <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l5 4-5 4z"/></svg>
+                </span>
+                <span class="sec-lbl">{BUCKET_LABELS[bucket]}</span>
+              </span>
+              <span class="sec-cnt">{grouped[bucket].length}</span>
+            </button>
             {#if expanded[bucket]}
-              {#each grouped[bucket] as conv (conv.id)}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div
-                  onclick={() => onSelect(conv.id)}
-                  onkeydown={(e) => { if (e.key === 'Enter') onSelect(conv.id); }}
-                  role="button"
-                  tabindex="0"
-                  animate:flip={{ duration: dur(180) }}
-                  out:fade={{ duration: dur(120) }}
-                  class="w-full text-left px-3 py-2.5 border-b transition-colors group cursor-pointer"
-                  style="border-color: var(--card-border); background: {activeConversationId === conv.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent'};"
-                >
-                  <div class="flex items-center justify-between mb-0.5 gap-2">
-                    {#if liveSet.has(conv.id)}
-                      <span class="live-dot" title="JKAI is working on this conversation" aria-label="Live job"></span>
-                    {/if}
-                    <span
-                      class="text-xs font-medium line-clamp-1 flex-1"
-                      style="color: {activeConversationId === conv.id ? 'var(--accent)' : 'var(--text-primary)'};"
-                    >
-                      {conv.title || 'New conversation'}
-                    </span>
-                    <span class="text-[10px] shrink-0" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                      {relativeTime(conv.updatedAt)}
-                    </span>
-                    <button
-                      onclick={(e) => confirmAndDelete(e, conv)}
-                      onkeydown={(e) => { if (e.key === 'Enter') confirmAndDelete(e, conv); }}
-                      class="del-btn text-[18px] leading-none w-7 h-7 flex items-center justify-center rounded shrink-0 transition-opacity hover:opacity-100"
-                      style="color: var(--text-ghost); opacity: 0.6;"
-                      title="Delete conversation"
-                      aria-label="Delete conversation"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                  <p class="text-[11px] line-clamp-1" style="color: var(--text-ghost);">
-                    {truncate(conv.lastMessage, 40)}
-                  </p>
-                  {#if Number(conv.costUsd ?? 0) > 0}
-                    <div class="text-[10px] mt-0.5" style="color: var(--text-ghost); font-family: var(--font-mono);">
-                      {formatGbp(Number(conv.costUsd))}
-                    </div>
-                  {/if}
-                </div>
+              {#each grouped[bucket] as c (c.id)}
+                {@render row(c)}
               {/each}
             {/if}
-          </div>
-        {/if}
-      {/each}
+          {/if}
+        {/each}
+      {/if}
     </div>
 
     <!-- Drafts (offline-first, IndexedDB) -->
     <DraftsPanel />
 
-    <!-- Footer actions -->
-    <div class="px-3 py-3 border-t space-y-2" style="border-color: var(--card-border);">
-      <div class="pb-1">
-        <MetricsStrip {metrics} {spendByPeriod} />
-      </div>
-      <a
-        href="/jkai/intel"
-        class="sb-action flex items-center gap-2 w-full px-3 py-2 border text-xs font-medium hover:opacity-80 transition-opacity"
-        style="border-color: var(--card-border); color: var(--accent);"
-      >
-        <span aria-hidden="true">
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M10 2 L17 6 V14 L10 18 L3 14 V6 Z" />
-          </svg>
-        </span> Intel Dashboard
+    <!-- Footer -->
+    <div class="foot">
+      <MetricsStrip {metrics} {spendByPeriod} />
+      <a class="foot-link" href="/jkai/intel">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2l7 4v8l-7 4-7-4V6z"/></svg>
+        Intel dashboard
       </a>
-      <button
-        onclick={onNew}
-        class="sb-action w-full px-3 py-2 text-xs font-medium transition-colors border"
-        style="border-color: var(--card-border); color: var(--text-secondary);"
-      >
-        + New conversation
-      </button>
     </div>
   </div>
 {/if}
 
+{#snippet row(c: ConversationItem)}
+  {#if renamingId === c.id}
+    <div class="row rename-row">
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="rename-input"
+        bind:value={renameDraft}
+        use:focusSelect
+        onkeydown={(e) => { if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') cancelRename(); }}
+        onblur={commitRename}
+        aria-label="Rename conversation"
+      />
+    </div>
+  {:else}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="row"
+      class:active={activeConversationId === c.id}
+      onclick={() => selectConv(c.id)}
+      onkeydown={(e) => { if (e.key === 'Enter') selectConv(c.id); }}
+      role="button"
+      tabindex="0"
+    >
+      <div class="row-top">
+        {#if liveSet.has(c.id)}
+          <span class="live" title="JKAI is working on this" aria-label="Live job"></span>
+        {:else if c.pinned}
+          <svg class="pin-badge" width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2l1.9 4.9L17 7.5l-3.8 3 1.3 5-4.5-2.9L5.5 15.5l1.3-5L3 7.5l5.1-.6z"/></svg>
+        {/if}
+        <span class="row-title">{c.title || 'New conversation'}</span>
+        <span class="row-time">{relativeTime(c.updatedAt)}</span>
+      </div>
+      {#if c.lastMessage}
+        <p class="row-prev">{truncate(c.lastMessage, 42)}</p>
+      {/if}
+
+      <!-- Hover actions (each button stops propagation so the row isn't selected) -->
+      <div class="actions">
+        {#if confirmingDeleteId === c.id}
+          <button class="act danger" onclick={(e) => confirmDelete(e, c)} title="Confirm delete" aria-label="Confirm delete">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l4 4 8-9"/></svg>
+          </button>
+          <button class="act" onclick={cancelDelete} title="Cancel" aria-label="Cancel delete">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5l10 10M15 5L5 15"/></svg>
+          </button>
+        {:else}
+          <button class="act" onclick={(e) => togglePin(e, c)} title={c.pinned ? 'Unpin' : 'Pin'} aria-label={c.pinned ? 'Unpin' : 'Pin'}>
+            <svg width="13" height="13" viewBox="0 0 20 20" fill={c.pinned ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.4"><path d="M10 2l1.9 4.9L17 7.5l-3.8 3 1.3 5-4.5-2.9L5.5 15.5l1.3-5L3 7.5l5.1-.6z"/></svg>
+          </button>
+          <button class="act" onclick={(e) => startRename(e, c)} title="Rename" aria-label="Rename">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 13.5V16h2.5L14 8.5 11.5 6z"/><path d="M11.5 6L14 8.5"/></svg>
+          </button>
+          <button class="act danger" onclick={(e) => askDelete(e, c)} title="Delete" aria-label="Delete">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 <style>
-  .del-btn:hover {
-    background: var(--surface-overlay);
+  /* ---- expanded shell ---- */
+  .sb {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    border-right: 1px solid var(--card-border);
+    background: var(--bg);
   }
-  .sb-action {
+  @media (min-width: 640px) { .sb { width: 16rem; flex-shrink: 0; } }
+
+  .sb-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 12px 10px;
+  }
+  .sb-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-secondary);
+  }
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
     border-radius: var(--radius-round);
+    color: var(--text-ghost);
+    background: none;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
   }
-  .live-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--wa-green);
+  .icon-btn:hover { color: var(--text-primary); background: var(--card-bg); }
+
+  .newchat {
+    margin: 0 12px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    padding: 9px 12px;
+    border: 1.5px solid var(--accent);
+    border-radius: var(--radius-round);
+    color: var(--accent);
+    background: none;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .newchat:hover { background: var(--accent); color: #fff; }
+
+  .search { position: relative; margin: 0 12px 6px; }
+  .search > svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-ghost); pointer-events: none; }
+  .search input {
+    width: 100%;
+    padding: 7px 28px 7px 30px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+    background: var(--surface-elevated);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+  .search input::placeholder { color: var(--text-ghost); }
+  .search input:focus { outline: none; border-color: var(--accent); }
+  .search-clear {
+    position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; border: none; background: none; color: var(--text-ghost);
+    cursor: pointer; border-radius: var(--radius-round);
+  }
+  .search-clear:hover { color: var(--text-primary); background: var(--card-bg); }
+
+  .list { flex: 1; overflow-y: auto; padding: 6px 0; }
+
+  /* section header */
+  .sec-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 9px 12px 4px; background: none; border: none; cursor: pointer;
+  }
+  .sec-l { display: flex; align-items: center; gap: 6px; }
+  .chev { color: var(--text-ghost); display: inline-flex; transition: transform 0.15s; }
+  .chev.open { transform: rotate(90deg); }
+  .sec-lbl { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; color: var(--text-secondary); }
+  .sec-cnt { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .sec-hd.pin .sec-lbl { color: var(--accent-ink); }
+
+  /* row */
+  .row {
+    position: relative; display: block; width: 100%; text-align: left;
+    padding: 8px 12px 8px 13px; border-left: 2px solid transparent;
+    cursor: pointer; transition: background 0.1s;
+  }
+  .row:hover { background: var(--bg-section); }
+  .row.active { background: color-mix(in srgb, var(--accent) 9%, transparent); border-left-color: var(--accent); }
+  .row:focus-visible { outline: none; background: var(--bg-section); border-left-color: var(--accent-ink); }
+  .row-top { display: flex; align-items: center; gap: 6px; }
+  .row-title {
+    flex: 1; font-size: 13px; font-weight: 500; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
+  }
+  .row.active .row-title { color: var(--accent); }
+  .row-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex-shrink: 0; }
+  .row-prev { font-size: 11.5px; color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; line-height: 1.3; }
+  .pin-badge { color: var(--accent-ink); flex-shrink: 0; }
+  .live {
+    width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--wa-green); flex-shrink: 0;
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent);
     animation: live-pulse 1.6s ease-out infinite;
-    flex-shrink: 0;
   }
   @keyframes live-pulse {
-    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent); }
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 55%, transparent); }
     70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--wa-green) 0%, transparent); }
-    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 0%, transparent); }
+    100% { box-shadow: 0 0 0 0 transparent; }
   }
+
+  /* hover action cluster */
+  .actions {
+    position: absolute; right: 8px; top: 6px; display: flex; gap: 1px;
+    background: var(--surface-elevated); border: 1px solid var(--card-border);
+    border-radius: var(--radius-round); padding: 1px;
+    opacity: 0; transform: translateX(4px); transition: opacity 0.12s, transform 0.12s;
+  }
+  .row:hover .actions, .row:focus-within .actions { opacity: 1; transform: none; }
+  .act {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 22px; border: none; background: none; color: var(--text-muted);
+    cursor: pointer; border-radius: 3px; transition: background 0.1s, color 0.1s;
+  }
+  .act:hover { background: var(--card-bg); color: var(--text-primary); }
+  .act.danger:hover { background: color-mix(in srgb, var(--error) 16%, transparent); color: #a3352f; }
+
+  /* rename */
+  .rename-row { padding: 6px 12px 6px 13px; }
+  .rename-input {
+    width: 100%; padding: 5px 7px; border: 1px solid var(--accent); border-radius: 3px;
+    background: var(--bg); font-family: var(--font-sans); font-size: 13px; color: var(--text-primary);
+  }
+  .rename-input:focus { outline: none; }
+
+  /* whatsapp */
+  .wa {
+    display: flex; align-items: center; gap: 8px; width: calc(100% - 16px);
+    padding: 9px 10px; margin: 2px 8px 6px; border: 1px solid var(--card-border);
+    border-radius: var(--radius-round); background: none; cursor: pointer; text-align: left;
+    transition: background 0.1s;
+  }
+  .wa:hover { background: var(--bg-section); }
+  .wa.active { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, var(--card-border)); }
+  .wa-tag {
+    font-family: var(--font-mono); font-size: 9px; font-weight: 500; padding: 2px 5px;
+    border-radius: 3px; background: color-mix(in srgb, var(--wa-green) 16%, transparent);
+    color: #128c3e; letter-spacing: 0.05em; flex-shrink: 0;
+  }
+  .wa-body { display: flex; flex-direction: column; min-width: 0; }
+  .wa-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+  .wa-prev { font-size: 11px; color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* empty state */
+  .empty { padding: 30px 16px; text-align: center; color: var(--text-ghost); }
+  .empty-big { font-size: 12.5px; color: var(--text-muted); margin-top: 10px; }
+  .empty-sm { font-size: 11px; margin-top: 3px; }
+
+  /* footer */
+  .foot {
+    border-top: 1px solid var(--card-border); padding: 9px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .foot-link {
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--text-secondary); text-decoration: none; padding: 2px 0;
+    transition: color 0.12s;
+  }
+  .foot-link:hover { color: var(--accent); }
+
+  /* ---- collapsed rail ---- */
+  .rail {
+    width: 56px; height: 100%; border-right: 1px solid var(--card-border); background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 8px;
+  }
+  .rbtn {
+    width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--card-border); border-radius: var(--radius-round);
+    color: var(--text-secondary); background: none; cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .rbtn:hover { background: var(--card-bg); color: var(--text-primary); }
+  .rbtn.primary { border-color: var(--accent); color: var(--accent); }
+  .rbtn.primary:hover { background: var(--accent); color: #fff; }
+  .rail-sep { width: 24px; height: 1px; background: var(--card-border); margin: 2px 0; }
+  .rail-dots { display: flex; flex-direction: column; align-items: center; gap: 8px; overflow: hidden; }
+  .cdot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--card-border); border: none; padding: 0; cursor: pointer; transition: transform 0.1s; }
+  .cdot:hover { transform: scale(1.35); }
+  .cdot.active { background: var(--accent); }
+  .cdot.live { background: var(--wa-green); }
+  .rail-spacer { flex: 1; }
 </style>

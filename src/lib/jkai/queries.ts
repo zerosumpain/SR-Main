@@ -12,6 +12,7 @@ export async function getConversationList() {
       createdAt: conversations.createdAt,
       updatedAt: conversations.updatedAt,
       costUsd: conversations.costUsd,
+      pinned: conversations.pinned,
       modelProvider: conversations.modelProvider,
       modelId: conversations.modelId,
       messageCount: sql<number>`(
@@ -25,5 +26,5 @@ export async function getConversationList() {
       )`.as('last_message'),
     })
     .from(conversations)
-    .orderBy(desc(conversations.updatedAt));
+    .orderBy(desc(conversations.pinned), desc(conversations.updatedAt));
 }

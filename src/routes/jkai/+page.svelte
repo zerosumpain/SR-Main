@@ -16,6 +16,13 @@
   let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
   let activeBuild = $state<{ id: string; status: string } | null>(null);
   let sidebarOpen = $state(false);
+  // Desktop sidebar collapsed to an icon rail (persisted across visits).
+  let sidebarCollapsed = $state(false);
+  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed';
+  function toggleSidebarCollapsed() {
+    sidebarCollapsed = !sidebarCollapsed;
+    try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
+  }
   // Conversation IDs the orchestrator currently has a running job for.
   // Polled every 10 s; the ConversationSidebar renders a pulsing dot next
   // to each. Updated whenever the user returns to the page so the UI
@@ -27,6 +34,7 @@
   const RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
 
   onMount(() => {
+    try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { /* ignore */ }
     let resumed = false;
     // 1) Deep-link from a WhatsApp escalation: ?c=<convId>. If it matches a
     // known conversation we open it; otherwise we fall through to the
@@ -203,6 +211,43 @@
       console.error('Failed to delete conversation:', err);
     }
   }
+
+  async function renameConversation(id: string, title: string) {
+    const next = title.trim();
+    // Optimistic: apply locally, then persist. Empty title clears back to null.
+    conversationList = conversationList.map((c) =>
+      c.id === id ? { ...c, title: next || null } : c,
+    );
+    try {
+      await fetch(`/api/jkai/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: next }),
+      });
+    } catch (err) {
+      console.error('Failed to rename conversation:', err);
+    }
+  }
+
+  async function togglePinConversation(id: string, pinned: boolean) {
+    // Optimistic: flip locally + re-sort pinned-first, then persist.
+    conversationList = conversationList
+      .map((c) => (c.id === id ? { ...c, pinned } : c))
+      .slice()
+      .sort((a, b) => {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+    try {
+      await fetch(`/api/jkai/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned }),
+      });
+    } catch (err) {
+      console.error('Failed to (un)pin conversation:', err);
+    }
+  }
 </script>
 
 <svelte:head>
@@ -249,8 +294,10 @@
         onNew={createConversation}
         onWhatsAppSelect={selectWhatsApp}
         onDelete={deleteConversation}
-        collapsed={false}
-        onToggleCollapse={() => {}}
+        onRename={renameConversation}
+        onTogglePin={togglePinConversation}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapsed}
         {liveConversationIds}
         {metrics}
         spendByPeriod={data.spendByPeriod}
@@ -279,6 +326,8 @@
             onNew={createConversation}
             onWhatsAppSelect={selectWhatsApp}
             onDelete={deleteConversation}
+            onRename={renameConversation}
+            onTogglePin={togglePinConversation}
             collapsed={false}
             onToggleCollapse={() => { sidebarOpen = false; }}
             {liveConversationIds}
