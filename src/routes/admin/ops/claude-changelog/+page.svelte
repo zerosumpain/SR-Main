@@ -28,6 +28,14 @@
 
   let raw = $state<null | { title: string; stage: string; text: string }>(null);
 
+  function openStageRaw(sess: { title: string | null; id: string }, st: { stage: string; rawText: string | null }) {
+    raw = {
+      title: sess.title || sess.id.slice(0, 8),
+      stage: STAGE_LABEL[st.stage] ?? st.stage,
+      text: st.rawText || '(no raw text captured for this stage)',
+    };
+  }
+
   // Per-session detail modal: full transcript + auditable cost breakdown, fetched on demand.
   type CostLine = {
     model: string; known: boolean; costUsd: number;
@@ -196,7 +204,7 @@
                 {#each (s.featureTypes as string[]) ?? [] as f}<span class="feat-chip">{f}</span>{/each}
               </span>
             </span>
-            <span class="cost-spark" role="img" aria-label="estimated cost per stage">
+            <span class="cost-spark" aria-label="estimated cost per stage — click a bar for its raw view">
               {#if s.stages.length === 0}
                 <span class="cs-empty">—</span>
               {:else}
@@ -204,8 +212,12 @@
                   <span
                     class="cs-bar"
                     data-stage={st.stage}
+                    role="button"
+                    tabindex="-1"
                     style={`height:${Math.max(9, Math.round(((st.costUsd ?? 0) / maxStageCost) * 100))}%`}
-                    title={`${STAGE_LABEL[st.stage] ?? st.stage}: ${fmtCost(st.costUsd ?? 0)} · ${fmtK(((st.tokens as { output?: number })?.output) ?? 0)} out tok`}
+                    title={`${STAGE_LABEL[st.stage] ?? st.stage}: ${fmtCost(st.costUsd ?? 0)} · ${fmtK(((st.tokens as { output?: number })?.output) ?? 0)} out tok — click for raw`}
+                    onclick={(e) => { e.stopPropagation(); openStageRaw(s, st); }}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openStageRaw(s, st); } }}
                   ></span>
                 {/each}
               {/if}
@@ -439,8 +451,14 @@
   .live-chip { background: #2f9e5f; color: #fff; }
   /* Cost-per-stage sparkline: one bar per stage segment (in order), height ∝ est. cost, coloured by stage. */
   .cost-spark { display: flex; align-items: flex-end; gap: 1px; height: 26px; width: 112px; }
+  .cost-spark:hover { gap: 1.5px; }
   .cs-empty { margin: auto; color: var(--text-ghost); font-size: 0.85rem; }
-  .cs-bar { flex: 1; min-width: 2px; border-radius: 1px 1px 0 0; background: var(--border, rgba(120, 110, 100, 0.4)); opacity: 0.92; }
+  .cs-bar {
+    flex: 1; min-width: 2px; border-radius: 1px 1px 0 0;
+    background: var(--border, rgba(120, 110, 100, 0.4)); opacity: 0.92;
+    cursor: pointer; padding: 0; border: none; transition: opacity 0.1s, transform 0.1s;
+  }
+  .cs-bar:hover, .cs-bar:focus-visible { opacity: 1; transform: scaleY(1.08); outline: 1px solid var(--text-primary); outline-offset: 1px; }
   .cs-bar[data-stage='request'] { background: #6b7f99; }
   .cs-bar[data-stage='design'] { background: #9b7fb8; }
   .cs-bar[data-stage='plan'] { background: #c99a4b; }
