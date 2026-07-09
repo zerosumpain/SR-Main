@@ -306,6 +306,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/claude-changelog/ingest POST is service-to-service: the homeserv cron
+  // scanner (scripts/claude-changelog/ingest.mjs) POSTs parsed transcripts and has
+  // no user session. It self-authenticates via `Authorization: Bearer
+  // CLAUDE_CHANGELOG_SECRET`, so the POST bypasses the Auth.js gate (mirrors
+  // /api/policy-engine above). GET (debug summary) is deliberately NOT bypassed —
+  // it falls through to the owner gate below (spec Decision Log #6: reads stay
+  // owner-only).
+  if (pathname.startsWith('/api/claude-changelog/') && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
   // /api/data-standard-designer/* (ingest + seed-workflows) are service-to-service:
   // the daily discovery cron's http-request node has no user session. The handlers
   // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` (open in dev if

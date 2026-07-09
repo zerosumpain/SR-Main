@@ -81,6 +81,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Cron', href: '/admin/ops/cron' },
       { label: 'Live', href: '/admin/ops/live' },
       { label: 'Architecture', href: '/admin/ops/architecture' },
+      { label: 'Changelog', href: '/admin/ops/claude-changelog' },
     ],
   },
   {

@@ -2079,3 +2079,80 @@ export const spaceLanderScores = pgTable(
 );
 export type SpaceLanderScore = typeof spaceLanderScores.$inferSelect;
 export type NewSpaceLanderScore = typeof spaceLanderScores.$inferInsert;
+
+// ==========================================
+// Claude Code Changelog — session + stage history
+// (ingested from ~/.claude transcripts by scripts/claude-changelog)
+// ==========================================
+
+export const claudeSessions = pgTable(
+  'claude_sessions',
+  {
+    id: text('id').primaryKey(), // Claude Code session UUID
+    project: text('project').notNull().default('unknown'),
+    title: text('title'),
+    firstPrompt: text('first_prompt'),
+    cwd: text('cwd'),
+    gitBranch: text('git_branch'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    status: text('status').notNull().default('completed'), // 'active' | 'completed'
+    messageCount: integer('message_count').notNull().default(0),
+    userMsgCount: integer('user_msg_count').notNull().default(0),
+    assistantMsgCount: integer('assistant_msg_count').notNull().default(0),
+    toolCallCount: integer('tool_call_count').notNull().default(0),
+    models: jsonb('models').notNull().default(sql`'[]'::jsonb`),
+    tokens: jsonb('tokens').notNull().default(sql`'{}'::jsonb`), // {input,output,cacheRead,cacheCreation}
+    estCostUsd: numeric('est_cost_usd', { precision: 12, scale: 4 }),
+    costKnown: boolean('cost_known').notNull().default(true),
+    featureTypes: jsonb('feature_types').notNull().default(sql`'[]'::jsonb`),
+    termFreq: jsonb('term_freq').notNull().default(sql`'[]'::jsonb`), // [{term,count}]
+    toolHistogram: jsonb('tool_histogram').notNull().default(sql`'{}'::jsonb`),
+    touchedPaths: jsonb('touched_paths').notNull().default(sql`'[]'::jsonb`),
+    skills: jsonb('skills').notNull().default(sql`'{}'::jsonb`),
+    summary: text('summary'),
+    aiSummary: text('ai_summary'), // optional LLM-written narrative (best-effort)
+    transcriptPath: text('transcript_path'),
+    contentHash: text('content_hash'), // sha256 of transcript — skip re-ingest if unchanged
+    fileMtime: timestamp('file_mtime', { withTimezone: true }),
+    fileSize: bigint('file_size', { mode: 'number' }),
+    schemaVersion: integer('schema_version').notNull().default(1),
+    ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('claude_sessions_project_started_idx').on(t.project, t.startedAt),
+    index('claude_sessions_started_idx').on(t.startedAt),
+    index('claude_sessions_hash_idx').on(t.contentHash),
+  ],
+);
+export type ClaudeSession = typeof claudeSessions.$inferSelect;
+export type NewClaudeSession = typeof claudeSessions.$inferInsert;
+
+export const claudeSessionStages = pgTable(
+  'claude_session_stages',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => claudeSessions.id, { onDelete: 'cascade' }),
+    stage: text('stage').notNull(), // 'request' | 'design' | 'plan' | 'result' | 'fixes'
+    ordinal: integer('ordinal').notNull(),
+    title: text('title'),
+    summary: text('summary'),
+    aiSummary: text('ai_summary'),
+    rawText: text('raw_text'), // verbatim prompt / plan / action trace
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    tokens: jsonb('tokens').notNull().default(sql`'{}'::jsonb`),
+    messageCount: integer('message_count').notNull().default(0),
+    toolCalls: integer('tool_calls').notNull().default(0),
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`), // {skills:[],files:[]}
+  },
+  (t) => [
+    uniqueIndex('claude_session_stages_session_ordinal_idx').on(t.sessionId, t.ordinal),
+    index('claude_session_stages_stage_idx').on(t.stage),
+    index('claude_session_stages_started_idx').on(t.startedAt),
+  ],
+);
+export type ClaudeSessionStage = typeof claudeSessionStages.$inferSelect;
+export type NewClaudeSessionStage = typeof claudeSessionStages.$inferInsert;
