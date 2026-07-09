@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // ── Pricing per MTok (USD). cache_read ~0.1x input; cache_write_5m ~1.25x; 1h ~2x.
 // Keyed by normalised model id prefix. Unknown Claude ids fall back to opus.
@@ -131,14 +131,19 @@ function isProjectFile(p) {
   if (/\/(scratchpad|node_modules|\.svelte-kit|\.git)\//.test(s)) return false;
   return true;
 }
+// Strip NUL + other C0 control chars (keep \t \n \r). Postgres text/jsonb columns
+// reject NUL bytes, and transcripts occasionally carry binary-ish tool output.
+function sanitize(s) {
+  return String(s == null ? '' : s).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
 function firstSentence(s, max = 140) {
-  const t = String(s).replace(/\s+/g, ' ').trim();
+  const t = sanitize(s).replace(/\s+/g, ' ').trim();
   const m = t.match(/^.*?[.!?](\s|$)/);
   const out = (m ? m[0] : t).trim();
   return out.length > max ? out.slice(0, max - 1) + '…' : out;
 }
 function clip(s, max) {
-  s = String(s || '');
+  s = sanitize(s);
   return s.length > max ? s.slice(0, max) + '\n…[truncated]' : s;
 }
 
@@ -162,6 +167,7 @@ export function parseTranscript(file, opts = {}) {
   let gitBranch = null;
   const models = new Set();
   const tok = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  const byModel = {}; // model -> {input, output, cacheRead, cw5, cw1} for the cost breakdown
   let estCostUsd = 0;
   let costKnown = true;
   const toolHistogram = {};
@@ -197,19 +203,18 @@ export function parseTranscript(file, opts = {}) {
         tok.cacheCreation += u.cache_creation_input_tokens || 0;
         const model = o.message?.model;
         if (model) models.add(model);
-        const price = priceFor(model);
-        if (price) {
-          const cc5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
-          const cc1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
-          const ccOther = Math.max(0, (u.cache_creation_input_tokens || 0) - cc5 - cc1);
-          estCostUsd += ((u.input_tokens || 0) * price.in
-            + (u.output_tokens || 0) * price.out
-            + (u.cache_read_input_tokens || 0) * price.cr
-            + (cc5 + ccOther) * price.cw5
-            + cc1 * price.cw1) / 1e6;
-        } else if (model) {
-          costKnown = false; // non-Claude model in the mix
-        }
+        // Per-model token buckets. cache_creation splits into 5m (1.25x) and 1h
+        // (2x) writes; any unattributed remainder is billed at the 5m rate.
+        const cc5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
+        const cc1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+        const ccOther = Math.max(0, (u.cache_creation_input_tokens || 0) - cc5 - cc1);
+        const mk = model || '<unknown>';
+        const bm = (byModel[mk] ??= { input: 0, output: 0, cacheRead: 0, cw5: 0, cw1: 0 });
+        bm.input += u.input_tokens || 0;
+        bm.output += u.output_tokens || 0;
+        bm.cacheRead += u.cache_read_input_tokens || 0;
+        bm.cw5 += cc5 + ccOther;
+        bm.cw1 += cc1;
         for (const b of toolUses(o.message)) {
           toolCallCount++;
           const name = b.name || 'unknown';
@@ -394,6 +399,39 @@ export function parseTranscript(file, opts = {}) {
     .sort((a, b) => b[1] - a[1]).slice(0, 25)
     .map(([p, count]) => ({ path: p.replace(/^\/home\/[^/]+\//, ''), count }));
 
+  // ── cost breakdown per model (auditable: tokens × Anthropic API rate) ──
+  // Verified against Anthropic's published API pricing (platform.claude.com/pricing):
+  // no long-context premium applies to these models, so a flat per-token rate holds
+  // across the full 1M context window.
+  const costBreakdown = [];
+  for (const [model, b] of Object.entries(byModel)) {
+    const price = priceFor(model);
+    const totalTok = b.input + b.output + b.cacheRead + b.cw5 + b.cw1;
+    if (price) {
+      const costUsd = (b.input * price.in + b.output * price.out + b.cacheRead * price.cr
+        + b.cw5 * price.cw5 + b.cw1 * price.cw1) / 1e6;
+      estCostUsd += costUsd;
+      costBreakdown.push({
+        model, known: true,
+        tokens: { input: b.input, output: b.output, cacheRead: b.cacheRead, cacheWrite5m: b.cw5, cacheWrite1h: b.cw1 },
+        rates: { input: price.in, output: price.out, cacheRead: price.cr, cacheWrite5m: price.cw5, cacheWrite1h: price.cw1 },
+        costUsd: Number(costUsd.toFixed(4)),
+      });
+    } else if (totalTok > 0) {
+      // genuinely unpriced model with real usage — flag the estimate as partial
+      costKnown = false;
+      costBreakdown.push({
+        model, known: false,
+        tokens: { input: b.input, output: b.output, cacheRead: b.cacheRead, cacheWrite5m: b.cw5, cacheWrite1h: b.cw1 },
+        rates: null, costUsd: 0,
+      });
+    }
+    // else: zero-token pseudo-model (e.g. <synthetic>) — ignore, don't flag cost as partial
+  }
+  costBreakdown.sort((a, b) => b.costUsd - a.costUsd);
+
+  const fullTranscript = renderTranscript(timeline);
+
   // ── status: active if the transcript was modified very recently ──
   const status = (now - stat.mtimeMs) < 30 * 60 * 1000 ? 'active' : 'completed';
 
@@ -418,6 +456,8 @@ export function parseTranscript(file, opts = {}) {
       toolHistogram,
       touchedPaths,
       skills: skillsUsed,
+      costBreakdown,
+      fullTranscript,
       summary: firstSentence(firstPrompt, 200),
       transcriptPath: file,
       contentHash,
@@ -460,6 +500,72 @@ function deriveFeatureTypes({ touchedTop, touchedFull, toolHistogram, skillsUsed
   if (/\.md\b/.test(paths) || has(/documentation|\breadme\b|\bdocs\b/)) f.add('docs');
   if (f.size === 0) f.add('other');
   return [...f];
+}
+
+// Render the ordered user/assistant timeline into a readable full transcript
+// (capped ~1.5 MB). User prompts + assistant thinking/text in full; tool calls as
+// compact one-liners; tool results truncated. Meta noise (caveats, reminders) dropped.
+function renderTranscript(timeline) {
+  const MAX = 1_500_000;
+  const out = [];
+  let len = 0;
+  let truncated = false;
+  const push = (s) => {
+    if (truncated) return;
+    if (len + s.length > MAX) { out.push('\n\n…[transcript truncated — open the raw .jsonl for the full record]'); truncated = true; return; }
+    out.push(s); len += s.length;
+  };
+  const hhmm = (ts) => (ts ? new Date(ts).toISOString().slice(11, 16) : '     ');
+  const toolBrief = (b) => {
+    const i = b.input || {};
+    if (b.name === 'Edit' || b.name === 'Write' || b.name === 'NotebookEdit') return (i.file_path || '').replace(/^\/home\/[^/]+\//, '');
+    if (b.name === 'Bash') return String(i.command || '').replace(/\s+/g, ' ').slice(0, 200);
+    if (b.name === 'Skill') return i.skill || '';
+    if (b.name === 'Task' || b.name === 'Agent') return String(i.description || i.prompt || '').slice(0, 120);
+    if (b.name === 'Read' || b.name === 'Glob' || b.name === 'Grep') return String(i.file_path || i.pattern || i.path || '').slice(0, 160);
+    const j = JSON.stringify(i);
+    return j.length > 140 ? j.slice(0, 140) + '…' : j;
+  };
+  const resultText = (b) => {
+    const c = b.content;
+    let t = '';
+    if (typeof c === 'string') t = c;
+    else if (Array.isArray(c)) t = c.map((x) => (typeof x === 'string' ? x : x?.text || '')).join(' ');
+    t = String(t).replace(/\s+/g, ' ').trim();
+    return t.length > 400 ? t.slice(0, 400) + '…' : t;
+  };
+
+  for (const { role, ts, o } of timeline) {
+    if (truncated) break;
+    const m = o.message || {};
+    if (role === 'user') {
+      if (hasToolResults(m)) {
+        for (const b of (Array.isArray(m.content) ? m.content : [])) {
+          if (b?.type === 'tool_result') {
+            const rt = resultText(b);
+            if (rt) push(`    ↳ result: ${rt}\n`);
+          }
+        }
+        continue;
+      }
+      if (isMetaUser(o)) {
+        const t = textOf(m).trim();
+        const cmd = t.match(/^<command-name>([^<]+)<\/command-name>/);
+        if (cmd) push(`\n──── /${cmd[1].replace(/^\//, '')} ────\n`);
+        else if (/^This session is being continued/.test(t)) push('\n──── [continued from a previous session] ────\n');
+        continue;
+      }
+      push(`\n\n════════ 👤 USER · ${hhmm(ts)} ════════\n${textOf(m).trim()}\n`);
+    } else {
+      for (const b of (Array.isArray(m.content) ? m.content : [])) {
+        if (!b || typeof b !== 'object') continue;
+        if (b.type === 'thinking' && b.thinking) push(`\n──── 🧠 thinking ────\n${String(b.thinking).trim()}\n`);
+        else if (b.type === 'text' && b.text) push(`\n════════ 🤖 CLAUDE · ${hhmm(ts)} ════════\n${String(b.text).trim()}\n`);
+        else if (b.type === 'tool_use') push(`  » ${b.name}: ${toolBrief(b)}\n`);
+      }
+    }
+  }
+  return sanitize(out.join('').trim());
 }
 
 // ── CLI ──

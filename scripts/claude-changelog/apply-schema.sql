@@ -41,6 +41,10 @@ CREATE INDEX IF NOT EXISTS claude_sessions_project_started_idx ON claude_session
 CREATE INDEX IF NOT EXISTS claude_sessions_started_idx ON claude_sessions (started_at);
 CREATE INDEX IF NOT EXISTS claude_sessions_hash_idx ON claude_sessions (content_hash);
 
+-- Added in schema v2 (cost audit + full transcript). Idempotent.
+ALTER TABLE claude_sessions ADD COLUMN IF NOT EXISTS cost_breakdown jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE claude_sessions ADD COLUMN IF NOT EXISTS full_transcript text;
+
 CREATE TABLE IF NOT EXISTS claude_session_stages (
   id serial PRIMARY KEY,
   session_id text NOT NULL REFERENCES claude_sessions(id) ON DELETE CASCADE,

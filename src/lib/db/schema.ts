@@ -2110,6 +2110,8 @@ export const claudeSessions = pgTable(
     toolHistogram: jsonb('tool_histogram').notNull().default(sql`'{}'::jsonb`),
     touchedPaths: jsonb('touched_paths').notNull().default(sql`'[]'::jsonb`),
     skills: jsonb('skills').notNull().default(sql`'{}'::jsonb`),
+    costBreakdown: jsonb('cost_breakdown').notNull().default(sql`'[]'::jsonb`), // per-model tokens×rate audit
+    fullTranscript: text('full_transcript'), // rendered readable full conversation
     summary: text('summary'),
     aiSummary: text('ai_summary'), // optional LLM-written narrative (best-effort)
     transcriptPath: text('transcript_path'),

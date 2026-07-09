@@ -28,6 +28,43 @@
 
   let raw = $state<null | { title: string; stage: string; text: string }>(null);
 
+  // Per-session detail modal: full transcript + auditable cost breakdown, fetched on demand.
+  type CostLine = {
+    model: string; known: boolean; costUsd: number;
+    tokens: { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
+    rates: { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number } | null;
+  };
+  type Detail = {
+    id: string; title: string; project: string; models: string[];
+    estCostUsd: number | null; costKnown: boolean; costBreakdown: CostLine[];
+    fullTranscript: string | null; transcriptPath: string;
+  };
+  let detail = $state<Detail | null>(null);
+  let detailTitle = $state('');
+  let detailLoading = $state(false);
+  let detailErr = $state<string | null>(null);
+
+  async function openDetail(id: string, title: string) {
+    detailTitle = title;
+    detailLoading = true;
+    detailErr = null;
+    detail = null;
+    try {
+      const res = await fetch(`/api/claude-changelog/session/${id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      detail = await res.json();
+    } catch (e) {
+      detailErr = e instanceof Error ? e.message : 'failed to load';
+    } finally {
+      detailLoading = false;
+    }
+  }
+  function closeDetail() {
+    detail = null;
+    detailTitle = '';
+    detailErr = null;
+  }
+
   const featureMax = $derived(Math.max(1, ...data.featureDist.map((f) => f.count)));
   const termMax = $derived(Math.max(1, ...data.topTerms.map((t) => t.count)));
   const costMax = $derived(Math.max(0.01, ...data.costSeries.map((c) => c.cost)));
@@ -176,6 +213,11 @@
 
           {#if expanded[s.id]}
             <div class="stages">
+              <div class="detail-bar">
+                <button class="detail-btn" onclick={() => openDetail(s.id, s.title || s.id.slice(0, 8))}>
+                  ⌗ Full transcript &amp; cost breakdown
+                </button>
+              </div>
               {#if s.stages.length === 0}<p class="empty-note small">No stage segments.</p>{/if}
               {#each s.stages as st (st.id)}
                 <div class="stage-card" data-stage={st.stage}>
@@ -231,6 +273,65 @@
         <button class="raw-close" onclick={() => (raw = null)} aria-label="Close">✕</button>
       </div>
       <pre class="raw-body">{raw.text}</pre>
+    </div>
+  </div>
+{/if}
+
+<!-- Per-session detail: full transcript + auditable cost breakdown -->
+{#if detail !== null || detailLoading || detailErr}
+  <div
+    class="raw-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Session detail"
+    tabindex="-1"
+    onclick={closeDetail}
+    onkeydown={(e) => { if (e.key === 'Escape') closeDetail(); }}
+  >
+    <div class="raw-modal detail-modal" role="document" onclick={(e) => e.stopPropagation()}>
+      <div class="raw-hd">
+        <span class="raw-stage">SESSION</span>
+        <span class="raw-title">{detailTitle}</span>
+        <button class="raw-close" onclick={closeDetail} aria-label="Close">✕</button>
+      </div>
+      {#if detailLoading}
+        <p class="detail-loading">Loading full transcript…</p>
+      {:else if detailErr}
+        <p class="detail-loading">Couldn't load detail ({detailErr}).</p>
+      {:else if detail}
+        <div class="detail-body">
+          <!-- Cost breakdown -->
+          <div class="cost-block">
+            <div class="cost-hd">
+              <span class="sr-label-tight">Cost breakdown</span>
+              <span class="nm-sec-meta">tokens × Anthropic API rate — {fmtCost(detail.estCostUsd)}{#if !detail.costKnown} (partial){/if}</span>
+            </div>
+            <div class="cost-scroll">
+              <table class="cost-table">
+                <thead>
+                  <tr><th>model</th><th>input</th><th>output</th><th>cache read</th><th>cache write</th><th>cost</th></tr>
+                </thead>
+                <tbody>
+                  {#each detail.costBreakdown as c (c.model)}
+                    <tr>
+                      <td class="mono">{c.model}</td>
+                      <td>{fmtK(c.tokens.input)}{#if c.rates}<span class="rate">@${c.rates.input}</span>{/if}</td>
+                      <td>{fmtK(c.tokens.output)}{#if c.rates}<span class="rate">@${c.rates.output}</span>{/if}</td>
+                      <td>{fmtK(c.tokens.cacheRead)}{#if c.rates}<span class="rate">@${c.rates.cacheRead}</span>{/if}</td>
+                      <td>{fmtK(c.tokens.cacheWrite5m + c.tokens.cacheWrite1h)}{#if c.rates}<span class="rate">@${c.rates.cacheWrite1h}/{c.rates.cacheWrite5m}</span>{/if}</td>
+                      <td class="cost-val">{c.known ? fmtCost(c.costUsd) : 'n/a'}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            <p class="cost-note">Rates in $/million tokens (input · output · cache-read · cache-write 1h/5m), per the model used in each message. Verified against Anthropic's published API pricing; the 1M context window is billed at standard rates (no long-context premium).</p>
+          </div>
+          <!-- Full transcript -->
+          <div class="cost-hd"><span class="sr-label-tight">Full transcript</span><span class="nm-sec-meta mono">{detail.transcriptPath?.split('/').pop()}</span></div>
+          <pre class="raw-body transcript-body">{detail.fullTranscript || '(no transcript stored)'}</pre>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -390,4 +491,33 @@
     margin: 0; padding: 1rem 1.1rem; overflow: auto; white-space: pre-wrap; word-break: break-word;
     font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.5; color: var(--text-secondary);
   }
+
+  /* Detail bar (in expanded session) */
+  .detail-bar { margin-bottom: 0.5rem; }
+  .detail-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: 4px;
+    padding: 0.35rem 0.7rem; font-size: 0.75rem; font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
+  }
+  .detail-btn:hover { opacity: 0.9; }
+
+  /* Detail modal */
+  .detail-modal { width: min(1000px, 100%); }
+  .detail-loading { padding: 2rem; text-align: center; color: var(--text-muted); }
+  .detail-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .cost-block { padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--border, rgba(120, 110, 100, 0.25)); }
+  .cost-hd { display: flex; justify-content: space-between; align-items: baseline; padding: 0.7rem 1.1rem 0.4rem; gap: 1rem; }
+  .cost-scroll { overflow-x: auto; }
+  .cost-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .cost-table th {
+    text-align: right; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-ghost); padding: 0.3rem 0.5rem; font-weight: 500;
+    border-bottom: 1px solid var(--border, rgba(120, 110, 100, 0.2));
+  }
+  .cost-table th:first-child, .cost-table td:first-child { text-align: left; }
+  .cost-table td { text-align: right; padding: 0.35rem 0.5rem; color: var(--text-secondary); white-space: nowrap; }
+  .cost-table .rate { color: var(--text-ghost); font-size: 0.68rem; margin-left: 0.25rem; }
+  .cost-table .cost-val { font-family: var(--font-brand); color: var(--text-primary); }
+  .cost-note { margin: 0.6rem 0 0; font-size: 0.72rem; color: var(--text-ghost); line-height: 1.4; }
+  .transcript-body { flex: 1; min-height: 240px; }
 </style>

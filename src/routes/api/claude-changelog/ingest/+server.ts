@@ -35,7 +35,8 @@ type SessionIn = {
   messageCount?: number; userMsgCount?: number; assistantMsgCount?: number; toolCallCount?: number;
   models?: unknown; tokens?: unknown; estCostUsd?: number; costKnown?: boolean;
   featureTypes?: unknown; termFreq?: unknown; toolHistogram?: unknown; touchedPaths?: unknown;
-  skills?: unknown; summary?: string; transcriptPath?: string; contentHash?: string;
+  skills?: unknown; costBreakdown?: unknown; fullTranscript?: string;
+  summary?: string; transcriptPath?: string; contentHash?: string;
   fileMtime?: string | null; fileSize?: number; schemaVersion?: number;
 };
 
@@ -89,6 +90,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
     toolHistogram: s.toolHistogram ?? {},
     touchedPaths: s.touchedPaths ?? [],
     skills: s.skills ?? {},
+    costBreakdown: s.costBreakdown ?? [],
+    fullTranscript: s.fullTranscript ?? null,
     summary: s.summary ?? null,
     transcriptPath: s.transcriptPath ?? null,
     contentHash: s.contentHash ?? null,
