@@ -97,3 +97,20 @@ src/routes/projects/+page.svelte    + card (Field Study card, private)
    re-authored deeper, not copy-pasted verbatim.
 7. **No new DB tables/APIs** — all content is typed TS constants like precedents;
    only DB touch is the projectVisibility row. Lowest-risk shape.
+8. **Review consolidated to 3 finder agents** (not the medium-effort 8) — diff was
+   ~95% new declarative content files; all 8 angles covered across 3 prompts.
+   Verification done inline (author context) rather than per-candidate agents.
+9. **Review fixes applied (8):** href-quote XSS in AskModel md(); rate limiter →
+   shared `$lib/server/rate-limit` keyed on cf-connecting-ip (was global-per-tunnel
+   + unbounded Map); stream abort 60s→120s; dead ELI5 ternary; unreachable
+   `trust2` synonym key → `mat`/`academy`; dead compact/onClose props; layout
+   comment corrected re public-by-default visibility.
+10. **Review findings skipped (logged):** SSE `messages = [...messages]` per-token
+   spread (precedent behaviour, low risk/benefit); ledger column markup dedup
+   (cosmetic); `$app/stores` → `$app/state` (precedent-wide migration, not this PR);
+   chat's direct z.ai transport vs CLAUDE.md gateway rule — kept because BOTH
+   existing project chat endpoints (policy-engine, keystone) deliberately use the
+   same low-level transport; a gateway migration should cover all three at once.
+11. **Private-from-first-request:** seeded `project_visibility(data-spine,false)`
+   on prod BEFORE deploy (review caught that visibility is public-by-default).
+   Live verification via a 1-hour share token minted in the DB, then revoked.
