@@ -15,6 +15,7 @@ export const STATIC_PROJECT_KEYS = [
   'broads-pilot',
   'terminal-descent',
   'data-standard-designer',
+  'data-spine',
   'dfe-data-strategy',
   'dfe-data-estate',
   'policy-engine',

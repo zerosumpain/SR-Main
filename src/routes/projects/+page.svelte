@@ -270,6 +270,45 @@
     </div>
     {/if}
 
+    {#if showCard('data-spine')}
+    <div class="project-card group">
+      <a href="/projects/data-spine" class="absolute inset-0 z-0" aria-label="Open The Data Spine"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field study
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · Data infrastructure
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Data Spine — Anatomy of a Promise
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        In one paragraph of a 2026 white paper, the government committed to build a "data spine" for English
+        education. This study takes the paragraph seriously: a five-layer anatomy, the international precedents
+        (NHS Spine, X-Road, ContactPoint), eight stakeholder lenses on its value, and a deep information-governance
+        treatment — the trust ledger, the legal plumbing, and a privacy-design playbook. Companion to Keystone
+        and the Policy Engine.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          precedents · personas · privacy · cited
+        </span>
+        {@render visToggle('data-spine', '/projects/data-spine', 'The Data Spine')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('dfe-data-strategy')}
     <div class="project-card group">
       <a href="/projects/dfe-data-strategy" class="absolute inset-0 z-0" aria-label="Open Keystone"></a>
