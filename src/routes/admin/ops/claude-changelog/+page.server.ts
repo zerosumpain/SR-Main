@@ -117,6 +117,7 @@ export const load: PageServerLoad = async ({ url }) => {
     estCostUsd: s.estCostUsd != null ? Number(s.estCostUsd) : null,
     stages: (stagesBySession[s.id] || []).map((st) => ({
       ...st,
+      costUsd: st.costUsd != null ? Number(st.costUsd) : 0,
       // trim very large plan bodies for transport; the vast majority are small
       rawText: st.rawText && st.rawText.length > 14000 ? st.rawText.slice(0, 14000) + '\n…[truncated]' : st.rawText,
     })),

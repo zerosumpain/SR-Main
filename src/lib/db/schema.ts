@@ -2146,6 +2146,7 @@ export const claudeSessionStages = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }),
     endedAt: timestamp('ended_at', { withTimezone: true }),
     tokens: jsonb('tokens').notNull().default(sql`'{}'::jsonb`),
+    costUsd: numeric('cost_usd', { precision: 12, scale: 4 }), // est. cost for this stage
     messageCount: integer('message_count').notNull().default(0),
     toolCalls: integer('tool_calls').notNull().default(0),
     metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`), // {skills:[],files:[]}

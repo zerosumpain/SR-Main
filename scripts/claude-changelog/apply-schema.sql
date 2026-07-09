@@ -45,6 +45,9 @@ CREATE INDEX IF NOT EXISTS claude_sessions_hash_idx ON claude_sessions (content_
 ALTER TABLE claude_sessions ADD COLUMN IF NOT EXISTS cost_breakdown jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE claude_sessions ADD COLUMN IF NOT EXISTS full_transcript text;
 
+-- Added in schema v3 (per-stage cost sparkline). Idempotent.
+ALTER TABLE claude_session_stages ADD COLUMN IF NOT EXISTS cost_usd numeric(12,4);
+
 CREATE TABLE IF NOT EXISTS claude_session_stages (
   id serial PRIMARY KEY,
   session_id text NOT NULL REFERENCES claude_sessions(id) ON DELETE CASCADE,

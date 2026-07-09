@@ -85,9 +85,6 @@
     if (!iso) return '';
     return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
   }
-  function stagesPresent(stages: { stage: string }[]): Set<string> {
-    return new Set(stages.map((s) => s.stage));
-  }
 </script>
 
 <svelte:head><title>Claude Changelog · Admin</title></svelte:head>
@@ -187,7 +184,7 @@
     {/if}
     <div class="sessions">
       {#each items as s (s.id)}
-        {@const present = stagesPresent(s.stages)}
+        {@const maxStageCost = Math.max(0.0001, ...s.stages.map((x) => x.costUsd ?? 0))}
         <article class="session" class:open={expanded[s.id]}>
           <button class="session-hd" onclick={() => toggle(s.id)} aria-expanded={expanded[s.id] ?? false}>
             <span class="date mono">{fmtDate(s.startedAt)}</span>
@@ -199,10 +196,19 @@
                 {#each (s.featureTypes as string[]) ?? [] as f}<span class="feat-chip">{f}</span>{/each}
               </span>
             </span>
-            <span class="strip">
-              {#each STAGE_ORDER as st}
-                <span class="dot" class:on={present.has(st)} data-stage={st} title={STAGE_LABEL[st]}></span>
-              {/each}
+            <span class="cost-spark" role="img" aria-label="estimated cost per stage">
+              {#if s.stages.length === 0}
+                <span class="cs-empty">—</span>
+              {:else}
+                {#each s.stages as st (st.id)}
+                  <span
+                    class="cs-bar"
+                    data-stage={st.stage}
+                    style={`height:${Math.max(9, Math.round(((st.costUsd ?? 0) / maxStageCost) * 100))}%`}
+                    title={`${STAGE_LABEL[st.stage] ?? st.stage}: ${fmtCost(st.costUsd ?? 0)} · ${fmtK(((st.tokens as { output?: number })?.output) ?? 0)} out tok`}
+                  ></span>
+                {/each}
+              {/if}
             </span>
             <span class="s-cost">
               <span class="c-val">{fmtCost(s.estCostUsd)}</span>
@@ -431,13 +437,15 @@
   .proj-chip { background: var(--accent); color: var(--bg); }
   .feat-chip { background: var(--border, rgba(120, 110, 100, 0.18)); color: var(--text-muted); }
   .live-chip { background: #2f9e5f; color: #fff; }
-  .strip { display: flex; gap: 3px; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border, rgba(120, 110, 100, 0.25)); }
-  .dot.on[data-stage='request'] { background: #6b7f99; }
-  .dot.on[data-stage='design'] { background: #9b7fb8; }
-  .dot.on[data-stage='plan'] { background: #c99a4b; }
-  .dot.on[data-stage='result'] { background: #4f9e6a; }
-  .dot.on[data-stage='fixes'] { background: #c56b6b; }
+  /* Cost-per-stage sparkline: one bar per stage segment (in order), height ∝ est. cost, coloured by stage. */
+  .cost-spark { display: flex; align-items: flex-end; gap: 1px; height: 26px; width: 112px; }
+  .cs-empty { margin: auto; color: var(--text-ghost); font-size: 0.85rem; }
+  .cs-bar { flex: 1; min-width: 2px; border-radius: 1px 1px 0 0; background: var(--border, rgba(120, 110, 100, 0.4)); opacity: 0.92; }
+  .cs-bar[data-stage='request'] { background: #6b7f99; }
+  .cs-bar[data-stage='design'] { background: #9b7fb8; }
+  .cs-bar[data-stage='plan'] { background: #c99a4b; }
+  .cs-bar[data-stage='result'] { background: #4f9e6a; }
+  .cs-bar[data-stage='fixes'] { background: #c56b6b; }
   .s-cost { display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; }
   .c-val { font-family: var(--font-brand); font-size: 0.95rem; }
   .c-sub { font-size: 9px; color: var(--text-ghost); }

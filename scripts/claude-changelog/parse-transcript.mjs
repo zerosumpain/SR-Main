@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // ── Pricing per MTok (USD). cache_read ~0.1x input; cache_write_5m ~1.25x; 1h ~2x.
 // Keyed by normalised model id prefix. Unknown Claude ids fall back to opus.
@@ -298,6 +298,7 @@ export function parseTranscript(file, opts = {}) {
       summary: '', rawText: '',
       startedAt: ts, endedAt: ts,
       tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+      costUsd: 0,
       messageCount: 0, toolCalls: 0,
       _raw: [], _skills: new Set(), _files: new Set(),
     };
@@ -342,6 +343,15 @@ export function parseTranscript(file, opts = {}) {
       cur.tokens.output += u.output_tokens || 0;
       cur.tokens.cacheRead += u.cache_read_input_tokens || 0;
       cur.tokens.cacheCreation += u.cache_creation_input_tokens || 0;
+      // per-stage cost (same per-message model + cache-split pricing as the session total)
+      const sp = priceFor(o.message?.model);
+      if (sp) {
+        const c5 = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
+        const c1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+        const cO = Math.max(0, (u.cache_creation_input_tokens || 0) - c5 - c1);
+        cur.costUsd += ((u.input_tokens || 0) * sp.in + (u.output_tokens || 0) * sp.out
+          + (u.cache_read_input_tokens || 0) * sp.cr + (c5 + cO) * sp.cw5 + c1 * sp.cw1) / 1e6;
+      }
       const at = textOf(o.message).trim();
       // capture raw material relevant to the stage
       for (const b of toolUses(o.message)) {
@@ -470,7 +480,8 @@ export function parseTranscript(file, opts = {}) {
       rawText: s.rawText,
       startedAt: s.startedAt ? new Date(s.startedAt).toISOString() : null,
       endedAt: s.endedAt ? new Date(s.endedAt).toISOString() : null,
-      tokens: s.tokens, messageCount: s.messageCount, toolCalls: s.toolCalls,
+      tokens: s.tokens, costUsd: Number((s.costUsd || 0).toFixed(4)),
+      messageCount: s.messageCount, toolCalls: s.toolCalls,
       metadata: s.metadata,
     })),
   };

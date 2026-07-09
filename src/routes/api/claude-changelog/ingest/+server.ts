@@ -26,7 +26,7 @@ const STAGES = new Set(['request', 'design', 'plan', 'result', 'fixes']);
 
 type StageIn = {
   stage: string; ordinal: number; title?: string; summary?: string; rawText?: string;
-  startedAt?: string | null; endedAt?: string | null; tokens?: unknown;
+  startedAt?: string | null; endedAt?: string | null; tokens?: unknown; costUsd?: number;
   messageCount?: number; toolCalls?: number; metadata?: unknown;
 };
 type SessionIn = {
@@ -113,6 +113,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
       startedAt: ts(st.startedAt),
       endedAt: ts(st.endedAt),
       tokens: st.tokens ?? {},
+      costUsd: st.costUsd != null ? String(st.costUsd) : null,
       messageCount: st.messageCount ?? 0,
       toolCalls: st.toolCalls ?? 0,
       metadata: st.metadata ?? {},
