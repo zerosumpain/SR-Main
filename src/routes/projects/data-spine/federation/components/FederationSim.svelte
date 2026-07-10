@@ -33,6 +33,8 @@
   let inspectorSchool = $state<SchoolInfo | null>(null);
   let contractOpen = $state(true);
   let pickerOpen = $state(false); // mobile scenario drawer
+  let canFullscreen = $state(false);
+  let isFullscreen = $state(false);
 
   const activeScenario = $derived<Scenario | null>(activeId ? (scenarioById(activeId) ?? null) : null);
 
@@ -116,7 +118,13 @@
   function setSpeed(x: number) { speed = x; engine?.setSpeed(x); }
   function setMode(m: 'federated' | 'central') { mode = m; sceneHandle?.setMode(m); }
 
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void shell?.requestFullscreen?.();
+  }
+
   onMount(() => {
+    canFullscreen = typeof shell?.requestFullscreen === 'function';
     const reduced = window.innerWidth < 800 || (navigator.hardwareConcurrency ?? 8) <= 4;
     topo = buildTopology();
     engine = new SimEngine({
@@ -143,6 +151,8 @@
     };
   });
 </script>
+
+<svelte:document onfullscreenchange={() => (isFullscreen = document.fullscreenElement === shell)} />
 
 {#snippet counterTiles()}
   {#each COUNTER_META as c}
@@ -171,6 +181,11 @@
         <button class:on={mode === 'central'} class="danger" onclick={() => setMode('central')} title="Central store counterfactual — everything copied to one national database.">Central store</button>
       </div>
       <button class="ghost" onclick={() => sceneHandle?.resetView()} title="Reset the camera">⌂ view</button>
+      {#if canFullscreen}
+        <button class="ghost" onclick={toggleFullscreen} title={isFullscreen ? 'Exit full screen' : 'Fill the screen'}>
+          {isFullscreen ? '⤡ exit' : '⛶ full screen'}
+        </button>
+      {/if}
       <button class="ghost picker-toggle" onclick={() => (pickerOpen = !pickerOpen)} aria-expanded={pickerOpen}>☰ scenarios</button>
     </div>
 
@@ -323,7 +338,8 @@
 {/if}
 
 <style>
-  .sim-shell { position: relative; height: clamp(540px, 74vh, 840px); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); overflow: hidden; background: #efe7d5; }
+  .sim-shell { position: relative; height: max(560px, calc(100vh - var(--topH, 56px) - 54px)); height: max(560px, calc(100svh - var(--topH, 56px) - 54px)); border-block: 1px solid rgba(28,22,17,0.25); overflow: hidden; background: #efe7d5; scroll-margin-top: calc(var(--topH, 56px) + 50px); }
+  .sim-shell:fullscreen { height: 100vh; border: none; }
   .sim-canvas { position: absolute; inset: 0; cursor: grab; }
   .sim-canvas:active { cursor: grabbing; }
 
@@ -352,12 +368,12 @@
   .sc-item:hover { border-color: rgba(28,22,17,0.45); }
   .sc-item.on { background: var(--ink); color: var(--paper, #f1ead6); border-color: var(--ink); }
 
-  /* narration + transport */
-  .narrate { left: 12px; right: 12px; bottom: 10px; background: rgba(241,234,214,0.94); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); padding: 10px 14px; backdrop-filter: blur(5px); }
-  .n-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
-  .n-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; }
-  .n-phase { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; color: #fff; background: var(--accent-ink); border-radius: var(--radius-sharp); padding: 2px 7px; }
-  .n-step { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.55); }
+  /* narration + transport — the presentation caption band */
+  .narrate { left: 50%; transform: translateX(-50%); width: min(1240px, calc(100% - 24px)); bottom: 14px; background: rgba(241,234,214,0.95); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 14px 22px 16px; backdrop-filter: blur(6px); }
+  .n-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .n-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(17px, 1.8vw, 24px); letter-spacing: -0.01em; }
+  .n-phase { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: #fff; background: var(--accent-ink); border-radius: var(--radius-sharp); padding: 3px 9px; }
+  .n-step { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(28,22,17,0.55); }
   .transport { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
   .transport > button { background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); width: 30px; height: 26px; cursor: pointer; color: var(--ink); font-size: 11px; line-height: 1; }
   .transport > button:hover:not(:disabled) { border-color: var(--ink); }
@@ -365,13 +381,13 @@
   .speed { display: inline-flex; background: rgba(28,22,17,0.07); border: 1px solid rgba(28,22,17,0.15); border-radius: var(--radius-round); padding: 1px; margin-left: 4px; }
   .speed button { background: transparent; border: none; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; padding: 4px 7px; cursor: pointer; color: var(--ink); border-radius: var(--radius-round); }
   .speed button.on { background: var(--ink); color: #fff; }
-  .n-text { margin: 0; font-size: 14px; line-height: 1.5; color: rgba(28,22,17,0.84); max-width: 110ch; }
+  .n-text { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(16px, 1.7vw, 23px); line-height: 1.42; color: rgba(28,22,17,0.88); max-width: 110ch; }
 
   /* counters */
   .counters { top: 54px; right: 12px; display: flex; flex-direction: column; gap: 6px; }
   .ct { background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 6px 11px; text-align: right; min-width: 120px; backdrop-filter: blur(4px); }
-  .ct b { display: block; font-family: 'Fraunces', serif; font-size: 17px; line-height: 1.1; }
-  .ct span { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.55); }
+  .ct b { display: block; font-family: 'Fraunces', serif; font-size: clamp(18px, 1.7vw, 26px); line-height: 1.1; }
+  .ct span { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.55); }
   .ct.hot { border-color: rgba(196,87,10,0.6); }
   .ct.hot b { color: var(--accent, #c4570a); }
   .counters-inline { display: none; }
@@ -386,8 +402,9 @@
   .inspector .close { position: absolute; top: 8px; right: 10px; background: none; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; }
   .inspector .close:hover { color: var(--ink); }
 
-  /* under-canvas: log + contract */
-  .under { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; align-items: start; }
+  /* under-canvas: log + contract (page is full-bleed, so this constrains itself) */
+  .under { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; max-width: 1240px; margin: 16px auto 0; padding: 0 clamp(16px, 3vw, 40px); }
+  .counters-inline { max-width: 1240px; margin-inline: auto; padding: 0 clamp(16px, 3vw, 40px); }
   .log-wrap { border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 10px 12px; }
   .log { max-height: 300px; overflow-y: auto; }
   .log-empty { font-size: 12px; color: rgba(28,22,17,0.5); font-style: italic; }
@@ -438,7 +455,10 @@
   :global(.fed-label.central) { color: #8a2d3a; font-weight: 600; font-size: 11px; }
 
   @media (max-width: 900px) {
-    .sim-shell { height: clamp(480px, 72vh, 640px); }
+    .sim-shell { height: max(480px, calc(100svh - var(--topH, 56px) - 50px)); }
+    .narrate { padding: 10px 14px 12px; }
+    .n-text { font-size: 14px; }
+    .n-title { font-size: 16px; }
     .picker-toggle { display: inline-block; }
     .scenarios { display: none; }
     .scenarios.open { display: block; width: min(260px, 78vw); z-index: 8; }
@@ -448,6 +468,5 @@
     .counters-inline .ct b { font-size: 14px; }
     .inspector { bottom: auto; top: 54px; }
     .under { grid-template-columns: 1fr; }
-    .n-text { font-size: 12.5px; }
   }
 </style>
