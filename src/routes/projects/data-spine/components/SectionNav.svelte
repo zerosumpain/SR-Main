@@ -1,6 +1,7 @@
 <script lang="ts">
-  // SectionNav — four-section tab bar + narrative toggle + mobile burger
+  // SectionNav — section tab bar + narrative toggle + mobile burger
   // (pattern copied from policy-engine/components/SectionNav.svelte).
+  // Governance keeps its warning styling via isGov(), not list position.
   import { app } from '../lib/appState.svelte';
   import { page } from '$app/stores';
 
@@ -8,8 +9,10 @@
     { href: '/projects/data-spine', label: 'Briefing' },
     { href: '/projects/data-spine/value', label: 'Value & personas' },
     { href: '/projects/data-spine/architecture', label: 'Architecture' },
+    { href: '/projects/data-spine/federation', label: 'Federation' },
     { href: '/projects/data-spine/governance', label: 'Governance' },
   ];
+  const isGov = (href: string) => href.endsWith('/governance');
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
   const active = (href: string) => pathname === href.replace(/\/$/, '');
   const current = $derived(SECTIONS.find((n) => active(n.href))?.label ?? 'Sections');
@@ -18,8 +21,8 @@
 
 <div class="secnav">
   <nav class="tabs" aria-label="Sections">
-    {#each SECTIONS as n, i}
-      <a class="tab" class:gov={i === 3} class:active={active(n.href)} href={n.href}>{i === 3 ? '⚖ ' : ''}{n.label}</a>
+    {#each SECTIONS as n}
+      <a class="tab" class:gov={isGov(n.href)} class:active={active(n.href)} href={n.href}>{isGov(n.href) ? '⚖ ' : ''}{n.label}</a>
     {/each}
   </nav>
 

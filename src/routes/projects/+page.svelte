@@ -293,16 +293,16 @@
       <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
         In one paragraph of a 2026 white paper, the government committed to build a "data spine" for English
         education. This study takes the paragraph seriously: a five-layer anatomy, the international precedents
-        (NHS Spine, X-Road, ContactPoint), eight stakeholder lenses on its value, and a deep information-governance
-        treatment — the trust ledger, the legal plumbing, and a privacy-design playbook. Companion to Keystone
-        and the Policy Engine.
+        (NHS Spine, X-Road, ContactPoint), eight stakeholder lenses on its value, a deep information-governance
+        treatment — and a live 3D simulation of the federated design: 24,000 schools, 15 MIS suppliers, thirteen
+        runnable scenarios from census day to breach day. Companion to Keystone and the Policy Engine.
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
           class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
           style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
         >
-          precedents · personas · privacy · cited
+          precedents · personas · privacy · 3D federation sim · cited
         </span>
         {@render visToggle('data-spine', '/projects/data-spine', 'The Data Spine')}
       </div>

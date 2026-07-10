@@ -156,7 +156,7 @@
   </StorySection>
 
   <div class="next-row">
-    <a class="pe-next" href="/projects/data-spine/governance">Next: the part nobody has designed — governance →</a>
+    <a class="pe-next" href="/projects/data-spine/federation">Next: the federated option, actually running →</a>
   </div>
 </div>
 
