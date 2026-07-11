@@ -4,9 +4,9 @@
   // out, run it on the network above, and read the full anatomy below.
   // The anatomy is live: it recomputes as the participation toggles change.
   import { untrack } from 'svelte';
-  import { QUERIES, runQuery, buildQueryScenario, queryById, type FedQuery } from '../lib/queries';
-  import { SUPPLIERS } from '../lib/topology';
-  import type { Scenario } from '../lib/engine';
+  import { QUERIES, runQuery, buildQueryScenario, queryById, type FedQuery } from '$lib/sim/federation/queries';
+  import { SUPPLIERS } from '$lib/sim/federation/topology';
+  import type { Scenario } from '$lib/sim/federation/engine';
   import QueryExplorer from './QueryExplorer.svelte';
 
   let {

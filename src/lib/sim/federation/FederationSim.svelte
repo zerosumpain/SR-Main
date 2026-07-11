@@ -3,10 +3,10 @@
   // engine (engine.ts) + this HUD. All render-loop handles are plain lets (never
   // $state — see svelte5-pitfalls); $state holds only what the template reads.
   import { onMount } from 'svelte';
-  import { buildTopology, schoolInfo, DFE_ID, LEDGER_ID, type Topology, type NetNode, type SchoolInfo } from '../lib/topology';
-  import { SimEngine, type SimEvent, type LogEntry, type CounterKey, type Scenario } from '../lib/engine';
-  import { SCENARIOS, SCENARIO_GROUPS, scenarioById } from '../lib/scenarios';
-  import { createFederationScene, type SceneHandle, type PickResult } from '../lib/scene';
+  import { buildTopology, schoolInfo, DFE_ID, LEDGER_ID, type Topology, type NetNode, type SchoolInfo } from './topology';
+  import { SimEngine, type SimEvent, type LogEntry, type CounterKey, type Scenario } from './engine';
+  import { SCENARIOS, SCENARIO_GROUPS, scenarioById } from './scenarios';
+  import { createFederationScene, type SceneHandle, type PickResult } from './scene';
 
   let { onActiveScenario }: { onActiveScenario?: (s: Scenario | null) => void } = $props();
 

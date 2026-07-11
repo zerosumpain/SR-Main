@@ -2,7 +2,7 @@
   // QueryExplorer — the drill-down anatomy of one federated ask: the signed
   // query itself, the per-estate partial responses, and what actually lands
   // back at the DfE. Pure presentation over a deterministic QueryRun.
-  import { basisLabel, type QueryRun, type PartialStatus } from '../lib/queries';
+  import { basisLabel, type QueryRun, type PartialStatus } from '$lib/sim/federation/queries';
 
   let { run }: { run: QueryRun } = $props();
 

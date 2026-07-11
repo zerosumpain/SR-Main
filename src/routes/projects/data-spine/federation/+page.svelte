@@ -3,10 +3,10 @@
   // slide-scale headlines. The shared StoryMasthead/StorySection shell is
   // deliberately not used here — this section presents; the others document.
   import { app } from '../lib/appState.svelte';
-  import { SCENARIOS, SCENARIO_GROUPS } from './lib/scenarios';
-  import { SUPPLIERS } from './lib/topology';
-  import type { Scenario } from './lib/engine';
-  import FederationSim from './components/FederationSim.svelte';
+  import { SCENARIOS, SCENARIO_GROUPS } from '$lib/sim/federation/scenarios';
+  import { SUPPLIERS } from '$lib/sim/federation/topology';
+  import type { Scenario } from '$lib/sim/federation/engine';
+  import FederationSim from '$lib/sim/federation/FederationSim.svelte';
   import AskFederation from './components/AskFederation.svelte';
 
   const eli = $derived(app.narrative === 'eli5');
