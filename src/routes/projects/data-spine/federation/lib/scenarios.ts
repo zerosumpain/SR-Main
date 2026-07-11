@@ -1,9 +1,11 @@
-// scenarios.ts — the scenario catalogue: thirteen scripted simulations of what a
+// scenarios.ts — the scenario catalogue: fourteen scripted simulations of what a
 // federated education data exchange would actually do, grouped into collections,
-// frontline operations, the vendor economy, and trust & failure modes. Every
-// scenario is synthetic; the numbers are market-shaped, not measured. Colour
-// language (shared with the scene): petrol = query/contract, orange = record
-// content moving, green = verified/aggregate answer, red = refusal or breach.
+// frontline operations, the vendor economy, and trust & failure modes. Supplier
+// names are real; every scenario is synthetic and every behaviour illustrative —
+// the numbers are market-shaped, not measured, and no incident depicted here
+// (outage, breach, queue) describes a real event. Colour language (shared with
+// the scene): petrol = query/contract, orange = record content moving, green =
+// verified/aggregate answer, red = refusal or breach.
 
 import type { PulseColor, Scenario, SimAction } from './engine';
 import { SUPPLIERS } from './topology';
@@ -14,8 +16,8 @@ const MAJORS = SUPPLIERS.filter((s) => s.tier === 'major').map((s) => s.id);
 const SMALLS = SUPPLIERS.filter((s) => s.tier !== 'major').map((s) => s.id);
 const ALL_SUPPLIERS = [...MAJORS, ...SMALLS];
 
-/** Every completed exchange stamps the citizen-readable ledger. */
-function ledgerStamp(text: string, delayMs = 0): SimAction[] {
+/** Every completed exchange stamps the citizen-readable ledger. (Shared with queries.ts.) */
+export function ledgerStamp(text: string, delayMs = 0): SimAction[] {
   return [
     { kind: 'flash', node: 'ledger', color: 'ok', delayMs },
     { kind: 'log', log: 'audit', text, delayMs },
@@ -23,8 +25,8 @@ function ledgerStamp(text: string, delayMs = 0): SimAction[] {
   ];
 }
 
-/** Staggered pulses from one node to many (or many to one). */
-function spray(from: string | string[], to: string | string[], color: PulseColor, baseDelay = 0, stepMs = 110): SimAction[] {
+/** Staggered pulses from one node to many (or many to one). (Shared with queries.ts.) */
+export function spray(from: string | string[], to: string | string[], color: PulseColor, baseDelay = 0, stepMs = 110): SimAction[] {
   const froms = Array.isArray(from) ? from : [from];
   const tos = Array.isArray(to) ? to : [to];
   const out: SimAction[] = [];
@@ -64,6 +66,7 @@ export const SCENARIOS: Scenario[] = [
       aggregation: 'School-level totals — no pupil-level rows leave any MIS',
       retention: 'Aggregates kept; the query itself logged permanently',
     },
+    queryId: 'fsm-eligibility',
     central: {
       records: '~8m pupil-level records copied to the centre, three times a year',
       exposure: 'The National Pupil Database grows by another term, forever',
@@ -90,7 +93,7 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Local compute. Each supplier runs the count inside its own estate — Cedar across 8,160 schools, Osier across 168. The records do the thing records almost never get to do: they stay put.',
+        narration: 'Local compute. Each supplier runs the count inside its own estate — Arbor across 10,560 schools, WCBS HUBmis across 96. The records do the thing records almost never get to do: they stay put.',
         phase: 'LOCAL COMPUTE', holdMs: 5200,
         actions: [
           ...MAJORS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 260, color: 'query', delayMs: i * 500 })),
@@ -127,6 +130,7 @@ export const SCENARIOS: Scenario[] = [
       aggregation: 'School-level; suppressed under 10 respondents',
       retention: 'Pilot aggregates for 24 months',
     },
+    queryId: 'wellbeing-pilot',
     central: {
       records: 'A new column in the central store — collected from every school by hand',
       exposure: 'Another permanent field in the honeypot',
@@ -180,6 +184,7 @@ export const SCENARIOS: Scenario[] = [
       aggregation: 'Cells under 10 suppressed at source; calibrated noise added before return',
       retention: 'Results only; underlying query auto-expires in 90 days',
     },
+    queryId: 'tutoring-uplift',
     central: {
       records: 'A bespoke NPD extract, months of approvals, a copy on a TRE disk',
       exposure: 'Every extract is one more place the data lives',
@@ -206,7 +211,7 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Local compute with local discipline: each estate builds its cells, suppresses anything under ten pupils, and adds calibrated noise before anything leaves. Whitloe’s early-years estate returns mostly suppressed cells — correctly.',
+        narration: 'Local compute with local discipline: each estate builds its cells, suppresses anything under ten pupils, and adds calibrated noise before anything leaves. Famly’s early-years estate returns mostly suppressed cells — correctly.',
         phase: 'DISCLOSURE CONTROL', holdMs: 5200,
         actions: [
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 90, color: 'query', delayMs: i * 160 })),
@@ -235,10 +240,10 @@ export const SCENARIOS: Scenario[] = [
     group: 'Frontline operations',
     title: 'The child who moves',
     tagline: 'One record follows one child — and that’s the point.',
-    description: 'A family moves from Bradford to Kent mid-year, across two schools on two different MIS suppliers. The record follows the child school-to-school; the LA sees no gap.',
+    description: 'A family moves from Bradford to Kent mid-year, across two schools on two different MIS suppliers — one on Arbor, one on SIMS. The record follows the child school-to-school; the LA sees no gap.',
     lesson: 'Federation doesn’t mean nothing moves — it means only what must move, moves; point-to-point, under a basis, on the record. The one pupil-level transfer in this scenario is the one the child needed.',
     contract: {
-      requester: 'Fern Hill Primary (Cedar MIS) — receiving school',
+      requester: 'Fern Hill Primary (ESS SIMS) — receiving school',
       purpose: 'Enrolment of an in-year admission: fetch the education record',
       legalBasis: 'Education (Pupil Information) Regulations — common transfer duty',
       fields: ['Full education record: attainment, attendance, SEND, safeguarding flags'],
@@ -253,30 +258,30 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'October half-term: a family leaves Bradford. Oakfield Primary records a leaver in Meridian, destination not yet known. Historically, this is the moment a child’s record starts to fragment.',
+        narration: 'October half-term: a family leaves Bradford. Oakfield Primary records a leaver in Arbor, destination not yet known. Historically, this is the moment a child’s record starts to fragment.',
         phase: 'EVENT', holdMs: 4200,
         actions: [
-          { kind: 'flash', node: 'sup-meridian', color: 'data' },
-          { kind: 'highlight', nodes: ['sup-meridian'], on: true },
-          { kind: 'log', log: 'info', text: 'Leaver recorded: Oakfield Primary (Meridian) · destination unknown' },
+          { kind: 'flash', node: 'sup-arbor', color: 'data' },
+          { kind: 'highlight', nodes: ['sup-arbor'], on: true },
+          { kind: 'log', log: 'info', text: 'Leaver recorded: Oakfield Primary (Arbor) · destination unknown' },
         ],
       },
       {
-        narration: 'Two weeks later the child appears at Fern Hill Primary in Kent — a Cedar school. Cedar’s gateway asks the exchange the only question that matters: who holds this child’s record?',
+        narration: 'Two weeks later the child appears at Fern Hill Primary in Kent — a SIMS school. The SIMS gateway asks the exchange the only question that matters: who holds this child’s record?',
         phase: 'LOCATE', holdMs: 4400,
         actions: [
-          { kind: 'flash', node: 'sup-cedar', color: 'query' },
-          { kind: 'highlight', nodes: ['sup-cedar'], on: true },
-          { kind: 'pulse', from: 'sup-cedar', to: 'sup-meridian', color: 'query', delayMs: 500 },
-          { kind: 'log', log: 'contract', text: 'Cedar → exchange: locate + fetch-a-record · UPN K93…41 · basis: enrolment', delayMs: 600 },
+          { kind: 'flash', node: 'sup-sims', color: 'query' },
+          { kind: 'highlight', nodes: ['sup-sims'], on: true },
+          { kind: 'pulse', from: 'sup-sims', to: 'sup-arbor', color: 'query', delayMs: 500 },
+          { kind: 'log', log: 'contract', text: 'SIMS → exchange: locate + fetch-a-record · UPN K93…41 · basis: enrolment', delayMs: 600 },
           { kind: 'counter', key: 'exchanges', delta: 1 },
         ],
       },
       {
-        narration: 'Meridian’s gateway verifies the receiving school’s claim — the child really is enrolling there — and stamps the ledger before a single field moves.',
+        narration: 'Arbor’s gateway verifies the receiving school’s claim — the child really is enrolling there — and stamps the ledger before a single field moves.',
         phase: 'VERIFY', holdMs: 3800,
         actions: [
-          { kind: 'flash', node: 'sup-meridian', color: 'ok', delayMs: 300 },
+          { kind: 'flash', node: 'sup-arbor', color: 'ok', delayMs: 300 },
           { kind: 'log', log: 'verify', text: 'Enrolment claim verified against admissions round · transfer authorised' },
           ...ledgerStamp('Record transfer authorised: Oakfield → Fern Hill', 1200),
         ],
@@ -285,7 +290,7 @@ export const SCENARIOS: Scenario[] = [
         narration: 'The record moves — once, whole, school-to-school. Attainment, attendance history, SEND plan, safeguarding flags. No re-keying, no CD in the post, no centre in the middle.',
         phase: 'TRANSFER', holdMs: 4400,
         actions: [
-          { kind: 'pulse', from: 'sup-meridian', to: 'sup-cedar', color: 'data', durMs: 2000 },
+          { kind: 'pulse', from: 'sup-arbor', to: 'sup-sims', color: 'data', durMs: 2000 },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 1, delayMs: 1800 },
           { kind: 'log', log: 'return', text: 'Full record transferred point-to-point · CTF file rendered obsolete', delayMs: 1900 },
         ],
@@ -294,10 +299,10 @@ export const SCENARIOS: Scenario[] = [
         narration: 'Both local authorities are notified automatically: Bradford closes its children-missing-education window, Kent opens a school place. The gap where a child can vanish never opens.',
         phase: 'NOTIFY', holdMs: 4600,
         actions: [
-          { kind: 'pulse', from: 'sup-cedar', to: 'con-la', color: 'ok', delayMs: 200 },
+          { kind: 'pulse', from: 'sup-sims', to: 'con-la', color: 'ok', delayMs: 200 },
           { kind: 'log', log: 'info', text: 'CME check: 0 days unaccounted · both LAs notified', delayMs: 900 },
           ...ledgerStamp('Transfer complete — visible to the family in the Education Record', 1600),
-          { kind: 'highlight', nodes: ['sup-meridian', 'sup-cedar'], on: false, delayMs: 2400 },
+          { kind: 'highlight', nodes: ['sup-arbor', 'sup-sims'], on: false, delayMs: 2400 },
         ],
       },
     ],
@@ -318,6 +323,7 @@ export const SCENARIOS: Scenario[] = [
       aggregation: 'Counts aggregate; flags record-level by exception',
       retention: 'Counts kept; flags reviewed at LA case level',
     },
+    queryId: 'absence-today',
     central: {
       records: '~8m pupils’ marks piped daily to the centre via a commercial broker',
       exposure: 'The most current national dataset about children, in one place, twice a day',
@@ -343,11 +349,11 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'One flag travels differently. A pupil at a BeaconEd school crosses the persistent-absence threshold; the standing contract lets exactly that flag — one pupil, one field — reach the local authority team that can act.',
+        narration: 'One flag travels differently. A pupil at a Bromcom school crosses the persistent-absence threshold; the standing contract lets exactly that flag — one pupil, one field — reach the local authority team that can act.',
         phase: 'EARLY WARNING', holdMs: 5000,
         actions: [
-          { kind: 'flash', node: 'sup-beacon', color: 'data', delayMs: 300 },
-          { kind: 'pulse', from: 'sup-beacon', to: 'con-la', color: 'data', durMs: 2000, delayMs: 800 },
+          { kind: 'flash', node: 'sup-bromcom', color: 'data', delayMs: 300 },
+          { kind: 'pulse', from: 'sup-bromcom', to: 'con-la', color: 'data', durMs: 2000, delayMs: 800 },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 1, delayMs: 2600 },
           { kind: 'log', log: 'return', text: 'PA-risk flag → LA attendance team · 1 pupil · threshold 15% crossed', delayMs: 2700 },
           ...ledgerStamp('Record-level disclosure logged: attendance flag, basis attendance regs', 3300),
@@ -392,24 +398,24 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'The query names its statutory basis and asks for four fields — not the record, not the file, not a browse session. The exchange resolves where the child is known: a Harbourside school now, a Meridian school before.',
+        narration: 'The query names its statutory basis and asks for four fields — not the record, not the file, not a browse session. The exchange resolves where the child is known: a Bromcom school now, an Arbor school before.',
         phase: 'CONTRACT', holdMs: 4600,
         actions: [
           { kind: 'log', log: 'contract', text: 'CSC → exchange: 4 fields, 1 child · basis Children Act 1989 / Working Together' },
           { kind: 'counter', key: 'exchanges', delta: 1 },
-          { kind: 'pulse', from: 'con-csc', to: 'sup-harbourside', color: 'query', delayMs: 400 },
-          { kind: 'pulse', from: 'con-csc', to: 'sup-meridian', color: 'query', delayMs: 700 },
-          { kind: 'flash', node: 'sup-harbourside', color: 'ok', delayMs: 1600 },
-          { kind: 'flash', node: 'sup-meridian', color: 'ok', delayMs: 1800 },
+          { kind: 'pulse', from: 'con-csc', to: 'sup-bromcom', color: 'query', delayMs: 400 },
+          { kind: 'pulse', from: 'con-csc', to: 'sup-arbor', color: 'query', delayMs: 700 },
+          { kind: 'flash', node: 'sup-bromcom', color: 'ok', delayMs: 1600 },
+          { kind: 'flash', node: 'sup-arbor', color: 'ok', delayMs: 1800 },
           { kind: 'log', log: 'verify', text: 'Practitioner role + case reference verified at both gateways', delayMs: 2000 },
         ],
       },
       {
-        narration: 'Two answers come back — current enrolment and attendance from Harbourside, history from Meridian. Four fields cross the network. The rest of two rich school records stays exactly where it was.',
+        narration: 'Two answers come back — current enrolment and attendance from Bromcom, history from Arbor. Four fields cross the network. The rest of two rich school records stays exactly where it was.',
         phase: 'RETURN', holdMs: 4600,
         actions: [
-          { kind: 'pulse', from: 'sup-harbourside', to: 'con-csc', color: 'data', delayMs: 200 },
-          { kind: 'pulse', from: 'sup-meridian', to: 'con-csc', color: 'data', delayMs: 600 },
+          { kind: 'pulse', from: 'sup-bromcom', to: 'con-csc', color: 'data', delayMs: 200 },
+          { kind: 'pulse', from: 'sup-arbor', to: 'con-csc', color: 'data', delayMs: 600 },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 1, delayMs: 1800 },
           { kind: 'log', log: 'return', text: '4 fields returned · enrolled: yes · attendance 71% ↓ · EHCP: assessment stage', delayMs: 2000 },
         ],
@@ -456,14 +462,14 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'The fan-out: one contract, three custodians — the current Cedar school, the previous Bracken school, and the Alder & Grey alternative-provision placement. Section 47 unlocks record-level answers; it does not unlock browsing.',
+        narration: 'The fan-out: one contract, three custodians — the current SIMS school, the previous ScholarPack school, and the Databridge alternative-provision placement. Section 47 unlocks record-level answers; it does not unlock browsing.',
         phase: 'FAN-OUT', holdMs: 4800,
         actions: [
           { kind: 'log', log: 'contract', text: 'CSC → exchange: s.47 chronology · 1 child · 3 custodians resolved' },
           { kind: 'counter', key: 'exchanges', delta: 1 },
-          { kind: 'pulse', from: 'con-csc', to: 'sup-cedar', color: 'query', delayMs: 300 },
-          { kind: 'pulse', from: 'con-csc', to: 'sup-bracken', color: 'query', delayMs: 550 },
-          { kind: 'pulse', from: 'con-csc', to: 'sup-aldergrey', color: 'query', delayMs: 800 },
+          { kind: 'pulse', from: 'con-csc', to: 'sup-sims', color: 'query', delayMs: 300 },
+          { kind: 'pulse', from: 'con-csc', to: 'sup-scholarpack', color: 'query', delayMs: 550 },
+          { kind: 'pulse', from: 'con-csc', to: 'sup-databridge', color: 'query', delayMs: 800 },
           { kind: 'log', log: 'verify', text: '3/3 gateways: s.47 reference verified with the requesting LA', delayMs: 1900 },
           ...ledgerStamp('s.47 fan-out authorised — highest-sensitivity access class', 2400),
         ],
@@ -472,9 +478,9 @@ export const SCENARIOS: Scenario[] = [
         narration: 'Three chronology extracts return inside four minutes — attendance collapsing since spring, an exclusion, a safeguarding log entry from the AP placement that changes the picture. The practitioners walk into the visit knowing what the system knows.',
         phase: 'CHRONOLOGY', holdMs: 5200,
         actions: [
-          { kind: 'pulse', from: 'sup-cedar', to: 'con-csc', color: 'data', delayMs: 200 },
-          { kind: 'pulse', from: 'sup-bracken', to: 'con-csc', color: 'data', delayMs: 600 },
-          { kind: 'pulse', from: 'sup-aldergrey', to: 'con-csc', color: 'data', delayMs: 1000 },
+          { kind: 'pulse', from: 'sup-sims', to: 'con-csc', color: 'data', delayMs: 200 },
+          { kind: 'pulse', from: 'sup-scholarpack', to: 'con-csc', color: 'data', delayMs: 600 },
+          { kind: 'pulse', from: 'sup-databridge', to: 'con-csc', color: 'data', delayMs: 1000 },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 3, delayMs: 2200 },
           { kind: 'log', log: 'return', text: 'Chronology assembled: 3 sources · 4 min · shared with strategy discussion', delayMs: 2400 },
         ],
@@ -498,10 +504,10 @@ export const SCENARIOS: Scenario[] = [
     group: 'The vendor economy',
     title: 'What the supplier gets back',
     tagline: 'Adoption economics: the day-one reason to plug in.',
-    description: 'A small primary-specialist MIS pulls national benchmark distributions from the exchange and lights up dashboards in 816 schools — value flowing back down the network.',
+    description: 'A primary-specialist MIS pulls national benchmark distributions from the exchange and lights up dashboards in 1,560 schools — value flowing back down the network.',
     lesson: 'GOV.UK Verify died of non-adoption, not bad architecture. A spine survives only if plugging in pays on day one — for suppliers and schools, not just the department. Benchmarks-back is the attendance-dashboard lesson, generalised.',
     contract: {
-      requester: 'Rowanfield MIS (on behalf of 816 schools)',
+      requester: 'ScholarPack (on behalf of 1,560 schools)',
       purpose: 'National benchmark distributions for school dashboards',
       legalBasis: 'Published-statistics reuse — open aggregate data',
       fields: ['Attendance distributions by phase/region', 'Attainment quartiles', 'Cohort comparators'],
@@ -516,30 +522,96 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'Rowanfield — 3.4% of the market, primary schools, no data-science team — pulls the national benchmark set the exchange publishes as open aggregates. The same infrastructure that collects can serve.',
+        narration: 'ScholarPack — 6.5% of the market, primary schools, no data-science team in most of them — pulls the national benchmark set the exchange publishes as open aggregates. The same infrastructure that collects can serve.',
         phase: 'PULL', holdMs: 4400,
         actions: [
-          { kind: 'highlight', nodes: ['sup-rowanfield'], on: true },
-          { kind: 'pulse', from: 'sup-rowanfield', to: 'con-dfe', color: 'query' },
-          { kind: 'log', log: 'contract', text: 'Rowanfield → exchange: pull national benchmarks v2026.3 (open aggregates)' },
+          { kind: 'highlight', nodes: ['sup-scholarpack'], on: true },
+          { kind: 'pulse', from: 'sup-scholarpack', to: 'con-dfe', color: 'query' },
+          { kind: 'log', log: 'contract', text: 'ScholarPack → exchange: pull national benchmarks v2026.3 (open aggregates)' },
           { kind: 'counter', key: 'exchanges', delta: 1 },
-          { kind: 'pulse', from: 'con-dfe', to: 'sup-rowanfield', color: 'ok', delayMs: 1400 },
+          { kind: 'pulse', from: 'con-dfe', to: 'sup-scholarpack', color: 'ok', delayMs: 1400 },
           { kind: 'counter', key: 'aggregatesReturned', delta: 1, delayMs: 2400 },
         ],
       },
       {
-        narration: 'Overnight, 816 small primaries get what only big trusts could previously afford: where do we actually sit — against phase, against region, against schools like us?',
+        narration: 'Overnight, 1,560 small primaries get what only big trusts could previously afford: where do we actually sit — against phase, against region, against schools like us?',
         phase: 'VALUE BACK', holdMs: 5000,
         actions: [
-          { kind: 'fanout', supplier: 'sup-rowanfield', count: 200, color: 'ok', delayMs: 300 },
-          { kind: 'log', log: 'info', text: 'Benchmark dashboards live in 816 schools · cost to each school: nothing', delayMs: 1500 },
+          { kind: 'fanout', supplier: 'sup-scholarpack', count: 200, color: 'ok', delayMs: 300 },
+          { kind: 'log', log: 'info', text: 'Benchmark dashboards live in 1,560 schools · cost to each school: nothing', delayMs: 1500 },
         ],
       },
       {
         narration: 'This is the adoption argument in one frame. The daily attendance feed succeeded because schools got dashboards back on day one. Verify failed because nobody got anything. Every supplier in this picture needs its own version of this scenario — or the spine is Verify again.',
         phase: 'LESSON', holdMs: 5200,
         actions: [
-          { kind: 'highlight', nodes: ['sup-rowanfield'], on: false, delayMs: 2600 },
+          { kind: 'highlight', nodes: ['sup-scholarpack'], on: false, delayMs: 2600 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'edtech-signal',
+    group: 'The vendor economy',
+    title: 'The pattern only the tendrils see',
+    tagline: 'Edtech platforms as certified spurs — intelligence in, never account data out.',
+    description: 'Toggle the edtech ring on and imagine the platforms schools already use — Satchel One, Sparx, Class Charts, Tapestry — certified onto the federation as tendrils, contributing aggregate signals under the same contract discipline as the MIS estates.',
+    lesson: 'The MIS estates hold the record; the edtech layer sees the behaviour. Homework engagement collapses weeks before attendance does — but today that signal dies inside each platform. Certified tendrils would let the federation see leading indicators without any platform surrendering account-level data.',
+    contract: {
+      requester: 'LA early-help team · standing pilot contract',
+      purpose: 'District-level early-warning composite from certified edtech signals',
+      legalBasis: 'Edtech federation pilot — school-level consent, aggregate-only',
+      fields: ['Engagement-drop index (district)', 'Behaviour-climate index', 'Attendance context'],
+      population: 'One district · platform aggregates only',
+      aggregation: 'District-level composites; per-platform pseudonyms, never joinable',
+      retention: 'Rolling 12-week window, then discarded',
+    },
+    queryId: 'digital-homework',
+    usesEdtech: true,
+    central: {
+      records: 'The central alternative: pipe every platform’s clickstream into the national store and mine it',
+      exposure: 'Every child’s homework, behaviour and reading history in one queryable pile',
+      note: 'The tendril pattern is the argument that intelligence-sharing and surveillance are different designs, not different intentions.',
+    },
+    steps: [
+      {
+        narration: 'Look at the outer ring: the platforms schools already run — homework, behaviour, reading, early-years journals. Today each one sees its own sliver of every child’s week, and the slivers never meet. Imagine them certified onto the federation as tendrils.',
+        phase: 'THE TENDRILS', holdMs: 5200,
+        actions: [
+          { kind: 'highlight', nodes: ['edt-satchel', 'edt-sparx', 'edt-classcharts', 'edt-tapestry'], on: true },
+          { kind: 'log', log: 'info', text: 'Edtech ring active: 12 certified tendrils · aggregate-only contracts' },
+        ],
+      },
+      {
+        narration: 'In one district, Satchel One and Sparx both watch homework engagement sag for the same cohort — weeks before a single attendance mark changes. Class Charts sees the behaviour climate shift. Three platforms, one pattern, and none of them knows the others are seeing it.',
+        phase: 'THE SIGNAL', holdMs: 5400,
+        actions: [
+          { kind: 'flash', node: 'edt-satchel', color: 'data', delayMs: 200 },
+          { kind: 'flash', node: 'edt-sparx', color: 'data', delayMs: 600 },
+          { kind: 'flash', node: 'edt-classcharts', color: 'data', delayMs: 1000 },
+          { kind: 'log', log: 'info', text: 'Engagement-drop index: district 4 · 3 platforms independently past threshold' },
+        ],
+      },
+      {
+        narration: 'Under the standing pilot contract, each platform contributes its district-level index — an aggregate, computed inside its own estate, under a per-platform pseudonym scheme that cannot be joined into a profile of any child.',
+        phase: 'CONTRIBUTE', holdMs: 5000,
+        actions: [
+          { kind: 'log', log: 'contract', text: 'Standing contract early-help/pilot: district composites · aggregate-only' },
+          { kind: 'counter', key: 'exchanges', delta: 3 },
+          { kind: 'pulse', from: 'edt-satchel', to: 'con-la', color: 'ok', delayMs: 300 },
+          { kind: 'pulse', from: 'edt-sparx', to: 'con-la', color: 'ok', delayMs: 700 },
+          { kind: 'pulse', from: 'edt-classcharts', to: 'con-la', color: 'ok', delayMs: 1100 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: 3, delayMs: 2000 },
+          ...ledgerStamp('Edtech composite delivered: district 4 early-warning · no account data', 2400),
+        ],
+      },
+      {
+        narration: 'The LA early-help team gets a district signal it has never had before: something is happening here, weeks early. The record-level follow-up — which schools, which children — needs its own statutory basis and its own ledger entries. The tendrils gave intelligence, not identities.',
+        phase: 'EARLY HELP', holdMs: 5600,
+        actions: [
+          { kind: 'flash', node: 'con-la', color: 'ok', delayMs: 400 },
+          { kind: 'log', log: 'return', text: 'Early-warning composite → LA · district-level · account rows shared: 0', delayMs: 800 },
+          { kind: 'highlight', nodes: ['edt-satchel', 'edt-sparx', 'edt-classcharts', 'edt-tapestry'], on: false, delayMs: 3000 },
         ],
       },
     ],
@@ -563,8 +635,8 @@ export const SCENARIOS: Scenario[] = [
         actions: [
           { kind: 'log', log: 'info', text: 'Admissions day: ~600,000 enrolment events forecast before noon' },
           ...spray(MAJORS, MAJORS, 'data', 0, 90),
-          ...spray(['sup-meridian', 'sup-cedar'], SMALLS.slice(0, 6), 'data', 500, 90),
-          ...spray(SMALLS.slice(6), ['sup-beacon', 'sup-cedar'], 'data', 1000, 90),
+          ...spray(['sup-arbor', 'sup-sims'], SMALLS.slice(0, 6), 'data', 500, 90),
+          ...spray(SMALLS.slice(6), ['sup-bromcom', 'sup-sims'], 'data', 1000, 90),
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 600000, delayMs: 2000 },
           { kind: 'counter', key: 'exchanges', delta: 58, delayMs: 2000 },
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 160, color: 'data', delayMs: 1500 + i * 150 })),
@@ -580,13 +652,13 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'One wobble, honestly rendered: the incumbent’s overnight-batch heritage shows, and Cedar’s queue stretches to forty minutes. Its schools wait; nobody else’s do. The backlog belongs to the node, not the nation.',
+        narration: 'One wobble, honestly imagined: suppose the incumbent’s overnight-batch heritage shows, and the SIMS queue stretches to forty minutes. Its schools wait; nobody else’s do. The backlog belongs to the node, not the nation.',
         phase: 'LOCAL STRAIN', holdMs: 5000,
         actions: [
-          { kind: 'flash', node: 'sup-cedar', color: 'refuse', delayMs: 300 },
-          { kind: 'log', log: 'info', text: 'Cedar MIS: transfer queue 40 min (batch architecture) · other estates unaffected', delayMs: 800 },
-          { kind: 'flash', node: 'sup-cedar', color: 'ok', delayMs: 3200 },
-          { kind: 'log', log: 'info', text: 'Cedar queue drained 13:10 · zero transfers lost', delayMs: 3400 },
+          { kind: 'flash', node: 'sup-sims', color: 'refuse', delayMs: 300 },
+          { kind: 'log', log: 'info', text: 'ESS SIMS: transfer queue 40 min (batch architecture) · other estates unaffected', delayMs: 800 },
+          { kind: 'flash', node: 'sup-sims', color: 'ok', delayMs: 3200 },
+          { kind: 'log', log: 'info', text: 'SIMS queue drained 13:10 · zero transfers lost', delayMs: 3400 },
         ],
       },
     ],
@@ -663,38 +735,38 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'Assume the breach — good security design always does. A phishing campaign lands: an engineer’s credentials at Kestrel SIS, 672 schools, 2.8% of the market. The attacker is inside a real estate with real children’s records.',
+        narration: 'Assume the breach — good security design always does. Suppose a phishing campaign lands: an engineer’s credentials at a mid-sized supplier — say RM Integris, 600 schools, 2.5% of the market. The attacker is inside a real estate with real children’s records.',
         phase: 'COMPROMISE', holdMs: 4800,
         actions: [
-          { kind: 'flash', node: 'sup-kestrel', color: 'refuse' },
-          { kind: 'highlight', nodes: ['sup-kestrel'], on: true },
-          { kind: 'log', log: 'info', text: 'INCIDENT: credential compromise at Kestrel SIS · estate: 672 schools' },
-          { kind: 'fanout', supplier: 'sup-kestrel', count: 200, color: 'refuse', delayMs: 1200 },
+          { kind: 'flash', node: 'sup-integris', color: 'refuse' },
+          { kind: 'highlight', nodes: ['sup-integris'], on: true },
+          { kind: 'log', log: 'info', text: 'INCIDENT (simulated): credential compromise at one mid-size estate · 600 schools' },
+          { kind: 'fanout', supplier: 'sup-integris', count: 200, color: 'refuse', delayMs: 1200 },
         ],
       },
       {
-        narration: 'The exposure is grave — and bounded. 672 schools’ records: serious, notifiable, life-affecting. But the attacker holds one estate’s keys, not the nation’s. Fourteen other estates, and the exchange itself, are different locks on different doors.',
+        narration: 'The exposure is grave — and bounded. 600 schools’ records: serious, notifiable, life-affecting. But the attacker holds one estate’s keys, not the nation’s. Fourteen other estates, and the exchange itself, are different locks on different doors.',
         phase: 'BLAST RADIUS', holdMs: 5000,
         actions: [
-          { kind: 'log', log: 'info', text: 'Exposure assessment: 672 schools (2.8%) · other estates unreachable with these keys' },
+          { kind: 'log', log: 'info', text: 'Exposure assessment: 600 schools (2.5%) · other estates unreachable with these keys' },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 0 },
         ],
       },
       {
-        narration: 'The federation’s immune response: the other members revoke Kestrel’s certificates and the exchange isolates it pending forensics. Its schools fall back to local-only operation — degraded, but contained. Time from detection to isolation: minutes.',
+        narration: 'The federation’s immune response: the other members revoke the compromised estate’s certificates and the exchange isolates it pending forensics. Its schools fall back to local-only operation — degraded, but contained. Time from detection to isolation: minutes.',
         phase: 'REVOKE', holdMs: 5200,
         actions: [
-          ...spray(['con-dfe', 'sup-cedar', 'sup-meridian'], 'sup-kestrel', 'refuse', 300, 250),
+          ...spray(['con-dfe', 'sup-sims', 'sup-arbor'], 'sup-integris', 'refuse', 300, 250),
           { kind: 'counter', key: 'refusals', delta: 1, delayMs: 1200 },
-          { kind: 'log', log: 'refuse', text: 'Certificate revoked: sup-kestrel isolated from exchange · 09:41', delayMs: 1400 },
+          { kind: 'log', log: 'refuse', text: 'Certificate revoked: compromised estate isolated from exchange · 09:41', delayMs: 1400 },
           ...ledgerStamp('Isolation event logged — members + regulator notified simultaneously', 2200),
         ],
       },
       {
-        narration: 'Now run the counterfactual in your head — or with the architecture toggle above. The same phishing email against a central store isn’t a 2.8% incident; it is the incident. One perimeter, 8 million children, and a target rich enough to justify any adversary’s patience.',
+        narration: 'Now run the counterfactual in your head — or with the architecture toggle above. The same phishing email against a central store isn’t a 2.5% incident; it is the incident. One perimeter, 8 million children, and a target rich enough to justify any adversary’s patience.',
         phase: 'COUNTERFACTUAL', holdMs: 5600,
         actions: [
-          { kind: 'highlight', nodes: ['sup-kestrel'], on: false, delayMs: 3000 },
+          { kind: 'highlight', nodes: ['sup-integris'], on: false, delayMs: 3000 },
         ],
       },
     ],
@@ -713,36 +785,36 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: '08:40, a wet Wednesday: Cedar MIS — 34% of the market — goes dark. A third of the country’s school estates are unreachable. In a hub-and-spoke world this would be the whole story.',
+        narration: '08:40, a wet Wednesday: imagine the incumbent — ESS SIMS, 26% of the market — goes dark. A quarter of the country’s school estates are unreachable. In a hub-and-spoke world this would be the whole story.',
         phase: 'OUTAGE', holdMs: 4600,
         actions: [
-          { kind: 'flash', node: 'sup-cedar', color: 'refuse' },
-          { kind: 'highlight', nodes: ['sup-cedar'], on: true },
-          { kind: 'log', log: 'info', text: 'Cedar MIS: national outage 08:40 · 8,160 estates unreachable' },
+          { kind: 'flash', node: 'sup-sims', color: 'refuse' },
+          { kind: 'highlight', nodes: ['sup-sims'], on: true },
+          { kind: 'log', log: 'info', text: 'Simulated outage: largest estate dark from 08:40 · 6,240 schools unreachable' },
         ],
       },
       {
-        narration: 'The DfE’s morning attendance question goes out anyway. Fourteen suppliers answer; Cedar times out. The result comes back labelled for what it is: 66% coverage, partial, not wrong.',
+        narration: 'The DfE’s morning attendance question goes out anyway. Fourteen suppliers answer; the incumbent times out. The result comes back labelled for what it is: 74% coverage, partial, not wrong.',
         phase: 'DEGRADED', holdMs: 5200,
         actions: [
           ...spray('con-dfe', ALL_SUPPLIERS, 'query', 0, 100),
           { kind: 'counter', key: 'exchanges', delta: 1 },
-          ...spray(ALL_SUPPLIERS.filter((s) => s !== 'sup-cedar'), 'con-dfe', 'ok', 1600, 110),
-          { kind: 'flash', node: 'sup-cedar', color: 'refuse', delayMs: 2000 },
+          ...spray(ALL_SUPPLIERS.filter((s) => s !== 'sup-sims'), 'con-dfe', 'ok', 1600, 110),
+          { kind: 'flash', node: 'sup-sims', color: 'refuse', delayMs: 2000 },
           { kind: 'counter', key: 'aggregatesReturned', delta: 14, delayMs: 2800 },
-          { kind: 'log', log: 'return', text: 'Daily counts: 14/15 sources · coverage 66% · flagged PARTIAL in every downstream use', delayMs: 3000 },
+          { kind: 'log', log: 'return', text: 'Daily counts: 14/15 sources · coverage 74% · flagged PARTIAL in every downstream use', delayMs: 3000 },
         ],
       },
       {
-        narration: 'Lunchtime: Cedar restores service and backfills the morning’s answers; the national picture quietly completes itself. Schools on other suppliers never noticed. Failure stayed local; honesty stayed global.',
+        narration: 'Lunchtime: the estate restores service and backfills the morning’s answers; the national picture quietly completes itself. Schools on other suppliers never noticed. Failure stayed local; honesty stayed global.',
         phase: 'BACKFILL', holdMs: 4800,
         actions: [
-          { kind: 'flash', node: 'sup-cedar', color: 'ok', delayMs: 400 },
-          { kind: 'pulse', from: 'sup-cedar', to: 'con-dfe', color: 'ok', delayMs: 900 },
+          { kind: 'flash', node: 'sup-sims', color: 'ok', delayMs: 400 },
+          { kind: 'pulse', from: 'sup-sims', to: 'con-dfe', color: 'ok', delayMs: 900 },
           { kind: 'counter', key: 'aggregatesReturned', delta: 1, delayMs: 1900 },
           { kind: 'log', log: 'return', text: 'Backfill complete 12:55 · coverage 100% · partial flags cleared', delayMs: 2100 },
           ...ledgerStamp('Outage + recovery fully on the record — availability is auditable too', 2800),
-          { kind: 'highlight', nodes: ['sup-cedar'], on: false, delayMs: 3400 },
+          { kind: 'highlight', nodes: ['sup-sims'], on: false, delayMs: 3400 },
         ],
       },
     ],
@@ -770,32 +842,32 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'A family reads the ledger — who has asked about our child? — and decides they don’t want the research uses. Through the learner-held Education Record they register an objection. One tap; Article 21.',
+        narration: 'A family reads the ledger — who has asked about our child? — and decides they don’t want the research uses. Through the learner-held Education Record they register an objection — watch it travel through the DfE gateway that operates the Record service. One tap; Article 21.',
         phase: 'OBJECTION', holdMs: 4800,
         actions: [
           { kind: 'highlight', nodes: ['con-record'], on: true },
           { kind: 'flash', node: 'con-record', color: 'ok' },
-          { kind: 'pulse', from: 'con-record', to: 'sup-meridian', color: 'query', delayMs: 600 },
-          { kind: 'log', log: 'contract', text: 'Education Record → Meridian: objection registered · research uses · Art. 21' },
+          { kind: 'pulse', from: 'con-record', to: 'sup-arbor', color: 'query', delayMs: 600 },
+          { kind: 'log', log: 'contract', text: 'Education Record (via DfE gateway) → Arbor: objection registered · research uses · Art. 21' },
           { kind: 'counter', key: 'exchanges', delta: 1 },
         ],
       },
       {
-        narration: 'The flag lives where the record lives — in the school’s MIS at Meridian — and the exchange’s policy registry notes that it exists. No copies to chase, no register to reconcile: the objection sits beside the data it protects.',
+        narration: 'The flag lives where the record lives — in the school’s MIS at Arbor — and the exchange’s policy registry notes that it exists. No copies to chase, no register to reconcile: the objection sits beside the data it protects.',
         phase: 'AT SOURCE', holdMs: 4400,
         actions: [
-          { kind: 'flash', node: 'sup-meridian', color: 'ok', delayMs: 300 },
+          { kind: 'flash', node: 'sup-arbor', color: 'ok', delayMs: 300 },
           { kind: 'log', log: 'verify', text: 'Objection flag stored at source · policy registry updated', delayMs: 600 },
           ...ledgerStamp('Objection registered — visible to the family, binding on queries', 1400),
         ],
       },
       {
-        narration: 'Prove it works: the earlier research query runs again. Meridian’s local compute excludes the flagged pupil before anything aggregates — the cohort returns as n = 118,204 instead of 118,205. Nobody downstream had to remember anything.',
+        narration: 'Prove it works: the earlier research query runs again. Arbor’s local compute excludes the flagged pupil before anything aggregates — the cohort returns as n = 118,204 instead of 118,205. Nobody downstream had to remember anything.',
         phase: 'ENFORCED', holdMs: 5400,
         actions: [
           ...spray('con-tre', ALL_SUPPLIERS, 'query', 0, 90),
           { kind: 'counter', key: 'exchanges', delta: 1 },
-          { kind: 'fanout', supplier: 'sup-meridian', count: 120, color: 'query', delayMs: 1200 },
+          { kind: 'fanout', supplier: 'sup-arbor', count: 120, color: 'query', delayMs: 1200 },
           ...spray(ALL_SUPPLIERS, 'con-tre', 'ok', 2200, 100),
           { kind: 'counter', key: 'aggregatesReturned', delta: 15, delayMs: 3400 },
           { kind: 'log', log: 'return', text: 'Cohort n=118,204 (−1) · objection honoured at source, invisibly to the researcher', delayMs: 3600 },

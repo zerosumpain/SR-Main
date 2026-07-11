@@ -21,6 +21,7 @@ export interface PickResult {
 export interface SceneHandle {
   applyEvent(e: SimEvent): void;
   setMode(mode: ArchMode): void;
+  setEdtech(on: boolean): void;
   addTick(fn: (dtMs: number) => void): void;
   resetView(): void;
   dispose(): void;
@@ -166,6 +167,9 @@ export function createFederationScene(
   const nodeMeshes = new Map<string, THREE.Mesh>();
   const nodeBaseColor = new Map<string, THREE.Color>();
   const pickables: THREE.Object3D[] = [];
+  // the edtech ring is toggleable: its meshes, labels and tendril edges live here
+  const edtechGroup = new THREE.Group();
+  scene.add(edtechGroup);
 
   function nodeMaterial(hex: string): THREE.MeshLambertMaterial {
     return new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
@@ -208,6 +212,20 @@ export function createFederationScene(
       const lbl = labelFor(n, 'ledger');
       lbl.position.y = 4.4; // above the collision band of far-side supplier labels
       mesh.add(lbl);
+    } else if (n.kind === 'store') {
+      // the DfE's existing satellite stores: mini central-store silhouettes
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size * 0.55, n.size * 0.72, n.size * 2.1, 12), nodeMaterial('#8a5450'));
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const lbl = labelFor(n, 'store');
+      lbl.position.y = n.size * 1.5;
+      mesh.add(lbl);
+    } else if (n.kind === 'edtech') {
+      mesh = new THREE.Mesh(new THREE.TetrahedronGeometry(n.size * 1.15), nodeMaterial('#7d6e58'));
+      mesh.rotation.set(Math.PI / 5, Math.PI / 7, 0);
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const lbl = labelFor(n, 'edt');
+      lbl.position.y = n.size + 0.9;
+      mesh.add(lbl);
     } else if (n.kind === 'central') {
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size, n.size, 7.5, 24), nodeMaterial(NODE_BASE[CENTRAL_ID]));
       mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
@@ -224,7 +242,7 @@ export function createFederationScene(
       mesh.userData.nodeId = n.id;
       nodeMeshes.set(n.id, mesh);
       nodeBaseColor.set(n.id, (mesh.material as THREE.MeshLambertMaterial).color.clone());
-      scene.add(mesh);
+      (n.kind === 'edtech' ? edtechGroup : scene).add(mesh);
       if (n.kind !== 'relay') pickables.push(mesh);
     }
   }
@@ -269,10 +287,24 @@ export function createFederationScene(
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
     return new THREE.LineSegments(geo, mat);
   }
-  const memberEdges = edgeLines(['member', 'ring'], INK_SOFT, 0.28);
+  const memberEdges = edgeLines(['member', 'ring', 'satellite'], INK_SOFT, 0.28);
   scene.add(memberEdges);
   const centralEdges = edgeLines(['central'], PULSE_COLORS.refuse, 0);
   scene.add(centralEdges);
+  const tendrilEdges = edgeLines(['tendril'], INK_SOFT, 0.22);
+  edtechGroup.add(tendrilEdges);
+
+  // hidden until toggled on — CSS2D labels need their own visible flags flipped,
+  // so the toggle traverses (which includes the group itself) rather than
+  // relying on group visibility alone
+  let edtechOn = false;
+  const isEdtech = (id: string) => id.startsWith('edt-');
+  function setEdtech(on: boolean) {
+    edtechOn = on;
+    edtechGroup.traverse((o) => { o.visible = on; });
+    // strip any highlight rings left around tendrils that just vanished
+    if (!on) highlight(Array.from(highlightRings.keys()).filter(isEdtech), false);
+  }
 
   // --- pulse pool ------------------------------------------------------------
   const glow = glowTexture();
@@ -294,6 +326,7 @@ export function createFederationScene(
 
   function spawnPulse(fromId: string, toId: string, color: PulseColor, durMs: number) {
     if (active.length > 140) return; // saturation guard
+    if (!edtechOn && (isEdtech(fromId) || isEdtech(toId))) return; // no pulses to hidden tendrils
     const way = routePath(topo, fromId, toId, mode);
     if (way.length < 2) return;
     const pts: THREE.Vector3[] = [];
@@ -353,11 +386,13 @@ export function createFederationScene(
   function flash(nodeId: string, color: PulseColor) {
     const mesh = nodeMeshes.get(nodeId);
     if (!mesh) return;
+    if (!edtechOn && isEdtech(nodeId)) return; // no flashes on hidden tendrils
     flashes.push({ id: nodeId, color: PULSE_COLORS[color], life: 900, total: 900 });
   }
 
   function highlight(nodeIds: string[], on: boolean) {
     for (const id of nodeIds) {
+      if (on && !edtechOn && isEdtech(id)) continue; // no rings around hidden tendrils
       const existing = highlightRings.get(id);
       if (!on) {
         if (existing) {
@@ -381,6 +416,9 @@ export function createFederationScene(
       highlightRings.set(id, mesh);
     }
   }
+
+  // the ring starts hidden (call sits below highlightRings' declaration on purpose)
+  setEdtech(false);
 
   function clearTransients() {
     for (const p of active.splice(0)) { releaseSprite(p.sprite); releaseSprite(p.trail); }
@@ -423,7 +461,10 @@ export function createFederationScene(
     pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
-    const meshHits = raycaster.intersectObjects(pickables, false);
+    // setEdtech flips every tendril mesh's own .visible flag, so this one check
+    // keeps hidden tendrils unpickable without a parallel bookkeeping flag
+    const meshHits = raycaster.intersectObjects(pickables, false)
+      .filter((h) => h.object.visible);
     if (meshHits.length) {
       opts.onPick?.({ kind: 'node', nodeId: meshHits[0].object.userData.nodeId as string });
       return;
@@ -645,6 +686,7 @@ export function createFederationScene(
   return {
     applyEvent,
     setMode,
+    setEdtech,
     addTick: (fn) => tickFns.push(fn),
     resetView,
     dispose,

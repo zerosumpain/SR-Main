@@ -1,11 +1,14 @@
-// topology.ts — the synthetic federated education network: 15 fictional MIS
-// suppliers (market-shaped: one legacy incumbent, cloud challengers, a long tail),
-// 24,000 provider points clustered by supplier, an exchange ring (the X-Road-style
-// protocol layer), and the consumer estate (DfE, LAs, social care, TRE, Ofsted,
-// the learner-held Education Record) plus the citizen-readable audit ledger.
+// topology.ts — the synthetic federated education network: the real English MIS
+// market (named suppliers, indicative shares), 24,000 provider points clustered
+// by supplier, an exchange ring (the X-Road-style protocol layer), the consumer
+// estate (DfE + its existing satellite stores — NPD, LEO, ILR, LDS — local
+// authorities, social care, TRE, Ofsted, the DfE-brokered learner-held Education
+// Record), a toggleable outer ring of edtech tendrils, and the citizen-readable
+// audit ledger. Supplier names are real; market shares are indicative (the real
+// figures move quarterly); every behaviour simulated on them is illustrative.
 // Everything is deterministic (seeded RNG) and DOM/Three-free so it can be tested.
 
-export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central';
+export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech';
 export type SupplierTier = 'major' | 'mid' | 'small';
 
 export interface NetNode {
@@ -24,7 +27,7 @@ export interface NetNode {
 export interface Edge {
   from: string;
   to: string;
-  kind: 'member' | 'ring' | 'central';
+  kind: 'member' | 'ring' | 'central' | 'satellite' | 'tendril';
 }
 
 export interface SchoolField {
@@ -43,6 +46,8 @@ export interface Topology {
   schools: SchoolField;
   supplierIds: string[];
   relayIds: string[];
+  edtechIds: string[];
+  storeIds: string[];
   byId: Map<string, NetNode>;
 }
 
@@ -70,8 +75,9 @@ function gaussian(rng: () => number): number {
 }
 
 // ---------------------------------------------------------------------------
-// The synthetic MIS market — fictional names, real market *shape*
-// (~80% with three majors, a mid pack, and a long tail incl. self-hosted)
+// The MIS market — real supplier names, indicative shares (spring 2026 shape:
+// three companies carrying ~80% of state schools, a mid pack, a long tail).
+// Shares are rounded approximations of publicly tracked figures, not claims.
 // ---------------------------------------------------------------------------
 
 export interface SupplierSpec {
@@ -84,37 +90,50 @@ export interface SupplierSpec {
 }
 
 export const SUPPLIERS: SupplierSpec[] = [
-  { id: 'sup-cedar', label: 'Cedar MIS', sub: 'legacy incumbent · on-prem heritage', tier: 'major', sharePct: 34,
-    desc: 'The long-standing incumbent: an on-premises heritage product mid-way through a cloud migration. Deep feature set, slow release cadence, and the largest single estate to bring onto any spine.' },
-  { id: 'sup-meridian', label: 'Meridian', sub: 'cloud-native challenger', tier: 'major', sharePct: 29,
-    desc: 'The cloud-native challenger that has grown fastest since 2020, strong with large multi-academy trusts. API-first, so gateway integration lands in weeks not years.' },
-  { id: 'sup-beacon', label: 'BeaconEd', sub: 'cloud · trust-focused', tier: 'major', sharePct: 17,
-    desc: 'The third force: a cloud MIS focused on trust-level dashboards and finance integration. Its customers are concentrated in secondaries.' },
-  { id: 'sup-rowanfield', label: 'Rowanfield', sub: 'primary specialist', tier: 'mid', sharePct: 3.4,
-    desc: 'A primary-phase specialist with a loyal base of small schools — the kind of supplier a federation must not price out.' },
-  { id: 'sup-kestrel', label: 'Kestrel SIS', sub: 'independent-sector roots', tier: 'mid', sharePct: 2.8,
-    desc: 'Grew up in the independent sector; strong pastoral and admissions modules; now selling into the state sector.' },
-  { id: 'sup-harbourside', label: 'Harbourside', sub: 'regional, north-west', tier: 'mid', sharePct: 2.4,
-    desc: 'A regional player with dense coverage in the north-west — proof that the market has geography, not just size.' },
-  { id: 'sup-aldergrey', label: 'Alder & Grey', sub: 'special schools & AP', tier: 'mid', sharePct: 2.1,
-    desc: 'Specialises in special schools and alternative provision, where record structures are richest and most sensitive.' },
-  { id: 'sup-ternbridge', label: 'Ternbridge', sub: 'sixth-form & colleges', tier: 'mid', sharePct: 1.9,
-    desc: 'Post-16 specialist straddling the school/college data divide — two statutory reporting regimes in one product.' },
-  { id: 'sup-lodestone', label: 'Lodestone', sub: 'MAT-built, now sold on', tier: 'small', sharePct: 1.6,
-    desc: 'Built inside a large trust and later spun out — a reminder that schools themselves create MIS suppliers.' },
-  { id: 'sup-fenwick', label: 'Fenwick Data', sub: 'attendance-led', tier: 'small', sharePct: 1.4,
-    desc: 'Entered via attendance and safeguarding tooling; holds thin records but very current ones.' },
-  { id: 'sup-bracken', label: 'Bracken MIS', sub: 'rural & small schools', tier: 'small', sharePct: 1.2,
-    desc: 'Serves federations of small rural schools that share a business manager between them.' },
-  { id: 'sup-pelham', label: 'Pelham Systems', sub: 'faith-school niche', tier: 'small', sharePct: 1.1,
-    desc: 'A niche supplier with a diocesan customer base — small, stable, and unlikely to fund heavy integration work unaided.' },
-  { id: 'sup-whitloe', label: 'Whitloe', sub: 'nursery & early years', tier: 'small', sharePct: 0.9,
-    desc: 'Early-years specialist: the spine’s hardest edge case, where children first appear in the data.' },
-  { id: 'sup-osier', label: 'Osier', sub: 'new entrant, AI-led', tier: 'small', sharePct: 0.7,
-    desc: 'A venture-backed new entrant. Open standards decide whether entrants like this can exist at all.' },
-  { id: 'sup-longtail', label: 'Self-hosted', sub: 'long tail · bespoke systems', tier: 'small', sharePct: 0.5,
+  { id: 'sup-arbor', label: 'Arbor', sub: 'cloud-native · The Key Group', tier: 'major', sharePct: 44,
+    desc: 'The market leader by school count: a cloud-native MIS that overtook the old incumbent by winning primaries and multi-academy trusts. API-first, so gateway integration lands in weeks not years.' },
+  { id: 'sup-sims', label: 'ESS SIMS', sub: 'legacy incumbent · on-prem heritage', tier: 'major', sharePct: 26,
+    desc: 'The long-standing incumbent, still the largest single estate in secondaries: an on-premises heritage product mid-way through its cloud migration. Deep feature set, slow release cadence, and the heaviest estate to bring onto any spine.' },
+  { id: 'sup-bromcom', label: 'Bromcom', sub: 'cloud · trust dashboards & finance', tier: 'major', sharePct: 13,
+    desc: 'The third force: a cloud MIS focused on trust-level dashboards and finance integration, strong in secondaries and growing fast in open procurements.' },
+  { id: 'sup-scholarpack', label: 'ScholarPack', sub: 'primary specialist · Juniper', tier: 'mid', sharePct: 6.5,
+    desc: 'The primary-phase specialist with a loyal base of small schools — exactly the kind of supplier a federation must not price out.' },
+  { id: 'sup-integris', label: 'RM Integris', sub: 'long-serving · primaries', tier: 'mid', sharePct: 2.5,
+    desc: 'A long-serving MIS with regional strongholds and decades of statutory-returns muscle memory. Proof the market has history, not just size.' },
+  { id: 'sup-horizons', label: 'Juniper Horizons', sub: 'primary-phase · was Pupil Asset', tier: 'mid', sharePct: 1.8,
+    desc: 'The former Pupil Asset, folded into the Juniper group — one consolidation among many. Federation standards have to survive suppliers merging under them.' },
+  { id: 'sup-edgen', label: 'IRIS Ed:gen', sub: 'IRIS group MIS', tier: 'mid', sharePct: 1.4,
+    desc: 'The IRIS software group’s MIS play — a payroll-and-payments giant arriving in the classroom market. Cross-sells make its data estate broader than a school register.' },
+  { id: 'sup-compass', label: 'Compass', sub: 'Australian entrant', tier: 'small', sharePct: 1.0,
+    desc: 'An established Australian MIS entering England — a reminder that open standards decide whether international entrants can compete here at all.' },
+  { id: 'sup-cloudschool', label: 'Advanced Cloud School', sub: 'Advanced group', tier: 'small', sharePct: 0.9,
+    desc: 'The Advanced group’s cloud MIS. A small estate inside a large enterprise-software house — integration capacity out of proportion to its market share.' },
+  { id: 'sup-isams', label: 'iSAMS', sub: 'independent-sector roots', tier: 'small', sharePct: 0.7,
+    desc: 'Grew up in the independent sector; strong pastoral and admissions modules; a small but real state-sector estate. Two statutory worlds, one product.' },
+  { id: 'sup-famly', label: 'Famly', sub: 'nursery & early years', tier: 'small', sharePct: 0.5,
+    desc: 'Early-years management: the spine’s hardest edge case, where children first appear in the data — and where record structures least resemble a school register.' },
+  { id: 'sup-engage', label: 'Engage', sub: 'Double First · independents', tier: 'small', sharePct: 0.5,
+    desc: 'An independent-schools specialist. The independent sector holds records for 600,000 children the state system will meet mid-flight — transfers cross this boundary daily.' },
+  { id: 'sup-databridge', label: 'Databridge', sub: 'special schools & AP', tier: 'small', sharePct: 0.4,
+    desc: 'Specialises in special schools and alternative provision, where record structures are richest and most sensitive. The estates a federation must serve best, not last.' },
+  { id: 'sup-hubmis', label: 'WCBS HUBmis', sub: 'independents · heritage', tier: 'small', sharePct: 0.4,
+    desc: 'A heritage independent-sector supplier — small, stable, and unlikely to fund heavy integration work unaided. The on-ramp cost question, personified.' },
+  { id: 'sup-selfhosted', label: 'Self-hosted', sub: 'long tail · bespoke systems', tier: 'small', sharePct: 0.4,
     desc: 'The long tail: schools running bespoke or self-hosted systems. Any federated design has to give them an on-ramp — or admit it excludes them.' },
 ];
+
+/**
+ * Deterministic largest-remainder allocation of schools to suppliers — shared by
+ * buildTopology and the query engine so both always agree on estate sizes.
+ */
+export function supplierCounts(schoolCount: number): number[] {
+  const raw = SUPPLIERS.map((s) => (s.sharePct / 100) * schoolCount);
+  const counts = raw.map(Math.floor);
+  const rem = schoolCount - counts.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < rem; k++) counts[order[k % order.length].i]++;
+  return counts;
+}
 
 export interface ConsumerSpec {
   id: string;
@@ -122,6 +141,8 @@ export interface ConsumerSpec {
   sub: string;
   desc: string;
   size: number;
+  /** this consumer reaches the ring via another member's gateway, not its own relay */
+  brokeredBy?: string;
 }
 
 // Well-known node ids shared across the engine/scene/component layer. Renaming
@@ -130,10 +151,11 @@ export interface ConsumerSpec {
 export const DFE_ID = 'con-dfe';
 export const LEDGER_ID = 'ledger';
 export const CENTRAL_ID = 'central-store';
+export const RECORD_ID = 'con-record';
 
 export const CONSUMERS: ConsumerSpec[] = [
   { id: 'con-dfe', label: 'DfE', sub: 'department · statistics & policy', size: 2.1,
-    desc: 'The Department for Education: statistical collections, funding allocation, policy monitoring. In a federated model it asks questions and receives answers — it does not hold the working copy of every child’s record.' },
+    desc: 'The Department for Education: statistical collections, funding allocation, policy monitoring. In a federated model it asks questions and receives answers — it does not hold the working copy of every child’s record. Its existing stores (NPD, LEO, ILR, LDS) orbit it: the estate a federation would slowly relieve.' },
   { id: 'con-la', label: 'Local authorities', sub: '153 · admissions · CME · SEND', size: 1.7,
     desc: '153 local authorities with statutory duties: admissions, children missing education, SEND, safeguarding. The heaviest operational users of any spine.' },
   { id: 'con-csc', label: 'Children’s social care', sub: 'safeguarding practitioners', size: 1.5,
@@ -142,15 +164,83 @@ export const CONSUMERS: ConsumerSpec[] = [
     desc: 'Accredited researchers working in a trusted research environment: statistical queries with small-cell suppression and noise, never record-level extracts.' },
   { id: 'con-ofsted', label: 'Ofsted', sub: 'inspection · pre-visit packs', size: 1.2,
     desc: 'Inspection: a pre-visit evidence pack assembled by query on demand, instead of schools compiling spreadsheets the night before.' },
-  { id: 'con-record', label: 'Education Record', sub: 'learner-held · the citizen’s copy', size: 1.3,
-    desc: 'The learner-held record: the young person carries and shares their own attainment history. The one consumer that is also the data subject.' },
+  { id: 'con-record', label: 'Education Record', sub: 'learner-held · brokered by DfE', size: 1.3, brokeredBy: DFE_ID,
+    desc: 'The learner-held record: the young person carries and shares their own attainment history. The one consumer that is also the data subject — and note its wiring: DfE operates the Education Record service, so the citizen’s view reaches the federation through the DfE gateway, stamped on the ledger like anyone else’s.' },
   { id: 'con-xgov', label: 'Cross-government', sub: 'other departments · MoUs', size: 1.1,
     desc: 'Other departments arriving with memoranda of understanding — the DWP, the Home Office, the Cabinet Office. Historically the least visible users of children’s data, and the reason the refusal path matters as much as the query path.' },
 ];
 
 // ---------------------------------------------------------------------------
+// The department's existing satellite stores — the current central estate,
+// drawn honestly so the federation is explicit about what it would replace.
+// ---------------------------------------------------------------------------
+
+export interface StoreSpec {
+  id: string;
+  label: string;
+  sub: string;
+  desc: string;
+  size: number;
+}
+
+export const STORES: StoreSpec[] = [
+  { id: 'store-npd', label: 'NPD', sub: 'National Pupil Database · 28m+ records', size: 1.0,
+    desc: 'The National Pupil Database: pupil-level records accumulated since 2002, linked across census, attainment and exclusions. The biggest single reason the federation argument exists — every collection this model answers by query is one the NPD no longer has to grow for.' },
+  { id: 'store-leo', label: 'LEO', sub: 'Longitudinal Education Outcomes', size: 0.85,
+    desc: 'Longitudinal Education Outcomes: NPD + ILR + HESA linked to HMRC and DWP earnings — education to payslip, tens of millions of people. The research crown jewels, and the strongest case for query-not-copy done properly through a TRE.' },
+  { id: 'store-ilr', label: 'ILR', sub: 'Individualised Learner Record · FE & skills', size: 0.8,
+    desc: 'The Individualised Learner Record: further-education and skills returns, collected termly from every funded provider. A second, parallel collection regime the spine would fold into the same query discipline.' },
+  { id: 'store-lds', label: 'LDS', sub: 'learner records · ULN / PLR family', size: 0.7,
+    desc: 'The learner-data services family — unique learner numbers and personal learning records, the department’s identity plumbing for post-16 learners. In a federated design, identity resolution like this becomes the spine’s most critical shared service.' },
+];
+
+// ---------------------------------------------------------------------------
+// The edtech ring — real products drawn as tendrils on the exchange. This layer
+// is aspirational: imagine each certified onto the federation, contributing the
+// intelligence it uniquely sees under the same contract-and-ledger discipline.
+// ---------------------------------------------------------------------------
+
+export interface EdtechSpec {
+  id: string;
+  label: string;
+  sub: string;
+  desc: string;
+  /** indicative schools-reached figure — presence also enrols the platform in the
+   * digital-homework query panel (see queries.ts) */
+  schoolsReached?: number;
+}
+
+export const EDTECH: EdtechSpec[] = [
+  { id: 'edt-wonde', label: 'Wonde', sub: 'access broker · plumbing today', schoolsReached: 9000,
+    desc: 'The broker the daily attendance feed already rides on — proof the tendril pattern exists. In a federation its role inverts: from bulk-access middleman to certified gateway operator.' },
+  { id: 'edt-cpoms', label: 'CPOMS', sub: 'safeguarding logs',
+    desc: 'Safeguarding and pastoral incident logs. Federated intelligence: concern-pattern signals (never case content) that could reach a strategy discussion hours after they cluster, under s.47-grade controls.' },
+  { id: 'edt-classcharts', label: 'Class Charts', sub: 'behaviour & seating',
+    desc: 'Behaviour points and seating plans. Federated intelligence: behaviour-climate aggregates that give the attendance numbers their missing context.' },
+  { id: 'edt-satchel', label: 'Satchel One', sub: 'homework & engagement', schoolsReached: 4100,
+    desc: 'Homework setting and completion. Federated intelligence: engagement-drop signals — the leading indicator that shows up weeks before attendance falls.' },
+  { id: 'edt-sparx', label: 'Sparx Maths', sub: 'adaptive maths practice', schoolsReached: 2300,
+    desc: 'Adaptive maths homework. Federated intelligence: anonymous mastery distributions by topic — a national curriculum-health readout no census question could collect.' },
+  { id: 'edt-ttrs', label: 'TT Rock Stars', sub: 'fluency practice', schoolsReached: 13800,
+    desc: 'Times-tables fluency. Federated intelligence: number-fluency cohort curves for the primary phase, aggregated at source, no child named.' },
+  { id: 'edt-tapestry', label: 'Tapestry', sub: 'EYFS evidence journals',
+    desc: 'Early-years evidence journals. Federated intelligence: development-milestone aggregates from the phase where the state currently sees least.' },
+  { id: 'edt-parentpay', label: 'ParentPay', sub: 'payments & engagement',
+    desc: 'School payments. Federated intelligence: FSM take-up vs eligibility gaps — the difference between entitled and fed, visible only in transaction aggregates.' },
+  { id: 'edt-ar', label: 'Accelerated Reader', sub: 'reading practice · Renaissance', schoolsReached: 6100,
+    desc: 'Reading practice and quizzing. Federated intelligence: reading-age distributions against chronological age, by region and phase — literacy weather, not literacy anecdotes.' },
+  { id: 'edt-gl', label: 'GL Assessment', sub: 'standardised assessment',
+    desc: 'CAT4 and standardised assessment. Federated intelligence: ability-vs-attainment gap aggregates — where potential is being missed, at population scale.' },
+  { id: 'edt-unifrog', label: 'Unifrog', sub: 'destinations & careers',
+    desc: 'Careers platforms see intentions before outcomes. Federated intelligence: destination-intention flows feeding LEO-style analysis years earlier than tax records can.' },
+  { id: 'edt-provisionmap', label: 'Provision Map', sub: 'SEND provision · Tes',
+    desc: 'SEND provision mapping. Federated intelligence: intervention-coverage aggregates — what support is actually in place against what EHCPs promise.' },
+];
+
+// ---------------------------------------------------------------------------
 // Layout — a layered composition echoing the study's five-layer anatomy:
-// provider field (ground) → supplier gateways → exchange ring (+ ledger) → consumers
+// provider field (ground) → supplier gateways → exchange ring (+ ledger,
+// + edtech tendrils) → consumers (+ DfE satellite stores)
 // ---------------------------------------------------------------------------
 
 export const LAYERS_Y = { schools: 0, suppliers: 9, ring: 19, consumers: 30 } as const;
@@ -170,11 +260,7 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
   const edges: Edge[] = [];
 
   // --- supplier school counts (largest remainder so they sum exactly) ---
-  const raw = SUPPLIERS.map((s) => (s.sharePct / 100) * schoolCount);
-  const counts = raw.map(Math.floor);
-  let rem = schoolCount - counts.reduce((a, b) => a + b, 0);
-  const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
-  for (let k = 0; k < rem; k++) counts[order[k % order.length].i]++;
+  const counts = supplierCounts(schoolCount);
 
   // --- supplier cluster centres on a ground ring, arc width ∝ blob radius ---
   const blobs = counts.map(blobRadius);
@@ -254,6 +340,34 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     });
   });
 
+  // --- DfE satellite stores: the existing central estate, orbiting the DfE ---
+  const dfe = nodes.find((n) => n.id === DFE_ID)!;
+  const storeIds: string[] = [];
+  STORES.forEach((s, i) => {
+    const theta = ((i + 0.5) / STORES.length) * Math.PI * 2;
+    const orbit = 4.6;
+    storeIds.push(s.id);
+    nodes.push({
+      id: s.id, kind: 'store', label: s.label, sub: s.sub, desc: s.desc,
+      pos: [dfe.pos[0] + Math.cos(theta) * orbit, dfe.pos[1] - 3.6 + (i % 2) * 1.1, dfe.pos[2] + Math.sin(theta) * orbit],
+      size: s.size,
+    });
+    edges.push({ from: s.id, to: DFE_ID, kind: 'satellite' });
+  });
+
+  // --- edtech tendrils: real products drawn as small spurs off the ring ---
+  const edtechIds: string[] = [];
+  EDTECH.forEach((e, i) => {
+    const theta = ((i + 0.5) / EDTECH.length) * Math.PI * 2;
+    const r = RING_RADIUS + 5.6 + (i % 3) * 1.7;
+    edtechIds.push(e.id);
+    nodes.push({
+      id: e.id, kind: 'edtech', label: e.label, sub: e.sub, desc: e.desc,
+      pos: [Math.cos(theta) * r, LAYERS_Y.ring + (i % 2 === 0 ? 1.6 : -1.8) + (i % 4) * 0.5, Math.sin(theta) * r],
+      size: 0.5,
+    });
+  });
+
   // --- the central-store counterfactual node (hidden in federated mode) ---
   nodes.push({
     id: CENTRAL_ID, kind: 'central', label: 'Central store', sub: 'the counterfactual · one copy of everything',
@@ -276,10 +390,15 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     }
     return best;
   };
+  const consumerBroker = new Map(CONSUMERS.map((c) => [c.id, c.brokeredBy]));
   for (const n of nodes) {
     if (n.kind === 'supplier' || n.kind === 'consumer') {
-      edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'member' });
+      // a brokered consumer's one door is its broker's gateway (Education Record → DfE)
+      edges.push({ from: n.id, to: consumerBroker.get(n.id) ?? nearestRelay(n.pos), kind: 'member' });
       edges.push({ from: n.id, to: CENTRAL_ID, kind: 'central' });
+    }
+    if (n.kind === 'edtech') {
+      edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'tendril' });
     }
   }
 
@@ -288,6 +407,8 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     schools: { count: schoolCount, positions, supplier, offsets },
     supplierIds: SUPPLIERS.map((s) => s.id),
     relayIds,
+    edtechIds,
+    storeIds,
     byId,
   };
 }
@@ -298,14 +419,38 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
 
 export type ArchMode = 'federated' | 'central';
 
-function memberRelay(topo: Topology, id: string): string | null {
-  const e = topo.edges.find((e) => e.kind === 'member' && e.from === id);
+function memberEdgeTarget(topo: Topology, id: string): string | null {
+  const e = topo.edges.find((e) => (e.kind === 'member' || e.kind === 'tendril' || e.kind === 'satellite') && e.from === id);
   return e ? e.to : null;
 }
 
 /**
- * Returns the positions a pulse passes through. Federated: member → its relay →
- * (short arc along the ring) → target's relay → member. Central: member → store → member.
+ * The hop chain from a member out to its relay. Usually [member, relay]; for
+ * brokered members (Education Record → DfE) the chain passes through the broker:
+ * [record, dfe, dfe's relay].
+ */
+function accessChain(topo: Topology, id: string): { via: NetNode[]; relay: string | null } {
+  const start = topo.byId.get(id);
+  if (!start) return { via: [], relay: null };
+  if (start.kind === 'relay' || start.kind === 'ledger') return { via: [start], relay: start.id };
+  const via: NetNode[] = [start];
+  let cur = start;
+  for (let hop = 0; hop < 3; hop++) {
+    const next = memberEdgeTarget(topo, cur.id);
+    if (!next) return { via, relay: null };
+    const node = topo.byId.get(next);
+    if (!node) return { via, relay: null };
+    if (node.kind === 'relay') return { via, relay: node.id };
+    via.push(node);
+    cur = node;
+  }
+  return { via, relay: null };
+}
+
+/**
+ * Returns the positions a pulse passes through. Federated: member → (broker →)
+ * its relay → (short arc along the ring) → target's relay → (broker →) member.
+ * Central: member → store → member.
  */
 export function routePath(topo: Topology, fromId: string, toId: string, mode: ArchMode): [number, number, number][] {
   const a = topo.byId.get(fromId);
@@ -315,9 +460,18 @@ export function routePath(topo: Topology, fromId: string, toId: string, mode: Ar
     const store = topo.byId.get(CENTRAL_ID)!;
     return [a.pos, store.pos, b.pos];
   }
-  const path: [number, number, number][] = [a.pos];
-  const ra = a.kind === 'relay' || a.kind === 'ledger' ? a.id : memberRelay(topo, a.id);
-  const rb = b.kind === 'relay' || b.kind === 'ledger' ? b.id : memberRelay(topo, b.id);
+  const chainA = accessChain(topo, a.id);
+  const chainB = accessChain(topo, b.id);
+  // broker-direct hops need no ring transit, in either direction:
+  // destination is the source's own broker (record → DfE, NPD → DfE)…
+  const brokerIdxA = chainA.via.findIndex((n) => n.id === b.id);
+  if (brokerIdxA > 0) return chainA.via.slice(0, brokerIdxA + 1).map((n) => n.pos);
+  // …or the source is the destination's broker (DfE → record, DfE → NPD)
+  const brokerIdxB = chainB.via.findIndex((n) => n.id === a.id);
+  if (brokerIdxB > 0) return chainB.via.slice(0, brokerIdxB + 1).reverse().map((n) => n.pos);
+  const path: [number, number, number][] = chainA.via.map((n) => n.pos);
+  const ra = chainA.relay;
+  const rb = chainB.relay;
   if (ra && rb && ra !== rb) {
     const ia = topo.relayIds.indexOf(ra);
     const ib = topo.relayIds.indexOf(rb);
@@ -334,10 +488,13 @@ export function routePath(topo: Topology, fromId: string, toId: string, mode: Ar
       }
     }
     path.push(topo.byId.get(rb)!.pos);
-  } else if (ra) {
+  } else if (ra && ra !== a.id) {
     path.push(topo.byId.get(ra)!.pos);
   }
-  path.push(b.pos);
+  for (let i = chainB.via.length - 1; i >= 0; i--) {
+    const n = chainB.via[i];
+    if (n.id !== a.id) path.push(n.pos);
+  }
   return path;
 }
 

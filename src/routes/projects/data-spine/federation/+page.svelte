@@ -4,31 +4,78 @@
   // deliberately not used here — this section presents; the others document.
   import { app } from '../lib/appState.svelte';
   import { SCENARIOS, SCENARIO_GROUPS } from './lib/scenarios';
+  import { SUPPLIERS } from './lib/topology';
+  import type { Scenario } from './lib/engine';
   import FederationSim from './components/FederationSim.svelte';
+  import AskFederation from './components/AskFederation.svelte';
 
   const eli = $derived(app.narrative === 'eli5');
-  let sim = $state<{ run: (id: string) => void }>();
+  let sim = $state<{ run: (id: string) => void; runScenario: (s: Scenario) => void }>();
+
+  // when a catalogue scenario with a linked query runs, mirror its anatomy in
+  // the ask-the-federation explorer below — a fresh object per run so replays
+  // of the same scenario still re-fire the mirror effect
+  let activeQuery = $state<{ id: string } | null>(null);
+  function onActiveScenario(s: Scenario | null) {
+    if (s?.queryId) activeQuery = { id: s.queryId };
+  }
 
   const GRAMMAR = [
     { term: 'The field of dots', means: '24,000 providers — every state school, college and AP setting, one dot each — clustered around the MIS supplier that holds their records. Blob size is market share.' },
-    { term: 'The pylons', means: 'Supplier gateways: the X-Road “security server” idea. Each estate answers queries through exactly one guarded door.' },
+    { term: 'The pylons', means: 'Supplier gateways: the X-Road “security server” idea. Each estate answers queries through exactly one guarded door. The names are the real market — Arbor, ESS SIMS, Bromcom, ScholarPack, down to the self-hosted long tail.' },
     { term: 'The ring', means: 'The exchange layer. Deliberately drawn as a ring, not a hub: it is protocol, not storage. The relays verify, enforce and stamp — they hold no record content.' },
     { term: 'The obelisk', means: 'The audit ledger at the heart of the ring — every query stamped, citizen-readable. Estonia’s best export, whatever the architecture.' },
-    { term: 'The upper shapes', means: 'Consumers: DfE, 153 local authorities, children’s social care, accredited research, Ofsted, the learner-held Education Record — and other departments arriving with MoUs.' },
+    { term: 'The upper shapes', means: 'Consumers: DfE, 153 local authorities, children’s social care, accredited research, Ofsted — and the learner-held Education Record, wired through the DfE gateway that operates it, not straight to the ring.' },
+    { term: 'The satellites', means: 'The department’s existing stores orbiting the DfE — NPD, LEO, ILR, LDS. Drawn honestly: this is the central estate a federation would progressively relieve, not pretend never existed.' },
+    { term: 'The tendrils', means: 'Toggle the edtech ring on: Wonde, CPOMS, Satchel One, Sparx, Tapestry and friends as certified spurs on the exchange — imagined contributors of aggregate intelligence, never account data.' },
     { term: 'The red cylinder', means: 'The counterfactual. Flip to “Central store” and the same traffic becomes bulk copies into one national database — the design England built once and switched off.' },
   ];
 
+  // the two array-count stats derive from the arrays they claim to count
   const STATS = [
     { n: '24,000', l: 'providers' },
-    { n: '15', l: 'MIS suppliers' },
-    { n: '13', l: 'scenarios' },
+    { n: String(SUPPLIERS.length), l: 'MIS suppliers' },
+    { n: String(SCENARIOS.length), l: 'scenarios' },
     { n: '0', l: 'records in the middle' },
+  ];
+
+  const STANDARDS = [
+    {
+      k: 'IDENTIFY', title: 'One child, one number',
+      have: ['UPN for schools, ULN from 14, URN/UKPRN for settings (GIAS)', 'The LRS/LDS learner-records plumbing for post-16'],
+      miss: ['A lifetime learner identifier crossing the early-years and FE boundaries', 'A published identity-resolution standard: match keys, confidence scoring, what happens when matching is wrong', 'Governance for identifier issuance outside state schools'],
+    },
+    {
+      k: 'DESCRIBE', title: 'A canonical model, versioned in the open',
+      have: ['CBDS — the Common Basic Data Set behind the census', 'CTF/ATF schemas for transfers', 'Census and ILR specifications (updated annually, by circular)'],
+      miss: ['An open canonical education-record model every gateway maps to once', 'A schema registry with semantic versioning and deprecation policy — the wellbeing/1.0 pattern from the scenarios', 'Conformance fixtures per schema version'],
+    },
+    {
+      k: 'MOVE', title: 'Query contracts, not file transfers',
+      have: ['CTF files and School-to-School (S2S) for moves', 'Proprietary MIS APIs; Wonde and peers as de-facto brokers', 'The daily attendance feed — the spine’s first vertebra'],
+      miss: ['A signed query-contract standard: purpose, basis, aggregation and retention as machine-readable fields', 'One gateway API profile every MIS implements (precedents: Ed-Fi, 1EdTech OneRoster, X-Road’s message protocol)', 'A public conformance suite that certifies a gateway before it joins'],
+    },
+    {
+      k: 'PROVE', title: 'Trust made inspectable',
+      have: ['DfE Sign-in for humans', 'Transport encryption everywhere, informally'],
+      miss: ['A federation PKI / e-seal profile: who signs what, key ceremony, revocation SLAs measured in minutes', 'The citizen-readable audit-ledger format — the obelisk needs a spec, not a vibe', 'Non-repudiation and trusted time-stamping rules (the part of X-Road worth importing wholesale)'],
+    },
+    {
+      k: 'PROTECT', title: 'Law as configuration',
+      have: ['DEA 2017 research accreditation and the ONS SDC practice', 'UK GDPR Art. 21 objection rights', 'Health’s national data opt-out — proof a registry can work, and how hard retrofitting is'],
+      miss: ['A machine-readable basis registry: which statute unlocks which fields at which aggregation — the thing every gateway checks in the simulations', 'An opt-out/objection registry standard enforced at source, not remembered at the centre', 'A published suppression + noise profile (small cells, ε-budgets) applied identically by all fifteen estates'],
+    },
+    {
+      k: 'ADOPT', title: 'Make plugging in pay',
+      have: ['DfE digital and technology standards for schools', 'G-Cloud and the MIS choice frameworks trusts already buy through'],
+      miss: ['The procurement hook: gateway conformance as a condition of framework listing', 'A funded on-ramp for the long tail — Databridge and the self-hosted schools cannot subsidise the spine', 'An edtech certification tier for the tendrils: aggregate-only contracts, pseudonym rules, audit obligations', 'Honest migration timelines — the incumbent estates move in years, not quarters'],
+    },
   ];
 </script>
 
 <svelte:head>
   <title>The Data Spine — the federated model, running</title>
-  <meta name="description" content="An interactive Three.js simulation of a federated (X-Road-style) education data exchange for England: 24,000 schools, 15 MIS suppliers, and thirteen runnable scenarios from census day to breach day." />
+  <meta name="description" content="An interactive Three.js simulation of a federated (X-Road-style) education data exchange for England: 24,000 schools, the real MIS market, an edtech ring, and fourteen runnable scenarios from census day to breach day — plus ask-the-federation queries with opt-out guardrails." />
 </svelte:head>
 
 <div class="fed-deck" data-section="federation-sim">
@@ -53,13 +100,35 @@
     </div>
     <div class="hero-cta">
       <button class="cta" onclick={() => sim?.run('census')}>▶ Run census day</button>
-      <a class="cta ghost" href="#catalogue">Browse all thirteen ↓</a>
+      <a class="cta ghost" href="#ask">Ask the federation ↓</a>
+      <a class="cta ghost" href="#catalogue">Browse all fourteen ↓</a>
     </div>
   </header>
 
   <!-- SLIDE 2 — the model, full bleed -->
   <section class="slide-sim">
-    <FederationSim bind:this={sim} />
+    <FederationSim bind:this={sim} {onActiveScenario} />
+  </section>
+
+  <!-- SLIDE 2.5 — ask the federation -->
+  <section class="slide" id="ask">
+    <span class="kicker">Ask the federation · query anatomy</span>
+    <h2>Central government asks. Watch the whole exchange.</h2>
+    <p class="slide-lede">
+      {#if eli}
+        Pick a real question the government might ask. Some questions the law says schools' systems must answer;
+        others they can politely refuse. Press the button, watch the sparks fly above — then read exactly what the
+        question looked like as code, what each supplier sent back, and what the department actually received.
+      {:else}
+        The scenarios above are scripted; this is the same machinery with the hood off. Choose a question, choose who
+        opts out, and put it to the federation: the network above plays the fan-out while the panels below show the
+        <b>full anatomy</b> — the signed query as it travels, every estate's partial response at component level, and
+        the assembled return that lands at the DfE. The guardrail is the point: a statutory basis compels an answer
+        (objections are logged, not obeyed); a voluntary ask can be declined, and the answer comes back smaller and
+        says so.
+      {/if}
+    </p>
+    <AskFederation onRunScenario={(s) => sim?.runScenario(s)} externalQuery={activeQuery} />
   </section>
 
   <!-- SLIDE 3 — how to read it -->
@@ -85,8 +154,10 @@
       {/each}
     </div>
     <p class="fine">
-      Supplier names are fictional; their market shape — three majors carrying ~80% of schools, a long tail down to
-      self-hosted — mirrors the real market the <a href="/projects/data-spine/architecture">architecture section</a> documents with sources.
+      Supplier and platform names are real; market shares are indicative approximations of publicly tracked figures,
+      and every behaviour simulated on them — outages, queues, breaches, opt-outs — is illustrative, not a depiction
+      of any real event. The market shape (three majors carrying ~80% of schools, a long tail down to self-hosted)
+      mirrors what the <a href="/projects/data-spine/architecture">architecture section</a> documents with sources.
     </p>
   </section>
 
@@ -98,13 +169,13 @@
   <!-- SLIDE 5 — catalogue -->
   <section class="slide" id="catalogue">
     <span class="kicker">The scenario catalogue · synthetic</span>
-    <h2>Thirteen mornings on the exchange</h2>
+    <h2>Fourteen mornings on the exchange</h2>
     <p class="slide-lede">
       {#if eli}
-        Thirteen stories, four themes. Each card says what happens and what it proves. Press run and watch it play out above.
+        Fourteen stories, four themes. Each card says what happens and what it proves. Press run and watch it play out above.
       {:else}
         Four movements — collections, frontline operations, the vendor economy, trust under stress — making one argument
-        from thirteen directions: what matters about a federated spine is not throughput but <b>behaviour</b>. What it
+        from fourteen directions: what matters about a federated spine is not throughput but <b>behaviour</b>. What it
         refuses. What it logs. What it returns when broken. Who gets value back.
       {/if}
     </p>
@@ -124,6 +195,50 @@
     {/each}
   </section>
 
+  <!-- SLIDE 5.5 — the standards stack -->
+  <section class="slide" id="standards">
+    <span class="kicker">The standards stack</span>
+    <h2>What it would take to make this real</h2>
+    <p class="slide-lede">
+      {#if eli}
+        For all these systems to talk to each other, everyone has to agree the rules first: how to name a child once,
+        how to describe a record, how to ask a question, how to prove who asked, how to say no, and why anyone would
+        bother joining. Some of those rules exist already. The interesting column is what's missing.
+      {:else}
+        Nothing on this page is blocked by cryptography. All of it is blocked by <b>agreement</b> — six layers of
+        standards, each with pieces that already exist and pieces nobody has written. This is the honest bill of
+        materials: what England already has on the shelf, and what a federation would have to standardise before the
+        first real query crosses a real exchange.
+      {/if}
+    </p>
+    <div class="std-grid">
+      {#each STANDARDS as s}
+        <div class="std-card">
+          <span class="std-k">{s.k}</span>
+          <h3>{s.title}</h3>
+          <div class="std-col have">
+            <span class="std-h">Exists today</span>
+            <ul>
+              {#each s.have as item}<li>{item}</li>{/each}
+            </ul>
+          </div>
+          <div class="std-col miss">
+            <span class="std-h">Missing</span>
+            <ul>
+              {#each s.miss as item}<li>{item}</li>{/each}
+            </ul>
+          </div>
+        </div>
+      {/each}
+    </div>
+    <p class="fine">
+      The pattern to steal is procedural, not technical: X-Road’s protocol and trust rules are open and versioned;
+      Ed-Fi and 1EdTech publish conformance suites vendors certify against. England has schemas and circulars —
+      what it lacks is the registry, the contract format, and the certification loop that make standards enforceable
+      at a gateway instead of negotiable in a meeting.
+    </p>
+  </section>
+
   <!-- SLIDE 6 — honest limits -->
   <section class="slide">
     <span class="kicker">Honest limits</span>
@@ -138,8 +253,9 @@
         problem was never cryptography but institutional agreement — and Estonia federates 1.3m people with one civil
         register, where England's education system alone has 24,000 providers and no shared identifier yet in
         operation. The long tail in this model is drawn deliberately: a real spine lives or dies on whether the
-        smallest participant can afford the on-ramp. And every number here is synthetic — real supplier names, real
-        volumes and real legal decisions belong to the consultation, not to this page.
+        smallest participant can afford the on-ramp. The supplier names are real but every number and behaviour is
+        synthetic — real volumes, real integration commitments and real legal decisions belong to the consultation,
+        not to this page.
       {/if}
     </p>
     <div class="limit-cards">
@@ -210,6 +326,21 @@
   .sc-lesson b { color: var(--ink); }
   .sc-run { margin-top: auto; align-self: flex-start; background: var(--ink); color: var(--paper, #f1ead6); border: none; border-radius: var(--radius-round); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; padding: 9px 16px; cursor: pointer; }
   .sc-run:hover { background: #000; }
+
+  /* SLIDE 5.5 — standards stack */
+  .std-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .std-card { border: 1px solid rgba(28,22,17,0.18); border-top: 3px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 20px 22px; min-width: 0; }
+  .std-k { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.22em; color: var(--accent-ink); margin-bottom: 4px; }
+  .std-card h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(19px, 1.9vw, 24px); line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 12px; color: var(--ink); }
+  .std-col { margin-bottom: 10px; }
+  .std-h { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .std-col.have .std-h { color: #2f7d4f; }
+  .std-col.miss .std-h { color: #8a2d3a; }
+  .std-col ul { list-style: none; margin: 0; padding: 0; }
+  .std-col li { font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); padding: 2px 0 2px 14px; position: relative; }
+  .std-col.have li::before { content: '·'; position: absolute; left: 2px; color: #2f7d4f; font-weight: 700; }
+  .std-col.miss li::before { content: '·'; position: absolute; left: 2px; color: #8a2d3a; font-weight: 700; }
+  .std-col.miss li { color: rgba(28,22,17,0.82); }
 
   /* SLIDE 6 — limits */
   .limit-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }

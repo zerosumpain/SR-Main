@@ -43,6 +43,11 @@ export interface Scenario {
   description: string;
   lesson: string;
   contract?: QueryContract;
+  /** links a query-shaped scenario to its FedQuery for the drill-down explorer */
+  queryId?: string;
+  /** declares that this scenario's actors include edtech tendrils, so the
+   * component must make the ring visible before playing it */
+  usesEdtech?: boolean;
   steps: ScenarioStep[];
   /** counterfactual shown in the comparison panel */
   central: { records: string; exposure: string; note: string };
@@ -79,6 +84,8 @@ export interface AmbientPool {
   hub: string;
   /** the audit-ledger node that flashes on ambient stamps */
   ledger: string;
+  /** edtech tendrils — only breathe when the edtech ring is toggled on */
+  edtech?: string[];
 }
 
 export class SimEngine {
@@ -95,6 +102,8 @@ export class SimEngine {
   private nextAmbientMs = 800;
   playing = false;
   speed = 1;
+  /** when true (and the pool has tendrils), ambient traffic includes edtech spurs */
+  edtechActive = false;
 
   constructor(private ambient: AmbientPool) {}
 
@@ -259,6 +268,15 @@ export class SimEngine {
     const { suppliers, consumers } = this.ambient;
     if (!suppliers.length || !consumers.length) return;
     const sup = suppliers[Math.floor(this.rng() * suppliers.length)];
+    const tendrils = this.ambient.edtech ?? [];
+    if (this.edtechActive && tendrils.length && this.rng() < 0.35) {
+      // a tendril syncs with an estate, or contributes a signal to the hub
+      const edt = tendrils[Math.floor(this.rng() * tendrils.length)];
+      const dest = this.rng() < 0.6 ? sup : this.ambient.hub;
+      this.emit({ type: 'pulse', from: edt, to: dest, color: 'ambient', durMs: 2000 });
+      this.emit({ type: 'counter', key: 'exchanges', delta: 1 });
+      return;
+    }
     const roll = this.rng();
     if (roll < 0.55) {
       // attendance trickle: supplier → the collection hub

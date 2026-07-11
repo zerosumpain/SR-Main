@@ -16,8 +16,8 @@ function nodeRefs(a: SimAction): string[] {
 }
 
 describe('the scenario catalogue', () => {
-  it('has 13 scenarios covering all four groups', () => {
-    expect(SCENARIOS).toHaveLength(13);
+  it('has 14 scenarios covering all four groups', () => {
+    expect(SCENARIOS).toHaveLength(14);
     for (const g of SCENARIO_GROUPS) {
       expect(SCENARIOS.some((s) => s.group === g)).toBe(true);
     }
@@ -65,5 +65,15 @@ describe('the scenario catalogue', () => {
   it('scenarioById resolves', () => {
     expect(scenarioById('census')?.group).toBe('Collections & statistics');
     expect(scenarioById('nope')).toBeUndefined();
+  });
+
+  it('queryId links resolve to real catalogue queries', async () => {
+    const { queryById } = await import('./queries');
+    for (const s of SCENARIOS) {
+      if (s.queryId) {
+        expect(queryById(s.queryId), `${s.id}: unknown queryId "${s.queryId}"`).toBeDefined();
+      }
+    }
+    expect(SCENARIOS.some((s) => s.queryId)).toBe(true);
   });
 });

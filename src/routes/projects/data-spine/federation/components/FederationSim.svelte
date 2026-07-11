@@ -8,6 +8,8 @@
   import { SCENARIOS, SCENARIO_GROUPS, scenarioById } from '../lib/scenarios';
   import { createFederationScene, type SceneHandle, type PickResult } from '../lib/scene';
 
+  let { onActiveScenario }: { onActiveScenario?: (s: Scenario | null) => void } = $props();
+
   // --- non-reactive handles (render loop internals) ---
   let container: HTMLElement;
   let shell: HTMLElement;
@@ -26,7 +28,11 @@
   let ended = $state(false);
   let speed = $state(1);
   let mode = $state<'federated' | 'central'>('federated');
-  let activeId = $state<string | null>(null);
+  let edtechOn = $state(false);
+  // the single source of truth for what is (or was just) playing — catalogue
+  // scenarios and generated ask-the-federation scenarios alike
+  let activeScenario = $state<Scenario | null>(null);
+  const activeId = $derived(activeScenario?.id ?? null);
   let logEntries = $state<LogEntry[]>([]);
   let counters = $state<Record<CounterKey, number>>({ exchanges: 0, pupilRecordsMoved: 0, aggregatesReturned: 0, refusals: 0, auditEntries: 0 });
   let inspectorNode = $state<NetNode | null>(null);
@@ -36,7 +42,6 @@
   let canFullscreen = $state(false);
   let isFullscreen = $state(false);
 
-  const activeScenario = $derived<Scenario | null>(activeId ? (scenarioById(activeId) ?? null) : null);
 
   const COUNTER_META: Array<{ key: CounterKey; label: string; hot?: boolean }> = [
     { key: 'exchanges', label: 'exchanges' },
@@ -60,13 +65,19 @@
       case 'counter':
         counters[e.key] += e.delta;
         break;
-      case 'scenario-start':
+      case 'scenario-start': {
         // per-scenario counters reset on EVERY start path (run, restart, replay);
         // exchanges + ledger entries are cumulative network history and persist
         counters = { exchanges: counters.exchanges, pupilRecordsMoved: 0, aggregatesReturned: 0, refusals: 0, auditEntries: counters.auditEntries };
         ended = false;
         playing = true;
+        // sits on the start EVENT (not just playScenario) so replay/restart
+        // paths also force the tendril ring visible for edtech scenarios
+        const s = engine?.activeScenario ?? null;
+        if (s && (s.usesEdtech ?? touchesEdtech(s)) && !edtechOn) setEdtech(true);
+        onActiveScenario?.(s);
         break;
+      }
       case 'scenario-end':
         ended = true;
         playing = false;
@@ -76,9 +87,10 @@
       case 'stopped':
         playing = false;
         ended = false;
-        activeId = null;
+        activeScenario = null;
         narration = 'Back to the ambient morning. Pick a scenario to run a simulation.';
         phase = undefined;
+        onActiveScenario?.(null);
         break;
       default:
         sceneHandle?.applyEvent(e);
@@ -97,13 +109,37 @@
     }
   }
 
+  /** does this scenario touch the edtech tendrils? then the ring must be visible */
+  function touchesEdtech(s: Scenario): boolean {
+    return s.steps.some((step) => step.actions.some((a) => {
+      switch (a.kind) {
+        case 'pulse': return a.from.startsWith('edt-') || a.to.startsWith('edt-');
+        case 'flash': return a.node.startsWith('edt-');
+        case 'highlight': return a.nodes.some((n) => n.startsWith('edt-'));
+        default: return false;
+      }
+    }));
+  }
+
   export function run(id: string) {
     const s = scenarioById(id);
-    if (!s || !engine || !ready) return; // dead engine when WebGL failed — don't fake a run
-    activeId = id;
+    if (!s) return;
+    runScenario(s);
+  }
+
+  /** play any scenario — catalogue or externally built (ask-the-federation) */
+  export function runScenario(s: Scenario) {
+    if (!engine || !ready) return; // dead engine when WebGL failed — don't fake a run
+    activeScenario = s;
     pickerOpen = false;
     engine.loadScenario(s);
     shell?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function setEdtech(on: boolean) {
+    edtechOn = on;
+    sceneHandle?.setEdtech(on);
+    if (engine) engine.edtechActive = on;
   }
 
   function togglePlay() {
@@ -132,6 +168,7 @@
       consumers: ['con-la', 'con-csc', 'con-tre', 'con-ofsted'],
       hub: DFE_ID,
       ledger: LEDGER_ID,
+      edtech: topo.edtechIds,
     });
     let unsub = () => {};
     try {
@@ -180,6 +217,9 @@
         <button class:on={mode === 'federated'} onclick={() => setMode('federated')} title="Federated exchange — records stay at source; queries travel.">Federated</button>
         <button class:on={mode === 'central'} class="danger" onclick={() => setMode('central')} title="Central store counterfactual — everything copied to one national database.">Central store</button>
       </div>
+      <button class="ghost" class:lit={edtechOn} onclick={() => setEdtech(!edtechOn)} title="Toggle the edtech tendrils — real platforms imagined as certified spurs on the exchange">
+        ◇ edtech ring{edtechOn ? ' · on' : ''}
+      </button>
       <button class="ghost" onclick={() => sceneHandle?.resetView()} title="Reset the camera">⌂ view</button>
       {#if canFullscreen}
         <button class="ghost" onclick={toggleFullscreen} title={isFullscreen ? 'Exit full screen' : 'Fill the screen'}>
@@ -237,7 +277,11 @@
       <aside class="hud panel inspector">
         <button class="close" onclick={() => { inspectorNode = null; inspectorSchool = null; }} aria-label="Close">✕</button>
         {#if inspectorNode}
-          <span class="p-lab">{inspectorNode.kind}</span>
+          <span class="p-lab">
+            {inspectorNode.kind === 'store' ? 'DfE estate · existing store'
+              : inspectorNode.kind === 'edtech' ? 'edtech tendril · imagined'
+              : inspectorNode.kind}
+          </span>
           <h4>{inspectorNode.label}</h4>
           {#if inspectorNode.sub}<span class="i-sub">{inspectorNode.sub}</span>{/if}
           {#if inspectorNode.kind === 'supplier'}
@@ -358,6 +402,7 @@
   .mode-seg button.danger.on { background: #8a2d3a; }
   .ghost { background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 7px 11px; cursor: pointer; backdrop-filter: blur(4px); }
   .ghost:hover { border-color: rgba(28,22,17,0.5); }
+  .ghost.lit { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
   .picker-toggle { display: none; margin-left: auto; }
 
   /* scenario browser */
@@ -453,6 +498,8 @@
   :global(.fed-label.ledger) { color: rgba(176,137,42,1); }
   :global(.fed-label.ring) { color: rgba(28,22,17,0.4); letter-spacing: 0.22em; font-size: 8px; }
   :global(.fed-label.central) { color: #8a2d3a; font-weight: 600; font-size: 11px; }
+  :global(.fed-label.store) { color: rgba(138,84,80,1); font-size: 8.5px; }
+  :global(.fed-label.edt) { color: rgba(125,110,88,0.95); font-size: 8px; letter-spacing: 0.08em; }
 
   @media (max-width: 900px) {
     .sim-shell { height: max(480px, calc(100svh - var(--topH, 56px) - 50px)); }

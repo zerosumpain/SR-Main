@@ -1,15 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildTopology, routePath, schoolInfo, sampleSchools,
-  SUPPLIERS, CONSUMERS, RELAY_COUNT, DEFAULT_SCHOOL_COUNT,
+  buildTopology, routePath, schoolInfo, sampleSchools, supplierCounts,
+  SUPPLIERS, CONSUMERS, STORES, EDTECH, RELAY_COUNT, DEFAULT_SCHOOL_COUNT,
+  DFE_ID, RECORD_ID,
 } from './topology';
 
-describe('the synthetic market', () => {
+describe('the MIS market', () => {
   it('shares sum to 100% with three majors', () => {
     const total = SUPPLIERS.reduce((a, s) => a + s.sharePct, 0);
     expect(total).toBeCloseTo(100, 6);
     expect(SUPPLIERS.filter((s) => s.tier === 'major')).toHaveLength(3);
     expect(SUPPLIERS.length).toBeGreaterThanOrEqual(13); // 3 majors + 10-15 smaller
+  });
+
+  it('uses the real supplier names', () => {
+    const labels = SUPPLIERS.map((s) => s.label);
+    for (const expected of ['Arbor', 'ESS SIMS', 'Bromcom', 'ScholarPack']) {
+      expect(labels).toContain(expected);
+    }
+  });
+
+  it('supplierCounts allocates exactly and deterministically', () => {
+    const counts = supplierCounts(DEFAULT_SCHOOL_COUNT);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(DEFAULT_SCHOOL_COUNT);
+    expect(counts).toEqual(supplierCounts(DEFAULT_SCHOOL_COUNT));
   });
 });
 
@@ -38,6 +52,8 @@ describe('buildTopology', () => {
     expect(kinds('supplier')).toHaveLength(SUPPLIERS.length);
     expect(kinds('consumer')).toHaveLength(CONSUMERS.length);
     expect(kinds('relay')).toHaveLength(RELAY_COUNT);
+    expect(kinds('store')).toHaveLength(STORES.length);
+    expect(kinds('edtech')).toHaveLength(EDTECH.length);
     expect(topo.byId.get('ledger')).toBeDefined();
     expect(topo.byId.get('central-store')).toBeDefined();
   });
@@ -52,6 +68,27 @@ describe('buildTopology', () => {
     expect(topo.edges.filter((e) => e.kind === 'ring')).toHaveLength(RELAY_COUNT);
   });
 
+  it('brokers the Education Record through DfE', () => {
+    const memberEdge = topo.edges.find((e) => e.kind === 'member' && e.from === RECORD_ID);
+    expect(memberEdge?.to).toBe(DFE_ID);
+  });
+
+  it('hangs the satellite stores (NPD/LEO/ILR/LDS) off DfE', () => {
+    expect(topo.storeIds).toEqual(['store-npd', 'store-leo', 'store-ilr', 'store-lds']);
+    for (const id of topo.storeIds) {
+      expect(topo.edges.some((e) => e.kind === 'satellite' && e.from === id && e.to === DFE_ID)).toBe(true);
+    }
+  });
+
+  it('gives every edtech tendril a relay attachment', () => {
+    expect(topo.edtechIds).toHaveLength(EDTECH.length);
+    for (const id of topo.edtechIds) {
+      const e = topo.edges.find((e) => e.kind === 'tendril' && e.from === id);
+      expect(e, `${id} has no tendril edge`).toBeDefined();
+      expect(topo.relayIds).toContain(e!.to);
+    }
+  });
+
   it('honours a reduced school count', () => {
     const small = buildTopology({ schoolCount: 8000 });
     expect(small.schools.count).toBe(8000);
@@ -64,21 +101,43 @@ describe('routePath', () => {
   const topo = buildTopology({ schoolCount: 1000 });
 
   it('federated: routes member → ring → member with the endpoints intact', () => {
-    const p = routePath(topo, 'con-dfe', 'sup-cedar', 'federated');
+    const p = routePath(topo, 'con-dfe', 'sup-sims', 'federated');
     expect(p.length).toBeGreaterThanOrEqual(3);
     expect(p[0]).toEqual(topo.byId.get('con-dfe')!.pos);
-    expect(p[p.length - 1]).toEqual(topo.byId.get('sup-cedar')!.pos);
+    expect(p[p.length - 1]).toEqual(topo.byId.get('sup-sims')!.pos);
   });
 
   it('central: routes via the central store only', () => {
-    const p = routePath(topo, 'con-dfe', 'sup-cedar', 'central');
+    const p = routePath(topo, 'con-dfe', 'sup-sims', 'central');
     expect(p).toHaveLength(3);
     expect(p[1]).toEqual(topo.byId.get('central-store')!.pos);
   });
 
   it('routes to the ledger without a member edge', () => {
-    const p = routePath(topo, 'sup-meridian', 'ledger', 'federated');
+    const p = routePath(topo, 'sup-arbor', 'ledger', 'federated');
     expect(p[p.length - 1]).toEqual(topo.byId.get('ledger')!.pos);
+  });
+
+  it('routes Education Record traffic through the DfE gateway', () => {
+    const p = routePath(topo, RECORD_ID, 'sup-arbor', 'federated');
+    expect(p[0]).toEqual(topo.byId.get(RECORD_ID)!.pos);
+    expect(p[1]).toEqual(topo.byId.get(DFE_ID)!.pos); // brokered hop
+    expect(p[p.length - 1]).toEqual(topo.byId.get('sup-arbor')!.pos);
+    // and the broker hop never transits the ring, in either direction
+    expect(routePath(topo, RECORD_ID, DFE_ID, 'federated')).toHaveLength(2);
+    expect(routePath(topo, DFE_ID, RECORD_ID, 'federated')).toHaveLength(2);
+  });
+
+  it('routes DfE ↔ satellite-store traffic directly, both directions', () => {
+    expect(routePath(topo, 'store-npd', DFE_ID, 'federated')).toHaveLength(2);
+    expect(routePath(topo, DFE_ID, 'store-npd', 'federated')).toHaveLength(2);
+  });
+
+  it('routes edtech tendrils via their relay', () => {
+    const p = routePath(topo, 'edt-wonde', 'sup-arbor', 'federated');
+    expect(p.length).toBeGreaterThanOrEqual(3);
+    expect(p[0]).toEqual(topo.byId.get('edt-wonde')!.pos);
+    expect(p[p.length - 1]).toEqual(topo.byId.get('sup-arbor')!.pos);
   });
 
   it('returns empty for unknown nodes', () => {
@@ -98,9 +157,9 @@ describe('synthetic school records', () => {
   });
 
   it('samples schools belonging to the right supplier', () => {
-    const picks = sampleSchools(topo, 'sup-beacon', 20);
+    const picks = sampleSchools(topo, 'sup-bromcom', 20);
     expect(picks.length).toBe(20);
-    const si = topo.supplierIds.indexOf('sup-beacon');
+    const si = topo.supplierIds.indexOf('sup-bromcom');
     for (const i of picks) expect(topo.schools.supplier[i]).toBe(si);
   });
 });
