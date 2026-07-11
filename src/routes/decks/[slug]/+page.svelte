@@ -7,14 +7,16 @@
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import DeckShell from '$lib/components/presentation/DeckShell.svelte';
+  import MiniSlide from '$lib/components/presentation/MiniSlide.svelte';
   import SlideView from '$lib/components/presentation/SlideView.svelte';
   import { breadcrumb, nextSlide, prevSlide, zoomIn as navZoomIn } from '$lib/presentation/navigation';
-  import { slideIn, slideOut, type MoveKind } from '$lib/presentation/transitions';
+  import { slideIn, slideOut, type MoveKind, type ZoomAnchor } from '$lib/presentation/transitions';
 
   let { data } = $props();
 
   let current = $state(data.startId);
   let moveKind = $state<MoveKind>('next');
+  let zoomAnchor = $state<ZoomAnchor | null>(null);
   let chromeVisible = $state(true);
 
   // non-reactive internals
@@ -22,6 +24,10 @@
   let touchX = 0;
   let touchY = 0;
   let shell: HTMLElement | undefined = $state();
+  let miniEl: HTMLElement | undefined;
+  // Remembers where each parent's mini-slide card sat, so rising back out of a
+  // sub-deck can shrink the slide into the same spot.
+  const anchorByParent = new Map<string, ZoomAnchor>();
 
   const byId = $derived(new Map(data.slides.map((s) => [s.id, s])));
   const slide = $derived(byId.get(current) ?? data.slides[0]);
@@ -33,7 +39,11 @@
       .sort((a, b) => a.position - b.position),
   );
   const planeIdx = $derived(plane.findIndex((s) => s.id === current));
-  const childCount = $derived(data.slides.filter((s) => s.parentSlideId === current).length);
+  const children = $derived(
+    data.slides.filter((s) => s.parentSlideId === current).sort((a, b) => a.position - b.position),
+  );
+  const childCount = $derived(children.length);
+  const firstChild = $derived(children[0] ?? null);
   const parentTitle = $derived(
     depth > 0 ? (byId.get(chain[chain.length - 2])?.title ?? 'overview') : null,
   );
@@ -50,20 +60,46 @@
     wakeChrome();
   }
 
+  /** Where the mini-slide card sits right now (also memoised for the rise). */
+  function captureAnchor(): ZoomAnchor | null {
+    if (!miniEl) return null;
+    const r = miniEl.getBoundingClientRect();
+    const anchor: ZoomAnchor = {
+      cx: r.left + r.width / 2,
+      cy: r.top + r.height / 2,
+      w: r.width,
+      vw: window.innerWidth,
+      vh: window.innerHeight,
+    };
+    anchorByParent.set(current, anchor);
+    return anchor;
+  }
+
   function next() {
     const mv = nextSlide(data.slides, current);
-    if (mv) goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'next');
+    if (!mv) return;
+    // Spilling out of a sub-deck lands on the parent's NEXT sibling — no card
+    // to anchor to there, so use the centered zoom-out.
+    zoomAnchor = null;
+    goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'next');
   }
   function prev() {
     const mv = prevSlide(data.slides, current);
-    if (mv) goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'prev');
+    if (!mv) return;
+    zoomAnchor = mv.move === 'zoomOut' ? (anchorByParent.get(mv.id) ?? null) : null;
+    goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'prev');
   }
   function dive() {
     const child = navZoomIn(data.slides, current);
-    if (child) goTo(child, 'zoomIn');
+    if (!child) return;
+    zoomAnchor = captureAnchor();
+    goTo(child, 'zoomIn');
   }
   function rise() {
-    if (depth > 0) goTo(chain[chain.length - 2], 'zoomOut');
+    if (depth === 0) return;
+    const parent = chain[chain.length - 2];
+    zoomAnchor = anchorByParent.get(parent) ?? null;
+    goTo(parent, 'zoomOut');
   }
 
   function toggleFullscreen() {
@@ -153,7 +189,11 @@
     >
       <div class="stage-wrap">
         {#key current}
-          <div class="stage" in:slideIn={{ move: moveKind }} out:slideOut={{ move: moveKind }}>
+          <div
+            class="stage"
+            in:slideIn={{ move: moveKind, anchor: zoomAnchor }}
+            out:slideOut={{ move: moveKind, anchor: zoomAnchor }}
+          >
             <SlideView {slide} />
           </div>
         {/key}
@@ -174,10 +214,15 @@
         </span>
       </footer>
 
-      {#if childCount > 0}
-        <button class="chrome dive-pill" class:hidden={!chromeVisible} onclick={dive}>
-          ⤵ dive — {childCount} slide{childCount === 1 ? '' : 's'} inside
-        </button>
+      {#if firstChild}
+        {#key current}
+          <button class="mini-door" bind:this={miniEl} onclick={dive} title="Dive in (Enter)">
+            <MiniSlide slide={firstChild} />
+            <span class="md-label">
+              <span class="md-count">↵ dive — {childCount} slide{childCount === 1 ? '' : 's'} inside</span>
+            </span>
+          </button>
+        {/key}
       {/if}
 
       {#if !hasInteractive}
@@ -194,6 +239,9 @@
     inset: 0;
     z-index: 1;
     overflow: hidden;
+    /* Paint the paper here too: this element is what goes fullscreen, and a
+       transparent fullscreen element renders on the browser's black backdrop. */
+    background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255, 255, 255, 0.4), transparent 60%), var(--paper);
   }
   .stage-wrap {
     position: absolute;
@@ -262,22 +310,45 @@
   }
   .depth { color: var(--accent-ink); letter-spacing: 0.3em; }
 
-  .dive-pill {
-    bottom: 46px;
-    left: 50%;
-    transform: translateX(-50%);
+  .mini-door {
+    position: absolute;
+    z-index: 12;
+    right: clamp(14px, 3vw, 40px);
+    bottom: clamp(48px, 8vh, 72px);
+    width: clamp(200px, 24vw, 340px);
+    padding: 0;
+    background: var(--paper);
+    border: 2px solid var(--accent-ink);
+    border-radius: var(--radius-round);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.25s ease, border-color 0.25s ease;
+  }
+  .mini-door:hover { transform: scale(1.04); border-color: var(--accent-ink-hover); }
+  .mini-door:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .md-label {
+    display: block;
+    background: var(--accent-ink);
+    padding: 7px 10px;
+    text-align: center;
+  }
+  .md-count {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
+    font-size: 10px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--paper);
-    background: var(--accent-ink);
-    border: none;
-    border-radius: var(--radius-pill);
-    padding: 8px 16px;
-    cursor: pointer;
   }
-  .dive-pill:hover { background: var(--accent-ink-hover); }
+  @media (prefers-reduced-motion: no-preference) {
+    .mini-door { animation: door-breathe 2.6s ease-in-out infinite; }
+  }
+  @keyframes door-breathe {
+    0%, 100% { border-color: var(--accent-ink); }
+    50% { border-color: var(--accent); }
+  }
+  @media (max-width: 760px) {
+    .mini-door { width: 46vw; bottom: 58px; }
+  }
 
   .zone {
     position: absolute;

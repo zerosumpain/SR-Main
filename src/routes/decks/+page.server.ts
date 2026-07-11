@@ -1,15 +1,15 @@
-// Owner-only deck index. Anonymous/guest visitors get a 404 (decks are
-// reached by direct share URL); the owner sees every deck with its state.
+// Decks landing — public visitors see published decks; the owner (session on
+// prod, LAN bypass on homeserv) additionally sees private decks and gets edit
+// affordances. Nav-bar destination, so no 404 for anonymous any more.
 
-import { error } from '@sveltejs/kit';
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
 import { isOwnerRequest } from '$lib/server/owner';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  if (!(await isOwnerRequest(event))) throw error(404, 'Not found');
+  const isOwner = await isOwnerRequest(event);
 
   const rows = await db
     .select({
@@ -22,8 +22,9 @@ export const load: PageServerLoad = async (event) => {
       slideCount: sql<number>`(select count(*) from ${deckSlides} where ${deckSlides.deckId} = ${decks.id})`,
     })
     .from(decks)
+    .where(isOwner ? undefined : eq(decks.isPublic, true))
     .orderBy(desc(decks.updatedAt));
 
-  event.setHeaders({ 'cache-control': 'private, no-store' });
-  return { decks: rows };
+  if (isOwner) event.setHeaders({ 'cache-control': 'private, no-store' });
+  return { decks: rows, isOwner };
 };

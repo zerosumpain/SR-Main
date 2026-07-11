@@ -6,6 +6,7 @@
   const DEFAULT_ITEMS: NavItem[] = [
     { href: '/', label: 'Home' },
     { href: '/projects', label: 'Projects' },
+    { href: '/decks', label: 'Decks' },
     { href: '/blog', label: 'Writing' },
     { href: '/health', label: 'Health' },
     { href: '/live', label: 'Live' },

@@ -6,8 +6,8 @@
 
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
-import { deckSlides, decks } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { deckSlides, decks, type DeckSlide } from '$lib/db/schema';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { slugify } from '$lib/canvas/slug';
 import { createShare } from '$lib/decks/shares';
 import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
@@ -209,6 +209,172 @@ register({
     return {
       success: persistIssues.length === 0,
       data: { deckId: deck.id, slug, url, shareUrl, slideCount, summaryMarkdown, verificationIssues: persistIssues },
+    };
+  },
+});
+
+/** Rebuild the nested SlideSpec tree from flat deck_slides rows. */
+function rowsToSpecTree(rows: DeckSlide[], parentSlideId: string | null): SlideSpec[] {
+  return rows
+    .filter((r) => r.parentSlideId === parentSlideId)
+    .sort((a, b) => a.position - b.position)
+    .map((r) => {
+      const children = rowsToSpecTree(rows, r.id);
+      const spec: SlideSpec = {
+        title: r.title ?? undefined,
+        layout: r.layout,
+        blocks: r.blocks as unknown[],
+        notes: r.notes ?? undefined,
+      };
+      if (children.length) spec.children = children;
+      return spec;
+    });
+}
+
+register({
+  name: 'presentation_list',
+  description:
+    'List sr. decks presentations (slug, title, visibility, slide count, updated). Use to find a deck before reading or revising it.',
+  parameters: { type: 'object', properties: {} },
+  category: 'Decks',
+  toolset: 'decks',
+  handler: async () => {
+    const rows = await db
+      .select({
+        slug: decks.slug,
+        title: decks.title,
+        description: decks.description,
+        isPublic: decks.isPublic,
+        updatedAt: decks.updatedAt,
+        slideCount: sql<number>`(select count(*) from ${deckSlides} where ${deckSlides.deckId} = ${decks.id})`,
+      })
+      .from(decks)
+      .orderBy(desc(decks.updatedAt));
+    return { success: true, data: { decks: rows } };
+  },
+});
+
+register({
+  name: 'presentation_get_spec',
+  description:
+    'Read an existing sr. deck as the SAME spec shape presentation_update_from_spec accepts — ' +
+    '{ title, description, slug, is_public, slides: [{ title, layout, blocks, notes?, children? }] }. ' +
+    'This is step 1 of revising a deck: read the spec, apply the user’s requested changes to it, propose ' +
+    'the revised outline in chat, and only after a yes call presentation_update_from_spec.',
+  parameters: {
+    type: 'object',
+    properties: { slug: { type: 'string', description: 'Deck slug (see presentation_list).' } },
+    required: ['slug'],
+  },
+  category: 'Decks',
+  toolset: 'decks',
+  handler: async (args) => {
+    const slug = typeof args.slug === 'string' ? args.slug.trim() : '';
+    const [deck] = await db.select().from(decks).where(eq(decks.slug, slug));
+    if (!deck) return { success: false, error: `no deck with slug "${slug}" — call presentation_list` };
+    const rows = await db
+      .select()
+      .from(deckSlides)
+      .where(eq(deckSlides.deckId, deck.id))
+      .orderBy(asc(deckSlides.position));
+    return {
+      success: true,
+      data: {
+        slug: deck.slug,
+        title: deck.title,
+        description: deck.description,
+        is_public: deck.isPublic,
+        theme: deck.theme,
+        slides: rowsToSpecTree(rows, null),
+      },
+    };
+  },
+});
+
+register({
+  name: 'presentation_update_from_spec',
+  description:
+    'REPLACE the slides of an EXISTING sr. deck with a revised spec (same shape as presentation_build_from_spec). ' +
+    'The deck keeps its slug, URL and share links; the slide content is rewritten wholesale. ' +
+    'REVISE-FIRST WORKFLOW: you MUST have (1) called presentation_get_spec, (2) applied the user’s requested ' +
+    'changes to that spec, (3) shown the revised outline (and what changed) in chat, and (4) received a ' +
+    'yes/update it — before calling this. Never call it with a guess. ' +
+    'CRITICAL: paste `data.summaryMarkdown` VERBATIM as your reply when the tool returns.',
+  parameters: {
+    type: 'object',
+    properties: {
+      slug: { type: 'string', description: 'Slug of the deck to update.' },
+      title: { type: 'string', description: 'Optional new title.' },
+      description: { type: 'string', description: 'Optional new description.' },
+      slides: {
+        type: 'array',
+        description: 'The COMPLETE revised slide tree (replaces all existing slides).',
+        items: { type: 'object' },
+      },
+    },
+    required: ['slug', 'slides'],
+  },
+  category: 'Decks',
+  toolset: 'decks',
+  destructive: true, // overwrites existing deck content — confirm before running
+  handler: async (args, ctx) => {
+    const slug = typeof args.slug === 'string' ? args.slug.trim() : '';
+    const slides = args.slides as SlideSpec[] | undefined;
+    const [deck] = await db.select().from(decks).where(eq(decks.slug, slug));
+    if (!deck) return { success: false, error: `no deck with slug "${slug}" — call presentation_list` };
+    if (!Array.isArray(slides) || slides.length === 0) return { success: false, error: 'slides must be a non-empty array' };
+    if (slides.length > 40) return { success: false, error: 'too many top-level slides (max 40) — tighten the story' };
+
+    const issues = slides.flatMap((s, i) => validateSlide(s, `slides[${i}]`, 0));
+    if (issues.length) {
+      return { success: false, error: `spec failed validation — fix these and call again:\n- ${issues.join('\n- ')}` };
+    }
+
+    const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');
+    const url = `${baseUrl}/decks/${slug}`;
+    ctx?.emit(`Rewriting deck at ${url} …`);
+
+    // Snapshot the old tree so a failed rewrite can be rolled back.
+    const oldRows = await db.select().from(deckSlides).where(eq(deckSlides.deckId, deck.id));
+    await db.delete(deckSlides).where(eq(deckSlides.deckId, deck.id));
+    let slideCount = 0;
+    try {
+      slideCount = await insertSlides(deck.id, slides, null);
+    } catch (err) {
+      // Restore the previous slides — never leave the deck empty.
+      for (const row of oldRows) {
+        await db.insert(deckSlides).values(row).catch(() => {});
+      }
+      return { success: false, error: `slide insert failed (previous content restored): ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    await db
+      .update(decks)
+      .set({
+        updatedAt: new Date(),
+        ...(typeof args.title === 'string' && args.title.trim() ? { title: args.title.trim() } : {}),
+        ...(typeof args.description === 'string' ? { description: args.description } : {}),
+      })
+      .where(eq(decks.id, deck.id));
+
+    const persisted = await db.select().from(deckSlides).where(eq(deckSlides.deckId, deck.id));
+    const persistIssues = persisted.flatMap((row) => {
+      const res = validateBlocks(row.blocks);
+      return res.issues.map((i) => `slide "${row.title ?? row.id}": ${i}`);
+    });
+
+    const summaryMarkdown = [
+      `**[${typeof args.title === 'string' && args.title.trim() ? args.title.trim() : deck.title}](${url})** — rewritten, ${slideCount} slides`,
+      '',
+      'Existing share links still work.',
+      '',
+      outlineMarkdown(slides),
+      ...(persistIssues.length ? ['', '**Needs attention:**', ...persistIssues.map((i) => `- ${i}`)] : []),
+    ].join('\n');
+
+    return {
+      success: persistIssues.length === 0,
+      data: { deckId: deck.id, slug, url, slideCount, summaryMarkdown, verificationIssues: persistIssues },
     };
   },
 });
