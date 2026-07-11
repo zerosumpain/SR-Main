@@ -1,14 +1,17 @@
 <script lang="ts">
   // Vertical timeline — the data-spine .timeline shape: hairline spine,
-  // accent dots, mono years.
+  // accent dots, mono years. Items cascade in down the spine.
+  import { fly } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
+  import { dur } from '$lib/motion';
   import type { TimelineBlock } from '$lib/presentation/types';
 
   let { block }: { block: TimelineBlock } = $props();
 </script>
 
 <ol class="tl">
-  {#each block.items as item}
-    <li class="tl-item">
+  {#each block.items as item, i (i)}
+    <li class="tl-item" in:fly={{ x: -18, duration: dur(460), delay: dur(90 * i), easing: cubicOut }}>
       <span class="tl-dot" aria-hidden="true"></span>
       <span class="tl-year">{item.year}</span>
       <div class="tl-body">

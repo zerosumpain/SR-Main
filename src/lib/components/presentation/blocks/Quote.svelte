@@ -7,6 +7,7 @@
 </script>
 
 <blockquote class="q">
+  <span class="q-rail" aria-hidden="true"></span>
   <p class="q-text">“{block.text}”</p>
   {#if block.attribution}
     <footer class="q-attr">
@@ -21,10 +22,26 @@
 
 <style>
   .q {
+    position: relative;
     margin: 0;
     padding: 6px 0 6px clamp(18px, 2.5vw, 30px);
-    border-left: 3px solid var(--accent-ink);
     max-width: 44ch;
+  }
+  .q-rail {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-ink);
+    transform-origin: top;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .q-rail { animation: q-rail-grow 700ms cubic-bezier(0.33, 1, 0.68, 1) both; }
+  }
+  @keyframes q-rail-grow {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
   }
   .q-text {
     font-family: 'Fraunces', serif;

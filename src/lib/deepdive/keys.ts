@@ -88,9 +88,13 @@ export function getEmbeddingModel(): string {
   return keys.embeddingModel || 'openai/text-embedding-3-large';
 }
 
-/** Returns the OpenRouter model to use as a rate-limit fallback for z.ai calls. */
+/** Returns the OpenRouter model to use as a rate-limit fallback for z.ai calls.
+ *  Default = the same GLM served via OpenRouter, so fallback output stays
+ *  consistent with the primary. (Was anthropic/claude-3-5-haiku, which
+ *  OpenRouter REMOVED — every gateway fallback silently failed on the dead
+ *  model id until this was caught on 2026-07-11.) */
 export function getFallbackModel(): string {
-  return loadKeys().openrouterFallbackModel || 'anthropic/claude-3-5-haiku';
+  return loadKeys().openrouterFallbackModel || 'z-ai/glm-5-turbo';
 }
 
 /** True when an OpenRouter API key is configured (fallback is available). */

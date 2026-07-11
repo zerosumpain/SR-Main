@@ -10,6 +10,7 @@ import { deckSlides, decks, type DeckSlide } from '$lib/db/schema';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { slugify } from '$lib/canvas/slug';
 import { createShare } from '$lib/decks/shares';
+import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
 import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
 import { scenarioById } from '$lib/sim/federation/scenarios';
 
@@ -20,8 +21,6 @@ interface SlideSpec {
   notes?: string;
   children?: SlideSpec[];
 }
-
-const LAYOUTS = new Set(['default', 'center', 'full-bleed']);
 
 function shortSlug(src: string): string {
   const base = slugify(src || 'deck');
@@ -53,8 +52,8 @@ async function pickUniqueSlug(seed: string): Promise<string> {
 /** Validate one slide (and its children) — returns path-labelled issues. */
 function validateSlide(slide: SlideSpec, path: string, depth: number): string[] {
   const issues: string[] = [];
-  if (slide.layout && !LAYOUTS.has(slide.layout)) {
-    issues.push(`${path}: unknown layout "${slide.layout}" — use default | center | full-bleed`);
+  if (slide.layout && !isLayout(slide.layout)) {
+    issues.push(`${path}: unknown layout "${slide.layout}" — see the layout list in this tool's description`);
   }
   if (!Array.isArray(slide.blocks) || slide.blocks.length === 0) {
     issues.push(`${path}: blocks must be a non-empty array`);
@@ -88,7 +87,7 @@ async function insertSlides(deckId: string, slides: SlideSpec[], parentSlideId: 
         parentSlideId,
         position: i,
         title: s.title?.slice(0, 120) ?? null,
-        layout: LAYOUTS.has(s.layout ?? '') ? (s.layout as string) : 'default',
+        layout: isLayout(s.layout) ? s.layout : 'default',
         blocks: s.blocks,
         notes: s.notes ?? null,
       })
@@ -118,6 +117,7 @@ register({
     '(numbered slides, per-slide block types and key content, which slides nest as a zoom-in sub-deck) ' +
     'and the user must have said yes/build it. Never call this tool with a guess at the design. ' +
     'Slides with `children` become zoomable sub-decks in the player (Enter dives in, Escape rises out). ' +
+    `Layouts (pick for impact and vary them for rhythm): ${layoutDocsForLLM()} ` +
     `Block vocabulary: ${Object.entries(BLOCK_DOCS)
       .map(([k, v]) => `${k} — ${v}`)
       .join(' | ')} ` +

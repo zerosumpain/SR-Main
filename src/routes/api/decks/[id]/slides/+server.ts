@@ -6,6 +6,7 @@ import { json } from '@sveltejs/kit';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
+import { isLayout } from '$lib/presentation/layouts';
 import { validateBlocks } from '$lib/presentation/registry';
 import type { RequestHandler } from './$types';
 
@@ -55,7 +56,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       parentSlideId,
       position,
       title: typeof body.title === 'string' ? body.title.slice(0, 120) : null,
-      layout: typeof body.layout === 'string' ? body.layout : 'default',
+      layout: isLayout(body.layout) ? body.layout : 'default',
       blocks,
     })
     .returning();

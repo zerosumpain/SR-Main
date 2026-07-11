@@ -48,11 +48,20 @@
       {#each block.series as s, si}
         <path
           d={polyline(s.points.map((p) => sx(p.x)), s.points.map((p) => sy(p.y)))}
-          class="line"
+          class="line draw"
+          pathLength="1"
           style:stroke={COLORS[si % COLORS.length]}
+          style:animation-delay="{si * 180}ms"
         />
-        {#each s.points as p}
-          <circle cx={sx(p.x)} cy={sy(p.y)} r="3.2" style:fill={COLORS[si % COLORS.length]} />
+        {#each s.points as p, pi}
+          <circle
+            cx={sx(p.x)}
+            cy={sy(p.y)}
+            r="3.2"
+            class="dot-in"
+            style:fill={COLORS[si % COLORS.length]}
+            style:animation-delay="{si * 180 + (pi / Math.max(1, s.points.length - 1)) * 950}ms"
+          />
         {/each}
       {/each}
     {:else}
@@ -62,13 +71,15 @@
         </text>
       {/each}
       {#each block.series as s, si}
-        {#each s.points as p}
+        {#each s.points as p, pi}
           <rect
             x={barX(p.x, si)}
             y={Math.min(sy(p.y), sy(0))}
             width={barW - 3}
             height={Math.abs(sy(p.y) - sy(0))}
+            class="bar-in"
             style:fill={COLORS[si % COLORS.length]}
+            style:animation-delay="{pi * 90 + si * 60}ms"
             rx="1"
           />
         {/each}
@@ -112,6 +123,29 @@
     fill: rgba(28, 22, 17, 0.5);
   }
   .line { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+  /* entrance choreography: lines draw in, points and bars follow. CSS-driven
+     so it replays whenever the keyed slide mounts; disabled under
+     prefers-reduced-motion (matching the dur() contract elsewhere). */
+  @media (prefers-reduced-motion: no-preference) {
+    .line.draw {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      animation: chart-draw 1100ms cubic-bezier(0.33, 1, 0.68, 1) both;
+    }
+    .dot-in {
+      opacity: 0;
+      animation: chart-fade 300ms ease-out both;
+    }
+    .bar-in {
+      transform-box: fill-box;
+      transform-origin: bottom;
+      transform: scaleY(0);
+      animation: chart-bar 640ms cubic-bezier(0.33, 1, 0.68, 1) both;
+    }
+  }
+  @keyframes chart-draw { to { stroke-dashoffset: 0; } }
+  @keyframes chart-fade { to { opacity: 1; } }
+  @keyframes chart-bar { to { transform: scaleY(1); } }
   .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 8px; }
   .leg-item {
     display: inline-flex;

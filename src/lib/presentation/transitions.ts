@@ -25,16 +25,35 @@ export interface MoveParams {
   anchor?: ZoomAnchor | null;
 }
 
-const GLIDE = 340;
-const ZOOM = 560;
+const GLIDE = 380;
+const ZOOM = 620;
+
+/** Block entrance: rise + settle with a micro-scale — used with a stagger
+ *  delay by SlideView and by block-internal choreography. */
+export function blockIn(_node: Element, { delay = 0 }: { delay?: number } = {}): TransitionConfig {
+  return {
+    delay: dur(delay),
+    duration: dur(560),
+    easing: cubicOut,
+    css: (t, u) => `transform: translateY(${u * 26}px) scale(${0.985 + 0.015 * t}); opacity: ${t}`,
+  };
+}
 
 export function slideIn(_node: Element, { move, anchor }: MoveParams): TransitionConfig {
   const easing = cubicOut;
   switch (move) {
     case 'next':
-      return { duration: dur(GLIDE), easing, css: (t, u) => `transform: translateX(${u * 44}px); opacity: ${t}` };
+      return {
+        duration: dur(GLIDE),
+        easing,
+        css: (t, u) => `transform: translateX(${u * 7}vw) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      };
     case 'prev':
-      return { duration: dur(GLIDE), easing, css: (t, u) => `transform: translateX(${-u * 44}px); opacity: ${t}` };
+      return {
+        duration: dur(GLIDE),
+        easing,
+        css: (t, u) => `transform: translateX(${-u * 7}vw) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      };
     case 'zoomIn': {
       if (anchor) {
         // Grow out of the mini-slide card: start at its center and scale.
@@ -69,9 +88,17 @@ export function slideOut(_node: Element, { move, anchor }: MoveParams): Transiti
   const easing = cubicOut;
   switch (move) {
     case 'next':
-      return { duration: dur(GLIDE), easing, css: (t, u) => `transform: translateX(${-u * 44}px); opacity: ${t}` };
+      return {
+        duration: dur(GLIDE),
+        easing,
+        css: (t, u) => `transform: translateX(${-u * 7}vw) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      };
     case 'prev':
-      return { duration: dur(GLIDE), easing, css: (t, u) => `transform: translateX(${u * 44}px); opacity: ${t}` };
+      return {
+        duration: dur(GLIDE),
+        easing,
+        css: (t, u) => `transform: translateX(${u * 7}vw) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      };
     case 'zoomIn': {
       if (anchor) {
         // The camera pushes toward the card: the parent scales up around it.

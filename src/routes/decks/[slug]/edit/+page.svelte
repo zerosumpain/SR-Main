@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import SlideView from '$lib/components/presentation/SlideView.svelte';
+  import { LAYOUT_IDS } from '$lib/presentation/layouts';
   import { buildPlanes } from '$lib/presentation/navigation';
   import { validateBlocks } from '$lib/presentation/registry';
   import { BLOCK_TEMPLATES } from '$lib/presentation/templates';
@@ -35,6 +36,10 @@
   let shares = $state<{ id: string; label: string | null; revokedAt: string | null; useCount: number }[]>([]);
   let freshToken = $state<string | null>(null);
   let addType = $state<BlockType>('prose');
+  let composeText = $state('');
+  let composeMedia = $state('');
+  let composeNest = $state(false);
+  let composing = $state(false);
 
   const planes = $derived(buildPlanes(slides));
   const selected = $derived(slides.find((s) => s.id === selectedId) ?? slides[0]);
@@ -104,6 +109,24 @@
     await saveMeta();
   }
 
+  function adoptNewSlide(payload: Record<string, unknown>, parentSlideId: string | null, position: number) {
+    const s = payload.slide as EditSlide;
+    // Reflect the server-side sibling shift locally, then adopt the row.
+    for (const sib of slides) {
+      if (sib.parentSlideId === parentSlideId && sib.position >= position) sib.position += 1;
+    }
+    slides.push({ ...s, blocks: s.blocks as Block[] });
+    selectedId = s.id;
+  }
+
+  /** Where a new slide goes: after the selected sibling, or into it as a child. */
+  function insertTarget(): { parentSlideId: string | null; position: number } {
+    if (composeNest && selected) {
+      return { parentSlideId: selected.id, position: (planes.get(selected.id) ?? []).length };
+    }
+    return { parentSlideId: selected?.parentSlideId ?? null, position: (selected?.position ?? -1) + 1 };
+  }
+
   async function addSlide(parentSlideId: string | null, position: number) {
     const payload = await api(`/api/decks/${data.deck.id}/slides`, 'POST', {
       parentSlideId,
@@ -111,14 +134,26 @@
       title: 'New slide',
       blocks: [structuredClone(BLOCK_TEMPLATES.prose)],
     });
+    if (payload?.slide) adoptNewSlide(payload, parentSlideId, position);
+  }
+
+  async function composeNewSlide() {
+    const target = insertTarget();
+    composing = true;
+    const payload = await api(`/api/decks/${data.deck.id}/slides/compose`, 'POST', {
+      text: composeText,
+      mediaUrls: composeMedia
+        .split(/[,\n]/)
+        .map((u) => u.trim())
+        .filter(Boolean),
+      ...target,
+    });
+    composing = false;
     if (payload?.slide) {
-      const s = payload.slide as EditSlide;
-      // Reflect the server-side sibling shift locally, then adopt the row.
-      for (const sib of slides) {
-        if (sib.parentSlideId === parentSlideId && sib.position >= position) sib.position += 1;
-      }
-      slides.push({ ...s, blocks: s.blocks as Block[] });
-      selectedId = s.id;
+      adoptNewSlide(payload, target.parentSlideId, target.position);
+      composeText = '';
+      composeMedia = '';
+      flash('ok', payload.source === 'llm' ? 'Composed' : 'Composed (fallback layout — LLM unavailable)');
     }
   }
 
@@ -282,12 +317,30 @@
           {@render treeItem(id, 0)}
         {/each}
       </ul>
-      <button class="add-slide" onclick={() => addSlide(selected?.parentSlideId ?? null, (selected?.position ?? -1) + 1)}>
-        + slide
-      </button>
-      <button class="add-slide" onclick={() => selected && addSlide(selected.id, (planes.get(selected.id) ?? []).length)}>
-        + sub-slide of selected
-      </button>
+      <div class="composer">
+        <span class="pane-lab">ADD SLIDE</span>
+        <textarea
+          rows="4"
+          bind:value={composeText}
+          placeholder="Paste the content — text, a punchy line, stats like '24,000 — schools'. The deck decides how to show it."
+        ></textarea>
+        <input bind:value={composeMedia} placeholder="media / page URLs (comma-separated, optional)" />
+        <label class="nest-check">
+          <input type="checkbox" bind:checked={composeNest} /> nest under selected slide
+        </label>
+        <div class="composer-btns">
+          <button
+            class="compose-btn"
+            disabled={composing || (!composeText.trim() && !composeMedia.trim())}
+            onclick={composeNewSlide}
+          >
+            {composing ? 'composing…' : '✦ compose slide'}
+          </button>
+          <button class="add-slide" onclick={() => { const t = insertTarget(); void addSlide(t.parentSlideId, t.position); }}>
+            + blank
+          </button>
+        </div>
+      </div>
 
       <div class="shares">
         <span class="pane-lab">SHARE LINKS</span>
@@ -321,9 +374,7 @@
           <label>
             <span class="pane-lab">LAYOUT</span>
             <select value={selected.layout} onchange={(e) => { selected.layout = e.currentTarget.value; markDirty(); }}>
-              <option value="default">default</option>
-              <option value="center">center</option>
-              <option value="full-bleed">full-bleed</option>
+              {#each LAYOUT_IDS as id (id)}<option value={id}>{id}</option>{/each}
             </select>
           </label>
           <label class="notes">
@@ -473,6 +524,48 @@
     cursor: pointer;
   }
   .add-slide:hover { color: var(--accent); border-color: var(--accent); }
+
+  .composer { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .composer textarea,
+  .composer input[type='text'],
+  .composer > input {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    padding: 7px 8px;
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+  .nest-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+  .composer-btns { display: flex; gap: 6px; }
+  .composer-btns .add-slide { margin-top: 0; width: auto; padding: 6px 10px; }
+  .compose-btn {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent-ink);
+    border: none;
+    border-radius: 2px;
+    padding: 8px;
+    cursor: pointer;
+  }
+  .compose-btn:hover { background: var(--accent-ink-hover); }
+  .compose-btn:disabled { opacity: 0.45; cursor: default; }
   .shares { margin-top: 22px; }
   .shares ul { list-style: none; margin: 0 0 8px; padding: 0; }
   .share-row {

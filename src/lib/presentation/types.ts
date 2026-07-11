@@ -102,7 +102,9 @@ export type Block =
   | EmbedBlock
   | IframeBlock;
 
-export type SlideLayout = 'default' | 'center' | 'full-bleed';
+import type { SlideLayoutId } from './layouts';
+
+export type SlideLayout = SlideLayoutId;
 
 /** What the player load returns per slide (DeckSlide row, blocks typed). */
 export interface SlideNode {

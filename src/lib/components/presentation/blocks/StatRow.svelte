@@ -1,14 +1,15 @@
 <script lang="ts">
   // Row of stat chips — the Scorecard/TakeawayBar shape: Fraunces number,
-  // mono label, hairline card.
+  // mono label, hairline card. Chips pop in sequence.
+  import { blockIn } from '$lib/presentation/transitions';
   import type { StatRowBlock } from '$lib/presentation/types';
 
   let { block }: { block: StatRowBlock } = $props();
 </script>
 
 <div class="sr-row" style:--n={block.stats.length}>
-  {#each block.stats as stat}
-    <div class="sr-chip">
+  {#each block.stats as stat, i (i)}
+    <div class="sr-chip" in:blockIn={{ delay: 90 * i }}>
       <span class="sr-n">{stat.n}</span>
       <span class="sr-lab">{stat.label}</span>
     </div>

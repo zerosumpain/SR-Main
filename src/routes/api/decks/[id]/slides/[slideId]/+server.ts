@@ -9,10 +9,9 @@ import { json } from '@sveltejs/kit';
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
+import { isLayout } from '$lib/presentation/layouts';
 import { validateBlocks } from '$lib/presentation/registry';
 import type { RequestHandler } from './$types';
-
-const LAYOUTS = new Set(['default', 'center', 'full-bleed']);
 
 async function loadSlide(deckId: string, slideId: string) {
   const [row] = await db
@@ -67,7 +66,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if (typeof body.title === 'string') patch.title = body.title.slice(0, 120) || null;
   if (typeof body.notes === 'string') patch.notes = body.notes || null;
   if (typeof body.layout === 'string') {
-    if (!LAYOUTS.has(body.layout)) return json({ error: `unknown layout "${body.layout}"` }, { status: 400 });
+    if (!isLayout(body.layout)) return json({ error: `unknown layout "${body.layout}"` }, { status: 400 });
     patch.layout = body.layout;
   }
   if (body.blocks !== undefined) {

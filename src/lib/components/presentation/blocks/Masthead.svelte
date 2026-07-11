@@ -1,17 +1,19 @@
 <script lang="ts">
   // Title-slide header — ported from data-spine StoryMasthead, sized for a
-  // full-viewport slide (no eli5 register; decks carry one voice).
+  // full-viewport slide (no eli5 register; decks carry one voice). Parts
+  // choreograph in sequence on top of the slide-level block entrance.
+  import { blockIn } from '$lib/presentation/transitions';
   import type { MastheadBlock } from '$lib/presentation/types';
 
   let { block }: { block: MastheadBlock } = $props();
 </script>
 
 <header class="mh">
-  {#if block.kicker}<span class="mh-kicker">{block.kicker}</span>{/if}
-  <h1 class="mh-title">{block.title}</h1>
-  {#if block.thesis}<p class="mh-thesis">{block.thesis}</p>{/if}
+  {#if block.kicker}<span class="mh-kicker" in:blockIn>{block.kicker}</span>{/if}
+  <h1 class="mh-title" in:blockIn={{ delay: 110 }}>{block.title}</h1>
+  {#if block.thesis}<p class="mh-thesis" in:blockIn={{ delay: 240 }}>{block.thesis}</p>{/if}
   {#if block.asks && block.asks.length}
-    <div class="mh-ask">
+    <div class="mh-ask" in:blockIn={{ delay: 340 }}>
       <ul>
         {#each block.asks as ask}<li>{ask}</li>{/each}
       </ul>
