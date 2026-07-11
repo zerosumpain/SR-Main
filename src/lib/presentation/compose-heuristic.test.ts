@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeHeuristic } from './compose-heuristic';
+import { composeHeuristic, pickStatementLayout } from './compose-heuristic';
 import { validateBlocks } from './registry';
 import { isLayout } from './layouts';
 
@@ -10,10 +10,37 @@ function assertValid(slide: { layout: string; blocks: unknown }) {
 }
 
 describe('composeHeuristic', () => {
-  it('short punchy line → statement quote', () => {
+  it('short bare claim → aligned statement headline', () => {
     const s = composeHeuristic({ text: 'Move the questions, not the records.', mediaUrls: [] });
+    expect(s.layout).toBe('statement-left');
+    expect(s.blocks[0]).toMatchObject({ type: 'headline', text: 'Move the questions, not the records' });
+    assertValid(s);
+  });
+
+  it('quoted punchy line keeps the quote treatment', () => {
+    const s = composeHeuristic({ text: '“Move the questions, not the records.”', mediaUrls: [] });
     expect(s.layout).toBe('statement');
     expect(s.blocks[0]).toMatchObject({ type: 'quote' });
+    assertValid(s);
+  });
+
+  it('alternates aligned statements against the neighbours', () => {
+    expect(pickStatementLayout([])).toBe('statement-left');
+    expect(pickStatementLayout(['grid', 'statement-left'])).toBe('statement-right');
+    expect(pickStatementLayout(['statement-left', 'statement-right'])).toBe('statement-left');
+    const s = composeHeuristic({ text: 'Whitespace is the loudest signal', mediaUrls: [] }, { recentLayouts: ['statement-left'] });
+    expect(s.layout).toBe('statement-right');
+    assertValid(s);
+  });
+
+  it('appends attached picker blocks', () => {
+    const s = composeHeuristic({
+      text: '',
+      mediaUrls: [],
+      attachedBlocks: [{ type: 'embed', embed: 'federation-sim', config: { scenario: 'move', autoplay: true } }],
+    });
+    expect(s.layout).toBe('full-bleed');
+    expect(s.blocks[0]).toMatchObject({ type: 'embed', embed: 'federation-sim' });
     assertValid(s);
   });
 

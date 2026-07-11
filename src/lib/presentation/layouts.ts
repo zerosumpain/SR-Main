@@ -24,7 +24,15 @@ export const LAYOUTS = {
   },
   statement: {
     label: 'Statement',
-    doc: 'ONE dominant element at poster scale with generous whitespace — a single quote, bigNumber or masthead. The boldest text page; use for the thesis or a gut-punch number.',
+    doc: 'ONE dominant element at poster scale, centered, with generous whitespace — a single quote, bigNumber or masthead. Use sparingly; the aligned variants below usually hit harder.',
+  },
+  'statement-left': {
+    label: 'Statement (left)',
+    doc: 'ONE bold element (usually a headline) ragged-left against a wall of whitespace on the right — the classic editorial statement page. The default choice for an assertive fact or claim.',
+  },
+  'statement-right': {
+    label: 'Statement (right)',
+    doc: 'Mirror of statement-left — the statement pinned right, whitespace left. Use for counterpoints and to break rhythm after a statement-left.',
   },
   split: {
     label: 'Split',

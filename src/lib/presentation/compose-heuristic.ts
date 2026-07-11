@@ -10,6 +10,19 @@ import type { Block, ImageBlock, IframeBlock } from './types';
 export interface ComposeInput {
   text: string;
   mediaUrls: string[];
+  /** Pre-built blocks (from the site-media picker) that MUST appear on the slide. */
+  attachedBlocks?: Block[];
+}
+
+export interface ComposeCtx {
+  /** Layouts of neighbouring slides, for alignment/rhythm variety. */
+  recentLayouts?: string[];
+}
+
+/** Alternate the aligned statement pages: avoid whichever side was used last. */
+export function pickStatementLayout(recentLayouts: string[] = []): string {
+  const lastAligned = [...recentLayouts].reverse().find((l) => l === 'statement-left' || l === 'statement-right');
+  return lastAligned === 'statement-left' ? 'statement-right' : 'statement-left';
 }
 
 export interface ComposedSlide {
@@ -36,9 +49,9 @@ const STAT_LINE = /^([£$€]?\d[\d,.]*\s?(?:%|bn|m|k|x)?)\s*[—–:-]\s*(.{2,6
 /** "24,000 schools connected" (number-led short line) → bigNumber. */
 const NUMBER_LEAD = /^([£$€]?)(\d[\d,]*(?:\.\d+)?)\s?(%|bn|m|k)?\s+(.{2,60})$/i;
 
-export function composeHeuristic(input: ComposeInput): ComposedSlide {
+export function composeHeuristic(input: ComposeInput, ctx: ComposeCtx = {}): ComposedSlide {
   const text = (input.text ?? '').trim();
-  const mediaBlocks: Block[] = [];
+  const mediaBlocks: Block[] = [...(input.attachedBlocks ?? [])];
   const looseLinks: string[] = [];
 
   for (const raw of input.mediaUrls ?? []) {
@@ -109,10 +122,16 @@ export function composeHeuristic(input: ComposeInput): ComposedSlide {
     }
   }
 
-  // Short punchy line, nothing else: statement quote.
+  // Short punchy line, nothing else: a statement page. An actual quotation
+  // (wrapped in quote marks) keeps the quote treatment; a bare assertive
+  // claim becomes an aligned editorial headline — bolder, better whitespace.
   if (!title && bodyWords > 0 && bodyWords <= 16 && stats.length === 0 && mediaBlocks.length === 0) {
-    blocks.push({ type: 'quote', text: body.replace(/^["“]|["”]$/g, '') });
-    return { title, layout: 'statement', blocks };
+    if (/^["“].*["”]$/.test(body)) {
+      blocks.push({ type: 'quote', text: body.replace(/^["“]|["”]$/g, '') });
+      return { title, layout: 'statement', blocks };
+    }
+    blocks.push({ type: 'headline', text: body.replace(/\.$/, '') });
+    return { title, layout: pickStatementLayout(ctx.recentLayouts), blocks };
   }
 
   // General assembly: text (+stats) (+media).

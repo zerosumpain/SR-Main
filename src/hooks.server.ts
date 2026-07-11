@@ -438,17 +438,22 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 const securityHeadersHandle: Handle = async ({ event, resolve }) => {
   const response = await resolve(event);
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  // Default policy: deny framing across the site. Two carve-outs get SAMEORIGIN
-  // (same-origin only — still blocks cross-origin embeds): the jkai build proxy
-  // (embedded by our canvas/build views), and file downloads (the /drive file
-  // viewer renders PDFs in a same-origin <iframe> via /api/files/<id>/download).
+  // Framing policy: pages default to SAMEORIGIN (cross-origin embedding stays
+  // blocked) because sr. decks legitimately frames site pages as slides — the
+  // deck iframe block and the editor's site-media browser both need it. The
+  // sensitive surfaces (admin, auth, APIs) keep hard DENY, except the two
+  // long-standing same-origin API carve-outs: the jkai build proxy and /drive
+  // file downloads (PDF viewer).
+  const framePath = event.url.pathname;
   if (
-    event.url.pathname.startsWith('/api/jkai/proxy/') ||
-    (event.url.pathname.startsWith('/api/files/') && event.url.pathname.endsWith('/download'))
+    framePath.startsWith('/api/jkai/proxy/') ||
+    (framePath.startsWith('/api/files/') && framePath.endsWith('/download'))
   ) {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-  } else {
+  } else if (framePath.startsWith('/admin') || framePath.startsWith('/api') || framePath.startsWith('/login')) {
     response.headers.set('X-Frame-Options', 'DENY');
+  } else {
+    response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   // Defence-in-depth for share links: any /projects/* response opened with a

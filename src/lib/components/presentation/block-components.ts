@@ -3,6 +3,7 @@
 import type { Component } from 'svelte';
 import type { Block, BlockType } from '$lib/presentation/types';
 import Masthead from './blocks/Masthead.svelte';
+import Headline from './blocks/Headline.svelte';
 import Prose from './blocks/Prose.svelte';
 import BigNumber from './blocks/BigNumber.svelte';
 import StatRow from './blocks/StatRow.svelte';
@@ -16,6 +17,7 @@ import Iframe from './blocks/Iframe.svelte';
 // Each component takes its own narrowed block; the map erases to the union.
 export const BLOCK_COMPONENTS = {
   masthead: Masthead,
+  headline: Headline,
   prose: Prose,
   bigNumber: BigNumber,
   statRow: StatRow,

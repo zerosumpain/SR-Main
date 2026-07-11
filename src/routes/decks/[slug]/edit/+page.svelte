@@ -8,9 +8,10 @@
   import { LAYOUT_IDS } from '$lib/presentation/layouts';
   import { buildPlanes } from '$lib/presentation/navigation';
   import { validateBlocks } from '$lib/presentation/registry';
-  import { BLOCK_TEMPLATES } from '$lib/presentation/templates';
-  import type { Block, BlockType, SlideNode } from '$lib/presentation/types';
+  import { BLOCK_TEMPLATES, CHART_TEMPLATES } from '$lib/presentation/templates';
+  import type { Block, SlideNode } from '$lib/presentation/types';
   import BlockForm from './BlockForm.svelte';
+  import SiteMediaPicker from './SiteMediaPicker.svelte';
 
   let { data } = $props();
 
@@ -35,11 +36,38 @@
   let isPublic = $state(data.deck.isPublic);
   let shares = $state<{ id: string; label: string | null; revokedAt: string | null; useCount: number }[]>([]);
   let freshToken = $state<string | null>(null);
-  let addType = $state<BlockType>('prose');
+  let addType = $state('prose');
   let composeText = $state('');
   let composeMedia = $state('');
   let composeNest = $state(false);
   let composing = $state(false);
+  let attached = $state<Block[]>([]);
+  let picker = $state<'closed' | 'compose' | 'block'>('closed');
+
+  // The add-block menu: every block type, with chart expanded per kind.
+  const TEMPLATE_OPTIONS: { key: string; label: string; block: Block }[] = [
+    ...Object.entries(BLOCK_TEMPLATES)
+      .filter(([t]) => t !== 'chart')
+      .map(([t, b]) => ({ key: t, label: t, block: b })),
+    ...Object.entries(CHART_TEMPLATES).map(([k, b]) => ({ key: `chart:${k}`, label: `chart · ${k}`, block: b })),
+  ];
+
+  function blockLabel(b: Block): string {
+    if (b.type === 'embed') return `◈ ${b.embed}`;
+    if (b.type === 'iframe') return `▤ ${b.src}`;
+    if (b.type === 'image') return `▣ ${b.src.split('/').pop()}`;
+    return b.type;
+  }
+
+  function onPicked(block: Block) {
+    if (picker === 'compose') {
+      attached = [...attached, block];
+    } else if (selected) {
+      selected.blocks.push(block);
+      markDirty();
+    }
+    picker = 'closed';
+  }
 
   const planes = $derived(buildPlanes(slides));
   const selected = $derived(slides.find((s) => s.id === selectedId) ?? slides[0]);
@@ -146,6 +174,7 @@
         .split(/[,\n]/)
         .map((u) => u.trim())
         .filter(Boolean),
+      attachedBlocks: $state.snapshot(attached),
       ...target,
     });
     composing = false;
@@ -153,7 +182,9 @@
       adoptNewSlide(payload, target.parentSlideId, target.position);
       composeText = '';
       composeMedia = '';
-      flash('ok', payload.source === 'llm' ? 'Composed' : 'Composed (fallback layout — LLM unavailable)');
+      attached = [];
+      const layout = (payload.slide as { layout?: string }).layout;
+      flash('ok', payload.source === 'llm' ? `Composed → ${layout}` : 'Composed (fallback layout — LLM unavailable)');
     }
   }
 
@@ -221,7 +252,9 @@
 
   function addBlock() {
     if (!selected) return;
-    selected.blocks.push(structuredClone(BLOCK_TEMPLATES[addType]));
+    const opt = TEMPLATE_OPTIONS.find((o) => o.key === addType);
+    if (!opt) return;
+    selected.blocks.push(structuredClone(opt.block));
     markDirty();
   }
   function removeBlock(i: number) {
@@ -325,13 +358,24 @@
           placeholder="Paste the content — text, a punchy line, stats like '24,000 — schools'. The deck decides how to show it."
         ></textarea>
         <input bind:value={composeMedia} placeholder="media / page URLs (comma-separated, optional)" />
+        {#if attached.length}
+          <div class="attach-chips">
+            {#each attached as b, i (i)}
+              <span class="attach-chip">
+                {blockLabel(b)}
+                <button title="Remove" onclick={() => (attached = attached.filter((_, j) => j !== i))}>✕</button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        <button class="add-slide" onclick={() => (picker = 'compose')}>◈ add site media…</button>
         <label class="nest-check">
           <input type="checkbox" bind:checked={composeNest} /> nest under selected slide
         </label>
         <div class="composer-btns">
           <button
             class="compose-btn"
-            disabled={composing || (!composeText.trim() && !composeMedia.trim())}
+            disabled={composing || (!composeText.trim() && !composeMedia.trim() && attached.length === 0)}
             onclick={composeNewSlide}
           >
             {composing ? 'composing…' : '✦ compose slide'}
@@ -403,9 +447,10 @@
         {/each}
         <div class="add-block">
           <select bind:value={addType}>
-            {#each Object.keys(BLOCK_TEMPLATES) as t (t)}<option value={t}>{t}</option>{/each}
+            {#each TEMPLATE_OPTIONS as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
           </select>
           <button onclick={addBlock}>+ block</button>
+          <button onclick={() => (picker = 'block')} title="Insert an interactive, page or image from the site">◈ site</button>
         </div>
         <button class="save-btn" disabled={saving || !dirty[selected.id]} onclick={() => saveSlide(selected)}>
           {saving ? 'Saving…' : dirty[selected.id] ? 'Save slide' : 'Saved'}
@@ -414,6 +459,10 @@
     </aside>
   </div>
 </div>
+
+{#if picker !== 'closed'}
+  <SiteMediaPicker catalogue={data.mediaCatalogue} onInsert={onPicked} onClose={() => (picker = 'closed')} />
+{/if}
 
 <style>
   .ed { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
@@ -550,6 +599,25 @@
     color: var(--text-muted);
   }
   .composer-btns { display: flex; gap: 6px; }
+  .attach-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    color: var(--accent-ink);
+    border: 1px solid var(--accent-ink);
+    border-radius: 2px;
+    padding: 3px 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attach-chip button { color: var(--text-muted); background: none; border: none; cursor: pointer; font-size: 9px; padding: 0; }
+  .attach-chip button:hover { color: var(--error); }
   .composer-btns .add-slide { margin-top: 0; width: auto; padding: 6px 10px; }
   .compose-btn {
     flex: 1;

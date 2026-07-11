@@ -4,6 +4,7 @@
 
 export type BlockType =
   | 'masthead'
+  | 'headline'
   | 'prose'
   | 'bigNumber'
   | 'statRow'
@@ -20,6 +21,18 @@ export interface MastheadBlock {
   title: string;
   thesis?: string;
   asks?: string[];
+}
+
+/** Editorial statement headline: kicker → headline → dek hierarchy. The
+ *  bold assertive fact page — display type, not a paragraph. */
+export interface HeadlineBlock {
+  type: 'headline';
+  kicker?: string;
+  /** The statement itself — short, assertive, ≤ ~12 words. */
+  text: string;
+  /** One-line dek (supporting subline) under the statement. */
+  dek?: string;
+  align?: 'left' | 'center' | 'right';
 }
 
 /** Markdown-lite body: **bold**, [text](url), blank-line paragraphs. */
@@ -63,15 +76,22 @@ export interface ImageBlock {
   caption?: string;
 }
 
+export type ChartKind = 'line' | 'bar' | 'area' | 'scatter' | 'slope' | 'donut' | 'sankey';
+
 export interface ChartBlock {
   type: 'chart';
-  kind: 'line' | 'bar';
+  kind: ChartKind;
   title?: string;
-  series: { label: string; points: { x: number; y: number }[] }[];
+  /** For line/bar/area/scatter/slope. Slope reads each series' first and last point. */
+  series?: { label: string; points: { x: number; y: number }[] }[];
+  /** For donut: labelled shares of a whole. */
+  segments?: { label: string; value: number }[];
+  /** For sankey: acyclic from→to flows. */
+  flows?: { from: string; to: string; value: number }[];
   xLabel?: string;
   yLabel?: string;
   /** Categorical x-axis labels, indexed by each distinct x value's rank
-   *  (bar charts: "Arbor", "SIMS"… instead of 0, 1…). */
+   *  (bar charts: "Arbor", "SIMS"… instead of 0, 1…; slope: the two ends). */
   xLabels?: string[];
 }
 
@@ -92,6 +112,7 @@ export interface IframeBlock {
 
 export type Block =
   | MastheadBlock
+  | HeadlineBlock
   | ProseBlock
   | BigNumberBlock
   | StatRowBlock

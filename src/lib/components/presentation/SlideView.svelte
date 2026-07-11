@@ -108,14 +108,49 @@
   .slide[data-layout='center'] .block,
   .slide[data-layout='statement'] .block { display: flex; flex-direction: column; align-items: center; }
 
-  /* statement: poster-scale type for the dominant elements */
-  .slide[data-layout='statement'] { gap: clamp(22px, 4vh, 44px); }
-  .slide[data-layout='statement'] :global(.q) { max-width: 26ch; }
-  .slide[data-layout='statement'] :global(.q-rail) { width: 5px; }
-  .slide[data-layout='statement'] :global(.q-text) { font-size: clamp(34px, 5.6vw, 68px); line-height: 1.18; }
-  .slide[data-layout='statement'] :global(.bn-num) { font-size: clamp(96px, 19vw, 240px); }
-  .slide[data-layout='statement'] :global(.mh-title) { font-size: clamp(48px, 9vw, 120px); }
-  .slide[data-layout='statement'] :global(.prose p) { font-size: clamp(20px, 2.8vw, 30px); line-height: 1.45; color: var(--ink); }
+  /* statement family: poster-scale type for the dominant elements */
+  .slide[data-layout='statement'],
+  .slide[data-layout='statement-left'],
+  .slide[data-layout='statement-right'] { gap: clamp(22px, 4vh, 44px); }
+  .slide[data-layout='statement'] :global(.q),
+  .slide[data-layout='statement-left'] :global(.q),
+  .slide[data-layout='statement-right'] :global(.q) { max-width: 26ch; }
+  .slide[data-layout='statement'] :global(.q-rail),
+  .slide[data-layout='statement-left'] :global(.q-rail),
+  .slide[data-layout='statement-right'] :global(.q-rail) { width: 5px; }
+  .slide[data-layout='statement'] :global(.q-text),
+  .slide[data-layout='statement-left'] :global(.q-text),
+  .slide[data-layout='statement-right'] :global(.q-text) { font-size: clamp(34px, 5.6vw, 68px); line-height: 1.18; }
+  .slide[data-layout='statement'] :global(.bn-num),
+  .slide[data-layout='statement-left'] :global(.bn-num),
+  .slide[data-layout='statement-right'] :global(.bn-num) { font-size: clamp(96px, 19vw, 240px); }
+  .slide[data-layout='statement'] :global(.mh-title),
+  .slide[data-layout='statement-left'] :global(.mh-title),
+  .slide[data-layout='statement-right'] :global(.mh-title) { font-size: clamp(48px, 9vw, 120px); }
+  .slide[data-layout='statement'] :global(.prose p),
+  .slide[data-layout='statement-left'] :global(.prose p),
+  .slide[data-layout='statement-right'] :global(.prose p) { font-size: clamp(20px, 2.8vw, 30px); line-height: 1.45; color: var(--ink); }
+  .slide[data-layout='statement'] :global(.hl-text),
+  .slide[data-layout='statement-left'] :global(.hl-text),
+  .slide[data-layout='statement-right'] :global(.hl-text) { font-size: clamp(44px, 8vw, 104px); }
+
+  /* aligned statements: the element pinned against a wall of whitespace.
+     Editorial rule — space signals importance more reliably than size. */
+  .slide[data-layout='statement-left'] {
+    align-items: flex-start;
+    text-align: left;
+    padding-right: clamp(48px, 26vw, 30vw);
+  }
+  .slide[data-layout='statement-right'] {
+    align-items: flex-end;
+    text-align: right;
+    padding-left: clamp(48px, 26vw, 30vw);
+  }
+  .slide[data-layout='statement-left'] .block { align-items: flex-start; }
+  .slide[data-layout='statement-right'] .block { align-items: flex-end; }
+  .slide[data-layout='statement-right'] :global(.hl[data-align='left']) { align-items: flex-end; text-align: right; }
+  .slide[data-layout='statement-right'] :global(.q) { padding: 6px clamp(18px, 2.5vw, 30px) 6px 0; }
+  .slide[data-layout='statement-right'] :global(.q-rail) { left: auto; right: 0; }
 
   .slide[data-layout='full-bleed'] {
     padding: clamp(10px, 2vw, 24px);

@@ -5,10 +5,26 @@
 // validation all agree on.
 
 import { z } from 'zod';
+import { sankeyDepths } from './chartkit';
 import { EMBEDS } from './embeds';
 import type { BlockType } from './types';
 
 const statSchema = z.object({ n: z.string().min(1), label: z.string().min(1) }).strict();
+
+const seriesSchema = z
+  .array(
+    z
+      .object({
+        label: z.string().min(1),
+        points: z.array(z.object({ x: z.number(), y: z.number() }).strict()).min(1),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(5);
+
+/** Chart kinds that read `series` (everything except donut/sankey). */
+const SERIES_KINDS = new Set(['line', 'bar', 'area', 'scatter', 'slope']);
 
 export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
   masthead: z
@@ -18,6 +34,15 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       title: z.string().min(1),
       thesis: z.string().optional(),
       asks: z.array(z.string().min(1)).optional(),
+    })
+    .strict(),
+  headline: z
+    .object({
+      type: z.literal('headline'),
+      kicker: z.string().optional(),
+      text: z.string().min(1).max(160),
+      dek: z.string().optional(),
+      align: z.enum(['left', 'center', 'right']).optional(),
     })
     .strict(),
   prose: z
@@ -71,24 +96,45 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
   chart: z
     .object({
       type: z.literal('chart'),
-      kind: z.enum(['line', 'bar']),
+      kind: z.enum(['line', 'bar', 'area', 'scatter', 'slope', 'donut', 'sankey']),
       title: z.string().optional(),
-      series: z
+      series: seriesSchema.optional(),
+      segments: z
+        .array(z.object({ label: z.string().min(1), value: z.number().nonnegative() }).strict())
+        .min(2)
+        .max(8)
+        .optional(),
+      flows: z
         .array(
-          z
-            .object({
-              label: z.string().min(1),
-              points: z.array(z.object({ x: z.number(), y: z.number() }).strict()).min(1),
-            })
-            .strict(),
+          z.object({ from: z.string().min(1), to: z.string().min(1), value: z.number().positive() }).strict(),
         )
         .min(1)
-        .max(5),
+        .max(24)
+        .optional(),
       xLabel: z.string().optional(),
       yLabel: z.string().optional(),
       xLabels: z.array(z.string()).optional(),
     })
-    .strict(),
+    .strict()
+    .superRefine((val, ctx) => {
+      if (SERIES_KINDS.has(val.kind)) {
+        if (!val.series?.length) {
+          ctx.addIssue({ code: 'custom', message: `kind "${val.kind}" requires series` });
+        } else if (val.kind === 'slope' && val.series.some((s) => s.points.length < 2)) {
+          ctx.addIssue({ code: 'custom', message: 'slope charts need ≥2 points per series (first vs last)' });
+        }
+      }
+      if (val.kind === 'donut' && !val.segments?.length) {
+        ctx.addIssue({ code: 'custom', message: 'kind "donut" requires segments: [{label, value}]' });
+      }
+      if (val.kind === 'sankey') {
+        if (!val.flows?.length) {
+          ctx.addIssue({ code: 'custom', message: 'kind "sankey" requires flows: [{from, to, value}]' });
+        } else if (!sankeyDepths(val.flows)) {
+          ctx.addIssue({ code: 'custom', message: 'sankey flows must be acyclic (a→b→a is a cycle)' });
+        }
+      }
+    }),
   embed: z
     .object({
       type: z.literal('embed'),
@@ -128,14 +174,17 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
 /** One-liner per block type, consumed by the phase-2 jkai tool description. */
 export const BLOCK_DOCS: Record<BlockType, string> = {
   masthead: 'Title slide header: { kicker?, title, thesis?, asks?: string[] }. Use once, usually slide 1.',
+  headline:
+    'Editorial statement headline — the bold assertive-fact page: { kicker? (mono eyebrow), text (the statement, ≤12 words, sentence case, no full stop), dek? (one-line support), align?: left|center|right (default left) }. Use for a claim or fact stated with authority; pair with statement-left/statement-right layouts.',
   prose: 'Editorial paragraph(s): { body (markdown-lite: **bold**, [text](url), blank-line paragraphs), lede?: boolean (larger opening type) }.',
   bigNumber: 'One huge count-up numeral: { value: number, label, unit?, sub?, dp? }.',
   statRow: 'Row of 1-6 stat chips: { stats: [{ n: preformatted string, label }] }.',
-  quote: 'Pull quote: { text, attribution?, url? }.',
+  quote:
+    'Pull quote for a REAL quotation or aphorism ONLY: { text (≤140 chars — never a paragraph; long text belongs in prose, assertive claims in headline), attribution?, url? }.',
   timeline: 'Vertical timeline of 2-12 moments: { items: [{ year, label, detail? }] }.',
   image: 'Figure: { src, alt, caption? }.',
   chart:
-    'Bespoke SVG chart: { kind: line|bar, series: [{ label, points: [{x,y}] }] (max 5), title?, xLabel?, yLabel?, xLabels?: string[] (categorical x names for bars, indexed by distinct x rank) }.',
+    'Bespoke SVG chart: { kind: line|bar|area|scatter|slope|donut|sankey, title?, xLabel?, yLabel? }. Data by kind — line/bar/area/scatter: series: [{label, points:[{x,y}]}] (max 5; xLabels?: string[] names distinct x ranks for bar); slope: series with 2 points each (before→after; xLabels = the two ends); donut: segments: [{label, value}] (2-8 shares of a whole); sankey: flows: [{from, to, value}] (acyclic; shows allocation/movement between named stages). Pick: trend→line/area, comparison→bar, before/after→slope, share-of-whole→donut, correlation→scatter, flow/allocation→sankey.',
   embed: `Registered interactive: { embed: name, config? }. Registered: ${Object.keys(EMBEDS)
     .map((k) => `"${k}" (${EMBEDS[k].doc})`)
     .join('; ')}`,

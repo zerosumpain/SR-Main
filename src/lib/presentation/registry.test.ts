@@ -5,6 +5,7 @@ describe('validateBlocks', () => {
   it('accepts a representative valid block list', () => {
     const res = validateBlocks([
       { type: 'masthead', kicker: 'FIELD STUDY', title: 'The Data Spine', thesis: 'One thesis.' },
+      { type: 'headline', kicker: 'THE FACT', text: 'Move the questions, not the records', dek: 'One line under it.', align: 'left' },
       { type: 'prose', body: 'Some **bold** text.', lede: true },
       { type: 'bigNumber', value: 24000, label: 'schools', unit: 'connected' },
       { type: 'statRow', stats: [{ n: '15', label: 'suppliers' }] },
@@ -69,10 +70,41 @@ describe('validateBlocks', () => {
   });
 });
 
+describe('chart kinds', () => {
+  const series = [{ label: 's', points: [{ x: 0, y: 1 }, { x: 1, y: 2 }] }];
+
+  it('requires the right data field per kind', () => {
+    expect(validateBlocks([{ type: 'chart', kind: 'area', series }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'chart', kind: 'area' }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'chart', kind: 'donut', segments: [{ label: 'a', value: 1 }, { label: 'b', value: 2 }] }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'chart', kind: 'donut', series }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'chart', kind: 'sankey', flows: [{ from: 'a', to: 'b', value: 3 }] }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'chart', kind: 'sankey', series }]).ok).toBe(false);
+  });
+
+  it('rejects cyclic sankey flows', () => {
+    const res = validateBlocks([
+      { type: 'chart', kind: 'sankey', flows: [{ from: 'a', to: 'b', value: 1 }, { from: 'b', to: 'a', value: 1 }] },
+    ]);
+    expect(res.ok).toBe(false);
+    expect(res.issues[0]).toContain('acyclic');
+  });
+
+  it('rejects slope series with a single point', () => {
+    expect(validateBlocks([{ type: 'chart', kind: 'slope', series: [{ label: 's', points: [{ x: 0, y: 1 }] }] }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'chart', kind: 'slope', series }]).ok).toBe(true);
+  });
+});
+
 describe('block templates', () => {
   it('every editor template validates', async () => {
-    const { BLOCK_TEMPLATES } = await import('./templates');
-    const res = validateBlocks(Object.values(BLOCK_TEMPLATES));
+    const { BLOCK_TEMPLATES, CHART_TEMPLATES } = await import('./templates');
+    const res = validateBlocks([...Object.values(BLOCK_TEMPLATES), ...Object.values(CHART_TEMPLATES)]);
     expect(res.issues).toEqual([]);
+  });
+
+  it('covers every chart kind with a template', async () => {
+    const { CHART_TEMPLATES } = await import('./templates');
+    expect(Object.keys(CHART_TEMPLATES).sort()).toEqual(['area', 'bar', 'donut', 'line', 'sankey', 'scatter', 'slope']);
   });
 });

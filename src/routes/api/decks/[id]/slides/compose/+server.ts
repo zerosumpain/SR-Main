@@ -7,10 +7,18 @@ import { and, eq, gte, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
 import { composeSlide } from '$lib/decks/composer.server';
+import { validateBlocks } from '$lib/presentation/registry';
+import type { Block } from '$lib/presentation/types';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ params, request }) => {
-  let body: { text?: unknown; mediaUrls?: unknown; parentSlideId?: unknown; position?: unknown };
+  let body: {
+    text?: unknown;
+    mediaUrls?: unknown;
+    attachedBlocks?: unknown;
+    parentSlideId?: unknown;
+    position?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -21,8 +29,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const text = typeof body.text === 'string' ? body.text : '';
   const mediaUrls = Array.isArray(body.mediaUrls) ? body.mediaUrls.filter((u): u is string => typeof u === 'string') : [];
-  if (!text.trim() && mediaUrls.length === 0) {
-    return json({ error: 'Provide text and/or mediaUrls' }, { status: 400 });
+  const attachedBlocks = Array.isArray(body.attachedBlocks) ? (body.attachedBlocks as Block[]) : [];
+  if (attachedBlocks.length) {
+    if (attachedBlocks.length > 4) return json({ error: 'Max 4 attached blocks per slide' }, { status: 400 });
+    const check = validateBlocks(attachedBlocks);
+    if (!check.ok) return json({ error: 'Attached blocks invalid', issues: check.issues }, { status: 400 });
+  }
+  if (!text.trim() && mediaUrls.length === 0 && attachedBlocks.length === 0) {
+    return json({ error: 'Provide text, mediaUrls and/or attachedBlocks' }, { status: 400 });
   }
   if (text.length > 8000) return json({ error: 'Text too long (max 8000 chars) — one slide at a time' }, { status: 400 });
 
@@ -46,7 +60,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .slice(-3)
     .map((s) => s.layout);
 
-  const { slide, source } = await composeSlide({ text, mediaUrls }, { deckTitle: deck.title, recentLayouts });
+  const { slide, source } = await composeSlide(
+    { text, mediaUrls, attachedBlocks },
+    { deckTitle: deck.title, recentLayouts },
+  );
 
   const position =
     typeof body.position === 'number' && Number.isInteger(body.position) && body.position >= 0

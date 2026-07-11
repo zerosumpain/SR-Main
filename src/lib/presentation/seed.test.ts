@@ -64,9 +64,14 @@ describe('showcase deck', () => {
     }
   });
 
-  it('exercises every block type and every layout', () => {
+  it('exercises every block type, every layout and every chart kind', () => {
     const blockTypes = new Set(
       all.flatMap(({ blocks }) => (blocks as { type: string }[]).map((b) => b.type)),
+    );
+    const chartKinds = new Set(
+      all.flatMap(({ blocks }) =>
+        (blocks as { type: string; kind?: string }[]).filter((b) => b.type === 'chart').map((b) => b.kind),
+      ),
     );
     const layouts = new Set<string>();
     const walk = (slides: SpecSlide[]) =>
@@ -76,11 +81,14 @@ describe('showcase deck', () => {
       });
     walk((SHOWCASE as { slides: SpecSlide[] }).slides);
 
-    for (const t of ['masthead', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'embed', 'iframe']) {
+    for (const t of ['masthead', 'headline', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'embed', 'iframe']) {
       expect(blockTypes.has(t), `block ${t}`).toBe(true);
     }
-    for (const l of ['default', 'center', 'full-bleed', 'statement', 'split', 'split-flip', 'grid', 'poster']) {
+    for (const l of ['default', 'center', 'full-bleed', 'statement', 'statement-left', 'statement-right', 'split', 'split-flip', 'grid', 'poster']) {
       expect(layouts.has(l), `layout ${l}`).toBe(true);
+    }
+    for (const k of ['line', 'bar', 'area', 'scatter', 'slope', 'donut', 'sankey']) {
+      expect(chartKinds.has(k), `chart kind ${k}`).toBe(true);
     }
   });
 });

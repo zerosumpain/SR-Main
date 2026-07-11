@@ -6,6 +6,7 @@ import { asc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
 import { isOwnerRequest } from '$lib/server/owner';
+import { buildMediaCatalogue } from '$lib/presentation/site-media';
 import type { Block, SlideLayout } from '$lib/presentation/types';
 import type { PageServerLoad } from './$types';
 
@@ -23,6 +24,7 @@ export const load: PageServerLoad = async (event) => {
 
   event.setHeaders({ 'cache-control': 'private, no-store' });
   return {
+    mediaCatalogue: await buildMediaCatalogue(),
     deck: {
       id: deck.id,
       slug: deck.slug,
