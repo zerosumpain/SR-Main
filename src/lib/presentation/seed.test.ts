@@ -1,8 +1,11 @@
-// The seeded deck must always satisfy the block registry — this is the same
-// validation gate the phase-2 jkai tool applies to LLM-authored decks.
+// The seeded decks must always satisfy the block registry — this is the same
+// validation gate the jkai tools apply to LLM-authored decks.
 import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line import/no-relative-packages
 import { DECK } from '../../../scripts/seed-deck-data-spine.mjs';
+// eslint-disable-next-line import/no-relative-packages
+import { DECK as SHOWCASE } from '../../../scripts/seed-deck-showcase.mjs';
+import { isLayout } from './layouts';
 import { validateBlocks } from './registry';
 
 interface SpecSlide {
@@ -38,6 +41,46 @@ describe('seed deck', () => {
           expect(scenarioById(b.config.scenario), b.config.scenario).toBeTruthy();
         }
       }
+    }
+  });
+});
+
+describe('showcase deck', () => {
+  const all = collect((SHOWCASE as { slides: SpecSlide[] }).slides);
+
+  it('every slide validates (blocks + layout + scenario ids)', async () => {
+    const { scenarioById } = await import('$lib/sim/federation/scenarios');
+    for (const { path, blocks } of all) {
+      const res = validateBlocks(blocks);
+      expect(res.issues, path).toEqual([]);
+      for (const b of blocks as { type: string; embed?: string; config?: { scenario?: string } }[]) {
+        if (b.type === 'embed' && b.config?.scenario) {
+          expect(scenarioById(b.config.scenario), b.config.scenario).toBeTruthy();
+        }
+      }
+    }
+    for (const s of (SHOWCASE as { slides: SpecSlide[] }).slides) {
+      expect(isLayout(s.layout ?? 'default'), String(s.layout)).toBe(true);
+    }
+  });
+
+  it('exercises every block type and every layout', () => {
+    const blockTypes = new Set(
+      all.flatMap(({ blocks }) => (blocks as { type: string }[]).map((b) => b.type)),
+    );
+    const layouts = new Set<string>();
+    const walk = (slides: SpecSlide[]) =>
+      slides.forEach((s) => {
+        layouts.add(s.layout ?? 'default');
+        if (s.children) walk(s.children);
+      });
+    walk((SHOWCASE as { slides: SpecSlide[] }).slides);
+
+    for (const t of ['masthead', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'embed', 'iframe']) {
+      expect(blockTypes.has(t), `block ${t}`).toBe(true);
+    }
+    for (const l of ['default', 'center', 'full-bleed', 'statement', 'split', 'split-flip', 'grid', 'poster']) {
+      expect(layouts.has(l), `layout ${l}`).toBe(true);
     }
   });
 });
