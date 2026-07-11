@@ -8,7 +8,16 @@
   import { SCENARIOS, SCENARIO_GROUPS, scenarioById } from './scenarios';
   import { createFederationScene, type SceneHandle, type PickResult } from './scene';
 
-  let { onActiveScenario }: { onActiveScenario?: (s: Scenario | null) => void } = $props();
+  let {
+    onActiveScenario,
+    onReady,
+  }: {
+    onActiveScenario?: (s: Scenario | null) => void;
+    /** Fires once the engine+scene are live, passing the playback API — lets an
+     *  embedding host (e.g. a deck slide) auto-run a scenario without racing
+     *  bind:this against onMount ordering. */
+    onReady?: (api: { run: (id: string) => void; runScenario: (s: Scenario) => void }) => void;
+  } = $props();
 
   // --- non-reactive handles (render loop internals) ---
   let container: HTMLElement;
@@ -177,6 +186,7 @@
       sceneHandle.addTick((dt) => eng.tick(dt));
       unsub = engine.subscribe(handleEvent);
       ready = true;
+      onReady?.({ run, runScenario });
     } catch (err) {
       console.error('federation scene failed to start', err);
       webglFailed = true;
