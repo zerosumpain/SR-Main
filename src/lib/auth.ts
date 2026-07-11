@@ -31,6 +31,11 @@ const PUBLIC_PATHS = [
   // single line to stdout, stores nothing. See its +server.ts for rationale.
   '/api/landing/ecg-telemetry',
   '/projects',
+  // sr. decks — presentations. The hook lets everyone through; per-deck privacy
+  // is enforced by requireDeckVisible in the route loads (private-by-default,
+  // owner or share-token; same two-layer design as /projects). The /decks index
+  // itself 404s non-owners in its own load.
+  '/decks',
   // Read-only shared jkai conversations. The /jkai/shared/<token> route
   // self-gates on shareVisibility ('public' → anyone; 'users' → requires a
   // signed-in session; else 404), so the hook must let anonymous visitors
