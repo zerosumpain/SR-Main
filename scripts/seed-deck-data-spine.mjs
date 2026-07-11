@@ -209,6 +209,12 @@ function resolveDatabaseUrl() {
   throw new Error('DATABASE_URL not set and no ../.env found');
 }
 
+/**
+ * @param {import('pg').Client} client
+ * @param {string} deckId
+ * @param {Array<{title?: string, layout?: string, blocks: unknown[], children?: unknown[]}>} slides
+ * @param {string | null} parentSlideId
+ */
 async function insertSlides(client, deckId, slides, parentSlideId) {
   for (let i = 0; i < slides.length; i++) {
     const s = slides[i];
@@ -219,7 +225,13 @@ async function insertSlides(client, deckId, slides, parentSlideId) {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [deckId, parentSlideId, i, s.title ?? null, s.layout ?? 'default', JSON.stringify(s.blocks)],
     );
-    if (s.children?.length) await insertSlides(client, deckId, s.children, row.id);
+    if (s.children?.length)
+      await insertSlides(
+        client,
+        deckId,
+        /** @type {Array<{title?: string, layout?: string, blocks: unknown[], children?: unknown[]}>} */ (s.children),
+        row.id,
+      );
   }
 }
 
@@ -259,7 +271,8 @@ async function main() {
 }
 
 // Only run when executed directly (the vitest spec imports DECK without side effects).
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
+const invoked = process.argv[1] ? process.argv[1].split('/').pop() : null;
+if (invoked && import.meta.url.endsWith(invoked)) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);
