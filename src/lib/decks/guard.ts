@@ -4,7 +4,7 @@
 
 import { error } from '@sveltejs/kit';
 import type { Cookies } from '@sveltejs/kit';
-import { isOwnerEmail } from '$lib/server/access';
+import { isOwnerRequest } from '$lib/server/owner';
 import { shareCookieName, validateDeckShare } from './shares';
 
 /** The bits of a SvelteKit request the guard needs (load events and +server
@@ -13,6 +13,7 @@ export interface DeckGuardCtx {
   locals: App.Locals;
   url: URL;
   cookies: Cookies;
+  getClientAddress?: () => string;
 }
 
 export interface GuardedDeck {
@@ -37,11 +38,11 @@ export async function requireDeckVisible(
 ): Promise<{ authedPrivate: boolean; viaShare: boolean }> {
   if (deck.isPublic) return { authedPrivate: false, viaShare: false };
 
-  // Private from here. The site OWNER can always view; signed-in guests are
-  // treated like the public (owner-only, matching private projects). A valid
-  // share token grants access without sign-in.
-  const session = await ctx.locals.auth();
-  if (isOwnerEmail(session?.user?.email)) return { authedPrivate: true, viaShare: false };
+  // Private from here. The site OWNER can always view (session on prod, LAN
+  // bypass on dev/homeserv); signed-in guests are treated like the public
+  // (owner-only, matching private projects). A valid share token grants
+  // access without sign-in.
+  if (await isOwnerRequest(ctx)) return { authedPrivate: true, viaShare: false };
 
   if (await resolveShareToken(deck, ctx)) return { authedPrivate: false, viaShare: true };
 

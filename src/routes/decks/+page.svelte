@@ -31,6 +31,7 @@
               <span class="chip" class:public={deck.isPublic}>{deck.isPublic ? 'PUBLIC' : 'PRIVATE'}</span>
               <span class="dl-count">{deck.slideCount} slides</span>
               <span class="dl-date">{fmtDate(deck.updatedAt)}</span>
+              <span class="dl-edit" role="link" tabindex="0" onclick={(e) => { e.preventDefault(); location.href = `/decks/${deck.slug}/edit`; }} onkeydown={(e) => { if (e.key === 'Enter') location.href = `/decks/${deck.slug}/edit`; }}>edit</span>
             </span>
           </a>
         </li>
@@ -89,4 +90,13 @@
   .chip.public { color: var(--success); border-color: var(--success); }
   .dl-count,
   .dl-date { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+  .dl-edit {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .dl-edit:hover { text-decoration: underline; }
 </style>

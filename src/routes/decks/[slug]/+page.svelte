@@ -145,6 +145,7 @@
   <DeckShell theme={data.deck.theme}>
     <div
       class="player"
+      role="presentation"
       bind:this={shell}
       onpointerdown={onPointerDown}
       onpointerup={onPointerUp}

@@ -2,15 +2,14 @@
 // reached by direct share URL); the owner sees every deck with its state.
 
 import { error } from '@sveltejs/kit';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
-import { isOwnerEmail } from '$lib/server/access';
+import { isOwnerRequest } from '$lib/server/owner';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  const session = await event.locals.auth();
-  if (!isOwnerEmail(session?.user?.email)) throw error(404, 'Not found');
+  if (!(await isOwnerRequest(event))) throw error(404, 'Not found');
 
   const rows = await db
     .select({

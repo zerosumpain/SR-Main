@@ -62,3 +62,11 @@ describe('validateBlocks', () => {
     expect(Object.keys(BLOCK_DOCS).sort()).toEqual(Object.keys(BLOCK_SCHEMAS).sort());
   });
 });
+
+describe('block templates', () => {
+  it('every editor template validates', async () => {
+    const { BLOCK_TEMPLATES } = await import('./templates');
+    const res = validateBlocks(Object.values(BLOCK_TEMPLATES));
+    expect(res.issues).toEqual([]);
+  });
+});
