@@ -56,9 +56,9 @@
         {/each}
       {/each}
     {:else}
-      {#each xValues as x}
-        <text x={PAD.l + groupW * (xValues.indexOf(x) + 0.5)} y={H - PAD.b + 18} class="tick" text-anchor="middle">
-          {fmt(x, 0)}
+      {#each xValues as x, xi}
+        <text x={PAD.l + groupW * (xi + 0.5)} y={H - PAD.b + 18} class="tick" text-anchor="middle">
+          {block.xLabels?.[xi] ?? fmt(x, 0)}
         </text>
       {/each}
       {#each block.series as s, si}

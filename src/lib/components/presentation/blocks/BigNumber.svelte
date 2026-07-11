@@ -29,7 +29,8 @@
 </div>
 
 <style>
-  .bn { display: flex; flex-direction: column; }
+  .bn { display: flex; flex-direction: column; align-items: flex-start; }
+  :global(.slide[data-layout='center']) .bn { align-items: center; text-align: center; }
   .bn-value { display: flex; align-items: baseline; gap: 14px; }
   .bn-num {
     font-family: 'Fraunces', serif;

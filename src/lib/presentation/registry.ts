@@ -86,6 +86,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
         .max(5),
       xLabel: z.string().optional(),
       yLabel: z.string().optional(),
+      xLabels: z.array(z.string()).optional(),
     })
     .strict(),
   embed: z
@@ -128,7 +129,8 @@ export const BLOCK_DOCS: Record<BlockType, string> = {
   quote: 'Pull quote: { text, attribution?, url? }.',
   timeline: 'Vertical timeline of 2-12 moments: { items: [{ year, label, detail? }] }.',
   image: 'Figure: { src, alt, caption? }.',
-  chart: 'Bespoke SVG chart: { kind: line|bar, series: [{ label, points: [{x,y}] }] (max 5), title?, xLabel?, yLabel? }.',
+  chart:
+    'Bespoke SVG chart: { kind: line|bar, series: [{ label, points: [{x,y}] }] (max 5), title?, xLabel?, yLabel?, xLabels?: string[] (categorical x names for bars, indexed by distinct x rank) }.',
   embed: `Registered interactive: { embed: name, config? }. Registered: ${Object.keys(EMBEDS)
     .map((k) => `"${k}" (${EMBEDS[k].doc})`)
     .join('; ')}`,

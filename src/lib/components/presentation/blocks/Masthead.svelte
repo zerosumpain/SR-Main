@@ -20,7 +20,7 @@
 </header>
 
 <style>
-  .mh { max-width: 30ch; }
+  .mh { max-width: 62ch; }
   .mh-kicker {
     display: block;
     font-family: 'JetBrains Mono', monospace;

@@ -70,6 +70,9 @@ export interface ChartBlock {
   series: { label: string; points: { x: number; y: number }[] }[];
   xLabel?: string;
   yLabel?: string;
+  /** Categorical x-axis labels, indexed by each distinct x value's rank
+   *  (bar charts: "Arbor", "SIMS"… instead of 0, 1…). */
+  xLabels?: string[];
 }
 
 /** A registered interactive from $lib/presentation/embeds.ts. */

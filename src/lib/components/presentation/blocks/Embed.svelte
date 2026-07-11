@@ -8,7 +8,10 @@
 
   let { block }: { block: EmbedBlock } = $props();
 
-  let SimComponent = $state<Component<{ onReady?: (api: { run: (id: string) => void }) => void }> | null>(null);
+  let SimComponent = $state<Component<{
+    embed?: boolean;
+    onReady?: (api: { run: (id: string) => void }) => void;
+  }> | null>(null);
   let failed = $state(false);
 
   onMount(async () => {
@@ -32,7 +35,7 @@
 
 <div class="embed">
   {#if SimComponent}
-    <SimComponent onReady={handleReady} />
+    <SimComponent embed onReady={handleReady} />
   {:else if failed}
     <div class="embed-fallback">
       <span class="ef-kicker">EMBED UNAVAILABLE</span>

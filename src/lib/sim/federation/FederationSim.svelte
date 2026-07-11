@@ -11,12 +11,17 @@
   let {
     onActiveScenario,
     onReady,
+    embed = false,
   }: {
     onActiveScenario?: (s: Scenario | null) => void;
     /** Fires once the engine+scene are live, passing the playback API — lets an
      *  embedding host (e.g. a deck slide) auto-run a scenario without racing
      *  bind:this against onMount ordering. */
     onReady?: (api: { run: (id: string) => void; runScenario: (s: Scenario) => void }) => void;
+    /** Compact presentation mode (sr. decks): canvas + narration + counters
+     *  only — no scenario catalogue, exchange log or colour-language panels.
+     *  The embedding slide provides the narrative around it. */
+    embed?: boolean;
   } = $props();
 
   // --- non-reactive handles (render loop internals) ---
@@ -210,7 +215,7 @@
   {/each}
 {/snippet}
 
-<div class="sim-shell" bind:this={shell}>
+<div class="sim-shell" class:embed bind:this={shell}>
   <div class="sim-canvas" bind:this={container}></div>
 
   {#if webglFailed}
@@ -236,10 +241,13 @@
           {isFullscreen ? '⤡ exit' : '⛶ full screen'}
         </button>
       {/if}
-      <button class="ghost picker-toggle" onclick={() => (pickerOpen = !pickerOpen)} aria-expanded={pickerOpen}>☰ scenarios</button>
+      {#if !embed}
+        <button class="ghost picker-toggle" onclick={() => (pickerOpen = !pickerOpen)} aria-expanded={pickerOpen}>☰ scenarios</button>
+      {/if}
     </div>
 
-    <!-- scenario browser -->
+    <!-- scenario browser (hidden in deck-embed mode: slides drive scenarios) -->
+    {#if !embed}
     <aside class="hud panel scenarios" class:open={pickerOpen}>
       <span class="p-lab">Scenarios · synthetic</span>
       {#each SCENARIO_GROUPS as g}
@@ -253,6 +261,7 @@
         </div>
       {/each}
     </aside>
+    {/if}
 
     <!-- transport + narration -->
     <div class="hud narrate">
@@ -316,7 +325,7 @@
   {/if}
 </div>
 
-{#if ready}
+{#if ready && !embed}
   <!-- mobile-only counters strip (the overlay hides <900px to keep the canvas clear) -->
   <div class="counters-inline">
     {@render counterTiles()}
@@ -394,6 +403,8 @@
 <style>
   .sim-shell { position: relative; height: max(560px, calc(100vh - var(--topH, 56px) - 54px)); height: max(560px, calc(100svh - var(--topH, 56px) - 54px)); border-block: 1px solid rgba(28,22,17,0.25); overflow: hidden; background: #efe7d5; scroll-margin-top: calc(var(--topH, 56px) + 50px); }
   .sim-shell:fullscreen { height: 100vh; border: none; }
+  /* deck-embed mode: fit inside a slide with the slide's own narration below */
+  .sim-shell.embed { height: max(440px, calc(100svh - 240px)); border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.2); }
   .sim-canvas { position: absolute; inset: 0; cursor: grab; }
   .sim-canvas:active { cursor: grabbing; }
 
