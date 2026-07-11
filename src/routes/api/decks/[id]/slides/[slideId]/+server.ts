@@ -6,7 +6,7 @@
 // slide's plane at its position (never orphan an unreachable sub-deck).
 
 import { json } from '@sveltejs/kit';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { deckSlides, decks } from '$lib/db/schema';
 import { validateBlocks } from '$lib/presentation/registry';
@@ -100,12 +100,29 @@ export const DELETE: RequestHandler = async ({ params }) => {
   const before = await loadSlide(params.id, params.slideId);
   if (!before) return json({ error: 'Unknown slide' }, { status: 404 });
 
-  // Re-parent children into the deleted slide's plane at its position so a
-  // sub-deck never becomes unreachable.
+  // Re-parent children into the deleted slide's plane, in order, at its
+  // position — and shift the later siblings to make room, so the plane stays
+  // gap-free and collision-free. (children=0 shifts by -1: closes the gap.)
+  const children = await db
+    .select({ id: deckSlides.id })
+    .from(deckSlides)
+    .where(and(eq(deckSlides.deckId, params.id), eq(deckSlides.parentSlideId, params.slideId)))
+    .orderBy(asc(deckSlides.position));
+
+  const planeCond = before.parentSlideId
+    ? eq(deckSlides.parentSlideId, before.parentSlideId)
+    : isNull(deckSlides.parentSlideId);
   await db
     .update(deckSlides)
-    .set({ parentSlideId: before.parentSlideId, position: sql`${deckSlides.position} + ${before.position}` })
-    .where(and(eq(deckSlides.deckId, params.id), eq(deckSlides.parentSlideId, params.slideId)));
+    .set({ position: sql`${deckSlides.position} + ${children.length - 1}` })
+    .where(and(eq(deckSlides.deckId, params.id), planeCond, gt(deckSlides.position, before.position)));
+
+  for (let i = 0; i < children.length; i++) {
+    await db
+      .update(deckSlides)
+      .set({ parentSlideId: before.parentSlideId, position: before.position + i })
+      .where(eq(deckSlides.id, children[i].id));
+  }
 
   await db.delete(deckSlides).where(eq(deckSlides.id, params.slideId));
   await db.update(decks).set({ updatedAt: new Date() }).where(eq(decks.id, params.id));

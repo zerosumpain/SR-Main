@@ -113,7 +113,12 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
   iframe: z
     .object({
       type: z.literal('iframe'),
-      src: z.string().min(1).startsWith('/', { message: 'iframe src must be a site-relative URL (start with /)' }),
+      // Site-relative ONLY. "//host" is protocol-relative (external!) and "/\"
+      // gets browser-normalized to "//" — both must fail, not just non-"/".
+      src: z
+        .string()
+        .min(1)
+        .regex(/^\/(?!\/|\\)/, { message: 'iframe src must be a site-relative URL (start with /, not // or /\\)' }),
       title: z.string().min(1),
       height: z.number().int().min(120).max(2000).optional(),
     })

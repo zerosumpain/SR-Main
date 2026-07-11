@@ -54,6 +54,12 @@ describe('validateBlocks', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('rejects protocol-relative and backslash iframe URLs', () => {
+    expect(validateBlocks([{ type: 'iframe', src: '//evil.example', title: 'x' }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'iframe', src: '/\\evil.example', title: 'x' }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'iframe', src: '/projects/data-spine', title: 'x' }]).ok).toBe(true);
+  });
+
   it('rejects a non-array payload', () => {
     expect(validateBlocks({ not: 'an array' }).ok).toBe(false);
   });
