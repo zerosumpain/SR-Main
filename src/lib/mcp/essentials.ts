@@ -31,6 +31,9 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // workflow_build_from_spec call, and the model must reliably hit it
   // after the user confirms. Cheap insurance.
   'workflow_build_from_spec',
+  // New-presentation path (sr. decks). Same design-first flow: outline agreed
+  // in chat, then one build call — must survive the meta-tool squeeze.
+  'presentation_build_from_spec',
 ]);
 
 export function isMetaToolEnabled(): boolean {

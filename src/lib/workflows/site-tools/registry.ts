@@ -31,6 +31,7 @@ import './tools/gmail';
 import './tools/web';
 import './tools/node-builder';
 import './tools/site-signals';
+import './tools/presentations';
 
 // --- Public API ---
 
