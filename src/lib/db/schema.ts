@@ -720,6 +720,84 @@ export const projectShares = pgTable(
 
 export type ProjectShare = typeof projectShares.$inferSelect;
 
+// ==========================================
+// sr. decks — presentation capability
+// Spec: docs/superpowers/specs/2026-07-11-decks-presentation-capability.md
+// ==========================================
+
+// A deck is a shareable presentation. Private by default: reachable only by
+// the owner or via a deck_share token, until isPublic is toggled.
+export const decks = pgTable(
+  'decks',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    theme: text('theme').notNull().default('editorial'),
+    isPublic: boolean('is_public').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ bySlug: uniqueIndex('decks_slug_idx').on(t.slug) }),
+);
+
+export type Deck = typeof decks.$inferSelect;
+export type NewDeck = typeof decks.$inferInsert;
+
+// A deck is a TREE of slides: parentSlideId=null is the main plane; a slide
+// with children can be "zoomed into" in the player. `blocks` is the ordered
+// jsonb array of typed blocks validated by $lib/presentation/registry.
+// `version` is the optimistic-concurrency counter (workflow_nodes pattern):
+// clients PATCH with expectedVersion and get 409 on a stale edit.
+// parentSlideId has no self-FK (Drizzle self-reference typing quirk); rows are
+// removed via the deckId cascade and tree integrity is enforced app-side.
+export const deckSlides = pgTable(
+  'deck_slides',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
+    parentSlideId: text('parent_slide_id'),
+    position: integer('position').notNull().default(0),
+    title: text('title'),
+    layout: text('layout').notNull().default('default'),
+    blocks: jsonb('blocks').notNull().default(sql`'[]'::jsonb`),
+    notes: text('notes'),
+    version: integer('version').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byDeck: index('deck_slides_deck_idx').on(t.deckId, t.parentSlideId, t.position) }),
+);
+
+export type DeckSlide = typeof deckSlides.$inferSelect;
+export type NewDeckSlide = typeof deckSlides.$inferInsert;
+
+// Secure per-deck share links — exact mirror of project_share: store only the
+// sha256 of the raw token; a row is live while revokedAt is null and expiresAt
+// is null-or-future.
+export const deckShares = pgTable(
+  'deck_share',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    deckId: text('deck_id').notNull().references(() => decks.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    label: text('label'),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex('deck_share_token_hash_idx').on(t.tokenHash),
+    byDeck: index('deck_share_deck_idx').on(t.deckId),
+  }),
+);
+
+export type DeckShare = typeof deckShares.$inferSelect;
+
 /**
  * Per-event log written by every JKAI-built app. The app POSTs to
  * /api/jkai/builds/<id>/events (same-origin from the proxy iframe; uses the
