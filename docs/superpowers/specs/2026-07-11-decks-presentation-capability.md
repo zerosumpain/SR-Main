@@ -102,6 +102,8 @@ Owner-gated. Left rail: slide tree (reorder, indent-to-nest). Center: live rende
 | 8 | Zoom = transform/Tween illusion, not spatial engine | true infinite-canvas camera | One zoom level covers the brief; ~90% of the feel for ~10% of the build | Tree model already supports deeper nesting |
 | 9 | No new dependencies (no GSAP, no svelte-flow, no reveal.js) | adopting a deck/animation lib | House patterns cover 100% of needs; svelte-flow already unused in repo | Can add later if a real gap appears |
 | 10 | In-tool LLM calls: none | tool calls gateway itself | Mirrors workflow_build_from_spec; Hermes is the author, tool is the persister | Gateway call could be added for auto-layout later |
+| 11 | Inline plan execution; ported components specified by source-reference | subagent-per-task with full inline code | Executor = planner in-session with all precedent files read; full-code plan would double the work (John: scale process to task) | N/A (process) |
+| 12 | Seed via standalone `pg` script run locally + on VPS | owner-token import endpoint | No new auth surface; matches `migrate-*.mjs`/`policy-engine-ingest.mjs` script precedent | Phase 3 adds proper POST /api/decks anyway |
 
 ## Not in scope (v1)
 
