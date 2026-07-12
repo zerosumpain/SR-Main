@@ -11,6 +11,9 @@
   import { page } from '$app/state';
   import DeckShell from '$lib/components/presentation/DeckShell.svelte';
   import SlideView from '$lib/components/presentation/SlideView.svelte';
+  import TransitionFx from '$lib/components/presentation/TransitionFx.svelte';
+  import type { EffectBlock } from '$lib/presentation/types';
+  import type { EffectTint } from '$lib/presentation/effects';
   import {
     branchTravel,
     buildPlanes,
@@ -34,10 +37,15 @@
    *  (bottom left). Persisted so it stays out of the content's way. */
   let mapPos = $state<{ x: number; y: number } | null>(null);
 
+  /** The transition-role effect playing over the current camera move. */
+  let fx = $state<{ effect: EffectBlock; travel: Travel; key: number } | null>(null);
+
   // non-reactive internals
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let touchX = 0;
   let touchY = 0;
+  let wheelLock = 0;
+  let fxKey = 0;
   let shell: HTMLElement | undefined = $state();
   let mapEl: HTMLElement | undefined;
   let mapDrag: { px: number; py: number; x: number; y: number } | null = null;
@@ -85,6 +93,10 @@
   function goTo(id: string, t: Travel, isMajor: boolean) {
     travel = t;
     major = isMajor;
+    const fxBlock = (byId.get(id)?.blocks.find(
+      (b) => b.type === 'effect' && (b as EffectBlock).role === 'transition',
+    ) ?? null) as EffectBlock | null;
+    fx = fxBlock ? { effect: fxBlock, travel: t, key: ++fxKey } : null;
     current = id;
     const url = new URL(page.url);
     url.searchParams.set('s', id);
@@ -179,6 +191,22 @@
     }
   }
 
+  /** Scroll wheel walks the deck: plain wheel = left/right along the main
+   *  axis, shift+wheel = up/down. Cooldown keeps one notch = one slide;
+   *  wheels over live embeds/iframes are theirs (sim zoom etc.). */
+  function onWheel(e: WheelEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('iframe, canvas')) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now < wheelLock) return;
+    const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (Math.abs(d) < 12) return;
+    wheelLock = now + 650;
+    if (e.shiftKey) arrow(d > 0 ? 'down' : 'up');
+    else arrow(d > 0 ? 'right' : 'left');
+  }
+
   function wakeChrome() {
     chromeVisible = true;
     if (hideTimer) clearTimeout(hideTimer);
@@ -269,6 +297,7 @@
       onpointerdown={onPointerDown}
       onpointerup={onPointerUp}
       onpointermove={wakeChrome}
+      onwheel={onWheel}
     >
       <div class="stage-wrap">
         {#key current}
@@ -277,6 +306,17 @@
           </div>
         {/key}
       </div>
+
+      {#if fx}
+        {#key fx.key}
+          <TransitionFx
+            travel={fx.travel}
+            tint={(fx.effect.tint ?? 'accent') as EffectTint}
+            intensity={fx.effect.intensity ?? 0.5}
+            onDone={() => (fx = null)}
+          />
+        {/key}
+      {/if}
 
       <header class="chrome chrome-top" class:hidden={!chromeVisible}>
         <span class="deck-title">{data.deck.title}</span>

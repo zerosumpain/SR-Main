@@ -81,7 +81,7 @@ describe('showcase deck', () => {
       });
     walk((SHOWCASE as { slides: SpecSlide[] }).slides);
 
-    for (const t of ['masthead', 'headline', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'embed', 'iframe']) {
+    for (const t of ['masthead', 'headline', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'effect', 'embed', 'iframe']) {
       expect(blockTypes.has(t), `block ${t}`).toBe(true);
     }
     for (const l of ['default', 'center', 'full-bleed', 'statement', 'statement-left', 'statement-right', 'split', 'split-flip', 'grid', 'poster']) {

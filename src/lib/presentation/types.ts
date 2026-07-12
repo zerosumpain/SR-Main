@@ -12,6 +12,7 @@ export type BlockType =
   | 'timeline'
   | 'image'
   | 'chart'
+  | 'effect'
   | 'embed'
   | 'iframe';
 
@@ -110,6 +111,18 @@ export interface ChartBlock {
   xLabels?: string[];
 }
 
+/** A registered effect from $lib/presentation/effects.ts — a Three.js
+ *  particle simulation (or the live ECG) behind the slide's content
+ *  (role "background") or played as the camera move in (role "transition"). */
+export interface EffectBlock {
+  type: 'effect';
+  effect: string;
+  role: 'background' | 'transition';
+  /** 0.1–1, how present the effect is (default 0.5). */
+  intensity?: number;
+  tint?: 'ink' | 'accent' | 'petrol';
+}
+
 /** A registered interactive from $lib/presentation/embeds.ts. */
 export interface EmbedBlock {
   type: 'embed';
@@ -135,6 +148,7 @@ export type Block =
   | TimelineBlock
   | ImageBlock
   | ChartBlock
+  | EffectBlock
   | EmbedBlock
   | IframeBlock;
 

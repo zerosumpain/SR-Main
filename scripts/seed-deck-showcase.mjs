@@ -23,6 +23,7 @@ export const DECK = {
       title: 'Every page in the box',
       layout: 'center',
       blocks: [
+        { type: 'effect', effect: 'drift', role: 'background', intensity: 0.45, tint: 'ink' },
         {
           type: 'masthead',
           kicker: 'SR. DECKS · SHOWCASE',
@@ -41,6 +42,7 @@ export const DECK = {
       title: 'The big number',
       layout: 'statement',
       blocks: [
+        { type: 'effect', effect: 'heartbeat', role: 'background', intensity: 0.55, tint: 'accent' },
         {
           type: 'bigNumber',
           value: 24000,
@@ -147,6 +149,7 @@ export const DECK = {
       layout: 'split-flip',
       journeyLabel: 'the chart room',
       blocks: [
+        { type: 'effect', effect: 'drift', role: 'transition', intensity: 0.6, tint: 'accent' },
         {
           type: 'prose',
           lede: true,

@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { sankeyDepths } from './chartkit';
+import { EFFECTS } from './effects';
 import { EMBEDS } from './embeds';
 import type { BlockType } from './types';
 
@@ -136,6 +137,28 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
         }
       }
     }),
+  effect: z
+    .object({
+      type: z.literal('effect'),
+      effect: z.string().min(1),
+      role: z.enum(['background', 'transition']),
+      intensity: z.number().min(0.1).max(1).optional(),
+      tint: z.enum(['ink', 'accent', 'petrol']).optional(),
+    })
+    .strict()
+    .superRefine((val, ctx) => {
+      const def = EFFECTS[val.effect];
+      if (!def) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `unknown effect "${val.effect}" — registered: ${Object.keys(EFFECTS).join(', ')}`,
+        });
+        return;
+      }
+      if (!def.roles.includes(val.role)) {
+        ctx.addIssue({ code: 'custom', message: `effect "${val.effect}" cannot play role "${val.role}" (allowed: ${def.roles.join(', ')})` });
+      }
+    }),
   embed: z
     .object({
       type: z.literal('embed'),
@@ -187,6 +210,11 @@ export const BLOCK_DOCS: Record<BlockType, string> = {
   image: 'Figure: { src, alt, caption? }.',
   chart:
     'Bespoke SVG chart: { kind: line|bar|area|scatter|slope|donut|sankey, title?, xLabel?, yLabel? }. Data by kind — line/bar/area/scatter: series: [{label, points:[{x,y}]}] (max 5; xLabels?: string[] names distinct x ranks for bar); slope: series with 2 points each (before→after; xLabels = the two ends); donut: segments: [{label, value}] (2-8 shares of a whole); sankey: flows: [{from, to, value}] (acyclic; shows allocation/movement between named stages). Pick: trend→line/area, comparison→bar, before/after→slope, share-of-whole→donut, correlation→scatter, flow/allocation→sankey.',
+  effect: `Atmosphere layer: { effect: name, role: "background"|"transition", intensity?: 0.1-1 (default 0.5), tint?: ink|accent|petrol }. role background renders BEHIND the slide's content; role transition plays as the camera moves INTO the slide. At most one background effect per slide, used sparingly. Registered: ${Object.keys(
+    EFFECTS,
+  )
+    .map((k) => `"${k}" (${EFFECTS[k].doc}; roles: ${EFFECTS[k].roles.join('/')})`)
+    .join('; ')}`,
   embed: `Registered interactive: { embed: name, config? }. Registered: ${Object.keys(EMBEDS)
     .map((k) => `"${k}" (${EMBEDS[k].doc})`)
     .join('; ')}`,

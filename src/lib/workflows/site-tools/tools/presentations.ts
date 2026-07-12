@@ -22,7 +22,22 @@ interface SlideSpec {
   /** Names the journey into this slide's children — the player's pill text
    *  ("down for <label>"). Only meaningful when children exist. */
   journey_label?: string;
+  /** Hand-laid block frames ({ "<blockIdx>": {x,y,w} } in % of the stage).
+   *  Set by the editor's canvas arrange; PRESERVE it when revising a deck
+   *  unless the revision replaces that slide's blocks. */
+  geometry?: Record<string, { x: number; y: number; w: number }>;
   children?: SlideSpec[];
+}
+
+function validGeometry(geo: unknown): boolean {
+  if (geo === undefined || geo === null) return true;
+  if (typeof geo !== 'object' || Array.isArray(geo)) return false;
+  return Object.entries(geo as Record<string, unknown>).every(([k, v]) => {
+    if (!/^\d{1,2}$/.test(k) || v === null || typeof v !== 'object') return false;
+    const f = v as { x?: unknown; y?: unknown; w?: unknown };
+    const num = (n: unknown, lo: number, hi: number) => typeof n === 'number' && n >= lo && n <= hi;
+    return num(f.x, -20, 120) && num(f.y, -20, 120) && num(f.w, 5, 100);
+  });
 }
 
 function shortSlug(src: string): string {
@@ -69,6 +84,9 @@ function validateSlide(slide: SlideSpec, path: string, depth: number): string[] 
       }
     }
   }
+  if (!validGeometry(slide.geometry)) {
+    issues.push(`${path}: geometry must map block indices to {x,y,w} percentages`);
+  }
   if (slide.children?.length) {
     if (depth >= 2) {
       issues.push(`${path}: nesting deeper than 2 levels is not presentable — flatten the structure`);
@@ -94,6 +112,7 @@ async function insertSlides(deckId: string, slides: SlideSpec[], parentSlideId: 
         blocks: s.blocks,
         notes: s.notes ?? null,
         journeyLabel: s.journey_label?.slice(0, 80) ?? null,
+        geometry: s.geometry ?? null,
       })
       .returning({ id: deckSlides.id });
     count += 1;
@@ -141,7 +160,7 @@ register({
       slides: {
         type: 'array',
         description:
-          'Ordered slides. Each: { title, layout?, blocks: Block[], notes?, journey_label?, children?: Slide[] }. ' +
+          'Ordered slides. Each: { title, layout?, blocks: Block[], notes?, journey_label?, geometry?, children?: Slide[] }. ' +
           'children = a SIDE JOURNEY off that slide: the main pathway runs left→right, a journey runs downward ' +
           '(and a journey inside a journey runs rightward; two levels max). The player shows a floating pill on ' +
           'the parent slide — "down for <journey_label>" — so ALWAYS set journey_label (2-5 words naming the side story) ' +
@@ -234,6 +253,7 @@ function rowsToSpecTree(rows: DeckSlide[], parentSlideId: string | null): SlideS
         blocks: r.blocks as unknown[],
         notes: r.notes ?? undefined,
         journey_label: r.journeyLabel ?? undefined,
+        geometry: (r.geometry as SlideSpec['geometry']) ?? undefined,
       };
       if (children.length) spec.children = children;
       return spec;
@@ -342,7 +362,7 @@ register({
   name: 'presentation_get_spec',
   description:
     'Read an existing sr. deck as the SAME spec shape presentation_update_from_spec accepts — ' +
-    '{ title, description, slug, is_public, slides: [{ title, layout, blocks, notes?, journey_label?, children? }] }. ' +
+    '{ title, description, slug, is_public, slides: [{ title, layout, blocks, notes?, journey_label?, geometry? (hand-laid frames — PRESERVE on revision), children? }] }. ' +
     'This is step 1 of revising a deck: read the spec, apply the user’s requested changes to it, propose ' +
     'the revised outline in chat, and only after a yes call presentation_update_from_spec.',
   parameters: {

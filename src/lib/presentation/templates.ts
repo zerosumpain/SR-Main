@@ -40,6 +40,7 @@ export const BLOCK_TEMPLATES: Record<BlockType, Block> = {
     ],
     xLabels: ['A', 'B'],
   },
+  effect: { type: 'effect', effect: 'drift', role: 'background', intensity: 0.5, tint: 'ink' },
   embed: { type: 'embed', embed: 'federation-sim', config: { scenario: 'attendance', autoplay: true } },
   iframe: { type: 'iframe', src: '/projects', title: 'Projects', height: 520 },
 };

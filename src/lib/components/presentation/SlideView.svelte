@@ -4,9 +4,10 @@
   // Layout zones are deterministic: split layouts send VISUAL_BLOCK_TYPES to
   // the visual column; poster uses the first image as its backdrop.
   import { blockIn } from '$lib/presentation/transitions';
+  import Effect from './blocks/Effect.svelte';
   import { VISUAL_BLOCK_TYPES } from '$lib/presentation/layouts';
   import { BLOCK_COMPONENTS } from './block-components';
-  import type { Block, ImageBlock, SlideNode } from '$lib/presentation/types';
+  import type { Block, EffectBlock, ImageBlock, SlideNode } from '$lib/presentation/types';
 
   let { slide }: { slide: SlideNode } = $props();
 
@@ -15,19 +16,24 @@
   /** Manual-arrange mode: the owner hand-laid this slide; frames win. */
   const manual = $derived(Boolean(slide.geometry && Object.keys(slide.geometry).length));
 
+  /** Background effect layers render behind everything; transition-role
+   *  effect blocks belong to the player and never join the flow. */
+  const fxBlocks = $derived(slide.blocks.filter((b) => b.type === 'effect' && b.role === 'background'));
+  const contentBlocks = $derived(slide.blocks.filter((b) => b.type !== 'effect'));
+
   const isSplit = $derived(slide.layout === 'split' || slide.layout === 'split-flip');
-  const textBlocks = $derived(slide.blocks.filter((b) => !VISUAL_BLOCK_TYPES.has(b.type)));
-  const visualBlocks = $derived(slide.blocks.filter((b) => VISUAL_BLOCK_TYPES.has(b.type)));
+  const textBlocks = $derived(contentBlocks.filter((b) => !VISUAL_BLOCK_TYPES.has(b.type)));
+  const visualBlocks = $derived(contentBlocks.filter((b) => VISUAL_BLOCK_TYPES.has(b.type)));
 
   const posterImage = $derived(
-    slide.layout === 'poster' ? ((slide.blocks.find((b) => b.type === 'image') as ImageBlock | undefined) ?? null) : null,
+    slide.layout === 'poster' ? ((contentBlocks.find((b) => b.type === 'image') as ImageBlock | undefined) ?? null) : null,
   );
-  const posterRest = $derived(slide.blocks.filter((b) => b !== (posterImage as Block | null)));
+  const posterRest = $derived(contentBlocks.filter((b) => b !== (posterImage as Block | null)));
 
   const gridLead = $derived(
-    slide.layout === 'grid' && slide.blocks.length > 2 ? slide.blocks[0] : null,
+    slide.layout === 'grid' && contentBlocks.length > 2 ? contentBlocks[0] : null,
   );
-  const gridRest = $derived(gridLead ? slide.blocks.slice(1) : slide.blocks);
+  const gridRest = $derived(gridLead ? contentBlocks.slice(1) : contentBlocks);
 </script>
 
 {#snippet renderBlock(block: Block, i: number)}
@@ -41,13 +47,17 @@
 
 {#if manual}
   <section class="slide manual" data-layout={slide.layout}>
-    {#each slide.blocks as block, i (i)}
+    {#each fxBlocks as fx, i (i)}
+      <Effect block={fx as EffectBlock} />
+    {/each}
+    {#each contentBlocks as block, i (i)}
       {@const Comp = BLOCK_COMPONENTS[block.type]}
-      {@const frame = slide.geometry?.[String(i)]}
+      {@const bi = slide.blocks.indexOf(block)}
+      {@const frame = slide.geometry?.[String(bi)]}
       {#if Comp}
         <div
           class="block mblock"
-          data-bi={i}
+          data-bi={bi}
           in:blockIn={{ delay: STAGGER * i }}
           style:left="{frame?.x ?? 6}%"
           style:top="{frame?.y ?? 8 + i * 22}%"
@@ -60,6 +70,9 @@
   </section>
 {:else if slide.layout === 'poster' && posterImage}
   <section class="slide poster">
+    {#each fxBlocks as fx, i (i)}
+      <Effect block={fx as EffectBlock} />
+    {/each}
     <img
       class="poster-bg"
       src={posterImage.src}
@@ -75,6 +88,9 @@
   </section>
 {:else if isSplit}
   <section class="slide split" class:flip={slide.layout === 'split-flip'}>
+    {#each fxBlocks as fx, i (i)}
+      <Effect block={fx as EffectBlock} />
+    {/each}
     <div class="split-text">
       {#each textBlocks as block, i (i)}
         {@render renderBlock(block, i)}
@@ -88,6 +104,9 @@
   </section>
 {:else if slide.layout === 'grid'}
   <section class="slide gridlay">
+    {#each fxBlocks as fx, i (i)}
+      <Effect block={fx as EffectBlock} />
+    {/each}
     {#if gridLead}
       <div class="grid-lead">{@render renderBlock(gridLead, 0)}</div>
     {/if}
@@ -99,7 +118,10 @@
   </section>
 {:else}
   <section class="slide" data-layout={slide.layout}>
-    {#each slide.blocks as block, i (i)}
+    {#each fxBlocks as fx, i (i)}
+      <Effect block={fx as EffectBlock} />
+    {/each}
+    {#each contentBlocks as block, i (i)}
       {@render renderBlock(block, i)}
     {/each}
   </section>
@@ -109,6 +131,7 @@
   .slide {
     width: 100%;
     height: 100%;
+    z-index: 0; /* own stacking context: the fx layer stays behind content */
     display: flex;
     flex-direction: column;
     /* `safe` keeps the top reachable when content overflows the stage */
@@ -120,7 +143,7 @@
     box-sizing: border-box;
     position: relative;
   }
-  .block { width: 100%; display: flex; flex-direction: column; align-items: inherit; }
+  .block { width: 100%; display: flex; flex-direction: column; align-items: inherit; position: relative; }
 
   /* manual arrange — hand-laid frames in % of the stage. The frame width is
      the layout: intrinsic max-widths yield to it so stretching an object

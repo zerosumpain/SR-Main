@@ -102,6 +102,15 @@ describe('chart kinds', () => {
   });
 });
 
+describe('effect blocks', () => {
+  it('validates registered effects and role compatibility', () => {
+    expect(validateBlocks([{ type: 'effect', effect: 'drift', role: 'background', intensity: 0.5 }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'effect', effect: 'heartbeat', role: 'background' }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'effect', effect: 'heartbeat', role: 'transition' }]).ok).toBe(false);
+    expect(validateBlocks([{ type: 'effect', effect: 'lasers', role: 'background' }]).ok).toBe(false);
+  });
+});
+
 describe('block templates', () => {
   it('every editor template validates', async () => {
     const { BLOCK_TEMPLATES, CHART_TEMPLATES } = await import('./templates');
