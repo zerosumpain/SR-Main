@@ -499,14 +499,15 @@
     await saveMeta();
   }
 
-  function adoptNewSlide(payload: Record<string, unknown>, parentSlideId: string | null, position: number) {
-    const s = payload.slide as EditSlide;
-    // Reflect the server-side sibling shift locally, then adopt the row.
+  /** Adopt freshly inserted rows (compose may split content over two slides). */
+  function adoptNewSlides(payload: Record<string, unknown>, parentSlideId: string | null, position: number) {
+    const rows = (Array.isArray(payload.slides) ? payload.slides : [payload.slide]) as EditSlide[];
+    // Reflect the server-side sibling shift locally, then adopt the rows.
     for (const sib of slides) {
-      if (sib.parentSlideId === parentSlideId && sib.position >= position) sib.position += 1;
+      if (sib.parentSlideId === parentSlideId && sib.position >= position) sib.position += rows.length;
     }
-    slides.push({ ...s, blocks: s.blocks as Block[] });
-    selectedId = s.id;
+    for (const s of rows) slides.push({ ...s, blocks: s.blocks as Block[] });
+    selectedId = rows[0].id;
   }
 
   /** Where a new slide goes: after the selected sibling, or into it as a child. */
@@ -524,7 +525,7 @@
       title: 'New slide',
       blocks: [structuredClone(BLOCK_TEMPLATES.prose)],
     });
-    if (payload?.slide) adoptNewSlide(payload, parentSlideId, position);
+    if (payload?.slide) adoptNewSlides(payload, parentSlideId, position);
   }
 
   const composeMediaUrls = () =>
@@ -543,11 +544,14 @@
     });
     composing = false;
     if (payload?.slide) {
-      adoptNewSlide(payload, target.parentSlideId, target.position);
+      adoptNewSlides(payload, target.parentSlideId, target.position);
       composeText = '';
       composeMedia = '';
-      const layout = (payload.slide as { layout?: string }).layout;
-      flash('ok', payload.source === 'llm' ? `Composed → ${layout}` : 'Composed (fallback layout — LLM unavailable)');
+      const rows = (Array.isArray(payload.slides) ? payload.slides : [payload.slide]) as { layout?: string }[];
+      const shape = rows.map((r) => r.layout).join(' + ');
+      flash('ok', payload.source === 'llm'
+        ? rows.length > 1 ? `Composed → split over ${rows.length} slides (${shape})` : `Composed → ${shape}`
+        : 'Composed (fallback layout — LLM unavailable)');
     }
   }
 

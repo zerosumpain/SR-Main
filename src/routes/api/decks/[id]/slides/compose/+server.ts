@@ -60,7 +60,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
     .slice(-3)
     .map((s) => s.layout);
 
-  const { slide, source } = await composeSlide(
+  // The composer returns 1 slide, or 2 when the content could not fit one page.
+  const { slides: composed, source } = await composeSlide(
     { text, mediaUrls, attachedBlocks },
     { deckTitle: deck.title, recentLayouts },
   );
@@ -72,19 +73,23 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   await db
     .update(deckSlides)
-    .set({ position: sql`${deckSlides.position} + 1` })
+    .set({ position: sql`${deckSlides.position} + ${composed.length}` })
     .where(and(eq(deckSlides.deckId, params.id), planeCond, gte(deckSlides.position, position)));
-  const [row] = await db
-    .insert(deckSlides)
-    .values({
-      deckId: params.id,
-      parentSlideId,
-      position,
-      title: slide.title,
-      layout: slide.layout,
-      blocks: slide.blocks,
-    })
-    .returning();
+  const rows = [];
+  for (let i = 0; i < composed.length; i++) {
+    const [row] = await db
+      .insert(deckSlides)
+      .values({
+        deckId: params.id,
+        parentSlideId,
+        position: position + i,
+        title: composed[i].title,
+        layout: composed[i].layout,
+        blocks: composed[i].blocks,
+      })
+      .returning();
+    rows.push(row);
+  }
   await db.update(decks).set({ updatedAt: new Date() }).where(eq(decks.id, params.id));
-  return json({ ok: true, slide: row, source });
+  return json({ ok: true, slide: rows[0], slides: rows, source });
 };

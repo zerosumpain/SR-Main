@@ -13,6 +13,7 @@ import {
   type ComposedSlide,
   type ComposeInput,
 } from '$lib/presentation/compose-heuristic';
+import { fitIssues } from '$lib/presentation/fit';
 import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
 import { BLOCK_DOCS, BLOCK_SCHEMAS, validateBlocks } from '$lib/presentation/registry';
 import type { Block, QuoteBlock } from '$lib/presentation/types';
@@ -32,6 +33,7 @@ export interface ComposeContext {
 const craftRules = (ctx: ComposeContext): string[] => [
     'Editorial craft (non-negotiable):',
     '- Whitespace is the loudest signal of importance. Fewer, bigger elements: 1–3 blocks. Never fill the page.',
+    '- The page is a FIXED 1280×720 canvas — nothing scrolls; overflow is CUT OFF. Never compose more than fits: roughly 120 words of body prose on a full page, HALF that beside a visual or at statement scale; a chart, image or embed leaves room for only ~40 words beside it. When the content is too much, do NOT overfill — tighten the words, choose a denser register (columns/ledger/cards), or split it across two slides.',
     '- An assertive fact or claim = a headline block (kicker → ≤12-word statement, sentence case, no full stop → optional one-line dek) on a statement-left or statement-right layout. Ragged, aligned display type beats centered text — reserve centered `statement` for openings and codas.',
     '- Format rules by block: masthead (title/section-opener) slides take `center` — NEVER statement-left/right. An aligned statement page carries exactly ONE dominant element (headline, bigNumber or short quote), nothing else.',
     '- quote is for REAL quotations and aphorisms only, ≤140 characters. A paragraph is prose (style "lede" for the opening); a claim is a headline. NEVER pour long text into a quote.',
@@ -55,7 +57,7 @@ const craftRules = (ctx: ComposeContext): string[] => [
 ];
 
 const RESPONSE_SHAPE =
-  'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]}. Every block object MUST include its "type" field, e.g. {"type": "headline", "kicker": "...", "text": "..."}. No markdown fences, no commentary.';
+  'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]} — or, ONLY when the content genuinely needs two pages, {"slides": [slide, slide]} (max 2, each complete in that shape). Every block object MUST include its "type" field, e.g. {"type": "headline", "kicker": "...", "text": "..."}. No markdown fences, no commentary.';
 
 function systemPrompt(ctx: ComposeContext): string {
   return [
@@ -80,6 +82,7 @@ function revisePrompt(ctx: ComposeContext): string {
     '- Change the layout only if the instruction asks for it, or the revised content clearly demands a different one.',
     '- Keep the slide title unless asked to change it.',
     '- NEVER invent facts, numbers or quotes that are not in the slide or the instruction.',
+    '- The revised slide must still FIT the fixed page. If the instruction adds content, make room: tighten other text or switch to a denser register. You CANNOT split into two slides here — condense instead.',
     '',
     // "Vary the rhythm" would nudge the reviser toward gratuitous layout swaps.
     ...craftRules(ctx).filter((l) => !l.startsWith('- Vary the rhythm')),
@@ -141,15 +144,37 @@ function applyEditorialGuardrails(slide: ComposedSlide, ctx: ComposeContext): Co
 }
 
 /** Attached picker blocks are a contract: if the LLM dropped or edited one,
- *  append the original (dedupe by exact JSON). */
-function enforceAttached(slide: ComposedSlide, attached: Block[]): ComposedSlide {
-  if (!attached.length) return slide;
-  const have = new Set(slide.blocks.map((b) => JSON.stringify(b)));
+ *  append the original to the last slide (dedupe by exact JSON). */
+function enforceAttached(slides: ComposedSlide[], attached: Block[]): ComposedSlide[] {
+  if (!attached.length) return slides;
+  const have = new Set(slides.flatMap((s) => s.blocks.map((b) => JSON.stringify(b))));
   const missing = attached.filter((b) => !have.has(JSON.stringify(b)));
-  return missing.length ? { ...slide, blocks: [...slide.blocks, ...missing] } : slide;
+  if (!missing.length) return slides;
+  const last = slides[slides.length - 1];
+  return [...slides.slice(0, -1), { ...last, blocks: [...last.blocks, ...missing] }];
 }
 
-function parseLLMSlide(raw: string): ComposedSlide | null {
+function normalizeSlide(obj: { title?: unknown; layout?: unknown; blocks?: unknown }): ComposedSlide | null {
+  if (!Array.isArray(obj.blocks) || obj.blocks.length === 0 || obj.blocks.length > 6) {
+    console.warn('[decks composer] LLM slide had no usable blocks array');
+    return null;
+  }
+  const blocks = obj.blocks.map(repairBlock);
+  const check = validateBlocks(blocks);
+  if (!check.ok) {
+    console.warn('[decks composer] LLM blocks rejected:', check.issues.join('; '));
+    return null;
+  }
+  return {
+    title: typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim().slice(0, 120) : null,
+    layout: isLayout(obj.layout) ? obj.layout : 'default',
+    blocks: blocks as Block[],
+  };
+}
+
+/** Parse the LLM reply into 1–2 slides — a bare slide object, or the
+ *  {"slides":[…]} split form the fit rule allows. */
+function parseLLMSlides(raw: string): ComposedSlide[] | null {
   // The OpenRouter failover path strips response_format (some providers reject
   // it), and reasoning models then wrap the JSON in prose/fences — extract the
   // outermost object instead of requiring a bare JSON reply.
@@ -170,28 +195,16 @@ function parseLLMSlide(raw: string): ComposedSlide | null {
     console.warn('[decks composer] unparseable LLM reply head:', cleaned.slice(0, 200));
     return null;
   }
-  const obj = parsed as { title?: unknown; layout?: unknown; blocks?: unknown };
-  if (!Array.isArray(obj.blocks) || obj.blocks.length === 0 || obj.blocks.length > 6) {
-    console.warn('[decks composer] LLM reply had no usable blocks array');
-    return null;
-  }
-  const blocks = obj.blocks.map(repairBlock);
-  const check = validateBlocks(blocks);
-  if (!check.ok) {
-    console.warn('[decks composer] LLM blocks rejected:', check.issues.join('; '));
-    return null;
-  }
-  return {
-    title: typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim().slice(0, 120) : null,
-    layout: isLayout(obj.layout) ? obj.layout : 'default',
-    blocks: blocks as Block[],
-  };
+  const obj = parsed as { slides?: unknown };
+  const rawSlides = Array.isArray(obj.slides) && obj.slides.length ? obj.slides.slice(0, 2) : [parsed];
+  const slides = rawSlides.map((s) => normalizeSlide(s as { title?: unknown; layout?: unknown; blocks?: unknown }));
+  return slides.every((s): s is ComposedSlide => s !== null) ? slides : null;
 }
 
 export async function composeSlide(
   input: ComposeInput,
   ctx: ComposeContext = {},
-): Promise<{ slide: ComposedSlide; source: 'llm' | 'heuristic' }> {
+): Promise<{ slides: ComposedSlide[]; source: 'llm' | 'heuristic' }> {
   const attached = input.attachedBlocks ?? [];
   const userContent = [
     ctx.deckTitle ? `Deck: "${ctx.deckTitle}"` : null,
@@ -202,32 +215,53 @@ export async function composeSlide(
     .filter(Boolean)
     .join('\n\n');
 
-  try {
-    const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
-      messages: [
-        { role: 'system', content: systemPrompt(ctx) },
-        { role: 'user', content: userContent },
-      ],
-      temperature: 0.4,
-      // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
-      // undersized ceiling comes back as EMPTY content after ~30s of thinking
-      // (see feedback_glm_reasoning_tokens). Keep this very generous.
-      max_tokens: 8000,
-      response_format: { type: 'json_object' },
-    }, { fallbackModel: ART_DIRECTOR_FALLBACK });
-    const text = completion.choices[0]?.message?.content ?? '';
-    const slide = parseLLMSlide(text);
-    if (slide) {
-      const final = enforceAttached(applyEditorialGuardrails(slide, ctx), attached);
-      // Guardrails only ever swap block types/layouts inside the registry, but
-      // re-validate so a bug here can never store an invalid slide.
-      if (validateBlocks(final.blocks).ok) return { slide: final, source: 'llm' };
+  const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+    { role: 'system', content: systemPrompt(ctx) },
+    { role: 'user', content: userContent },
+  ];
+  // Fit gate: one corrective round-trip when the estimator says the page
+  // overflows. A still-overfull retry beats the heuristic, so keep the best.
+  let best: ComposedSlide[] | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let text = '';
+    try {
+      const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
+        messages,
+        temperature: 0.4,
+        // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
+        // undersized ceiling comes back as EMPTY content after ~30s of thinking
+        // (see feedback_glm_reasoning_tokens). Keep this very generous.
+        max_tokens: 8000,
+        response_format: { type: 'json_object' },
+      }, { fallbackModel: ART_DIRECTOR_FALLBACK });
+      text = completion.choices[0]?.message?.content ?? '';
+    } catch (err) {
+      console.warn('[decks composer] LLM unavailable:', err instanceof Error ? err.message : err);
+      break;
     }
-    console.warn('[decks composer] LLM output failed validation — using heuristic');
-  } catch (err) {
-    console.warn('[decks composer] LLM unavailable — using heuristic:', err instanceof Error ? err.message : err);
+    const parsed = parseLLMSlides(text);
+    if (!parsed) break;
+    const finals = enforceAttached(parsed.map((s) => applyEditorialGuardrails(s, ctx)), attached);
+    // Guardrails only ever swap block types/layouts inside the registry, but
+    // re-validate so a bug here can never store an invalid slide.
+    if (!finals.every((f) => validateBlocks(f.blocks).ok)) break;
+    const issues = finals.flatMap((f, i) => fitIssues(f.layout, f.blocks).map((m) => `slide ${i + 1}: ${m}`));
+    if (!issues.length) return { slides: finals, source: 'llm' };
+    best = finals;
+    messages.push(
+      { role: 'assistant', content: text },
+      {
+        role: 'user',
+        content: `Your composition overflows the fixed page — ${issues.join('; ')}. Return a corrected version: tighten the text, use a denser register, or split into {"slides": [...]} (max 2).`,
+      },
+    );
   }
-  return { slide: composeHeuristic(input, { recentLayouts: ctx.recentLayouts }), source: 'heuristic' };
+  if (best) {
+    console.warn('[decks composer] still estimated overfull after fit retry — accepting best effort');
+    return { slides: best, source: 'llm' };
+  }
+  console.warn('[decks composer] LLM output failed validation — using heuristic');
+  return { slides: [composeHeuristic(input, { recentLayouts: ctx.recentLayouts })], source: 'heuristic' };
 }
 
 /** LLM revision of an existing slide. Unlike composeSlide there is no
@@ -248,29 +282,48 @@ export async function reviseSlide(
     .filter(Boolean)
     .join('\n\n');
 
-  try {
-    const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
-      messages: [
-        { role: 'system', content: revisePrompt(ctx) },
-        { role: 'user', content: userContent },
-      ],
-      temperature: 0.3,
-      // Same generous ceiling as composeSlide — GLM reasoning burns from it.
-      max_tokens: 8000,
-      response_format: { type: 'json_object' },
-    }, { fallbackModel: ART_DIRECTOR_FALLBACK });
-    const text = completion.choices[0]?.message?.content ?? '';
-    const slide = parseLLMSlide(text);
-    if (slide) {
-      const final = applyEditorialGuardrails(slide, ctx);
-      if (validateBlocks(final.blocks).ok) {
-        // A revision keeps the slide's title unless the LLM deliberately set one.
-        return { ...final, title: final.title ?? current.title };
-      }
+  const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+    { role: 'system', content: revisePrompt(ctx) },
+    { role: 'user', content: userContent },
+  ];
+  // Same fit gate as composeSlide, but a revision can never split — the
+  // corrective retry asks for condensing only.
+  let best: ComposedSlide | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let text = '';
+    try {
+      const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
+        messages,
+        temperature: 0.3,
+        // Same generous ceiling as composeSlide — GLM reasoning burns from it.
+        max_tokens: 8000,
+        response_format: { type: 'json_object' },
+      }, { fallbackModel: ART_DIRECTOR_FALLBACK });
+      text = completion.choices[0]?.message?.content ?? '';
+    } catch (err) {
+      console.warn('[decks composer] revise LLM unavailable:', err instanceof Error ? err.message : err);
+      break;
     }
-    console.warn('[decks composer] revise output failed validation');
-  } catch (err) {
-    console.warn('[decks composer] revise LLM unavailable:', err instanceof Error ? err.message : err);
+    const parsed = parseLLMSlides(text)?.[0];
+    if (!parsed) break;
+    const final = applyEditorialGuardrails(parsed, ctx);
+    if (!validateBlocks(final.blocks).ok) {
+      console.warn('[decks composer] revise output failed validation');
+      break;
+    }
+    // A revision keeps the slide's title unless the LLM deliberately set one.
+    const slide = { ...final, title: final.title ?? current.title };
+    const issues = fitIssues(slide.layout, slide.blocks);
+    if (!issues.length) return slide;
+    best = slide;
+    messages.push(
+      { role: 'assistant', content: text },
+      {
+        role: 'user',
+        content: `Your revision overflows the fixed page — ${issues.join('; ')}. Return a corrected revision: tighten the text or use a denser register (you cannot split into two slides).`,
+      },
+    );
   }
-  return null;
+  if (best) console.warn('[decks composer] revise still estimated overfull after fit retry — accepting best effort');
+  return best;
 }

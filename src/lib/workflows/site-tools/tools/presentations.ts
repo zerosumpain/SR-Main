@@ -10,9 +10,11 @@ import { deckSlides, decks, type DeckSlide } from '$lib/db/schema';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { slugify } from '$lib/canvas/slug';
 import { createShare } from '$lib/decks/shares';
+import { fitIssues } from '$lib/presentation/fit';
 import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
 import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
 import { scenarioById } from '$lib/sim/federation/scenarios';
+import type { Block } from '$lib/presentation/types';
 
 interface SlideSpec {
   title?: string;
@@ -78,6 +80,10 @@ function validateSlide(slide: SlideSpec, path: string, depth: number): string[] 
   } else {
     const res = validateBlocks(slide.blocks);
     issues.push(...res.issues.map((i) => `${path}.${i}`));
+    if (res.ok) {
+      // The page is a fixed 1280×720 canvas — overfull slides are spec errors.
+      issues.push(...fitIssues(slide.layout ?? 'default', slide.blocks as Block[]).map((m) => `${path}: ${m}`));
+    }
     for (const b of slide.blocks as { type?: string; embed?: string; config?: { scenario?: string } }[]) {
       if (b?.type === 'embed' && b.embed === 'federation-sim' && b.config?.scenario && !scenarioById(b.config.scenario)) {
         issues.push(`${path}: federation-sim scenario "${b.config.scenario}" does not exist`);
@@ -141,6 +147,8 @@ register({
     'and the user must have said yes/build it. Never call this tool with a guess at the design. ' +
     'Slides with `children` become SIDE JOURNEYS: the main pathway runs left→right; a floating pill on the ' +
     'parent ("down for <journey_label>") leads down into the journey; ↑/Escape climb back. ' +
+    'Every slide is a FIXED 1280×720 page — nothing scrolls, overfull specs are REJECTED with fit feedback: ' +
+    'tighten the words, use a denser prose register (columns/ledger/cards), or split the content over two slides. ' +
     `Layouts (pick for impact and vary them for rhythm): ${layoutDocsForLLM()} ` +
     `Block vocabulary: ${Object.entries(BLOCK_DOCS)
       .map(([k, v]) => `${k} — ${v}`)
