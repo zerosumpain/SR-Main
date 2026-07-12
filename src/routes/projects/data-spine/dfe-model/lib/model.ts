@@ -16,6 +16,8 @@ export interface FabricNode {
   band: 'consumers' | 'brokerage' | 'edge-mis' | 'edge-la' | 'cross';
   /** amber = PII-capable element */
   hot?: boolean;
+  /** edge-mis only: indicative market share %, drives the weighted fan-out */
+  share?: number;
   desc: string;
   exemplar?: string;
   standards?: string;
@@ -23,17 +25,17 @@ export interface FabricNode {
 
 export const FABRIC_NODES: FabricNode[] = [
   // Edge — MIS estates (stage 0)
-  { id: 'mis-arbor', label: 'Arbor', sub: '~39–44% of schools', stage: 0, band: 'edge-mis',
+  { id: 'mis-arbor', label: 'Arbor', sub: '~39–44% of schools', stage: 0, band: 'edge-mis', share: 42,
     desc: 'The current market leader across state schools. Under the model it keeps every pupil record it holds today — its estate simply gains a connector that answers signed queries in situ.', exemplar: 'Data stays with the controller — the X-Road commitment' },
-  { id: 'mis-sims', label: 'ESS SIMS', sub: '~a third of schools', stage: 0, band: 'edge-mis',
+  { id: 'mis-sims', label: 'ESS SIMS', sub: '~a third of schools', stage: 0, band: 'edge-mis', share: 33,
     desc: 'The long-time incumbent, now around a third of schools after recent market churn and litigation. A vendor-neutral overlay avoids betting the spine on any one supplier’s fortunes.' },
-  { id: 'mis-bromcom', label: 'Bromcom', sub: '~16% of schools', stage: 0, band: 'edge-mis',
+  { id: 'mis-bromcom', label: 'Bromcom', sub: '~16% of schools', stage: 0, band: 'edge-mis', share: 16,
     desc: 'The third major. Together the top three carry roughly four in five schools — the fan-out topology in the simulator mirrors this concentration.' },
-  { id: 'mis-iris', label: 'IRIS Ed:gen', sub: 'mid-tail', stage: 0, band: 'edge-mis',
+  { id: 'mis-iris', label: 'IRIS Ed:gen', sub: 'mid-tail', stage: 0, band: 'edge-mis', share: 4,
     desc: 'One of the mid-tail suppliers making up most of the remainder. Certification, not bespoke integration, is what lets the tail join on equal terms.' },
-  { id: 'mis-compass', label: 'Compass', sub: 'mid-tail', stage: 0, band: 'edge-mis',
+  { id: 'mis-compass', label: 'Compass', sub: 'mid-tail', stage: 0, band: 'edge-mis', share: 3,
     desc: 'Mid-tail MIS supplier. Every estate, large or small, runs the same open-source connector against its own records.' },
-  { id: 'mis-juniper', label: 'Juniper / others', sub: 'long tail', stage: 0, band: 'edge-mis',
+  { id: 'mis-juniper', label: 'Juniper / others', sub: 'long tail', stage: 0, band: 'edge-mis', share: 2,
     desc: 'The long tail down to self-hosted schools. A funded on-ramp matters here: the smallest participant must be able to afford the connector, or the fabric has holes exactly where safeguarding needs it most.' },
   // Edge — local authorities (stage 0)
   { id: 'la-a', label: 'LA node', sub: 'children’s services', stage: 0, band: 'edge-la',
@@ -381,3 +383,124 @@ export const RISKS: Tension[] = [
   { title: 'Threshold scope-creep', body: 'The PII-release rule catalogue needs a tight definition and independent oversight to resist expansion.' },
   { title: 'Ledger governance', body: 'Who operates it, retention periods, and who may read it are first-order policy questions, not implementation details.' },
 ];
+
+// ---------------------------------------------------------------------------
+// VISUAL-FIRST layer — the "one question's journey" redesign. The page is a
+// 7-beat journey; every section is a beat or an annotation on it. These are the
+// data the new interactive visuals read; keyed lookups so the arrays above stay
+// untouched.
+// ---------------------------------------------------------------------------
+
+export interface Beat { id: string; n: number; kicker: string; label: string }
+/** the journey spine — every section maps to one of these */
+export const BEATS: Beat[] = [
+  { id: 'ask', n: 0, kicker: 'BEAT 0', label: 'Ask one question' },
+  { id: 'terrain', n: 1, kicker: 'BEAT 1', label: 'The terrain' },
+  { id: 'gates', n: 2, kicker: 'BEAT 2', label: 'The front door' },
+  { id: 'connector', n: 3, kicker: 'BEAT 3', label: 'Inside a connector' },
+  { id: 'endings', n: 4, kicker: 'BEAT 4', label: 'The two endings' },
+  { id: 'beyond', n: 5, kicker: 'BEAT 5', label: 'Beyond education' },
+  { id: 'borrowed', n: 6, kicker: 'BEAT 6', label: 'Borrowed from the world' },
+];
+export const BEAT_LABEL: Record<string, string> = Object.fromEntries(BEATS.map((b) => [b.id, `Beat ${b.n} · ${b.label}`]));
+
+/** the protagonist question threaded through the whole page */
+export const WORKED_QUESTION = 'How many Year-11 pupils with an EHCP were persistently absent last autumn term?';
+export const WORKED_QUESTION_SHORT = 'Yr-11 · EHCP · persistently absent';
+export const WORKED_ANSWER = 4120; // illustrative no-PII aggregate
+export const WORKED_ANSWER_LABEL = 'pupils, England';
+
+/** per-category cell counts at one connector (Oakfield Academy) — feeds the
+ *  disclosure-control slider: small cells are suppressed before the total leaves.
+ *  Sums to WORKED_ANSWER. */
+export interface CellRow { group: string; count: number }
+export const CONNECTOR_CELLS: CellRow[] = [
+  { group: 'Community school', count: 1840 },
+  { group: 'Academy', count: 1560 },
+  { group: 'Free school', count: 420 },
+  { group: 'Special school', count: 250 },
+  { group: 'AP / PRU', count: 42 },
+  { group: 'Independent, state-funded place', count: 8 },
+];
+
+/** the central-store counterfactual, for the hero "…what if we pooled it?" morph */
+export const POOL_RECORDS = 8_400_000; // ~ every pupil record, copied into one store
+export const POOL_LABEL = 'records in one national store';
+export const BLAST_FEDERATED = 'one school';
+export const BLAST_CENTRAL = '8.4M pupils';
+
+/** where each model sits on the DATA↔TRUST spectrum. dataMoves 0 = nothing moves
+ *  (compute-to-data) … 1 = bulk copies to a central pool. centralises = the one
+ *  primitive that country puts in the middle. Keyed by SurveyArchetype.no. */
+export interface ArchetypeAxis { centralises: string; dataMoves: number }
+export const ARCHETYPE_AXIS: Record<number, ArchetypeAxis> = {
+  1: { centralises: 'routing', dataMoves: 0.14 },              // X-Road brokered exchange
+  2: { centralises: 'gateway', dataMoves: 0.24 },             // Singapore APEX / NHS Spine
+  3: { centralises: 'events + catalogue', dataMoves: 0.34 },  // NL/DK base registers
+  4: { centralises: 'consent', dataMoves: 0.18 },             // India DEPA
+  5: { centralises: 'membership', dataMoves: 0.16 },          // German TI-Messenger
+  6: { centralises: 'compute', dataMoves: 0.05 },             // UK OpenSAFELY
+  7: { centralises: 'identity', dataMoves: 0.20 },            // MOSIP
+};
+/** England's proposed model, plotted as the star on the same spectrum */
+export const ENGLAND_MODEL = { centralises: 'routing + trust', dataMoves: 0.10, label: 'England (proposed)' };
+
+/** each requirement → the beat it powers + the archetype numbers it's lifted from.
+ *  Keyed by Requirement.need. */
+export const REQUIREMENT_LINK: Record<string, { beat: string; archetypeNos: number[] }> = {
+  'Federated analytic queries across ~24,000 schools': { beat: 'terrain', archetypeNos: [6, 1] },
+  'Commission & compile no-PII analysis, to standards': { beat: 'connector', archetypeNos: [3] },
+  'Immutable log of every transaction': { beat: 'gates', archetypeNos: [1] },
+  'Point-to-point sharing': { beat: 'endings', archetypeNos: [1] },
+  'Query opt-outs (consent-based)': { beat: 'gates', archetypeNos: [4] },
+  'Rules-based PII release on thresholds': { beat: 'endings', archetypeNos: [3] },
+  'Greater-than-education': { beat: 'beyond', archetypeNos: [1, 2] },
+  'Local authority connectivity': { beat: 'terrain', archetypeNos: [1] },
+  'Open standards end to end': { beat: 'connector', archetypeNos: [3] },
+  'Highly distributed governance': { beat: 'gates', archetypeNos: [1, 5] },
+};
+
+/** stack layer → the journey beats that depend on it. Keyed by StackRow.layer. */
+export const STACK_BEATS: Record<string, string[]> = {
+  'Data model': ['connector'],
+  'Transport & contracts': ['connector', 'gates'],
+  'Connector': ['terrain', 'connector'],
+  'Identity': ['gates', 'endings'],
+  'Catalogue & health bridge': ['beyond'],
+  'Assurance': ['connector', 'endings'],
+};
+
+/** every risk/tension → the beat that absorbs it + the design's mitigation.
+ *  Keyed by title (RISKS and TENSIONS share this map). */
+export const RISK_LINK: Record<string, { beat: string; kind: 'risk' | 'tension'; mitigation: string }> = {
+  'Re-identification in aggregates': { beat: 'connector', kind: 'risk', mitigation: 'Disclosure control fires at every connector before a total leaves — minimum cell sizes and suppression — plus centrally-governed output checking on the assembled result.' },
+  'Opt-out vs statutory override': { beat: 'endings', kind: 'risk', mitigation: 'The two endings sit in different policy classes by design: opt-outs govern the analytic total; a statutory duty can override consent only under a logged rule.' },
+  'Vendor incentives & market churn': { beat: 'terrain', kind: 'risk', mitigation: 'The open connector is mandated through the DfE MIS framework — conformance certification as a condition of listing — so lock-in cannot re-form around one supplier.' },
+  'LA capacity and funding': { beat: 'terrain', kind: 'risk', mitigation: 'A Denmark-style use-proportional funding model + a funded on-ramp for the long tail keeps the smallest participant able to join.' },
+  'Threshold scope-creep': { beat: 'endings', kind: 'risk', mitigation: 'The PII-release rule catalogue is tightly scoped with an independent directing board overseeing every threshold change.' },
+  'Ledger governance': { beat: 'gates', kind: 'risk', mitigation: 'Who operates the ledger, retention and read-access are first-order policy set by the cross-sector directing board — the ledger is a named brokerage service, not an implementation detail.' },
+  'Centralise-and-link vs federate': { beat: 'terrain', kind: 'tension', mitigation: 'The federated posture reaches the same linking outcomes the white paper wants, with a materially stronger privacy and security story — no central pool to breach.' },
+  'Purpose limitation on the SUI': { beat: 'endings', kind: 'tension', mitigation: 'The NHS-number SUI resolves identity on the amber PII path only; the teal analytic path stays pseudonymous, honouring the stated safeguarding-purpose limitation.' },
+  'ContactPoint’s shadow': { beat: 'terrain', kind: 'tension', mitigation: '"No central pool" is a stated design principle here, not an implementation detail — the direct architectural answer to the 2010 precedent.' },
+  'Coverage gaps': { beat: 'connector', kind: 'tension', mitigation: 'An explicit fallback resolution path for children without an NHS number (migrant, home-educated, CNIS) so the fabric never makes them more invisible.' },
+  'LA capacity and security': { beat: 'terrain', kind: 'tension', mitigation: 'The default-deny connector and local enforcement reduce reliance on uneven LA security — the least-secure estate still only ever emits an aggregate or a logged rule-based release.' },
+  'Commercial MIS incentives': { beat: 'terrain', kind: 'tension', mitigation: 'Mandating the open connector through the DfE MIS framework is the procurement lever that realigns vendor incentives away from data lock-in.' },
+};
+
+/** each DfE commitment → its live status, source type (for filter chips), and the
+ *  journey beat it validates. Keyed by Commitment.what. */
+export const COMMITMENT_META: Record<string, { status: 'committed' | 'statute' | 'programme' | 'emerging'; sourceType: 'white-paper' | 'statute' | 'mais' | 'milburn'; beat: string }> = {
+  'DfE Data Spine': { status: 'committed', sourceType: 'white-paper', beat: 'terrain' },
+  'Single Unique Identifier (NHS number)': { status: 'statute', sourceType: 'statute', beat: 'endings' },
+  'MAIS statutory information-sharing duty': { status: 'programme', sourceType: 'mais', beat: 'endings' },
+  'MAIS Tier 1 Data Sharing Agreement': { status: 'programme', sourceType: 'mais', beat: 'gates' },
+  'MASH / Multi-Agency Child Protection Teams': { status: 'statute', sourceType: 'statute', beat: 'endings' },
+  'NPD & “collection and linking”': { status: 'committed', sourceType: 'white-paper', beat: 'terrain' },
+  'Milburn review — hidden NEETs': { status: 'emerging', sourceType: 'milburn', beat: 'beyond' },
+  'School Profiles': { status: 'committed', sourceType: 'white-paper', beat: 'connector' },
+  'Content Store / National Data Library': { status: 'emerging', sourceType: 'white-paper', beat: 'connector' },
+  'Post-16 & Skills England': { status: 'emerging', sourceType: 'white-paper', beat: 'terrain' },
+};
+export const SOURCE_TYPE_LABEL: Record<string, string> = {
+  'white-paper': 'White paper', 'statute': 'Statute', 'mais': 'MAIS', 'milburn': 'Milburn',
+};
