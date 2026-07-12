@@ -22,6 +22,7 @@
     pathTo,
     planeAxis,
     resolveArrow,
+    windowStrip,
     type ArrowKey,
     type Travel,
   } from '$lib/presentation/navigation';
@@ -75,18 +76,29 @@
   const hasInteractive = $derived(slide.blocks.some((b) => b.type === 'embed' || b.type === 'iframe'));
 
   // Nav-map strips along the active path: the root row, then one strip per
-  // branch level, each anchored at its parent's index in the strip above.
+  // branch level. Each strip is WINDOWED — one dot behind the on-path dot and
+  // up to four ahead, ellipses marking the cut — so long planes and nested
+  // journeys never balloon the map.
   const mapStrips = $derived.by(() => {
-    const strips: { ids: string[]; axis: 'h' | 'v'; anchorIdx: number }[] = [
-      { ids: planes.get(null) ?? [], axis: 'h', anchorIdx: 0 },
-    ];
-    for (let d = 0; d < Math.min(depth, 2); d++) {
-      const parentId = chain[d];
-      const parentStrip = strips[d];
+    const strips: {
+      axis: 'h' | 'v';
+      ids: string[];
+      leading: boolean;
+      trailing: boolean;
+      /** Rendered cell index (incl. the leading ellipsis cell) of this
+       *  level's on-path dot — anchors the child strip. */
+      activeRender: number;
+    }[] = [];
+    for (let d = 0; d <= Math.min(depth, 2); d++) {
+      const planeIds = planes.get(d === 0 ? null : chain[d - 1]) ?? [];
+      const activeIdx = Math.max(0, planeIds.indexOf(chain[d]));
+      const win = windowStrip(planeIds.length, activeIdx);
       strips.push({
-        ids: planes.get(parentId) ?? [],
-        axis: planeAxis(d + 1),
-        anchorIdx: Math.max(0, parentStrip.ids.indexOf(parentId)),
+        axis: planeAxis(d),
+        ids: planeIds.slice(win.start, win.end),
+        leading: win.leading,
+        trailing: win.trailing,
+        activeRender: (win.leading ? 1 : 0) + (activeIdx - win.start),
       });
     }
     return strips;
@@ -359,27 +371,41 @@
         onpointerup={onMapPointerUp}
       >
         <span class="nm-grip" aria-hidden="true" title="Drag to move">⠿</span>
-        {#each mapStrips as strip, si (si)}
-          <div
-            class="nm-strip"
-            class:vert={strip.axis === 'v'}
-            style:margin-left={si > 0 && mapStrips[si - 1].axis === 'h' ? `${strip.anchorIdx * 14}px` : si > 0 ? '14px' : '0'}
-            style:margin-top={si > 0 && mapStrips[si - 1].axis === 'v' ? `${strip.anchorIdx * 14}px` : '0'}
-          >
-            {#each strip.ids as id (id)}
-              <button
-                class="nm-dot"
-                class:here={id === current}
-                class:onpath={chain.includes(id) && id !== current}
-                title={byId.get(id)?.title ?? ''}
-                aria-label={byId.get(id)?.title ?? 'slide'}
-                onclick={() => { if (!mapClickGuard()) jump(id); }}
-              ></button>
-            {/each}
+        {#snippet stripDots(strip: (typeof mapStrips)[number])}
+          {#if strip.leading}<span class="nm-ell" aria-hidden="true">{strip.axis === 'v' ? '⋮' : '…'}</span>{/if}
+          {#each strip.ids as id (id)}
+            <button
+              class="nm-dot"
+              class:here={id === current}
+              class:onpath={chain.includes(id) && id !== current}
+              title={byId.get(id)?.title ?? ''}
+              aria-label={byId.get(id)?.title ?? 'slide'}
+              onclick={() => { if (!mapClickGuard()) jump(id); }}
+            ></button>
+          {/each}
+          {#if strip.trailing}<span class="nm-ell" aria-hidden="true">{strip.axis === 'v' ? '⋮' : '…'}</span>{/if}
+        {/snippet}
+        <div class="nm-strip" class:vert={mapStrips[0].axis === 'v'}>
+          {@render stripDots(mapStrips[0])}
+        </div>
+        {#if mapStrips.length > 1}
+          <div class="nm-branch" style:margin-left={`${mapStrips[0].activeRender * 14}px`}>
+            <div class="nm-strip" class:vert={mapStrips[1].axis === 'v'}>
+              {@render stripDots(mapStrips[1])}
+            </div>
+            {#if mapStrips.length > 2}
+              <div
+                class="nm-strip"
+                class:vert={mapStrips[2].axis === 'v'}
+                style:margin-top={mapStrips[1].axis === 'v' ? `${mapStrips[1].activeRender * 14}px` : '0'}
+              >
+                {@render stripDots(mapStrips[2])}
+              </div>
+            {/if}
           </div>
-        {/each}
+        {/if}
         {#if depth > 0}
-          <button class="nm-return" onclick={() => { if (!mapClickGuard()) exit(); }}>↩ back</button>
+          <button class="nm-return" onclick={() => { if (!mapClickGuard()) jump(chain[0]); }}>↰ main track</button>
         {/if}
       </nav>
 
@@ -523,6 +549,19 @@
   }
   .nm-strip { display: flex; gap: 6px; }
   .nm-strip.vert { flex-direction: column; }
+  .nm-branch { display: flex; align-items: flex-start; gap: 8px; }
+  .nm-ell {
+    width: 8px;
+    height: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--ink-soft);
+    opacity: 0.75;
+    pointer-events: none;
+  }
   .nm-dot {
     width: 8px;
     height: 8px;

@@ -7,6 +7,7 @@ import {
   pathTo,
   planeAxis,
   resolveArrow,
+  windowStrip,
   type FlatSlide,
 } from './navigation';
 
@@ -110,5 +111,31 @@ describe('branchTravel / jumpTravel', () => {
     expect(jumpTravel(rows, 'b2y', 'b2')).toBe('left');
     expect(jumpTravel(rows, 'b2', 'B')).toBe('up');
     expect(jumpTravel(rows, 'b1', 'b2')).toBe('down');
+  });
+});
+
+describe('windowStrip', () => {
+  it('shows one behind, the active dot and the next four, with ellipses', () => {
+    // 18-dot root plane, standing on dot 8
+    expect(windowStrip(18, 8)).toEqual({ start: 7, end: 13, leading: true, trailing: true });
+  });
+
+  it('clamps at the start — no leading ellipsis on the first dots', () => {
+    expect(windowStrip(18, 0)).toEqual({ start: 0, end: 5, leading: false, trailing: true });
+    expect(windowStrip(18, 1)).toEqual({ start: 0, end: 6, leading: false, trailing: true });
+  });
+
+  it('clamps at the end — no trailing ellipsis on the last dots', () => {
+    expect(windowStrip(18, 17)).toEqual({ start: 16, end: 18, leading: true, trailing: false });
+  });
+
+  it('short strips render whole', () => {
+    expect(windowStrip(4, 2)).toEqual({ start: 1, end: 4, leading: true, trailing: false });
+    expect(windowStrip(3, 0)).toEqual({ start: 0, end: 3, leading: false, trailing: false });
+  });
+
+  it('tolerates out-of-range active indices', () => {
+    expect(windowStrip(5, -1).start).toBe(0);
+    expect(windowStrip(5, 99).end).toBe(5);
   });
 });

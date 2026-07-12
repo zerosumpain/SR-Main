@@ -128,3 +128,20 @@ export function jumpTravel(rows: FlatSlide[], current: string, target: string): 
   if (axis === 'h') return forward ? 'right' : 'left';
   return forward ? 'down' : 'up';
 }
+
+/** Windowed view of one nav-map strip: at most `behind` dots before the
+ *  active one and `ahead` after it, with ellipsis flags where dots were cut.
+ *  Keeps the map small on long planes while the way back stays visible. */
+export interface StripWindow {
+  start: number;
+  end: number;
+  leading: boolean;
+  trailing: boolean;
+}
+
+export function windowStrip(len: number, active: number, ahead = 4, behind = 1): StripWindow {
+  const a = Math.max(0, Math.min(len - 1, active));
+  const start = Math.max(0, a - behind);
+  const end = Math.min(len, a + ahead + 1);
+  return { start, end, leading: start > 0, trailing: end < len };
+}
