@@ -26,6 +26,9 @@
     { id: 'band', label: 'band — inverted emphasis' },
     { id: 'cards', label: 'cards — paragraph cards' },
     { id: 'aside', label: 'aside — mono footnote' },
+    { id: 'pull', label: 'pull — italic pull-text' },
+    { id: 'columns', label: 'columns — two-column body' },
+    { id: 'callout', label: 'callout — petrol note box' },
   ];
   const proseStyle = $derived(
     typeof block.style === 'string' ? block.style : block.lede ? 'lede' : 'body',

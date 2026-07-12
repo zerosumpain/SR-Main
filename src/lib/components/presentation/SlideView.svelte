@@ -111,7 +111,8 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* `safe` keeps the top reachable when content overflows the stage */
+    justify-content: safe center;
     align-items: flex-start;
     gap: clamp(18px, 3vh, 34px);
     padding: clamp(24px, 5vw, 72px);
@@ -121,9 +122,21 @@
   }
   .block { width: 100%; display: flex; flex-direction: column; align-items: inherit; }
 
-  /* manual arrange — hand-laid frames in % of the stage */
+  /* manual arrange — hand-laid frames in % of the stage. The frame width is
+     the layout: intrinsic max-widths yield to it so stretching an object
+     genuinely stretches its content (quotes, prose measures, charts). */
   .slide.manual { display: block; padding: 0; overflow: hidden; }
   .mblock { position: absolute; align-items: flex-start; }
+  .mblock :global(.q),
+  .mblock :global(.prose),
+  .mblock :global(.hl),
+  .mblock :global(.hl-text),
+  .mblock :global(.hl-dek),
+  .mblock :global(.chart),
+  .mblock :global(.mh) { max-width: none; width: 100%; }
+  .mblock :global(.q-text) { font-size: clamp(20px, 2.6vw, 40px); }
+  .mblock :global(.fig) { width: 100%; }
+  .mblock :global(.fig img) { width: 100%; height: auto; max-height: none; }
 
   /* centered + statement */
   .slide[data-layout='center'],

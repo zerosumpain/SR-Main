@@ -1,7 +1,7 @@
 // Markdown-lite for the prose block: escape-then-allowlist, the same XSS-safe
 // approach as data-spine's AskModel renderer. Supports # … #### headings,
-// **bold**, *italic*, __underline__, [text](url) (site-relative or http(s)
-// only) and blank-line paragraphs. Nothing else.
+// "- " bullet lines, **bold**, *italic*, __underline__, [text](url)
+// (site-relative or http(s) only) and blank-line paragraphs. Nothing else.
 
 function escapeHtml(s: string): string {
   return s
@@ -33,21 +33,33 @@ export function renderProse(body: string): string {
       const lines = chunk.split('\n');
       const out: string[] = [];
       let para: string[] = [];
-      const flush = () => {
+      let items: string[] = [];
+      const flushPara = () => {
         if (para.length) out.push(`<p>${renderInline(para.join('<br />'))}</p>`);
         para = [];
       };
+      const flushList = () => {
+        if (items.length) out.push(`<ul>${items.map((li) => `<li>${renderInline(li)}</li>`).join('')}</ul>`);
+        items = [];
+      };
       for (const line of lines) {
         const h = line.match(/^(#{1,4})\s+(.*)$/);
+        const li = line.match(/^[-•]\s+(.*)$/);
         if (h) {
-          flush();
+          flushPara();
+          flushList();
           const level = h[1].length;
           out.push(`<h${level}>${renderInline(h[2])}</h${level}>`);
+        } else if (li) {
+          flushPara();
+          items.push(li[1]);
         } else {
+          flushList();
           para.push(line);
         }
       }
-      flush();
+      flushPara();
+      flushList();
       return out.join('');
     })
     .join('');

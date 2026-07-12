@@ -75,6 +75,11 @@ export function htmlToMarkdownLite(root: HTMLElement): string {
       const h = child.tagName.match(/^H([1-4])$/);
       if (h) {
         paras.push(`${'#'.repeat(Number(h[1]))} ${inlineOf(child).replaceAll('\n', ' ').trim()}`);
+      } else if (child.tagName === 'UL' || child.tagName === 'OL') {
+        const lis = Array.from(child.querySelectorAll(':scope > li'))
+          .map((li) => `- ${inlineOf(li).replaceAll('\n', ' ').trim()}`)
+          .filter((l) => l !== '- ');
+        if (lis.length) paras.push(lis.join('\n'));
       } else if (child.tagName === 'P') {
         const t = inlineOf(child).trim();
         if (t) paras.push(t);

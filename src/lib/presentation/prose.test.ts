@@ -29,4 +29,11 @@ describe('renderProse', () => {
   it('splits blank lines into paragraphs', () => {
     expect(renderProse('one\n\ntwo')).toBe('<p>one</p><p>two</p>');
   });
+
+  it('renders "- " lines as a bullet list, mixed with paragraphs', () => {
+    const html = renderProse('intro line\n- first\n- **second**\nafter');
+    expect(html).toContain('<p>intro line</p>');
+    expect(html).toContain('<ul><li>first</li><li><b>second</b></li></ul>');
+    expect(html).toContain('<p>after</p>');
+  });
 });

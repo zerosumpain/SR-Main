@@ -93,6 +93,20 @@
   let frameDrag: { bi: string; mode: 'move' | 'resize'; px: number; py: number; f: BlockFrame } | null = null;
   let editableCleanups: (() => void)[] = [];
   let activeCommits: (() => void)[] = [];
+  let raisedEl: HTMLElement | null = null;
+
+  /** The last-selected object always sits on top — overlapping blocks stay
+   *  reachable (grab the buried one from the panel, it surfaces). */
+  function raiseSelected() {
+    raisedEl?.classList.remove('sel-raised');
+    raisedEl = null;
+    if (selBlock === null || !previewEl) return;
+    const el = previewEl.querySelector<HTMLElement>(`.block[data-bi="${selBlock}"]`);
+    if (el) {
+      el.classList.add('sel-raised');
+      raisedEl = el;
+    }
+  }
 
   function measureGeometry(): Record<string, BlockFrame> {
     const geo: Record<string, BlockFrame> = {};
@@ -129,7 +143,23 @@
       selected.geometry = measureGeometry();
       markDirty();
     }
-    if (!selected.geometry[bi]) return;
+    // A block added AFTER the slide was hand-laid has no frame yet — measure
+    // it (or seed a sensible one) so it can be moved/resized immediately.
+    if (!selected.geometry[bi]) {
+      const host = previewEl?.getBoundingClientRect();
+      const el = previewEl?.querySelector<HTMLElement>(`.block[data-bi="${bi}"]`);
+      if (host && el) {
+        const r = el.getBoundingClientRect();
+        selected.geometry[bi] = {
+          x: Math.round(((r.left - host.left) / host.width) * 1000) / 10,
+          y: Math.round(((r.top - host.top) / host.height) * 1000) / 10,
+          w: Math.round((r.width / host.width) * 1000) / 10,
+        };
+      } else {
+        selected.geometry[bi] = { x: 30, y: 35, w: 40 };
+      }
+      markDirty();
+    }
     e.preventDefault();
     e.stopPropagation();
     frameDrag = { bi, mode, px: e.clientX, py: e.clientY, f: { ...selected.geometry[bi] } };
@@ -223,6 +253,11 @@
           e.preventDefault();
           document.execCommand({ b: 'bold', i: 'italic', u: 'underline' }[e.key.toLowerCase()]!);
         }
+        // Ctrl/Cmd+Enter in a cards prose = start a new card
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && def.rich && (block.style ?? '') === 'cards') {
+          e.preventDefault();
+          addCard();
+        }
         if (e.key === 'Escape') {
           e.preventDefault();
           el.blur();
@@ -246,6 +281,7 @@
     selBlock = bi;
     addMenu = false;
     requestAnimationFrame(() => {
+      raiseSelected();
       measureSelRect();
       attachEditables();
     });
@@ -272,6 +308,19 @@
    *  focus from the contenteditable (pointerdown preventDefault). */
   function fmt(cmd: string, value?: string) {
     document.execCommand(cmd, false, value);
+  }
+
+  /** Append a fresh card to a cards-style prose block and re-render. */
+  function addCard() {
+    if (selBlock === null || !selected) return;
+    commitActive();
+    const b = selected.blocks[selBlock] as unknown as Record<string, unknown>;
+    b.body = `${String(b.body ?? '').trim()}\n\n**New card** — detail goes here.`;
+    markDirty();
+    requestAnimationFrame(() => {
+      measureSelRect();
+      attachEditables();
+    });
   }
 
   function setSelStyle(style: string) {
@@ -313,9 +362,14 @@
     if (!selected) return;
     commitActive();
     selected.blocks.push(structuredClone(block));
+    const bi = selected.blocks.length - 1;
+    // On a hand-laid slide a new block needs its own frame at once — placed
+    // clear of the top-left so it never buries an existing block.
+    if (selected.geometry && Object.keys(selected.geometry).length > 0) {
+      selected.geometry[String(bi)] = { x: 28 + (bi % 3) * 6, y: 30 + (bi % 4) * 8, w: 44 };
+    }
     addMenu = false;
     markDirty();
-    const bi = selected.blocks.length - 1;
     requestAnimationFrame(() => selectBlock(bi));
   }
 
@@ -765,6 +819,8 @@
             {@const left = selFrame ? `${selFrame.x}%` : `${selRect?.x ?? 0}px`}
             {@const top = selFrame ? `${selFrame.y}%` : `${selRect?.y ?? 0}px`}
             {@const width = selFrame ? `${selFrame.w}%` : `${selRect?.w ?? 0}px`}
+            {@const tbLeft = selFrame ? `${Math.max(0.6, selFrame.x)}%` : `${Math.max(6, selRect?.x ?? 0)}px`}
+            {@const tbTop = selFrame ? `${Math.max(1, selFrame.y)}%` : `${Math.max(6, selRect?.y ?? 0)}px`}
             <div class="sel-frame" style:left={left} style:top={top} style:width={width} style:height={selFrame ? 'auto' : `${selRect?.h ?? 0}px`}>
               <span
                 class="sel-handle sel-resize"
@@ -775,7 +831,7 @@
               ></span>
             </div>
             {@const nearTop = selFrame ? selFrame.y < 7 : (selRect?.y ?? 0) < 44}
-            <div class="sel-toolbar" class:below={nearTop} style:left={left} style:top={top}>
+            <div class="sel-toolbar" class:below={nearTop} style:left={tbLeft} style:top={tbTop}>
               <span
                 class="sel-handle sel-grip"
                 role="button"
@@ -791,7 +847,7 @@
                   onpointerdown={(e) => e.stopPropagation()}
                   onchange={(e) => setSelStyle(e.currentTarget.value)}
                 >
-                  {#each ['body', 'lede', 'band', 'cards', 'aside'] as s (s)}<option value={s}>{s}</option>{/each}
+                  {#each ['body', 'lede', 'band', 'cards', 'aside', 'pull', 'columns', 'callout'] as s (s)}<option value={s}>{s}</option>{/each}
                 </select>
                 {#each [1, 2, 3, 4] as h (h)}
                   <button onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('formatBlock', `H${h}`)}>H{h}</button>
@@ -799,6 +855,10 @@
                 <button class="fb" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('bold')}>B</button>
                 <button class="fi" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('italic')}>I</button>
                 <button class="fu" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('underline')}>U</button>
+                <button title="Bullet list" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('insertUnorderedList')}>•</button>
+                {#if selProseStyle === 'cards'}
+                  <button title="New card (Ctrl+Enter)" onpointerdown={(e) => e.preventDefault()} onclick={addCard}>+card</button>
+                {/if}
               {:else if selType === 'chart'}
                 <span class="sel-tag">chart — edit via the panel →</span>
               {:else}
@@ -860,8 +920,8 @@
       <span class="pane-lab">BLOCKS</span>
       {#if selected}
         {#each selected.blocks as block, i (i)}
-          <details class="blk" open={selected.blocks.length <= 3}>
-            <summary>
+          <details class="blk" class:on-canvas={selBlock === i} open={selected.blocks.length <= 3}>
+            <summary onclick={() => selectBlock(i)}>
               <span class="blk-type">{block.type}</span>
               <span class="blk-ops">
                 <button title="Up" onclick={(e) => { e.preventDefault(); moveBlock(i, -1); }}>↑</button>
@@ -1108,7 +1168,7 @@
   /* canvas selection — frame, hover toolbar, handles, inline editing */
   .sel-frame {
     position: absolute;
-    z-index: 5;
+    z-index: 50;
     min-height: 24px;
     border: 1.5px dashed var(--accent);
     border-radius: 2px;
@@ -1128,7 +1188,7 @@
   }
   .sel-toolbar {
     position: absolute;
-    z-index: 7;
+    z-index: 60;
     transform: translateY(calc(-100% - 6px));
     display: inline-flex;
     align-items: center;
@@ -1175,6 +1235,10 @@
     min-width: 24px;
     min-height: 1em;
   }
+  /* the last-selected object always surfaces above overlapping neighbours */
+  .preview-frame :global(.sel-raised) { z-index: 40; position: relative; }
+  .preview-frame :global(.mblock.sel-raised) { position: absolute; }
+  .blk.on-canvas { border-color: var(--accent); }
   .preview-frame :global(.ce-live:focus) {
     background: rgba(196, 87, 10, 0.05);
     border-radius: 2px;
@@ -1183,7 +1247,7 @@
   /* the floating add box */
   .add-fab {
     position: absolute;
-    z-index: 8;
+    z-index: 55;
     right: 14px;
     bottom: 14px;
     width: 40px;
@@ -1200,7 +1264,7 @@
   .add-fab:hover { transform: scale(1.08); background: var(--accent-ink-hover); }
   .add-menu {
     position: absolute;
-    z-index: 9;
+    z-index: 65;
     right: 14px;
     bottom: 62px;
     display: grid;

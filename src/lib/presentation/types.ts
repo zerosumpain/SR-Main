@@ -35,7 +35,15 @@ export interface HeadlineBlock {
   align?: 'left' | 'center' | 'right';
 }
 
-export type ProseStyle = 'body' | 'lede' | 'band' | 'cards' | 'aside';
+export type ProseStyle =
+  | 'body'
+  | 'lede'
+  | 'band'
+  | 'cards'
+  | 'aside'
+  | 'pull'
+  | 'columns'
+  | 'callout';
 
 /** Markdown-lite body: # …#### headings, **bold**, *italic*, __underline__,
  *  [text](url), blank-line paragraphs. `style` picks a preformatted register:

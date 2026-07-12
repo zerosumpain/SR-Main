@@ -29,7 +29,14 @@
     <div class="band-inner">{@html html}</div>
   </div>
 {:else}
-  <div class="prose" class:lede={style === 'lede'} class:aside={style === 'aside'}>
+  <div
+    class="prose"
+    class:lede={style === 'lede'}
+    class:aside={style === 'aside'}
+    class:pull={style === 'pull'}
+    class:columns={style === 'columns'}
+    class:callout={style === 'callout'}
+  >
     <!-- eslint-disable-next-line svelte/no-at-html-tags — renderProse escapes first -->
     {@html html}
   </div>
@@ -59,6 +66,70 @@
   .prose :global(b) { color: var(--ink); }
   .prose :global(a) { color: var(--accent-ink); }
   .prose :global(u) { text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .prose :global(ul) {
+    margin: 0 0 14px;
+    padding-left: 1.2em;
+    list-style: none;
+  }
+  .prose :global(li) {
+    font-size: clamp(15px, 1.8vw, 19px);
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .prose :global(li)::before {
+    content: '—';
+    position: absolute;
+    left: -1.2em;
+    color: var(--accent);
+  }
+  .prose.lede :global(li) { font-size: clamp(18px, 2.4vw, 26px); color: var(--ink); }
+
+  /* pull — oversized italic pull-text between hairlines (not a quotation) */
+  .prose.pull {
+    max-width: 46ch;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: clamp(14px, 2.4vh, 26px) 0;
+  }
+  .prose.pull :global(p) {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(21px, 2.9vw, 34px);
+    line-height: 1.35;
+    color: var(--ink);
+  }
+
+  /* columns — dense reference text flowed into two columns */
+  .prose.columns {
+    max-width: none;
+    width: 100%;
+    column-count: 2;
+    column-gap: clamp(24px, 3vw, 44px);
+    column-rule: 1px solid rgba(28, 22, 17, 0.14);
+  }
+  .prose.columns :global(p) { font-size: clamp(13px, 1.5vw, 16px); line-height: 1.62; }
+  .prose.columns :global(li) { font-size: clamp(13px, 1.5vw, 16px); }
+
+  /* callout — tinted petrol note box, bold opener as its title */
+  .prose.callout {
+    background: rgba(14, 91, 102, 0.08);
+    border-left: 4px solid var(--accent-ink);
+    border-radius: var(--radius-round, 4px);
+    padding: clamp(14px, 1.9vw, 22px);
+  }
+  .prose.callout :global(p) { color: var(--ink-soft); }
+  .prose.callout :global(b) {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(10px, 1.2vw, 12px);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin-bottom: 6px;
+  }
   .prose :global(h1),
   .prose :global(h2),
   .prose :global(h3),
