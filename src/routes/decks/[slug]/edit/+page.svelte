@@ -12,6 +12,7 @@
   import type { Block, SlideNode } from '$lib/presentation/types';
   import BlockForm from './BlockForm.svelte';
   import SiteMediaPicker from './SiteMediaPicker.svelte';
+  import { EDITABLE_FIELDS, htmlToMarkdownLite } from './canvas-text';
 
   let { data } = $props();
 
@@ -44,7 +45,6 @@
   let isPublic = $state(data.deck.isPublic);
   let shares = $state<{ id: string; label: string | null; revokedAt: string | null; useCount: number }[]>([]);
   let freshToken = $state<string | null>(null);
-  let addType = $state('prose');
   let composeText = $state('');
   let composeMedia = $state('');
   let composeNest = $state(false);
@@ -82,11 +82,17 @@
     }
   }
 
-  // --- manual arrange mode: drag/resize block frames on the preview ---
-  let arranging = $state(false);
+  // --- canvas editing: selection, inline text, drag/resize (always on) ---
   let previewEl: HTMLElement | undefined; // plain let — measured, never rendered from
-  // frame drag internals — plain lets
+  let selBlock = $state<number | null>(null);
+  /** px rect of the selected block within the preview frame (drives the
+   *  hover toolbar + handles when the slide isn't hand-laid yet). */
+  let selRect = $state<{ x: number; y: number; w: number; h: number } | null>(null);
+  let addMenu = $state(false);
+  // inline-edit + frame-drag internals — plain lets (svelte5-pitfalls §1)
   let frameDrag: { bi: string; mode: 'move' | 'resize'; px: number; py: number; f: BlockFrame } | null = null;
+  let editableCleanups: (() => void)[] = [];
+  let activeCommits: (() => void)[] = [];
 
   function measureGeometry(): Record<string, BlockFrame> {
     const geo: Record<string, BlockFrame> = {};
@@ -108,24 +114,22 @@
     return geo;
   }
 
-  function toggleArrange() {
-    if (!selected) return;
-    if (!arranging && (!selected.geometry || Object.keys(selected.geometry).length === 0)) {
-      selected.geometry = measureGeometry();
-      markDirty();
-    }
-    arranging = !arranging;
-  }
-
   function resetArrange() {
     if (!selected) return;
     selected.geometry = null;
-    arranging = false;
     markDirty();
+    requestAnimationFrame(measureSelRect);
   }
 
   function startFrame(bi: string, mode: 'move' | 'resize', e: PointerEvent) {
-    if (!selected?.geometry?.[bi]) return;
+    if (!selected) return;
+    commitActive();
+    // First drag hand-lays the slide: measure the archetype's positions once.
+    if (!selected.geometry || Object.keys(selected.geometry).length === 0) {
+      selected.geometry = measureGeometry();
+      markDirty();
+    }
+    if (!selected.geometry[bi]) return;
     e.preventDefault();
     e.stopPropagation();
     frameDrag = { bi, mode, px: e.clientX, py: e.clientY, f: { ...selected.geometry[bi] } };
@@ -155,7 +159,166 @@
   }
   function endFrame() {
     frameDrag = null;
+    requestAnimationFrame(measureSelRect);
   }
+
+  // --- selection + inline editing ---
+
+  function measureSelRect() {
+    if (selBlock === null || !previewEl) {
+      selRect = null;
+      return;
+    }
+    const host = previewEl.getBoundingClientRect();
+    const el = previewEl.querySelector<HTMLElement>(`.block[data-bi="${selBlock}"]`);
+    if (!el) {
+      selRect = null;
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    selRect = { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height };
+  }
+
+  /** Commit any in-progress inline edits back into the block data. */
+  function commitActive() {
+    for (const commit of activeCommits) commit();
+  }
+
+  function detachEditables() {
+    commitActive();
+    for (const c of editableCleanups) c();
+    editableCleanups = [];
+    activeCommits = [];
+  }
+
+  function attachEditables() {
+    detachEditables();
+    if (selBlock === null || !selected || !previewEl) return;
+    const block = selected.blocks[selBlock] as unknown as Record<string, unknown>;
+    if (!block) return;
+    const blockEl = previewEl.querySelector<HTMLElement>(`.block[data-bi="${selBlock}"]`);
+    if (!blockEl) return;
+    for (const def of EDITABLE_FIELDS[String(block.type)] ?? []) {
+      const el = blockEl.querySelector<HTMLElement>(def.selector);
+      if (!el) continue;
+      el.contentEditable = 'true';
+      el.spellcheck = false;
+      el.classList.add('ce-live');
+      const commit = () => {
+        let next: string;
+        if (def.rich) {
+          next = htmlToMarkdownLite(el);
+        } else {
+          next = (el.textContent ?? '').trim();
+          if (def.stripQuotes) next = next.replace(/^[“"]|[”"]$/g, '');
+        }
+        if (next && next !== block[def.field]) {
+          block[def.field] = next;
+          markDirty();
+        }
+      };
+      const onBlur = () => commit();
+      const onKeydown = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && ['b', 'i', 'u'].includes(e.key.toLowerCase())) {
+          e.preventDefault();
+          document.execCommand({ b: 'bold', i: 'italic', u: 'underline' }[e.key.toLowerCase()]!);
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          el.blur();
+        }
+        e.stopPropagation(); // typing must not trigger editor shortcuts
+      };
+      el.addEventListener('blur', onBlur);
+      el.addEventListener('keydown', onKeydown);
+      activeCommits.push(commit);
+      editableCleanups.push(() => {
+        el.removeEventListener('blur', onBlur);
+        el.removeEventListener('keydown', onKeydown);
+        el.contentEditable = 'false';
+        el.classList.remove('ce-live');
+      });
+    }
+  }
+
+  function selectBlock(bi: number | null) {
+    if (selBlock !== null && bi !== selBlock) detachEditables();
+    selBlock = bi;
+    addMenu = false;
+    requestAnimationFrame(() => {
+      measureSelRect();
+      attachEditables();
+    });
+  }
+
+  function onCanvasPointerDown(e: PointerEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('.sel-toolbar, .sel-handle, .add-fab, .add-menu')) return;
+    const blockEl = target?.closest<HTMLElement>('.block[data-bi]');
+    if (!blockEl) {
+      selectBlock(null);
+      return;
+    }
+    const bi = Number(blockEl.dataset.bi);
+    if (bi !== selBlock) selectBlock(bi);
+    // Non-text blocks drag from anywhere; text blocks drag via the ⠿ grip.
+    const type = String((selected?.blocks[bi] as { type?: string } | undefined)?.type ?? '');
+    if (['image', 'chart', 'embed', 'iframe', 'statRow', 'timeline'].includes(type)) {
+      startFrame(String(bi), 'move', e);
+    }
+  }
+
+  /** execCommand keeps the live selection — toolbar buttons must not steal
+   *  focus from the contenteditable (pointerdown preventDefault). */
+  function fmt(cmd: string, value?: string) {
+    document.execCommand(cmd, false, value);
+  }
+
+  function setSelStyle(style: string) {
+    if (selBlock === null || !selected) return;
+    commitActive();
+    const b = selected.blocks[selBlock] as unknown as Record<string, unknown>;
+    b.style = style;
+    delete b.lede;
+    markDirty();
+    requestAnimationFrame(() => {
+      measureSelRect();
+      attachEditables();
+    });
+  }
+
+  /** Keep geometry keys aligned when blocks reorder/delete. */
+  function remapGeometry(map: (i: number) => number | null) {
+    if (!selected?.geometry) return;
+    const next: Record<string, BlockFrame> = {};
+    for (const [k, f] of Object.entries(selected.geometry)) {
+      const to = map(Number(k));
+      if (to !== null) next[String(to)] = f;
+    }
+    selected.geometry = next;
+  }
+
+  function deleteSelBlock() {
+    if (selBlock === null || !selected) return;
+    detachEditables();
+    const bi = selBlock;
+    selected.blocks.splice(bi, 1);
+    remapGeometry((i) => (i === bi ? null : i > bi ? i - 1 : i));
+    selBlock = null;
+    selRect = null;
+    markDirty();
+  }
+
+  function addBlockFromMenu(block: Block) {
+    if (!selected) return;
+    commitActive();
+    selected.blocks.push(structuredClone(block));
+    addMenu = false;
+    markDirty();
+    const bi = selected.blocks.length - 1;
+    requestAnimationFrame(() => selectBlock(bi));
+  }
+
 
   // --- drag attached site media onto the slide ---
   function chipDragStart(e: DragEvent, i: number) {
@@ -205,6 +368,18 @@
 
   const planes = $derived(buildPlanes(slides));
   const selected = $derived(slides.find((s) => s.id === selectedId) ?? slides[0]);
+  const selType = $derived(
+    selBlock !== null ? ((selected?.blocks[selBlock] as { type?: string } | undefined)?.type ?? null) : null,
+  );
+  const selIsText = $derived(selType !== null && selType in EDITABLE_FIELDS);
+  const selFrame = $derived(
+    selBlock !== null && selected?.geometry ? (selected.geometry[String(selBlock)] ?? null) : null,
+  );
+  const selProseStyle = $derived.by(() => {
+    if (selType !== 'prose' || selBlock === null || !selected) return 'body';
+    const b = selected.blocks[selBlock] as { style?: string; lede?: boolean };
+    return b.style ?? (b.lede ? 'lede' : 'body');
+  });
   const previewSlide = $derived(
     selected
       ? ({ ...selected, hasChildren: (planes.get(selected.id) ?? []).length > 0 } as SlideNode)
@@ -236,6 +411,7 @@
   }
 
   async function saveSlide(slide: EditSlide) {
+    commitActive();
     const check = validateBlocks(slide.blocks);
     if (!check.ok) {
       flash('err', `Blocks invalid — ${check.issues.join('; ')}`);
@@ -386,15 +562,12 @@
     await renumberPlane(oldPlane);
   }
 
-  function addBlock() {
-    if (!selected) return;
-    const opt = TEMPLATE_OPTIONS.find((o) => o.key === addType);
-    if (!opt) return;
-    selected.blocks.push(structuredClone(opt.block));
-    markDirty();
-  }
   function removeBlock(i: number) {
+    detachEditables();
+    selBlock = null;
+    selRect = null;
     selected?.blocks.splice(i, 1);
+    remapGeometry((k) => (k === i ? null : k > i ? k - 1 : k));
     markDirty();
   }
   function moveBlock(i: number, dir: -1 | 1) {
@@ -402,6 +575,7 @@
     const j = i + dir;
     if (j < 0 || j >= selected.blocks.length) return;
     [selected.blocks[i], selected.blocks[j]] = [selected.blocks[j], selected.blocks[i]];
+    remapGeometry((k) => (k === i ? j : k === j ? i : k));
     markDirty();
   }
   function markDirty() {
@@ -455,7 +629,7 @@
   {#if slide}
     <li>
       <div class="tree-row" class:sel={selectedId === id} style:padding-left="{8 + depth * 16}px">
-        <button class="tr-title" onclick={() => (selectedId = id)}>
+        <button class="tr-title" onclick={() => { detachEditables(); selBlock = null; selRect = null; selectedId = id; }}>
           {slide.title ?? 'Untitled'}
           {#if dirty[id]}<span class="dot" title="Unsaved">●</span>{/if}
         </button>
@@ -507,7 +681,7 @@
         {#if attached.length}
           <div class="attach-chips">
             {#each attached as b, i (i)}
-              <span class="attach-chip" role="button" draggable="true" ondragstart={(e) => chipDragStart(e, i)} title="Drag onto the slide, or compose with it">
+              <span class="attach-chip" role="button" tabindex="-1" draggable="true" ondragstart={(e) => chipDragStart(e, i)} title="Drag onto the slide, or compose with it">
                 {blockLabel(b)}
                 <button
                   title="Add to the selected slide now"
@@ -567,52 +741,80 @@
     <main class="ed-preview">
       {#if previewSlide}
         <div class="preview-toolbar">
-          <button class="arr-btn" class:active={arranging} onclick={toggleArrange}>
-            {arranging ? '✓ done arranging' : '⊞ arrange'}
-          </button>
+          <span class="arr-note">click a block to select & type · ⠿ moves it · right handle resizes</span>
           {#if selected.geometry}
             <button class="arr-btn danger" onclick={resetArrange}>reset to layout</button>
-            <span class="arr-note">hand-laid — drag to move, right edge to resize width</span>
+            <span class="arr-note">hand-laid</span>
           {/if}
         </div>
         <div
           class="preview-frame"
-          class:arranging
           role="region"
-          aria-label="Slide preview (drop site media here)"
+          aria-label="Slide canvas — click to select, type to edit, drop site media here"
           ondragover={(e) => e.preventDefault()}
           ondrop={previewDrop}
+          onpointerdown={onCanvasPointerDown}
+          onpointermove={moveFrame}
+          onpointerup={endFrame}
         >
           <div class="preview-theme" bind:this={previewEl}>
             <SlideView slide={previewSlide} />
           </div>
-          {#if arranging && selected.geometry}
-            <div class="arr-overlay">
-              {#each Object.entries(selected.geometry) as [bi, f] (bi)}
-                <div
-                  class="arr-frame"
-                  role="button"
-                  aria-label="Move block"
-                  tabindex="-1"
-                  style:left="{f.x}%"
-                  style:top="{f.y}%"
-                  style:width="{f.w}%"
-                  onpointerdown={(e) => startFrame(bi, 'move', e)}
-                  onpointermove={moveFrame}
-                  onpointerup={endFrame}
+
+          {#if selBlock !== null && (selFrame || selRect)}
+            {@const left = selFrame ? `${selFrame.x}%` : `${selRect?.x ?? 0}px`}
+            {@const top = selFrame ? `${selFrame.y}%` : `${selRect?.y ?? 0}px`}
+            {@const width = selFrame ? `${selFrame.w}%` : `${selRect?.w ?? 0}px`}
+            <div class="sel-frame" style:left={left} style:top={top} style:width={width} style:height={selFrame ? 'auto' : `${selRect?.h ?? 0}px`}>
+              <span
+                class="sel-handle sel-resize"
+                role="button"
+                aria-label="Resize block width"
+                tabindex="-1"
+                onpointerdown={(e) => startFrame(String(selBlock), 'resize', e)}
+              ></span>
+            </div>
+            {@const nearTop = selFrame ? selFrame.y < 7 : (selRect?.y ?? 0) < 44}
+            <div class="sel-toolbar" class:below={nearTop} style:left={left} style:top={top}>
+              <span
+                class="sel-handle sel-grip"
+                role="button"
+                aria-label="Move block"
+                tabindex="-1"
+                title="Drag to move"
+                onpointerdown={(e) => startFrame(String(selBlock), 'move', e)}>⠿</span
+              >
+              {#if selType === 'prose'}
+                <select
+                  class="sel-style"
+                  value={selProseStyle}
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onchange={(e) => setSelStyle(e.currentTarget.value)}
                 >
-                  <span class="arr-tag">{selected.blocks[Number(bi)]?.type ?? bi}</span>
-                  <span
-                    class="arr-resize"
-                    role="button"
-                    aria-label="Resize block width"
-                    tabindex="-1"
-                    onpointerdown={(e) => startFrame(bi, 'resize', e)}
-                    onpointermove={moveFrame}
-                    onpointerup={endFrame}
-                  ></span>
-                </div>
+                  {#each ['body', 'lede', 'band', 'cards', 'aside'] as s (s)}<option value={s}>{s}</option>{/each}
+                </select>
+                {#each [1, 2, 3, 4] as h (h)}
+                  <button onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('formatBlock', `H${h}`)}>H{h}</button>
+                {/each}
+                <button class="fb" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('bold')}>B</button>
+                <button class="fi" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('italic')}>I</button>
+                <button class="fu" onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('underline')}>U</button>
+              {:else if selType === 'chart'}
+                <span class="sel-tag">chart — edit via the panel →</span>
+              {:else}
+                <span class="sel-tag">{selType}</span>
+              {/if}
+              <button class="sel-del" title="Delete block" onclick={deleteSelBlock}>✕</button>
+            </div>
+          {/if}
+
+          <button class="add-fab" title="Add a block" onclick={() => (addMenu = !addMenu)}>＋</button>
+          {#if addMenu}
+            <div class="add-menu">
+              {#each TEMPLATE_OPTIONS as o (o.key)}
+                <button onclick={() => addBlockFromMenu(o.block)}>{o.label}</button>
               {/each}
+              <button class="site-entry" onclick={() => { addMenu = false; picker = 'block'; }}>◈ site media…</button>
             </div>
           {/if}
         </div>
@@ -670,13 +872,6 @@
             <BlockForm block={block as unknown as Record<string, unknown>} onEdited={markDirty} />
           </details>
         {/each}
-        <div class="add-block">
-          <select bind:value={addType}>
-            {#each TEMPLATE_OPTIONS as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-          </select>
-          <button onclick={addBlock}>+ block</button>
-          <button onclick={() => (picker = 'block')} title="Insert an interactive, page or image from the site">◈ site</button>
-        </div>
         <button class="save-btn" disabled={saving || !dirty[selected.id]} onclick={() => saveSlide(selected)}>
           {saving ? 'Saving…' : dirty[selected.id] ? 'Save slide' : 'Saved'}
         </button>
@@ -910,32 +1105,17 @@
     aspect-ratio: 16 / 10;
     position: relative;
   }
-  .preview-frame.arranging { user-select: none; }
-  .arr-overlay { position: absolute; inset: 0; z-index: 5; }
-  .arr-frame {
+  /* canvas selection — frame, hover toolbar, handles, inline editing */
+  .sel-frame {
     position: absolute;
-    min-height: 28px;
-    height: auto;
+    z-index: 5;
+    min-height: 24px;
     border: 1.5px dashed var(--accent);
     border-radius: 2px;
-    background: rgba(196, 87, 10, 0.06);
-    cursor: grab;
-    touch-action: none;
+    pointer-events: none;
   }
-  .arr-frame:active { cursor: grabbing; }
-  .arr-tag {
-    position: absolute;
-    top: -16px;
-    left: 0;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.08em;
-    color: var(--bg);
-    background: var(--accent);
-    border-radius: 2px;
-    padding: 1px 5px;
-  }
-  .arr-resize {
+  .sel-handle { pointer-events: auto; touch-action: none; }
+  .sel-resize {
     position: absolute;
     right: -5px;
     top: 50%;
@@ -945,8 +1125,108 @@
     background: var(--accent);
     border-radius: 2px;
     cursor: ew-resize;
-    touch-action: none;
   }
+  .sel-toolbar {
+    position: absolute;
+    z-index: 7;
+    transform: translateY(calc(-100% - 6px));
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--text-primary);
+    border-radius: 3px;
+    padding: 3px 4px;
+    white-space: nowrap;
+  }
+  /* blocks at the canvas top would clip an above-toolbar — flip it inside */
+  .sel-toolbar.below { transform: translateY(6px); }
+  .sel-toolbar button {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    min-width: 22px;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    padding: 3px 4px;
+    cursor: pointer;
+  }
+  .sel-toolbar button:hover { color: var(--accent); border-color: var(--accent); }
+  .sel-toolbar .fb { font-weight: 700; }
+  .sel-toolbar .fi { font-style: italic; }
+  .sel-toolbar .fu { text-decoration: underline; }
+  .sel-toolbar .sel-del:hover { color: var(--error); border-color: var(--error); }
+  .sel-grip { cursor: grab; font-size: 11px; color: var(--accent-ink); padding: 2px 5px; }
+  .sel-grip:active { cursor: grabbing; }
+  .sel-style {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    padding: 2px 3px;
+  }
+  .sel-tag { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); padding: 0 5px; }
+  .preview-frame :global(.ce-live) {
+    outline: none;
+    cursor: text;
+    min-width: 24px;
+    min-height: 1em;
+  }
+  .preview-frame :global(.ce-live:focus) {
+    background: rgba(196, 87, 10, 0.05);
+    border-radius: 2px;
+  }
+
+  /* the floating add box */
+  .add-fab {
+    position: absolute;
+    z-index: 8;
+    right: 14px;
+    bottom: 14px;
+    width: 40px;
+    height: 40px;
+    font-size: 19px;
+    line-height: 1;
+    color: var(--bg);
+    background: var(--accent-ink);
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .add-fab:hover { transform: scale(1.08); background: var(--accent-ink-hover); }
+  .add-menu {
+    position: absolute;
+    z-index: 9;
+    right: 14px;
+    bottom: 62px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 2px;
+    background: var(--surface-elevated);
+    border: 2px solid var(--text-primary);
+    border-radius: 4px;
+    padding: 6px;
+    max-height: 70%;
+    overflow-y: auto;
+  }
+  .add-menu button {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-align: left;
+    color: var(--text-primary);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    padding: 6px 8px;
+    cursor: pointer;
+  }
+  .add-menu button:hover { color: var(--accent); border-color: var(--accent); }
+  .add-menu .site-entry { grid-column: 1 / -1; color: var(--accent-ink); border-top: 1px solid var(--card-border); border-radius: 0; margin-top: 2px; padding-top: 8px; }
   .preview-theme {
     --paper: var(--bg);
     --paper-deep: var(--surface-elevated);
@@ -989,28 +1269,6 @@
   .blk-ops button:hover { color: var(--accent); }
   .blk-ops button.danger:hover { color: var(--error); }
   .blk > :global(.bf) { padding: 4px 10px 12px; }
-  .add-block { display: flex; gap: 6px; margin: 10px 0; }
-  .add-block select {
-    flex: 1;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: var(--bg);
-    color: var(--text-primary);
-    border: 1px solid var(--card-border);
-    border-radius: 2px;
-    padding: 6px;
-  }
-  .add-block button {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    background: none;
-    border: 1px dashed var(--card-border);
-    border-radius: 2px;
-    padding: 6px 12px;
-    cursor: pointer;
-  }
-  .add-block button:hover { color: var(--accent); border-color: var(--accent); }
   .save-btn {
     display: block;
     width: 100%;
