@@ -263,7 +263,7 @@
   .hero { min-height: calc(82svh - var(--topH, 56px)); display: flex; flex-direction: column; justify-content: center; }
   .hero h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(38px, 7vw, 90px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 26px; color: var(--ink); }
   .hero h1 em { font-style: italic; color: var(--accent-ink); }
-  .hero-lede { font-size: clamp(16px, 1.7vw, 21px); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 64ch; margin: 0 0 34px; }
+  .hero-lede { font-size: clamp(16px, 1.7vw, 21px); line-height: 1.55; color: rgba(26,16,8,0.82); max-width: 64ch; margin: 0 0 34px; }
   .hero-lede b { color: var(--ink); }
   .hero-stats { display: flex; gap: clamp(20px, 4vw, 56px); flex-wrap: wrap; margin-bottom: 38px; }
   .hs b { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(30px, 3.6vw, 52px); line-height: 1; color: var(--ink); letter-spacing: -0.02em; }
@@ -277,7 +277,7 @@
 
   h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(30px, 4.6vw, 60px); line-height: 1.04; letter-spacing: -0.025em; margin: 0 0 20px; color: var(--ink); }
   h2 em { font-style: italic; color: var(--accent-ink); }
-  .slide-lede { font-size: clamp(15px, 1.5vw, 19px); line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 74ch; margin: 0 0 34px; }
+  .slide-lede { font-size: clamp(15px, 1.5vw, 19px); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 74ch; margin: 0 0 34px; }
   .slide-lede b { color: var(--ink); }
 
   /* inverted band */
@@ -287,13 +287,13 @@
 
   /* requirements */
   .req-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
-  .req-card { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.18); border-top: 3px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 18px 20px; min-width: 0; }
+  .req-card { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.18); border-top: 3px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: #faf6ec; padding: 18px 20px; min-width: 0; }
   .req-card h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.15; margin: 0 0 8px; color: var(--ink); }
-  .req-card p { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0 0 10px; }
+  .req-card p { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0 0 10px; }
   .req-from { margin-top: auto; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em; color: var(--accent-ink); }
 
   /* world tour */
-  .arch { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); margin-bottom: 10px; }
+  .arch { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: #faf6ec; margin-bottom: 10px; }
   .arch summary { display: flex; align-items: baseline; gap: 12px; cursor: pointer; list-style: none; padding: 14px 18px; }
   .arch summary::-webkit-details-marker { display: none; }
   .arch-no { flex: 0 0 auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--paper, #f1ead6); background: var(--accent-ink); border-radius: var(--radius-sharp); padding: 2px 8px; }
@@ -301,7 +301,7 @@
   .arch-short { font-size: 12.5px; font-style: italic; color: rgba(28,22,17,0.55); }
   .arch-chev { margin-left: auto; font-size: 11px; color: rgba(28,22,17,0.45); transition: transform 0.15s; }
   .arch[open] .arch-chev { transform: rotate(180deg); }
-  .arch-what { font-size: 13.5px; line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0; padding: 0 18px 12px; max-width: 90ch; }
+  .arch-what { font-size: 13.5px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; padding: 0 18px 12px; max-width: 90ch; }
   .impl-table { padding: 0 18px 16px; }
   .impl-row { display: flex; gap: 14px; padding: 10px 0; border-top: 1px dashed rgba(28,22,17,0.14); }
   .impl-where { flex: 0 0 170px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--accent-ink); padding-top: 3px; }
@@ -310,31 +310,31 @@
   .impl-tech { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.7); margin: 3px 0 2px; }
   .impl-note { font-size: 12px; line-height: 1.5; font-style: italic; color: rgba(28,22,17,0.55); margin: 0; }
   .obs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 26px; }
-  .obs-card { border: 1px solid rgba(28,22,17,0.18); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; }
+  .obs-card { border: 1px solid rgba(28,22,17,0.18); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: #faf6ec; padding: 14px 16px; }
   .obs-card h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15.5px; margin: 0 0 6px; color: var(--ink); }
-  .obs-card p { font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0; }
+  .obs-card p { font-size: 12.5px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; }
 
   /* stack + risks */
   .stack-risks { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .col-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #2f7d4f; margin-bottom: 10px; }
   .col-lab.risk-lab { color: #8a2d3a; }
-  .stack-col, .risk-col { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 16px 18px; min-width: 0; }
+  .stack-col, .risk-col { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: #faf6ec; padding: 16px 18px; min-width: 0; }
   .stack-row, .risk-row { padding: 8px 0; border-top: 1px dashed rgba(28,22,17,0.14); }
   .stack-row b, .risk-row b { font-family: 'Fraunces', serif; font-size: 14.5px; color: var(--ink); }
   .stack-row p, .risk-row p { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.72); margin: 3px 0 0; }
 
   /* policy */
-  .commit-list { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 4px 18px; }
+  .commit-list { border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round); background: #faf6ec; padding: 4px 18px; }
   .commit-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 6px 18px; padding: 12px 0; border-top: 1px dashed rgba(28,22,17,0.14); }
   .commit-row:first-child { border-top: none; }
   .commit-what b { font-family: 'Fraunces', serif; font-size: 15.5px; color: var(--ink); display: block; }
   .commit-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.03em; color: rgba(28,22,17,0.5); }
-  .commit-align { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.76); margin: 0; }
+  .commit-align { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; }
   .tension-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(19px, 2vw, 26px); margin: 34px 0 14px; color: var(--ink); }
   .tension-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
   .tension-card { border: 1px solid rgba(138,45,58,0.4); border-left: 3px solid #8a2d3a; border-radius: var(--radius-round); background: rgba(138,45,58,0.045); padding: 14px 16px; }
   .tension-card h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15.5px; margin: 0 0 6px; color: var(--ink); }
-  .tension-card p { font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); margin: 0; }
+  .tension-card p { font-size: 12.5px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; }
   .bottom-line { margin: 30px 0 0; font-family: 'Fraunces', serif; font-size: clamp(17px, 1.9vw, 23px); line-height: 1.45; color: rgba(28,22,17,0.85); max-width: 80ch; }
   .bottom-line b { color: var(--accent-ink); }
   .next-row { margin-top: 44px; }

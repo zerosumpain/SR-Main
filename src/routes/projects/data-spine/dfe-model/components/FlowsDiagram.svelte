@@ -100,20 +100,20 @@
 
 <style>
   .flows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .flow { border: 1.5px solid rgba(28,22,17,0.25); border-top: 4px solid var(--fc); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 18px 20px 14px; min-width: 0; display: flex; flex-direction: column; }
+  .flow { border: 1.5px solid rgba(26,16,8,0.35); border-top: 4px solid var(--fc); border-radius: var(--radius-round); background: var(--surface-elevated, #e8dece); padding: 18px 20px 14px; min-width: 0; display: flex; flex-direction: column; }
   .f-head .f-tag { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.2em; color: var(--fc); }
   .f-head h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(17px, 1.8vw, 22px); margin: 3px 0 10px; color: var(--ink); }
 
   .strip-scroll { overflow-x: auto; }
   svg { display: block; min-width: 420px; width: 100%; height: auto; }
-  .rail { stroke: rgba(28,22,17,0.18); stroke-width: 2; }
-  .seg { fill: none; stroke: var(--fc); stroke-width: 2.5; opacity: 0.45; }
-  .n-dot { fill: rgba(255,255,255,0.9); stroke: rgba(28,22,17,0.4); stroke-width: 1.5; }
+  .rail { stroke: rgba(26,16,8,0.3); stroke-width: 2; }
+  .seg { fill: none; stroke: var(--fc); stroke-width: 2.5; opacity: 0.6; }
+  .n-dot { fill: #ffffff; stroke: rgba(26,16,8,0.55); stroke-width: 1.5; }
   .n-dot.on { stroke: var(--fc); stroke-width: 2.5; }
-  .n-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); }
+  .n-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em; fill: rgba(26,16,8,0.72); }
   .n-lab.on { fill: var(--ink); font-weight: 600; }
 
-  .step-card { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--fc); border-radius: var(--radius-round); background: rgba(255,255,255,0.6); padding: 12px 14px; margin: 10px 0 12px; min-height: 92px;
+  .step-card { display: flex; gap: 12px; align-items: flex-start; border: 1.5px solid var(--fc); border-radius: var(--radius-round); background: #ffffff; padding: 12px 14px; margin: 10px 0 12px; min-height: 92px;
     animation-duration: 0.9s; animation-timing-function: ease-out; }
   .s-no { flex: 0 0 26px; width: 26px; height: 26px; display: grid; place-content: center; background: var(--fc); color: #fff; border-radius: var(--radius-pill); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
   .s-body b { font-family: 'Fraunces', serif; font-size: 16px; color: var(--ink); }
@@ -121,10 +121,10 @@
 
   .f-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: auto; }
   .dots { display: inline-flex; gap: 5px; }
-  .pd { width: 11px; height: 11px; border-radius: var(--radius-pill); border: 1.5px solid rgba(28,22,17,0.35); background: transparent; cursor: pointer; padding: 0; }
+  .pd { width: 11px; height: 11px; border-radius: var(--radius-pill); border: 1.5px solid rgba(26,16,8,0.5); background: transparent; cursor: pointer; padding: 0; }
   .pd.done { background: rgba(28,22,17,0.3); border-color: transparent; }
   .pd.on { background: var(--fc); border-color: var(--fc); }
-  .f-step { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.45); }
+  .f-step { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(26,16,8,0.6); }
   .f-btns { margin-left: auto; display: inline-flex; gap: 6px; }
   .nav-btn { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; border-radius: var(--radius-round); padding: 7px 13px; cursor: pointer; }
   .nav-btn.primary { background: var(--ink); color: var(--paper, #f1ead6); border: 1.5px solid var(--ink); }
@@ -133,13 +133,13 @@
   .nav-btn.ghost:hover:not(:disabled) { border-color: var(--ink); }
   .nav-btn:disabled { opacity: 0.35; cursor: default; }
 
-  .f-foot { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.45); text-align: center; margin-top: 12px; border-top: 1px dashed rgba(28,22,17,0.18); padding-top: 8px; }
+  .f-foot { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(26,16,8,0.62); text-align: center; margin-top: 12px; border-top: 1px dashed rgba(26,16,8,0.28); padding-top: 8px; }
 
-  .eli-note { font-size: 13px; font-style: italic; color: rgba(28,22,17,0.6); margin: 12px 2px 0; }
+  .eli-note { font-size: 13px; font-style: italic; color: rgba(26,16,8,0.72); margin: 12px 2px 0; }
 
   /* -global-: the animation-name arrives via an inline style, which Svelte's scoper does not rewrite */
-  @keyframes -global-step-pulse-a { 0% { background: rgba(255,255,255,0.95); } 100% { background: rgba(255,255,255,0.6); } }
-  @keyframes -global-step-pulse-b { 0% { background: rgba(255,255,255,0.95); } 100% { background: rgba(255,255,255,0.6); } }
+  @keyframes -global-step-pulse-a { 0% { background: #fbf7ee; } 100% { background: #ffffff; } }
+  @keyframes -global-step-pulse-b { 0% { background: #fbf7ee; } 100% { background: #ffffff; } }
 
   @media (max-width: 900px) {
     .flows { grid-template-columns: 1fr; }

@@ -101,42 +101,42 @@
 </div>
 
 <style>
-  .edge { border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); overflow: hidden; }
+  .edge { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-round); background: var(--surface-elevated, #e8dece); overflow: hidden; }
   .diagram-scroll { overflow-x: auto; }
   svg { display: block; min-width: 820px; width: 100%; height: auto; }
 
-  .panel { fill: rgba(255,255,255,0.4); stroke: rgba(28,22,17,0.22); stroke-width: 1; }
-  .panel.strong { stroke: rgba(28,22,17,0.8); stroke-width: 2; fill: var(--accent-ink-tint-06, rgba(14,91,102,0.05)); }
+  .panel { fill: rgba(255,255,255,0.55); stroke: rgba(26,16,8,0.4); stroke-width: 1.2; }
+  .panel.strong { stroke: var(--accent-ink, #0e5b66); stroke-width: 2; fill: rgba(14,91,102,0.08); }
   .panel.dashed { stroke-dasharray: 6 5; }
-  .p-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.16em; fill: rgba(28,22,17,0.62); font-weight: 600; }
+  .p-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.16em; fill: rgba(26,16,8,0.78); font-weight: 600; }
   .p-title.strong-t { fill: var(--accent-ink); }
-  .p-sub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; fill: rgba(28,22,17,0.45); }
-  .p-note { font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; fill: rgba(28,22,17,0.55); }
+  .p-sub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; fill: rgba(26,16,8,0.72); }
+  .p-note { font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; fill: rgba(26,16,8,0.72); }
 
   .part { cursor: pointer; }
-  .pbox { fill: rgba(255,255,255,0.72); stroke: rgba(28,22,17,0.35); stroke-width: 1.2; transition: stroke 0.12s, fill 0.12s; }
-  .part:hover .pbox { stroke: rgba(28,22,17,0.8); }
-  .part.sel .pbox { stroke: var(--accent-ink); stroke-width: 2.5; fill: var(--accent-ink-tint-06, rgba(14,91,102,0.08)); }
-  .part.ok .pbox { stroke: rgba(47,125,79,0.55); fill: rgba(47,125,79,0.06); }
-  .part.hot .pbox { stroke: rgba(196,87,10,0.65); fill: rgba(196,87,10,0.07); }
-  .part.ledger .pbox { stroke: rgba(176,137,42,0.6); fill: rgba(176,137,42,0.06); }
+  .pbox { fill: #ffffff; stroke: rgba(26,16,8,0.55); stroke-width: 1.4; transition: stroke 0.12s, fill 0.12s; }
+  .part:hover .pbox { stroke: rgba(26,16,8,0.9); }
+  .part.sel .pbox { stroke: var(--accent-ink); stroke-width: 2.5; fill: #dce9e4; }
+  .part.ok .pbox { stroke: #2f7d4f; stroke-width: 1.5px; fill: rgba(47,125,79,0.10); }
+  .part.hot .pbox { stroke: var(--accent, #c4570a); stroke-width: 1.6px; fill: rgba(196,87,10,0.10); }
+  .part.ledger .pbox { stroke: #a8842a; stroke-width: 1.5px; fill: rgba(176,137,42,0.10); }
   .part:focus-visible .pbox { stroke: var(--accent-ink); stroke-width: 2.5; }
   .plab { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; fill: var(--ink); }
-  .psub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; fill: rgba(28,22,17,0.52); }
+  .psub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; fill: rgba(26,16,8,0.72); }
 
-  .arrow { fill: none; stroke: rgba(28,22,17,0.4); stroke-width: 1.6; }
-  .a-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; fill: rgba(28,22,17,0.55); }
+  .arrow { fill: none; stroke: rgba(26,16,8,0.6); stroke-width: 1.6; }
+  .a-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; fill: rgba(26,16,8,0.72); }
   .dot.ink { fill: #1c2f4a; }
   .dot.ok { fill: #2f7d4f; }
   .dot.query { fill: var(--accent-ink); }
-  .boundary { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; fill: var(--accent, #c4570a); font-weight: 600; }
+  .boundary { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; fill: #9a3f08; font-weight: 600; }
 
-  .inspector { position: relative; margin: 14px 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: rgba(255,255,255,0.6); padding: 14px 18px; }
-  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; }
+  .inspector { position: relative; margin: 14px 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: #ffffff; padding: 14px 18px; }
+  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(26,16,8,0.55); cursor: pointer; font-size: 13px; }
   .inspector .close:hover { color: var(--ink); }
   .ins-kicker { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-ink); }
   .inspector h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; margin: 3px 0 6px; color: var(--ink); }
-  .inspector h4 em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.5); }
-  .inspector p { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.78); margin: 0; }
-  .hint { font-size: 12px; font-style: italic; color: rgba(28,22,17,0.5); margin: 12px 20px 16px; }
+  .inspector h4 em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(26,16,8,0.6); }
+  .inspector p { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.85); margin: 0; }
+  .hint { font-size: 12px; font-style: italic; color: rgba(26,16,8,0.62); margin: 12px 20px 16px; }
 </style>

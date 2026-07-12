@@ -105,11 +105,11 @@
       <!-- band frames -->
       <g class="layer" class:on={stage >= 3} class:ghost={stage < 3}>
         <rect class="band" x="40" y="30" width="910" height="140" rx="10" />
-        <text class="band-lab" x="60" y="58">COMMISSIONING &amp; CONSUMERS</text>
+        <text class="band-lab" x="60" y="58">COMMISSIONING &amp; CONSUMERS{stage < 3 ? '  ·  arrives stage 4' : ''}</text>
       </g>
       <g class="layer" class:on={stage >= 2} class:ghost={stage < 2}>
         <rect class="band strong" x="40" y="300" width="910" height="170" rx="10" />
-        <text class="band-lab strong-lab" x="60" y="328">NATIONAL TRUST &amp; BROKERAGE LAYER — DfE-run · brokers only · holds no pupil-level data</text>
+        <text class="band-lab strong-lab" x="60" y="328">NATIONAL TRUST &amp; BROKERAGE LAYER — DfE-run · brokers only · holds no pupil-level data{stage < 2 ? '  ·  arrives stage 3' : ''}</text>
       </g>
       <g class="layer on">
         <rect class="band" x="40" y="560" width="910" height="250" rx="10" />
@@ -120,7 +120,7 @@
       <g class="layer" class:on={stage >= 5} class:ghost={stage < 5}>
         <rect class="band dashed" x="975" y="300" width="185" height="510" rx="10" />
         <text class="band-lab" x="1067" y="328" text-anchor="middle">BEYOND EDUCATION</text>
-        <text class="band-sub" x="1067" y="346" text-anchor="middle">cross-domain trust federation</text>
+        <text class="band-sub" x="1067" y="346" text-anchor="middle">{stage < 5 ? 'arrives stage 6' : 'cross-domain trust federation'}</text>
       </g>
 
       <!-- flow traffic (dots re-keyed so SMIL restarts with the stage replays) -->
@@ -226,22 +226,25 @@
 </div>
 
 <style>
-  .fabric { border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); background: rgba(255,255,255,0.35); overflow: hidden; }
+  .fabric { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-round); background: var(--surface-elevated, #e8dece); overflow: hidden; }
   .diagram-scroll { overflow-x: auto; }
   svg { display: block; min-width: 860px; width: 100%; height: auto; }
 
-  .band { fill: rgba(255,255,255,0.4); stroke: rgba(28,22,17,0.22); stroke-width: 1; }
-  .band.strong { stroke: rgba(28,22,17,0.75); stroke-width: 2; fill: var(--accent-ink-tint-06, rgba(14,91,102,0.06)); }
-  .band.dashed { stroke-dasharray: 6 5; fill: rgba(255,255,255,0.25); }
-  .band-lab { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; fill: rgba(28,22,17,0.62); font-weight: 600; }
+  .band { fill: rgba(255,255,255,0.55); stroke: rgba(26,16,8,0.4); stroke-width: 1.2; }
+  .band.strong { stroke: var(--accent-ink, #0e5b66); stroke-width: 2; fill: rgba(14,91,102,0.09); }
+  .band.dashed { stroke-dasharray: 6 5; fill: rgba(255,255,255,0.4); }
+  .band-lab { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.14em; fill: rgba(26,16,8,0.78); font-weight: 600; }
   .band-lab.strong-lab { fill: var(--accent-ink); }
-  .band-sub { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; fill: rgba(28,22,17,0.45); }
+  .band-sub { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; fill: rgba(26,16,8,0.72); }
 
   .layer { opacity: 0; transition: opacity 0.5s ease; pointer-events: none; }
   .layer.on { opacity: 1; }
-  /* bands not yet introduced stay as faint blueprint ghosts, so the empty canvas
-     reads as a plan being filled in rather than a broken render */
-  .layer.ghost { opacity: 0.16; }
+  /* bands not yet introduced read as legible dashed blueprint placeholders (not
+     near-invisible ghosts): a clear "arrives later" outline the reader can read. */
+  .layer.ghost { opacity: 1; }
+  .layer.ghost .band, .layer.ghost .band.strong, .layer.ghost .band.dashed { fill: none; stroke: rgba(26,16,8,0.32); stroke-width: 1.2; stroke-dasharray: 7 6; }
+  .layer.ghost .band-lab { fill: rgba(26,16,8,0.6); }
+  .layer.ghost .band-sub { fill: rgba(26,16,8,0.52); }
 
   .node { opacity: 0; cursor: pointer; pointer-events: none; }
   .node.on { opacity: 1; pointer-events: auto; }
@@ -253,28 +256,29 @@
   @keyframes -global-rise-b { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   .node:focus-visible .nbox { stroke: var(--accent-ink); stroke-width: 2.5; }
 
-  .nbox { fill: rgba(255,255,255,0.72); stroke: rgba(28,22,17,0.35); stroke-width: 1.2; transition: stroke 0.12s, fill 0.12s; }
-  .node:hover .nbox { stroke: rgba(28,22,17,0.8); }
-  .node.sel .nbox { stroke: var(--accent-ink); stroke-width: 2.5; fill: var(--accent-ink-tint-06, rgba(14,91,102,0.08)); }
-  .node.hot .nbox { stroke: rgba(196,87,10,0.65); fill: rgba(196,87,10,0.07); }
-  .node.hot.sel .nbox { stroke: var(--accent, #c4570a); }
+  .nbox { fill: #ffffff; stroke: rgba(26,16,8,0.55); stroke-width: 1.4; transition: stroke 0.12s, fill 0.12s; }
+  .node:hover .nbox { stroke: rgba(26,16,8,0.9); }
+  .node.sel .nbox { stroke: var(--accent-ink); stroke-width: 2.5; fill: #dce9e4; }
+  .node.hot .nbox { stroke: var(--accent, #c4570a); stroke-width: 1.6; fill: rgba(196,87,10,0.10); }
+  .node.hot.sel .nbox { stroke: var(--accent, #c4570a); fill: rgba(196,87,10,0.16); }
   .nlab { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; fill: var(--ink); }
-  .nsub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; fill: rgba(28,22,17,0.52); }
-  .conn { fill: #2f7d4f; opacity: 0.85; }
-  .conn-lab { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.14em; fill: rgba(47,125,79,0.9); text-transform: uppercase; }
+  .nsub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; fill: rgba(26,16,8,0.72); }
+  .conn { fill: #216b3f; opacity: 1; }
+  .conn-lab { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.14em; fill: #216b3f; text-transform: uppercase; }
   .conn-g.fresh { animation: conn-in 0.7s ease-out both; }
   @keyframes conn-in { from { opacity: 0; } to { opacity: 1; } }
 
-  .flow-line { fill: none; stroke-width: 1.4; opacity: 0.3; stroke-dasharray: 3 4; }
+  .flow-line { fill: none; stroke-width: 1.9; opacity: 0.55; stroke-dasharray: 3 4; }
   .traffic { pointer-events: none; }
+  .traffic circle { stroke: #ede4d4; stroke-width: 1.5; }
 
-  .caption { display: flex; gap: 18px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; padding: 16px 20px 18px; border-top: 1px solid rgba(28,22,17,0.18); background: rgba(241,234,214,0.75); }
+  .caption { display: flex; gap: 18px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; padding: 16px 20px 18px; border-top: 1px solid rgba(26,16,8,0.25); background: #ede4d4; }
   .cap-text { max-width: 72ch; min-width: 260px; flex: 1 1 380px; }
   .cap-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.2em; color: var(--accent-ink); }
   .caption h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(18px, 2vw, 24px); margin: 4px 0 6px; color: var(--ink); }
-  .caption p { font-size: 13.5px; line-height: 1.55; color: rgba(28,22,17,0.76); margin: 0; }
+  .caption p { font-size: 13.5px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 0; }
   .cap-nav { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-  .cap-step { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); white-space: nowrap; }
+  .cap-step { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(26,16,8,0.62); white-space: nowrap; }
   .cap-btns { display: flex; gap: 8px; }
   .nav-btn { font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600; border-radius: var(--radius-round); padding: 9px 18px; cursor: pointer; }
   .nav-btn.primary { background: var(--ink); color: var(--paper, #f1ead6); border: 1.5px solid var(--ink); }
@@ -284,18 +288,18 @@
   .nav-btn:disabled { opacity: 0.35; cursor: default; }
 
   .flow-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.05em; color: var(--ink); background: rgba(255,255,255,0.55); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; opacity: 0.55; }
-  .chip.on { opacity: 1; border-color: var(--c); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.05em; color: rgba(26,16,8,0.62); background: #ffffff; border: 1px solid rgba(26,16,8,0.45); border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+  .chip.on { border: 1.5px solid var(--c); color: var(--ink); }
   .chip i { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--c); display: inline-block; }
 
-  .inspector { position: relative; margin: 0 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: rgba(255,255,255,0.6); padding: 14px 18px; }
-  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; }
+  .inspector { position: relative; margin: 0 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: #ffffff; padding: 14px 18px; }
+  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(26,16,8,0.55); cursor: pointer; font-size: 13px; }
   .inspector .close:hover { color: var(--ink); }
   .ins-kicker { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-ink); }
   .inspector h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; margin: 3px 0 6px; color: var(--ink); }
-  .inspector h4 em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.5); }
-  .inspector p { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.78); margin: 0 0 6px; }
-  .inspector .ins-row { font-size: 12px; color: rgba(28,22,17,0.66); margin: 2px 0 0; }
+  .inspector h4 em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(26,16,8,0.6); }
+  .inspector p { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.85); margin: 0 0 6px; }
+  .inspector .ins-row { font-size: 12px; color: rgba(26,16,8,0.72); margin: 2px 0 0; }
   .inspector .ins-row b { color: var(--ink); font-weight: 600; }
 
   @media (max-width: 700px) {
