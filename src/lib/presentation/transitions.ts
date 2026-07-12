@@ -14,6 +14,9 @@ export interface MoveParams {
   travel: Travel;
   /** Branch/exit moves glide further than sibling walks. */
   major?: boolean;
+  /** Melt wipe: the outgoing slide drops fast (particles replace it) and the
+   *  incoming one holds back a beat while they blow away. */
+  melt?: boolean;
 }
 
 const GLIDE = 380;
@@ -44,18 +47,28 @@ function vec(travel: Travel): { x: number; y: number } {
   }
 }
 
-export function slideIn(_node: Element, { travel, major = false }: MoveParams): TransitionConfig {
+export function slideIn(_node: Element, { travel, major = false, melt = false }: MoveParams): TransitionConfig {
   const { x, y } = vec(travel);
   const dist = major ? 12 : 7;
   return {
-    duration: dur(major ? MAJOR : GLIDE),
+    delay: melt ? dur(340) : 0,
+    duration: dur(major || melt ? MAJOR : GLIDE),
     easing: cubicOut,
     css: (t, u) =>
       `transform: translate(${x * u * dist}vw, ${y * u * dist}vh) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
   };
 }
 
-export function slideOut(_node: Element, { travel, major = false }: MoveParams): TransitionConfig {
+export function slideOut(_node: Element, { travel, major = false, melt = false }: MoveParams): TransitionConfig {
+  if (melt) {
+    // the content "melts": drop fast with a slight sag — the particle layer
+    // takes over the storytelling
+    return {
+      duration: dur(230),
+      easing: cubicOut,
+      css: (t, u) => `transform: translateY(${u * 2.5}vh); opacity: ${t}`,
+    };
+  }
   const { x, y } = vec(travel);
   const dist = major ? 12 : 7;
   return {

@@ -13,7 +13,7 @@
   import SlideView from '$lib/components/presentation/SlideView.svelte';
   import TransitionFx from '$lib/components/presentation/TransitionFx.svelte';
   import type { EffectBlock } from '$lib/presentation/types';
-  import type { EffectTint } from '$lib/presentation/effects';
+  import type { EffectTint, Zone } from '$lib/presentation/effects';
   import {
     branchTravel,
     buildPlanes,
@@ -32,13 +32,14 @@
   let current = $state(data.startId);
   let travel = $state<Travel>('right');
   let major = $state(false);
+  let melting = $state(false);
   let chromeVisible = $state(true);
   /** Nav-map position once the user has dragged it; null = the CSS default
    *  (bottom left). Persisted so it stays out of the content's way. */
   let mapPos = $state<{ x: number; y: number } | null>(null);
 
   /** The transition-role effect playing over the current camera move. */
-  let fx = $state<{ effect: EffectBlock; travel: Travel; key: number } | null>(null);
+  let fx = $state<{ effect: EffectBlock; travel: Travel; key: number; zones: Zone[] } | null>(null);
 
   // non-reactive internals
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,7 +97,18 @@
     const fxBlock = (byId.get(id)?.blocks.find(
       (b) => b.type === 'effect' && (b as EffectBlock).role === 'transition',
     ) ?? null) as EffectBlock | null;
-    fx = fxBlock ? { effect: fxBlock, travel: t, key: ++fxKey } : null;
+    melting = fxBlock?.effect === 'melt';
+    // melt spawns its particles from the OUTGOING content — capture the block
+    // rects before the slide switches out from under us
+    let zones: Zone[] = [];
+    if (melting && shell) {
+      const host = shell.getBoundingClientRect();
+      zones = Array.from(shell.querySelectorAll<HTMLElement>('.stage .block')).map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height };
+      });
+    }
+    fx = fxBlock ? { effect: fxBlock, travel: t, key: ++fxKey, zones } : null;
     current = id;
     const url = new URL(page.url);
     url.searchParams.set('s', id);
@@ -301,7 +313,7 @@
     >
       <div class="stage-wrap">
         {#key current}
-          <div class="stage" in:slideIn={{ travel, major }} out:slideOut={{ travel, major }}>
+          <div class="stage" in:slideIn={{ travel, major, melt: melting }} out:slideOut={{ travel, major, melt: melting }}>
             <SlideView {slide} />
           </div>
         {/key}
@@ -310,9 +322,11 @@
       {#if fx}
         {#key fx.key}
           <TransitionFx
+            mode={fx.effect.effect === 'melt' ? 'melt' : 'sweep'}
             travel={fx.travel}
             tint={(fx.effect.tint ?? 'accent') as EffectTint}
             intensity={fx.effect.intensity ?? 0.5}
+            zones={fx.zones}
             onDone={() => (fx = null)}
           />
         {/key}

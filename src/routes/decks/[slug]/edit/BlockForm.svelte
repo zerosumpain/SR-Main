@@ -5,6 +5,7 @@
   // of raw fields, and everything else renders from the block object's own
   // shape (the zod registry is the validation gate on save). Mutates the
   // parent-owned $state draft directly and reports edits via onEdited().
+  import { EFFECTS, EFFECT_CATEGORIES } from '$lib/presentation/effects';
   import type { ChartBlock } from '$lib/presentation/types';
   import ChartEditorModal from './ChartEditorModal.svelte';
 
@@ -16,7 +17,19 @@
 
   const isProse = $derived(block.type === 'prose');
   const isChart = $derived(block.type === 'chart');
+  const isEffect = $derived(block.type === 'effect');
   let chartOpen = $state(false);
+
+  const effectDef = $derived(isEffect ? EFFECTS[String(block.effect)] : undefined);
+
+  function setEffect(id: string) {
+    const def = EFFECTS[id];
+    if (!def) return;
+    block.effect = id;
+    // keep the role legal for the chosen effect
+    if (!def.roles.includes(block.role as 'background' | 'transition')) block.role = def.roles[0];
+    onEdited();
+  }
   // textarea handle for the prose toolbar — plain let (nothing reactive reads it)
   let bodyTa: HTMLTextAreaElement | null = null;
 
@@ -138,7 +151,48 @@
 </script>
 
 <div class="bf">
-  {#if isChart}
+  {#if isEffect}
+    <label class="bf-field">
+      <span class="bf-lab">effect</span>
+      <select value={String(block.effect)} onchange={(e) => setEffect(e.currentTarget.value)}>
+        {#each EFFECT_CATEGORIES as cat (cat)}
+          <optgroup label={cat}>
+            {#each Object.entries(EFFECTS).filter(([, d]) => d.category === cat) as [id, d] (id)}
+              <option value={id}>{d.label}</option>
+            {/each}
+          </optgroup>
+        {/each}
+      </select>
+      {#if effectDef}<span class="bf-hint">{effectDef.doc}</span>{/if}
+    </label>
+    <label class="bf-field">
+      <span class="bf-lab">role</span>
+      <select value={String(block.role)} onchange={(e) => { block.role = e.currentTarget.value; onEdited(); }}>
+        {#each effectDef?.roles ?? ['background'] as r (r)}
+          <option value={r}>{r === 'background' ? 'background — behind the content' : 'transition — plays on arrival'}</option>
+        {/each}
+      </select>
+    </label>
+    <label class="bf-field">
+      <span class="bf-lab">tint</span>
+      <select value={String(block.tint ?? 'ink')} onchange={(e) => { block.tint = e.currentTarget.value; onEdited(); }}>
+        <option value="ink">ink</option>
+        <option value="accent">burnt orange</option>
+        <option value="petrol">petrol</option>
+      </select>
+    </label>
+    <label class="bf-field">
+      <span class="bf-lab">intensity — {Number(block.intensity ?? 0.5).toFixed(1)}</span>
+      <input
+        type="range"
+        min="0.1"
+        max="1"
+        step="0.1"
+        value={Number(block.intensity ?? 0.5)}
+        oninput={(e) => { block.intensity = Number(e.currentTarget.value); onEdited(); }}
+      />
+    </label>
+  {:else if isChart}
     <div class="bf-chart">
       <span class="bf-chart-sum">{chartSummary()}</span>
       <button class="bf-chart-btn" onclick={() => (chartOpen = true)}>✎ edit chart</button>

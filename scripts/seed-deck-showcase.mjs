@@ -149,7 +149,7 @@ export const DECK = {
       layout: 'split-flip',
       journeyLabel: 'the chart room',
       blocks: [
-        { type: 'effect', effect: 'drift', role: 'transition', intensity: 0.6, tint: 'accent' },
+        { type: 'effect', effect: 'melt', role: 'transition', intensity: 0.6, tint: 'ink' },
         {
           type: 'prose',
           lede: true,
