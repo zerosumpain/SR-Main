@@ -241,6 +241,81 @@ function rowsToSpecTree(rows: DeckSlide[], parentSlideId: string | null): SlideS
 }
 
 register({
+  name: 'presentation_source_image',
+  description:
+    'Source imagery for deck slides from free/open providers. op:"search" { query } → openly-licensed candidates ' +
+    '(Openverse + Wikimedia Commons; each has title/creator/license/imageUrl). op:"import" { image_url, title?, creator?, license?, source? } ' +
+    '→ downloads the chosen candidate and stores a site-served copy; returns { src, alt, caption } — use src in an image block ' +
+    'and KEEP the caption (it carries the licence attribution). op:"generate" { prompt, width?, height? } → generates via the free ' +
+    'pollinations.ai service (10–60s) and stores it; the caption labels it AI-generated. ' +
+    'Use for poster backdrops and figures when building or revising a deck: search first (real photos beat generated ones for real places/things); generate when nothing fits.',
+  parameters: {
+    type: 'object',
+    properties: {
+      op: { type: 'string', enum: ['search', 'import', 'generate'], description: 'What to do.' },
+      query: { type: 'string', description: 'search: what to look for (2+ chars).' },
+      image_url: { type: 'string', description: 'import: the candidate imageUrl from a search result.' },
+      title: { type: 'string', description: 'import: candidate title (becomes alt text).' },
+      creator: { type: 'string', description: 'import: candidate creator (for the attribution caption).' },
+      license: { type: 'string', description: 'import: candidate licence (for the attribution caption).' },
+      source: { type: 'string', description: 'import: provider id from the search result.' },
+      prompt: { type: 'string', description: 'generate: what to paint (editorial, descriptive).' },
+      width: { type: 'number', description: 'generate: px, 256–2048 (default 1600).' },
+      height: { type: 'number', description: 'generate: px, 256–2048 (default 900).' },
+    },
+    required: ['op'],
+  },
+  category: 'Decks',
+  toolset: 'decks',
+  handler: async (args) => {
+    const { searchOpenImages, importImage, generateImage } = await import('$lib/decks/image-sources.server');
+    const op = String(args.op ?? '');
+    try {
+      if (op === 'search') {
+        const query = typeof args.query === 'string' ? args.query.trim() : '';
+        if (query.length < 2) return { success: false, error: 'query must be at least 2 characters' };
+        const results = (await searchOpenImages(query)).map((c) => ({
+          title: c.title,
+          creator: c.creator,
+          license: c.license,
+          source: c.source,
+          imageUrl: c.imageUrl,
+          width: c.width,
+          height: c.height,
+        }));
+        return {
+          success: true,
+          data: { results, next: 'Pick one and call op:"import" with its imageUrl + title/creator/license/source.' },
+        };
+      }
+      if (op === 'import') {
+        const imageUrl = typeof args.image_url === 'string' ? args.image_url : '';
+        if (!imageUrl) return { success: false, error: 'image_url required' };
+        const stored = await importImage({
+          imageUrl,
+          title: typeof args.title === 'string' ? args.title : undefined,
+          creator: typeof args.creator === 'string' ? args.creator : null,
+          license: typeof args.license === 'string' ? args.license : undefined,
+          source: typeof args.source === 'string' ? args.source : undefined,
+        });
+        return { success: true, data: { ...stored, next: 'Use src in an image block; keep the caption (attribution).' } };
+      }
+      if (op === 'generate') {
+        const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+        if (prompt.length < 3) return { success: false, error: 'prompt must be at least 3 characters' };
+        const dim = (v: unknown, fallback: number) =>
+          typeof v === 'number' && Number.isInteger(v) && v >= 256 && v <= 2048 ? v : fallback;
+        const stored = await generateImage(prompt, dim(args.width, 1600), dim(args.height, 900));
+        return { success: true, data: { ...stored, next: 'Use src in an image block; keep the AI-generated caption.' } };
+      }
+      return { success: false, error: `unknown op "${op}" — search | import | generate` };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'image sourcing failed' };
+    }
+  },
+});
+
+register({
   name: 'presentation_list',
   description:
     'List sr. decks presentations (slug, title, visibility, slide count, updated). Use to find a deck before reading or revising it.',

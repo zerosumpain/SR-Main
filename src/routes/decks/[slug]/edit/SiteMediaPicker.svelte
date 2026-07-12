@@ -19,8 +19,18 @@
     onClose: () => void;
   } = $props();
 
-  type Tab = 'interactives' | 'pages' | 'images' | 'browse';
+  type Tab = 'interactives' | 'pages' | 'images' | 'find' | 'generate' | 'browse';
   let tab = $state<Tab>('interactives');
+
+  interface Candidate {
+    title: string;
+    creator: string | null;
+    license: string;
+    source: string;
+    pageUrl: string;
+    thumbUrl: string;
+    imageUrl: string;
+  }
 
   // Interactives
   let embedId = $state(catalogue.interactives[0]?.embed ?? '');
@@ -43,6 +53,81 @@
   let imageSrc = $state('');
   let imageAlt = $state('');
   let imageUrlInput = $state('');
+
+  // Find (open-licence providers)
+  let findQuery = $state('');
+  let findResults = $state<Candidate[]>([]);
+  let findBusy = $state(false);
+  let findError = $state('');
+  let selectedCandidate = $state<Candidate | null>(null);
+  let importing = $state(false);
+
+  // Generate (pollinations.ai)
+  let genPrompt = $state('');
+  let genBusy = $state(false);
+  let genError = $state('');
+  let genResult = $state<{ src: string; alt: string; caption: string } | null>(null);
+
+  async function runFind() {
+    const q = findQuery.trim();
+    if (q.length < 2) return;
+    findBusy = true;
+    findError = '';
+    selectedCandidate = null;
+    try {
+      const res = await fetch(`/api/decks/media/search?q=${encodeURIComponent(q)}`);
+      const payload = (await res.json()) as { results?: Candidate[]; error?: string };
+      if (!res.ok) throw new Error(payload.error ?? res.statusText);
+      findResults = payload.results ?? [];
+      if (!findResults.length) findError = 'Nothing found — try broader words.';
+    } catch (err) {
+      findError = err instanceof Error ? err.message : 'search failed';
+    } finally {
+      findBusy = false;
+    }
+  }
+
+  async function importSelected() {
+    if (!selectedCandidate || importing) return;
+    importing = true;
+    findError = '';
+    try {
+      const res = await fetch('/api/decks/media/import', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(selectedCandidate),
+      });
+      const payload = (await res.json()) as { src?: string; alt?: string; caption?: string; error?: string };
+      if (!res.ok || !payload.src) throw new Error(payload.error ?? res.statusText);
+      onInsert({ type: 'image', src: payload.src, alt: payload.alt ?? 'Image', caption: payload.caption });
+    } catch (err) {
+      findError = err instanceof Error ? err.message : 'import failed';
+    } finally {
+      importing = false;
+    }
+  }
+
+  async function runGenerate() {
+    const prompt = genPrompt.trim();
+    if (prompt.length < 3 || genBusy) return;
+    genBusy = true;
+    genError = '';
+    genResult = null;
+    try {
+      const res = await fetch('/api/decks/media/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const payload = (await res.json()) as { src?: string; alt?: string; caption?: string; error?: string };
+      if (!res.ok || !payload.src) throw new Error(payload.error ?? res.statusText);
+      genResult = { src: payload.src, alt: payload.alt ?? prompt, caption: payload.caption ?? '' };
+    } catch (err) {
+      genError = err instanceof Error ? err.message : 'generation failed';
+    } finally {
+      genBusy = false;
+    }
+  }
 
   // Browse. frameEl is an internal handle — plain let, never $state
   // (nothing reactive reads it; see svelte5-pitfalls §1).
@@ -111,6 +196,8 @@
     { id: 'interactives', label: 'INTERACTIVES' },
     { id: 'pages', label: 'PAGES' },
     { id: 'images', label: 'IMAGES' },
+    { id: 'find', label: 'FIND IMAGES' },
+    { id: 'generate', label: 'GENERATE' },
     { id: 'browse', label: 'BROWSE SITE' },
   ];
 </script>
@@ -208,6 +295,79 @@
             <input type="text" bind:value={imageAlt} placeholder="Describe the image" />
           </label>
           <button class="insert" disabled={!imageSrc && !imageUrlInput.trim()} onclick={insertImage}>insert image</button>
+        </div>
+      </div>
+    {:else if tab === 'find'}
+      <div class="smp-body">
+        <div class="find-bar">
+          <input
+            type="text"
+            bind:value={findQuery}
+            placeholder="search openly-licensed images (Openverse + Wikimedia Commons)…"
+            onkeydown={(e) => { if (e.key === 'Enter') void runFind(); }}
+          />
+          <button class="go" disabled={findBusy} onclick={runFind}>{findBusy ? 'searching…' : 'search'}</button>
+        </div>
+        {#if findError}<p class="err">{findError}</p>{/if}
+        <div class="img-grid">
+          {#each findResults as c (c.imageUrl)}
+            <button
+              class="img-cell found"
+              class:sel={selectedCandidate === c}
+              onclick={() => (selectedCandidate = c)}
+              title={`${c.title} — ${c.license}`}
+            >
+              <img src={c.thumbUrl} alt={c.title} loading="lazy" />
+              <span class="cell-meta">{c.license} · {c.source}</span>
+            </button>
+          {/each}
+        </div>
+        {#if selectedCandidate}
+          <div class="find-form">
+            <div class="find-meta">
+              <strong>{selectedCandidate.title}</strong>
+              <span class="row-note">
+                {selectedCandidate.creator ?? 'unknown creator'} · {selectedCandidate.license} ·
+                <a href={selectedCandidate.pageUrl} target="_blank" rel="noopener">source ↗</a>
+              </span>
+              <span class="row-note">A copy is stored on this site; the attribution becomes the figure caption.</span>
+            </div>
+            <button class="insert" disabled={importing} onclick={importSelected}>
+              {importing ? 'importing…' : 'insert image'}
+            </button>
+          </div>
+        {/if}
+      </div>
+    {:else if tab === 'generate'}
+      <div class="smp-body two-col">
+        <div class="col">
+          <label class="field">
+            <span class="lab">DESCRIBE THE IMAGE</span>
+            <textarea
+              rows="5"
+              bind:value={genPrompt}
+              placeholder="a wooden cruiser moored on a misty broad at dawn, editorial photography, muted tones…"
+            ></textarea>
+          </label>
+          <button class="insert" disabled={genBusy || genPrompt.trim().length < 3} onclick={runGenerate}>
+            {genBusy ? 'generating… (can take ~30s)' : genResult ? 'regenerate' : 'generate'}
+          </button>
+          {#if genError}<p class="err">{genError}</p>{/if}
+          <span class="row-note">Free open service (pollinations.ai). The result is stored on this site and labelled AI-generated.</span>
+        </div>
+        <div class="col preview-col">
+          <span class="lab">RESULT</span>
+          {#if genResult}
+            <img class="gen-preview" src={genResult.src} alt={genResult.alt} />
+            <button class="insert" onclick={() => genResult && onInsert({ type: 'image', src: genResult.src, alt: genResult.alt, caption: genResult.caption })}>
+              insert image
+            </button>
+          {:else}
+            <div class="int-preview">
+              <span class="int-glyph">✦</span>
+              <span>{genBusy ? 'painting…' : 'nothing yet'}</span>
+            </div>
+          {/if}
         </div>
       </div>
     {:else}
@@ -367,6 +527,57 @@
   }
   .img-cell.sel { border-color: var(--accent); outline: 2px solid var(--accent); }
   .img-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .img-cell.found { position: relative; }
+  .cell-meta {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #f4ecdc;
+    background: rgba(26, 16, 8, 0.72);
+    padding: 3px 6px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .find-bar { display: flex; gap: 8px; }
+  .find-bar input {
+    flex: 1;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    padding: 7px 9px;
+  }
+  .find-form {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--card-border);
+    padding-top: 12px;
+  }
+  .find-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-body); font-size: 12.5px; color: var(--text-primary); min-width: 0; }
+  .find-meta a { color: var(--accent-ink); }
+  .err { font-family: var(--font-mono); font-size: 10px; color: var(--error); margin: 0; }
+  .field textarea {
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    padding: 7px 9px;
+    resize: vertical;
+  }
+  .gen-preview { width: 100%; border: 1px solid var(--card-border); border-radius: 2px; display: block; margin-bottom: 10px; }
   .empty { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
   .img-form { display: flex; gap: 12px; align-items: flex-end; border-top: 1px solid var(--card-border); padding-top: 12px; }
 

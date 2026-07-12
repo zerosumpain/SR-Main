@@ -30,12 +30,21 @@
   let travel = $state<Travel>('right');
   let major = $state(false);
   let chromeVisible = $state(true);
+  /** Nav-map position once the user has dragged it; null = the CSS default
+   *  (bottom left). Persisted so it stays out of the content's way. */
+  let mapPos = $state<{ x: number; y: number } | null>(null);
 
   // non-reactive internals
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let touchX = 0;
   let touchY = 0;
   let shell: HTMLElement | undefined = $state();
+  let mapEl: HTMLElement | undefined;
+  let mapDrag: { px: number; py: number; x: number; y: number } | null = null;
+  let mapDragMoved = false;
+  let dragResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const MAP_POS_KEY = 'sr-decks-navmap-pos';
 
   const byId = $derived(new Map(data.slides.map((s) => [s.id, s])));
   const slide = $derived(byId.get(current) ?? data.slides[0]);
@@ -176,10 +185,70 @@
     hideTimer = setTimeout(() => (chromeVisible = false), 3500);
   }
 
+  // --- nav-map drag: click-and-drag it anywhere it isn't in the way. A drag
+  // only starts after 5px of travel, so the dots stay clickable; a finished
+  // drag suppresses the trailing click. Position clamps to the player.
+  function clampPos(x: number, y: number): { x: number; y: number } {
+    const host = shell?.getBoundingClientRect();
+    const map = mapEl?.getBoundingClientRect();
+    if (!host || !map) return { x, y };
+    return {
+      x: Math.min(Math.max(x, 6), Math.max(6, host.width - map.width - 6)),
+      y: Math.min(Math.max(y, 6), Math.max(6, host.height - map.height - 6)),
+    };
+  }
+
+  function onMapPointerDown(e: PointerEvent) {
+    e.stopPropagation(); // not a slide swipe
+    const host = shell?.getBoundingClientRect();
+    const map = mapEl?.getBoundingClientRect();
+    if (!host || !map) return;
+    mapDrag = { px: e.clientX, py: e.clientY, x: map.left - host.left, y: map.top - host.top };
+    mapDragMoved = false;
+    mapEl?.setPointerCapture(e.pointerId);
+  }
+  function onMapPointerMove(e: PointerEvent) {
+    if (!mapDrag) return;
+    const dx = e.clientX - mapDrag.px;
+    const dy = e.clientY - mapDrag.py;
+    if (!mapDragMoved && Math.hypot(dx, dy) < 5) return;
+    mapDragMoved = true;
+    mapPos = clampPos(mapDrag.x + dx, mapDrag.y + dy);
+  }
+  function onMapPointerUp(e: PointerEvent) {
+    e.stopPropagation();
+    if (!mapDrag) return;
+    mapDrag = null;
+    if (mapDragMoved) {
+      try {
+        localStorage.setItem(MAP_POS_KEY, JSON.stringify(mapPos));
+      } catch {
+        /* private mode */
+      }
+      // swallow the click that follows this drag
+      if (dragResetTimer) clearTimeout(dragResetTimer);
+      dragResetTimer = setTimeout(() => (mapDragMoved = false), 250);
+    }
+  }
+  /** Dot/back clicks are ignored when they are the tail of a drag. */
+  function mapClickGuard(): boolean {
+    return mapDragMoved;
+  }
+
   onMount(() => {
     wakeChrome();
+    try {
+      const raw = localStorage.getItem(MAP_POS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { x: number; y: number };
+        if (Number.isFinite(p.x) && Number.isFinite(p.y)) mapPos = clampPos(p.x, p.y);
+      }
+    } catch {
+      /* corrupt/blocked storage — default position */
+    }
     return () => {
       if (hideTimer) clearTimeout(hideTimer);
+      if (dragResetTimer) clearTimeout(dragResetTimer);
     };
   });
 </script>
@@ -222,7 +291,19 @@
         {/key}
       {/if}
 
-      <nav class="navmap" class:hidden={!chromeVisible && depth === 0} aria-label="Deck map">
+      <nav
+        class="navmap"
+        class:hidden={!chromeVisible && depth === 0}
+        class:moved={mapPos !== null}
+        style:left={mapPos ? `${mapPos.x}px` : undefined}
+        style:top={mapPos ? `${mapPos.y}px` : undefined}
+        aria-label="Deck map (drag to move)"
+        bind:this={mapEl}
+        onpointerdown={onMapPointerDown}
+        onpointermove={onMapPointerMove}
+        onpointerup={onMapPointerUp}
+      >
+        <span class="nm-grip" aria-hidden="true" title="Drag to move">⠿</span>
         {#each mapStrips as strip, si (si)}
           <div
             class="nm-strip"
@@ -237,13 +318,13 @@
                 class:onpath={chain.includes(id) && id !== current}
                 title={byId.get(id)?.title ?? ''}
                 aria-label={byId.get(id)?.title ?? 'slide'}
-                onclick={() => jump(id)}
+                onclick={() => { if (!mapClickGuard()) jump(id); }}
               ></button>
             {/each}
           </div>
         {/each}
         {#if depth > 0}
-          <button class="nm-return" onclick={exit}>↩ back</button>
+          <button class="nm-return" onclick={() => { if (!mapClickGuard()) exit(); }}>↩ back</button>
         {/if}
       </nav>
 
@@ -353,7 +434,9 @@
     50% { transform: translateX(3px); }
   }
 
-  /* Nav map — where you are in the 2D field, and the way back. */
+  /* Nav map — where you are in the 2D field, and the way back. Opaque panel
+     (modal token rule: floating chrome never sits transparent over content);
+     draggable anywhere via its own pointer handlers. */
   .navmap {
     position: absolute;
     z-index: 11;
@@ -363,9 +446,26 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
+    padding: 12px 14px 10px;
+    background: var(--paper-deep, var(--paper));
+    border: 1px solid rgba(28, 22, 17, 0.22);
+    border-radius: 4px;
     transition: opacity 0.5s ease;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
   }
+  .navmap:active { cursor: grabbing; }
+  .navmap.moved { bottom: auto; }
   .navmap.hidden { opacity: 0; pointer-events: none; }
+  .nm-grip {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    font-size: 9px;
+    color: var(--ink-soft);
+    opacity: 0.7;
+  }
   .nm-strip { display: flex; gap: 6px; }
   .nm-strip.vert { flex-direction: column; }
   .nm-dot {
