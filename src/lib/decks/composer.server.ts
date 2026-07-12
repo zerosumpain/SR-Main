@@ -14,7 +14,7 @@ import {
   type ComposeInput,
 } from '$lib/presentation/compose-heuristic';
 import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
-import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
+import { BLOCK_DOCS, BLOCK_SCHEMAS, validateBlocks } from '$lib/presentation/registry';
 import type { Block, QuoteBlock } from '$lib/presentation/types';
 
 /** Art direction is a one-shot composition, not an agentic loop — GLM 5.2's
@@ -52,8 +52,34 @@ function systemPrompt(ctx: ComposeContext): string {
     '',
     'If ATTACHED BLOCKS are provided they are pre-built and must appear in your blocks array VERBATIM (do not edit them); choose the layout and any companion text around them.',
     '',
-    'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]}. No markdown fences, no commentary.',
+    'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]}. Every block object MUST include its "type" field, e.g. {"type": "headline", "kicker": "...", "text": "..."}. No markdown fences, no commentary.',
   ].join('\n');
+}
+
+/** Known LLM drift: blocks arriving without a "type" field (GLM 5.2 does this
+ *  on the OpenRouter path) or wrapped as {"headline": {...}}. Repair the
+ *  unambiguous shapes; anything still wrong dies in validateBlocks as before. */
+function repairBlock(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const b = raw as Record<string, unknown>;
+  if (typeof b.type === 'string') return b;
+  const keys = Object.keys(b);
+  if (keys.length === 1 && keys[0] in BLOCK_SCHEMAS && typeof b[keys[0]] === 'object' && b[keys[0]] !== null) {
+    return { type: keys[0], ...(b[keys[0]] as Record<string, unknown>) };
+  }
+  const has = (k: string) => k in b;
+  if (has('stats')) return { type: 'statRow', ...b };
+  if (has('items')) return { type: 'timeline', ...b };
+  if (has('embed')) return { type: 'embed', ...b };
+  if (has('kind') && (has('series') || has('segments') || has('flows'))) return { type: 'chart', ...b };
+  if (has('src') && has('alt')) return { type: 'image', ...b };
+  if (has('src') && has('title')) return { type: 'iframe', ...b };
+  if (has('value') && has('label')) return { type: 'bigNumber', ...b };
+  if (has('body')) return { type: 'prose', ...b };
+  if (has('title') && (has('thesis') || has('asks') || has('kicker'))) return { type: 'masthead', ...b };
+  if (has('text') && has('attribution')) return { type: 'quote', ...b };
+  if (has('text')) return { type: 'headline', ...b };
+  return b;
 }
 
 /** Deterministic editorial guardrails over the LLM's output. A quote that is
@@ -88,24 +114,41 @@ function enforceAttached(slide: ComposedSlide, attached: Block[]): ComposedSlide
 }
 
 function parseLLMSlide(raw: string): ComposedSlide | null {
+  // The OpenRouter failover path strips response_format (some providers reject
+  // it), and reasoning models then wrap the JSON in prose/fences — extract the
+  // outermost object instead of requiring a bare JSON reply.
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '');
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end <= start) {
+    console.warn(`[decks composer] no JSON object in LLM reply (${cleaned.length} chars):`, cleaned.slice(0, 200));
+    return null;
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = JSON.parse(cleaned.slice(start, end + 1));
   } catch {
+    console.warn('[decks composer] unparseable LLM reply head:', cleaned.slice(0, 200));
     return null;
   }
   const obj = parsed as { title?: unknown; layout?: unknown; blocks?: unknown };
-  if (!Array.isArray(obj.blocks) || obj.blocks.length === 0 || obj.blocks.length > 6) return null;
-  const check = validateBlocks(obj.blocks);
-  if (!check.ok) return null;
+  if (!Array.isArray(obj.blocks) || obj.blocks.length === 0 || obj.blocks.length > 6) {
+    console.warn('[decks composer] LLM reply had no usable blocks array');
+    return null;
+  }
+  const blocks = obj.blocks.map(repairBlock);
+  const check = validateBlocks(blocks);
+  if (!check.ok) {
+    console.warn('[decks composer] LLM blocks rejected:', check.issues.join('; '));
+    return null;
+  }
   return {
     title: typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim().slice(0, 120) : null,
     layout: isLayout(obj.layout) ? obj.layout : 'default',
-    blocks: obj.blocks as Block[],
+    blocks: blocks as Block[],
   };
 }
 
@@ -130,9 +173,10 @@ export async function composeSlide(
         { role: 'user', content: userContent },
       ],
       temperature: 0.4,
-      // GLM burns reasoning tokens from max_tokens — keep the ceiling generous
-      // (see feedback_glm_reasoning_tokens; 5.2 reasons more than 5.1).
-      max_tokens: 4000,
+      // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
+      // undersized ceiling comes back as EMPTY content after ~30s of thinking
+      // (see feedback_glm_reasoning_tokens). Keep this very generous.
+      max_tokens: 8000,
       response_format: { type: 'json_object' },
     }, { fallbackModel: ART_DIRECTOR_FALLBACK });
     const text = completion.choices[0]?.message?.content ?? '';
