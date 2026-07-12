@@ -41,6 +41,7 @@ function systemPrompt(ctx: ComposeContext): string {
     '- quote is for REAL quotations and aphorisms only, ≤140 characters. A paragraph is prose (lede: true for the opening); a claim is a headline. NEVER pour long text into a quote.',
     '- A number worth feeling goes in bigNumber. Several figures go in statRow.',
     '- Charts: trend→line/area, comparison→bar, before/after→slope, share-of-whole→donut, correlation→scatter, flow/allocation→sankey.',
+    '- Photography is editorial material, not decoration: a dramatic image can BE the page (poster — image + short masthead); a documentary image sits beside its argument (split/split-flip with prose). NEVER discard an image\'s caption — it carries the photographer\'s credit and licence.',
     '- Reformat and tighten the given content. NEVER invent facts, numbers or quotes that are not in it.',
     '- Every provided media URL must appear as an image block (or iframe for site-relative pages).',
     `- Vary the rhythm: the neighbouring slides use [${(ctx.recentLayouts ?? []).join(', ') || 'none yet'}] — prefer a DIFFERENT layout and a different alignment when the content allows.`,

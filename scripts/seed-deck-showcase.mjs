@@ -28,7 +28,7 @@ export const DECK = {
           kicker: 'SR. DECKS · SHOWCASE',
           title: 'Every page in the box',
           thesis:
-            'A live tour of the deck system — eleven block types, ten page designs, seven chart kinds, side journeys off the main pathway and two live embeds. Every slide demonstrates the thing it describes.',
+            'A live tour of the deck system — eleven block types, ten page designs, seven chart kinds, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
         },
       ],
     },
@@ -110,7 +110,7 @@ export const DECK = {
         {
           type: 'chart',
           kind: 'line',
-          title: 'Six build batches (real numbers)',
+          title: 'Seven build batches (real numbers)',
           series: [
             {
               label: 'unit tests passing',
@@ -121,6 +121,7 @@ export const DECK = {
                 { x: 4, y: 34 },
                 { x: 5, y: 45 },
                 { x: 6, y: 48 },
+                { x: 7, y: 48 },
               ],
             },
             {
@@ -132,6 +133,7 @@ export const DECK = {
                 { x: 4, y: 8 },
                 { x: 5, y: 10 },
                 { x: 6, y: 10 },
+                { x: 7, y: 10 },
               ],
             },
           ],
@@ -163,10 +165,10 @@ export const DECK = {
                 { x: 2, y: 1 },
                 { x: 3, y: 1 },
                 { x: 4, y: 1 },
-                { x: 5, y: 4 },
-                { x: 6, y: 4 },
+                { x: 5, y: 5 },
+                { x: 6, y: 5 },
                 { x: 7, y: 3 },
-                { x: 8, y: 1 },
+                { x: 8, y: 2 },
                 { x: 9, y: 2 },
               ],
             },
@@ -254,9 +256,12 @@ export const DECK = {
                     { x: 9, y: 1 },
                     { x: 10, y: 2 },
                     { x: 11, y: 2 },
-                    { x: 12, y: 2 },
+                    { x: 12, y: 3 },
                     { x: 13, y: 2 },
-                    { x: 14, y: 1 },
+                    { x: 14, y: 2 },
+                    { x: 15, y: 2 },
+                    { x: 16, y: 2 },
+                    { x: 17, y: 1 },
                   ],
                 },
               ],
@@ -272,16 +277,16 @@ export const DECK = {
             {
               type: 'prose',
               lede: true,
-              body: '**Donut** for shares of one whole, segments sweeping in with the count in the middle. The whole here is this deck: all twenty-two pages, by what leads them.',
+              body: '**Donut** for shares of one whole, segments sweeping in with the count in the middle. The whole here is this deck: all twenty-five pages, by what leads them.',
             },
             {
               type: 'chart',
               kind: 'donut',
-              title: 'This deck’s 22 pages, by family',
+              title: 'This deck’s 25 pages, by family',
               segments: [
                 { label: 'words lead', value: 8 },
                 { label: 'data leads', value: 9 },
-                { label: 'media leads', value: 3 },
+                { label: 'media leads', value: 6 },
                 { label: 'interactive leads', value: 2 },
               ],
             },
@@ -294,7 +299,7 @@ export const DECK = {
             {
               type: 'prose',
               lede: true,
-              body: '**Sankey** draws allocation — ribbons proportional to flow. Here: what this deck’s twenty-two pages are made from, through the art director, into the page families you have been walking.',
+              body: '**Sankey** draws allocation — ribbons proportional to flow. Here: what this deck’s twenty-five pages are made from, through the art director, into the page families you have been walking.',
             },
             {
               type: 'chart',
@@ -303,10 +308,10 @@ export const DECK = {
               flows: [
                 { from: 'words', to: 'art director', value: 8 },
                 { from: 'numbers', to: 'art director', value: 9 },
-                { from: 'site media', to: 'art director', value: 5 },
+                { from: 'site media', to: 'art director', value: 8 },
                 { from: 'art director', to: 'text pages', value: 8 },
                 { from: 'art director', to: 'data pages', value: 9 },
-                { from: 'art director', to: 'media + interactive', value: 5 },
+                { from: 'art director', to: 'media + interactive', value: 8 },
               ],
             },
           ],
@@ -326,6 +331,7 @@ export const DECK = {
             { year: 'ph. 4', label: 'The art director', detail: 'Paste raw content; the system chooses the page. Eight designs, better motion.' },
             { year: 'ph. 5', label: 'The chart room', detail: 'Sankey, donut, slope, area, scatter; statement headlines; the site-media picker.' },
             { year: 'ph. 6', label: 'Journeys', detail: 'Zoom gave way to a 2D field — pills lead down into side stories, the map leads home.' },
+            { year: 'ph. 7', label: 'Pictures', detail: 'Found in the open commons or painted on demand — stored on-site, credited in the caption.' },
             { year: 'now', label: 'This showcase', detail: 'Timeline items cascade in down the spine — which is what this block is demonstrating.' },
           ],
         },
@@ -358,6 +364,62 @@ export const DECK = {
           src: '/images/decks/federation-vista.jpg',
           alt: 'The federation exchange at ambient traffic',
           caption: 'FIG 01 — THE EXCHANGE AT AMBIENT TRAFFIC · SCREENSHOT, UNRETOUCHED',
+        },
+      ],
+    },
+    {
+      title: 'Words beside a found photograph',
+      layout: 'split',
+      blocks: [
+        {
+          type: 'prose',
+          lede: true,
+          body: '**Found, not taken.** The deck searches the open commons — Openverse and Wikimedia — and keeps its own copy of what it finds. The caption carries the licence; the licence carries the credit.',
+        },
+        {
+          type: 'prose',
+          body: 'These are the Chicago Defender’s linotype operators, photographed by Russell Lee — searched, stored and credited by the system in one step.',
+        },
+        {
+          type: 'image',
+          src: '/api/blog/images/deck-media/linotype-operators-of-the-chicago-defender-d73c1b69f8.jpg',
+          alt: 'Linotype operators in the Chicago Defender composing room',
+          caption: 'PHOTO — RUSSELL LEE · CC BY 2.0 · VIA OPENVERSE',
+        },
+      ],
+    },
+    {
+      title: 'A found photograph becomes the page',
+      layout: 'poster',
+      blocks: [
+        {
+          type: 'image',
+          src: '/api/blog/images/deck-media/sunset-at-thurne-mill-3f1eaead82.jpg',
+          alt: 'Sunset at Thurne Mill — boats moored beneath the windmill',
+        },
+        {
+          type: 'masthead',
+          kicker: 'PAGE DESIGN · POSTER, FOUND',
+          title: 'Sunset does the talking',
+          thesis:
+            'One search, one import — Thurne Mill at dusk becomes the page. Photo — Michael Westley · CC BY-SA 2.0 · Wikimedia Commons.',
+        },
+      ],
+    },
+    {
+      title: 'Painted from the content',
+      layout: 'split-flip',
+      blocks: [
+        {
+          type: 'prose',
+          lede: true,
+          body: '**And when the commons has nothing,** the deck paints its own. This image was generated from the deck’s idea of itself — pages on a desk, joined into journeys — and labelled honestly. Real photographs for real things; painted ones for ideas.',
+        },
+        {
+          type: 'image',
+          src: '/api/blog/images/deck-media/a-field-of-cream-paper-pages-laid-out-in-rows-on-899102978c.jpg',
+          alt: 'A field of cream pages on a dark desk, joined by glowing threads',
+          caption: 'IMAGE — AI-GENERATED · POLLINATIONS.AI · PROMPTED FROM THIS DECK’S OWN CONTENT',
         },
       ],
     },
