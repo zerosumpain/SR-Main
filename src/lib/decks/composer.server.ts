@@ -18,8 +18,10 @@ import { BLOCK_DOCS, validateBlocks } from '$lib/presentation/registry';
 import type { Block, QuoteBlock } from '$lib/presentation/types';
 
 /** Art direction is a one-shot composition, not an agentic loop — GLM 5.2's
- *  quality is worth its latency here (turbo/5.1 stay the agentic models). */
+ *  quality is worth its latency here (turbo/5.1 stay the agentic models).
+ *  The failover pin keeps 5.2 across providers when z.ai is down/limited. */
 const ART_DIRECTOR_MODEL = 'glm-5.2';
+const ART_DIRECTOR_FALLBACK = 'z-ai/glm-5.2';
 
 export interface ComposeContext {
   deckTitle?: string;
@@ -132,7 +134,7 @@ export async function composeSlide(
       // (see feedback_glm_reasoning_tokens; 5.2 reasons more than 5.1).
       max_tokens: 4000,
       response_format: { type: 'json_object' },
-    });
+    }, { fallbackModel: ART_DIRECTOR_FALLBACK });
     const text = completion.choices[0]?.message?.content ?? '';
     const slide = parseLLMSlide(text);
     if (slide) {

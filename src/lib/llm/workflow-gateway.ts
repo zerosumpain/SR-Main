@@ -65,7 +65,14 @@ function stripResponseFormat(body: ChatBody): ChatBody {
 export async function resilientChatCompletion(
   configuredModel: string | undefined,
   body: ChatBody,
-  opts?: { signal?: AbortSignal },
+  opts?: {
+    signal?: AbortSignal;
+    /** OpenRouter model to fail over to instead of the global getFallbackModel()
+     *  — for callers pinned to a specific model (e.g. the decks art director
+     *  stays glm-5.2 across providers). Verify the id exists on OpenRouter:
+     *  a dead id makes failover die silently (see reference_zai_balance_outage). */
+    fallbackModel?: string;
+  },
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
   const { client, model, provider } = await resolveLLMClient(configuredModel);
 
@@ -84,7 +91,7 @@ export async function resilientChatCompletion(
   } catch (err) {
     if (provider !== 'openrouter' && (isRateLimitError(err) || isOurTimeoutAbort(err, opts?.signal))) {
       try {
-        const fb = await getLLMClient({ provider: 'openrouter', modelId: getFallbackModel() });
+        const fb = await getLLMClient({ provider: 'openrouter', modelId: opts?.fallbackModel ?? getFallbackModel() });
         console.warn(
           `[workflow-llm] z.ai ${isRateLimitError(err) ? 'rate-limited' : 'timed out'}; falling back to OpenRouter ${fb.model}`,
         );
