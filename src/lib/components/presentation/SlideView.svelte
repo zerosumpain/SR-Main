@@ -3,22 +3,41 @@
   // $lib/presentation/layouts.ts), with a staggered rise-and-settle entrance.
   // Layout zones are deterministic: split layouts send VISUAL_BLOCK_TYPES to
   // the visual column; poster uses the first image as its backdrop.
+  //
+  // Sizing contract: the slide is ALWAYS laid out at the fixed 1280×720 stage
+  // (types.ts STAGE_W/H) and uniformly scaled by its host — every dimension
+  // here is a constant px value evaluated at that design size, never vw/vh,
+  // so resizing the window scales the composition instead of reflowing it.
   import { blockIn } from '$lib/presentation/transitions';
   import Effect from './blocks/Effect.svelte';
   import { VISUAL_BLOCK_TYPES } from '$lib/presentation/layouts';
   import { BLOCK_COMPONENTS } from './block-components';
   import type { Block, EffectBlock, ImageBlock, SlideNode } from '$lib/presentation/types';
 
-  let { slide }: { slide: SlideNode } = $props();
+  let {
+    slide,
+    revealStep = Infinity,
+    still = false,
+  }: {
+    slide: SlideNode;
+    /** Build-step cursor: blocks with step > revealStep stay hidden. */
+    revealStep?: number;
+    /** Print/export rendering: no entrances, no background sims. */
+    still?: boolean;
+  } = $props();
 
   const STAGGER = 120;
+
+  const stepOf = (b: Block) => ('step' in b ? (b.step ?? 0) : 0);
 
   /** Manual-arrange mode: the owner hand-laid this slide; frames win. */
   const manual = $derived(Boolean(slide.geometry && Object.keys(slide.geometry).length));
 
   /** Background effect layers render behind everything; transition-role
    *  effect blocks belong to the player and never join the flow. */
-  const fxBlocks = $derived(slide.blocks.filter((b) => b.type === 'effect' && b.role === 'background'));
+  const fxBlocks = $derived(
+    still ? [] : slide.blocks.filter((b) => b.type === 'effect' && b.role === 'background'),
+  );
   const contentBlocks = $derived(slide.blocks.filter((b) => b.type !== 'effect'));
 
   const isSplit = $derived(slide.layout === 'split' || slide.layout === 'split-flip');
@@ -39,7 +58,12 @@
 {#snippet renderBlock(block: Block, i: number)}
   {@const Comp = BLOCK_COMPONENTS[block.type]}
   {#if Comp}
-    <div class="block" data-bi={slide.blocks.indexOf(block)} in:blockIn={{ delay: STAGGER * i }}>
+    <div
+      class="block"
+      class:step-wait={stepOf(block) > revealStep}
+      data-bi={slide.blocks.indexOf(block)}
+      in:blockIn={{ delay: STAGGER * i, noop: still || stepOf(block) > 0 }}
+    >
       <Comp {block} />
     </div>
   {/if}
@@ -57,8 +81,9 @@
       {#if Comp}
         <div
           class="block mblock"
+          class:step-wait={stepOf(block) > revealStep}
           data-bi={bi}
-          in:blockIn={{ delay: STAGGER * i }}
+          in:blockIn={{ delay: STAGGER * i, noop: still || stepOf(block) > 0 }}
           style:left="{frame?.x ?? 6}%"
           style:top="{frame?.y ?? 8 + i * 22}%"
           style:width="{frame?.w ?? 60}%"
@@ -137,13 +162,25 @@
     /* `safe` keeps the top reachable when content overflows the stage */
     justify-content: safe center;
     align-items: flex-start;
-    gap: clamp(18px, 3vh, 34px);
-    padding: clamp(24px, 5vw, 72px);
+    gap: 22px;
+    padding: 64px;
     overflow-y: auto;
     box-sizing: border-box;
     position: relative;
   }
   .block { width: 100%; display: flex; flex-direction: column; align-items: inherit; position: relative; }
+
+  /* build steps — a gated block sits invisible in its final position (it must
+     keep its layout slot so nothing reflows when it appears), then rises in
+     when the presenter advances to its step. */
+  @media (prefers-reduced-motion: no-preference) {
+    .block { transition: opacity 0.5s ease, transform 0.5s ease; }
+  }
+  .block.step-wait {
+    opacity: 0;
+    transform: translateY(16px);
+    pointer-events: none;
+  }
 
   /* manual arrange — hand-laid frames in % of the stage. The frame width is
      the layout: intrinsic max-widths yield to it so stretching an object
@@ -157,7 +194,7 @@
   .mblock :global(.hl-dek),
   .mblock :global(.chart),
   .mblock :global(.mh) { max-width: none; width: 100%; }
-  .mblock :global(.q-text) { font-size: clamp(20px, 2.6vw, 40px); }
+  .mblock :global(.q-text) { font-size: 33px; }
   .mblock :global(.fig) { width: 100%; }
   .mblock :global(.fig img) { width: 100%; height: auto; max-height: none; }
 
@@ -173,7 +210,7 @@
   /* statement family: poster-scale type for the dominant elements */
   .slide[data-layout='statement'],
   .slide[data-layout='statement-left'],
-  .slide[data-layout='statement-right'] { gap: clamp(22px, 4vh, 44px); }
+  .slide[data-layout='statement-right'] { gap: 29px; }
   .slide[data-layout='statement'] :global(.q),
   .slide[data-layout='statement-left'] :global(.q),
   .slide[data-layout='statement-right'] :global(.q) { max-width: 26ch; }
@@ -182,19 +219,19 @@
   .slide[data-layout='statement-right'] :global(.q-rail) { width: 5px; }
   .slide[data-layout='statement'] :global(.q-text),
   .slide[data-layout='statement-left'] :global(.q-text),
-  .slide[data-layout='statement-right'] :global(.q-text) { font-size: clamp(34px, 5.6vw, 68px); line-height: 1.18; }
+  .slide[data-layout='statement-right'] :global(.q-text) { font-size: 68px; line-height: 1.18; }
   .slide[data-layout='statement'] :global(.bn-num),
   .slide[data-layout='statement-left'] :global(.bn-num),
-  .slide[data-layout='statement-right'] :global(.bn-num) { font-size: clamp(96px, 19vw, 240px); }
+  .slide[data-layout='statement-right'] :global(.bn-num) { font-size: 240px; }
   .slide[data-layout='statement'] :global(.mh-title),
   .slide[data-layout='statement-left'] :global(.mh-title),
-  .slide[data-layout='statement-right'] :global(.mh-title) { font-size: clamp(48px, 9vw, 120px); }
+  .slide[data-layout='statement-right'] :global(.mh-title) { font-size: 115px; }
   .slide[data-layout='statement'] :global(.prose p),
   .slide[data-layout='statement-left'] :global(.prose p),
-  .slide[data-layout='statement-right'] :global(.prose p) { font-size: clamp(20px, 2.8vw, 30px); line-height: 1.45; color: var(--ink); }
+  .slide[data-layout='statement-right'] :global(.prose p) { font-size: 30px; line-height: 1.45; color: var(--ink); }
   .slide[data-layout='statement'] :global(.hl-text),
   .slide[data-layout='statement-left'] :global(.hl-text),
-  .slide[data-layout='statement-right'] :global(.hl-text) { font-size: clamp(44px, 8vw, 104px); }
+  .slide[data-layout='statement-right'] :global(.hl-text) { font-size: 102px; }
 
   /* aligned statements: the element pinned against a wall of whitespace.
      Editorial rule — space signals importance more reliably than size. The
@@ -204,12 +241,12 @@
   .slide[data-layout='statement-left'] {
     align-items: flex-start;
     text-align: left;
-    padding-right: max(48px, 44%);
+    padding-right: 563px; /* 44% of the 1280 stage */
   }
   .slide[data-layout='statement-right'] {
     align-items: flex-end;
     text-align: right;
-    padding-left: max(48px, 44%);
+    padding-left: 563px;
   }
   .slide[data-layout='statement-left'] .block { align-items: flex-start; }
   .slide[data-layout='statement-right'] .block { align-items: flex-end; }
@@ -222,15 +259,11 @@
   .slide[data-layout='statement-left'] :global(.prose),
   .slide[data-layout='statement-right'] :global(.prose) { max-width: none; }
   .slide[data-layout='statement-right'] :global(.hl[data-align='left']) { align-items: flex-end; text-align: right; }
-  .slide[data-layout='statement-right'] :global(.q) { padding: 6px clamp(18px, 2.5vw, 30px) 6px 0; }
+  .slide[data-layout='statement-right'] :global(.q) { padding: 6px 24px 6px 0; }
   .slide[data-layout='statement-right'] :global(.q-rail) { left: auto; right: 0; }
-  @media (max-width: 860px) {
-    .slide[data-layout='statement-left'] { padding-right: clamp(24px, 12vw, 90px); }
-    .slide[data-layout='statement-right'] { padding-left: clamp(24px, 12vw, 90px); }
-  }
 
   .slide[data-layout='full-bleed'] {
-    padding: clamp(10px, 2vw, 24px);
+    padding: 24px;
     gap: 12px;
   }
   .slide[data-layout='default'] .block { align-items: flex-start; }
@@ -239,14 +272,14 @@
   .split {
     display: grid;
     grid-template-columns: 38fr 62fr;
-    gap: clamp(20px, 3.5vw, 56px);
+    gap: 45px;
     align-items: center;
   }
   .split.flip { grid-template-columns: 62fr 38fr; }
   .split-text {
     display: flex;
     flex-direction: column;
-    gap: clamp(16px, 2.6vh, 28px);
+    gap: 19px;
     min-width: 0;
   }
   .split.flip .split-text { order: 2; }
@@ -258,20 +291,20 @@
     align-self: center;
   }
   .split.flip .split-visual { order: 1; }
-  .split-visual :global(.fig img) { max-height: 74vh; width: 100%; object-fit: cover; }
+  .split-visual :global(.fig img) { max-height: 533px; width: 100%; object-fit: cover; }
 
   /* grid — evidence-dense */
   .gridlay {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: clamp(16px, 2.6vh, 30px);
+    gap: 19px;
   }
   .grid-lead { width: 100%; }
   .grid-cells {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: clamp(14px, 2vw, 26px);
+    gap: 26px;
     align-items: start;
   }
   .grid-cells .block { min-width: 0; }
@@ -295,12 +328,12 @@
   }
   .poster-overlay {
     position: absolute;
-    left: clamp(24px, 5vw, 72px);
-    right: clamp(24px, 18vw, 30vw);
-    bottom: clamp(28px, 7vh, 76px);
+    left: 64px;
+    right: 230px;
+    bottom: 50px;
     display: flex;
     flex-direction: column;
-    gap: clamp(12px, 2vh, 22px);
+    gap: 14px;
     /* invert the ink onto the darkened photograph */
     --ink: #f4ecdc;
     --ink-soft: rgba(244, 236, 220, 0.78);
@@ -308,12 +341,4 @@
   .poster-overlay :global(.prose p) { color: var(--ink-soft); }
   .poster-overlay :global(.prose b) { color: var(--ink); }
   .poster-overlay :global(.q) { border-left-color: var(--accent); }
-
-  @media (max-width: 860px) {
-    .split, .split.flip { display: flex; flex-direction: column; justify-content: center; }
-    .split.flip .split-text { order: 0; }
-    .split.flip .split-visual { order: 1; }
-    .grid-cells { grid-template-columns: 1fr; }
-    .poster-overlay { right: clamp(24px, 5vw, 72px); }
-  }
 </style>

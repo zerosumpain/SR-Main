@@ -15,7 +15,7 @@
   .fig img {
     display: block;
     max-width: 100%;
-    max-height: 62vh;
+    max-height: 446.5px;
     border: 1px solid rgba(28, 22, 17, 0.16);
     border-radius: var(--radius-round);
   }

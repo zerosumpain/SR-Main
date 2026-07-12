@@ -145,6 +145,8 @@ register({
     `Block vocabulary: ${Object.entries(BLOCK_DOCS)
       .map(([k, v]) => `${k} — ${v}`)
       .join(' | ')} ` +
+    'Any content block may carry step: N (1-12) — a build step: it stays hidden until the presenter\'s Nth ' +
+    'forward press within the slide. Use sparingly to stage an argument on a single slide. ' +
     'Draw content from real site material (research_search, file_search, the data-spine study) — decks are ' +
     'editorial, factual, and cite what they claim. ' +
     'Decks are PRIVATE by default; the tool mints a share link and returns it. ' +

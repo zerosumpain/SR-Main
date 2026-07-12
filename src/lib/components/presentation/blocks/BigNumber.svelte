@@ -35,7 +35,7 @@
   .bn-num {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(64px, 13vw, 160px);
+    font-size: 160px;
     line-height: 0.95;
     letter-spacing: -0.03em;
     color: var(--ink);
@@ -43,21 +43,21 @@
   }
   .bn-unit {
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(11px, 1.4vw, 14px);
+    font-size: 14px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent-ink);
   }
   .bn-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(11px, 1.4vw, 14px);
+    font-size: 14px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--ink-soft);
     margin-top: 12px;
   }
   .bn-sub {
-    font-size: clamp(14px, 1.6vw, 17px);
+    font-size: 17px;
     line-height: 1.55;
     color: var(--ink-soft);
     margin: 10px 0 0;

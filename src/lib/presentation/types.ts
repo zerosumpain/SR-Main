@@ -1,6 +1,10 @@
 // sr. decks — block + slide types. The zod schemas in registry.ts are the
 // runtime source of truth; these interfaces are their TS mirror for components.
 // Spec: docs/superpowers/specs/2026-07-11-decks-presentation-capability.md
+//
+// Every CONTENT block accepts an optional `step` (1–12): a build step — the
+// block stays hidden until the presenter's Nth forward press within the slide
+// (see steps.ts). Effect blocks are atmosphere, not content, so they don't.
 
 export type BlockType =
   | 'masthead'
@@ -12,6 +16,8 @@ export type BlockType =
   | 'timeline'
   | 'image'
   | 'chart'
+  | 'code'
+  | 'video'
   | 'effect'
   | 'embed'
   | 'iframe';
@@ -22,6 +28,7 @@ export interface MastheadBlock {
   title: string;
   thesis?: string;
   asks?: string[];
+  step?: number;
 }
 
 /** Editorial statement headline: kicker → headline → dek hierarchy. The
@@ -34,6 +41,7 @@ export interface HeadlineBlock {
   /** One-line dek (supporting subline) under the statement. */
   dek?: string;
   align?: 'left' | 'center' | 'right';
+  step?: number;
 }
 
 export type ProseStyle =
@@ -62,6 +70,7 @@ export interface ProseBlock {
   /** Legacy pre-style flag — equivalent to style: 'lede'. */
   lede?: boolean;
   style?: ProseStyle;
+  step?: number;
 }
 
 export interface BigNumberBlock {
@@ -72,11 +81,13 @@ export interface BigNumberBlock {
   sub?: string;
   /** Decimal places for the count-up display (default 0). */
   dp?: number;
+  step?: number;
 }
 
 export interface StatRowBlock {
   type: 'statRow';
   stats: { n: string; label: string }[];
+  step?: number;
 }
 
 export type QuoteStyle = 'rail' | 'pull' | 'boxed';
@@ -88,11 +99,13 @@ export interface QuoteBlock {
   url?: string;
   /** rail (default accent left rail) | pull (huge centered) | boxed (inset card). */
   style?: QuoteStyle;
+  step?: number;
 }
 
 export interface TimelineBlock {
   type: 'timeline';
   items: { year: string; label: string; detail?: string }[];
+  step?: number;
 }
 
 export interface ImageBlock {
@@ -100,6 +113,7 @@ export interface ImageBlock {
   src: string;
   alt: string;
   caption?: string;
+  step?: number;
 }
 
 export type ChartKind = 'line' | 'bar' | 'area' | 'scatter' | 'slope' | 'donut' | 'sankey';
@@ -119,6 +133,34 @@ export interface ChartBlock {
   /** Categorical x-axis labels, indexed by each distinct x value's rank
    *  (bar charts: "Arbor", "SIMS"… instead of 0, 1…; slope: the two ends). */
   xLabels?: string[];
+  step?: number;
+}
+
+/** Syntax-highlighted source panel (Shiki, editorial framing). */
+export interface CodeBlock {
+  type: 'code';
+  code: string;
+  /** Shiki language id (ts, python, bash, json…); unknown ids render plain. */
+  lang?: string;
+  /** Mono header label above the panel — usually a filename. */
+  title?: string;
+  caption?: string;
+  step?: number;
+}
+
+/** Motion figure: a site-hosted mp4/webm (e.g. an uploaded
+ *  /api/blog/images/deck-media/… file) or a YouTube/Vimeo URL rendered as a
+ *  privacy-enhanced embed. See video.ts for the accepted shapes. */
+export interface VideoBlock {
+  type: 'video';
+  src: string;
+  caption?: string;
+  /** File videos only: start playing (muted) when the slide arrives. */
+  autoplay?: boolean;
+  loop?: boolean;
+  /** File videos only: poster image shown before play. */
+  poster?: string;
+  step?: number;
 }
 
 /** A registered effect from $lib/presentation/effects.ts — a Three.js
@@ -138,6 +180,7 @@ export interface EmbedBlock {
   type: 'embed';
   embed: string;
   config?: Record<string, unknown>;
+  step?: number;
 }
 
 /** Site-relative URL only — embeds existing dynamic pages as a fallback. */
@@ -146,6 +189,7 @@ export interface IframeBlock {
   src: string;
   title: string;
   height?: number;
+  step?: number;
 }
 
 export type Block =
@@ -158,6 +202,8 @@ export type Block =
   | TimelineBlock
   | ImageBlock
   | ChartBlock
+  | CodeBlock
+  | VideoBlock
   | EffectBlock
   | EmbedBlock
   | IframeBlock;
@@ -195,3 +241,10 @@ export interface DeckMeta {
   description: string | null;
   theme: string;
 }
+
+/** The slide stage's fixed design size, logical px. Slides are laid out at
+ *  exactly this size everywhere (player, editor canvas, print/PDF) and then
+ *  uniformly transform-scaled to fit their host — resizing the window scales
+ *  the whole composition in proportion instead of reflowing it. */
+export const STAGE_W = 1280;
+export const STAGE_H = 720;

@@ -9,9 +9,13 @@ import { sankeyDepths } from './chartkit';
 import { EFFECTS } from './effects';
 import { EMBEDS } from './embeds';
 import { PROSE_STYLES, PROSE_STYLE_IDS, QUOTE_STYLES, QUOTE_STYLE_IDS, styleDocsForLLM } from './styles';
+import { parseVideoSrc } from './video';
 import type { BlockType } from './types';
 
 const statSchema = z.object({ n: z.string().min(1), label: z.string().min(1) }).strict();
+
+/** Build step — every content block may stage itself behind N forward presses. */
+const STEP = z.number().int().min(1).max(12).optional();
 
 const seriesSchema = z
   .array(
@@ -36,6 +40,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       title: z.string().min(1),
       thesis: z.string().optional(),
       asks: z.array(z.string().min(1)).optional(),
+      step: STEP,
     })
     .strict(),
   headline: z
@@ -45,6 +50,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       text: z.string().min(1).max(160),
       dek: z.string().optional(),
       align: z.enum(['left', 'center', 'right']).optional(),
+      step: STEP,
     })
     .strict(),
   prose: z
@@ -53,6 +59,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       body: z.string().min(1),
       lede: z.boolean().optional(),
       style: z.enum(PROSE_STYLE_IDS as [string, ...string[]]).optional(),
+      step: STEP,
     })
     .strict(),
   bigNumber: z
@@ -63,12 +70,14 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       unit: z.string().optional(),
       sub: z.string().optional(),
       dp: z.number().int().min(0).max(3).optional(),
+      step: STEP,
     })
     .strict(),
   statRow: z
     .object({
       type: z.literal('statRow'),
       stats: z.array(statSchema).min(1).max(6),
+      step: STEP,
     })
     .strict(),
   quote: z
@@ -78,6 +87,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       attribution: z.string().optional(),
       url: z.string().optional(),
       style: z.enum(QUOTE_STYLE_IDS as [string, ...string[]]).optional(),
+      step: STEP,
     })
     .strict(),
   timeline: z
@@ -87,6 +97,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
         .array(z.object({ year: z.string().min(1), label: z.string().min(1), detail: z.string().optional() }).strict())
         .min(2)
         .max(12),
+      step: STEP,
     })
     .strict(),
   image: z
@@ -95,6 +106,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       src: z.string().min(1),
       alt: z.string().min(1),
       caption: z.string().optional(),
+      step: STEP,
     })
     .strict(),
   chart: z
@@ -118,6 +130,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       xLabel: z.string().optional(),
       yLabel: z.string().optional(),
       xLabels: z.array(z.string()).optional(),
+      step: STEP,
     })
     .strict()
     .superRefine((val, ctx) => {
@@ -137,6 +150,35 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
         } else if (!sankeyDepths(val.flows)) {
           ctx.addIssue({ code: 'custom', message: 'sankey flows must be acyclic (a→b→a is a cycle)' });
         }
+      }
+    }),
+  code: z
+    .object({
+      type: z.literal('code'),
+      code: z.string().min(1).max(4000),
+      lang: z.string().max(30).optional(),
+      title: z.string().max(120).optional(),
+      caption: z.string().optional(),
+      step: STEP,
+    })
+    .strict(),
+  video: z
+    .object({
+      type: z.literal('video'),
+      src: z.string().min(1),
+      caption: z.string().optional(),
+      autoplay: z.boolean().optional(),
+      loop: z.boolean().optional(),
+      poster: z.string().optional(),
+      step: STEP,
+    })
+    .strict()
+    .superRefine((val, ctx) => {
+      if (!parseVideoSrc(val.src)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'video src must be a site-relative .mp4/.webm file or a YouTube/Vimeo URL',
+        });
       }
     }),
   effect: z
@@ -166,6 +208,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       type: z.literal('embed'),
       embed: z.string().min(1),
       config: z.record(z.string(), z.unknown()).optional(),
+      step: STEP,
     })
     .strict()
     .superRefine((val, ctx) => {
@@ -193,6 +236,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
         .regex(/^\/(?!\/|\\)/, { message: 'iframe src must be a site-relative URL (start with /, not // or /\\)' }),
       title: z.string().min(1),
       height: z.number().int().min(120).max(2000).optional(),
+      step: STEP,
     })
     .strict(),
 };
@@ -210,6 +254,9 @@ export const BLOCK_DOCS: Record<BlockType, string> = {
   image: 'Figure: { src, alt, caption? }.',
   chart:
     'Bespoke SVG chart: { kind: line|bar|area|scatter|slope|donut|sankey, title?, xLabel?, yLabel? }. Data by kind — line/bar/area/scatter: series: [{label, points:[{x,y}]}] (max 5; xLabels?: string[] names distinct x ranks for bar); slope: series with 2 points each (before→after; xLabels = the two ends); donut: segments: [{label, value}] (2-8 shares of a whole); sankey: flows: [{from, to, value}] (acyclic; shows allocation/movement between named stages). Pick: trend→line/area, comparison→bar, before/after→slope, share-of-whole→donut, correlation→scatter, flow/allocation→sankey.',
+  code: 'Syntax-highlighted source panel: { code (keep snippets ≤20 lines), lang? (shiki id: ts|python|bash|json|sql|yaml…), title? (mono header, usually a filename), caption? }. A visual block — pairs well with split layouts (argument beside code).',
+  video:
+    'Motion figure: { src (a site-relative .mp4/.webm — e.g. an uploaded /api/blog/images/deck-media/… file — OR a YouTube/Vimeo URL, rendered as a privacy-enhanced embed), caption?, autoplay? (file videos, plays muted), loop?, poster? }.',
   effect: `Atmosphere layer: { effect: name, role: "background"|"transition", intensity?: 0.1-1 (default 0.5), tint?: ink|accent|petrol }. role background renders BEHIND the slide's content; role transition plays as the camera moves INTO the slide. At most one background effect per slide, used sparingly. Registered: ${Object.keys(
     EFFECTS,
   )

@@ -24,6 +24,11 @@ export interface MoveParams {
 const GLIDE = 380;
 const MAJOR = 520;
 
+/** Glide distances in design px (the stage is a fixed 1280×720 canvas that
+ *  the host scales, so travel must be in stage units, not viewport units). */
+const DIST = 90;
+const DIST_MAJOR = 154;
+
 /** Wipes where particles replace the outgoing DOM (it must vanish fast). */
 const VEIL = new Set(['melt', 'shatter']);
 
@@ -40,7 +45,13 @@ const IN_DELAY: Record<string, number> = {
 
 /** Block entrance: rise + settle with a micro-scale — used with a stagger
  *  delay by SlideView and by block-internal choreography. */
-export function blockIn(_node: Element, { delay = 0 }: { delay?: number } = {}): TransitionConfig {
+export function blockIn(
+  _node: Element,
+  { delay = 0, noop = false }: { delay?: number; noop?: boolean } = {},
+): TransitionConfig {
+  // Step-gated blocks (and print rendering) skip the entrance: their reveal
+  // is the CSS transition on .step-wait, not an intro animation.
+  if (noop) return { duration: 0 };
   return {
     delay: dur(delay),
     duration: dur(560),
@@ -65,14 +76,14 @@ function vec(travel: Travel): { x: number; y: number } {
 
 export function slideIn(_node: Element, { travel, major = false, wipe }: MoveParams): TransitionConfig {
   const { x, y } = vec(travel);
-  const dist = major ? 12 : 7;
+  const dist = major ? DIST_MAJOR : DIST;
   const delay = wipe ? (IN_DELAY[wipe] ?? 0) : 0;
   return {
     delay: dur(delay),
     duration: dur(major || delay ? MAJOR : GLIDE),
     easing: cubicOut,
     css: (t, u) =>
-      `transform: translate(${x * u * dist}vw, ${y * u * dist}vh) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      `transform: translate(${x * u * dist}px, ${y * u * dist}px) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
   };
 }
 
@@ -83,15 +94,15 @@ export function slideOut(_node: Element, { travel, major = false, wipe }: MovePa
     return {
       duration: dur(230),
       easing: cubicOut,
-      css: (t, u) => `transform: translateY(${u * 2.5}vh); opacity: ${t}`,
+      css: (t, u) => `transform: translateY(${u * 18}px); opacity: ${t}`,
     };
   }
   const { x, y } = vec(travel);
-  const dist = major ? 12 : 7;
+  const dist = major ? DIST_MAJOR : DIST;
   return {
     duration: dur(major ? MAJOR : GLIDE),
     easing: cubicOut,
     css: (t, u) =>
-      `transform: translate(${-x * u * dist}vw, ${-y * u * dist}vh) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
+      `transform: translate(${-x * u * dist}px, ${-y * u * dist}px) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
   };
 }

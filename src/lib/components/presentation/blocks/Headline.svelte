@@ -24,7 +24,7 @@
   .hl {
     display: flex;
     flex-direction: column;
-    gap: clamp(10px, 1.8vh, 18px);
+    gap: 13px;
     max-width: 100%;
   }
   .hl[data-align='left'] { align-items: flex-start; text-align: left; }
@@ -32,13 +32,13 @@
   .hl[data-align='right'] { align-items: flex-end; text-align: right; }
   .hl-kicker {
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(10px, 1.2vw, 13px);
+    font-size: 13px;
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--accent-ink);
   }
   .hl-rule {
-    width: clamp(42px, 5vw, 76px);
+    width: 64px;
     height: 4px;
     background: var(--accent);
     transform-origin: left;
@@ -55,7 +55,7 @@
   .hl-text {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(36px, 6vw, 76px);
+    font-size: 76px;
     line-height: 1.04;
     letter-spacing: -0.02em;
     color: var(--ink);
@@ -66,7 +66,7 @@
   }
   .hl-dek {
     font-family: 'DM Sans', system-ui, sans-serif;
-    font-size: clamp(15px, 1.9vw, 21px);
+    font-size: 21px;
     line-height: 1.5;
     color: var(--ink-soft);
     margin: 0;

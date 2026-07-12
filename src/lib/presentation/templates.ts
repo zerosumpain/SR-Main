@@ -40,6 +40,13 @@ export const BLOCK_TEMPLATES: Record<BlockType, Block> = {
     ],
     xLabels: ['A', 'B'],
   },
+  code: {
+    type: 'code',
+    lang: 'ts',
+    title: 'example.ts',
+    code: "export function greet(name: string): string {\n  return `hello, ${name}`;\n}",
+  },
+  video: { type: 'video', src: 'https://www.youtube.com/watch?v=YE7VzlLtp-4', caption: 'VIDEO — CAPTION' },
   effect: { type: 'effect', effect: 'drift', role: 'background', intensity: 0.5, tint: 'ink' },
   embed: { type: 'embed', embed: 'federation-sim', config: { scenario: 'attendance', autoplay: true } },
   iframe: { type: 'iframe', src: '/projects', title: 'Projects', height: 520 },

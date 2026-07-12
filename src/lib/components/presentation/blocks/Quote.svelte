@@ -34,7 +34,7 @@
   .q {
     position: relative;
     margin: 0;
-    padding: 6px 0 6px clamp(18px, 2.5vw, 30px);
+    padding: 6px 0 6px 30px;
     max-width: 44ch;
   }
   .q-rail {
@@ -57,7 +57,7 @@
     font-family: 'Fraunces', serif;
     font-style: italic;
     font-weight: 500;
-    font-size: clamp(22px, 3.4vw, 40px);
+    font-size: 40px;
     line-height: 1.3;
     letter-spacing: -0.01em;
     color: var(--ink);
@@ -66,7 +66,7 @@
   .q-attr {
     margin-top: 14px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(10px, 1.2vw, 12px);
+    font-size: 12px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -83,34 +83,34 @@
     display: block;
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(64px, 9vw, 130px);
+    font-size: 115px;
     line-height: 0.55;
     color: var(--accent);
-    margin-bottom: clamp(10px, 2vh, 22px);
+    margin-bottom: 14.5px;
   }
   .q.q-pull .q-text {
-    font-size: clamp(28px, 4.6vw, 58px);
+    font-size: 58px;
     line-height: 1.2;
   }
-  .q.q-pull .q-attr { margin-top: clamp(16px, 2.6vh, 26px); }
+  .q.q-pull .q-attr { margin-top: 18.5px; }
 
   /* boxed — inset bordered card with a large opening glyph */
   .q.q-boxed {
-    padding: clamp(18px, 2.4vw, 30px) clamp(18px, 2.4vw, 30px) clamp(14px, 1.9vw, 24px) clamp(52px, 6vw, 78px);
+    padding: 30px 30px 24px 77px;
     border: 1px solid rgba(28, 22, 17, 0.18);
     border-radius: var(--radius-round, 4px);
     background: rgba(255, 255, 255, 0.45);
   }
   .q.q-boxed .q-glyph {
     position: absolute;
-    left: clamp(12px, 1.6vw, 20px);
-    top: clamp(6px, 1vw, 12px);
+    left: 20px;
+    top: 12px;
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(44px, 5.6vw, 76px);
+    font-size: 71.5px;
     line-height: 1;
     color: var(--accent);
   }
-  .q.q-boxed .q-text { font-size: clamp(17px, 2.3vw, 26px); }
+  .q.q-boxed .q-text { font-size: 26px; }
   .q.q-boxed .q-attr { text-align: right; }
 </style>

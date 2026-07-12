@@ -246,7 +246,7 @@
   .ch-title {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(15px, 1.9vw, 20px);
+    font-size: 20px;
     color: var(--ink);
     margin-bottom: 8px;
   }

@@ -26,11 +26,18 @@
     type ArrowKey,
     type Travel,
   } from '$lib/presentation/navigation';
+  import { maxStep, stepArrow } from '$lib/presentation/steps';
   import { slideIn, slideOut } from '$lib/presentation/transitions';
+  import { STAGE_H, STAGE_W } from '$lib/presentation/types';
 
   let { data } = $props();
 
   let current = $state(data.startId);
+  /** Build-step cursor within the current slide (0 = only unstaged blocks). */
+  let stepIndex = $state(0);
+  /** Stage host size — drives the uniform scale of the fixed 1280×720 canvas. */
+  let hostW = $state(0);
+  let hostH = $state(0);
   let travel = $state<Travel>('right');
   let major = $state(false);
   /** Active wipe effect id for the current move (null = plain glide/sweep). */
@@ -45,6 +52,7 @@
 
   // non-reactive internals
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
+  let trackedSlides = new Set<string>();
   let touchX = 0;
   let touchY = 0;
   let wheelLock = 0;
@@ -71,9 +79,15 @@
   const pillLabel = $derived(
     slide?.journeyLabel ?? byId.get(children[0] ?? '')?.title ?? `${childCount} more`,
   );
-  // Slides hosting an interactive (sim orbit-drags, iframes) keep the pointer
-  // to themselves: no swipe nav, no invisible edge click-zones.
-  const hasInteractive = $derived(slide.blocks.some((b) => b.type === 'embed' || b.type === 'iframe'));
+  // Slides hosting an interactive (sim orbit-drags, iframes, video controls)
+  // keep the pointer to themselves: no swipe nav, no invisible edge click-zones.
+  const hasInteractive = $derived(
+    slide.blocks.some((b) => b.type === 'embed' || b.type === 'iframe' || b.type === 'video'),
+  );
+  const stepMax = $derived(maxStep(slide?.blocks ?? []));
+  /** Uniform scale fitting the fixed design canvas into the window. Hidden
+   *  until measured so the first paint never flashes unscaled. */
+  const stageScale = $derived(hostW && hostH ? Math.min(hostW / STAGE_W, hostH / STAGE_H) : 0);
 
   // Nav-map strips along the active path: the root row, then one strip per
   // branch level. Each strip is WINDOWED — one dot behind the on-path dot and
@@ -123,6 +137,10 @@
     }
     fx = fxBlock ? { effect: fxBlock, travel: t, key: ++fxKey, zones } : null;
     current = id;
+    // Forward arrivals start a staged slide unrevealed; walking back (or a
+    // map jump upward/leftward) lands with the page as you left it — built.
+    stepIndex = t === 'right' || t === 'down' ? 0 : maxStep(byId.get(id)?.blocks ?? []);
+    trackSlide(id);
     const url = new URL(page.url);
     url.searchParams.set('s', id);
     replaceState(url, {});
@@ -130,10 +148,36 @@
   }
 
   function arrow(key: ArrowKey) {
+    // Build steps intercept the plane axis: forward reveals the next staged
+    // block, backward re-hides — navigation resumes past either end.
+    const act = stepArrow(axis, key, stepIndex, stepMax);
+    if (act) {
+      stepIndex += act === 'reveal' ? 1 : -1;
+      wakeChrome();
+      return;
+    }
     const mv = resolveArrow(data.slides, current, key);
     if (!mv) return;
     const depthChanged = pathTo(data.slides, mv.id).length !== chain.length;
     goTo(mv.id, mv.travel, depthChanged);
+  }
+
+  /** Share-viewer telemetry: beacon each slide once per session so the owner
+   *  can see how far a share link actually got. Owner/public views are not
+   *  tracked — only via-share sessions, attributed by the share cookie. */
+  function trackSlide(id: string) {
+    if (!data.viaShare || trackedSlides.has(id)) return;
+    trackedSlides.add(id);
+    // Under /decks (not /api) so the path-scoped share cookie rides along.
+    const url = `/decks/${data.deck.slug}/track`;
+    const body = JSON.stringify({ slideId: id });
+    try {
+      if (!navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }))) {
+        void fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
+      }
+    } catch {
+      /* telemetry must never break navigation */
+    }
   }
 
   function exit() {
@@ -206,7 +250,7 @@
   function onPointerUp(e: PointerEvent) {
     if (hasInteractive) return; // an orbit-drag on the sim is not a swipe
     const target = e.target as HTMLElement | null;
-    if (target?.closest('a, button, iframe')) return;
+    if (target?.closest('a, button, iframe, video')) return;
     const dx = e.clientX - touchX;
     const dy = e.clientY - touchY;
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
@@ -221,7 +265,7 @@
    *  wheels over live embeds/iframes are theirs (sim zoom etc.). */
   function onWheel(e: WheelEvent) {
     const target = e.target as HTMLElement | null;
-    if (target?.closest('iframe, canvas')) return;
+    if (target?.closest('iframe, canvas, video')) return;
     e.preventDefault();
     const now = performance.now();
     if (now < wheelLock) return;
@@ -290,6 +334,7 @@
 
   onMount(() => {
     wakeChrome();
+    trackSlide(current);
     try {
       const raw = localStorage.getItem(MAP_POS_KEY);
       if (raw) {
@@ -309,6 +354,13 @@
 <svelte:head>
   <title>{data.deck.title} — sr. decks</title>
   <meta name="robots" content="noindex" />
+  {#if data.deck.ogImage}
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={data.deck.title} />
+    {#if data.deck.description}<meta property="og:description" content={data.deck.description} />{/if}
+    <meta property="og:image" content={new URL(data.deck.ogImage, page.url.origin).href} />
+    <meta name="twitter:card" content="summary_large_image" />
+  {/if}
 </svelte:head>
 
 <svelte:window onkeydown={onKeydown} />
@@ -324,12 +376,20 @@
       onpointermove={wakeChrome}
       onwheel={onWheel}
     >
-      <div class="stage-wrap">
-        {#key current}
-          <div class="stage" in:slideIn={{ travel, major, wipe: wiping ?? undefined }} out:slideOut={{ travel, major, wipe: wiping ?? undefined }}>
-            <SlideView {slide} />
-          </div>
-        {/key}
+      <div class="stage-wrap" bind:clientWidth={hostW} bind:clientHeight={hostH}>
+        <!-- The fixed 1280×720 design canvas, uniformly scaled to fit: resizing
+             the window scales the whole composition — the layout never reflows. -->
+        <div
+          class="stage-fixed"
+          style:transform={`translate(-50%, -50%) scale(${stageScale || 1})`}
+          style:visibility={stageScale ? 'visible' : 'hidden'}
+        >
+          {#key current}
+            <div class="stage" in:slideIn={{ travel, major, wipe: wiping ?? undefined }} out:slideOut={{ travel, major, wipe: wiping ?? undefined }}>
+              <SlideView {slide} revealStep={stepIndex} />
+            </div>
+          {/key}
+        </div>
       </div>
 
       {#if fx}
@@ -415,6 +475,9 @@
           {childCount > 0 ? `${pillTravel === 'down' ? '↓' : '→'} side story · ` : ''}{depth > 0 ? 'esc back · ' : ''}f fullscreen
         </span>
         <span class="progress">
+          {#if stepMax > 0}<span class="step-dots" aria-label="Build step {stepIndex} of {stepMax}">
+            {#each Array.from({ length: stepMax }) as _, i (i)}<span class="step-dot" class:lit={i < stepIndex}></span>{/each}
+          </span>{/if}
           {String(planeIdx + 1).padStart(2, '0')} / {String(plane.length).padStart(2, '0')}
         </span>
       </footer>
@@ -440,6 +503,13 @@
   .stage-wrap {
     position: absolute;
     inset: 0;
+  }
+  .stage-fixed {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 1280px;
+    height: 720px;
   }
   .stage {
     position: absolute;
@@ -608,6 +678,15 @@
     text-transform: uppercase;
     color: var(--ink-soft);
   }
+  .progress { display: inline-flex; align-items: center; gap: 10px; }
+  .step-dots { display: inline-flex; gap: 4px; }
+  .step-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--ink-soft);
+  }
+  .step-dot.lit { background: var(--accent); border-color: var(--accent); }
 
   .zone {
     position: absolute;

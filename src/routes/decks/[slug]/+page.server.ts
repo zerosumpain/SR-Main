@@ -50,8 +50,11 @@ export const load: PageServerLoad = async (event) => {
       title: deck.title,
       description: deck.description,
       theme: deck.theme,
+      ogImage: deck.ogImage,
     },
     slides,
     startId,
+    // The player only beacons slide-reach telemetry for share-link sessions.
+    viaShare,
   };
 };

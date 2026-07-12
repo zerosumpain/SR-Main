@@ -68,4 +68,4 @@ export function layoutDocsForLLM(): string {
 }
 
 /** Block types that count as "visual" when a split layout assigns columns. */
-export const VISUAL_BLOCK_TYPES = new Set(['image', 'chart', 'embed', 'iframe', 'timeline']);
+export const VISUAL_BLOCK_TYPES = new Set(['image', 'chart', 'embed', 'iframe', 'timeline', 'code', 'video']);

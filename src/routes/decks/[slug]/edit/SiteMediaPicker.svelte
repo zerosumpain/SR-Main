@@ -19,7 +19,7 @@
     onClose: () => void;
   } = $props();
 
-  type Tab = 'interactives' | 'pages' | 'images' | 'find' | 'generate' | 'browse';
+  type Tab = 'interactives' | 'pages' | 'images' | 'find' | 'generate' | 'upload' | 'browse';
   let tab = $state<Tab>('interactives');
 
   interface Candidate {
@@ -67,6 +67,38 @@
   let genBusy = $state(false);
   let genError = $state('');
   let genResult = $state<{ src: string; alt: string; caption: string } | null>(null);
+
+  // Upload (own files — images become image blocks, mp4/webm video blocks)
+  let upBusy = $state(false);
+  let upError = $state('');
+  let upDragging = $state(false);
+  let upResult = $state<{ src: string; alt: string; kind: 'image' | 'video' } | null>(null);
+  let fileInput: HTMLInputElement | undefined; // plain render handle
+
+  async function uploadFile(file: File) {
+    if (upBusy) return;
+    upBusy = true;
+    upError = '';
+    upResult = null;
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/decks/media/upload', { method: 'POST', body: fd });
+      const payload = (await res.json()) as { src?: string; alt?: string; kind?: 'image' | 'video'; error?: string };
+      if (!res.ok || !payload.src) throw new Error(payload.error ?? res.statusText);
+      upResult = { src: payload.src, alt: payload.alt ?? 'Uploaded media', kind: payload.kind ?? 'image' };
+    } catch (err) {
+      upError = err instanceof Error ? err.message : 'upload failed';
+    } finally {
+      upBusy = false;
+    }
+  }
+
+  function insertUpload() {
+    if (!upResult) return;
+    if (upResult.kind === 'video') onInsert({ type: 'video', src: upResult.src });
+    else onInsert({ type: 'image', src: upResult.src, alt: upResult.alt });
+  }
 
   async function runFind() {
     const q = findQuery.trim();
@@ -198,6 +230,7 @@
     { id: 'images', label: 'IMAGES' },
     { id: 'find', label: 'FIND IMAGES' },
     { id: 'generate', label: 'GENERATE' },
+    { id: 'upload', label: 'UPLOAD' },
     { id: 'browse', label: 'BROWSE SITE' },
   ];
 </script>
@@ -366,6 +399,52 @@
             <div class="int-preview">
               <span class="int-glyph">✦</span>
               <span>{genBusy ? 'painting…' : 'nothing yet'}</span>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {:else if tab === 'upload'}
+      <div class="smp-body two-col">
+        <div class="col">
+          <div
+            class="drop"
+            class:over={upDragging}
+            role="button"
+            tabindex="0"
+            aria-label="Drop a file or click to choose"
+            ondragover={(e) => { e.preventDefault(); upDragging = true; }}
+            ondragleave={() => (upDragging = false)}
+            ondrop={(e) => { e.preventDefault(); upDragging = false; const f = e.dataTransfer?.files?.[0]; if (f) void uploadFile(f); }}
+            onclick={() => fileInput?.click()}
+            onkeydown={(e) => { if (e.key === 'Enter') fileInput?.click(); }}
+          >
+            <span class="drop-main">{upBusy ? 'uploading…' : '⤒ drop a file here, or click to choose'}</span>
+            <span class="row-note">jpg · png · webp · gif images (≤15MB) — mp4 · webm video (≤60MB)</span>
+          </div>
+          <input
+            class="file-hidden"
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm"
+            bind:this={fileInput}
+            onchange={(e) => { const f = e.currentTarget.files?.[0]; if (f) void uploadFile(f); e.currentTarget.value = ''; }}
+          />
+          {#if upError}<p class="err">{upError}</p>{/if}
+          <span class="row-note">A copy is stored on this site (deck-media) — videos insert as a video block.</span>
+        </div>
+        <div class="col preview-col">
+          <span class="lab">RESULT</span>
+          {#if upResult}
+            {#if upResult.kind === 'image'}
+              <img class="gen-preview" src={upResult.src} alt={upResult.alt} />
+            {:else}
+              <!-- svelte-ignore a11y_media_has_caption -->
+              <video class="gen-preview" src={upResult.src} controls muted></video>
+            {/if}
+            <button class="insert" onclick={insertUpload}>insert {upResult.kind}</button>
+          {:else}
+            <div class="int-preview">
+              <span class="int-glyph">⤒</span>
+              <span>{upBusy ? 'uploading…' : 'nothing yet'}</span>
             </div>
           {/if}
         </div>
@@ -578,6 +657,30 @@
     resize: vertical;
   }
   .gen-preview { width: 100%; border: 1px solid var(--card-border); border-radius: 2px; display: block; margin-bottom: 10px; }
+  .drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 150px;
+    border: 1.5px dashed var(--card-border);
+    border-radius: 4px;
+    padding: 20px;
+    cursor: pointer;
+    text-align: center;
+    background: var(--bg);
+  }
+  .drop.over,
+  .drop:hover { border-color: var(--accent); }
+  .drop-main {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .file-hidden { display: none; }
   .empty { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
   .img-form { display: flex; gap: 12px; align-items: flex-end; border-top: 1px solid var(--card-border); padding-top: 12px; }
 

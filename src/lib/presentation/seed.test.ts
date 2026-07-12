@@ -7,7 +7,7 @@ import { DECK } from '../../../scripts/seed-deck-data-spine.mjs';
 import { DECK as SHOWCASE } from '../../../scripts/seed-deck-showcase.mjs';
 import { EFFECT_IDS } from './effects';
 import { isLayout } from './layouts';
-import { validateBlocks } from './registry';
+import { BLOCK_SCHEMAS, validateBlocks } from './registry';
 import { PROSE_STYLE_IDS, QUOTE_STYLE_IDS } from './styles';
 
 interface SpecSlide {
@@ -83,7 +83,8 @@ describe('showcase deck', () => {
       });
     walk((SHOWCASE as { slides: SpecSlide[] }).slides);
 
-    for (const t of ['masthead', 'headline', 'prose', 'bigNumber', 'statRow', 'quote', 'timeline', 'image', 'chart', 'effect', 'embed', 'iframe']) {
+    // Ratchet: EVERY registered block type must be demonstrated in the showcase.
+    for (const t of Object.keys(BLOCK_SCHEMAS)) {
       expect(blockTypes.has(t), `block ${t}`).toBe(true);
     }
     for (const l of ['default', 'center', 'full-bleed', 'statement', 'statement-left', 'statement-right', 'split', 'split-flip', 'grid', 'poster']) {
@@ -115,5 +116,12 @@ describe('showcase deck', () => {
     for (const e of EFFECT_IDS) expect(effects.has(e), `effect ${e}`).toBe(true);
     for (const s of PROSE_STYLE_IDS) expect(proseStyles.has(s), `prose style ${s}`).toBe(true);
     for (const s of QUOTE_STYLE_IDS) expect(quoteStyles.has(s), `quote style ${s}`).toBe(true);
+  });
+
+  it('demonstrates build steps (at least one staged slide)', () => {
+    const staged = all.some(({ blocks }) =>
+      (blocks as { step?: number }[]).some((b) => (b.step ?? 0) >= 1),
+    );
+    expect(staged).toBe(true);
   });
 });

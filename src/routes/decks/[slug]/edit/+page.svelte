@@ -44,7 +44,11 @@
   let deckTitle = $state(data.deck.title);
   let deckDescription = $state(data.deck.description ?? '');
   let isPublic = $state(data.deck.isPublic);
-  let shares = $state<{ id: string; label: string | null; revokedAt: string | null; useCount: number }[]>([]);
+  let shares = $state<{ id: string; label: string | null; revokedAt: string | null; useCount: number; slidesReached: number }[]>([]);
+  let exporting = $state(false);
+  let exportError = $state('');
+  /** Canvas host width — scales the fixed 1280×720 stage to fit the pane. */
+  let pvW = $state(0);
   let freshToken = $state<string | null>(null);
   let composeText = $state('');
   let composeMedia = $state('');
@@ -400,7 +404,7 @@
   // kind, atmosphere seeded per effect category.
   const tpl = (t: BlockType) => ({ key: t, label: t, block: BLOCK_TEMPLATES[t] });
   const TEMPLATE_GROUPS: { label: string; items: { key: string; label: string; block: Block }[] }[] = [
-    { label: 'TEXT', items: (['masthead', 'headline', 'prose', 'quote'] as BlockType[]).map(tpl) },
+    { label: 'TEXT', items: (['masthead', 'headline', 'prose', 'quote', 'code'] as BlockType[]).map(tpl) },
     {
       label: 'DATA',
       items: [
@@ -408,7 +412,7 @@
         ...Object.entries(CHART_TEMPLATES).map(([k, b]) => ({ key: `chart:${k}`, label: `chart · ${k}`, block: b as Block })),
       ],
     },
-    { label: 'MEDIA', items: (['image', 'iframe', 'embed'] as BlockType[]).map(tpl) },
+    { label: 'MEDIA', items: (['image', 'video', 'iframe', 'embed'] as BlockType[]).map(tpl) },
     {
       label: 'ATMOSPHERE',
       items: [
@@ -661,6 +665,28 @@
     const payload = await api(`/api/decks/${data.deck.id}/share`, 'GET');
     if (payload) shares = payload.shares as typeof shares;
   }
+
+  /** Server-side PDF export (headless render of /print) — also refreshes the
+   *  deck's OG poster from slide 1. Takes ~10–20s; keep the button honest. */
+  async function exportPdf() {
+    if (exporting) return;
+    exporting = true;
+    exportError = '';
+    try {
+      const res = await fetch(`/api/decks/${data.deck.id}/export`);
+      if (!res.ok) throw new Error(`export failed (${res.status})`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${data.deck.slug}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      exportError = err instanceof Error ? err.message : 'export failed';
+    } finally {
+      exporting = false;
+    }
+  }
   async function mintShare() {
     const payload = await api(`/api/decks/${data.deck.id}/share`, 'POST', { label: 'editor link' });
     if (payload) {
@@ -795,12 +821,19 @@
         <ul>
           {#each shares.filter((s) => !s.revokedAt) as s (s.id)}
             <li class="share-row">
-              <span>{s.label ?? 'link'} · {s.useCount} uses</span>
+              <span>{s.label ?? 'link'} · {s.useCount} uses · reached {s.slidesReached}/{slides.length}</span>
               <button class="danger" onclick={() => revoke(s.id)}>revoke</button>
             </li>
           {/each}
         </ul>
         <button class="add-slide" onclick={mintShare}>+ share link</button>
+        <div class="export">
+          <span class="pane-lab">EXPORT</span>
+          <button class="add-slide" disabled={exporting} onclick={exportPdf}>
+            {exporting ? 'rendering…' : '⤓ export pdf'}
+          </button>
+          {#if exportError}<span class="export-err">{exportError}</span>{/if}
+        </div>
       </div>
     </aside>
 
@@ -832,8 +865,14 @@
           onpointermove={moveFrame}
           onpointerup={endFrame}
         >
-          <div class="preview-theme" bind:this={previewEl}>
-            <SlideView slide={previewSlide} />
+          <div class="preview-theme" bind:this={previewEl} bind:clientWidth={pvW}>
+            <!-- Fixed 1280×720 design canvas scaled to the pane — the editor
+                 shows exactly the player's proportions at any pane width.
+                 previewEl (the visual box) stays the measurement host, so all
+                 %-based geometry math is scale-agnostic. -->
+            <div class="pv-stage" style:transform={`scale(${pvW ? pvW / 1280 : 1})`}>
+              <SlideView slide={previewSlide} />
+            </div>
           </div>
 
           {#if selBlock !== null && (selFrame || selRect)}
@@ -1161,6 +1200,9 @@
   .compose-btn:hover { background: var(--accent-ink-hover); }
   .compose-btn:disabled { opacity: 0.45; cursor: default; }
   .shares { margin-top: 22px; }
+  .export { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .export .add-slide[disabled] { opacity: 0.6; cursor: progress; }
+  .export-err { font-family: var(--font-mono); font-size: 9px; color: var(--error); }
   .shares ul { list-style: none; margin: 0 0 8px; padding: 0; }
   .share-row {
     display: flex;
@@ -1197,8 +1239,16 @@
     border: 1px solid var(--card-border);
     border-radius: 4px;
     overflow: hidden;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 16 / 9; /* the stage's fixed design ratio (1280×720) */
     position: relative;
+  }
+  .pv-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1280px;
+    height: 720px;
+    transform-origin: top left;
   }
   /* canvas selection — frame, hover toolbar, handles, inline editing */
   .sel-frame {

@@ -29,7 +29,7 @@ export const DECK = {
           kicker: 'SR. DECKS · SHOWCASE',
           title: 'Every page in the box',
           thesis:
-            'A live tour of the deck system — twelve block types, ten page designs, seven chart kinds, fourteen prose registers, twenty-three atmosphere effects, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
+            'A live tour of the deck system — fourteen block types, ten page designs, seven chart kinds, fourteen prose registers, twenty-three atmosphere effects, build steps, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
         },
       ],
     },
@@ -776,6 +776,69 @@ export const DECK = {
               ],
             },
           ],
+        },
+      ],
+    },
+    {
+      title: 'Stagecraft',
+      layout: 'default',
+      blocks: [
+        {
+          type: 'headline',
+          kicker: 'BUILD STEPS',
+          text: 'Arguments can arrive one press at a time',
+          dek: 'Press forward: each of the three points below carries a reveal step.',
+        },
+        {
+          type: 'prose',
+          style: 'ledger',
+          step: 1,
+          body: '**Stage it.** Give any block a reveal step in the editor — it waits, invisible, holding its place so nothing reflows.',
+        },
+        {
+          type: 'prose',
+          style: 'ledger',
+          step: 2,
+          body: '**Walk it.** The forward arrow reveals the next step before it moves the deck on; backward re-hides it.',
+        },
+        {
+          type: 'prose',
+          style: 'ledger',
+          step: 3,
+          body: '**Leave it.** Past the last step the same press navigates — and walking back finds the page as you left it.',
+        },
+      ],
+    },
+    {
+      title: 'The workbench',
+      layout: 'split',
+      blocks: [
+        {
+          type: 'prose',
+          style: 'lede',
+          body: '**Code is editorial material.** A code block sets a snippet in JetBrains Mono over paper, Shiki-highlighted, filename in the header — argument on the left, evidence on the right.',
+        },
+        {
+          type: 'code',
+          lang: 'ts',
+          title: 'navigation.ts',
+          caption: 'REAL CODE — THE WINDOWED NAV MAP, AS SHIPPED',
+          code: 'export function windowStrip(len: number, active: number, ahead = 4, behind = 1): StripWindow {\n  const a = Math.max(0, Math.min(len - 1, active));\n  const start = Math.max(0, a - behind);\n  const end = Math.min(len, a + ahead + 1);\n  return { start, end, leading: start > 0, trailing: end < len };\n}',
+        },
+      ],
+    },
+    {
+      title: 'Motion',
+      layout: 'split-flip',
+      blocks: [
+        {
+          type: 'video',
+          src: 'https://www.youtube.com/watch?v=YE7VzlLtp-4',
+          caption: 'VIDEO — BIG BUCK BUNNY · BLENDER FOUNDATION · CC BY 3.0',
+        },
+        {
+          type: 'prose',
+          body: '**Video blocks** take a YouTube or Vimeo URL — rendered through the privacy-enhanced players — or a site-hosted mp4/webm uploaded straight from the editor\u2019s UPLOAD tab.',
         },
       ],
     },

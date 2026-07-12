@@ -11,6 +11,8 @@ import Quote from './blocks/Quote.svelte';
 import Timeline from './blocks/Timeline.svelte';
 import Image from './blocks/Image.svelte';
 import Chart from './blocks/Chart.svelte';
+import Code from './blocks/Code.svelte';
+import Video from './blocks/Video.svelte';
 import Embed from './blocks/Embed.svelte';
 import Iframe from './blocks/Iframe.svelte';
 
@@ -25,6 +27,8 @@ export const BLOCK_COMPONENTS = {
   timeline: Timeline,
   image: Image,
   chart: Chart,
+  code: Code,
+  video: Video,
   embed: Embed,
   iframe: Iframe,
 } as unknown as Record<BlockType, Component<{ block: Block }>>;

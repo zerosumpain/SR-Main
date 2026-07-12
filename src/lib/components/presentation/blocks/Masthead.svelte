@@ -26,7 +26,7 @@
   .mh-kicker {
     display: block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(10px, 1.2vw, 13px);
+    font-size: 13px;
     letter-spacing: 0.24em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -35,14 +35,14 @@
   .mh-title {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(38px, 7vw, 92px);
+    font-size: 89.5px;
     line-height: 0.98;
     letter-spacing: -0.025em;
     margin: 0 0 20px;
     color: var(--ink);
   }
   .mh-thesis {
-    font-size: clamp(16px, 2vw, 22px);
+    font-size: 22px;
     line-height: 1.55;
     color: var(--ink-soft);
     margin: 0;
@@ -57,5 +57,5 @@
     max-width: 58ch;
   }
   .mh-ask ul { margin: 0; padding-left: 18px; }
-  .mh-ask li { font-size: clamp(13px, 1.5vw, 15px); line-height: 1.6; color: var(--ink-soft); margin: 3px 0; }
+  .mh-ask li { font-size: 15px; line-height: 1.6; color: var(--ink-soft); margin: 3px 0; }
 </style>

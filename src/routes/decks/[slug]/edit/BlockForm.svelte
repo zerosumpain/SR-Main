@@ -12,16 +12,26 @@
 
   let { block, onEdited }: { block: Record<string, unknown>; onEdited: () => void } = $props();
 
-  const LONG_TEXT = new Set(['body', 'thesis', 'text', 'detail', 'sub', 'description']);
+  const LONG_TEXT = new Set(['body', 'thesis', 'text', 'detail', 'sub', 'description', 'code']);
+  const CODE_LANGS = ['ts', 'js', 'svelte', 'python', 'bash', 'json', 'sql', 'yaml', 'html', 'css', 'rust', 'go', 'text'];
 
   const keys = $derived(
     Object.keys(block).filter(
       (k) =>
         k !== 'type' &&
+        k !== 'step' && // curated reveal-step control below
         !(block.type === 'prose' && (k === 'style' || k === 'lede')) &&
         !(block.type === 'quote' && k === 'style'),
     ),
   );
+
+  /** Build step: 0/empty clears the field (always visible), 1-12 stages it. */
+  function setStep(raw: string) {
+    const n = Math.round(Number(raw));
+    if (!Number.isFinite(n) || n <= 0) delete block.step;
+    else block.step = Math.min(12, n);
+    onEdited();
+  }
 
   const isProse = $derived(block.type === 'prose');
   const isQuote = $derived(block.type === 'quote');
@@ -242,7 +252,22 @@
           ></textarea>
           <span class="bf-hint"># heading · **bold** · *italic* · __underline__ · [link](/path) · blank line = new paragraph{proseStyle === 'cards' ? ' = new card' : ''}</span>
         {:else if k === 'string' && LONG_TEXT.has(key)}
-          <textarea rows="3" value={v as string} oninput={(e) => { block[key] = e.currentTarget.value; onEdited(); }}></textarea>
+          <textarea
+            rows={key === 'code' ? 8 : 3}
+            class:bf-code={key === 'code'}
+            value={v as string}
+            oninput={(e) => { block[key] = e.currentTarget.value; onEdited(); }}
+          ></textarea>
+        {:else if k === 'string' && block.type === 'code' && key === 'lang'}
+          <input
+            type="text"
+            list="bf-code-langs"
+            value={v as string}
+            oninput={(e) => { block[key] = e.currentTarget.value; onEdited(); }}
+          />
+          <datalist id="bf-code-langs">
+            {#each CODE_LANGS as l (l)}<option value={l}></option>{/each}
+          </datalist>
         {:else if k === 'string'}
           <input type="text" value={v as string} oninput={(e) => { block[key] = e.currentTarget.value; onEdited(); }} />
         {:else if k === 'number'}
@@ -284,6 +309,13 @@
       </label>
     {/each}
   {/if}
+  {#if !isEffect}
+    <label class="bf-field">
+      <span class="bf-lab">reveal step</span>
+      <input type="number" min="0" max="12" value={Number(block.step ?? 0)} oninput={(e) => setStep(e.currentTarget.value)} />
+      <span class="bf-hint">0 = always visible · N = appears on the Nth forward press in the player</span>
+    </label>
+  {/if}
 </div>
 
 <style>
@@ -312,6 +344,7 @@
     box-sizing: border-box;
   }
   .bf-json { font-family: var(--font-mono); font-size: 11px; }
+  .bf-code { font-family: var(--font-mono); font-size: 11px; white-space: pre; }
   textarea { resize: vertical; }
   .bf-toolbar { display: flex; gap: 2px; align-items: center; }
   .bf-toolbar button {

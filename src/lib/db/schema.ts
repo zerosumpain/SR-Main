@@ -736,6 +736,9 @@ export const decks = pgTable(
     description: text('description'),
     theme: text('theme').notNull().default('editorial'),
     isPublic: boolean('is_public').notNull().default(false),
+    // Social-card poster (site-relative URL) — refreshed by the PDF export,
+    // which screenshots the first slide. Null until the deck is first exported.
+    ogImage: text('og_image'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -794,6 +797,9 @@ export const deckShares = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     useCount: integer('use_count').notNull().default(0),
+    // Slide-reach telemetry: { "<slideId>": hitCount } — bumped by the
+    // player's anonymous beacon (POST /api/decks/[id]/track), share sessions only.
+    slidesReached: jsonb('slides_reached'),
   },
   (t) => ({
     byTokenHash: uniqueIndex('deck_share_token_hash_idx').on(t.tokenHash),

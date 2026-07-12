@@ -8,6 +8,10 @@ const EXT_MIME: Record<string, string> = {
   png: 'image/png',
   gif: 'image/gif',
   webp: 'image/webp',
+  // deck-media video uploads (video blocks) ride the same store; served as a
+  // whole body (no range support) which <video> handles fine for short clips.
+  mp4: 'video/mp4',
+  webm: 'video/webm',
 };
 
 export const GET: RequestHandler = async ({ params }) => {

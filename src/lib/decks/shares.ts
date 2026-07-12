@@ -77,6 +77,8 @@ export interface PublicDeckShare {
   revokedAt: Date | null;
   lastUsedAt: Date | null;
   useCount: number;
+  /** Distinct slides this link's viewers reached (from slidesReached keys). */
+  slidesReached: number;
 }
 
 /** All links for a deck (newest first), never exposing the token hash. */
@@ -90,11 +92,15 @@ export async function listShares(deckId: string): Promise<PublicDeckShare[]> {
       revokedAt: deckShares.revokedAt,
       lastUsedAt: deckShares.lastUsedAt,
       useCount: deckShares.useCount,
+      slidesReachedRaw: deckShares.slidesReached,
     })
     .from(deckShares)
     .where(eq(deckShares.deckId, deckId))
     .orderBy(desc(deckShares.createdAt));
-  return rows;
+  return rows.map(({ slidesReachedRaw, ...row }) => ({
+    ...row,
+    slidesReached: slidesReachedRaw ? Object.keys(slidesReachedRaw as Record<string, number>).length : 0,
+  }));
 }
 
 /** Revoke a link (id must belong to deckId). Returns true if a row changed. */

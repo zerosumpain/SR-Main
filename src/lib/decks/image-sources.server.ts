@@ -185,6 +185,31 @@ async function store(buf: Buffer, ext: string, nameSeed: string): Promise<string
   return `/api/blog/images/${BUCKET}/${filename}`;
 }
 
+/** Owner uploads (drag-drop / file picker in the editor). Images ride the
+ *  same store as imports; short mp4/webm clips are allowed for video blocks. */
+const UPLOAD_MIME: Record<string, { ext: string; kind: 'image' | 'video'; max: number }> = {
+  'image/jpeg': { ext: 'jpg', kind: 'image', max: MAX_BYTES },
+  'image/png': { ext: 'png', kind: 'image', max: MAX_BYTES },
+  'image/gif': { ext: 'gif', kind: 'image', max: MAX_BYTES },
+  'image/webp': { ext: 'webp', kind: 'image', max: MAX_BYTES },
+  'video/mp4': { ext: 'mp4', kind: 'video', max: 60 * 1024 * 1024 },
+  'video/webm': { ext: 'webm', kind: 'video', max: 60 * 1024 * 1024 },
+};
+
+export async function storeUpload(
+  buf: Buffer,
+  mime: string,
+  originalName: string,
+): Promise<StoredImage & { kind: 'image' | 'video' }> {
+  const def = UPLOAD_MIME[mime.split(';')[0].trim()];
+  if (!def) throw new Error(`unsupported upload type "${mime}" — jpg/png/gif/webp images or mp4/webm video`);
+  if (buf.length === 0) throw new Error('empty file');
+  if (buf.length > def.max) throw new Error(`file too large (max ${Math.round(def.max / 1024 / 1024)}MB)`);
+  const base = originalName.replace(/\.[a-z0-9]+$/i, '') || 'upload';
+  const src = await store(buf, def.ext, base);
+  return { src, alt: base.replace(/[-_]+/g, ' ').trim() || 'Uploaded media', caption: '', kind: def.kind };
+}
+
 /** Import a provider result: download the original, persist a copy, return a
  *  ready image block payload with the attribution caption pre-written. */
 export async function importImage(candidate: {

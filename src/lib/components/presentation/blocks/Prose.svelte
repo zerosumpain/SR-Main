@@ -51,20 +51,20 @@
 <style>
   .prose { max-width: 58ch; }
   .prose :global(p) {
-    font-size: clamp(15px, 1.8vw, 19px);
+    font-size: 19px;
     line-height: 1.65;
     color: var(--ink-soft);
     margin: 0 0 14px;
   }
   .prose :global(p:last-child) { margin-bottom: 0; }
   .prose.lede :global(p) {
-    font-size: clamp(18px, 2.4vw, 26px);
+    font-size: 26px;
     line-height: 1.5;
     color: var(--ink);
   }
   .prose.aside :global(p) {
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(10px, 1.2vw, 12.5px);
+    font-size: 12.5px;
     letter-spacing: 0.05em;
     line-height: 1.7;
     color: var(--ink-soft);
@@ -78,7 +78,7 @@
     list-style: none;
   }
   .prose :global(li) {
-    font-size: clamp(15px, 1.8vw, 19px);
+    font-size: 19px;
     line-height: 1.6;
     color: var(--ink-soft);
     margin-bottom: 6px;
@@ -90,20 +90,20 @@
     left: -1.2em;
     color: var(--accent);
   }
-  .prose.lede :global(li) { font-size: clamp(18px, 2.4vw, 26px); color: var(--ink); }
+  .prose.lede :global(li) { font-size: 26px; color: var(--ink); }
 
   /* pull — oversized italic pull-text between hairlines (not a quotation) */
   .prose.pull {
     max-width: 46ch;
     border-top: 1px solid var(--ink);
     border-bottom: 1px solid var(--ink);
-    padding: clamp(14px, 2.4vh, 26px) 0;
+    padding: 17.5px 0;
   }
   .prose.pull :global(p) {
     font-family: 'Fraunces', serif;
     font-style: italic;
     font-weight: 500;
-    font-size: clamp(21px, 2.9vw, 34px);
+    font-size: 34px;
     line-height: 1.35;
     color: var(--ink);
   }
@@ -113,24 +113,24 @@
     max-width: none;
     width: 100%;
     column-count: 2;
-    column-gap: clamp(24px, 3vw, 44px);
+    column-gap: 38.5px;
     column-rule: 1px solid rgba(28, 22, 17, 0.14);
   }
-  .prose.columns :global(p) { font-size: clamp(13px, 1.5vw, 16px); line-height: 1.62; }
-  .prose.columns :global(li) { font-size: clamp(13px, 1.5vw, 16px); }
+  .prose.columns :global(p) { font-size: 16px; line-height: 1.62; }
+  .prose.columns :global(li) { font-size: 16px; }
 
   /* callout — tinted petrol note box, bold opener as its title */
   .prose.callout {
     background: rgba(14, 91, 102, 0.08);
     border-left: 4px solid var(--accent-ink);
     border-radius: var(--radius-round, 4px);
-    padding: clamp(14px, 1.9vw, 22px);
+    padding: 22px;
   }
   .prose.callout :global(p) { color: var(--ink-soft); }
   .prose.callout :global(b) {
     display: block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(10px, 1.2vw, 12px);
+    font-size: 12px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -141,9 +141,9 @@
   .prose.numbered :global(p) {
     counter-increment: pn;
     position: relative;
-    padding-left: clamp(52px, 6vw, 76px);
+    padding-left: 76px;
     min-height: 44px;
-    margin-bottom: clamp(14px, 2.2vh, 24px);
+    margin-bottom: 16px;
   }
   .prose.numbered :global(p)::before {
     content: counter(pn, decimal-leading-zero);
@@ -152,7 +152,7 @@
     top: -2px;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 700;
-    font-size: clamp(20px, 2.6vw, 30px);
+    font-size: 30px;
     letter-spacing: -0.02em;
     color: var(--accent);
   }
@@ -160,7 +160,7 @@
     display: block;
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(17px, 2vw, 22px);
+    font-size: 22px;
     margin-bottom: 2px;
   }
 
@@ -170,10 +170,10 @@
   .prose.ledger { max-width: 62ch; width: 100%; }
   .prose.ledger :global(p) {
     position: relative;
-    padding: clamp(9px, 1.3vh, 14px) 0 clamp(9px, 1.3vh, 14px) clamp(130px, 32%, 220px);
+    padding: 9.5px 0 9.5px clamp(130px, 32%, 220px);
     margin: 0;
     border-bottom: 1px solid rgba(28, 22, 17, 0.16);
-    font-size: clamp(14px, 1.6vw, 17px);
+    font-size: 17px;
     min-height: 1.4em;
   }
   .prose.ledger :global(p:first-child) { border-top: 1px solid var(--ink); }
@@ -183,7 +183,7 @@
     max-width: clamp(118px, 30%, 208px);
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: clamp(10px, 1.2vw, 12.5px);
+    font-size: 12.5px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -192,12 +192,12 @@
   /* interview — Q&A exchange: bold opener = speaker eyebrow; odd paragraphs
      (the questions) render italic serif */
   .prose.interview { max-width: 58ch; }
-  .prose.interview :global(p) { margin-bottom: clamp(14px, 2.2vh, 24px); }
+  .prose.interview :global(p) { margin-bottom: 16px; }
   .prose.interview :global(p > b:first-child) {
     display: block;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: clamp(9.5px, 1.1vw, 11.5px);
+    font-size: 11.5px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent);
@@ -207,7 +207,7 @@
     font-family: 'Fraunces', serif;
     font-style: italic;
     font-weight: 500;
-    font-size: clamp(16px, 2vw, 22px);
+    font-size: 22px;
     line-height: 1.45;
     color: var(--ink);
   }
@@ -219,11 +219,11 @@
   .prose.manifesto :global(p) {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(28px, 4.6vw, 64px);
+    font-size: 59px;
     line-height: 1.06;
     letter-spacing: -0.02em;
     color: var(--ink);
-    margin: 0 0 clamp(8px, 1.4vh, 16px);
+    margin: 0 0 10px;
   }
   .prose.manifesto :global(em) { font-style: normal; color: var(--accent); }
   .prose.manifesto :global(b) { color: var(--accent-ink); }
@@ -234,7 +234,7 @@
     font-family: 'Fraunces', serif;
     font-style: italic;
     font-weight: 500;
-    font-size: clamp(16px, 2.1vw, 23px);
+    font-size: 23px;
     line-height: 1.85;
     color: var(--ink);
   }
@@ -263,13 +263,13 @@
     letter-spacing: -0.015em;
     margin: 0 0 12px;
   }
-  .prose :global(h1) { font-size: clamp(30px, 4.4vw, 54px); }
-  .prose :global(h2) { font-size: clamp(24px, 3.4vw, 40px); }
-  .prose :global(h3) { font-size: clamp(20px, 2.6vw, 30px); }
+  .prose :global(h1) { font-size: 54px; }
+  .prose :global(h2) { font-size: 40px; }
+  .prose :global(h3) { font-size: 30px; }
   .prose :global(h4) {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: clamp(11px, 1.3vw, 13px);
+    font-size: 13px;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -280,14 +280,14 @@
     width: 100%;
     background: var(--ink);
     border-radius: 2px;
-    padding: clamp(28px, 6vh, 64px) clamp(20px, 4vw, 56px);
+    padding: 43px 51px;
     box-sizing: border-box;
   }
   .band-inner { max-width: 1100px; margin: 0 auto; text-align: center; }
   .band-inner :global(p) {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(24px, 3.8vw, 52px);
+    font-size: 48.5px;
     line-height: 1.16;
     letter-spacing: -0.02em;
     color: var(--paper);
@@ -300,7 +300,7 @@
   .prose-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-    gap: clamp(12px, 1.6vw, 18px);
+    gap: 18px;
     width: 100%;
   }
   .pcard {
@@ -308,11 +308,11 @@
     border-left: 4px solid var(--accent-ink);
     border-radius: var(--radius-round, 4px);
     background: rgba(255, 255, 255, 0.45);
-    padding: clamp(14px, 1.8vw, 22px);
+    padding: 22px;
     min-width: 0;
   }
   .pcard :global(p) {
-    font-size: clamp(13px, 1.5vw, 16px);
+    font-size: 16px;
     line-height: 1.6;
     color: var(--ink-soft);
     margin: 0;
@@ -321,7 +321,7 @@
     display: block;
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(16px, 1.9vw, 21px);
+    font-size: 21px;
     color: var(--ink);
     margin-bottom: 6px;
   }

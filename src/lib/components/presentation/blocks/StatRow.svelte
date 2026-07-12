@@ -28,7 +28,7 @@
     border: 1px solid rgba(28, 22, 17, 0.16);
     border-radius: var(--radius-round);
     background: rgba(255, 255, 255, 0.45);
-    padding: clamp(12px, 2vw, 22px) clamp(14px, 2vw, 24px);
+    padding: 22px 24px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -37,7 +37,7 @@
   .sr-n {
     font-family: 'Fraunces', serif;
     font-weight: 600;
-    font-size: clamp(26px, 3.6vw, 44px);
+    font-size: 44px;
     line-height: 1;
     letter-spacing: -0.02em;
     color: var(--ink);
@@ -45,7 +45,7 @@
   }
   .sr-lab {
     font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(9px, 1.1vw, 11px);
+    font-size: 11px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--ink-soft);
