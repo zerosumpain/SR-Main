@@ -54,8 +54,9 @@
   let composeMedia = $state('');
   let composeNest = $state(false);
   let composing = $state(false);
-  let attached = $state<Block[]>([]);
-  let picker = $state<'closed' | 'compose' | 'block'>('closed');
+  /** AI composer target: revise the selected slide, or compose a new one. */
+  let llmMode = $state<'edit' | 'new'>('edit');
+  let picker = $state<'closed' | 'block'>('closed');
 
   // --- resizable side panels (at the expense of the centre preview) ---
   let leftW = $state(250);
@@ -379,27 +380,6 @@
   }
 
 
-  // --- drag attached site media onto the slide ---
-  function chipDragStart(e: DragEvent, i: number) {
-    e.dataTransfer?.setData('application/x-deck-block', JSON.stringify({ from: 'attached', i }));
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copyMove';
-  }
-  function previewDrop(e: DragEvent) {
-    const raw = e.dataTransfer?.getData('application/x-deck-block');
-    if (!raw || !selected) return;
-    e.preventDefault();
-    try {
-      const info = JSON.parse(raw) as { from: string; i: number };
-      if (info.from === 'attached' && attached[info.i]) {
-        selected.blocks.push($state.snapshot(attached[info.i]) as Block);
-        attached = attached.filter((_, j) => j !== info.i);
-        markDirty();
-      }
-    } catch {
-      /* not ours */
-    }
-  }
-
   // The add-block menu, grouped by what the block does: chart expanded per
   // kind, atmosphere seeded per effect category.
   const tpl = (t: BlockType) => ({ key: t, label: t, block: BLOCK_TEMPLATES[t] });
@@ -424,17 +404,8 @@
     },
   ];
 
-  function blockLabel(b: Block): string {
-    if (b.type === 'embed') return `◈ ${b.embed}`;
-    if (b.type === 'iframe') return `▤ ${b.src}`;
-    if (b.type === 'image') return `▣ ${b.src.split('/').pop()}`;
-    return b.type;
-  }
-
   function onPicked(block: Block) {
-    if (picker === 'compose') {
-      attached = [...attached, block];
-    } else if (selected) {
+    if (selected) {
       selected.blocks.push(block);
       markDirty();
     }
@@ -556,16 +527,18 @@
     if (payload?.slide) adoptNewSlide(payload, parentSlideId, position);
   }
 
+  const composeMediaUrls = () =>
+    composeMedia
+      .split(/[,\n]/)
+      .map((u) => u.trim())
+      .filter(Boolean);
+
   async function composeNewSlide() {
     const target = insertTarget();
     composing = true;
     const payload = await api(`/api/decks/${data.deck.id}/slides/compose`, 'POST', {
       text: composeText,
-      mediaUrls: composeMedia
-        .split(/[,\n]/)
-        .map((u) => u.trim())
-        .filter(Boolean),
-      attachedBlocks: $state.snapshot(attached),
+      mediaUrls: composeMediaUrls(),
       ...target,
     });
     composing = false;
@@ -573,9 +546,41 @@
       adoptNewSlide(payload, target.parentSlideId, target.position);
       composeText = '';
       composeMedia = '';
-      attached = [];
       const layout = (payload.slide as { layout?: string }).layout;
       flash('ok', payload.source === 'llm' ? `Composed → ${layout}` : 'Composed (fallback layout — LLM unavailable)');
+    }
+  }
+
+  /** LLM revision of the selected slide — applied locally as a dirty edit so
+   *  the normal save (and not-saving) path stays the undo story. */
+  async function reviseSelected() {
+    if (!selected || composing) return;
+    commitActive();
+    detachEditables();
+    composing = true;
+    const payload = await api(`/api/decks/${data.deck.id}/slides/revise`, 'POST', {
+      instruction: composeText,
+      mediaUrls: composeMediaUrls(),
+      slide: {
+        title: selected.title,
+        layout: selected.layout,
+        blocks: $state.snapshot(selected.blocks),
+      },
+    });
+    composing = false;
+    if (payload?.slide) {
+      const s = payload.slide as { title: string | null; layout: string; blocks: Block[] };
+      selected.title = s.title;
+      selected.layout = s.layout;
+      selected.blocks = s.blocks;
+      // The model re-art-directs the slide — hand-laid frames no longer align.
+      selected.geometry = null;
+      selBlock = null;
+      selRect = null;
+      composeText = '';
+      composeMedia = '';
+      markDirty();
+      flash('ok', `Revised → ${s.layout} — review, then save`);
     }
   }
 
@@ -771,70 +776,12 @@
           {@render treeItem(id, 0)}
         {/each}
       </ul>
-      <div class="composer">
-        <span class="pane-lab">ADD SLIDE</span>
-        <textarea
-          rows="4"
-          bind:value={composeText}
-          placeholder="Paste the content — text, a punchy line, stats like '24,000 — schools'. The deck decides how to show it."
-        ></textarea>
-        <input bind:value={composeMedia} placeholder="media / page URLs (comma-separated, optional)" />
-        {#if attached.length}
-          <div class="attach-chips">
-            {#each attached as b, i (i)}
-              <span class="attach-chip" role="button" tabindex="-1" draggable="true" ondragstart={(e) => chipDragStart(e, i)} title="Drag onto the slide, or compose with it">
-                {blockLabel(b)}
-                <button
-                  title="Add to the selected slide now"
-                  onclick={() => { if (selected) { selected.blocks.push($state.snapshot(b) as Block); attached = attached.filter((_, j) => j !== i); markDirty(); } }}
-                  >→</button
-                >
-                <button title="Remove" onclick={() => (attached = attached.filter((_, j) => j !== i))}>✕</button>
-              </span>
-            {/each}
-            <span class="attach-hint">drag a chip onto the slide, → adds it, or ✦ compose designs around them</span>
-          </div>
-        {/if}
-        <button class="add-slide" onclick={() => (picker = 'compose')}>◈ add site media…</button>
-        <label class="nest-check">
-          <input type="checkbox" bind:checked={composeNest} /> nest under selected slide
-        </label>
-        <div class="composer-btns">
-          <button
-            class="compose-btn"
-            disabled={composing || (!composeText.trim() && !composeMedia.trim() && attached.length === 0)}
-            onclick={composeNewSlide}
-          >
-            {composing ? 'composing…' : '✦ compose slide'}
-          </button>
-          <button class="add-slide" onclick={() => { const t = insertTarget(); void addSlide(t.parentSlideId, t.position); }}>
-            + blank
-          </button>
-        </div>
-      </div>
-
-      <div class="shares">
-        <span class="pane-lab">SHARE LINKS</span>
-        {#if freshToken}
-          <p class="fresh">New link (copy now — shown once):<br /><code>/decks/{data.deck.slug}?t={freshToken}</code></p>
-        {/if}
-        <ul>
-          {#each shares.filter((s) => !s.revokedAt) as s (s.id)}
-            <li class="share-row">
-              <span>{s.label ?? 'link'} · {s.useCount} uses · reached {s.slidesReached}/{slides.length}</span>
-              <button class="danger" onclick={() => revoke(s.id)}>revoke</button>
-            </li>
-          {/each}
-        </ul>
-        <button class="add-slide" onclick={mintShare}>+ share link</button>
-        <div class="export">
-          <span class="pane-lab">EXPORT</span>
-          <button class="add-slide" disabled={exporting} onclick={exportPdf}>
-            {exporting ? 'rendering…' : '⤓ export pdf'}
-          </button>
-          {#if exportError}<span class="export-err">{exportError}</span>{/if}
-        </div>
-      </div>
+      <button
+        class="add-slide"
+        onclick={() => void addSlide(selected?.parentSlideId ?? null, (selected?.position ?? -1) + 1)}
+      >
+        + blank slide
+      </button>
     </aside>
 
     <div
@@ -848,6 +795,32 @@
 
     <main class="ed-preview">
       {#if previewSlide}
+        <div class="preview-meta">
+          <label>
+            <span class="pane-lab">SLIDE TITLE</span>
+            <input value={selected.title ?? ''} oninput={(e) => { selected.title = e.currentTarget.value; markDirty(); }} />
+          </label>
+          <label>
+            <span class="pane-lab">LAYOUT</span>
+            <select value={selected.layout} onchange={(e) => { selected.layout = e.currentTarget.value; markDirty(); }}>
+              {#each LAYOUT_IDS as id (id)}<option value={id}>{id}</option>{/each}
+            </select>
+          </label>
+          {#if (planes.get(selected.id) ?? []).length}
+            <label>
+              <span class="pane-lab">JOURNEY LABEL</span>
+              <input
+                value={selected.journeyLabel ?? ''}
+                placeholder="the pill: “down for …”"
+                oninput={(e) => { selected.journeyLabel = e.currentTarget.value; markDirty(); }}
+              />
+            </label>
+          {/if}
+          <label class="notes">
+            <span class="pane-lab">NOTES</span>
+            <input value={selected.notes ?? ''} oninput={(e) => { selected.notes = e.currentTarget.value; markDirty(); }} />
+          </label>
+        </div>
         <div class="preview-toolbar">
           <span class="arr-note">click a block to select & type · ⠿ moves it · right handle resizes</span>
           {#if selected.geometry}
@@ -858,9 +831,7 @@
         <div
           class="preview-frame"
           role="region"
-          aria-label="Slide canvas — click to select, type to edit, drop site media here"
-          ondragover={(e) => e.preventDefault()}
-          ondrop={previewDrop}
+          aria-label="Slide canvas — click to select, type to edit"
           onpointerdown={onCanvasPointerDown}
           onpointermove={moveFrame}
           onpointerup={endFrame}
@@ -952,31 +923,74 @@
             </div>
           {/if}
         </div>
-        <div class="preview-meta">
-          <label>
-            <span class="pane-lab">SLIDE TITLE</span>
-            <input value={selected.title ?? ''} oninput={(e) => { selected.title = e.currentTarget.value; markDirty(); }} />
-          </label>
-          <label>
-            <span class="pane-lab">LAYOUT</span>
-            <select value={selected.layout} onchange={(e) => { selected.layout = e.currentTarget.value; markDirty(); }}>
-              {#each LAYOUT_IDS as id (id)}<option value={id}>{id}</option>{/each}
-            </select>
-          </label>
-          {#if (planes.get(selected.id) ?? []).length}
-            <label>
-              <span class="pane-lab">JOURNEY LABEL</span>
-              <input
-                value={selected.journeyLabel ?? ''}
-                placeholder="the pill: “down for …”"
-                oninput={(e) => { selected.journeyLabel = e.currentTarget.value; markDirty(); }}
-              />
-            </label>
-          {/if}
-          <label class="notes">
-            <span class="pane-lab">NOTES</span>
-            <input value={selected.notes ?? ''} oninput={(e) => { selected.notes = e.currentTarget.value; markDirty(); }} />
-          </label>
+        <div class="desk">
+          <div class="desk-col">
+            <span class="pane-lab">SLIDE</span>
+            <button class="save-btn" disabled={saving || !dirty[selected.id]} onclick={() => saveSlide(selected)}>
+              {saving ? 'Saving…' : dirty[selected.id] ? 'Save slide' : 'Saved'}
+            </button>
+            <div class="shares">
+              <span class="pane-lab">SHARE LINKS</span>
+              {#if freshToken}
+                <p class="fresh">New link (copy now — shown once):<br /><code>/decks/{data.deck.slug}?t={freshToken}</code></p>
+              {/if}
+              <ul>
+                {#each shares.filter((s) => !s.revokedAt) as s (s.id)}
+                  <li class="share-row">
+                    <span>{s.label ?? 'link'} · {s.useCount} uses · reached {s.slidesReached}/{slides.length}</span>
+                    <button class="danger" onclick={() => revoke(s.id)}>revoke</button>
+                  </li>
+                {/each}
+              </ul>
+              <button class="add-slide" onclick={mintShare}>+ share link</button>
+            </div>
+            <div class="export">
+              <span class="pane-lab">EXPORT</span>
+              <button class="add-slide" disabled={exporting} onclick={exportPdf}>
+                {exporting ? 'rendering…' : '⤓ export pdf'}
+              </button>
+              {#if exportError}<span class="export-err">{exportError}</span>{/if}
+            </div>
+            <div class="deck-meta">
+              <span class="pane-lab">DECK DESCRIPTION</span>
+              <textarea
+                rows="2"
+                bind:value={deckDescription}
+                onblur={saveMeta}
+                placeholder="one line for the /decks index and share cards"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="desk-col">
+            <div class="ai-head">
+              <span class="pane-lab">AI COMPOSER</span>
+              <div class="mode-toggle">
+                <button class:on={llmMode === 'edit'} onclick={() => (llmMode = 'edit')}>✎ this slide</button>
+                <button class:on={llmMode === 'new'} onclick={() => (llmMode = 'new')}>＋ new slide</button>
+              </div>
+            </div>
+            <textarea
+              rows="5"
+              bind:value={composeText}
+              placeholder={llmMode === 'edit'
+                ? 'Tell the model what to change — “tighten the headline”, “make the number the hero”, “stage the three points”.'
+                : "Paste the content — text, a punchy line, stats like '24,000 — schools'. The deck decides how to show it."}
+            ></textarea>
+            <input bind:value={composeMedia} placeholder="media / page URLs (comma-separated, optional)" />
+            {#if llmMode === 'new'}
+              <label class="nest-check">
+                <input type="checkbox" bind:checked={composeNest} /> nest under selected slide
+              </label>
+            {/if}
+            <button
+              class="compose-btn"
+              disabled={composing || (llmMode === 'edit' ? !composeText.trim() : !composeText.trim() && !composeMedia.trim())}
+              onclick={llmMode === 'edit' ? reviseSelected : composeNewSlide}
+            >
+              {composing ? 'composing…' : llmMode === 'edit' ? '✦ apply to this slide' : '✦ compose slide'}
+            </button>
+          </div>
         </div>
       {/if}
     </main>
@@ -1006,9 +1020,6 @@
             <BlockForm block={block as unknown as Record<string, unknown>} onEdited={markDirty} />
           </details>
         {/each}
-        <button class="save-btn" disabled={saving || !dirty[selected.id]} onclick={() => saveSlide(selected)}>
-          {saving ? 'Saving…' : dirty[selected.id] ? 'Save slide' : 'Saved'}
-        </button>
       {/if}
     </aside>
   </div>
@@ -1136,10 +1147,19 @@
   }
   .add-slide:hover { color: var(--accent); border-color: var(--accent); }
 
-  .composer { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
-  .composer textarea,
-  .composer input[type='text'],
-  .composer > input {
+  /* the desk — deck-wide controls (left) + AI composer (right) under the canvas */
+  .desk {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 26px;
+    align-items: start;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--card-border);
+  }
+  .desk-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .desk textarea,
+  .desk input:not([type='checkbox']) {
     font-family: var(--font-body);
     font-size: 12px;
     color: var(--text-primary);
@@ -1151,6 +1171,25 @@
     box-sizing: border-box;
     resize: vertical;
   }
+  .ai-head { display: flex; align-items: center; justify-content: space-between; }
+  .ai-head .pane-lab { margin: 0; }
+  .mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mode-toggle button {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 4px 9px;
+    cursor: pointer;
+  }
+  .mode-toggle button.on { color: var(--bg); background: var(--accent-ink); }
   .nest-check {
     display: flex;
     align-items: center;
@@ -1160,32 +1199,7 @@
     letter-spacing: 0.06em;
     color: var(--text-muted);
   }
-  .composer-btns { display: flex; gap: 6px; }
-  .attach-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .attach-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.05em;
-    color: var(--accent-ink);
-    border: 1px solid var(--accent-ink);
-    border-radius: 2px;
-    padding: 3px 6px;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .attach-chip { cursor: grab; }
-  .attach-chip button { color: var(--text-muted); background: none; border: none; cursor: pointer; font-size: 9px; padding: 0; }
-  .attach-chip button:hover { color: var(--error); }
-  .attach-chip button:first-of-type:hover { color: var(--accent); }
-  .attach-hint { font-family: var(--font-mono); font-size: 8px; color: var(--text-ghost); }
-  .composer-btns .add-slide { margin-top: 0; width: auto; padding: 6px 10px; }
   .compose-btn {
-    flex: 1;
     font-family: var(--font-mono);
     font-size: 10.5px;
     letter-spacing: 0.1em;
@@ -1199,8 +1213,9 @@
   }
   .compose-btn:hover { background: var(--accent-ink-hover); }
   .compose-btn:disabled { opacity: 0.45; cursor: default; }
-  .shares { margin-top: 22px; }
-  .export { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .shares { margin-top: 10px; }
+  .deck-meta { margin-top: 10px; }
+  .export { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .export .add-slide[disabled] { opacity: 0.6; cursor: progress; }
   .export-err { font-family: var(--font-mono); font-size: 9px; color: var(--error); }
   .shares ul { list-style: none; margin: 0 0 8px; padding: 0; }
@@ -1400,7 +1415,7 @@
     font-family: 'DM Sans', system-ui, sans-serif;
     overflow: hidden;
   }
-  .preview-meta { display: flex; gap: 14px; margin-top: 12px; }
+  .preview-meta { display: flex; gap: 14px; margin: 0 0 10px; }
   .preview-meta label { display: flex; flex-direction: column; gap: 4px; }
   .preview-meta .notes { flex: 1; }
   .preview-meta input,
@@ -1450,5 +1465,6 @@
     .ed-cols { grid-template-columns: 220px 1fr; }
     .col-div { display: none; }
     .ed-blocks { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--card-border); }
+    .desk { grid-template-columns: 1fr; }
   }
 </style>

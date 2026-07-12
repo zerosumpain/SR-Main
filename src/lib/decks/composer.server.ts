@@ -29,11 +29,7 @@ export interface ComposeContext {
   recentLayouts?: string[];
 }
 
-function systemPrompt(ctx: ComposeContext): string {
-  return [
-    'You are the art director for sr. decks — bold, editorial presentation slides (Fraunces serif, paper-and-ink).',
-    'Given raw content, compose EXACTLY ONE slide: pick the most impactful layout and typed blocks.',
-    '',
+const craftRules = (ctx: ComposeContext): string[] => [
     'Editorial craft (non-negotiable):',
     '- Whitespace is the loudest signal of importance. Fewer, bigger elements: 1–3 blocks. Never fill the page.',
     '- An assertive fact or claim = a headline block (kicker → ≤12-word statement, sentence case, no full stop → optional one-line dek) on a statement-left or statement-right layout. Ragged, aligned display type beats centered text — reserve centered `statement` for openings and codas.',
@@ -56,10 +52,39 @@ function systemPrompt(ctx: ComposeContext): string {
     `Blocks: ${Object.entries(BLOCK_DOCS)
       .map(([k, v]) => `${k} — ${v}`)
       .join(' | ')}`,
+];
+
+const RESPONSE_SHAPE =
+  'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]}. Every block object MUST include its "type" field, e.g. {"type": "headline", "kicker": "...", "text": "..."}. No markdown fences, no commentary.';
+
+function systemPrompt(ctx: ComposeContext): string {
+  return [
+    'You are the art director for sr. decks — bold, editorial presentation slides (Fraunces serif, paper-and-ink).',
+    'Given raw content, compose EXACTLY ONE slide: pick the most impactful layout and typed blocks.',
+    '',
+    ...craftRules(ctx),
     '',
     'If ATTACHED BLOCKS are provided they are pre-built and must appear in your blocks array VERBATIM (do not edit them); choose the layout and any companion text around them.',
     '',
-    'Respond with ONLY a JSON object: {"title": string|null, "layout": string, "blocks": Block[]}. Every block object MUST include its "type" field, e.g. {"type": "headline", "kicker": "...", "text": "..."}. No markdown fences, no commentary.',
+    RESPONSE_SHAPE,
+  ].join('\n');
+}
+
+function revisePrompt(ctx: ComposeContext): string {
+  return [
+    'You are the art director for sr. decks — bold, editorial presentation slides (Fraunces serif, paper-and-ink).',
+    'You are given ONE existing slide (as JSON) and an instruction. Return the REVISED slide.',
+    '',
+    'Revision discipline:',
+    '- Lightest touch wins: every block the instruction does not concern must come back VERBATIM (identical JSON), in the same order.',
+    '- Change the layout only if the instruction asks for it, or the revised content clearly demands a different one.',
+    '- Keep the slide title unless asked to change it.',
+    '- NEVER invent facts, numbers or quotes that are not in the slide or the instruction.',
+    '',
+    // "Vary the rhythm" would nudge the reviser toward gratuitous layout swaps.
+    ...craftRules(ctx).filter((l) => !l.startsWith('- Vary the rhythm')),
+    '',
+    RESPONSE_SHAPE,
   ].join('\n');
 }
 
@@ -203,4 +228,49 @@ export async function composeSlide(
     console.warn('[decks composer] LLM unavailable — using heuristic:', err instanceof Error ? err.message : err);
   }
   return { slide: composeHeuristic(input, { recentLayouts: ctx.recentLayouts }), source: 'heuristic' };
+}
+
+/** LLM revision of an existing slide. Unlike composeSlide there is no
+ *  deterministic fallback — an arbitrary instruction cannot be applied
+ *  heuristically, so failure returns null and the caller reports it. */
+export async function reviseSlide(
+  current: { title: string | null; layout: string; blocks: Block[] },
+  instruction: string,
+  mediaUrls: string[] = [],
+  ctx: ComposeContext = {},
+): Promise<ComposedSlide | null> {
+  const userContent = [
+    ctx.deckTitle ? `Deck: "${ctx.deckTitle}"` : null,
+    `CURRENT SLIDE:\n${JSON.stringify(current)}`,
+    `INSTRUCTION:\n${instruction.trim()}`,
+    mediaUrls.length ? `MEDIA URLS (each must appear as an image block, or iframe for site-relative pages):\n${mediaUrls.join('\n')}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  try {
+    const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
+      messages: [
+        { role: 'system', content: revisePrompt(ctx) },
+        { role: 'user', content: userContent },
+      ],
+      temperature: 0.3,
+      // Same generous ceiling as composeSlide — GLM reasoning burns from it.
+      max_tokens: 8000,
+      response_format: { type: 'json_object' },
+    }, { fallbackModel: ART_DIRECTOR_FALLBACK });
+    const text = completion.choices[0]?.message?.content ?? '';
+    const slide = parseLLMSlide(text);
+    if (slide) {
+      const final = applyEditorialGuardrails(slide, ctx);
+      if (validateBlocks(final.blocks).ok) {
+        // A revision keeps the slide's title unless the LLM deliberately set one.
+        return { ...final, title: final.title ?? current.title };
+      }
+    }
+    console.warn('[decks composer] revise output failed validation');
+  } catch (err) {
+    console.warn('[decks composer] revise LLM unavailable:', err instanceof Error ? err.message : err);
+  }
+  return null;
 }
