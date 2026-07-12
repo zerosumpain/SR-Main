@@ -51,11 +51,47 @@ describe('SimEngine', () => {
     expect(events.some((e) => e.type === 'flash')).toBe(true);
   });
 
-  it('advances steps after holdMs and ends the scenario', () => {
+  it('holds after holdMs — emits step-settled instead of auto-advancing', () => {
     engine.loadScenario(fixture());
-    for (let i = 0; i < 11; i++) engine.tick(100); // 1100ms — past step 1 hold
+    for (let i = 0; i < 15; i++) engine.tick(100); // 1500ms — well past step 1 hold (1000)
+    expect(events.filter((e) => e.type === 'narrate')).toHaveLength(1);
+    expect(events.some((e) => e.type === 'step-settled')).toBe(true);
+    expect(events.some((e) => e.type === 'scenario-end')).toBe(false);
+  });
+
+  it('replays the settled stage visuals every 5s without re-firing logs or counters', () => {
+    engine.loadScenario(fixture());
+    for (let i = 0; i < 10; i++) engine.tick(100); // settle step 1 at t=1000
+    const logsBefore = events.filter((e) => e.type === 'log').length;
+    expect(events.filter((e) => e.type === 'pulse')).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'flash')).toHaveLength(1);
+    for (let i = 0; i < 55; i++) engine.tick(100); // t=6500 — replay at 6000, delayed flash at 6500
+    expect(events.filter((e) => e.type === 'pulse')).toHaveLength(2);
+    expect(events.filter((e) => e.type === 'flash')).toHaveLength(2);
+    expect(events.filter((e) => e.type === 'log')).toHaveLength(logsBefore);
+    expect(events.filter((e) => e.type === 'counter')).toHaveLength(0);
+  });
+
+  it('replays on a wall-clock 5s cadence regardless of playback speed', () => {
+    engine.loadScenario(fixture());
+    engine.setSpeed(4); // holdMs 1000 settles in ~250ms wall-clock at 4x
+    for (let i = 0; i < 5; i++) engine.tick(100);
+    expect(events.some((e) => e.type === 'step-settled')).toBe(true);
+    const atSettle = events.filter((e) => e.type === 'pulse').length;
+    // 4s more wall-clock — under 5s, so NO replay even though engine time ran 4x
+    for (let i = 0; i < 40; i++) engine.tick(100);
+    expect(events.filter((e) => e.type === 'pulse').length).toBe(atSettle);
+    // cross the 5s wall-clock mark — now it replays
+    for (let i = 0; i < 12; i++) engine.tick(100);
+    expect(events.filter((e) => e.type === 'pulse').length).toBeGreaterThan(atSettle);
+  });
+
+  it('stepForward advances a settled stage and ends the scenario after the final stage', () => {
+    engine.loadScenario(fixture());
+    for (let i = 0; i < 10; i++) engine.tick(100); // settle step 1
+    engine.stepForward();
     expect(events.filter((e) => e.type === 'narrate')).toHaveLength(2);
-    for (let i = 0; i < 9; i++) engine.tick(100);
+    engine.stepForward(); // mid-beat on the final stage — completes it and ends
     expect(events.some((e) => e.type === 'scenario-end')).toBe(true);
     expect(engine.activeScenario).toBeNull();
   });
@@ -96,7 +132,8 @@ describe('SimEngine', () => {
 
   it('restart works after a scenario has ended (replay path)', () => {
     engine.loadScenario(fixture());
-    for (let i = 0; i < 20; i++) engine.tick(100); // run to completion
+    engine.stepForward();
+    engine.stepForward(); // user-steps to completion
     expect(events.some((e) => e.type === 'scenario-end')).toBe(true);
     events.length = 0;
     engine.restart();

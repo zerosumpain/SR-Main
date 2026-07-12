@@ -172,7 +172,8 @@
     <h2>Fourteen mornings on the exchange</h2>
     <p class="slide-lede">
       {#if eli}
-        Fourteen stories, four themes. Each card says what happens and what it proves. Press run and watch it play out above.
+        Fourteen stories, four themes. Each card says what happens and what it proves. Press run, then step through it
+        above — each stage replays until you move on.
       {:else}
         Four movements — collections, frontline operations, the vendor economy, trust under stress — making one argument
         from fourteen directions: what matters about a federated spine is not throughput but <b>behaviour</b>. What it

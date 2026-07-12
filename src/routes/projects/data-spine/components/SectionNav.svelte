@@ -10,6 +10,7 @@
     { href: '/projects/data-spine/value', label: 'Value & personas' },
     { href: '/projects/data-spine/architecture', label: 'Architecture' },
     { href: '/projects/data-spine/federation', label: 'Federation' },
+    { href: '/projects/data-spine/dfe-model', label: 'The DfE model' },
     { href: '/projects/data-spine/governance', label: 'Governance' },
   ];
   const isGov = (href: string) => href.endsWith('/governance');

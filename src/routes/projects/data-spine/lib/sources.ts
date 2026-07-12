@@ -58,4 +58,18 @@ export const SOURCES: Source[] = [
   { org: 'ASCL', what: 'Schools white paper — sector response', url: 'https://www.ascl.org.uk/News/Our-news-and-press-releases/ASCL-comment-on-schools-white-paper-(1)' },
   { org: 'LGA', what: 'FSM automatic registration — briefing', url: 'https://www.local.gov.uk/parliament/briefings-and-responses/free-school-meals-automatic-registration-eligible-children-bill' },
   { org: 'GAO', what: 'Privacy-enhancing technologies survey (SMPC, DP, federated, synthetic)', url: 'https://www.gao.gov/products/gao-26-109063' },
+  // The DfE model section — national implementations survey + policy alignment
+  { org: 'NIIS', what: 'X-Road — the open-source data-exchange layer (Estonia, Finland, Iceland + 25+ countries)', url: 'https://x-road.global/' },
+  { org: 'e-Governance Academy', what: 'Trembita — Ukraine’s X-Road-based exchange at ~44m population scale', url: 'https://ega.ee/success_story/trembita-and-diia/' },
+  { org: 'UNDP', what: 'CamDX — Cambodia’s open-source adaptation of X-Road', url: 'https://www.undp.org/policy-centre/singapore/blog/camdx-open-source-adaptation-year' },
+  { org: 'GovTech Singapore', what: 'APEX — the central API gateway of the Singapore Government Tech Stack', url: 'https://www.developer.tech.gov.sg/products/categories/data-and-apis/apex/overview.html' },
+  { org: 'Logius', what: 'Netherlands System of Base Registries — Digikoppeling / Digilevering / Stelselcatalogus', url: 'https://www.logius.nl/domeinen/gegevensuitwisseling' },
+  { org: 'Danish Agency for Digitisation', what: 'Grunddata & Datafordeler — the Basic Data Programme', url: 'https://en.digst.dk/data/basic-data/' },
+  { org: 'NITI Aayog', what: 'DEPA — India’s consent-mediated data-empowerment architecture', url: 'https://www.niti.gov.in/sites/default/files/2020-09/DEPA-Book.pdf' },
+  { org: 'gematik', what: 'TI-Messenger — Matrix-based federated messaging for German healthcare', url: 'https://www.gematik.de/anwendungen/ti-messenger' },
+  { org: 'MOSIP', what: 'Modular Open Source Identity Platform — foundational ID for exchange layers', url: 'https://www.mosip.io/' },
+  { org: 'Eclipse Foundation', what: 'Eclipse Dataspace Components — open-source connector: catalogue, contracts, usage control', url: 'https://projects.eclipse.org/projects/technology.edc' },
+  { org: 'Ed-Fi Alliance', what: 'Ed-Fi Data Standard — the common education data model precedent', url: 'https://www.ed-fi.org/' },
+  { org: 'GOV.UK', what: 'MAIS — multi-agency information sharing statutory guidance consultation', url: 'https://www.gov.uk/government/consultations/multi-agency-information-sharing-statutory-guidance' },
+  { org: 'GOV.UK', what: 'Milburn review “Young People and Work” — interim diagnostic (hidden NEETs)', url: 'https://www.gov.uk/government/publications/young-people-and-work-interim-report' },
 ];

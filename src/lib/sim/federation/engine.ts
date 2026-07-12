@@ -70,12 +70,22 @@ export type SimEvent =
   | { type: 'counter'; key: CounterKey; delta: number }
   | { type: 'scenario-start'; id: string }
   | { type: 'scenario-end'; id: string }
+  /** the current stage's actions have all played — waiting for the user to advance */
+  | { type: 'step-settled' }
   | { type: 'stopped' }
   | { type: 'clear' };
 
 interface Pending { atMs: number; action: SimAction }
 
 const DEFAULT_PULSE_MS = 1600;
+/** while holding on a settled stage, replay its visual actions this often (wall-clock ms) */
+const STEP_REPLAY_MS = 5000;
+
+/** actions that are safe to re-fire on a stage replay — pure visuals, no side effects
+ *  (re-firing log/counter actions would duplicate log rows and inflate the counters) */
+function isVisualAction(a: SimAction): boolean {
+  return a.kind === 'pulse' || a.kind === 'fanout' || a.kind === 'flash' || a.kind === 'highlight';
+}
 
 export interface AmbientPool {
   suppliers: string[];
@@ -96,6 +106,11 @@ export class SimEngine {
   private clockMs = 9 * 3600 * 1000; // sim clock starts 09:00:00
   private timeMs = 0; // engine time (scaled)
   private stepStartMs = 0;
+  /** true once the current stage's beat has fully played — the engine holds and
+   *  replays the stage's visuals every STEP_REPLAY_MS until stepForward() */
+  private awaitingNext = false;
+  /** unscaled wall-clock ms accumulated since the last stage replay */
+  private replayAccumMs = 0;
   private pending: Pending[] = [];
   private sigCounter = 0;
   private rng = mulberry32(0xfeed5);
@@ -140,6 +155,7 @@ export class SimEngine {
     this.lastLoaded = s;
     this.stepIdx = -1;
     this.pending = [];
+    this.awaitingNext = false;
     this.playing = true;
     this.emit({ type: 'scenario-start', id: s.id });
     this.beginStep(0);
@@ -150,6 +166,7 @@ export class SimEngine {
     this.scenario = null;
     this.stepIdx = -1;
     this.pending = [];
+    this.awaitingNext = false;
     this.playing = false;
     this.emit({ type: 'stopped' });
   }
@@ -164,12 +181,19 @@ export class SimEngine {
     if (s) this.loadScenario(s);
   }
 
-  /** Complete the current beat instantly and begin the next. */
+  /** User-driven advance: mid-beat it completes the beat instantly; once the
+   *  stage has settled it drops any queued replays and begins the next stage. */
   stepForward() {
     if (!this.scenario || this.stepIdx < 0) return;
-    const step = this.scenario.steps[this.stepIdx];
-    this.timeMs = this.stepStartMs + step.holdMs;
-    this.flushPending();
+    if (this.awaitingNext) {
+      // anything still pending here is a scheduled stage replay — discard it
+      this.pending = [];
+      this.awaitingNext = false;
+    } else {
+      const step = this.scenario.steps[this.stepIdx];
+      this.timeMs = this.stepStartMs + step.holdMs;
+      this.flushPending();
+    }
     this.advance();
   }
 
@@ -180,18 +204,28 @@ export class SimEngine {
       const id = s.id;
       this.scenario = null;
       this.stepIdx = -1;
+      this.awaitingNext = false;
       this.playing = false;
       this.emit({ type: 'scenario-end', id });
       return;
     }
     this.stepIdx = i;
     this.stepStartMs = this.timeMs;
+    this.awaitingNext = false;
     const step = s.steps[i];
     this.emit({ type: 'narrate', text: step.narration, phase: step.phase, stepIndex: i, stepCount: s.steps.length });
     for (const a of step.actions) {
       this.pending.push({ atMs: this.timeMs + (a.delayMs ?? 0), action: a });
     }
     this.flushPending(); // zero-delay actions land on the same beat as their narration
+  }
+
+  /** re-fire the settled stage's visual actions with their original in-beat timing */
+  private replayStepVisuals(step: ScenarioStep) {
+    for (const a of step.actions) {
+      if (isVisualAction(a)) this.pending.push({ atMs: this.timeMs + (a.delayMs ?? 0), action: a });
+    }
+    this.flushPending();
   }
 
   private advance() {
@@ -256,7 +290,23 @@ export class SimEngine {
     const s = this.scenario;
     if (s && this.stepIdx >= 0) {
       const step = s.steps[this.stepIdx];
-      if (this.timeMs - this.stepStartMs >= step.holdMs) this.advance();
+      if (!this.awaitingNext) {
+        // stage played out: hold for the user instead of auto-advancing
+        if (this.timeMs - this.stepStartMs >= step.holdMs) {
+          this.awaitingNext = true;
+          this.replayAccumMs = 0;
+          this.emit({ type: 'step-settled' });
+        }
+      } else {
+        // replay the settled stage's visuals on a steady wall-clock cadence, so the
+        // "repeats every 5 s" affordance holds at every playback speed. dt is unscaled;
+        // timeMs/pulse-travel still scale, so the visuals themselves play at the chosen speed.
+        this.replayAccumMs += dt;
+        if (this.replayAccumMs >= STEP_REPLAY_MS) {
+          this.replayAccumMs -= STEP_REPLAY_MS;
+          this.replayStepVisuals(step);
+        }
+      }
     }
   }
 

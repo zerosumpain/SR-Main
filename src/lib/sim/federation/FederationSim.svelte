@@ -40,6 +40,8 @@
   let stepCount = $state(0);
   let playing = $state(false);
   let ended = $state(false);
+  // the current stage has fully played and is looping its visuals — Next advances
+  let awaitingNext = $state(false);
   let speed = $state(1);
   let mode = $state<'federated' | 'central'>('federated');
   let edtechOn = $state(false);
@@ -72,6 +74,10 @@
         phase = e.phase;
         stepIndex = e.stepIndex + 1;
         stepCount = e.stepCount;
+        awaitingNext = false;
+        break;
+      case 'step-settled':
+        awaitingNext = true;
         break;
       case 'log':
         logEntries = [e.entry, ...logEntries].slice(0, 60);
@@ -95,12 +101,14 @@
       case 'scenario-end':
         ended = true;
         playing = false;
-        narration = 'Scenario complete. Replay it, step through it, or pick another — the ambient traffic carries on regardless.';
+        awaitingNext = false;
+        narration = 'Scenario complete. Replay it or pick another — the ambient traffic carries on regardless.';
         phase = undefined;
         break;
       case 'stopped':
         playing = false;
         ended = false;
+        awaitingNext = false;
         activeScenario = null;
         narration = 'Back to the ambient morning. Pick a scenario to run a simulation.';
         phase = undefined;
@@ -270,9 +278,14 @@
           <span class="n-title">{activeScenario.title}</span>
           {#if phase}<span class="n-phase">{phase}</span>{/if}
           {#if stepCount}<span class="n-step">{stepIndex}/{stepCount}</span>{/if}
+          {#if awaitingNext}<span class="n-hint">stage repeats every 5 s</span>{/if}
           <div class="transport">
+            {#if !ended}
+              <button class="next-btn" class:ready={awaitingNext} onclick={stepFwd} title="Advance to the next stage">
+                {stepIndex >= stepCount ? 'Finish' : 'Next stage'} ▸
+              </button>
+            {/if}
             <button onclick={togglePlay} title={ended ? 'Replay' : playing ? 'Pause' : 'Play'}>{ended ? '↺' : playing ? '❚❚' : '▶'}</button>
-            <button onclick={stepFwd} title="Next beat" disabled={ended}>⏭</button>
             <button onclick={restart} title="Restart">⟲</button>
             <button onclick={stopScenario} title="Exit scenario">✕</button>
             <span class="speed">
@@ -444,6 +457,14 @@
   .transport > button { background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); width: 30px; height: 26px; cursor: pointer; color: var(--ink); font-size: 11px; line-height: 1; }
   .transport > button:hover:not(:disabled) { border-color: var(--ink); }
   .transport > button:disabled { opacity: 0.4; cursor: default; }
+  .transport > .next-btn { width: auto; padding: 0 14px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; background: var(--ink); border-color: var(--ink); color: var(--paper, #f1ead6); }
+  .transport > .next-btn:hover { background: #000; }
+  .transport > .next-btn.ready { animation: next-nudge 2.4s ease-in-out infinite; }
+  @keyframes next-nudge {
+    0%, 100% { background: var(--ink); border-color: var(--ink); }
+    50% { background: var(--accent-ink); border-color: var(--accent-ink); }
+  }
+  .n-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
   .speed { display: inline-flex; background: rgba(28,22,17,0.07); border: 1px solid rgba(28,22,17,0.15); border-radius: var(--radius-round); padding: 1px; margin-left: 4px; }
   .speed button { background: transparent; border: none; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; padding: 4px 7px; cursor: pointer; color: var(--ink); border-radius: var(--radius-round); }
   .speed button.on { background: var(--ink); color: #fff; }
