@@ -1,12 +1,14 @@
 <script lang="ts">
-  // Background effect layer — Three.js particle simulations (drift/starfield)
-  // or the site's live ECG heartbeat, rendered behind the slide's content.
-  // Three loads dynamically (same pattern as the federation embed) so decks
-  // without effects never pay for it. Transition-role blocks render nothing
-  // here — the player plays those. Honors prefers-reduced-motion (static).
+  // Background effect layer — hosts one Three.js simulation from
+  // $lib/presentation/effect-sims.ts (or the site's live ECG heartbeat)
+  // behind the slide's content. Three loads dynamically (same pattern as the
+  // federation embed) so decks without effects never pay for it. Transition-
+  // role blocks render nothing here — the player plays those via
+  // TransitionFx. Honors prefers-reduced-motion (static).
   import { onMount } from 'svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
   import { TINT_COLORS, type EffectTint } from '$lib/presentation/effects';
+  import { SIM_BUILDERS } from '$lib/presentation/effect-sims';
   import type { EffectBlock } from '$lib/presentation/types';
 
   let { block }: { block: EffectBlock } = $props();
@@ -18,6 +20,8 @@
 
   onMount(() => {
     if (block.role !== 'background' || block.effect === 'heartbeat' || !host) return;
+    const builder = SIM_BUILDERS[block.effect];
+    if (!builder) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     let disposed = false;
@@ -38,51 +42,13 @@
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
       host.appendChild(renderer.domElement);
 
-      const starfield = block.effect === 'starfield';
-      const count = starfield ? 700 : 260;
-      const positions = new Float32Array(count * 3);
-      const speeds = new Float32Array(count);
-      for (let i = 0; i < count; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * 26;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 16;
-        positions[i * 3 + 2] = starfield ? Math.random() * -40 : (Math.random() - 0.5) * 6;
-        speeds[i] = 0.2 + Math.random() * 0.8;
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const mat = new THREE.PointsMaterial({
-        color: new THREE.Color(tint),
-        size: starfield ? 0.075 : 0.11,
-        transparent: true,
-        opacity: 0.35 + intensity * 0.4,
-        depthWrite: false,
-        sizeAttenuation: true,
-      });
-      const points = new THREE.Points(geo, mat);
-      scene.add(points);
+      const sim = builder({ THREE, scene, camera, w, h, tint, intensity });
 
-      const pos = geo.getAttribute('position') as InstanceType<typeof THREE.BufferAttribute>;
       let last = performance.now();
       const tick = (now: number) => {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        for (let i = 0; i < count; i++) {
-          if (starfield) {
-            // slow push forward; recycle behind the camera
-            let z = pos.getZ(i) + dt * speeds[i] * 2.2 * intensity;
-            if (z > 8) z = -40;
-            pos.setZ(i, z);
-          } else {
-            // paper dust: drift up-right with a lazy sine sway
-            let x = pos.getX(i) + dt * speeds[i] * 0.5 * intensity;
-            let y = pos.getY(i) + dt * speeds[i] * 0.22 * intensity + Math.sin(now / 2400 + i) * 0.0016;
-            if (x > 13) x = -13;
-            if (y > 8) y = -8;
-            pos.setX(i, x);
-            pos.setY(i, y);
-          }
-        }
-        pos.needsUpdate = true;
+        sim.tick(now, dt);
         renderer.render(scene, camera);
         raf = requestAnimationFrame(tick);
       };
@@ -101,8 +67,7 @@
       cleanup = () => {
         window.removeEventListener('resize', onResize);
         cancelAnimationFrame(raf);
-        geo.dispose();
-        mat.dispose();
+        sim.dispose();
         renderer.dispose();
         renderer.domElement.remove();
       };

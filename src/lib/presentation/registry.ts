@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { sankeyDepths } from './chartkit';
 import { EFFECTS } from './effects';
 import { EMBEDS } from './embeds';
+import { PROSE_STYLES, PROSE_STYLE_IDS, QUOTE_STYLES, QUOTE_STYLE_IDS, styleDocsForLLM } from './styles';
 import type { BlockType } from './types';
 
 const statSchema = z.object({ n: z.string().min(1), label: z.string().min(1) }).strict();
@@ -51,7 +52,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       type: z.literal('prose'),
       body: z.string().min(1),
       lede: z.boolean().optional(),
-      style: z.enum(['body', 'lede', 'band', 'cards', 'aside', 'pull', 'columns', 'callout']).optional(),
+      style: z.enum(PROSE_STYLE_IDS as [string, ...string[]]).optional(),
     })
     .strict(),
   bigNumber: z
@@ -76,6 +77,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       text: z.string().min(1),
       attribution: z.string().optional(),
       url: z.string().optional(),
+      style: z.enum(QUOTE_STYLE_IDS as [string, ...string[]]).optional(),
     })
     .strict(),
   timeline: z
@@ -200,12 +202,10 @@ export const BLOCK_DOCS: Record<BlockType, string> = {
   masthead: 'Title slide header: { kicker?, title, thesis?, asks?: string[] }. Use once, usually slide 1.',
   headline:
     'Editorial statement headline — the bold assertive-fact page: { kicker? (mono eyebrow), text (the statement, ≤12 words, sentence case, no full stop), dek? (one-line support), align?: left|center|right (default left) }. Use for a claim or fact stated with authority; pair with statement-left/statement-right layouts.',
-  prose:
-    'Editorial text: { body (markdown-lite: # …#### headings, **bold**, *italic*, __underline__, "- " bullet lines, [text](url), blank-line paragraphs), style?: body|lede|band|cards|aside|pull|columns|callout }. Styles — lede: large opening type; band: full-width INVERTED emphasis band for short rhythmic creeds ("Refusal. Auditability. Blast radius." — an *italic* line renders amber); cards: each paragraph becomes a bordered card (bold opener = card title) for detail-dense content instead of long paragraphs; aside: small mono footnote/source note; pull: oversized italic pull-text between hairlines (a line worth lingering on that is NOT a quotation); columns: body flowed into two columns for dense reference text; callout: a tinted petrol note box (bold opener = its title) for warnings/key takeaways.',
+  prose: `Editorial text: { body (markdown-lite: # …#### headings, **bold**, *italic*, __underline__, "- " bullet lines, [text](url), blank-line paragraphs), style?: ${PROSE_STYLE_IDS.join('|')} }. Styles — ${styleDocsForLLM(PROSE_STYLES)}.`,
   bigNumber: 'One huge count-up numeral: { value: number, label, unit?, sub?, dp? }.',
   statRow: 'Row of 1-6 stat chips: { stats: [{ n: preformatted string, label }] }.',
-  quote:
-    'Pull quote for a REAL quotation or aphorism ONLY: { text (≤140 chars — never a paragraph; long text belongs in prose, assertive claims in headline), attribution?, url? }.',
+  quote: `Pull quote for a REAL quotation or aphorism ONLY: { text (≤140 chars — never a paragraph; long text belongs in prose, assertive claims in headline), attribution?, url?, style?: ${QUOTE_STYLE_IDS.join('|')} }. Styles — ${styleDocsForLLM(QUOTE_STYLES)}.`,
   timeline: 'Vertical timeline of 2-12 moments: { items: [{ year, label, detail? }] }.',
   image: 'Figure: { src, alt, caption? }.',
   chart:

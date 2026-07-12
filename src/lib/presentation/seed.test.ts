@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { DECK } from '../../../scripts/seed-deck-data-spine.mjs';
 // eslint-disable-next-line import/no-relative-packages
 import { DECK as SHOWCASE } from '../../../scripts/seed-deck-showcase.mjs';
+import { EFFECT_IDS } from './effects';
 import { isLayout } from './layouts';
 import { validateBlocks } from './registry';
+import { PROSE_STYLE_IDS, QUOTE_STYLE_IDS } from './styles';
 
 interface SpecSlide {
   title?: string;
@@ -90,5 +92,28 @@ describe('showcase deck', () => {
     for (const k of ['line', 'bar', 'area', 'scatter', 'slope', 'donut', 'sankey']) {
       expect(chartKinds.has(k), `chart kind ${k}`).toBe(true);
     }
+  });
+
+  it('exercises every effect, every prose register and every quote style', () => {
+    const effects = new Set(
+      all.flatMap(({ blocks }) =>
+        (blocks as { type: string; effect?: string }[]).filter((b) => b.type === 'effect').map((b) => b.effect),
+      ),
+    );
+    const proseStyles = new Set(
+      all.flatMap(({ blocks }) =>
+        (blocks as { type: string; style?: string; lede?: boolean }[])
+          .filter((b) => b.type === 'prose')
+          .map((b) => b.style ?? (b.lede ? 'lede' : 'body')),
+      ),
+    );
+    const quoteStyles = new Set(
+      all.flatMap(({ blocks }) =>
+        (blocks as { type: string; style?: string }[]).filter((b) => b.type === 'quote').map((b) => b.style ?? 'rail'),
+      ),
+    );
+    for (const e of EFFECT_IDS) expect(effects.has(e), `effect ${e}`).toBe(true);
+    for (const s of PROSE_STYLE_IDS) expect(proseStyles.has(s), `prose style ${s}`).toBe(true);
+    for (const s of QUOTE_STYLE_IDS) expect(quoteStyles.has(s), `quote style ${s}`).toBe(true);
   });
 });

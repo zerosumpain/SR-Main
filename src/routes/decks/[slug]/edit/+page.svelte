@@ -9,6 +9,7 @@
   import { buildPlanes } from '$lib/presentation/navigation';
   import { validateBlocks } from '$lib/presentation/registry';
   import { BLOCK_TEMPLATES, CHART_TEMPLATES } from '$lib/presentation/templates';
+  import { PROSE_STYLES, QUOTE_STYLES } from '$lib/presentation/styles';
   import type { Block, SlideNode } from '$lib/presentation/types';
   import BlockForm from './BlockForm.svelte';
   import SiteMediaPicker from './SiteMediaPicker.svelte';
@@ -434,6 +435,10 @@
     const b = selected.blocks[selBlock] as { style?: string; lede?: boolean };
     return b.style ?? (b.lede ? 'lede' : 'body');
   });
+  const selQuoteStyle = $derived.by(() => {
+    if (selType !== 'quote' || selBlock === null || !selected) return 'rail';
+    return (selected.blocks[selBlock] as { style?: string }).style ?? 'rail';
+  });
   const previewSlide = $derived(
     selected
       ? ({ ...selected, hasChildren: (planes.get(selected.id) ?? []).length > 0 } as SlideNode)
@@ -847,7 +852,7 @@
                   onpointerdown={(e) => e.stopPropagation()}
                   onchange={(e) => setSelStyle(e.currentTarget.value)}
                 >
-                  {#each ['body', 'lede', 'band', 'cards', 'aside', 'pull', 'columns', 'callout'] as s (s)}<option value={s}>{s}</option>{/each}
+                  {#each PROSE_STYLES as s (s.id)}<option value={s.id}>{s.id}</option>{/each}
                 </select>
                 {#each [1, 2, 3, 4] as h (h)}
                   <button onpointerdown={(e) => e.preventDefault()} onclick={() => fmt('formatBlock', `H${h}`)}>H{h}</button>
@@ -859,6 +864,15 @@
                 {#if selProseStyle === 'cards'}
                   <button title="New card (Ctrl+Enter)" onpointerdown={(e) => e.preventDefault()} onclick={addCard}>+card</button>
                 {/if}
+              {:else if selType === 'quote'}
+                <select
+                  class="sel-style"
+                  value={selQuoteStyle}
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onchange={(e) => setSelStyle(e.currentTarget.value)}
+                >
+                  {#each QUOTE_STYLES as s (s.id)}<option value={s.id}>{s.id}</option>{/each}
+                </select>
               {:else if selType === 'chart'}
                 <span class="sel-tag">chart — edit via the panel →</span>
               {:else}

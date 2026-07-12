@@ -1,13 +1,23 @@
 <script lang="ts">
-  // Pull quote — data-spine .quote shape at slide scale: accent-ink left
-  // border, Fraunces italic, mono attribution.
+  // Pull quote, three registers picked by `style`: rail (default — data-spine
+  // .quote shape: accent-ink left rail, Fraunces italic, mono attribution),
+  // pull (huge centered under an ornamental mark — the quote IS the page),
+  // boxed (inset bordered card with a large opening glyph — a documentary
+  // aside beside other content).
   import type { QuoteBlock } from '$lib/presentation/types';
 
   let { block }: { block: QuoteBlock } = $props();
+  const style = $derived(block.style ?? 'rail');
 </script>
 
-<blockquote class="q">
-  <span class="q-rail" aria-hidden="true"></span>
+<blockquote class="q" class:q-pull={style === 'pull'} class:q-boxed={style === 'boxed'}>
+  {#if style === 'rail'}
+    <span class="q-rail" aria-hidden="true"></span>
+  {:else if style === 'pull'}
+    <span class="q-mark" aria-hidden="true">“</span>
+  {:else}
+    <span class="q-glyph" aria-hidden="true">“</span>
+  {/if}
   <p class="q-text">“{block.text}”</p>
   {#if block.attribution}
     <footer class="q-attr">
@@ -62,4 +72,45 @@
     color: var(--ink-soft);
   }
   .q-attr a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
+
+  /* pull — huge centered, no rail: the quote IS the page */
+  .q.q-pull {
+    padding: 0;
+    max-width: 24ch;
+    text-align: center;
+  }
+  .q.q-pull .q-mark {
+    display: block;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(64px, 9vw, 130px);
+    line-height: 0.55;
+    color: var(--accent);
+    margin-bottom: clamp(10px, 2vh, 22px);
+  }
+  .q.q-pull .q-text {
+    font-size: clamp(28px, 4.6vw, 58px);
+    line-height: 1.2;
+  }
+  .q.q-pull .q-attr { margin-top: clamp(16px, 2.6vh, 26px); }
+
+  /* boxed — inset bordered card with a large opening glyph */
+  .q.q-boxed {
+    padding: clamp(18px, 2.4vw, 30px) clamp(18px, 2.4vw, 30px) clamp(14px, 1.9vw, 24px) clamp(52px, 6vw, 78px);
+    border: 1px solid rgba(28, 22, 17, 0.18);
+    border-radius: var(--radius-round, 4px);
+    background: rgba(255, 255, 255, 0.45);
+  }
+  .q.q-boxed .q-glyph {
+    position: absolute;
+    left: clamp(12px, 1.6vw, 20px);
+    top: clamp(6px, 1vw, 12px);
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(44px, 5.6vw, 76px);
+    line-height: 1;
+    color: var(--accent);
+  }
+  .q.q-boxed .q-text { font-size: clamp(17px, 2.3vw, 26px); }
+  .q.q-boxed .q-attr { text-align: right; }
 </style>

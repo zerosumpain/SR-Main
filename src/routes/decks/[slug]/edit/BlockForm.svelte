@@ -6,6 +6,7 @@
   // shape (the zod registry is the validation gate on save). Mutates the
   // parent-owned $state draft directly and reports edits via onEdited().
   import { EFFECTS, EFFECT_CATEGORIES } from '$lib/presentation/effects';
+  import { PROSE_STYLES, QUOTE_STYLES } from '$lib/presentation/styles';
   import type { ChartBlock } from '$lib/presentation/types';
   import ChartEditorModal from './ChartEditorModal.svelte';
 
@@ -13,9 +14,17 @@
 
   const LONG_TEXT = new Set(['body', 'thesis', 'text', 'detail', 'sub', 'description']);
 
-  const keys = $derived(Object.keys(block).filter((k) => k !== 'type' && !(block.type === 'prose' && (k === 'style' || k === 'lede'))));
+  const keys = $derived(
+    Object.keys(block).filter(
+      (k) =>
+        k !== 'type' &&
+        !(block.type === 'prose' && (k === 'style' || k === 'lede')) &&
+        !(block.type === 'quote' && k === 'style'),
+    ),
+  );
 
   const isProse = $derived(block.type === 'prose');
+  const isQuote = $derived(block.type === 'quote');
   const isChart = $derived(block.type === 'chart');
   const isEffect = $derived(block.type === 'effect');
   let chartOpen = $state(false);
@@ -33,16 +42,6 @@
   // textarea handle for the prose toolbar — plain let (nothing reactive reads it)
   let bodyTa: HTMLTextAreaElement | null = null;
 
-  const PROSE_STYLES = [
-    { id: 'body', label: 'body — paragraphs' },
-    { id: 'lede', label: 'lede — large opener' },
-    { id: 'band', label: 'band — inverted emphasis' },
-    { id: 'cards', label: 'cards — paragraph cards' },
-    { id: 'aside', label: 'aside — mono footnote' },
-    { id: 'pull', label: 'pull — italic pull-text' },
-    { id: 'columns', label: 'columns — two-column body' },
-    { id: 'callout', label: 'callout — petrol note box' },
-  ];
   const proseStyle = $derived(
     typeof block.style === 'string' ? block.style : block.lede ? 'lede' : 'body',
   );
@@ -206,6 +205,17 @@
         <span class="bf-lab">style</span>
         <select value={proseStyle} onchange={(e) => setProseStyle(e.currentTarget.value)}>
           {#each PROSE_STYLES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+        </select>
+      </label>
+    {/if}
+    {#if isQuote}
+      <label class="bf-field">
+        <span class="bf-lab">style</span>
+        <select
+          value={typeof block.style === 'string' ? block.style : 'rail'}
+          onchange={(e) => { block.style = e.currentTarget.value; onEdited(); }}
+        >
+          {#each QUOTE_STYLES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
         </select>
       </label>
     {/if}

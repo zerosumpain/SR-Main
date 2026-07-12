@@ -14,13 +14,21 @@ export interface MoveParams {
   travel: Travel;
   /** Branch/exit moves glide further than sibling walks. */
   major?: boolean;
-  /** Melt wipe: the outgoing slide drops fast (particles replace it) and the
-   *  incoming one holds back a beat while they blow away. */
-  melt?: boolean;
+  /** Active wipe effect id (melt/shatter/inkbleed/slats/dissolve). Veil wipes
+   *  (melt, shatter) drop the outgoing slide fast — particles replace it —
+   *  and hold the incoming one back a beat; covering wipes just delay the
+   *  incoming slide under their flood. */
+  wipe?: string;
 }
 
 const GLIDE = 380;
 const MAJOR = 520;
+
+/** Wipes where particles replace the outgoing DOM (it must vanish fast). */
+const VEIL = new Set(['melt', 'shatter']);
+
+/** How long the incoming slide holds back under each wipe, ms. */
+const IN_DELAY: Record<string, number> = { melt: 340, shatter: 340, inkbleed: 320, dissolve: 200, slats: 0 };
 
 /** Block entrance: rise + settle with a micro-scale — used with a stagger
  *  delay by SlideView and by block-internal choreography. */
@@ -47,22 +55,23 @@ function vec(travel: Travel): { x: number; y: number } {
   }
 }
 
-export function slideIn(_node: Element, { travel, major = false, melt = false }: MoveParams): TransitionConfig {
+export function slideIn(_node: Element, { travel, major = false, wipe }: MoveParams): TransitionConfig {
   const { x, y } = vec(travel);
   const dist = major ? 12 : 7;
+  const delay = wipe ? (IN_DELAY[wipe] ?? 0) : 0;
   return {
-    delay: melt ? dur(340) : 0,
-    duration: dur(major || melt ? MAJOR : GLIDE),
+    delay: dur(delay),
+    duration: dur(major || delay ? MAJOR : GLIDE),
     easing: cubicOut,
     css: (t, u) =>
       `transform: translate(${x * u * dist}vw, ${y * u * dist}vh) scale(${0.99 + 0.01 * t}); opacity: ${t}`,
   };
 }
 
-export function slideOut(_node: Element, { travel, major = false, melt = false }: MoveParams): TransitionConfig {
-  if (melt) {
-    // the content "melts": drop fast with a slight sag — the particle layer
-    // takes over the storytelling
+export function slideOut(_node: Element, { travel, major = false, wipe }: MoveParams): TransitionConfig {
+  if (wipe && VEIL.has(wipe)) {
+    // the content melts/shatters: drop fast with a slight sag — the particle
+    // layer takes over the storytelling
     return {
       duration: dur(230),
       easing: cubicOut,

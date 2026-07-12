@@ -36,6 +36,12 @@
     class:pull={style === 'pull'}
     class:columns={style === 'columns'}
     class:callout={style === 'callout'}
+    class:numbered={style === 'numbered'}
+    class:ledger={style === 'ledger'}
+    class:interview={style === 'interview'}
+    class:manifesto={style === 'manifesto'}
+    class:verse={style === 'verse'}
+    class:checklist={style === 'checklist'}
   >
     <!-- eslint-disable-next-line svelte/no-at-html-tags — renderProse escapes first -->
     {@html html}
@@ -130,6 +136,122 @@
     color: var(--accent-ink);
     margin-bottom: 6px;
   }
+  /* numbered — editorial 01/02/03 sequence, one paragraph per step */
+  .prose.numbered { max-width: 54ch; counter-reset: pn; }
+  .prose.numbered :global(p) {
+    counter-increment: pn;
+    position: relative;
+    padding-left: clamp(52px, 6vw, 76px);
+    min-height: 44px;
+    margin-bottom: clamp(14px, 2.2vh, 24px);
+  }
+  .prose.numbered :global(p)::before {
+    content: counter(pn, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: -2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(20px, 2.6vw, 30px);
+    letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+  .prose.numbered :global(p > b:first-child) {
+    display: block;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(17px, 2vw, 22px);
+    margin-bottom: 2px;
+  }
+
+  /* ledger — spec-sheet rows: bold opener = left-column label. The label is
+     absolutely positioned so any inline content in the value (links, italics)
+     wraps cleanly in the right column. */
+  .prose.ledger { max-width: 62ch; width: 100%; }
+  .prose.ledger :global(p) {
+    position: relative;
+    padding: clamp(9px, 1.3vh, 14px) 0 clamp(9px, 1.3vh, 14px) clamp(130px, 32%, 220px);
+    margin: 0;
+    border-bottom: 1px solid rgba(28, 22, 17, 0.16);
+    font-size: clamp(14px, 1.6vw, 17px);
+    min-height: 1.4em;
+  }
+  .prose.ledger :global(p:first-child) { border-top: 1px solid var(--ink); }
+  .prose.ledger :global(p > b:first-child) {
+    position: absolute;
+    left: 0;
+    max-width: clamp(118px, 30%, 208px);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: clamp(10px, 1.2vw, 12.5px);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+
+  /* interview — Q&A exchange: bold opener = speaker eyebrow; odd paragraphs
+     (the questions) render italic serif */
+  .prose.interview { max-width: 58ch; }
+  .prose.interview :global(p) { margin-bottom: clamp(14px, 2.2vh, 24px); }
+  .prose.interview :global(p > b:first-child) {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: clamp(9.5px, 1.1vw, 11.5px);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 3px;
+  }
+  .prose.interview :global(p:nth-of-type(odd)) {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(16px, 2vw, 22px);
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .prose.interview :global(p:nth-of-type(odd) > b:first-child) { font-style: normal; }
+
+  /* manifesto — a stack of shouted display lines, one paragraph per line.
+     Fraunces 600 like the band, but on paper: the lighter creed. */
+  .prose.manifesto { max-width: none; }
+  .prose.manifesto :global(p) {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(28px, 4.6vw, 64px);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0 0 clamp(8px, 1.4vh, 16px);
+  }
+  .prose.manifesto :global(em) { font-style: normal; color: var(--accent); }
+  .prose.manifesto :global(b) { color: var(--accent-ink); }
+
+  /* verse — centered lyric: italic serif, airy leading */
+  .prose.verse { max-width: 48ch; text-align: center; }
+  .prose.verse :global(p) {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(16px, 2.1vw, 23px);
+    line-height: 1.85;
+    color: var(--ink);
+  }
+  .prose.verse :global(em) { color: var(--accent-ink); }
+
+  /* checklist — "- " lines become accent-ticked items */
+  .prose.checklist :global(li)::before {
+    content: '✓';
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--success, #2d7a3a);
+  }
+  .prose.checklist :global(li) {
+    margin-bottom: 10px;
+    color: var(--ink);
+  }
+
   .prose :global(h1),
   .prose :global(h2),
   .prose :global(h3),

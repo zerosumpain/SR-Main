@@ -13,7 +13,7 @@
   import SlideView from '$lib/components/presentation/SlideView.svelte';
   import TransitionFx from '$lib/components/presentation/TransitionFx.svelte';
   import type { EffectBlock } from '$lib/presentation/types';
-  import type { EffectTint, Zone } from '$lib/presentation/effects';
+  import { isWipe, VEIL_WIPES, type EffectTint, type Zone } from '$lib/presentation/effects';
   import {
     branchTravel,
     buildPlanes,
@@ -32,7 +32,8 @@
   let current = $state(data.startId);
   let travel = $state<Travel>('right');
   let major = $state(false);
-  let melting = $state(false);
+  /** Active wipe effect id for the current move (null = plain glide/sweep). */
+  let wiping = $state<string | null>(null);
   let chromeVisible = $state(true);
   /** Nav-map position once the user has dragged it; null = the CSS default
    *  (bottom left). Persisted so it stays out of the content's way. */
@@ -97,11 +98,11 @@
     const fxBlock = (byId.get(id)?.blocks.find(
       (b) => b.type === 'effect' && (b as EffectBlock).role === 'transition',
     ) ?? null) as EffectBlock | null;
-    melting = fxBlock?.effect === 'melt';
-    // melt spawns its particles from the OUTGOING content — capture the block
-    // rects before the slide switches out from under us
+    wiping = fxBlock && isWipe(fxBlock.effect) ? fxBlock.effect : null;
+    // melt/shatter spawn their particles from the OUTGOING content — capture
+    // the block rects before the slide switches out from under us
     let zones: Zone[] = [];
-    if (melting && shell) {
+    if (wiping && VEIL_WIPES.has(wiping) && shell) {
       const host = shell.getBoundingClientRect();
       zones = Array.from(shell.querySelectorAll<HTMLElement>('.stage .block')).map((el) => {
         const r = el.getBoundingClientRect();
@@ -313,7 +314,7 @@
     >
       <div class="stage-wrap">
         {#key current}
-          <div class="stage" in:slideIn={{ travel, major, melt: melting }} out:slideOut={{ travel, major, melt: melting }}>
+          <div class="stage" in:slideIn={{ travel, major, wipe: wiping ?? undefined }} out:slideOut={{ travel, major, wipe: wiping ?? undefined }}>
             <SlideView {slide} />
           </div>
         {/key}
@@ -322,7 +323,7 @@
       {#if fx}
         {#key fx.key}
           <TransitionFx
-            mode={fx.effect.effect === 'melt' ? 'melt' : 'sweep'}
+            mode={isWipe(fx.effect.effect) ? fx.effect.effect : 'sweep'}
             travel={fx.travel}
             tint={(fx.effect.tint ?? 'accent') as EffectTint}
             intensity={fx.effect.intensity ?? 0.5}

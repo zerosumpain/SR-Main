@@ -1,5 +1,5 @@
 // Seed "The sr. decks Showcase" — a public deck where every slide demonstrates
-// the feature it describes: all eleven block types, all ten page designs, all
+// the feature it describes: all twelve block types, all ten page designs, all
 // seven chart kinds (the chart-room side journey), journey pills + nav map,
 // autoplaying sim embeds, an iframe, and the animation set.
 // Idempotent, same pattern as seed-deck-data-spine.mjs:
@@ -29,7 +29,7 @@ export const DECK = {
           kicker: 'SR. DECKS · SHOWCASE',
           title: 'Every page in the box',
           thesis:
-            'A live tour of the deck system — eleven block types, ten page designs, seven chart kinds, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
+            'A live tour of the deck system — twelve block types, ten page designs, seven chart kinds, fourteen prose registers, ten atmosphere effects, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
         },
       ],
     },
@@ -473,11 +473,12 @@ export const DECK = {
     {
       title: 'The registers of prose',
       layout: 'default',
+      journeyLabel: 'the new registers',
       blocks: [
         {
           type: 'prose',
           style: 'lede',
-          body: '**Prose comes in preset registers** — pick one from a dropdown and play. This is *lede*; below are __band__ and __cards__, borrowed from the field studies.',
+          body: '**Prose comes in preset registers** — pick one from a dropdown and play. This is *lede*; below are __band__ and __cards__, borrowed from the field studies. The pill points **down to six newer registers** — and the quote styles.',
         },
         {
           type: 'prose',
@@ -495,11 +496,194 @@ export const DECK = {
           body: 'SET IN DM SANS · FRAUNCES · JETBRAINS MONO — THE SAME REGISTERS AS THE FIELD STUDIES. SEE [THE DATA-SPINE DECK](/decks/data-spine-federation).',
         },
       ],
+      children: [
+        {
+          title: 'Pull, columns, callout',
+          layout: 'default',
+          blocks: [
+            {
+              type: 'prose',
+              style: 'pull',
+              body: 'The pull register is for a line worth lingering on — hairlines above and below, italic serif between.',
+            },
+            {
+              type: 'prose',
+              style: 'columns',
+              body: 'Columns flow dense reference text into two measures, with a hairline rule between them. It is the register for material that must be present but should not dominate — methodology notes, licence terms, the long tail of sources.\n\nAt slide scale it reads as a broadsheet fragment: the eye takes the shape first, the detail only if invited. Pair it with a callout so the one thing that matters cannot be missed.',
+            },
+            {
+              type: 'prose',
+              style: 'callout',
+              body: '**The one thing.** A callout is the petrol note box — bold opener as its title. One per page, or it stops being one.',
+            },
+          ],
+        },
+        {
+          title: 'Numbered and ledger',
+          layout: 'split',
+          blocks: [
+            {
+              type: 'prose',
+              style: 'numbered',
+              body: '**Say it in order.** The numbered register turns paragraphs into an editorial sequence — the bold opener is the step title.\n\n**Keep the openers short.** Three or four words carry best at this size.\n\n**Stop at five.** Past that it is a table, not an argument.',
+            },
+            {
+              type: 'prose',
+              style: 'ledger',
+              body: '**Registers** fourteen prose presets, one dropdown\n\n**Quote styles** rail · pull · boxed\n\n**Effects** ten, across four categories\n\n**Wipes** melt · shatter · inkbleed · slats · dissolve',
+            },
+          ],
+        },
+        {
+          title: 'Manifesto',
+          layout: 'statement',
+          blocks: [
+            {
+              type: 'prose',
+              style: 'manifesto',
+              body: 'Fewer blocks.\n\nBigger type.\n\n*Earned* atmosphere.',
+            },
+          ],
+        },
+        {
+          title: 'Interview and verse',
+          layout: 'split',
+          blocks: [
+            {
+              type: 'prose',
+              style: 'interview',
+              body: '**ED.** Why presets instead of free styling?\n\n**SR.** Because taste is a system. The presets carry the design so the words can carry the argument.\n\n**ED.** And when a page needs something new?\n\n**SR.** We add a register — once — and every deck inherits it.',
+            },
+            {
+              type: 'prose',
+              style: 'verse',
+              body: 'A page is a room;\nthe type is the furniture,\nthe whitespace, the light.',
+            },
+          ],
+        },
+        {
+          title: 'Checklist and the quote styles',
+          layout: 'default',
+          blocks: [
+            {
+              type: 'prose',
+              style: 'checklist',
+              body: '- Fourteen prose registers, one dropdown\n- Three quote styles\n- Ten effects, five of them wipes\n- Every one of them reachable by jkai',
+            },
+            {
+              type: 'quote',
+              style: 'boxed',
+              text: 'The boxed quote is a documentary aside — it sits beside the argument, not on top of it.',
+              attribution: 'sr. decks style guide',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'The atmosphere room',
+      layout: 'split',
+      journeyLabel: 'the atmosphere room',
+      blocks: [
+        { type: 'effect', effect: 'inkbleed', role: 'transition', intensity: 0.6, tint: 'petrol' },
+        {
+          type: 'prose',
+          lede: true,
+          body: '**Atmosphere is a block.** Ten registered effects — Three.js particle simulations and canvas wipes — play behind a page or as the camera move into it. You arrived through the *ink-bleed* wipe; the pill below walks six backgrounds, and three more wipes fire along the way.',
+        },
+        {
+          type: 'prose',
+          style: 'aside',
+          body: 'EFFECTS ARE AN ALLOWLIST, LIKE EMBEDS: DRIFT · STARFIELD · PLEXUS · CURRENTS · ORBITS · SEA · HALFTONE · LETTERPRESS · HEARTBEAT — PLUS FIVE WIPES. INTENSITY AND TINT ARE KNOBS ON EVERY ONE.',
+        },
+      ],
+      children: [
+        {
+          title: 'Constellation',
+          layout: 'statement-left',
+          blocks: [
+            { type: 'effect', effect: 'plexus', role: 'background', intensity: 0.6, tint: 'petrol' },
+            {
+              type: 'headline',
+              kicker: 'PLEXUS',
+              text: 'Systems join up',
+              dek: 'Points find each other and hold a line — the federation effect.',
+              align: 'left',
+            },
+          ],
+        },
+        {
+          title: 'Ink currents',
+          layout: 'statement-right',
+          blocks: [
+            { type: 'effect', effect: 'currents', role: 'background', intensity: 0.55, tint: 'ink' },
+            { type: 'effect', effect: 'slats', role: 'transition', intensity: 0.5, tint: 'accent' },
+            {
+              type: 'headline',
+              kicker: 'CURRENTS',
+              text: 'Everything is moving',
+              dek: 'Strokes ride an invisible field — data in motion. You arrived through the paper-slat wipe.',
+              align: 'right',
+            },
+          ],
+        },
+        {
+          title: 'Orbits',
+          layout: 'center',
+          blocks: [
+            { type: 'effect', effect: 'orbits', role: 'background', intensity: 0.5, tint: 'ink' },
+            { type: 'bigNumber', value: 92, label: 'minutes per orbit', sub: 'the long view — cycles hold the page steady' },
+          ],
+        },
+        {
+          title: 'The point sea',
+          layout: 'statement',
+          blocks: [
+            { type: 'effect', effect: 'sea', role: 'background', intensity: 0.6, tint: 'petrol' },
+            { type: 'effect', effect: 'dissolve', role: 'transition', intensity: 0.5, tint: 'ink' },
+            {
+              type: 'headline',
+              text: 'Calm at scale',
+              dek: 'A dot sea swells toward the horizon. You arrived through the halftone dissolve.',
+              align: 'center',
+            },
+          ],
+        },
+        {
+          title: 'Halftone',
+          layout: 'statement-left',
+          blocks: [
+            { type: 'effect', effect: 'halftone', role: 'background', intensity: 0.55, tint: 'accent' },
+            {
+              type: 'headline',
+              kicker: 'PRINT & TYPE',
+              text: 'The page is a press',
+              dek: 'A live halftone screen, breathing under the type.',
+              align: 'left',
+            },
+          ],
+        },
+        {
+          title: 'Loose type',
+          layout: 'center',
+          blocks: [
+            { type: 'effect', effect: 'letterpress', role: 'background', intensity: 0.5, tint: 'ink' },
+            { type: 'effect', effect: 'shatter', role: 'transition', intensity: 0.6, tint: 'ink' },
+            {
+              type: 'quote',
+              style: 'pull',
+              text: 'The compositor spilled the tray, and the words kept their meaning.',
+              attribution: 'the letterpress effect',
+            },
+          ],
+        },
+      ],
     },
     {
       title: 'Build your own',
       layout: 'center',
       blocks: [
+        { type: 'effect', effect: 'starfield', role: 'background', intensity: 0.5, tint: 'ink' },
         {
           type: 'masthead',
           kicker: 'BUILD YOUR OWN',

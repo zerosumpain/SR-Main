@@ -44,7 +44,13 @@ export type ProseStyle =
   | 'aside'
   | 'pull'
   | 'columns'
-  | 'callout';
+  | 'callout'
+  | 'numbered'
+  | 'ledger'
+  | 'interview'
+  | 'manifesto'
+  | 'verse'
+  | 'checklist';
 
 /** Markdown-lite body: # …#### headings, **bold**, *italic*, __underline__,
  *  [text](url), blank-line paragraphs. `style` picks a preformatted register:
@@ -73,11 +79,15 @@ export interface StatRowBlock {
   stats: { n: string; label: string }[];
 }
 
+export type QuoteStyle = 'rail' | 'pull' | 'boxed';
+
 export interface QuoteBlock {
   type: 'quote';
   text: string;
   attribution?: string;
   url?: string;
+  /** rail (default accent left rail) | pull (huge centered) | boxed (inset card). */
+  style?: QuoteStyle;
 }
 
 export interface TimelineBlock {
