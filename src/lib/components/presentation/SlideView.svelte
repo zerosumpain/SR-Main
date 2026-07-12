@@ -12,6 +12,9 @@
 
   const STAGGER = 120;
 
+  /** Manual-arrange mode: the owner hand-laid this slide; frames win. */
+  const manual = $derived(Boolean(slide.geometry && Object.keys(slide.geometry).length));
+
   const isSplit = $derived(slide.layout === 'split' || slide.layout === 'split-flip');
   const textBlocks = $derived(slide.blocks.filter((b) => !VISUAL_BLOCK_TYPES.has(b.type)));
   const visualBlocks = $derived(slide.blocks.filter((b) => VISUAL_BLOCK_TYPES.has(b.type)));
@@ -30,13 +33,32 @@
 {#snippet renderBlock(block: Block, i: number)}
   {@const Comp = BLOCK_COMPONENTS[block.type]}
   {#if Comp}
-    <div class="block" in:blockIn={{ delay: STAGGER * i }}>
+    <div class="block" data-bi={slide.blocks.indexOf(block)} in:blockIn={{ delay: STAGGER * i }}>
       <Comp {block} />
     </div>
   {/if}
 {/snippet}
 
-{#if slide.layout === 'poster' && posterImage}
+{#if manual}
+  <section class="slide manual" data-layout={slide.layout}>
+    {#each slide.blocks as block, i (i)}
+      {@const Comp = BLOCK_COMPONENTS[block.type]}
+      {@const frame = slide.geometry?.[String(i)]}
+      {#if Comp}
+        <div
+          class="block mblock"
+          data-bi={i}
+          in:blockIn={{ delay: STAGGER * i }}
+          style:left="{frame?.x ?? 6}%"
+          style:top="{frame?.y ?? 8 + i * 22}%"
+          style:width="{frame?.w ?? 60}%"
+        >
+          <Comp {block} />
+        </div>
+      {/if}
+    {/each}
+  </section>
+{:else if slide.layout === 'poster' && posterImage}
   <section class="slide poster">
     <img
       class="poster-bg"
@@ -98,6 +120,10 @@
     position: relative;
   }
   .block { width: 100%; display: flex; flex-direction: column; align-items: inherit; }
+
+  /* manual arrange — hand-laid frames in % of the stage */
+  .slide.manual { display: block; padding: 0; overflow: hidden; }
+  .mblock { position: absolute; align-items: flex-start; }
 
   /* centered + statement */
   .slide[data-layout='center'],

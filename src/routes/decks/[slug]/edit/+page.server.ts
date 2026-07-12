@@ -42,6 +42,7 @@ export const load: PageServerLoad = async (event) => {
       blocks: r.blocks as Block[],
       notes: r.notes,
       journeyLabel: r.journeyLabel,
+      geometry: (r.geometry as Record<string, { x: number; y: number; w: number }> | null) ?? null,
       version: r.version,
     })),
   };

@@ -50,6 +50,7 @@ export const BLOCK_SCHEMAS: Record<BlockType, z.ZodTypeAny> = {
       type: z.literal('prose'),
       body: z.string().min(1),
       lede: z.boolean().optional(),
+      style: z.enum(['body', 'lede', 'band', 'cards', 'aside']).optional(),
     })
     .strict(),
   bigNumber: z
@@ -176,7 +177,8 @@ export const BLOCK_DOCS: Record<BlockType, string> = {
   masthead: 'Title slide header: { kicker?, title, thesis?, asks?: string[] }. Use once, usually slide 1.',
   headline:
     'Editorial statement headline — the bold assertive-fact page: { kicker? (mono eyebrow), text (the statement, ≤12 words, sentence case, no full stop), dek? (one-line support), align?: left|center|right (default left) }. Use for a claim or fact stated with authority; pair with statement-left/statement-right layouts.',
-  prose: 'Editorial paragraph(s): { body (markdown-lite: **bold**, [text](url), blank-line paragraphs), lede?: boolean (larger opening type) }.',
+  prose:
+    'Editorial text: { body (markdown-lite: # …#### headings, **bold**, *italic*, __underline__, [text](url), blank-line paragraphs), style?: body|lede|band|cards|aside }. Styles — lede: large opening type; band: full-width INVERTED emphasis band for short rhythmic creeds ("Refusal. Auditability. Blast radius." — an *italic* line renders amber); cards: each paragraph becomes a bordered card (bold opener = card title) for detail-dense content instead of long paragraphs; aside: small mono footnote/source note.',
   bigNumber: 'One huge count-up numeral: { value: number, label, unit?, sub?, dp? }.',
   statRow: 'Row of 1-6 stat chips: { stats: [{ n: preformatted string, label }] }.',
   quote:

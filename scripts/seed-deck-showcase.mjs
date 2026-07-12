@@ -260,7 +260,7 @@ export const DECK = {
                     { x: 13, y: 2 },
                     { x: 14, y: 2 },
                     { x: 15, y: 2 },
-                    { x: 16, y: 2 },
+                    { x: 16, y: 4 },
                     { x: 17, y: 1 },
                   ],
                 },
@@ -468,17 +468,28 @@ export const DECK = {
       ],
     },
     {
-      title: 'Prose, links & type',
+      title: 'The registers of prose',
       layout: 'default',
       blocks: [
         {
           type: 'prose',
-          lede: true,
-          body: 'Prose is DM Sans over paper, with **bold for the load-bearing words** and links in petrol — like [the data-spine deck](/decks/data-spine-federation) this system was proven on.',
+          style: 'lede',
+          body: '**Prose comes in preset registers** — pick one from a dropdown and play. This is *lede*; below are __band__ and __cards__, borrowed from the field studies.',
         },
         {
           type: 'prose',
-          body: 'Paragraphs space themselves. Blocks rise and settle in sequence as each slide arrives; under reduced-motion everything cuts instantly instead. Fraunces carries display duty, JetBrains Mono the labels — the same registers as the field studies.',
+          style: 'band',
+          body: 'Found. Painted. Credited.\n*The registers of prose are presets — this one is the federation band.*',
+        },
+        {
+          type: 'prose',
+          style: 'cards',
+          body: '**Cards** carry detail-dense content — each paragraph becomes one, its bold opener the title.\n\n**Band** is the inverted creed above — short rhythmic statements at poster scale.\n\n**Aside** is the small mono register that closes this page.',
+        },
+        {
+          type: 'prose',
+          style: 'aside',
+          body: 'SET IN DM SANS · FRAUNCES · JETBRAINS MONO — THE SAME REGISTERS AS THE FIELD STUDIES. SEE [THE DATA-SPINE DECK](/decks/data-spine-federation).',
         },
       ],
     },

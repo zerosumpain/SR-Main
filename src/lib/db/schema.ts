@@ -765,6 +765,9 @@ export const deckSlides = pgTable(
     notes: text('notes'),
     // Names the journey INTO this slide's children ("down for <label>").
     journeyLabel: text('journey_label'),
+    // Manual-arrange frames: { "<blockIdx>": {x,y,w} } in % of the stage.
+    // Null = the layout archetype positions blocks.
+    geometry: jsonb('geometry'),
     version: integer('version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -45,6 +45,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     blocks?: unknown;
     notes?: unknown;
     journeyLabel?: unknown;
+    geometry?: unknown;
     position?: unknown;
     parentSlideId?: unknown;
     expectedVersion?: unknown;
@@ -67,6 +68,30 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   if (typeof body.title === 'string') patch.title = body.title.slice(0, 120) || null;
   if (typeof body.notes === 'string') patch.notes = body.notes || null;
   if (typeof body.journeyLabel === 'string') patch.journeyLabel = body.journeyLabel.slice(0, 80) || null;
+  if (body.geometry !== undefined) {
+    // Manual-arrange frames: null clears; otherwise { "<idx>": {x,y,w} } in %.
+    if (body.geometry === null) {
+      patch.geometry = null;
+    } else if (typeof body.geometry === 'object' && !Array.isArray(body.geometry)) {
+      const entries = Object.entries(body.geometry as Record<string, unknown>);
+      const ok = entries.every(([k, v]) => {
+        if (!/^\d{1,2}$/.test(k) || v === null || typeof v !== 'object') return false;
+        const f = v as { x?: unknown; y?: unknown; w?: unknown };
+        const num = (n: unknown, lo: number, hi: number) => typeof n === 'number' && n >= lo && n <= hi;
+        return num(f.x, -20, 120) && num(f.y, -20, 120) && num(f.w, 5, 100);
+      });
+      if (!ok) return json({ error: 'geometry must map block indices to {x,y,w} percentages' }, { status: 400 });
+      patch.geometry = Object.fromEntries(
+        entries.map(([k, v]) => {
+          const f = v as { x: number; y: number; w: number };
+          const r = (n: number) => Math.round(n * 10) / 10;
+          return [k, { x: r(f.x), y: r(f.y), w: r(f.w) }];
+        }),
+      );
+    } else {
+      return json({ error: 'geometry must be an object or null' }, { status: 400 });
+    }
+  }
   if (typeof body.layout === 'string') {
     if (!isLayout(body.layout)) return json({ error: `unknown layout "${body.layout}"` }, { status: 400 });
     patch.layout = body.layout;

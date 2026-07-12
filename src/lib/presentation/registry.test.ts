@@ -37,6 +37,12 @@ describe('validateBlocks', () => {
     expect(res.issues[0]).toContain('hologram');
   });
 
+  it('accepts prose style presets and rejects unknown ones', () => {
+    expect(validateBlocks([{ type: 'prose', body: 'x', style: 'band' }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'prose', body: 'x', style: 'cards' }]).ok).toBe(true);
+    expect(validateBlocks([{ type: 'prose', body: 'x', style: 'shouty' }]).ok).toBe(false);
+  });
+
   it('rejects a missing required prop, naming the path', () => {
     const res = validateBlocks([{ type: 'bigNumber', label: 'schools' }]);
     expect(res.ok).toBe(false);

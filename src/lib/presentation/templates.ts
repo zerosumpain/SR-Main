@@ -7,7 +7,7 @@ import type { Block, BlockType, ChartBlock, ChartKind } from './types';
 export const BLOCK_TEMPLATES: Record<BlockType, Block> = {
   masthead: { type: 'masthead', kicker: 'KICKER', title: 'Headline', thesis: 'One-sentence thesis.' },
   headline: { type: 'headline', kicker: 'THE FACT', text: 'The statement, said with authority', dek: 'One supporting line under it.' },
-  prose: { type: 'prose', body: 'A paragraph. **Bold** for emphasis; [links](/projects) allowed.' },
+  prose: { type: 'prose', body: 'A paragraph. **Bold** for emphasis, *italic*, __underline__; [links](/projects) allowed.', style: 'body' },
   bigNumber: { type: 'bigNumber', value: 100, label: 'the measure', unit: 'unit' },
   statRow: {
     type: 'statRow',

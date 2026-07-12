@@ -34,6 +34,7 @@ export const load: PageServerLoad = async (event) => {
     blocks: r.blocks as Block[],
     hasChildren: parents.has(r.id),
     journeyLabel: r.journeyLabel,
+    geometry: (r.geometry as Record<string, { x: number; y: number; w: number }> | null) ?? null,
   }));
 
   const roots = slides.filter((s) => s.parentSlideId === null);

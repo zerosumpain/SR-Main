@@ -35,11 +35,18 @@ export interface HeadlineBlock {
   align?: 'left' | 'center' | 'right';
 }
 
-/** Markdown-lite body: **bold**, [text](url), blank-line paragraphs. */
+export type ProseStyle = 'body' | 'lede' | 'band' | 'cards' | 'aside';
+
+/** Markdown-lite body: # …#### headings, **bold**, *italic*, __underline__,
+ *  [text](url), blank-line paragraphs. `style` picks a preformatted register:
+ *  body | lede (large opener) | band (full-width inverted emphasis band) |
+ *  cards (each paragraph a bordered card) | aside (small mono footnote). */
 export interface ProseBlock {
   type: 'prose';
   body: string;
+  /** Legacy pre-style flag — equivalent to style: 'lede'. */
   lede?: boolean;
+  style?: ProseStyle;
 }
 
 export interface BigNumberBlock {
@@ -138,6 +145,15 @@ export interface SlideNode {
   hasChildren: boolean;
   /** Names the journey into this slide's children (the pill text). */
   journeyLabel: string | null;
+  /** Manual-arrange overrides: block index → frame in % of the stage.
+   *  Present = the slide is hand-laid; absent = the layout archetype rules. */
+  geometry: Record<string, BlockFrame> | null;
+}
+
+export interface BlockFrame {
+  x: number;
+  y: number;
+  w: number;
 }
 
 export interface DeckMeta {

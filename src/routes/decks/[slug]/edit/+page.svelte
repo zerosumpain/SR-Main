@@ -15,6 +15,12 @@
 
   let { data } = $props();
 
+  interface BlockFrame {
+    x: number;
+    y: number;
+    w: number;
+  }
+
   interface EditSlide {
     id: string;
     parentSlideId: string | null;
@@ -24,6 +30,7 @@
     blocks: Block[];
     notes: string | null;
     journeyLabel: string | null;
+    geometry: Record<string, BlockFrame> | null;
     version: number;
   }
 
@@ -44,6 +51,132 @@
   let composing = $state(false);
   let attached = $state<Block[]>([]);
   let picker = $state<'closed' | 'compose' | 'block'>('closed');
+
+  // --- resizable side panels (at the expense of the centre preview) ---
+  let leftW = $state(250);
+  let rightW = $state(330);
+  // divider drag internals — plain lets (svelte5-pitfalls §1)
+  let dividerSide: 'l' | 'r' | null = null;
+  let divStartX = 0;
+  let divStartW = 0;
+
+  function startDivider(side: 'l' | 'r', e: PointerEvent) {
+    dividerSide = side;
+    divStartX = e.clientX;
+    divStartW = side === 'l' ? leftW : rightW;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function moveDivider(e: PointerEvent) {
+    if (!dividerSide) return;
+    const d = e.clientX - divStartX;
+    if (dividerSide === 'l') leftW = Math.min(560, Math.max(170, divStartW + d));
+    else rightW = Math.min(640, Math.max(240, divStartW - d));
+  }
+  function endDivider() {
+    if (!dividerSide) return;
+    dividerSide = null;
+    try {
+      localStorage.setItem('sr-decks-editor-panels', JSON.stringify({ l: leftW, r: rightW }));
+    } catch {
+      /* private mode */
+    }
+  }
+
+  // --- manual arrange mode: drag/resize block frames on the preview ---
+  let arranging = $state(false);
+  let previewEl: HTMLElement | undefined; // plain let — measured, never rendered from
+  // frame drag internals — plain lets
+  let frameDrag: { bi: string; mode: 'move' | 'resize'; px: number; py: number; f: BlockFrame } | null = null;
+
+  function measureGeometry(): Record<string, BlockFrame> {
+    const geo: Record<string, BlockFrame> = {};
+    const host = previewEl?.getBoundingClientRect();
+    if (!host || !selected) return geo;
+    for (const el of previewEl!.querySelectorAll<HTMLElement>('.block[data-bi]')) {
+      const bi = el.dataset.bi ?? '';
+      const r = el.getBoundingClientRect();
+      geo[bi] = {
+        x: Math.round(((r.left - host.left) / host.width) * 1000) / 10,
+        y: Math.round(((r.top - host.top) / host.height) * 1000) / 10,
+        w: Math.round((r.width / host.width) * 1000) / 10,
+      };
+    }
+    // blocks the layout didn't render as .block (e.g. a poster backdrop image)
+    selected.blocks.forEach((_, i) => {
+      if (!geo[String(i)]) geo[String(i)] = { x: 6, y: 8 + i * 24, w: 60 };
+    });
+    return geo;
+  }
+
+  function toggleArrange() {
+    if (!selected) return;
+    if (!arranging && (!selected.geometry || Object.keys(selected.geometry).length === 0)) {
+      selected.geometry = measureGeometry();
+      markDirty();
+    }
+    arranging = !arranging;
+  }
+
+  function resetArrange() {
+    if (!selected) return;
+    selected.geometry = null;
+    arranging = false;
+    markDirty();
+  }
+
+  function startFrame(bi: string, mode: 'move' | 'resize', e: PointerEvent) {
+    if (!selected?.geometry?.[bi]) return;
+    e.preventDefault();
+    e.stopPropagation();
+    frameDrag = { bi, mode, px: e.clientX, py: e.clientY, f: { ...selected.geometry[bi] } };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function moveFrame(e: PointerEvent) {
+    if (!frameDrag || !selected?.geometry) return;
+    const host = previewEl?.getBoundingClientRect();
+    if (!host) return;
+    const dx = ((e.clientX - frameDrag.px) / host.width) * 100;
+    const dy = ((e.clientY - frameDrag.py) / host.height) * 100;
+    const f = frameDrag.f;
+    const r = (n: number) => Math.round(n * 10) / 10;
+    if (frameDrag.mode === 'move') {
+      selected.geometry[frameDrag.bi] = {
+        ...selected.geometry[frameDrag.bi],
+        x: r(Math.min(115, Math.max(-15, f.x + dx))),
+        y: r(Math.min(115, Math.max(-15, f.y + dy))),
+      };
+    } else {
+      selected.geometry[frameDrag.bi] = {
+        ...selected.geometry[frameDrag.bi],
+        w: r(Math.min(100, Math.max(8, f.w + dx))),
+      };
+    }
+    markDirty();
+  }
+  function endFrame() {
+    frameDrag = null;
+  }
+
+  // --- drag attached site media onto the slide ---
+  function chipDragStart(e: DragEvent, i: number) {
+    e.dataTransfer?.setData('application/x-deck-block', JSON.stringify({ from: 'attached', i }));
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copyMove';
+  }
+  function previewDrop(e: DragEvent) {
+    const raw = e.dataTransfer?.getData('application/x-deck-block');
+    if (!raw || !selected) return;
+    e.preventDefault();
+    try {
+      const info = JSON.parse(raw) as { from: string; i: number };
+      if (info.from === 'attached' && attached[info.i]) {
+        selected.blocks.push($state.snapshot(attached[info.i]) as Block);
+        attached = attached.filter((_, j) => j !== info.i);
+        markDirty();
+      }
+    } catch {
+      /* not ours */
+    }
+  }
 
   // The add-block menu: every block type, with chart expanded per kind.
   const TEMPLATE_OPTIONS: { key: string; label: string; block: Block }[] = [
@@ -115,6 +248,7 @@
       blocks: slide.blocks,
       notes: slide.notes ?? '',
       journeyLabel: slide.journeyLabel ?? '',
+      geometry: slide.geometry ?? null,
       expectedVersion: slide.version,
     });
     saving = false;
@@ -292,6 +426,16 @@
 
   onMount(() => {
     void loadShares();
+    try {
+      const raw = localStorage.getItem('sr-decks-editor-panels');
+      if (raw) {
+        const p = JSON.parse(raw) as { l?: number; r?: number };
+        if (typeof p.l === 'number') leftW = Math.min(560, Math.max(170, p.l));
+        if (typeof p.r === 'number') rightW = Math.min(640, Math.max(240, p.r));
+      }
+    } catch {
+      /* default widths */
+    }
   });
 </script>
 
@@ -344,7 +488,7 @@
     {#if banner}<span class="banner {banner.kind}">{banner.text}</span>{/if}
   </header>
 
-  <div class="ed-cols">
+  <div class="ed-cols" style:--lw="{leftW}px" style:--rw="{rightW}px">
     <aside class="ed-tree">
       <span class="pane-lab">SLIDES</span>
       <ul class="tree-root">
@@ -363,11 +507,17 @@
         {#if attached.length}
           <div class="attach-chips">
             {#each attached as b, i (i)}
-              <span class="attach-chip">
+              <span class="attach-chip" role="button" draggable="true" ondragstart={(e) => chipDragStart(e, i)} title="Drag onto the slide, or compose with it">
                 {blockLabel(b)}
+                <button
+                  title="Add to the selected slide now"
+                  onclick={() => { if (selected) { selected.blocks.push($state.snapshot(b) as Block); attached = attached.filter((_, j) => j !== i); markDirty(); } }}
+                  >→</button
+                >
                 <button title="Remove" onclick={() => (attached = attached.filter((_, j) => j !== i))}>✕</button>
               </span>
             {/each}
+            <span class="attach-hint">drag a chip onto the slide, → adds it, or ✦ compose designs around them</span>
           </div>
         {/if}
         <button class="add-slide" onclick={() => (picker = 'compose')}>◈ add site media…</button>
@@ -405,12 +555,66 @@
       </div>
     </aside>
 
+    <div
+      class="col-div"
+      role="separator"
+      aria-orientation="vertical"
+      onpointerdown={(e) => startDivider('l', e)}
+      onpointermove={moveDivider}
+      onpointerup={endDivider}
+    ></div>
+
     <main class="ed-preview">
       {#if previewSlide}
-        <div class="preview-frame">
-          <div class="preview-theme">
+        <div class="preview-toolbar">
+          <button class="arr-btn" class:active={arranging} onclick={toggleArrange}>
+            {arranging ? '✓ done arranging' : '⊞ arrange'}
+          </button>
+          {#if selected.geometry}
+            <button class="arr-btn danger" onclick={resetArrange}>reset to layout</button>
+            <span class="arr-note">hand-laid — drag to move, right edge to resize width</span>
+          {/if}
+        </div>
+        <div
+          class="preview-frame"
+          class:arranging
+          role="region"
+          aria-label="Slide preview (drop site media here)"
+          ondragover={(e) => e.preventDefault()}
+          ondrop={previewDrop}
+        >
+          <div class="preview-theme" bind:this={previewEl}>
             <SlideView slide={previewSlide} />
           </div>
+          {#if arranging && selected.geometry}
+            <div class="arr-overlay">
+              {#each Object.entries(selected.geometry) as [bi, f] (bi)}
+                <div
+                  class="arr-frame"
+                  role="button"
+                  aria-label="Move block"
+                  tabindex="-1"
+                  style:left="{f.x}%"
+                  style:top="{f.y}%"
+                  style:width="{f.w}%"
+                  onpointerdown={(e) => startFrame(bi, 'move', e)}
+                  onpointermove={moveFrame}
+                  onpointerup={endFrame}
+                >
+                  <span class="arr-tag">{selected.blocks[Number(bi)]?.type ?? bi}</span>
+                  <span
+                    class="arr-resize"
+                    role="button"
+                    aria-label="Resize block width"
+                    tabindex="-1"
+                    onpointerdown={(e) => startFrame(bi, 'resize', e)}
+                    onpointermove={moveFrame}
+                    onpointerup={endFrame}
+                  ></span>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
         <div class="preview-meta">
           <label>
@@ -440,6 +644,15 @@
         </div>
       {/if}
     </main>
+
+    <div
+      class="col-div"
+      role="separator"
+      aria-orientation="vertical"
+      onpointerdown={(e) => startDivider('r', e)}
+      onpointermove={moveDivider}
+      onpointerup={endDivider}
+    ></div>
 
     <aside class="ed-blocks">
       <span class="pane-lab">BLOCKS</span>
@@ -526,10 +739,18 @@
   .ed-cols {
     flex: 1;
     display: grid;
-    grid-template-columns: 250px 1fr 330px;
+    /* side panel widths are user-resizable via the dividers (--lw/--rw) */
+    grid-template-columns: var(--lw, 250px) 6px 1fr 6px var(--rw, 330px);
     gap: 0;
     min-height: 0;
   }
+  .col-div {
+    cursor: col-resize;
+    background: transparent;
+    border-left: 1px solid var(--card-border);
+    touch-action: none;
+  }
+  .col-div:hover { border-left: 2px solid var(--accent); }
   .pane-lab {
     display: block;
     font-family: var(--font-mono);
@@ -628,8 +849,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .attach-chip { cursor: grab; }
   .attach-chip button { color: var(--text-muted); background: none; border: none; cursor: pointer; font-size: 9px; padding: 0; }
   .attach-chip button:hover { color: var(--error); }
+  .attach-chip button:first-of-type:hover { color: var(--accent); }
+  .attach-hint { font-family: var(--font-mono); font-size: 8px; color: var(--text-ghost); }
   .composer-btns .add-slide { margin-top: 0; width: auto; padding: 6px 10px; }
   .compose-btn {
     flex: 1;
@@ -663,12 +887,65 @@
   .fresh code { font-size: 9px; }
 
   .ed-preview { padding: 16px; overflow-y: auto; min-width: 0; }
+  .preview-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .arr-btn {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--card-border);
+    border-radius: 2px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .arr-btn:hover, .arr-btn.active { color: var(--accent); border-color: var(--accent); }
+  .arr-btn.danger:hover { color: var(--error); border-color: var(--error); }
+  .arr-note { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-ghost); }
   .preview-frame {
     border: 1px solid var(--card-border);
     border-radius: 4px;
     overflow: hidden;
     aspect-ratio: 16 / 10;
     position: relative;
+  }
+  .preview-frame.arranging { user-select: none; }
+  .arr-overlay { position: absolute; inset: 0; z-index: 5; }
+  .arr-frame {
+    position: absolute;
+    min-height: 28px;
+    height: auto;
+    border: 1.5px dashed var(--accent);
+    border-radius: 2px;
+    background: rgba(196, 87, 10, 0.06);
+    cursor: grab;
+    touch-action: none;
+  }
+  .arr-frame:active { cursor: grabbing; }
+  .arr-tag {
+    position: absolute;
+    top: -16px;
+    left: 0;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    color: var(--bg);
+    background: var(--accent);
+    border-radius: 2px;
+    padding: 1px 5px;
+  }
+  .arr-resize {
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 26px;
+    background: var(--accent);
+    border-radius: 2px;
+    cursor: ew-resize;
+    touch-action: none;
   }
   .preview-theme {
     --paper: var(--bg);
@@ -752,6 +1029,7 @@
 
   @media (max-width: 1100px) {
     .ed-cols { grid-template-columns: 220px 1fr; }
+    .col-div { display: none; }
     .ed-blocks { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--card-border); }
   }
 </style>
