@@ -28,7 +28,15 @@ const MAJOR = 520;
 const VEIL = new Set(['melt', 'shatter']);
 
 /** How long the incoming slide holds back under each wipe, ms. */
-const IN_DELAY: Record<string, number> = { melt: 340, shatter: 340, inkbleed: 320, dissolve: 200, slats: 0 };
+const IN_DELAY: Record<string, number> = {
+  melt: 340,
+  shatter: 340,
+  inkbleed: 320,
+  dissolve: 200,
+  slats: 0,
+  iris: 380,
+  erode: 300,
+};
 
 /** Block entrance: rise + settle with a micro-scale — used with a stagger
  *  delay by SlideView and by block-internal choreography. */

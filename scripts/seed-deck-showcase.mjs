@@ -29,7 +29,7 @@ export const DECK = {
           kicker: 'SR. DECKS · SHOWCASE',
           title: 'Every page in the box',
           thesis:
-            'A live tour of the deck system — twelve block types, ten page designs, seven chart kinds, fourteen prose registers, ten atmosphere effects, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
+            'A live tour of the deck system — twelve block types, ten page designs, seven chart kinds, fourteen prose registers, twenty-three atmosphere effects, side journeys, found-and-painted imagery and two live embeds. Every slide demonstrates the thing it describes.',
         },
       ],
     },
@@ -589,12 +589,12 @@ export const DECK = {
         {
           type: 'prose',
           lede: true,
-          body: '**Atmosphere is a block.** Ten registered effects — Three.js particle simulations and canvas wipes — play behind a page or as the camera move into it. You arrived through the *ink-bleed* wipe; the pill below walks six backgrounds, and three more wipes fire along the way.',
+          body: '**Atmosphere is a block.** Twenty-three registered effects — Three.js particle simulations and canvas wipes — play behind a page or as the camera move into it. You arrived through the *ink-bleed* wipe; the pill below walks eight particle fields, a print room hides one level deeper, and five more wipes fire along the way.',
         },
         {
           type: 'prose',
           style: 'aside',
-          body: 'EFFECTS ARE AN ALLOWLIST, LIKE EMBEDS: DRIFT · STARFIELD · PLEXUS · CURRENTS · ORBITS · SEA · HALFTONE · LETTERPRESS · HEARTBEAT — PLUS FIVE WIPES. INTENSITY AND TINT ARE KNOBS ON EVERY ONE.',
+          body: 'EFFECTS ARE AN ALLOWLIST, LIKE EMBEDS: 16 BACKGROUNDS ACROSS PARTICLE FIELDS · PRINT & TYPE · LIVE DATA, PLUS 7 WIPES. INTENSITY AND TINT ARE KNOBS ON EVERY ONE.',
         },
       ],
       children: [
@@ -628,6 +628,21 @@ export const DECK = {
           ],
         },
         {
+          title: 'Murmuration',
+          layout: 'statement-left',
+          blocks: [
+            { type: 'effect', effect: 'murmuration', role: 'background', intensity: 0.6, tint: 'ink' },
+            { type: 'effect', effect: 'iris', role: 'transition', intensity: 0.5, tint: 'ink' },
+            {
+              type: 'headline',
+              kicker: 'MURMURATION',
+              text: 'Many act as one',
+              dek: 'A boid flock billows behind the argument — collective behaviour, live. You arrived through the iris.',
+              align: 'left',
+            },
+          ],
+        },
+        {
           title: 'Orbits',
           layout: 'center',
           blocks: [
@@ -650,30 +665,115 @@ export const DECK = {
           ],
         },
         {
-          title: 'Halftone',
+          title: 'Ink rain',
+          layout: 'statement-right',
+          blocks: [
+            { type: 'effect', effect: 'rain', role: 'background', intensity: 0.55, tint: 'ink' },
+            {
+              type: 'headline',
+              kicker: 'RAIN',
+              text: 'Let it weather',
+              dek: 'Slender ink rain with a little wind in it — patience as a page.',
+              align: 'right',
+            },
+          ],
+        },
+        {
+          title: 'Meteors',
+          layout: 'statement',
+          blocks: [
+            { type: 'effect', effect: 'meteors', role: 'background', intensity: 0.65, tint: 'accent' },
+            { type: 'effect', effect: 'erode', role: 'transition', intensity: 0.55, tint: 'ink' },
+            {
+              type: 'headline',
+              text: 'Ideas arrive unannounced',
+              dek: 'Rare streaks across a still field. The last page was eaten away by the erode wipe.',
+              align: 'center',
+            },
+          ],
+        },
+        {
+          title: 'Phyllotaxis',
           layout: 'statement-left',
+          blocks: [
+            { type: 'effect', effect: 'phyllotaxis', role: 'background', intensity: 0.55, tint: 'petrol' },
+            {
+              type: 'headline',
+              kicker: 'PHYLLOTAXIS',
+              text: 'Order from simple rules',
+              dek: 'A sunflower spiral, one golden angle at a time — growth that compounds.',
+              align: 'left',
+            },
+          ],
+        },
+        {
+          title: 'The print room',
+          layout: 'statement-left',
+          journeyLabel: 'the print room',
           blocks: [
             { type: 'effect', effect: 'halftone', role: 'background', intensity: 0.55, tint: 'accent' },
             {
               type: 'headline',
               kicker: 'PRINT & TYPE',
               text: 'The page is a press',
-              dek: 'A live halftone screen, breathing under the type.',
+              dek: 'A live halftone screen, breathing under the type. The pill goes deeper: loose type, a wandering pen, ridgelines and film grain.',
               align: 'left',
             },
           ],
-        },
-        {
-          title: 'Loose type',
-          layout: 'center',
-          blocks: [
-            { type: 'effect', effect: 'letterpress', role: 'background', intensity: 0.5, tint: 'ink' },
-            { type: 'effect', effect: 'shatter', role: 'transition', intensity: 0.6, tint: 'ink' },
+          children: [
             {
-              type: 'quote',
-              style: 'pull',
-              text: 'The compositor spilled the tray, and the words kept their meaning.',
-              attribution: 'the letterpress effect',
+              title: 'Loose type',
+              layout: 'center',
+              blocks: [
+                { type: 'effect', effect: 'letterpress', role: 'background', intensity: 0.5, tint: 'ink' },
+                { type: 'effect', effect: 'shatter', role: 'transition', intensity: 0.6, tint: 'ink' },
+                {
+                  type: 'quote',
+                  style: 'pull',
+                  text: 'The compositor spilled the tray, and the words kept their meaning.',
+                  attribution: 'the letterpress effect',
+                },
+              ],
+            },
+            {
+              title: 'The scribe',
+              layout: 'statement-left',
+              blocks: [
+                { type: 'effect', effect: 'scribe', role: 'background', intensity: 0.6, tint: 'ink' },
+                {
+                  type: 'headline',
+                  kicker: 'SCRIBE',
+                  text: 'Thought in longhand',
+                  dek: 'One pen line wanders the page, drafting something it never finishes.',
+                  align: 'left',
+                },
+              ],
+            },
+            {
+              title: 'Ridgeline',
+              layout: 'statement',
+              blocks: [
+                { type: 'effect', effect: 'ridgeline', role: 'background', intensity: 0.55, tint: 'ink' },
+                {
+                  type: 'headline',
+                  text: 'Signal in the noise',
+                  dek: 'Stacked ridgelines pulse like the famous pulsar chart — data with a heartbeat.',
+                  align: 'center',
+                },
+              ],
+            },
+            {
+              title: 'Film grain',
+              layout: 'statement',
+              blocks: [
+                { type: 'effect', effect: 'grain', role: 'background', intensity: 0.6, tint: 'ink' },
+                {
+                  type: 'headline',
+                  text: 'The archive hums',
+                  dek: 'A shimmer of film grain over the paper — the quietest effect in the box.',
+                  align: 'center',
+                },
+              ],
             },
           ],
         },

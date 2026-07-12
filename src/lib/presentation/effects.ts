@@ -50,6 +50,30 @@ export const EFFECTS: Record<string, EffectDef> = {
     doc: 'a receding sea of dots swelling in slow waves toward the horizon — calm scale, undercurrents, what lies beneath',
     roles: ['background'],
   },
+  murmuration: {
+    label: 'Murmuration',
+    category: 'Particle fields',
+    doc: 'a flock of dark birds billowing and turning as one — collective behaviour, coordination, many acting together',
+    roles: ['background'],
+  },
+  rain: {
+    label: 'Ink rain',
+    category: 'Particle fields',
+    doc: 'slender ink rain falling with a little wind in it — patience, melancholy, weathering the storm',
+    roles: ['background'],
+  },
+  meteors: {
+    label: 'Meteors',
+    category: 'Particle fields',
+    doc: 'rare bright streaks arcing across a still field — moments of change, ideas arriving unannounced',
+    roles: ['background'],
+  },
+  phyllotaxis: {
+    label: 'Phyllotaxis',
+    category: 'Particle fields',
+    doc: 'a sunflower-spiral bloom of points slowly turning — natural order, growth from simple rules, compounding',
+    roles: ['background'],
+  },
   halftone: {
     label: 'Halftone screen',
     category: 'Print & type',
@@ -60,6 +84,24 @@ export const EFFECTS: Record<string, EffectDef> = {
     label: 'Loose type',
     category: 'Print & type',
     doc: 'oversized serif glyphs tumbling slowly like spilled type from a compositor tray — language, print, the craft of setting words',
+    roles: ['background'],
+  },
+  scribe: {
+    label: 'Scribe',
+    category: 'Print & type',
+    doc: 'a pen line wandering the page in unreadable longhand — drafting, thought in progress, the working note',
+    roles: ['background'],
+  },
+  ridgeline: {
+    label: 'Ridgeline',
+    category: 'Print & type',
+    doc: 'stacked ridgelines pulsing like a famous pressing of a pulsar chart — signal in the noise, data with a heartbeat',
+    roles: ['background'],
+  },
+  grain: {
+    label: 'Film grain',
+    category: 'Print & type',
+    doc: 'a faint shimmer of film grain across the paper — archival texture, memory; the quietest effect in the box',
     roles: ['background'],
   },
   heartbeat: {
@@ -96,6 +138,18 @@ export const EFFECTS: Record<string, EffectDef> = {
     label: 'Halftone dissolve',
     category: 'Wipes',
     doc: 'a granular halftone screen cascades across the page, dissolving it dot by dot — print-flavoured, between slats and melt in weight',
+    roles: ['transition'],
+  },
+  iris: {
+    label: 'Iris wipe',
+    category: 'Wipes',
+    doc: 'a clean cinema iris — ink closes over the page from the centre, then opens onto the next slide; formal, deliberate',
+    roles: ['transition'],
+  },
+  erode: {
+    label: 'Erode wipe',
+    category: 'Wipes',
+    doc: 'the page is eaten away from the edge, crumbling into specks as the front advances — decay, endings, weathering',
     roles: ['transition'],
   },
 };

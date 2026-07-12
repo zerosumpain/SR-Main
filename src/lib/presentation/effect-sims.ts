@@ -473,6 +473,411 @@ function letterpress({ THREE, scene, tint, intensity }: SimCtx): Sim {
   };
 }
 
+/* ------------------------------------------------------------ murmuration */
+
+function murmuration({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // Boids rendered as short dashes along their velocity — a starling flock
+  // billowing after a slowly wandering target so it never leaves the page.
+  const N = 110;
+  const px = new Float32Array(N);
+  const py = new Float32Array(N);
+  const vx = new Float32Array(N);
+  const vy = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    px[i] = (Math.random() - 0.5) * 10;
+    py[i] = (Math.random() - 0.5) * 6;
+    const a = Math.random() * Math.PI * 2;
+    vx[i] = Math.cos(a) * 2;
+    vy[i] = Math.sin(a) * 2;
+  }
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(N * 6);
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(tint),
+    transparent: true,
+    opacity: 0.4 + intensity * 0.35,
+    depthWrite: false,
+  });
+  scene.add(new THREE.LineSegments(geo, mat));
+  const attr = geo.getAttribute('position') as THREE_NS.BufferAttribute;
+
+  const SEP = 0.9;
+  const NEAR = 2.4;
+  return {
+    tick(now, dt) {
+      const t = now / 1000;
+      // wandering attractor keeps the flock on stage and shapes the billow
+      const tx = Math.sin(t * 0.21) * 7 + Math.sin(t * 0.083) * 3;
+      const ty = Math.cos(t * 0.17) * 4;
+      for (let i = 0; i < N; i++) {
+        let ax = 0;
+        let ay = 0;
+        let cx = 0;
+        let cy = 0;
+        let alx = 0;
+        let aly = 0;
+        let n = 0;
+        for (let j = 0; j < N; j++) {
+          if (j === i) continue;
+          const dx = px[j] - px[i];
+          const dy = py[j] - py[i];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < NEAR * NEAR) {
+            cx += px[j];
+            cy += py[j];
+            alx += vx[j];
+            aly += vy[j];
+            n++;
+            if (d2 < SEP * SEP && d2 > 0.0001) {
+              ax -= dx / d2;
+              ay -= dy / d2;
+            }
+          }
+        }
+        if (n) {
+          ax += (cx / n - px[i]) * 0.55 + (alx / n - vx[i]) * 0.9;
+          ay += (cy / n - py[i]) * 0.55 + (aly / n - vy[i]) * 0.9;
+        }
+        ax += (tx - px[i]) * 0.14;
+        ay += (ty - py[i]) * 0.14;
+        vx[i] += ax * dt * (0.8 + intensity);
+        vy[i] += ay * dt * (0.8 + intensity);
+        const sp = Math.hypot(vx[i], vy[i]) || 1;
+        const cl = Math.min(3.4, Math.max(1.6, sp));
+        vx[i] = (vx[i] / sp) * cl;
+        vy[i] = (vy[i] / sp) * cl;
+        px[i] += vx[i] * dt;
+        py[i] += vy[i] * dt;
+        const len = 0.13;
+        posArr[i * 6] = px[i];
+        posArr[i * 6 + 1] = py[i];
+        posArr[i * 6 + 3] = px[i] - (vx[i] / cl) * len * 2.2;
+        posArr[i * 6 + 4] = py[i] - (vy[i] / cl) * len * 2.2;
+      }
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------- rain */
+
+function rain({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // Slender streaks falling with a constant wind slant; faster = longer.
+  const N = 210;
+  const x = new Float32Array(N);
+  const y = new Float32Array(N);
+  const v = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    x[i] = (Math.random() - 0.5) * 30;
+    y[i] = (Math.random() - 0.5) * 18;
+    v[i] = 3 + Math.random() * 5;
+  }
+  const WIND = -0.16;
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(N * 6);
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(tint),
+    transparent: true,
+    opacity: 0.2 + intensity * 0.3,
+    depthWrite: false,
+  });
+  scene.add(new THREE.LineSegments(geo, mat));
+  const attr = geo.getAttribute('position') as THREE_NS.BufferAttribute;
+  return {
+    tick(_now, dt) {
+      const s = dt * (0.5 + intensity);
+      for (let i = 0; i < N; i++) {
+        y[i] -= v[i] * s;
+        x[i] += v[i] * WIND * s;
+        if (y[i] < -9) {
+          y[i] = 9;
+          x[i] = (Math.random() - 0.5) * 30;
+        }
+        const len = 0.09 * v[i];
+        posArr[i * 6] = x[i];
+        posArr[i * 6 + 1] = y[i];
+        posArr[i * 6 + 3] = x[i] - WIND * len;
+        posArr[i * 6 + 4] = y[i] + len;
+      }
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
+/* ---------------------------------------------------------------- meteors */
+
+function meteors({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // A few streaks arcing across a still field, each with a fading trail
+  // (vertex colors run tint → paper along the tail).
+  const M = 6;
+  const TRAIL = 16;
+  const paper = new THREE.Color('#ede4d4');
+  const head = new THREE.Color(tint);
+  const lines: { geo: THREE_NS.BufferGeometry; pts: Float32Array; life: number; wait: number; x: number; y: number; dx: number; dy: number; sp: number }[] = [];
+  const mats: THREE_NS.LineBasicMaterial[] = [];
+  for (let m = 0; m < M; m++) {
+    const geo = new THREE.BufferGeometry();
+    const pts = new Float32Array(TRAIL * 3);
+    geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    const cols = new Float32Array(TRAIL * 3);
+    for (let k = 0; k < TRAIL; k++) {
+      const c = paper.clone().lerp(head, k / (TRAIL - 1));
+      cols[k * 3] = c.r;
+      cols[k * 3 + 1] = c.g;
+      cols[k * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.45 + intensity * 0.35,
+      depthWrite: false,
+    });
+    mats.push(mat);
+    scene.add(new THREE.Line(geo, mat));
+    lines.push({ geo, pts, life: 0, wait: Math.random() * 3, x: 0, y: 0, dx: 0, dy: 0, sp: 0 });
+  }
+  const spawn = (l: (typeof lines)[number]) => {
+    const a = Math.PI * (1.05 + Math.random() * 0.35); // down-left-ish arcs
+    l.dx = Math.cos(a);
+    l.dy = Math.sin(a) * 0.6;
+    l.x = 6 + Math.random() * 8;
+    l.y = 3 + Math.random() * 6;
+    l.sp = 9 + Math.random() * 7;
+    l.life = 1;
+    for (let k = 0; k < TRAIL; k++) {
+      l.pts[k * 3] = l.x;
+      l.pts[k * 3 + 1] = l.y;
+    }
+  };
+  return {
+    tick(_now, dt) {
+      for (const l of lines) {
+        if (!l.life) {
+          l.wait -= dt;
+          if (l.wait <= 0) spawn(l);
+          continue;
+        }
+        l.x += l.dx * l.sp * dt * (0.6 + intensity);
+        l.y += l.dy * l.sp * dt * (0.6 + intensity);
+        // shift the trail down one slot, head at the end
+        l.pts.copyWithin(0, 3);
+        l.pts[(TRAIL - 1) * 3] = l.x;
+        l.pts[(TRAIL - 1) * 3 + 1] = l.y;
+        (l.geo.getAttribute('position') as THREE_NS.BufferAttribute).needsUpdate = true;
+        if (l.x < -16 || l.y < -10) {
+          l.life = 0;
+          l.wait = 1.5 + Math.random() * 4;
+        }
+      }
+    },
+    dispose() {
+      for (const l of lines) l.geo.dispose();
+      for (const m of mats) m.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------ phyllotaxis */
+
+function phyllotaxis({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // Sunflower-spiral bloom: points at the golden angle, slowly turning, each
+  // breathing in z so sizeAttenuation pulses them.
+  const N = 440;
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(N * 3);
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  const mat = new THREE.PointsMaterial({
+    color: new THREE.Color(tint),
+    size: 0.16,
+    transparent: true,
+    opacity: 0.35 + intensity * 0.35,
+    depthWrite: false,
+    sizeAttenuation: true,
+  });
+  scene.add(new THREE.Points(geo, mat));
+  const attr = geo.getAttribute('position') as THREE_NS.BufferAttribute;
+  return {
+    tick(now) {
+      const t = now / 1000;
+      const rot = t * 0.05 * (0.5 + intensity);
+      for (let i = 0; i < N; i++) {
+        const r = 0.36 * Math.sqrt(i);
+        const a = i * GOLDEN + rot;
+        attr.setXYZ(i, Math.cos(a) * r, Math.sin(a) * r * 0.94, Math.sin(t * 0.8 + r * 1.4) * 1.1);
+      }
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
+/* ----------------------------------------------------------------- scribe */
+
+function scribe({ THREE, scene, w, h, tint, intensity }: SimCtx): Sim {
+  // One pen line wandering the page: a ring of trailing points steered by
+  // layered sines, vertex colors fading paper → tint toward the nib.
+  const M = 300;
+  const pts = new Float32Array(M * 3);
+  const paper = new THREE.Color('#ede4d4');
+  const ink = new THREE.Color(tint);
+  const cols = new Float32Array(M * 3);
+  for (let k = 0; k < M; k++) {
+    const c = paper.clone().lerp(ink, Math.pow(k / (M - 1), 0.6));
+    cols[k * 3] = c.r;
+    cols[k * 3 + 1] = c.g;
+    cols[k * 3 + 2] = c.b;
+  }
+  let x = 0;
+  let y = 0;
+  let heading = 0;
+  for (let k = 0; k < M; k++) {
+    pts[k * 3] = x;
+    pts[k * 3 + 1] = y;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  const mat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5 + intensity * 0.3,
+    depthWrite: false,
+  });
+  scene.add(new THREE.Line(geo, mat));
+  const attr = geo.getAttribute('position') as THREE_NS.BufferAttribute;
+  const BX = ((w / h) * 8.2) || 11;
+  return {
+    tick(now, dt) {
+      const t = now / 1000;
+      // steer: layered sines wobble the heading; drift home when out of bounds
+      heading += (Math.sin(t * 1.7) * 0.9 + Math.sin(t * 0.43 + 2) * 1.3 + Math.sin(t * 3.1) * 0.35) * dt * 2.2;
+      if (Math.abs(x) > BX || Math.abs(y) > 7) {
+        const home = Math.atan2(-y, -x);
+        let d = home - heading;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        heading += d * dt * 3;
+      }
+      const sp = 3.4 * (0.5 + intensity);
+      x += Math.cos(heading) * sp * dt;
+      y += Math.sin(heading) * sp * dt * 0.8;
+      pts.copyWithin(0, 3);
+      pts[(M - 1) * 3] = x;
+      pts[(M - 1) * 3 + 1] = y;
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
+/* -------------------------------------------------------------- ridgeline */
+
+function ridgeline({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // Stacked horizon lines, each displaced by travelling waves under a centre
+  // envelope — the pulsar-chart print.
+  const ROWS = 16;
+  const COLS = 96;
+  const geos: THREE_NS.BufferGeometry[] = [];
+  const mat = new THREE.LineBasicMaterial({
+    color: new THREE.Color(tint),
+    transparent: true,
+    opacity: 0.3 + intensity * 0.3,
+    depthWrite: false,
+  });
+  const phases: number[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(COLS * 3);
+    for (let c = 0; c < COLS; c++) arr[c * 3] = ((c / (COLS - 1)) - 0.5) * 22;
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    geos.push(geo);
+    phases.push(Math.random() * 10);
+    scene.add(new THREE.Line(geo, mat));
+  }
+  return {
+    tick(now) {
+      const t = (now / 1000) * (0.5 + intensity * 0.6);
+      for (let r = 0; r < ROWS; r++) {
+        const attr = geos[r].getAttribute('position') as THREE_NS.BufferAttribute;
+        const baseY = ((r / (ROWS - 1)) - 0.5) * 11;
+        const ph = phases[r];
+        for (let c = 0; c < COLS; c++) {
+          const nx = ((c / (COLS - 1)) - 0.5) * 2; // -1..1
+          const env = Math.exp(-nx * nx * 3.2);
+          const wave =
+            Math.sin(nx * 6 + t * 1.4 + ph) * 0.5 +
+            Math.sin(nx * 13 - t * 0.9 + ph * 2) * 0.3 +
+            Math.sin(nx * 23 + t * 2.2 + ph * 3) * 0.14;
+          attr.setY(c, baseY + env * wave * 1.5);
+        }
+        attr.needsUpdate = true;
+      }
+    },
+    dispose() {
+      for (const g of geos) g.dispose();
+      mat.dispose();
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ grain */
+
+function grain({ THREE, scene, tint, intensity }: SimCtx): Sim {
+  // Film grain: a field of specks, a slice of which re-scatters every frame.
+  const N = 850;
+  const geo = new THREE.BufferGeometry();
+  const posArr = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    posArr[i * 3] = (Math.random() - 0.5) * 26;
+    posArr[i * 3 + 1] = (Math.random() - 0.5) * 16;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+  const mat = new THREE.PointsMaterial({
+    color: new THREE.Color(tint),
+    size: 0.055,
+    transparent: true,
+    opacity: 0.1 + intensity * 0.16,
+    depthWrite: false,
+  });
+  scene.add(new THREE.Points(geo, mat));
+  const attr = geo.getAttribute('position') as THREE_NS.BufferAttribute;
+  let cursor = 0;
+  return {
+    tick() {
+      const churn = Math.round(N * 0.12);
+      for (let k = 0; k < churn; k++) {
+        const i = (cursor + k) % N;
+        posArr[i * 3] = (Math.random() - 0.5) * 26;
+        posArr[i * 3 + 1] = (Math.random() - 0.5) * 16;
+      }
+      cursor = (cursor + churn) % N;
+      attr.needsUpdate = true;
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
 export const SIM_BUILDERS: Record<string, Builder> = {
   drift,
   starfield,
@@ -480,6 +885,13 @@ export const SIM_BUILDERS: Record<string, Builder> = {
   currents,
   orbits,
   sea,
+  murmuration,
+  rain,
+  meteors,
+  phyllotaxis,
   halftone,
   letterpress,
+  scribe,
+  ridgeline,
+  grain,
 };

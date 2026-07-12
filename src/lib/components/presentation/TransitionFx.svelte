@@ -60,7 +60,9 @@
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / wipe.duration);
+      // rAF timestamps can precede the performance.now() taken at mount —
+      // clamp both ends or the first frame renders with a negative t.
+      const t = Math.min(1, Math.max(0, (now - start) / wipe.duration));
       ctx.clearRect(0, 0, w, h);
       wipe.render(ctx, t, now);
       if (t < 1) raf = requestAnimationFrame(tick);

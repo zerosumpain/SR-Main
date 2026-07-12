@@ -282,6 +282,97 @@ function dissolve({ w, h, dpr, travel, intensity, color }: WipeCtx): Wipe {
   };
 }
 
+/* ------------------------------------------------------------------- iris */
+
+function iris({ w, h, color }: WipeCtx): Wipe {
+  // Clean cinema iris: ink closes over the page from the centre, then opens
+  // onto the next slide. Cover 0→0.48, hold, reveal 0.55→1.
+  const cx = w / 2;
+  const cy = h / 2;
+  const rmax = Math.hypot(w, h) / 2 + 4;
+  return {
+    duration: 1000,
+    render(ctx, t) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = color;
+      if (t < 0.48) {
+        const grow = 1 - Math.pow(1 - t / 0.48, 2.4); // ease-out close
+        ctx.beginPath();
+        ctx.arc(cx, cy, rmax * grow, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(0, 0, w, h);
+        if (t > 0.55) {
+          const open = Math.pow((t - 0.55) / 0.45, 1.8); // ease-in open
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          ctx.arc(cx, cy, rmax * open, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+    },
+  };
+}
+
+/* ------------------------------------------------------------------ erode */
+
+function erode({ w, h, dpr, travel, intensity, color }: WipeCtx): Wipe {
+  // The page is eaten from the edge: a jagged front advances (per-column
+  // noise), specks crumbling in a band ahead of it; a second jagged front
+  // follows and clears. Sweeps the way the outgoing content leaves.
+  const vertical = travel === 'up' || travel === 'down';
+  const reverse = travel === 'right' || travel === 'down';
+  const span = vertical ? h : w;
+  const across = vertical ? w : h;
+  const COL = 10 * dpr;
+  const cols = Math.ceil(across / COL);
+  const jag = new Float32Array(cols);
+  const jag2 = new Float32Array(cols);
+  for (let i = 0; i < cols; i++) {
+    jag[i] = Math.random();
+    jag2[i] = Math.random();
+  }
+  const JAG = 70 * dpr;
+  const speckCount = Math.round(160 + intensity * 160);
+  const specks = Array.from({ length: speckCount }, () => ({
+    a: Math.random(), // position across
+    lead: Math.random() * 120 * dpr, // distance ahead of the front
+    r: (0.6 + Math.random() * 1.6) * dpr,
+  }));
+  const rect = (ctx: CanvasRenderingContext2D, a0: number, f0: number, f1: number) => {
+    // fill from f0 to f1 along the span at across-position a0 (one column)
+    const lo = Math.min(f0, f1);
+    const hi = Math.max(f0, f1);
+    if (vertical) ctx.fillRect(a0, reverse ? span - hi : lo, COL + 1, hi - lo);
+    else ctx.fillRect(reverse ? span - hi : lo, a0, hi - lo, COL + 1);
+  };
+  return {
+    duration: 950,
+    render(ctx, t) {
+      ctx.globalAlpha = 0.94;
+      ctx.fillStyle = color;
+      const lead = t * (span + JAG) * 1.35; // eating front
+      const trail = Math.max(0, (t - 0.42) * (span + JAG) * 1.75); // clearing front
+      for (let i = 0; i < cols; i++) {
+        const f0 = Math.min(span, Math.max(0, trail - jag2[i] * JAG));
+        const f1 = Math.min(span, Math.max(0, lead - jag[i] * JAG));
+        if (f1 > f0) rect(ctx, i * COL, f0, f1);
+      }
+      // crumbs ahead of the eating front
+      for (const s of specks) {
+        const pos = lead - jag[Math.floor(s.a * (cols - 1))] * JAG + s.lead;
+        if (pos < 0 || pos > span) continue;
+        const ax = s.a * across;
+        ctx.beginPath();
+        if (vertical) ctx.arc(ax, reverse ? span - pos : pos, s.r, 0, Math.PI * 2);
+        else ctx.arc(reverse ? span - pos : pos, ax, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    },
+  };
+}
+
 const WIPES: Record<string, (ctx: WipeCtx) => Wipe> = {
   sweep,
   melt,
@@ -289,6 +380,8 @@ const WIPES: Record<string, (ctx: WipeCtx) => Wipe> = {
   inkbleed,
   slats,
   dissolve,
+  iris,
+  erode,
 };
 
 export function createWipe(mode: string, ctx: WipeCtx): Wipe {

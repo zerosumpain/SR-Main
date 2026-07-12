@@ -10,7 +10,7 @@
   import { validateBlocks } from '$lib/presentation/registry';
   import { BLOCK_TEMPLATES, CHART_TEMPLATES } from '$lib/presentation/templates';
   import { PROSE_STYLES, QUOTE_STYLES } from '$lib/presentation/styles';
-  import type { Block, SlideNode } from '$lib/presentation/types';
+  import type { Block, BlockType, SlideNode } from '$lib/presentation/types';
   import BlockForm from './BlockForm.svelte';
   import SiteMediaPicker from './SiteMediaPicker.svelte';
   import { EDITABLE_FIELDS, htmlToMarkdownLite } from './canvas-text';
@@ -396,12 +396,28 @@
     }
   }
 
-  // The add-block menu: every block type, with chart expanded per kind.
-  const TEMPLATE_OPTIONS: { key: string; label: string; block: Block }[] = [
-    ...Object.entries(BLOCK_TEMPLATES)
-      .filter(([t]) => t !== 'chart')
-      .map(([t, b]) => ({ key: t, label: t, block: b })),
-    ...Object.entries(CHART_TEMPLATES).map(([k, b]) => ({ key: `chart:${k}`, label: `chart · ${k}`, block: b })),
+  // The add-block menu, grouped by what the block does: chart expanded per
+  // kind, atmosphere seeded per effect category.
+  const tpl = (t: BlockType) => ({ key: t, label: t, block: BLOCK_TEMPLATES[t] });
+  const TEMPLATE_GROUPS: { label: string; items: { key: string; label: string; block: Block }[] }[] = [
+    { label: 'TEXT', items: (['masthead', 'headline', 'prose', 'quote'] as BlockType[]).map(tpl) },
+    {
+      label: 'DATA',
+      items: [
+        ...(['bigNumber', 'statRow', 'timeline'] as BlockType[]).map(tpl),
+        ...Object.entries(CHART_TEMPLATES).map(([k, b]) => ({ key: `chart:${k}`, label: `chart · ${k}`, block: b as Block })),
+      ],
+    },
+    { label: 'MEDIA', items: (['image', 'iframe', 'embed'] as BlockType[]).map(tpl) },
+    {
+      label: 'ATMOSPHERE',
+      items: [
+        { key: 'fx:particles', label: 'particle field', block: { type: 'effect', effect: 'drift', role: 'background', intensity: 0.5, tint: 'ink' } as Block },
+        { key: 'fx:print', label: 'print & type', block: { type: 'effect', effect: 'halftone', role: 'background', intensity: 0.5, tint: 'ink' } as Block },
+        { key: 'fx:live', label: 'live data', block: { type: 'effect', effect: 'heartbeat', role: 'background', intensity: 0.5, tint: 'accent' } as Block },
+        { key: 'fx:wipe', label: 'wipe on arrival', block: { type: 'effect', effect: 'slats', role: 'transition', intensity: 0.5, tint: 'ink' } as Block },
+      ],
+    },
   ];
 
   function blockLabel(b: Block): string {
@@ -885,10 +901,15 @@
           <button class="add-fab" title="Add a block" onclick={() => (addMenu = !addMenu)}>＋</button>
           {#if addMenu}
             <div class="add-menu">
-              {#each TEMPLATE_OPTIONS as o (o.key)}
-                <button onclick={() => addBlockFromMenu(o.block)}>{o.label}</button>
+              {#each TEMPLATE_GROUPS as g (g.label)}
+                <span class="add-cat">{g.label}</span>
+                {#each g.items as o (o.key)}
+                  <button onclick={() => addBlockFromMenu(o.block)}>{o.label}</button>
+                {/each}
+                {#if g.label === 'MEDIA'}
+                  <button class="site-entry" onclick={() => { addMenu = false; picker = 'block'; }}>◈ site media…</button>
+                {/if}
               {/each}
-              <button class="site-entry" onclick={() => { addMenu = false; picker = 'block'; }}>◈ site media…</button>
             </div>
           {/if}
         </div>
@@ -1304,7 +1325,19 @@
     cursor: pointer;
   }
   .add-menu button:hover { color: var(--accent); border-color: var(--accent); }
-  .add-menu .site-entry { grid-column: 1 / -1; color: var(--accent-ink); border-top: 1px solid var(--card-border); border-radius: 0; margin-top: 2px; padding-top: 8px; }
+  .add-cat {
+    grid-column: 1 / -1;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--text-ghost, var(--text-muted));
+    border-bottom: 1px solid var(--card-border);
+    padding: 7px 8px 3px;
+    margin-bottom: 2px;
+  }
+  .add-cat:first-child { padding-top: 2px; }
+  .add-menu .site-entry { grid-column: 1 / -1; color: var(--accent-ink); }
   .preview-theme {
     --paper: var(--bg);
     --paper-deep: var(--surface-elevated);
