@@ -26,8 +26,16 @@
   const ye = $derived(extent(allY, 0.08, zeroBased));
   const sx = $derived(linScale([xe.lo, xe.hi], [PAD.l, W - PAD.r]));
   const sy = $derived(linScale([ye.lo, ye.hi], [H - PAD.b, PAD.t]));
-  const xTicks = $derived(niceTicks(xe.lo, xe.hi, 5));
-  const yTicks = $derived(niceTicks(ye.lo, ye.hi, 4));
+  // Integer domains keep integer ticks — fractional ticks at 0dp would print
+  // as duplicates ("2 2 3 3").
+  const xTicks = $derived.by(() => {
+    const t = niceTicks(xe.lo, xe.hi, 5);
+    return allX.every(Number.isInteger) ? t.filter(Number.isInteger) : t;
+  });
+  const yTicks = $derived.by(() => {
+    const t = niceTicks(ye.lo, ye.hi, 4);
+    return allY.every(Number.isInteger) ? t.filter(Number.isInteger) : t;
+  });
 
   // Bar geometry: group per x value, one bar per series within the group.
   const xValues = $derived([...new Set(allX)].sort((a, b) => a - b));

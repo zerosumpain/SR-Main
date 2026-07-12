@@ -28,11 +28,11 @@ export const LAYOUTS = {
   },
   'statement-left': {
     label: 'Statement (left)',
-    doc: 'ONE bold element (usually a headline) ragged-left against a wall of whitespace on the right — the classic editorial statement page. The default choice for an assertive fact or claim.',
+    doc: 'ONE bold element — a headline, bigNumber or short quote — filling the LEFT HALF of the page (edge to middle), whitespace right. The default for an assertive fact or claim. NEVER a masthead/title slide (those take center).',
   },
   'statement-right': {
     label: 'Statement (right)',
-    doc: 'Mirror of statement-left — the statement pinned right, whitespace left. Use for counterpoints and to break rhythm after a statement-left.',
+    doc: 'Mirror of statement-left — the statement fills the right half, whitespace left. Use for counterpoints and to break rhythm after a statement-left. Same rule: never a masthead.',
   },
   split: {
     label: 'Split',

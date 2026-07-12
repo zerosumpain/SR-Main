@@ -136,6 +136,8 @@ export interface SlideNode {
   layout: SlideLayout;
   blocks: Block[];
   hasChildren: boolean;
+  /** Names the journey into this slide's children (the pill text). */
+  journeyLabel: string | null;
 }
 
 export interface DeckMeta {

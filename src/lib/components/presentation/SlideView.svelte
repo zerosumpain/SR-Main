@@ -135,22 +135,37 @@
   .slide[data-layout='statement-right'] :global(.hl-text) { font-size: clamp(44px, 8vw, 104px); }
 
   /* aligned statements: the element pinned against a wall of whitespace.
-     Editorial rule — space signals importance more reliably than size. */
+     Editorial rule — space signals importance more reliably than size. The
+     content column stretches from its edge to the middle of the page (a hair
+     past, so the rag breathes into the empty half); block-level max-widths
+     are lifted so the column, not the block, sets the measure. */
   .slide[data-layout='statement-left'] {
     align-items: flex-start;
     text-align: left;
-    padding-right: clamp(48px, 26vw, 30vw);
+    padding-right: max(48px, 44%);
   }
   .slide[data-layout='statement-right'] {
     align-items: flex-end;
     text-align: right;
-    padding-left: clamp(48px, 26vw, 30vw);
+    padding-left: max(48px, 44%);
   }
   .slide[data-layout='statement-left'] .block { align-items: flex-start; }
   .slide[data-layout='statement-right'] .block { align-items: flex-end; }
+  .slide[data-layout='statement-left'] :global(.hl),
+  .slide[data-layout='statement-right'] :global(.hl) { max-width: none; width: 100%; }
+  .slide[data-layout='statement-left'] :global(.hl-dek),
+  .slide[data-layout='statement-right'] :global(.hl-dek) { max-width: none; }
+  .slide[data-layout='statement-left'] :global(.q),
+  .slide[data-layout='statement-right'] :global(.q) { max-width: none; }
+  .slide[data-layout='statement-left'] :global(.prose),
+  .slide[data-layout='statement-right'] :global(.prose) { max-width: none; }
   .slide[data-layout='statement-right'] :global(.hl[data-align='left']) { align-items: flex-end; text-align: right; }
   .slide[data-layout='statement-right'] :global(.q) { padding: 6px clamp(18px, 2.5vw, 30px) 6px 0; }
   .slide[data-layout='statement-right'] :global(.q-rail) { left: auto; right: 0; }
+  @media (max-width: 860px) {
+    .slide[data-layout='statement-left'] { padding-right: clamp(24px, 12vw, 90px); }
+    .slide[data-layout='statement-right'] { padding-left: clamp(24px, 12vw, 90px); }
+  }
 
   .slide[data-layout='full-bleed'] {
     padding: clamp(10px, 2vw, 24px);

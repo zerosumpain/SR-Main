@@ -1,22 +1,34 @@
 <script lang="ts">
-  // The deck player. Linear ←/→ walks the current plane; Enter dives into a
-  // slide's sub-deck; Escape rises back out; the end of a sub-deck spills to
-  // the parent's next slide. All camera moves in transitions.ts. Runes only;
-  // timer/pointer internals are plain lets (svelte5-pitfalls rule 1).
+  // The deck player. The deck is a 2D field: the main pathway runs left→right;
+  // a slide with children advertises a side journey with a floating pill
+  // (down off the main path, right off a vertical journey — planes alternate
+  // axis by depth). Arrows walk the current plane; the free axis enters the
+  // journey; ↑/← past the first slide (or Escape) climbs back the way you
+  // came. The nav map (bottom left) shows the whole active path and jumps.
+  // Runes only; timer/pointer internals are plain lets (svelte5-pitfalls §1).
   import { onMount } from 'svelte';
   import { replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import DeckShell from '$lib/components/presentation/DeckShell.svelte';
-  import MiniSlide from '$lib/components/presentation/MiniSlide.svelte';
   import SlideView from '$lib/components/presentation/SlideView.svelte';
-  import { breadcrumb, nextSlide, prevSlide, zoomIn as navZoomIn } from '$lib/presentation/navigation';
-  import { slideIn, slideOut, type MoveKind, type ZoomAnchor } from '$lib/presentation/transitions';
+  import {
+    branchTravel,
+    buildPlanes,
+    exitBranch,
+    jumpTravel,
+    pathTo,
+    planeAxis,
+    resolveArrow,
+    type ArrowKey,
+    type Travel,
+  } from '$lib/presentation/navigation';
+  import { slideIn, slideOut } from '$lib/presentation/transitions';
 
   let { data } = $props();
 
   let current = $state(data.startId);
-  let moveKind = $state<MoveKind>('next');
-  let zoomAnchor = $state<ZoomAnchor | null>(null);
+  let travel = $state<Travel>('right');
+  let major = $state(false);
   let chromeVisible = $state(true);
 
   // non-reactive internals
@@ -24,35 +36,46 @@
   let touchX = 0;
   let touchY = 0;
   let shell: HTMLElement | undefined = $state();
-  let miniEl: HTMLElement | undefined;
-  // Remembers where each parent's mini-slide card sat, so rising back out of a
-  // sub-deck can shrink the slide into the same spot.
-  const anchorByParent = new Map<string, ZoomAnchor>();
 
   const byId = $derived(new Map(data.slides.map((s) => [s.id, s])));
   const slide = $derived(byId.get(current) ?? data.slides[0]);
-  const chain = $derived(breadcrumb(data.slides, current));
+  const planes = $derived(buildPlanes(data.slides));
+  const chain = $derived(pathTo(data.slides, current));
   const depth = $derived(chain.length - 1);
-  const plane = $derived(
-    data.slides
-      .filter((s) => s.parentSlideId === (slide?.parentSlideId ?? null))
-      .sort((a, b) => a.position - b.position),
-  );
-  const planeIdx = $derived(plane.findIndex((s) => s.id === current));
-  const children = $derived(
-    data.slides.filter((s) => s.parentSlideId === current).sort((a, b) => a.position - b.position),
-  );
+  const axis = $derived(planeAxis(depth));
+  const plane = $derived(planes.get(slide?.parentSlideId ?? null) ?? []);
+  const planeIdx = $derived(plane.indexOf(current));
+  const children = $derived(planes.get(current) ?? []);
   const childCount = $derived(children.length);
-  const firstChild = $derived(children[0] ?? null);
-  const parentTitle = $derived(
-    depth > 0 ? (byId.get(chain[chain.length - 2])?.title ?? 'overview') : null,
+  const pillTravel = $derived(branchTravel(depth));
+  const pillLabel = $derived(
+    slide?.journeyLabel ?? byId.get(children[0] ?? '')?.title ?? `${childCount} more`,
   );
   // Slides hosting an interactive (sim orbit-drags, iframes) keep the pointer
   // to themselves: no swipe nav, no invisible edge click-zones.
   const hasInteractive = $derived(slide.blocks.some((b) => b.type === 'embed' || b.type === 'iframe'));
 
-  function goTo(id: string, kind: MoveKind) {
-    moveKind = kind;
+  // Nav-map strips along the active path: the root row, then one strip per
+  // branch level, each anchored at its parent's index in the strip above.
+  const mapStrips = $derived.by(() => {
+    const strips: { ids: string[]; axis: 'h' | 'v'; anchorIdx: number }[] = [
+      { ids: planes.get(null) ?? [], axis: 'h', anchorIdx: 0 },
+    ];
+    for (let d = 0; d < Math.min(depth, 2); d++) {
+      const parentId = chain[d];
+      const parentStrip = strips[d];
+      strips.push({
+        ids: planes.get(parentId) ?? [],
+        axis: planeAxis(d + 1),
+        anchorIdx: Math.max(0, parentStrip.ids.indexOf(parentId)),
+      });
+    }
+    return strips;
+  });
+
+  function goTo(id: string, t: Travel, isMajor: boolean) {
+    travel = t;
+    major = isMajor;
     current = id;
     const url = new URL(page.url);
     url.searchParams.set('s', id);
@@ -60,46 +83,23 @@
     wakeChrome();
   }
 
-  /** Where the mini-slide card sits right now (also memoised for the rise). */
-  function captureAnchor(): ZoomAnchor | null {
-    if (!miniEl) return null;
-    const r = miniEl.getBoundingClientRect();
-    const anchor: ZoomAnchor = {
-      cx: r.left + r.width / 2,
-      cy: r.top + r.height / 2,
-      w: r.width,
-      vw: window.innerWidth,
-      vh: window.innerHeight,
-    };
-    anchorByParent.set(current, anchor);
-    return anchor;
+  function arrow(key: ArrowKey) {
+    const mv = resolveArrow(data.slides, current, key);
+    if (!mv) return;
+    const depthChanged = pathTo(data.slides, mv.id).length !== chain.length;
+    goTo(mv.id, mv.travel, depthChanged);
   }
 
-  function next() {
-    const mv = nextSlide(data.slides, current);
+  function exit() {
+    const mv = exitBranch(data.slides, current);
     if (!mv) return;
-    // Spilling out of a sub-deck lands on the parent's NEXT sibling — no card
-    // to anchor to there, so use the centered zoom-out.
-    zoomAnchor = null;
-    goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'next');
+    goTo(mv.id, mv.travel, true);
   }
-  function prev() {
-    const mv = prevSlide(data.slides, current);
-    if (!mv) return;
-    zoomAnchor = mv.move === 'zoomOut' ? (anchorByParent.get(mv.id) ?? null) : null;
-    goTo(mv.id, mv.move === 'zoomOut' ? 'zoomOut' : 'prev');
-  }
-  function dive() {
-    const child = navZoomIn(data.slides, current);
-    if (!child) return;
-    zoomAnchor = captureAnchor();
-    goTo(child, 'zoomIn');
-  }
-  function rise() {
-    if (depth === 0) return;
-    const parent = chain[chain.length - 2];
-    zoomAnchor = anchorByParent.get(parent) ?? null;
-    goTo(parent, 'zoomOut');
+
+  function jump(id: string) {
+    if (id === current) return;
+    const isMajor = pathTo(data.slides, id).length !== chain.length;
+    goTo(id, jumpTravel(data.slides, current, id), isMajor);
   }
 
   function toggleFullscreen() {
@@ -113,26 +113,39 @@
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     switch (e.key) {
       case 'ArrowRight':
+        e.preventDefault();
+        arrow('right');
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        arrow('left');
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        arrow('down');
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        arrow('up');
+        break;
       case ' ':
       case 'PageDown':
         e.preventDefault();
-        next();
+        arrow(axis === 'h' ? 'right' : 'down');
         break;
-      case 'ArrowLeft':
       case 'PageUp':
         e.preventDefault();
-        prev();
+        arrow(axis === 'h' ? 'left' : 'up');
         break;
       case 'Enter':
-      case 'ArrowDown':
         if (childCount > 0) {
           e.preventDefault();
-          dive();
+          arrow(pillTravel);
         }
         break;
       case 'Escape':
-        // let the browser consume Escape for real fullscreen; otherwise rise
-        if (!document.fullscreenElement) rise();
+        // let the browser consume Escape for real fullscreen; otherwise exit
+        if (!document.fullscreenElement) exit();
         break;
       case 'f':
         toggleFullscreen();
@@ -151,8 +164,9 @@
     const dx = e.clientX - touchX;
     const dy = e.clientY - touchY;
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      if (dx < 0) next();
-      else prev();
+      arrow(dx < 0 ? 'right' : 'left');
+    } else if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+      arrow(dy < 0 ? 'down' : 'up');
     }
   }
 
@@ -189,11 +203,7 @@
     >
       <div class="stage-wrap">
         {#key current}
-          <div
-            class="stage"
-            in:slideIn={{ move: moveKind, anchor: zoomAnchor }}
-            out:slideOut={{ move: moveKind, anchor: zoomAnchor }}
-          >
+          <div class="stage" in:slideIn={{ travel, major }} out:slideOut={{ travel, major }}>
             <SlideView {slide} />
           </div>
         {/key}
@@ -201,33 +211,55 @@
 
       <header class="chrome chrome-top" class:hidden={!chromeVisible}>
         <span class="deck-title">{data.deck.title}</span>
-        {#if depth > 0}
-          <button class="crumb" onclick={rise} title="Back up (Esc)">↩ {parentTitle}</button>
-        {/if}
       </header>
 
-      <footer class="chrome chrome-bottom" class:hidden={!chromeVisible}>
-        <span class="hint">← → move · {childCount > 0 ? '↵ dive · ' : ''}{depth > 0 ? 'esc rise · ' : ''}f fullscreen</span>
-        <span class="progress">
-          {#if depth > 0}<span class="depth">{'·'.repeat(depth)} </span>{/if}
-          {String(planeIdx + 1).padStart(2, '0')} / {String(plane.length).padStart(2, '0')}
-        </span>
-      </footer>
-
-      {#if firstChild}
+      {#if childCount > 0}
         {#key current}
-          <button class="mini-door" bind:this={miniEl} onclick={dive} title="Dive in (Enter)">
-            <MiniSlide slide={firstChild} />
-            <span class="md-label">
-              <span class="md-count">↵ dive — {childCount} slide{childCount === 1 ? '' : 's'} inside</span>
-            </span>
+          <button class="pill" class:right={pillTravel === 'right'} onclick={() => arrow(pillTravel)}>
+            <span class="pill-arrow">{pillTravel === 'down' ? '↓' : '→'}</span>
+            {pillTravel === 'down' ? 'down' : 'right'} for {pillLabel}
           </button>
         {/key}
       {/if}
 
+      <nav class="navmap" class:hidden={!chromeVisible && depth === 0} aria-label="Deck map">
+        {#each mapStrips as strip, si (si)}
+          <div
+            class="nm-strip"
+            class:vert={strip.axis === 'v'}
+            style:margin-left={si > 0 && mapStrips[si - 1].axis === 'h' ? `${strip.anchorIdx * 14}px` : si > 0 ? '14px' : '0'}
+            style:margin-top={si > 0 && mapStrips[si - 1].axis === 'v' ? `${strip.anchorIdx * 14}px` : '0'}
+          >
+            {#each strip.ids as id (id)}
+              <button
+                class="nm-dot"
+                class:here={id === current}
+                class:onpath={chain.includes(id) && id !== current}
+                title={byId.get(id)?.title ?? ''}
+                aria-label={byId.get(id)?.title ?? 'slide'}
+                onclick={() => jump(id)}
+              ></button>
+            {/each}
+          </div>
+        {/each}
+        {#if depth > 0}
+          <button class="nm-return" onclick={exit}>↩ back</button>
+        {/if}
+      </nav>
+
+      <footer class="chrome chrome-bottom" class:hidden={!chromeVisible}>
+        <span class="hint">
+          {axis === 'h' ? '← → move' : '↑ ↓ move'} ·
+          {childCount > 0 ? `${pillTravel === 'down' ? '↓' : '→'} side story · ` : ''}{depth > 0 ? 'esc back · ' : ''}f fullscreen
+        </span>
+        <span class="progress">
+          {String(planeIdx + 1).padStart(2, '0')} / {String(plane.length).padStart(2, '0')}
+        </span>
+      </footer>
+
       {#if !hasInteractive}
-        <button class="zone zone-left" aria-label="Previous slide" onclick={prev}></button>
-        <button class="zone zone-right" aria-label="Next slide" onclick={next}></button>
+        <button class="zone zone-left" aria-label="Previous slide" onclick={() => arrow('left')}></button>
+        <button class="zone zone-right" aria-label="Next slide" onclick={() => arrow('right')}></button>
       {/if}
     </div>
   </DeckShell>
@@ -277,19 +309,92 @@
     text-transform: uppercase;
     color: var(--ink-soft);
   }
-  .crumb {
+
+  /* The journey pill — the invitation into a side story. Always visible. */
+  .pill {
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: clamp(44px, 7vh, 64px);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.1em;
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--paper);
+    background: var(--accent-ink);
+    border: none;
+    border-radius: var(--radius-pill);
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  .pill:hover { transform: translateX(-50%) scale(1.05); }
+  .pill.right {
+    left: auto;
+    right: clamp(16px, 3vw, 40px);
+    transform: none;
+  }
+  .pill.right:hover { transform: scale(1.05); }
+  .pill-arrow { font-size: 13px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .pill-arrow { animation: pill-nudge 2.2s ease-in-out infinite; }
+  }
+  @keyframes pill-nudge {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(3px); }
+  }
+  .pill.right .pill-arrow { animation-name: pill-nudge-x; }
+  @keyframes pill-nudge-x {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(3px); }
+  }
+
+  /* Nav map — where you are in the 2D field, and the way back. */
+  .navmap {
+    position: absolute;
+    z-index: 11;
+    left: 20px;
+    bottom: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    transition: opacity 0.5s ease;
+  }
+  .navmap.hidden { opacity: 0; pointer-events: none; }
+  .nm-strip { display: flex; gap: 6px; }
+  .nm-strip.vert { flex-direction: column; }
+  .nm-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--ink-soft);
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .nm-dot:hover { transform: scale(1.35); border-color: var(--accent); }
+  .nm-dot.here { background: var(--accent); border-color: var(--accent); }
+  .nm-dot.onpath { border-color: var(--accent-ink); background: var(--accent-ink-tint-35); }
+  .nm-return {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent-ink);
     background: var(--accent-ink-tint-12);
     border: none;
     border-radius: var(--radius-pill);
-    padding: 5px 12px;
+    padding: 4px 10px;
     cursor: pointer;
+    margin-top: 2px;
   }
-  .crumb:hover { background: var(--accent-ink-tint-35); }
+  .nm-return:hover { background: var(--accent-ink-tint-35); }
 
   .chrome-bottom {
     bottom: 0;
@@ -297,7 +402,8 @@
     right: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
+    gap: 24px;
     padding: 12px 20px;
   }
   .hint,
@@ -307,47 +413,6 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink-soft);
-  }
-  .depth { color: var(--accent-ink); letter-spacing: 0.3em; }
-
-  .mini-door {
-    position: absolute;
-    z-index: 12;
-    right: clamp(14px, 3vw, 40px);
-    bottom: clamp(48px, 8vh, 72px);
-    width: clamp(200px, 24vw, 340px);
-    padding: 0;
-    background: var(--paper);
-    border: 2px solid var(--accent-ink);
-    border-radius: var(--radius-round);
-    overflow: hidden;
-    cursor: pointer;
-    transition: transform 0.25s ease, border-color 0.25s ease;
-  }
-  .mini-door:hover { transform: scale(1.04); border-color: var(--accent-ink-hover); }
-  .mini-door:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .md-label {
-    display: block;
-    background: var(--accent-ink);
-    padding: 7px 10px;
-    text-align: center;
-  }
-  .md-count {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--paper);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .mini-door { animation: door-breathe 2.6s ease-in-out infinite; }
-  }
-  @keyframes door-breathe {
-    0%, 100% { border-color: var(--accent-ink); }
-    50% { border-color: var(--accent); }
-  }
-  @media (max-width: 760px) {
-    .mini-door { width: 46vw; bottom: 58px; }
   }
 
   .zone {
@@ -367,5 +432,6 @@
   @media (max-width: 760px) {
     .hint { display: none; }
     .zone { width: 18%; }
+    .pill { bottom: 58px; }
   }
 </style>

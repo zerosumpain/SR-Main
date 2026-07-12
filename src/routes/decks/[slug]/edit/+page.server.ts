@@ -41,6 +41,7 @@ export const load: PageServerLoad = async (event) => {
       layout: r.layout as SlideLayout,
       blocks: r.blocks as Block[],
       notes: r.notes,
+      journeyLabel: r.journeyLabel,
       version: r.version,
     })),
   };

@@ -37,6 +37,7 @@ function systemPrompt(ctx: ComposeContext): string {
     'Editorial craft (non-negotiable):',
     '- Whitespace is the loudest signal of importance. Fewer, bigger elements: 1–3 blocks. Never fill the page.',
     '- An assertive fact or claim = a headline block (kicker → ≤12-word statement, sentence case, no full stop → optional one-line dek) on a statement-left or statement-right layout. Ragged, aligned display type beats centered text — reserve centered `statement` for openings and codas.',
+    '- Format rules by block: masthead (title/section-opener) slides take `center` — NEVER statement-left/right. An aligned statement page carries exactly ONE dominant element (headline, bigNumber or short quote), nothing else.',
     '- quote is for REAL quotations and aphorisms only, ≤140 characters. A paragraph is prose (lede: true for the opening); a claim is a headline. NEVER pour long text into a quote.',
     '- A number worth feeling goes in bigNumber. Several figures go in statRow.',
     '- Charts: trend→line/area, comparison→bar, before/after→slope, share-of-whole→donut, correlation→scatter, flow/allocation→sankey.',
@@ -100,6 +101,10 @@ function applyEditorialGuardrails(slide: ComposedSlide, ctx: ComposeContext): Co
   });
   if (layout === 'statement' && blocks.some((b) => b.type === 'headline')) {
     layout = pickStatementLayout(ctx.recentLayouts);
+  }
+  // Title slides never rag against a half page — mastheads take center.
+  if ((layout === 'statement-left' || layout === 'statement-right') && blocks.some((b) => b.type === 'masthead')) {
+    layout = 'center';
   }
   return { ...slide, layout, blocks };
 }

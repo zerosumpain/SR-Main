@@ -1,6 +1,6 @@
 // Seed "The sr. decks Showcase" — a public deck where every slide demonstrates
 // the feature it describes: all eleven block types, all ten page designs, all
-// seven chart kinds (the chart-room sub-deck), the zoomable sub-decks,
+// seven chart kinds (the chart-room side journey), journey pills + nav map,
 // autoplaying sim embeds, an iframe, and the animation set.
 // Idempotent, same pattern as seed-deck-data-spine.mjs:
 //   node scripts/seed-deck-showcase.mjs     # DATABASE_URL from env or ../.env
@@ -28,7 +28,7 @@ export const DECK = {
           kicker: 'SR. DECKS · SHOWCASE',
           title: 'Every page in the box',
           thesis:
-            'A live tour of the deck system — eleven block types, ten page designs, seven chart kinds, zoomable sub-decks and two live embeds. Every slide demonstrates the thing it describes.',
+            'A live tour of the deck system — eleven block types, ten page designs, seven chart kinds, side journeys off the main pathway and two live embeds. Every slide demonstrates the thing it describes.',
         },
       ],
     },
@@ -110,7 +110,7 @@ export const DECK = {
         {
           type: 'chart',
           kind: 'line',
-          title: 'Five build batches (real numbers)',
+          title: 'Six build batches (real numbers)',
           series: [
             {
               label: 'unit tests passing',
@@ -120,6 +120,7 @@ export const DECK = {
                 { x: 3, y: 30 },
                 { x: 4, y: 34 },
                 { x: 5, y: 45 },
+                { x: 6, y: 48 },
               ],
             },
             {
@@ -130,6 +131,7 @@ export const DECK = {
                 { x: 3, y: 8 },
                 { x: 4, y: 8 },
                 { x: 5, y: 10 },
+                { x: 6, y: 10 },
               ],
             },
           ],
@@ -141,11 +143,12 @@ export const DECK = {
     {
       title: 'The chart room',
       layout: 'split-flip',
+      journeyLabel: 'the chart room',
       blocks: [
         {
           type: 'prose',
           lede: true,
-          body: '**Flip the split** and the evidence leads. Bars grow from the baseline, staggered; categorical axes take real labels.\n\nThis slide is also a door — the miniature below leads to the chart room: five more ways to draw a number. Press Enter.',
+          body: '**Flip the split** and the evidence leads. Bars grow from the baseline, staggered; categorical axes take real labels.\n\nThis page has a side journey — the pill below points **down into the chart room**: five more ways to draw a number. The map, bottom left, always knows the way back.',
         },
         {
           type: 'chart',
@@ -317,11 +320,12 @@ export const DECK = {
         {
           type: 'timeline',
           items: [
-            { year: 'ph. 1', label: 'The engine', detail: 'Schema, block registry, the player with hierarchical zoom, share-token URLs.' },
+            { year: 'ph. 1', label: 'The engine', detail: 'Schema, block registry, the player, share-token URLs.' },
             { year: 'ph. 2', label: 'jkai builds decks', detail: 'presentation_build_from_spec — outline agreed in chat, one tool call, a URL back.' },
-            { year: 'ph. 3', label: 'The mini-door', detail: 'Sub-decks got a visible miniature to zoom into; decks joined the nav.' },
+            { year: 'ph. 3', label: 'Decks join the nav', detail: 'A public gallery at /decks; revise-by-prompt tools.' },
             { year: 'ph. 4', label: 'The art director', detail: 'Paste raw content; the system chooses the page. Eight designs, better motion.' },
             { year: 'ph. 5', label: 'The chart room', detail: 'Sankey, donut, slope, area, scatter; statement headlines; the site-media picker.' },
+            { year: 'ph. 6', label: 'Journeys', detail: 'Zoom gave way to a 2D field — pills lead down into side stories, the map leads home.' },
             { year: 'now', label: 'This showcase', detail: 'Timeline items cascade in down the spine — which is what this block is demonstrating.' },
           ],
         },
@@ -360,11 +364,12 @@ export const DECK = {
     {
       title: 'Live interactives',
       layout: 'full-bleed',
+      journeyLabel: 'the sim, staged',
       blocks: [
         { type: 'embed', embed: 'federation-sim', config: {} },
         {
           type: 'prose',
-          body: '**Live interactives are blocks.** This is the real federation simulator — drag to orbit, click a supplier. The mini-slide below is the door into a sub-deck: press Enter and the camera dives through it.',
+          body: '**Live interactives are blocks.** This is the real federation simulator — drag to orbit, click a supplier. The pill marks a side journey: press ↓ to walk it.',
         },
       ],
       children: [
@@ -383,7 +388,7 @@ export const DECK = {
           title: 'One level down',
           layout: 'statement',
           blocks: [
-            { type: 'quote', text: 'You are one level down. Escape rises; the last arrow spills back out on its own.' },
+            { type: 'quote', text: 'You are on a side journey. ↑ climbs back out — the map, bottom left, shows the way.' },
           ],
         },
         {
@@ -453,7 +458,7 @@ function resolveDatabaseUrl() {
 /**
  * @param {import('pg').Client} client
  * @param {string} deckId
- * @param {Array<{title?: string, layout?: string, blocks: unknown[], children?: unknown[]}>} slides
+ * @param {Array<{title?: string, layout?: string, blocks: unknown[], journeyLabel?: string, children?: unknown[]}>} slides
  * @param {string | null} parentSlideId
  */
 async function insertSlides(client, deckId, slides, parentSlideId) {
@@ -462,15 +467,15 @@ async function insertSlides(client, deckId, slides, parentSlideId) {
     const {
       rows: [row],
     } = await client.query(
-      `INSERT INTO deck_slides (deck_id, parent_slide_id, position, title, layout, blocks)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [deckId, parentSlideId, i, s.title ?? null, s.layout ?? 'default', JSON.stringify(s.blocks)],
+      `INSERT INTO deck_slides (deck_id, parent_slide_id, position, title, layout, blocks, journey_label)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [deckId, parentSlideId, i, s.title ?? null, s.layout ?? 'default', JSON.stringify(s.blocks), s.journeyLabel ?? null],
     );
     if (s.children?.length)
       await insertSlides(
         client,
         deckId,
-        /** @type {Array<{title?: string, layout?: string, blocks: unknown[], children?: unknown[]}>} */ (s.children),
+        /** @type {Array<{title?: string, layout?: string, blocks: unknown[], journeyLabel?: string, children?: unknown[]}>} */ (s.children),
         row.id,
       );
   }

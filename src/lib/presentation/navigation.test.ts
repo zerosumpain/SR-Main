@@ -1,65 +1,114 @@
 import { describe, expect, it } from 'vitest';
-import { breadcrumb, buildPlanes, nextSlide, prevSlide, zoomIn, type FlatSlide } from './navigation';
+import {
+  branchTravel,
+  buildPlanes,
+  exitBranch,
+  jumpTravel,
+  pathTo,
+  planeAxis,
+  resolveArrow,
+  type FlatSlide,
+} from './navigation';
 
-// Tree: root plane [a, b, c]; b has children [b1, b2]; c → [c1]; c1 → [c11].
+// Root row A B C; B has a vertical journey b1 b2; b2 has a horizontal
+// sub-journey b2x b2y.
 const rows: FlatSlide[] = [
-  { id: 'b2', parentSlideId: 'b', position: 1 },
-  { id: 'a', parentSlideId: null, position: 0 },
-  { id: 'c', parentSlideId: null, position: 2 },
-  { id: 'b1', parentSlideId: 'b', position: 0 },
-  { id: 'b', parentSlideId: null, position: 1 },
-  { id: 'c1', parentSlideId: 'c', position: 0 },
-  { id: 'c11', parentSlideId: 'c1', position: 0 },
+  { id: 'A', parentSlideId: null, position: 0 },
+  { id: 'B', parentSlideId: null, position: 1 },
+  { id: 'C', parentSlideId: null, position: 2 },
+  { id: 'b1', parentSlideId: 'B', position: 0 },
+  { id: 'b2', parentSlideId: 'B', position: 1 },
+  { id: 'b2x', parentSlideId: 'b2', position: 0 },
+  { id: 'b2y', parentSlideId: 'b2', position: 1 },
 ];
 
-describe('buildPlanes', () => {
-  it('groups by parent and sorts by position', () => {
+describe('buildPlanes / pathTo / planeAxis', () => {
+  it('orders planes by position', () => {
     const planes = buildPlanes(rows);
-    expect(planes.get(null)).toEqual(['a', 'b', 'c']);
-    expect(planes.get('b')).toEqual(['b1', 'b2']);
+    expect(planes.get(null)).toEqual(['A', 'B', 'C']);
+    expect(planes.get('B')).toEqual(['b1', 'b2']);
+    expect(planes.get('b2')).toEqual(['b2x', 'b2y']);
+  });
+
+  it('pathTo returns the root-first chain', () => {
+    expect(pathTo(rows, 'b2y')).toEqual(['B', 'b2', 'b2y']);
+    expect(pathTo(rows, 'A')).toEqual(['A']);
+  });
+
+  it('axis alternates by depth', () => {
+    expect(planeAxis(0)).toBe('h');
+    expect(planeAxis(1)).toBe('v');
+    expect(planeAxis(2)).toBe('h');
   });
 });
 
-describe('nextSlide', () => {
-  it('walks siblings', () => {
-    expect(nextSlide(rows, 'a')).toEqual({ id: 'b', move: 'sibling' });
+describe('resolveArrow — root (horizontal) plane', () => {
+  it('right/left walk siblings', () => {
+    expect(resolveArrow(rows, 'A', 'right')).toEqual({ id: 'B', travel: 'right' });
+    expect(resolveArrow(rows, 'B', 'left')).toEqual({ id: 'A', travel: 'left' });
   });
-  it('zooms out past the last child to the parent plane', () => {
-    expect(nextSlide(rows, 'b2')).toEqual({ id: 'c', move: 'zoomOut' });
+
+  it('no wrap at the ends, no exit above the root', () => {
+    expect(resolveArrow(rows, 'C', 'right')).toBeNull();
+    expect(resolveArrow(rows, 'A', 'left')).toBeNull();
+    expect(resolveArrow(rows, 'A', 'up')).toBeNull();
   });
-  it('recurses zoom-out through nested last children to null at deck end', () => {
-    expect(nextSlide(rows, 'c11')).toBeNull();
-  });
-  it('returns null at the end of the root plane', () => {
-    expect(nextSlide(rows, 'c')).toBeNull();
+
+  it('down enters the branch only where one exists', () => {
+    expect(resolveArrow(rows, 'B', 'down')).toEqual({ id: 'b1', travel: 'down' });
+    expect(resolveArrow(rows, 'A', 'down')).toBeNull();
   });
 });
 
-describe('prevSlide', () => {
-  it('walks siblings backwards', () => {
-    expect(prevSlide(rows, 'c')).toEqual({ id: 'b', move: 'sibling' });
+describe('resolveArrow — vertical journey', () => {
+  it('down/up walk the stack', () => {
+    expect(resolveArrow(rows, 'b1', 'down')).toEqual({ id: 'b2', travel: 'down' });
+    expect(resolveArrow(rows, 'b2', 'up')).toEqual({ id: 'b1', travel: 'up' });
   });
-  it('zooms out to the parent from the first child', () => {
-    expect(prevSlide(rows, 'b1')).toEqual({ id: 'b', move: 'zoomOut' });
+
+  it('up past the first slide climbs back to the parent', () => {
+    expect(resolveArrow(rows, 'b1', 'up')).toEqual({ id: 'B', travel: 'up' });
   });
-  it('returns null at the first root slide', () => {
-    expect(prevSlide(rows, 'a')).toBeNull();
+
+  it('right enters the sub-journey; left does nothing', () => {
+    expect(resolveArrow(rows, 'b2', 'right')).toEqual({ id: 'b2x', travel: 'right' });
+    expect(resolveArrow(rows, 'b1', 'right')).toBeNull();
+    expect(resolveArrow(rows, 'b1', 'left')).toBeNull();
+  });
+
+  it('no forward past the end of the stack (no spill)', () => {
+    expect(resolveArrow(rows, 'b2', 'down')).toBeNull();
   });
 });
 
-describe('zoomIn', () => {
-  it('enters the first child', () => {
-    expect(zoomIn(rows, 'b')).toBe('b1');
-  });
-  it('returns null on a leaf', () => {
-    expect(zoomIn(rows, 'a')).toBeNull();
+describe('resolveArrow — horizontal sub-journey', () => {
+  it('right/left walk the sub-row; left at the first slide exits to the parent', () => {
+    expect(resolveArrow(rows, 'b2x', 'right')).toEqual({ id: 'b2y', travel: 'right' });
+    expect(resolveArrow(rows, 'b2y', 'left')).toEqual({ id: 'b2x', travel: 'left' });
+    expect(resolveArrow(rows, 'b2x', 'left')).toEqual({ id: 'b2', travel: 'left' });
   });
 });
 
-describe('breadcrumb', () => {
-  it('lists ancestors root-first, including current', () => {
-    expect(breadcrumb(rows, 'b2')).toEqual(['b', 'b2']);
-    expect(breadcrumb(rows, 'c11')).toEqual(['c', 'c1', 'c11']);
-    expect(breadcrumb(rows, 'a')).toEqual(['a']);
+describe('exitBranch', () => {
+  it('climbs up out of a vertical journey, left out of a horizontal one', () => {
+    expect(exitBranch(rows, 'b2')).toEqual({ id: 'B', travel: 'up' });
+    expect(exitBranch(rows, 'b2y')).toEqual({ id: 'b2', travel: 'left' });
+    expect(exitBranch(rows, 'A')).toBeNull();
+  });
+});
+
+describe('branchTravel / jumpTravel', () => {
+  it('pills point down off rows, right off columns', () => {
+    expect(branchTravel(0)).toBe('down');
+    expect(branchTravel(1)).toBe('right');
+  });
+
+  it('nav-map jumps pick a sensible travel', () => {
+    expect(jumpTravel(rows, 'A', 'C')).toBe('right');
+    expect(jumpTravel(rows, 'C', 'A')).toBe('left');
+    expect(jumpTravel(rows, 'B', 'b2')).toBe('down');
+    expect(jumpTravel(rows, 'b2y', 'b2')).toBe('left');
+    expect(jumpTravel(rows, 'b2', 'B')).toBe('up');
+    expect(jumpTravel(rows, 'b1', 'b2')).toBe('down');
   });
 });

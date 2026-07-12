@@ -25,7 +25,7 @@
     display: flex;
     flex-direction: column;
     gap: clamp(10px, 1.8vh, 18px);
-    max-width: 20ch;
+    max-width: 100%;
   }
   .hl[data-align='left'] { align-items: flex-start; text-align: left; }
   .hl[data-align='center'] { align-items: center; text-align: center; }
@@ -61,6 +61,8 @@
     color: var(--ink);
     margin: 0;
     text-wrap: balance;
+    /* measure in ch of the DISPLAY size, so the rag scales with the type */
+    max-width: 16ch;
   }
   .hl-dek {
     font-family: 'DM Sans', system-ui, sans-serif;
@@ -68,6 +70,6 @@
     line-height: 1.5;
     color: var(--ink-soft);
     margin: 0;
-    max-width: 42ch;
+    max-width: 46ch;
   }
 </style>

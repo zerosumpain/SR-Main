@@ -44,6 +44,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     layout?: unknown;
     blocks?: unknown;
     notes?: unknown;
+    journeyLabel?: unknown;
     position?: unknown;
     parentSlideId?: unknown;
     expectedVersion?: unknown;
@@ -65,6 +66,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
   if (typeof body.title === 'string') patch.title = body.title.slice(0, 120) || null;
   if (typeof body.notes === 'string') patch.notes = body.notes || null;
+  if (typeof body.journeyLabel === 'string') patch.journeyLabel = body.journeyLabel.slice(0, 80) || null;
   if (typeof body.layout === 'string') {
     if (!isLayout(body.layout)) return json({ error: `unknown layout "${body.layout}"` }, { status: 400 });
     patch.layout = body.layout;

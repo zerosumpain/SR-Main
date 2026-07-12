@@ -33,6 +33,7 @@ export const load: PageServerLoad = async (event) => {
     layout: r.layout as SlideLayout,
     blocks: r.blocks as Block[],
     hasChildren: parents.has(r.id),
+    journeyLabel: r.journeyLabel,
   }));
 
   const roots = slides.filter((s) => s.parentSlideId === null);

@@ -23,6 +23,7 @@
     layout: string;
     blocks: Block[];
     notes: string | null;
+    journeyLabel: string | null;
     version: number;
   }
 
@@ -113,6 +114,7 @@
       layout: slide.layout,
       blocks: slide.blocks,
       notes: slide.notes ?? '',
+      journeyLabel: slide.journeyLabel ?? '',
       expectedVersion: slide.version,
     });
     saving = false;
@@ -421,6 +423,16 @@
               {#each LAYOUT_IDS as id (id)}<option value={id}>{id}</option>{/each}
             </select>
           </label>
+          {#if (planes.get(selected.id) ?? []).length}
+            <label>
+              <span class="pane-lab">JOURNEY LABEL</span>
+              <input
+                value={selected.journeyLabel ?? ''}
+                placeholder="the pill: “down for …”"
+                oninput={(e) => { selected.journeyLabel = e.currentTarget.value; markDirty(); }}
+              />
+            </label>
+          {/if}
           <label class="notes">
             <span class="pane-lab">NOTES</span>
             <input value={selected.notes ?? ''} oninput={(e) => { selected.notes = e.currentTarget.value; markDirty(); }} />

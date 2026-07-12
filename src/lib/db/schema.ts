@@ -763,6 +763,8 @@ export const deckSlides = pgTable(
     layout: text('layout').notNull().default('default'),
     blocks: jsonb('blocks').notNull().default(sql`'[]'::jsonb`),
     notes: text('notes'),
+    // Names the journey INTO this slide's children ("down for <label>").
+    journeyLabel: text('journey_label'),
     version: integer('version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

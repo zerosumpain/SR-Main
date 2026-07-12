@@ -19,6 +19,9 @@ interface SlideSpec {
   layout?: string;
   blocks: unknown[];
   notes?: string;
+  /** Names the journey into this slide's children — the player's pill text
+   *  ("down for <label>"). Only meaningful when children exist. */
+  journey_label?: string;
   children?: SlideSpec[];
 }
 
@@ -90,6 +93,7 @@ async function insertSlides(deckId: string, slides: SlideSpec[], parentSlideId: 
         layout: isLayout(s.layout) ? s.layout : 'default',
         blocks: s.blocks,
         notes: s.notes ?? null,
+        journeyLabel: s.journey_label?.slice(0, 80) ?? null,
       })
       .returning({ id: deckSlides.id });
     count += 1;
@@ -114,9 +118,10 @@ register({
     'Build a NEW sr. decks presentation (/decks/<slug>) from an EXPLICIT spec — title plus a tree of slides, ' +
     'each slide an ordered list of typed blocks. ' +
     'DESIGN-FIRST WORKFLOW: before calling this tool you MUST have written the deck outline in chat ' +
-    '(numbered slides, per-slide block types and key content, which slides nest as a zoom-in sub-deck) ' +
+    '(numbered slides, per-slide block types and key content, which slides carry a side journey) ' +
     'and the user must have said yes/build it. Never call this tool with a guess at the design. ' +
-    'Slides with `children` become zoomable sub-decks in the player (Enter dives in, Escape rises out). ' +
+    'Slides with `children` become SIDE JOURNEYS: the main pathway runs left→right; a floating pill on the ' +
+    'parent ("down for <journey_label>") leads down into the journey; ↑/Escape climb back. ' +
     `Layouts (pick for impact and vary them for rhythm): ${layoutDocsForLLM()} ` +
     `Block vocabulary: ${Object.entries(BLOCK_DOCS)
       .map(([k, v]) => `${k} — ${v}`)
@@ -136,8 +141,11 @@ register({
       slides: {
         type: 'array',
         description:
-          'Ordered slides. Each: { title, layout?: default|center|full-bleed, blocks: Block[], notes?, children?: Slide[] }. ' +
-          'children = the sub-deck the player zooms into from that slide (one level of nesting; two max).',
+          'Ordered slides. Each: { title, layout?, blocks: Block[], notes?, journey_label?, children?: Slide[] }. ' +
+          'children = a SIDE JOURNEY off that slide: the main pathway runs left→right, a journey runs downward ' +
+          '(and a journey inside a journey runs rightward; two levels max). The player shows a floating pill on ' +
+          'the parent slide — "down for <journey_label>" — so ALWAYS set journey_label (2-5 words naming the side story) ' +
+          'on any slide with children.',
         items: { type: 'object' },
       },
     },
@@ -202,7 +210,7 @@ register({
       '',
       outlineMarkdown(slides),
       '',
-      'Play: ← → move · Enter dives into a sub-deck · Escape rises · F fullscreen.',
+      'Play: ← → walk the pathway · ↓ where a pill marks a side journey · ↑/Esc back · F fullscreen.',
       ...(persistIssues.length ? ['', '**Needs attention:**', ...persistIssues.map((i) => `- ${i}`)] : []),
     ].join('\n');
 
@@ -225,6 +233,7 @@ function rowsToSpecTree(rows: DeckSlide[], parentSlideId: string | null): SlideS
         layout: r.layout,
         blocks: r.blocks as unknown[],
         notes: r.notes ?? undefined,
+        journey_label: r.journeyLabel ?? undefined,
       };
       if (children.length) spec.children = children;
       return spec;
@@ -258,7 +267,7 @@ register({
   name: 'presentation_get_spec',
   description:
     'Read an existing sr. deck as the SAME spec shape presentation_update_from_spec accepts — ' +
-    '{ title, description, slug, is_public, slides: [{ title, layout, blocks, notes?, children? }] }. ' +
+    '{ title, description, slug, is_public, slides: [{ title, layout, blocks, notes?, journey_label?, children? }] }. ' +
     'This is step 1 of revising a deck: read the spec, apply the user’s requested changes to it, propose ' +
     'the revised outline in chat, and only after a yes call presentation_update_from_spec.',
   parameters: {
