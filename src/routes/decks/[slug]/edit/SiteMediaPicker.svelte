@@ -6,6 +6,7 @@
   // readable). Parent mounts via {#if open}; panel is opaque per the modal
   // token rules; local portal action (NOT $lib/canvas/portal — its destroy
   // re-appends).
+  import { untrack } from 'svelte';
   import type { MediaCatalogue } from '$lib/presentation/site-media';
   import type { Block } from '$lib/presentation/types';
 
@@ -19,7 +20,7 @@
     onClose: () => void;
   } = $props();
 
-  type Tab = 'interactives' | 'pages' | 'images' | 'find' | 'generate' | 'upload' | 'browse';
+  type Tab = 'interactives' | 'pages' | 'images' | 'find' | 'generate' | 'drive' | 'upload' | 'browse';
   let tab = $state<Tab>('interactives');
 
   interface Candidate {
@@ -67,6 +68,72 @@
   let genBusy = $state(false);
   let genError = $state('');
   let genResult = $state<{ src: string; alt: string; caption: string } | null>(null);
+
+  // Drive (/drive file store — compatible media copies into deck-media)
+  interface DriveFile {
+    id: string;
+    name: string;
+    sizeBytes: number;
+    kind: 'image' | 'video';
+    previewUrl: string;
+  }
+  let driveFiles = $state<DriveFile[] | null>(null); // null = not loaded yet
+  let driveSel = $state<DriveFile | null>(null);
+  let driveBusy = $state(false);
+  let driveError = $state('');
+  let driveQuery = $state('');
+
+  const driveShown = $derived(
+    (driveFiles ?? []).filter((f) => f.name.toLowerCase().includes(driveQuery.trim().toLowerCase())),
+  );
+
+  // Lazy-load the drive listing the first time the tab opens (untracked so
+  // the effect only watches `tab`, not the state loadDrive writes).
+  $effect(() => {
+    if (tab === 'drive') untrack(() => void loadDrive());
+  });
+
+  async function loadDrive() {
+    if (driveFiles !== null) return;
+    driveError = '';
+    try {
+      const res = await fetch('/api/decks/media/drive');
+      const payload = (await res.json()) as { files?: DriveFile[]; error?: string };
+      if (!res.ok) throw new Error(payload.error ?? res.statusText);
+      driveFiles = payload.files ?? [];
+    } catch (err) {
+      driveError = err instanceof Error ? err.message : 'drive list failed';
+      driveFiles = [];
+    }
+  }
+
+  /** Deck slides never serve from the owner-gated drive store — inclusion
+   *  copies the file into the public deck-media bucket first. */
+  async function insertDriveFile() {
+    if (!driveSel || driveBusy) return;
+    driveBusy = true;
+    driveError = '';
+    try {
+      const res = await fetch('/api/decks/media/drive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fileId: driveSel.id }),
+      });
+      const payload = (await res.json()) as { src?: string; alt?: string; kind?: 'image' | 'video'; error?: string };
+      if (!res.ok || !payload.src) throw new Error(payload.error ?? res.statusText);
+      if (payload.kind === 'video') onInsert({ type: 'video', src: payload.src });
+      else onInsert({ type: 'image', src: payload.src, alt: payload.alt ?? driveSel.name });
+    } catch (err) {
+      driveError = err instanceof Error ? err.message : 'import failed';
+    } finally {
+      driveBusy = false;
+    }
+  }
+
+  function fmtSize(n: number): string {
+    if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)}MB`;
+    return `${Math.max(1, Math.round(n / 1024))}KB`;
+  }
 
   // Upload (own files — images become image blocks, mp4/webm video blocks)
   let upBusy = $state(false);
@@ -230,6 +297,7 @@
     { id: 'images', label: 'IMAGES' },
     { id: 'find', label: 'FIND IMAGES' },
     { id: 'generate', label: 'GENERATE' },
+    { id: 'drive', label: 'DRIVE' },
     { id: 'upload', label: 'UPLOAD' },
     { id: 'browse', label: 'BROWSE SITE' },
   ];
@@ -402,6 +470,43 @@
             </div>
           {/if}
         </div>
+      </div>
+    {:else if tab === 'drive'}
+      <div class="smp-body">
+        <div class="find-bar">
+          <input type="text" bind:value={driveQuery} placeholder="filter your /drive media by name…" />
+          <span class="row-note">{driveShown.length} compatible file{driveShown.length === 1 ? '' : 's'}</span>
+        </div>
+        {#if driveError}<p class="err">{driveError}</p>{/if}
+        {#if driveFiles === null}
+          <p class="empty">loading /drive…</p>
+        {:else if !driveShown.length}
+          <p class="empty">No compatible media in /drive (jpg · png · webp · gif · mp4 · webm).</p>
+        {:else}
+          <div class="img-grid">
+            {#each driveShown as f (f.id)}
+              <button class="img-cell found" class:sel={driveSel?.id === f.id} onclick={() => (driveSel = f)} title={f.name}>
+                {#if f.kind === 'image'}
+                  <img src={f.previewUrl} alt={f.name} loading="lazy" />
+                {:else}
+                  <span class="drive-vid" aria-hidden="true">▶</span>
+                {/if}
+                <span class="cell-meta">{f.name} · {fmtSize(f.sizeBytes)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if driveSel}
+          <div class="find-form">
+            <div class="find-meta">
+              <strong>{driveSel.name}</strong>
+              <span class="row-note">{driveSel.kind} · {fmtSize(driveSel.sizeBytes)} · a public copy is stored under deck-media — /drive itself stays private</span>
+            </div>
+            <button class="insert" disabled={driveBusy} onclick={insertDriveFile}>
+              {driveBusy ? 'copying…' : `insert ${driveSel.kind}`}
+            </button>
+          </div>
+        {/if}
       </div>
     {:else if tab === 'upload'}
       <div class="smp-body two-col">
@@ -681,6 +786,16 @@
     color: var(--text-muted);
   }
   .file-hidden { display: none; }
+  .drive-vid {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    font-size: 22px;
+    color: var(--text-muted);
+    background: var(--bg);
+  }
   .empty { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
   .img-form { display: flex; gap: 12px; align-items: flex-end; border-top: 1px solid var(--card-border); padding-top: 12px; }
 
