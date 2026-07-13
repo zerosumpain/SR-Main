@@ -5,13 +5,17 @@
   import { app } from '../lib/appState.svelte';
   import { page } from '$app/stores';
 
+  // The study reads as a research project: problem → sources → solutions →
+  // recommendation → outcomes → governance → next steps. (The live 3-D simulation
+  // lives at /federation + /federation/sim, reached from Solutions and Outcomes.)
   const SECTIONS = [
-    { href: '/projects/data-spine', label: 'Briefing' },
-    { href: '/projects/data-spine/value', label: 'Value & personas' },
-    { href: '/projects/data-spine/architecture', label: 'Architecture' },
-    { href: '/projects/data-spine/federation', label: 'Federation' },
-    { href: '/projects/data-spine/dfe-model', label: 'The DfE model' },
+    { href: '/projects/data-spine', label: 'Problem' },
+    { href: '/projects/data-spine/sources', label: 'Sources' },
+    { href: '/projects/data-spine/architecture', label: 'Solutions' },
+    { href: '/projects/data-spine/model', label: 'Recommendation' },
+    { href: '/projects/data-spine/outcomes', label: 'Outcomes' },
     { href: '/projects/data-spine/governance', label: 'Governance' },
+    { href: '/projects/data-spine/next', label: 'Next steps' },
   ];
   const isGov = (href: string) => href.endsWith('/governance');
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));

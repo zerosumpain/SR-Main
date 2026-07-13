@@ -1,7 +1,18 @@
-// model.ts — all content for "The DfE model" section, distilled from the uploaded
-// analysis paper "Federated Working: National Implementations and Their Underlying
-// Models" (Parts I–III, /drive). The three HLD figures are rebuilt as interactive
-// components; this module is their single source of data.
+// model.ts — all content for "The recommendation" (DfE model) section, distilled from
+// the uploaded analysis paper "Federated Working: National Implementations and Their
+// Underlying Models" (Parts I–III, /drive). The three HLD figures are rebuilt as
+// interactive components; this module is their single source of data.
+
+import { SUPPLIERS } from '$lib/sim/federation/topology';
+
+// Reconcile the estate to ONE source of truth (2026-07-13): the three majors' market
+// shares are DERIVED from the federation topology's real WhichMIS Oct-2025 counts, so
+// this recommendation deck and the live simulation can never disagree about the market.
+const _stateTotal = SUPPLIERS.filter((s) => !s.indicative).reduce((a, s) => a + s.schools, 0);
+const misShare = (id: string) => Math.round((SUPPLIERS.find((s) => s.id === id)!.schools / _stateTotal) * 100);
+const SHARE_ARBOR = misShare('sup-arbor');
+const SHARE_SIMS = misShare('sup-sims');
+const SHARE_BROMCOM = misShare('sup-bromcom');
 
 // ---------------------------------------------------------------------------
 // The blueprint (Figure 1) — nodes, layers and flows of the national fabric
@@ -25,12 +36,12 @@ export interface FabricNode {
 
 export const FABRIC_NODES: FabricNode[] = [
   // Edge — MIS estates (stage 0)
-  { id: 'mis-arbor', label: 'Arbor', sub: '~39–44% of schools', stage: 0, band: 'edge-mis', share: 42,
-    desc: 'The current market leader across state schools. Under the model it keeps every pupil record it holds today — its estate simply gains a connector that answers signed queries in situ.', exemplar: 'Data stays with the controller — the X-Road commitment' },
-  { id: 'mis-sims', label: 'ESS SIMS', sub: '~a third of schools', stage: 0, band: 'edge-mis', share: 33,
+  { id: 'mis-arbor', label: 'Arbor', sub: `~${SHARE_ARBOR}% of schools`, stage: 0, band: 'edge-mis', share: SHARE_ARBOR,
+    desc: 'The current market leader across state schools (WhichMIS Oct-2025 census). Under the model it keeps every pupil record it holds today — its estate simply gains a connector that answers signed queries in situ.', exemplar: 'Data stays with the controller — the X-Road commitment' },
+  { id: 'mis-sims', label: 'ESS SIMS', sub: `~${SHARE_SIMS}% of schools`, stage: 0, band: 'edge-mis', share: SHARE_SIMS,
     desc: 'The long-time incumbent, now around a third of schools after recent market churn and litigation. A vendor-neutral overlay avoids betting the spine on any one supplier’s fortunes.' },
-  { id: 'mis-bromcom', label: 'Bromcom', sub: '~16% of schools', stage: 0, band: 'edge-mis', share: 16,
-    desc: 'The third major. Together the top three carry roughly four in five schools — the fan-out topology in the simulator mirrors this concentration.' },
+  { id: 'mis-bromcom', label: 'Bromcom', sub: `~${SHARE_BROMCOM}% of schools`, stage: 0, band: 'edge-mis', share: SHARE_BROMCOM,
+    desc: 'The third major. Together the top three carry roughly nine in ten schools — the fan-out topology in the simulator mirrors this concentration exactly.' },
   { id: 'mis-iris', label: 'IRIS Ed:gen', sub: 'mid-tail', stage: 0, band: 'edge-mis', share: 4,
     desc: 'One of the mid-tail suppliers making up most of the remainder. Certification, not bespoke integration, is what lets the tail join on equal terms.' },
   { id: 'mis-compass', label: 'Compass', sub: 'mid-tail', stage: 0, band: 'edge-mis', share: 3,

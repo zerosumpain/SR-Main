@@ -6,6 +6,7 @@
   import { SCENARIOS, SCENARIO_GROUPS } from '$lib/sim/federation/scenarios';
   import { SUPPLIERS, DEFAULT_SCHOOL_COUNT } from '$lib/sim/federation/topology';
   import { JOIN_QUERIES } from '$lib/sim/federation/joins';
+  import { STANDARDS } from '../lib/standards';
 
   const totalDots = DEFAULT_SCHOOL_COUNT.toLocaleString('en-GB');
   import type { Scenario } from '$lib/sim/federation/engine';
@@ -43,38 +44,7 @@
     { n: '0', l: 'records in the middle' },
   ];
 
-  const STANDARDS = [
-    {
-      k: 'IDENTIFY', title: 'One child, one number',
-      have: ['UPN for schools, ULN from 14, URN/UKPRN for settings (GIAS)', 'The LRS/LDS learner-records plumbing for post-16'],
-      miss: ['A lifetime learner identifier crossing the early-years and FE boundaries', 'A published identity-resolution standard: match keys, confidence scoring, what happens when matching is wrong', 'Governance for identifier issuance outside state schools'],
-    },
-    {
-      k: 'DESCRIBE', title: 'A canonical model, versioned in the open',
-      have: ['CBDS — the Common Basic Data Set behind the census', 'CTF/ATF schemas for transfers', 'Census and ILR specifications (updated annually, by circular)'],
-      miss: ['An open canonical education-record model every gateway maps to once', 'A schema registry with semantic versioning and deprecation policy — the wellbeing/1.0 pattern from the scenarios', 'Conformance fixtures per schema version'],
-    },
-    {
-      k: 'MOVE', title: 'Query contracts, not file transfers',
-      have: ['CTF files and School-to-School (S2S) for moves', 'Proprietary MIS APIs; Wonde and peers as de-facto brokers', 'The daily attendance feed — the spine’s first vertebra'],
-      miss: ['A signed query-contract standard: purpose, basis, aggregation and retention as machine-readable fields', 'One gateway API profile every MIS implements (precedents: Ed-Fi, 1EdTech OneRoster, X-Road’s message protocol)', 'A public conformance suite that certifies a gateway before it joins'],
-    },
-    {
-      k: 'PROVE', title: 'Trust made inspectable',
-      have: ['DfE Sign-in for humans', 'Transport encryption everywhere, informally'],
-      miss: ['A federation PKI / e-seal profile: who signs what, key ceremony, revocation SLAs measured in minutes', 'The citizen-readable audit-ledger format — the obelisk needs a spec, not a vibe', 'Non-repudiation and trusted time-stamping rules (the part of X-Road worth importing wholesale)'],
-    },
-    {
-      k: 'PROTECT', title: 'Law as configuration',
-      have: ['DEA 2017 research accreditation and the ONS SDC practice', 'UK GDPR Art. 21 objection rights', 'Health’s national data opt-out — proof a registry can work, and how hard retrofitting is'],
-      miss: ['A machine-readable basis registry: which statute unlocks which fields at which aggregation — the thing every gateway checks in the simulations', 'An opt-out/objection registry standard enforced at source, not remembered at the centre', 'A published suppression + noise profile (small cells, ε-budgets) applied identically by all fifteen estates'],
-    },
-    {
-      k: 'ADOPT', title: 'Make plugging in pay',
-      have: ['DfE digital and technology standards for schools', 'G-Cloud and the MIS choice frameworks trusts already buy through'],
-      miss: ['The procurement hook: gateway conformance as a condition of framework listing', 'A funded on-ramp for the long tail — Databridge and the self-hosted schools cannot subsidise the spine', 'An edtech certification tier for the tendrils: aggregate-only contracts, pseudonym rules, audit obligations', 'Honest migration timelines — the incumbent estates move in years, not quarters'],
-    },
-  ];
+  // STANDARDS moved to lib/standards.ts (also rendered on /next) — single source.
 </script>
 
 <svelte:head>

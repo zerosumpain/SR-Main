@@ -26,7 +26,7 @@
 
 <div class="pe-route">
   <StoryMasthead
-    kicker="Field study · The Data Spine · Architecture"
+    kicker="Field study · The Data Spine · Solutions"
     title="Four ways to build a spine"
     thesis="“Data spine” could mean anything from a giant central database to no database at all. Other countries and other departments have built all four possible shapes — so the design argument doesn't have to be theoretical. The empirical record is strikingly consistent: pointers survive, warehouses die."
     thesisEli5="There are basically four blueprints, and other governments have tried them all. The big-database one keeps failing; the phone-book one keeps working."
@@ -156,7 +156,8 @@
   </StorySection>
 
   <div class="next-row">
-    <a class="pe-next" href="/projects/data-spine/federation">Next: the federated option, actually running →</a>
+    <a class="pe-next" href="/projects/data-spine/model">Next: the recommended model →</a>
+    &nbsp; <a class="pe-next" href="/projects/data-spine/federation/sim" style="opacity:0.72">▶ or watch it run</a>
   </div>
 </div>
 

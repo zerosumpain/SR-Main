@@ -17,7 +17,7 @@
 
 <div class="pe-route">
   <StoryMasthead
-    kicker="Field study · The Data Spine · Briefing"
+    kicker="Field study · The Data Spine · The problem"
     title="What is the education data spine?"
     thesis="In February 2026 the government committed, in one paragraph of a white paper, to build a “data spine” for English education. This project takes that paragraph seriously: what a spine actually is, what it would be worth, who wants what from it — and how it could be built without repeating the mistakes already made with children's data."
     thesisEli5="The government promised new national plumbing for school data — in a single paragraph, with no design. This project unpacks what that could mean, who wins and loses, and how to build it safely."
@@ -170,7 +170,7 @@
   </StorySection>
 
   <div class="next-row">
-    <a class="pe-next" href="/projects/data-spine/value">Next: the value — and eight ways of seeing it →</a>
+    <a class="pe-next" href="/projects/data-spine/sources">Next: the estate & the evidence →</a>
   </div>
 </div>
 

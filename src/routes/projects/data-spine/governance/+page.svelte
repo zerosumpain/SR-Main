@@ -187,6 +187,10 @@
     <p class="pe-prose syn-links">Companions: <a href="/projects/policy-engine/monitor">Policy Engine №4 — how we'd know policy works</a> ·
       <a href="/projects/dfe-data-strategy">Keystone — the department's whole data agenda</a>.</p>
   </div>
+
+  <div class="next-row" style="margin:26px 0 16px">
+    <a class="pe-next" href="/projects/data-spine/next">Next: what happens next →</a>
+  </div>
 </div>
 
 <style>
