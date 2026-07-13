@@ -16,8 +16,8 @@ function nodeRefs(a: SimAction): string[] {
 }
 
 describe('the scenario catalogue', () => {
-  it('has 14 scenarios covering all four groups', () => {
-    expect(SCENARIOS).toHaveLength(14);
+  it('has at least 14 scenarios covering all four groups', () => {
+    expect(SCENARIOS.length).toBeGreaterThanOrEqual(14); // derived, not pinned — new scenarios are additive
     for (const g of SCENARIO_GROUPS) {
       expect(SCENARIOS.some((s) => s.group === g)).toBe(true);
     }

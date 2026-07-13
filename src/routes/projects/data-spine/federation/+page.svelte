@@ -4,7 +4,10 @@
   // deliberately not used here — this section presents; the others document.
   import { app } from '../lib/appState.svelte';
   import { SCENARIOS, SCENARIO_GROUPS } from '$lib/sim/federation/scenarios';
-  import { SUPPLIERS } from '$lib/sim/federation/topology';
+  import { SUPPLIERS, DEFAULT_SCHOOL_COUNT } from '$lib/sim/federation/topology';
+  import { JOIN_QUERIES } from '$lib/sim/federation/joins';
+
+  const totalDots = DEFAULT_SCHOOL_COUNT.toLocaleString('en-GB');
   import type { Scenario } from '$lib/sim/federation/engine';
   import FederationSim from '$lib/sim/federation/FederationSim.svelte';
   import AskFederation from './components/AskFederation.svelte';
@@ -21,7 +24,8 @@
   }
 
   const GRAMMAR = [
-    { term: 'The field of dots', means: '24,000 providers — every state school, college and AP setting, one dot each — clustered around the MIS supplier that holds their records. Blob size is market share.' },
+    { term: 'The field of dots', means: `${totalDots} providers — one dot per real English school, clustered around the MIS supplier that holds its records. Cluster size is each vendor's real school count (WhichMIS Oct-2025 census), so Arbor's field dwarfs the long tail because it genuinely does.` },
+    { term: 'The far island', means: 'The second context space: 153 local authorities and their case systems — social care, SEND, admissions, alternative provision, the CME register. A cross-context question (schools × LAs) must cross to this island, and meet the identity resolver on the way.' },
     { term: 'The pylons', means: 'Supplier gateways: the X-Road “security server” idea. Each estate answers queries through exactly one guarded door. The names are the real market — Arbor, ESS SIMS, Bromcom, ScholarPack, down to the self-hosted long tail.' },
     { term: 'The ring', means: 'The exchange layer. Deliberately drawn as a ring, not a hub: it is protocol, not storage. The relays verify, enforce and stamp — they hold no record content.' },
     { term: 'The obelisk', means: 'The audit ledger at the heart of the ring — every query stamped, citizen-readable. Estonia’s best export, whatever the architecture.' },
@@ -33,9 +37,9 @@
 
   // the two array-count stats derive from the arrays they claim to count
   const STATS = [
-    { n: '24,000', l: 'providers' },
+    { n: totalDots, l: 'real schools' },
     { n: String(SUPPLIERS.length), l: 'MIS suppliers' },
-    { n: String(SCENARIOS.length), l: 'scenarios' },
+    { n: `${SCENARIOS.length}+${JOIN_QUERIES.length}`, l: 'scenarios & joins' },
     { n: '0', l: 'records in the middle' },
   ];
 
@@ -75,14 +79,14 @@
 
 <svelte:head>
   <title>The Data Spine — the federated model, running</title>
-  <meta name="description" content="An interactive Three.js simulation of a federated (X-Road-style) education data exchange for England: 24,000 schools, the real MIS market, an edtech ring, and fourteen runnable scenarios from census day to breach day — plus ask-the-federation queries with opt-out guardrails." />
+  <meta name="description" content="An interactive Three.js simulation of a federated (X-Road-style) education data exchange for England: ~22,600 schools clustered by their real MIS vendor, a local-authority context space, fourteen scenarios from census day to breach day, plus cross-context join queries that resolve a school UPN to an LA case ID with an honest match confidence." />
 </svelte:head>
 
 <div class="fed-deck" data-section="federation-sim">
   <!-- SLIDE 1 — hero -->
   <header class="slide hero">
     <span class="kicker">Field study · The Data Spine · Federation</span>
-    <h1>Twenty-four thousand schools.<br /><em>No central database.</em></h1>
+    <h1>Every English school.<br /><em>No central database.</em></h1>
     <p class="hero-lede">
       {#if eli}
         The no-big-database design from the architecture section — running. Every dot is a school. The sparks are
@@ -99,9 +103,9 @@
       {/each}
     </div>
     <div class="hero-cta">
-      <button class="cta" onclick={() => sim?.run('census')}>▶ Run census day</button>
+      <a class="cta" href="/projects/data-spine/federation/sim">⛶ Open the full-screen simulation ↗</a>
       <a class="cta ghost" href="#ask">Ask the federation ↓</a>
-      <a class="cta ghost" href="#catalogue">Browse all fourteen ↓</a>
+      <a class="cta ghost" href="#catalogue">Browse the scenarios ↓</a>
     </div>
   </header>
 
@@ -154,10 +158,11 @@
       {/each}
     </div>
     <p class="fine">
-      Supplier and platform names are real; market shares are indicative approximations of publicly tracked figures,
-      and every behaviour simulated on them — outages, queues, breaches, opt-outs — is illustrative, not a depiction
-      of any real event. The market shape (three majors carrying ~80% of schools, a long tail down to self-hosted)
-      mirrors what the <a href="/projects/data-spine/architecture">architecture section</a> documents with sources.
+      Supplier and platform names are real; per-vendor school counts are the WhichMIS October 2025 census (the
+      independent / early-years / bespoke long tail is indicative), and every behaviour simulated on them — outages,
+      queues, breaches, opt-outs — is illustrative, not a depiction of any real event. The market shape (three majors
+      carrying ~92% of state schools, a long tail down to self-hosted) mirrors what the
+      <a href="/projects/data-spine/architecture">architecture section</a> documents with sources.
     </p>
   </section>
 

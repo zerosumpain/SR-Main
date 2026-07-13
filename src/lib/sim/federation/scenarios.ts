@@ -8,13 +8,33 @@
 // verified/aggregate answer, red = refusal or breach.
 
 import type { PulseColor, Scenario, SimAction } from './engine';
-import { SUPPLIERS } from './topology';
+import { SUPPLIERS, supplierCounts, DEFAULT_SCHOOL_COUNT } from './topology';
 
 // Derived from the topology's single source of truth so a new/renamed supplier
 // can never be silently skipped by the scenario fan-outs.
 const MAJORS = SUPPLIERS.filter((s) => s.tier === 'major').map((s) => s.id);
 const SMALLS = SUPPLIERS.filter((s) => s.tier !== 'major').map((s) => s.id);
 const ALL_SUPPLIERS = [...MAJORS, ...SMALLS];
+
+// Narration numbers are TEMPLATED from the topology so the accurate per-MIS dots and
+// the scenario prose can never drift apart (they did once: "15 gateways", "10,560
+// schools" survived the switch to real WhichMIS counts). Never hardcode an estate
+// count or a per-vendor school figure in a string below — derive it here.
+const N_SUP = SUPPLIERS.length;
+const SCH = supplierCounts(DEFAULT_SCHOOL_COUNT);
+const gb = (n: number) => n.toLocaleString('en-GB');
+const schoolsOf = (id: string) => SCH[SUPPLIERS.findIndex((s) => s.id === id)] ?? 0;
+const shareOf = (id: string) => {
+  const s = SUPPLIERS.find((x) => x.id === id);
+  return s ? Math.round((s.schools / DEFAULT_SCHOOL_COUNT) * 1000) / 10 : 0;
+};
+/** the total modelled estate, e.g. "22,573" */
+const TOTAL_SCHOOLS = gb(DEFAULT_SCHOOL_COUNT);
+const sArbor = gb(schoolsOf('sup-arbor'));
+const sSims = gb(schoolsOf('sup-sims'));
+const sScholar = gb(schoolsOf('sup-scholarpack'));
+const sIntegris = gb(schoolsOf('sup-integris'));
+const sHub = gb(schoolsOf('sup-hubmis'));
 
 /** Every completed exchange stamps the citizen-readable ledger. (Shared with queries.ts.) */
 export function ledgerStamp(text: string, delayMs = 0): SimAction[] {
@@ -55,14 +75,14 @@ export const SCENARIOS: Scenario[] = [
     group: 'Collections & statistics',
     title: 'Retire the census',
     tagline: 'A statutory collection becomes a question, not a form.',
-    description: 'The termly school census — ~400 items per child, three times a year — replayed as one signed query contract answered by fifteen suppliers computing locally.',
+    description: `The termly school census — ~400 items per child, three times a year — replayed as one signed query contract answered by ${N_SUP} suppliers computing locally.`,
     lesson: 'Today the DfE moves whole-child records to the centre to answer questions about totals. A federated collection moves the question instead — and the pupil-level records counter stays at zero.',
     contract: {
       requester: 'Department for Education',
       purpose: 'Termly pupil counts, FSM eligibility and SEN provision for funding allocation',
       legalBasis: 'Education Act 1996 s.537A — prescribed information regulations',
       fields: ['Pupil counts by year group', 'FSM-eligible totals', 'SEN support / EHCP totals'],
-      population: 'All 24,000 state-funded providers',
+      population: `All ${TOTAL_SCHOOLS} state-funded providers`,
       aggregation: 'School-level totals — no pupil-level rows leave any MIS',
       retention: 'Aggregates kept; the query itself logged permanently',
     },
@@ -84,30 +104,30 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Fifteen gateways independently verify the signature and the statutory basis. Any of them can refuse. None does — this ask is lawful, minimal, and aggregate-only.',
+        narration: `All ${N_SUP} gateways independently verify the signature and the statutory basis. Any of them can refuse. None does — this ask is lawful, minimal, and aggregate-only.`,
         phase: 'VERIFY', holdMs: 4200,
         actions: [
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'flash', node: s, color: 'ok', delayMs: i * 90 })),
-          { kind: 'log', log: 'verify', text: '15/15 gateways: signature valid · basis s.537A confirmed · aggregation level accepted', delayMs: 700 },
+          { kind: 'log', log: 'verify', text: `${N_SUP}/${N_SUP} gateways: signature valid · basis s.537A confirmed · aggregation level accepted`, delayMs: 700 },
           ...ledgerStamp('Contract census/2026-autumn accepted by all members', 1400),
         ],
       },
       {
-        narration: 'Local compute. Each supplier runs the count inside its own estate — Arbor across 10,560 schools, WCBS HUBmis across 96. The records do the thing records almost never get to do: they stay put.',
+        narration: `Local compute. Each supplier runs the count inside its own estate — Arbor across ${sArbor} schools, WCBS HUBmis across ${sHub}. The records do the thing records almost never get to do: they stay put.`,
         phase: 'LOCAL COMPUTE', holdMs: 5200,
         actions: [
           ...MAJORS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 260, color: 'query', delayMs: i * 500 })),
           ...SMALLS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 60, color: 'query', delayMs: 1300 + i * 220 })),
-          { kind: 'log', log: 'compute', text: 'Counts computed inside all 15 estates — 0 pupil-level rows extracted', delayMs: 1800 },
+          { kind: 'log', log: 'compute', text: `Counts computed inside all ${N_SUP} estates — 0 pupil-level rows extracted`, delayMs: 1800 },
         ],
       },
       {
-        narration: 'The answers come home: fifteen small parcels of school-level totals. The entire national census, and the pupil-records-moved counter still reads zero.',
+        narration: `The answers come home: ${N_SUP} small parcels of school-level totals. The entire national census, and the pupil-records-moved counter still reads zero.`,
         phase: 'RETURN', holdMs: 4800,
         actions: [
           ...spray(ALL_SUPPLIERS, 'con-dfe', 'ok', 0, 140),
-          { kind: 'counter', key: 'aggregatesReturned', delta: 15, delayMs: 1200 },
-          { kind: 'log', log: 'return', text: '15 aggregate returns · largest payload ~40KB · pupil rows moved: 0', delayMs: 1400 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP, delayMs: 1200 },
+          { kind: 'log', log: 'return', text: `${N_SUP} aggregate returns · largest payload ~40KB · pupil rows moved: 0`, delayMs: 1400 },
           ...ledgerStamp('census/2026-autumn complete — results and query text publicly inspectable', 2200),
           { kind: 'highlight', nodes: ['con-dfe'], on: false, delayMs: 2600 },
         ],
@@ -118,9 +138,9 @@ export const SCENARIOS: Scenario[] = [
     id: 'new-collection',
     group: 'Collections & statistics',
     title: 'A new question, without a new form',
-    tagline: 'Once-only: publish a schema, not 24,000 admin tasks.',
-    description: 'The DfE needs a new data collection — a wellbeing indicator. In the old world that is a new form for every school office. Here it is a schema published once and implemented fifteen times.',
-    lesson: 'The burden of a new collection lands on whoever must implement it. A federation moves that burden from 24,000 school offices to 15 supplier dev teams — which is also where the CMA says the market power sits.',
+    tagline: `Once-only: publish a schema, not ${TOTAL_SCHOOLS} admin tasks.`,
+    description: `The DfE needs a new data collection — a wellbeing indicator. In the old world that is a new form for every school office. Here it is a schema published once and implemented ${N_SUP} times.`,
+    lesson: `The burden of a new collection lands on whoever must implement it. A federation moves that burden from ${TOTAL_SCHOOLS} school offices to ${N_SUP} supplier dev teams — which is also where the CMA says the market power sits.`,
     contract: {
       requester: 'Department for Education',
       purpose: 'Pilot collection: school-level wellbeing indicator',
@@ -148,11 +168,11 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Fifteen implementations, not twenty-four thousand. Each supplier maps the schema onto its own data model once, ships it in a release, and every school on that MIS is ready.',
+        narration: `${N_SUP} implementations, not ${TOTAL_SCHOOLS}. Each supplier maps the schema onto its own data model once, ships it in a release, and every school on that MIS is ready.`,
         phase: 'IMPLEMENT', holdMs: 4600,
         actions: [
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'flash', node: s, color: 'query', delayMs: i * 180 })),
-          { kind: 'log', log: 'compute', text: '15 supplier implementations of wellbeing/1.0 · school effort required: 0 forms', delayMs: 1500 },
+          { kind: 'log', log: 'compute', text: `${N_SUP} supplier implementations of wellbeing/1.0 · school effort required: 0 forms`, delayMs: 1500 },
         ],
       },
       {
@@ -215,15 +235,15 @@ export const SCENARIOS: Scenario[] = [
         phase: 'DISCLOSURE CONTROL', holdMs: 5200,
         actions: [
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'fanout', supplier: s, count: 90, color: 'query', delayMs: i * 160 })),
-          { kind: 'log', log: 'compute', text: '15 estates: cells built · 1,904 small cells suppressed at source · noise ε applied', delayMs: 2000 },
+          { kind: 'log', log: 'compute', text: `${N_SUP} estates: cells built · 1,904 small cells suppressed at source · noise ε applied`, delayMs: 2000 },
         ],
       },
       {
-        narration: 'The answer assembles itself from fifteen partial tables — cohort n = 118,205, every cell already safe to publish. No pupil-level extract was created anywhere in the process.',
+        narration: `The answer assembles itself from ${N_SUP} partial tables — cohort n = 118,205, every cell already safe to publish. No pupil-level extract was created anywhere in the process.`,
         phase: 'RETURN', holdMs: 4600,
         actions: [
           ...spray(ALL_SUPPLIERS, 'con-tre', 'ok', 0, 130),
-          { kind: 'counter', key: 'aggregatesReturned', delta: 15, delayMs: 1400 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP, delayMs: 1400 },
           { kind: 'log', log: 'return', text: 'Combined table returned to TRE · n=118,205 · extract created: none', delayMs: 1600 },
           ...ledgerStamp('R-2417/14 answered — query text and result schema inspectable', 2200),
           { kind: 'highlight', nodes: ['con-tre'], on: false, delayMs: 2600 },
@@ -339,13 +359,13 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'By 09:30 the aggregate signals cross the exchange: counts by school, nothing more. The DfE’s daily attendance picture assembles from fifteen small green parcels.',
+        narration: `By 09:30 the aggregate signals cross the exchange: counts by school, nothing more. The DfE’s daily attendance picture assembles from ${N_SUP} small green parcels.`,
         phase: 'AGGREGATE', holdMs: 4400,
         actions: [
           ...spray(ALL_SUPPLIERS, 'con-dfe', 'ok', 0, 120),
-          { kind: 'counter', key: 'aggregatesReturned', delta: 15, delayMs: 1200 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP, delayMs: 1200 },
           { kind: 'log', log: 'return', text: 'Daily counts → DfE · school-level · same-day national picture', delayMs: 1400 },
-          { kind: 'counter', key: 'exchanges', delta: 15, delayMs: 1400 },
+          { kind: 'counter', key: 'exchanges', delta: N_SUP, delayMs: 1400 },
         ],
       },
       {
@@ -504,10 +524,10 @@ export const SCENARIOS: Scenario[] = [
     group: 'The vendor economy',
     title: 'What the supplier gets back',
     tagline: 'Adoption economics: the day-one reason to plug in.',
-    description: 'A primary-specialist MIS pulls national benchmark distributions from the exchange and lights up dashboards in 1,560 schools — value flowing back down the network.',
+    description: `A primary-specialist MIS pulls national benchmark distributions from the exchange and lights up dashboards in ${sScholar} schools — value flowing back down the network.`,
     lesson: 'GOV.UK Verify died of non-adoption, not bad architecture. A spine survives only if plugging in pays on day one — for suppliers and schools, not just the department. Benchmarks-back is the attendance-dashboard lesson, generalised.',
     contract: {
-      requester: 'ScholarPack (on behalf of 1,560 schools)',
+      requester: `ScholarPack (on behalf of ${sScholar} schools)`,
       purpose: 'National benchmark distributions for school dashboards',
       legalBasis: 'Published-statistics reuse — open aggregate data',
       fields: ['Attendance distributions by phase/region', 'Attainment quartiles', 'Cohort comparators'],
@@ -522,7 +542,7 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'ScholarPack — 6.5% of the market, primary schools, no data-science team in most of them — pulls the national benchmark set the exchange publishes as open aggregates. The same infrastructure that collects can serve.',
+        narration: `ScholarPack — ${shareOf('sup-scholarpack')}% of the market, primary schools, no data-science team in most of them — pulls the national benchmark set the exchange publishes as open aggregates. The same infrastructure that collects can serve.`,
         phase: 'PULL', holdMs: 4400,
         actions: [
           { kind: 'highlight', nodes: ['sup-scholarpack'], on: true },
@@ -534,11 +554,11 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Overnight, 1,560 small primaries get what only big trusts could previously afford: where do we actually sit — against phase, against region, against schools like us?',
+        narration: `Overnight, ${sScholar} small primaries get what only big trusts could previously afford: where do we actually sit — against phase, against region, against schools like us?`,
         phase: 'VALUE BACK', holdMs: 5000,
         actions: [
           { kind: 'fanout', supplier: 'sup-scholarpack', count: 200, color: 'ok', delayMs: 300 },
-          { kind: 'log', log: 'info', text: 'Benchmark dashboards live in 1,560 schools · cost to each school: nothing', delayMs: 1500 },
+          { kind: 'log', log: 'info', text: `Benchmark dashboards live in ${sScholar} schools · cost to each school: nothing`, delayMs: 1500 },
         ],
       },
       {
@@ -626,7 +646,7 @@ export const SCENARIOS: Scenario[] = [
     central: {
       records: 'Every September enrolment written through one national front door',
       exposure: 'One write path, on the one day everything writes at once',
-      note: 'Ask any national system operator which day they fear. Now put all 24,000 schools behind one endpoint on it.',
+      note: `Ask any national system operator which day they fear. Now put all ${TOTAL_SCHOOLS} schools behind one endpoint on it.`,
     },
     steps: [
       {
@@ -672,7 +692,7 @@ export const SCENARIOS: Scenario[] = [
     group: 'Trust & failure modes',
     title: 'The query that gets refused',
     tagline: 'In a federation, “no” is enforced at the edge — and everyone can see it.',
-    description: 'Another department arrives with a memorandum of understanding and a bulk request: names, addresses and nationality of pupils. Fifteen gateways check the basis. Fifteen say no.',
+    description: `Another department arrives with a memorandum of understanding and a bulk request: names, addresses and nationality of pupils. All ${N_SUP} gateways check the basis. All ${N_SUP} say no.`,
     lesson: 'England has run this experiment: the 2015 Home Office MoU pulled school records into immigration enforcement, in private, until an FOI surfaced it. Federation changes the physics of that — refusal is enforceable at the edge, and the attempt itself becomes a public fact.',
     contract: {
       requester: 'Cross-government requester · MoU attached',
@@ -701,13 +721,13 @@ export const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        narration: 'Fifteen gateways run the same check the census passed — and this one fails it everywhere. No statutory gateway, no aggregation, no proportionality. The contract is refused at the edge, by code enforcing law, fifteen times independently.',
+        narration: `All ${N_SUP} gateways run the same check the census passed — and this one fails it everywhere. No statutory gateway, no aggregation, no proportionality. The contract is refused at the edge, by code enforcing law, ${N_SUP} times independently.`,
         phase: 'REFUSE', holdMs: 5200,
         actions: [
           ...ALL_SUPPLIERS.map((s, i): SimAction => ({ kind: 'flash', node: s, color: 'refuse', delayMs: i * 100 })),
           ...spray(ALL_SUPPLIERS, 'con-xgov', 'refuse', 900, 110),
-          { kind: 'counter', key: 'refusals', delta: 15, delayMs: 1800 },
-          { kind: 'log', log: 'refuse', text: '15/15 gateways: REFUSED — no lawful basis for bulk identified extract', delayMs: 1400 },
+          { kind: 'counter', key: 'refusals', delta: N_SUP, delayMs: 1800 },
+          { kind: 'log', log: 'refuse', text: `${N_SUP}/${N_SUP} gateways: REFUSED — no lawful basis for bulk identified extract`, delayMs: 1400 },
         ],
       },
       {
@@ -735,20 +755,20 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'Assume the breach — good security design always does. Suppose a phishing campaign lands: an engineer’s credentials at a mid-sized supplier — say RM Integris, 600 schools, 2.5% of the market. The attacker is inside a real estate with real children’s records.',
+        narration: `Assume the breach — good security design always does. Suppose a phishing campaign lands: an engineer’s credentials at a mid-sized supplier — say RM Integris, ${sIntegris} schools, ${shareOf('sup-integris')}% of the market. The attacker is inside a real estate with real children’s records.`,
         phase: 'COMPROMISE', holdMs: 4800,
         actions: [
           { kind: 'flash', node: 'sup-integris', color: 'refuse' },
           { kind: 'highlight', nodes: ['sup-integris'], on: true },
-          { kind: 'log', log: 'info', text: 'INCIDENT (simulated): credential compromise at one mid-size estate · 600 schools' },
+          { kind: 'log', log: 'info', text: `INCIDENT (simulated): credential compromise at one mid-size estate · ${sIntegris} schools` },
           { kind: 'fanout', supplier: 'sup-integris', count: 200, color: 'refuse', delayMs: 1200 },
         ],
       },
       {
-        narration: 'The exposure is grave — and bounded. 600 schools’ records: serious, notifiable, life-affecting. But the attacker holds one estate’s keys, not the nation’s. Fourteen other estates, and the exchange itself, are different locks on different doors.',
+        narration: `The exposure is grave — and bounded. ${sIntegris} schools’ records: serious, notifiable, life-affecting. But the attacker holds one estate’s keys, not the nation’s. The other ${N_SUP - 1} estates, and the exchange itself, are different locks on different doors.`,
         phase: 'BLAST RADIUS', holdMs: 5000,
         actions: [
-          { kind: 'log', log: 'info', text: 'Exposure assessment: 600 schools (2.5%) · other estates unreachable with these keys' },
+          { kind: 'log', log: 'info', text: `Exposure assessment: ${sIntegris} schools (${shareOf('sup-integris')}%) · other estates unreachable with these keys` },
           { kind: 'counter', key: 'pupilRecordsMoved', delta: 0 },
         ],
       },
@@ -785,24 +805,24 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: '08:40, a wet Wednesday: imagine the incumbent — ESS SIMS, 26% of the market — goes dark. A quarter of the country’s school estates are unreachable. In a hub-and-spoke world this would be the whole story.',
+        narration: `08:40, a wet Wednesday: imagine the incumbent — ESS SIMS, ${shareOf('sup-sims')}% of the market — goes dark. Nearly a third of the country’s school estates are unreachable. In a hub-and-spoke world this would be the whole story.`,
         phase: 'OUTAGE', holdMs: 4600,
         actions: [
           { kind: 'flash', node: 'sup-sims', color: 'refuse' },
           { kind: 'highlight', nodes: ['sup-sims'], on: true },
-          { kind: 'log', log: 'info', text: 'Simulated outage: largest estate dark from 08:40 · 6,240 schools unreachable' },
+          { kind: 'log', log: 'info', text: `Simulated outage: largest estate dark from 08:40 · ${sSims} schools unreachable` },
         ],
       },
       {
-        narration: 'The DfE’s morning attendance question goes out anyway. Fourteen suppliers answer; the incumbent times out. The result comes back labelled for what it is: 74% coverage, partial, not wrong.',
+        narration: `The DfE’s morning attendance question goes out anyway. The other ${N_SUP - 1} suppliers answer; the incumbent times out. The result comes back labelled for what it is: ${(100 - shareOf('sup-sims')).toFixed(0)}% coverage, partial, not wrong.`,
         phase: 'DEGRADED', holdMs: 5200,
         actions: [
           ...spray('con-dfe', ALL_SUPPLIERS, 'query', 0, 100),
           { kind: 'counter', key: 'exchanges', delta: 1 },
           ...spray(ALL_SUPPLIERS.filter((s) => s !== 'sup-sims'), 'con-dfe', 'ok', 1600, 110),
           { kind: 'flash', node: 'sup-sims', color: 'refuse', delayMs: 2000 },
-          { kind: 'counter', key: 'aggregatesReturned', delta: 14, delayMs: 2800 },
-          { kind: 'log', log: 'return', text: 'Daily counts: 14/15 sources · coverage 74% · flagged PARTIAL in every downstream use', delayMs: 3000 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP - 1, delayMs: 2800 },
+          { kind: 'log', log: 'return', text: `Daily counts: ${N_SUP - 1}/${N_SUP} sources · coverage ${(100 - shareOf('sup-sims')).toFixed(0)}% · flagged PARTIAL in every downstream use`, delayMs: 3000 },
         ],
       },
       {
@@ -869,7 +889,7 @@ export const SCENARIOS: Scenario[] = [
           { kind: 'counter', key: 'exchanges', delta: 1 },
           { kind: 'fanout', supplier: 'sup-arbor', count: 120, color: 'query', delayMs: 1200 },
           ...spray(ALL_SUPPLIERS, 'con-tre', 'ok', 2200, 100),
-          { kind: 'counter', key: 'aggregatesReturned', delta: 15, delayMs: 3400 },
+          { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP, delayMs: 3400 },
           { kind: 'log', log: 'return', text: 'Cohort n=118,204 (−1) · objection honoured at source, invisibly to the researcher', delayMs: 3600 },
           { kind: 'highlight', nodes: ['con-record'], on: false, delayMs: 4200 },
         ],

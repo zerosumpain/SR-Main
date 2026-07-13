@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
   buildTopology, routePath, schoolInfo, sampleSchools, supplierCounts,
   SUPPLIERS, CONSUMERS, STORES, EDTECH, RELAY_COUNT, DEFAULT_SCHOOL_COUNT,
-  DFE_ID, RECORD_ID,
+  STATE_CENSUS_TOTAL, DFE_ID, RECORD_ID,
 } from './topology';
 
 describe('the MIS market', () => {
-  it('shares sum to 100% with three majors', () => {
+  it('has three majors and a real long tail, shares ≈100%', () => {
     const total = SUPPLIERS.reduce((a, s) => a + s.sharePct, 0);
-    expect(total).toBeCloseTo(100, 6);
+    expect(total).toBeCloseTo(100, 0);
     expect(SUPPLIERS.filter((s) => s.tier === 'major')).toHaveLength(3);
-    expect(SUPPLIERS.length).toBeGreaterThanOrEqual(13); // 3 majors + 10-15 smaller
+    expect(SUPPLIERS.length).toBeGreaterThanOrEqual(13); // 3 majors + long tail
   });
 
   it('uses the real supplier names', () => {
@@ -20,10 +20,33 @@ describe('the MIS market', () => {
     }
   });
 
-  it('supplierCounts allocates exactly and deterministically', () => {
+  it('carries real per-vendor census counts, drops the dead product, flags the long tail', () => {
+    const byId = new Map(SUPPLIERS.map((s) => [s.id, s]));
+    expect(byId.get('sup-arbor')!.schools).toBe(9677);
+    expect(byId.get('sup-sims')!.schools).toBe(6897);
+    expect(byId.get('sup-bromcom')!.schools).toBe(3493);
+    // the top three carry ~92% of the tracked state estate
+    expect((9677 + 6897 + 3493) / STATE_CENSUS_TOTAL).toBeGreaterThan(0.9);
+    // Advanced/Progresso (EOL Aug 2023) has been removed
+    expect(byId.has('sup-cloudschool')).toBe(false);
+    // independent/EY/bespoke estates are flagged indicative; census vendors are not
+    expect(byId.get('sup-famly')!.indicative).toBe(true);
+    expect(byId.get('sup-arbor')!.indicative).toBeFalsy();
+  });
+
+  it('supplierCounts: 1 dot = 1 school at the default, exact + deterministic', () => {
     const counts = supplierCounts(DEFAULT_SCHOOL_COUNT);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(DEFAULT_SCHOOL_COUNT);
+    SUPPLIERS.forEach((s, i) => expect(counts[i]).toBe(s.schools)); // exact real counts
     expect(counts).toEqual(supplierCounts(DEFAULT_SCHOOL_COUNT));
+  });
+
+  it('supplierCounts: scales proportionally + exactly at a reduced budget', () => {
+    const counts = supplierCounts(8000);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(8000);
+    expect(counts).toEqual(supplierCounts(8000));
+    const maxIdx = counts.indexOf(Math.max(...counts));
+    expect(SUPPLIERS[maxIdx].id).toBe('sup-arbor'); // still the largest cluster
   });
 });
 

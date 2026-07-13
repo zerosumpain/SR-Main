@@ -103,7 +103,7 @@ WHERE  session_date = CURRENT_DATE
 GROUP  BY school_urn, la_code
 -- gateway policy: aggregate-only · suppress cells < 10 at source`,
     returnNotes: [
-      '152 LA-level absence totals and one national figure — assembled from 15 estate parcels',
+      '152 LA-level absence totals and one national figure — assembled from every estate that answered',
       'No pupil identifier, no school-by-school register, no row-level marks leave any MIS',
       'Coverage statement attached: which estates answered, which were unreachable',
       'Ledger entry: query text + basis + result schema, citizen-inspectable',

@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { Topology, NetNode, ArchMode } from './topology';
-import { routePath, sampleSchools, LAYERS_Y, RING_RADIUS, CENTRAL_ID, LEDGER_ID } from './topology';
+import { routePath, sampleSchools, LAYERS_Y, RING_RADIUS, CENTRAL_ID, LEDGER_ID, RESOLVER_ID } from './topology';
 import type { SimEvent, PulseColor } from './engine';
 
 export interface PickResult {
@@ -87,6 +87,24 @@ function glowTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+/** A soft round disc so the point field reads as thousands of tiny circles, not
+ *  aliased squares — the single biggest lift in how "slick" the estate looks. */
+function discTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 48;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(24, 24, 1, 24, 24, 22);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.98)');
+  grad.addColorStop(0.85, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(24, 24, 23, 0, Math.PI * 2);
+  g.fill();
+  return new THREE.CanvasTexture(c);
+}
+
 export function createFederationScene(
   container: HTMLElement,
   topo: Topology,
@@ -132,17 +150,24 @@ export function createFederationScene(
   dir.position.set(40, 80, 20);
   scene.add(dir);
 
+  const disc = discTexture();
+
   // --- school field ------------------------------------------------------
   const schoolGeo = new THREE.BufferGeometry();
   schoolGeo.setAttribute('position', new THREE.BufferAttribute(topo.schools.positions, 3));
   const baseColors = new Float32Array(topo.schools.count * 3);
   {
-    // warm ink dots with gentle per-supplier tonal variation
+    // warm ink dots: each supplier gets its own hue+lightness signature so clusters
+    // read as distinct estates (majors denser/cooler, the long tail warmer/lighter)
     const tone = new THREE.Color();
     for (let i = 0; i < topo.schools.count; i++) {
       const si = topo.schools.supplier[i];
-      const l = 0.5 + ((si * 37) % 11) * 0.014 + (i % 7) * 0.008;
-      tone.setHSL(0.08, 0.18, l);
+      const spec = topo.byId.get(topo.supplierIds[si]);
+      const hue = 0.055 + ((si * 0.61803) % 1) * 0.06;          // spread across the warm band
+      const sat = spec?.tier === 'major' ? 0.26 : spec?.tier === 'mid' ? 0.2 : 0.16;
+      const baseL = spec?.tier === 'major' ? 0.44 : spec?.tier === 'mid' ? 0.5 : 0.56;
+      const l = baseL + (i % 9) * 0.006;
+      tone.setHSL(hue, sat, l);
       baseColors[i * 3] = tone.r;
       baseColors[i * 3 + 1] = tone.g;
       baseColors[i * 3 + 2] = tone.b;
@@ -150,9 +175,16 @@ export function createFederationScene(
   }
   const schoolColors = new Float32Array(baseColors);
   schoolGeo.setAttribute('color', new THREE.BufferAttribute(schoolColors, 3));
-  const schoolMat = new THREE.PointsMaterial({ size: 0.42, vertexColors: true, sizeAttenuation: true });
+  const schoolMat = new THREE.PointsMaterial({ size: 0.5, map: disc, vertexColors: true, sizeAttenuation: true, transparent: true, alphaTest: 0.42, depthWrite: true });
   const schoolPoints = new THREE.Points(schoolGeo, schoolMat);
   scene.add(schoolPoints);
+
+  // --- LA field: the 153 local authorities, a second context space in petrol ---
+  const laGeo = new THREE.BufferGeometry();
+  laGeo.setAttribute('position', new THREE.BufferAttribute(topo.las.positions, 3));
+  const laMat = new THREE.PointsMaterial({ size: 0.95, map: disc, color: new THREE.Color('#2f6b73'), sizeAttenuation: true, transparent: true, opacity: 0.95, alphaTest: 0.42 });
+  const laPoints = new THREE.Points(laGeo, laMat);
+  scene.add(laPoints);
 
   // --- ground disc (paper shore) -----------------------------------------
   const ground = new THREE.Mesh(
@@ -225,6 +257,28 @@ export function createFederationScene(
       mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
       const lbl = labelFor(n, 'edt');
       lbl.position.y = n.size + 0.9;
+      mesh.add(lbl);
+    } else if (n.kind === 'la') {
+      // second-world data holders: LA case systems (teal) + cross-sector worlds (amber)
+      const hex = n.sector === 'cross' ? '#9a6a2f' : '#356b74';
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size * 0.6, n.size * 0.82, n.size * 2.0, 6), nodeMaterial(hex));
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const lbl = labelFor(n, n.sector === 'cross' ? 'la cross' : 'la');
+      lbl.position.y = n.size * 1.6;
+      mesh.add(lbl);
+      // a thin stem down to the LA ground field
+      const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, n.pos[1], 4),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(hex), transparent: true, opacity: 0.3 }),
+      );
+      stem.position.y = -n.pos[1] / 2;
+      mesh.add(stem);
+    } else if (n.kind === 'resolver') {
+      // the identity resolver: a faceted knot between the worlds — where UPN meets LA case ID
+      mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(n.size * 0.62, n.size * 0.2, 72, 10), nodeMaterial('#a85a2a'));
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const lbl = labelFor(n, 'resolver');
+      lbl.position.y = n.size * 1.7;
       mesh.add(lbl);
     } else if (n.kind === 'central') {
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size, n.size, 7.5, 24), nodeMaterial(NODE_BASE[CENTRAL_ID]));
@@ -516,6 +570,8 @@ export function createFederationScene(
 
     controls.update();
     ringSpin.rotation.z += dt * 0.00012;
+    const resolverMesh = nodeMeshes.get(RESOLVER_ID);
+    if (resolverMesh) resolverMesh.rotation.y += dt * 0.0007;
 
     // pulses
     for (let i = active.length - 1; i >= 0; i--) {
@@ -678,6 +734,7 @@ export function createFederationScene(
       if (o instanceof THREE.Sprite) o.material.dispose();
     });
     glow.dispose();
+    disc.dispose();
     renderer.dispose();
     renderer.domElement.remove();
     labelRenderer.domElement.remove();

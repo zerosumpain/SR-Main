@@ -1,5 +1,5 @@
 // topology.ts — the synthetic federated education network: the real English MIS
-// market (named suppliers, indicative shares), 24,000 provider points clustered
+// market (named suppliers, real WhichMIS Oct-2025 counts), ~22,600 provider points clustered
 // by supplier, an exchange ring (the X-Road-style protocol layer), the consumer
 // estate (DfE + its existing satellite stores — NPD, LEO, ILR, LDS — local
 // authorities, social care, TRE, Ofsted, the DfE-brokered learner-held Education
@@ -8,7 +8,7 @@
 // figures move quarterly); every behaviour simulated on them is illustrative.
 // Everything is deterministic (seeded RNG) and DOM/Three-free so it can be tested.
 
-export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech';
+export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech' | 'la' | 'resolver';
 export type SupplierTier = 'major' | 'mid' | 'small';
 
 export interface NetNode {
@@ -22,6 +22,10 @@ export interface NetNode {
   tier?: SupplierTier;
   sharePct?: number;
   schools?: number;
+  /** supplier flag: not in the tracked state MIS census (its count is illustrative) */
+  indicative?: boolean;
+  /** for holder nodes (kind 'la'): which second world this belongs to */
+  sector?: 'la' | 'cross';
 }
 
 export interface Edge {
@@ -40,14 +44,25 @@ export interface SchoolField {
   offsets: Uint32Array;
 }
 
+/** The local-authority estate: one dot per LA, drawn as a second context space. */
+export interface LaField {
+  count: number;
+  /** xyz triplets, length = count * 3 */
+  positions: Float32Array;
+}
+
 export interface Topology {
   nodes: NetNode[];
   edges: Edge[];
   schools: SchoolField;
+  /** the LA context space (153 authorities) — the second half of a cross-context join */
+  las: LaField;
   supplierIds: string[];
   relayIds: string[];
   edtechIds: string[];
   storeIds: string[];
+  /** the second-world data-holder domains a join can terminate at (LA + cross-sector) */
+  holderIds: string[];
   byId: Map<string, NetNode>;
 }
 
@@ -85,49 +100,77 @@ export interface SupplierSpec {
   label: string;
   sub: string;
   tier: SupplierTier;
+  /** the source of truth for dots: real per-vendor English school count. State-market
+   * vendors carry WhichMIS Oct-2025 census figures (1 dot = 1 real school); long-tail /
+   * independent / early-years / bespoke estates carry an indicative figure (see below). */
+  schools: number;
+  /** derived display value (schools ÷ total modelled estate × 100). NOT the source of
+   * truth — kept precomputed so the inspector/legend can show a share without recomputing. */
   sharePct: number;
+  /** true = independent-sector / early-years / special / bespoke estate that is NOT in
+   * the tracked state-school MIS census; its `schools` figure is illustrative, not sourced. */
+  indicative?: boolean;
   desc: string;
 }
 
+// State-tracked market: WhichMIS October 2025 census, 22,067 English state schools.
+// Arbor 9,677 (44.0%) · ESS SIMS 6,897 (31.7%) · Bromcom 3,493 (15.9%) — a top-3
+// concentration of ~92%. ScholarPack + RM Integris (The Key Group residual, 1,450
+// combined) are being retired into Arbor by Feb 2026; the split shown is an estimate.
+// The long-tail band below is independent-sector / early-years / special / bespoke —
+// NOT in the state census, so its figures are illustrative and flagged `indicative`.
 export const SUPPLIERS: SupplierSpec[] = [
-  { id: 'sup-arbor', label: 'Arbor', sub: 'cloud-native · The Key Group', tier: 'major', sharePct: 44,
-    desc: 'The market leader by school count: a cloud-native MIS that overtook the old incumbent by winning primaries and multi-academy trusts. API-first, so gateway integration lands in weeks not years.' },
-  { id: 'sup-sims', label: 'ESS SIMS', sub: 'legacy incumbent · on-prem heritage', tier: 'major', sharePct: 26,
-    desc: 'The long-standing incumbent, still the largest single estate in secondaries: an on-premises heritage product mid-way through its cloud migration. Deep feature set, slow release cadence, and the heaviest estate to bring onto any spine.' },
-  { id: 'sup-bromcom', label: 'Bromcom', sub: 'cloud · trust dashboards & finance', tier: 'major', sharePct: 13,
-    desc: 'The third force: a cloud MIS focused on trust-level dashboards and finance integration, strong in secondaries and growing fast in open procurements.' },
-  { id: 'sup-scholarpack', label: 'ScholarPack', sub: 'primary specialist · Juniper', tier: 'mid', sharePct: 6.5,
-    desc: 'The primary-phase specialist with a loyal base of small schools — exactly the kind of supplier a federation must not price out.' },
-  { id: 'sup-integris', label: 'RM Integris', sub: 'long-serving · primaries', tier: 'mid', sharePct: 2.5,
-    desc: 'A long-serving MIS with regional strongholds and decades of statutory-returns muscle memory. Proof the market has history, not just size.' },
-  { id: 'sup-horizons', label: 'Juniper Horizons', sub: 'primary-phase · was Pupil Asset', tier: 'mid', sharePct: 1.8,
+  { id: 'sup-arbor', label: 'Arbor', sub: 'cloud-native · The Key Group', tier: 'major', schools: 9677, sharePct: 42.9,
+    desc: 'The market leader by school count (WhichMIS Oct-2025: 9,677 state schools, ~44%): a cloud-native MIS that overtook the old incumbent by winning primaries and multi-academy trusts. API-first, so gateway integration lands in weeks not years.' },
+  { id: 'sup-sims', label: 'ESS SIMS', sub: 'legacy incumbent · on-prem heritage', tier: 'major', schools: 6897, sharePct: 30.6,
+    desc: 'The long-standing incumbent, still a vast estate in secondaries (6,897 schools, ~32%): an on-premises heritage product mid-way through its cloud migration. Deep feature set, slow release cadence, and the heaviest estate to bring onto any spine.' },
+  { id: 'sup-bromcom', label: 'Bromcom', sub: 'cloud · trust dashboards & finance', tier: 'major', schools: 3493, sharePct: 15.5,
+    desc: 'The third force (3,493 schools, ~16%): a cloud MIS focused on trust-level dashboards and finance integration, strong in secondaries and growing fast in open procurements.' },
+  { id: 'sup-scholarpack', label: 'ScholarPack', sub: 'primary specialist · Key Group', tier: 'mid', schools: 800, sharePct: 3.5,
+    desc: 'The primary-phase specialist with a loyal base of small schools — exactly the kind of supplier a federation must not price out. Being retired into Arbor by Feb 2026: consolidation is itself a federation risk.' },
+  { id: 'sup-integris', label: 'RM Integris', sub: 'long-serving · Key Group', tier: 'mid', schools: 650, sharePct: 2.9,
+    desc: 'A long-serving MIS with regional strongholds and decades of statutory-returns muscle memory. Also being folded into Arbor by Feb 2026 — proof the market has history, and that estates merge under any standard you write.' },
+  { id: 'sup-horizons', label: 'Juniper Horizons', sub: 'primary-phase · was Pupil Asset', tier: 'mid', schools: 284, sharePct: 1.3,
     desc: 'The former Pupil Asset, folded into the Juniper group — one consolidation among many. Federation standards have to survive suppliers merging under them.' },
-  { id: 'sup-edgen', label: 'IRIS Ed:gen', sub: 'IRIS group MIS', tier: 'mid', sharePct: 1.4,
-    desc: 'The IRIS software group’s MIS play — a payroll-and-payments giant arriving in the classroom market. Cross-sells make its data estate broader than a school register.' },
-  { id: 'sup-compass', label: 'Compass', sub: 'Australian entrant', tier: 'small', sharePct: 1.0,
-    desc: 'An established Australian MIS entering England — a reminder that open standards decide whether international entrants can compete here at all.' },
-  { id: 'sup-cloudschool', label: 'Advanced Cloud School', sub: 'Advanced group', tier: 'small', sharePct: 0.9,
-    desc: 'The Advanced group’s cloud MIS. A small estate inside a large enterprise-software house — integration capacity out of proportion to its market share.' },
-  { id: 'sup-isams', label: 'iSAMS', sub: 'independent-sector roots', tier: 'small', sharePct: 0.7,
-    desc: 'Grew up in the independent sector; strong pastoral and admissions modules; a small but real state-sector estate. Two statutory worlds, one product.' },
-  { id: 'sup-famly', label: 'Famly', sub: 'nursery & early years', tier: 'small', sharePct: 0.5,
-    desc: 'Early-years management: the spine’s hardest edge case, where children first appear in the data — and where record structures least resemble a school register.' },
-  { id: 'sup-engage', label: 'Engage', sub: 'Double First · independents', tier: 'small', sharePct: 0.5,
-    desc: 'An independent-schools specialist. The independent sector holds records for 600,000 children the state system will meet mid-flight — transfers cross this boundary daily.' },
-  { id: 'sup-databridge', label: 'Databridge', sub: 'special schools & AP', tier: 'small', sharePct: 0.4,
-    desc: 'Specialises in special schools and alternative provision, where record structures are richest and most sensitive. The estates a federation must serve best, not last.' },
-  { id: 'sup-hubmis', label: 'WCBS HUBmis', sub: 'independents · heritage', tier: 'small', sharePct: 0.4,
+  { id: 'sup-edgen', label: 'IRIS Ed:gen', sub: 'IRIS group MIS', tier: 'small', schools: 115, sharePct: 0.5,
+    desc: 'The IRIS software group’s MIS play — a payroll-and-payments giant arriving in the classroom market. A small estate (~115 schools) but cross-sells make its data footprint broader than a school register.' },
+  { id: 'sup-compass', label: 'Compass', sub: 'Australian entrant', tier: 'small', schools: 102, sharePct: 0.5,
+    desc: 'An established Australian MIS entering England (~102 schools, up from ~72) — a reminder that open standards decide whether international entrants can compete here at all.' },
+  { id: 'sup-isams', label: 'iSAMS', sub: 'independent-sector roots', tier: 'small', schools: 95, sharePct: 0.4, indicative: true,
+    desc: 'Grew up in the independent sector; strong pastoral and admissions modules; a small state-sector footprint not separately tracked in the census. Two statutory worlds, one product.' },
+  { id: 'sup-famly', label: 'Famly', sub: 'nursery & early years', tier: 'small', schools: 140, sharePct: 0.6, indicative: true,
+    desc: 'Early-years management: the spine’s hardest edge case, where children first appear in the data — and where record structures least resemble a school register. Not in the state-school census.' },
+  { id: 'sup-engage', label: 'Engage', sub: 'Double First · independents', tier: 'small', schools: 65, sharePct: 0.3, indicative: true,
+    desc: 'An independent-schools specialist. The independent sector holds records for ~600,000 children the state system will meet mid-flight — transfers cross this boundary daily.' },
+  { id: 'sup-databridge', label: 'Databridge', sub: 'special schools & AP', tier: 'small', schools: 120, sharePct: 0.5, indicative: true,
+    desc: 'Specialises in special schools and alternative provision, where record structures are richest and most sensitive. No published per-vendor count, so the figure here is illustrative — but the estates a federation must serve best, not last.' },
+  { id: 'sup-hubmis', label: 'WCBS HUBmis', sub: 'independents · heritage', tier: 'small', schools: 45, sharePct: 0.2, indicative: true,
     desc: 'A heritage independent-sector supplier — small, stable, and unlikely to fund heavy integration work unaided. The on-ramp cost question, personified.' },
-  { id: 'sup-selfhosted', label: 'Self-hosted', sub: 'long tail · bespoke systems', tier: 'small', sharePct: 0.4,
+  { id: 'sup-selfhosted', label: 'Self-hosted', sub: 'long tail · bespoke systems', tier: 'small', schools: 90, sharePct: 0.4, indicative: true,
     desc: 'The long tail: schools running bespoke or self-hosted systems. Any federated design has to give them an on-ramp — or admit it excludes them.' },
 ];
 
+/** Provenance for the per-vendor school counts, surfaced in the sim UI. */
+export const MIS_SOURCE =
+  'Per-vendor counts: WhichMIS October 2025 MIS census (22,067 tracked English state schools). ' +
+  'Long-tail / independent / early-years / bespoke estates are indicative, not census-tracked. Shares drift each census.';
+/** The tracked state-school MIS census total the accurate clusters are normalised against. */
+export const STATE_CENSUS_TOTAL = 22067;
+
+/** Total dots the model draws = Σ real/indicative per-vendor school counts. */
+function totalSchools(): number {
+  return SUPPLIERS.reduce((a, s) => a + s.schools, 0);
+}
+
 /**
- * Deterministic largest-remainder allocation of schools to suppliers — shared by
- * buildTopology and the query engine so both always agree on estate sizes.
+ * Deterministic largest-remainder allocation of `schoolCount` dots to suppliers in
+ * proportion to their REAL per-vendor `schools` — shared by buildTopology and the query
+ * engine so both always agree on estate sizes. When `schoolCount === DEFAULT_SCHOOL_COUNT`
+ * (= Σ schools) each supplier gets exactly its real count: 1 dot = 1 school.
  */
 export function supplierCounts(schoolCount: number): number[] {
-  const raw = SUPPLIERS.map((s) => (s.sharePct / 100) * schoolCount);
+  const total = totalSchools();
+  const raw = SUPPLIERS.map((s) => (s.schools / total) * schoolCount);
   const counts = raw.map(Math.floor);
   const rem = schoolCount - counts.reduce((a, b) => a + b, 0);
   const order = raw.map((v, i) => ({ i, frac: v - Math.floor(v) })).sort((a, b) => b.frac - a.frac);
@@ -238,15 +281,79 @@ export const EDTECH: EdtechSpec[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// The local-authority context space — the SECOND data world a cross-context join
+// must reach. Schools cluster by MIS vendor; local authorities run their OWN line-
+// of-business case systems (a different market: Liquidlogic and OLM Mosaic in social
+// care; Capita ONE, Servelec Synergy and Civica in education). A join across schools
+// and LAs is hard precisely because these two worlds share no analytic key — the
+// school-side UPN does not resolve cleanly to an LA case-management ID. Caseload
+// figures are indicative, grounded in DfE/ONS national statistics.
+// ---------------------------------------------------------------------------
+
+export const LA_COUNT = 153;
+export const RESOLVER_ID = 'resolver';
+
+export interface LaHolderSpec {
+  id: string;
+  label: string;
+  /** the case-management system(s) behind this domain */
+  sub: string;
+  desc: string;
+  /** indicative national caseload this domain holds — sizes the second-side partials */
+  cases: number;
+  /** the second-side identifier a join must resolve against the school-side UPN */
+  key: string;
+  /** 'la' = a local-authority case system; 'cross' = a different sector entirely
+   * (health, cross-government earnings) where the join is harder still */
+  sector: 'la' | 'cross';
+}
+
+export const LA_HOLDERS: LaHolderSpec[] = [
+  { id: 'la-csc', label: 'Children’s social care', sub: 'CIN / CP / CLA casework · Liquidlogic · OLM Mosaic', cases: 404000, key: 'LA social-care person ID', sector: 'la',
+    desc: 'Children-in-need, child-protection-plan and looked-after casework — the most sensitive LA data, held under a safeguarding basis distinct from schools’ attendance duty. ~404,000 children in need at a point in time (DfE CIN census). Its person IDs were never designed to line up with a school UPN.' },
+  { id: 'la-send', label: 'SEND & EHCP casework', sub: 'assessment + plans · Capita ONE · Servelec Synergy', cases: 600000, key: 'LA SEND case ID', sector: 'la',
+    desc: 'Education, health and care needs-assessment and plan casework — ~600,000 EHCPs and rising, plus those awaiting assessment. Lives in the LA’s SEND case system, not the school MIS; the two are linked today only by hand.' },
+  { id: 'la-admissions', label: 'Admissions & fair access', sub: 'in-year + fair-access panels · Capita ONE · Synergy · Civica', cases: 700000, key: 'LA admissions applicant ID', sector: 'la',
+    desc: 'The LA’s admissions and in-year / fair-access-panel systems — who applied where, who was placed, who is still unplaced. A separate line-of-business system from both the MIS and the SEND case file.' },
+  { id: 'la-ap', label: 'Alternative provision', sub: 'AP / PRU commissioning · mixed / bespoke', cases: 41000, key: 'LA AP placement ID', sector: 'la',
+    desc: 'LA-commissioned alternative provision and pupil-referral-unit rolls — where excluded and out-of-school children land. ~41,000 pupils in state-place AP/PRU. Often a different MIS again (special/AP specialists), or a spreadsheet.' },
+  { id: 'la-cme', label: 'CME & Children Not in School', sub: 'attendance registers · Capita ONE · spreadsheets', cases: 117000, key: 'LA CME / CNIS register ID', sector: 'la',
+    desc: 'The children-missing-education and new Children-Not-in-School registers (Children’s Wellbeing and Schools Act 2026). The LA’s own view of who is NOT accounted for by any school — the mirror image of the MIS estates.' },
+];
+
+// Cross-SECTOR holders — a third and fourth world, where the join is harder still
+// because the shared key is either purpose-limited (the NHS number, a safeguarding
+// identifier that cannot be an analytic key) or crosses a department boundary. These
+// exist so the sim can honestly show the frontier questions, not to claim they're easy.
+export const CROSS_HOLDERS: LaHolderSpec[] = [
+  { id: 'xh-health', label: 'Health & CAMHS', sub: 'NHS · CAMHS · A&E · FHIR bridge', cases: 500000, key: 'NHS number (SUI — purpose-limited)', sector: 'cross',
+    desc: 'NHS mental-health (CAMHS) and urgent-care contact — a different sector with its own law. The NHS number can appear in schools as a Safeguarding Unique Identifier, but that is purpose-limited to safeguarding and cannot lawfully be used as an analytic join key. So a schools×health question has no clean key at all: the hardest join in the model.' },
+  { id: 'xh-earnings', label: 'Destinations & earnings', sub: 'ILR · LEO · HMRC–DWP link', cases: 700000, key: 'ULN → NINO link', sector: 'cross',
+    desc: 'Post-16 learning (ILR) and employment/earnings outcomes (LEO, via HMRC and DWP) — the crown-jewel longitudinal link. The identifier cliff is at 16: the school UPN gives way to the ULN, and the join into tax records is a cross-government matching exercise under memoranda of understanding, not a shared key.' },
+];
+
+/** Every second-world data holder — LA case systems + the cross-sector worlds. */
+export const ALL_HOLDERS: LaHolderSpec[] = [...LA_HOLDERS, ...CROSS_HOLDERS];
+
+export function holderById(id: string): LaHolderSpec | undefined {
+  return ALL_HOLDERS.find((h) => h.id === id);
+}
+export function laHolderById(id: string): LaHolderSpec | undefined {
+  return LA_HOLDERS.find((h) => h.id === id);
+}
+
+// ---------------------------------------------------------------------------
 // Layout — a layered composition echoing the study's five-layer anatomy:
 // provider field (ground) → supplier gateways → exchange ring (+ ledger,
-// + edtech tendrils) → consumers (+ DfE satellite stores)
+// + edtech tendrils) → consumers (+ DfE satellite stores). The LA context space
+// sits as a second estate off to one side, meeting the schools only at the resolver.
 // ---------------------------------------------------------------------------
 
 export const LAYERS_Y = { schools: 0, suppliers: 9, ring: 19, consumers: 30 } as const;
 export const RING_RADIUS = 19;
 export const RELAY_COUNT = 24;
-export const DEFAULT_SCHOOL_COUNT = 24000;
+/** 1 dot = 1 school: the total modelled estate = Σ per-vendor school counts (≈22,573). */
+export const DEFAULT_SCHOOL_COUNT = SUPPLIERS.reduce((a, s) => a + s.schools, 0);
 
 /** Visual blob radius for a supplier cluster (∝ sqrt of estate size). */
 function blobRadius(schools: number): number {
@@ -271,7 +378,8 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     const mid = acc + (b + pad) / 2;
     acc += b + pad;
     const theta = (mid / arcTotal) * Math.PI * 2;
-    // majors sit slightly closer in so the composition reads hub-and-shore
+    // larger estates sit slightly further out, forming the "shore"; the exchange ring
+    // is the hub. (Arc width already ∝ blob radius, so majors claim more of the circle.)
     const r = 30 + b * 0.9;
     return [Math.cos(theta) * r, Math.sin(theta) * r];
   });
@@ -304,7 +412,7 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
       id: spec.id, kind: 'supplier', label: spec.label, sub: spec.sub, desc: spec.desc,
       pos: [cx, LAYERS_Y.suppliers, cz],
       size: spec.tier === 'major' ? 1.7 : spec.tier === 'mid' ? 1.0 : 0.75,
-      tier: spec.tier, sharePct: spec.sharePct, schools: counts[si],
+      tier: spec.tier, sharePct: spec.sharePct, schools: counts[si], indicative: spec.indicative,
     });
   });
 
@@ -368,6 +476,59 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     });
   });
 
+  // --- the local-authority estate: LA-side data-holder gateways in their own sector,
+  //     a ground field of 153 authorities, and the identity RESOLVER between the worlds ---
+  // The LA world is a DISTINCT ISLAND off to one side, beyond the school cloud, so the
+  // "two context spaces" reading is literal: schools fill the main disc, local
+  // authorities sit apart, and the resolver bridges the gap between them.
+  // The LA world floats as a distinct island in the "sky" BEHIND the exchange (away
+  // from the camera → the HUD-free upper-centre of the screen), elevated above the
+  // school cloud so the two context spaces read as separate, bridged by the resolver.
+  const LA_SECTOR = Math.PI * 1.2;          // back of the composition (upper-centre on screen)
+  const holderIds: string[] = [];
+  const laH = ALL_HOLDERS.filter((h) => h.sector === 'la');
+  const crossH = ALL_HOLDERS.filter((h) => h.sector === 'cross');
+  ALL_HOLDERS.forEach((h) => {
+    holderIds.push(h.id);
+    let pos: [number, number, number];
+    if (h.sector === 'la') {
+      const i = laH.indexOf(h);
+      const frac = laH.length > 1 ? i / (laH.length - 1) : 0.5;
+      const theta = LA_SECTOR + (frac - 0.5) * Math.PI * 0.42; // ±38° arc
+      const r = 47;
+      pos = [Math.cos(theta) * r, LAYERS_Y.suppliers + 5, Math.sin(theta) * r];
+    } else {
+      // the cross-sector worlds flank the LA island, raised higher and further out
+      const i = crossH.indexOf(h);
+      const theta = LA_SECTOR + (i === 0 ? -0.36 : 0.36) * Math.PI * 0.42;
+      const r = 54;
+      pos = [Math.cos(theta) * r, LAYERS_Y.suppliers + 10, Math.sin(theta) * r];
+    }
+    nodes.push({
+      id: h.id, kind: 'la', label: h.label, sub: h.sub, desc: h.desc,
+      pos, size: h.sector === 'cross' ? 1.05 : 1.2, sector: h.sector,
+    });
+  });
+
+  // the 153 local authorities as a raised ground patch beneath the LA island
+  const laPositions = new Float32Array(LA_COUNT * 3);
+  for (let i = 0; i < LA_COUNT; i++) {
+    const theta = LA_SECTOR + gaussian(rng) * 0.28;
+    const rr = 46 + gaussian(rng) * 4.5;
+    laPositions[i * 3] = Math.cos(theta) * rr;
+    laPositions[i * 3 + 1] = LAYERS_Y.suppliers - 4 + rng() * 0.6; // a raised shelf, not the school floor
+    laPositions[i * 3 + 2] = Math.sin(theta) * rr;
+  }
+
+  // the resolver: where a school-side UPN is matched to an LA-side case ID. It sits
+  // between the two estates — on the line from the ring out to the LA island.
+  nodes.push({
+    id: RESOLVER_ID, kind: 'resolver', label: 'Identity resolver', sub: 'UPN ↔ LA case ID · match confidence',
+    desc: 'The hardest, least-built part of any cross-context join: matching a child’s school-side identifier (UPN) to their LA-side case-management ID, with no shared analytic key. It resolves what it can, scores the confidence, and drops what it cannot match — honestly. There is no published standard for this today; the study names it as the missing piece.',
+    pos: [Math.cos(LA_SECTOR) * 30, LAYERS_Y.suppliers + 4, Math.sin(LA_SECTOR) * 30],
+    size: 1.4,
+  });
+
   // --- the central-store counterfactual node (hidden in federated mode) ---
   nodes.push({
     id: CENTRAL_ID, kind: 'central', label: 'Central store', sub: 'the counterfactual · one copy of everything',
@@ -400,15 +561,21 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     if (n.kind === 'edtech') {
       edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'tendril' });
     }
+    // LA-side data holders answer through their own gateway onto the ring, like any member
+    if (n.kind === 'la') {
+      edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'member' });
+    }
   }
 
   return {
     nodes, edges,
     schools: { count: schoolCount, positions, supplier, offsets },
+    las: { count: LA_COUNT, positions: laPositions },
     supplierIds: SUPPLIERS.map((s) => s.id),
     relayIds,
     edtechIds,
     storeIds,
+    holderIds,
     byId,
   };
 }
