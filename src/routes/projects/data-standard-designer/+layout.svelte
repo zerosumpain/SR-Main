@@ -121,7 +121,7 @@
     <p>
       The <b>Data Standard Designer</b> proposes a dataset standard grounded in published UK and international
       government data standards. Its recommendations are decision-support, not a substitute for your own
-      legal, information-governance and Open Standards Board processes. Built by John Kelly in a personal
+      legal, information-governance and Open Standards Board processes. Built independently, in a personal
       capacity; it does not represent the Department for Education or any government position.
     </p>
     <p class="path"><code>/projects/data-standard-designer</code> · grounded in DfE, NHS, ONS, local-gov, W3C and international standards · see <a href={`${base}/method`}>About &amp; method</a>.</p>

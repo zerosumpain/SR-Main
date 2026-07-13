@@ -139,7 +139,7 @@
   </div>
 
   <footer class="foot">
-    <p class="foot-personal"><b>A personal project.</b> Built by John Kelly in a personal capacity and in his own time. It does not
+    <p class="foot-personal"><b>A personal project.</b> Built independently, in a personal capacity and in personal time. It does not
       represent the Department for Education, any government or political party, or any official position, and takes no political stance.</p>
     <details class="sources-foot"><summary>Sources ({SOURCES.length}) — every input is research-backed</summary>
       <ul>{#each SOURCES as s}<li><a href={s.url} target="_blank" rel="noopener">{s.org} ↗</a> — {s.what}</li>{/each}</ul>
