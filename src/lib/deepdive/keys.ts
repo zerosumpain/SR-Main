@@ -59,7 +59,7 @@ export function getOpenAIClient(): OpenAI {
 
 export function getModel(): string {
   const keys = loadKeys();
-  return keys.zaiModel || 'glm-5.1';
+  return keys.zaiModel || 'glm-5.2';
 }
 
 export function getTavilyKey(): string {
@@ -71,10 +71,17 @@ export function getTavilyKey(): string {
 export function getOpenRouterClient(): OpenAI {
   const keys = loadKeys();
   if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
-  return new OpenAI({
-    apiKey: keys.openrouterApiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
-  });
+  // Wrapped like getOpenAIClient so fallback CHAT usage is cost-captured (was a
+  // raw client, so every z.ai->OpenRouter fallback recorded zero cost). Embeddings
+  // via this client are still uncaptured — installUsageCapture only patches
+  // chat.completions.create, not embeddings.create.
+  return installUsageCapture(
+    new OpenAI({
+      apiKey: keys.openrouterApiKey,
+      baseURL: 'https://openrouter.ai/api/v1',
+    }),
+    'openrouter',
+  );
 }
 
 // Research embedding space: text-embedding-3-large reduced to 1536 dims via the
@@ -88,13 +95,14 @@ export function getEmbeddingModel(): string {
   return keys.embeddingModel || 'openai/text-embedding-3-large';
 }
 
-/** Returns the OpenRouter model to use as a rate-limit fallback for z.ai calls.
- *  Default = the same GLM served via OpenRouter, so fallback output stays
- *  consistent with the primary. (Was anthropic/claude-3-5-haiku, which
- *  OpenRouter REMOVED — every gateway fallback silently failed on the dead
- *  model id until this was caught on 2026-07-11.) */
+/** Returns the OpenRouter model to use as a rate-limit/timeout fallback for z.ai
+ *  calls. Default = Gemini 3.1 Flash Lite (preview): fast + cheap, ideal for a
+ *  degraded-availability fallback when the z.ai flagship (glm-5.2) is limited.
+ *  MUST be a live OpenRouter id — a dead id makes failover die silently (the
+ *  previous anthropic/claude-3-5-haiku default was REMOVED by OpenRouter and
+ *  broke every fallback until caught on 2026-07-11). Verified live 2026-07-14. */
 export function getFallbackModel(): string {
-  return loadKeys().openrouterFallbackModel || 'z-ai/glm-5-turbo';
+  return loadKeys().openrouterFallbackModel || 'google/gemini-3.1-flash-lite-preview';
 }
 
 /** True when an OpenRouter API key is configured (fallback is available). */
@@ -118,7 +126,7 @@ export function getKeysStatus(): {
     openrouterConfigured: !!keys.openrouterApiKey,
     elevenlabsConfigured: !!keys.elevenlabsApiKey,
     zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-    zaiModel: keys.zaiModel || 'glm-5.1',
+    zaiModel: keys.zaiModel || 'glm-5.2',
     embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-large',
   };
 }

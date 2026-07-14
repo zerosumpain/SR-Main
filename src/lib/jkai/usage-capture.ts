@@ -1,6 +1,7 @@
 import type OpenAI from 'openai';
-import { recordLLMCall, type LLMCallRecord } from '$lib/workflows/execution-context';
+import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
+import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 
 export interface CompletionUsage {
   prompt_tokens?: number;
@@ -9,10 +10,11 @@ export interface CompletionUsage {
   completion_tokens_details?: { reasoning_tokens?: number };
 }
 
-/** Extract telemetry from a non-streaming completion response and push it
- *  into the active execution context (no-op if called outside an engine-
- *  managed node, e.g. from the /jkai chat hub). Robust to missing fields:
- *  if usage is absent, the call records nulls everywhere — never zeros. */
+/** Extract telemetry from a completion response and push it into (a) the active
+ *  execution context (for per-node workflow rollup — no-op outside a node) and
+ *  (b) the durable agent_actions cost ledger (so /admin/ops/costs reflects the
+ *  call regardless of where it originated). Robust to missing fields: if usage
+ *  is absent, tokens/cost record as null — never a fabricated zero. */
 function captureUsage(
   provider: 'zai' | 'openrouter',
   model: string,
@@ -41,14 +43,78 @@ function captureUsage(
       ? { inputPerMillion: pricing.inputPerMillion, outputPerMillion: pricing.outputPerMillion }
       : null,
   };
+  // Per-node workflow rollup (no-op outside an engine-managed node).
   recordLLMCall(record);
+
+  // Durable ledger row — only when we actually have usage data, so we don't
+  // clutter the cost table with null-cost "call happened" rows.
+  if (promptTokens !== null || completionTokens !== null) {
+    const store = executionContext.getStore();
+    recordDurableLLMCall({
+      provider,
+      model,
+      tokensInput: promptTokens,
+      tokensOutput: completionTokens,
+      costUsd,
+      source: store ? 'workflow' : 'gateway',
+      sessionId: store?.runId ?? null,
+    });
+  }
 }
 
-/** Wrap a client's `chat.completions.create` so every non-streaming call
- *  captures usage into the active execution context. Streaming calls pass
- *  through unmodified — provider streams don't always surface usage, and
- *  capturing it would require iterator interposition. Workflow nodes are
- *  predominantly non-streaming, so the streaming gap costs little. */
+/** Wrap a streamed completion so end-of-stream usage is captured, WITHOUT
+ *  altering any yielded chunk. A Proxy delegates every property/method to the
+ *  real SDK Stream (so .controller/.tee/etc. keep working) and only interposes
+ *  on iteration to observe the final usage-bearing chunk. */
+function wrapStreamForUsage(
+  stream: AsyncIterable<{ usage?: CompletionUsage }>,
+  provider: 'zai' | 'openrouter',
+  model: string,
+): AsyncIterable<{ usage?: CompletionUsage }> {
+  let lastUsage: CompletionUsage | undefined;
+  let recorded = false;
+  const flush = () => {
+    if (recorded) return;
+    recorded = true;
+    captureUsage(provider, model, lastUsage);
+  };
+
+  return new Proxy(stream, {
+    get(target, prop, recv) {
+      if (prop === Symbol.asyncIterator) {
+        return function () {
+          const inner = (target as AsyncIterable<{ usage?: CompletionUsage }>)[Symbol.asyncIterator]();
+          return {
+            next: async () => {
+              try {
+                const r = await inner.next();
+                if (r.value?.usage) lastUsage = r.value.usage;
+                if (r.done) flush();
+                return r;
+              } catch (err) {
+                flush();
+                throw err;
+              }
+            },
+            return: async (v?: unknown) => {
+              flush();
+              return inner.return ? inner.return(v) : { done: true as const, value: v };
+            },
+            throw: inner.throw ? (e?: unknown) => inner.throw!(e) : undefined,
+          };
+        };
+      }
+      const v = Reflect.get(target, prop, recv);
+      return typeof v === 'function' ? v.bind(target) : v;
+    },
+  }) as AsyncIterable<{ usage?: CompletionUsage }>;
+}
+
+/** Wrap a client's `chat.completions.create` so every call — streaming and
+ *  non-streaming — captures usage into the workflow rollup AND the durable cost
+ *  ledger. For streams we ensure the provider emits a final usage chunk
+ *  (stream_options.include_usage) and observe it transparently as the stream is
+ *  consumed. Embeddings are not intercepted (only chat.completions). */
 export function installUsageCapture(client: OpenAI, provider: 'zai' | 'openrouter'): OpenAI {
   type CreateFn = typeof client.chat.completions.create;
   const completions = client.chat.completions as unknown as { create: CreateFn };
@@ -59,13 +125,28 @@ export function installUsageCapture(client: OpenAI, provider: 'zai' | 'openroute
   // the overload set by hand.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   completions.create = (async function (this: unknown, ...args: unknown[]): Promise<unknown> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const params = (args[0] ?? {}) as { model?: string; stream?: boolean };
+    const params = (args[0] ?? {}) as {
+      model?: string;
+      stream?: boolean;
+      stream_options?: Record<string, unknown> | null;
+    };
     const model = params.model ?? '';
+
+    if (params.stream) {
+      // Ask the provider for a trailing usage-only chunk if the caller didn't.
+      // The final chunk has empty choices, which every consumer already skips.
+      if (model && !params.stream_options?.include_usage) {
+        args[0] = { ...params, stream_options: { ...(params.stream_options ?? {}), include_usage: true } };
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const stream = await (original as any)(...args);
+      if (!model) return stream;
+      return wrapStreamForUsage(stream as AsyncIterable<{ usage?: CompletionUsage }>, provider, model);
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (original as any)(...args);
-
-    if (!params.stream && model) {
+    if (model) {
       const usage = (result as { usage?: CompletionUsage })?.usage;
       captureUsage(provider, model, usage);
     }

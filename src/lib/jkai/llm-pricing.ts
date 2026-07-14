@@ -50,6 +50,8 @@ const OPENROUTER_PRICES: Record<string, ModelPricing> = {
   'google/gemini-2.5-pro': { inputPerMillion: 1.25, outputPerMillion: 5 },
   'google/gemini-2.5-flash': { inputPerMillion: 0.075, outputPerMillion: 0.3 },
   'google/gemini-2.0-flash': { inputPerMillion: 0.075, outputPerMillion: 0.3 },
+  // z.ai rate-limit/timeout fallback (see getFallbackModel). OpenRouter posted rates 2026-07.
+  'google/gemini-3.1-flash-lite-preview': { inputPerMillion: 0.25, outputPerMillion: 1.5 },
   'deepseek/deepseek-chat': { inputPerMillion: 0.27, outputPerMillion: 1.1 },
   'deepseek/deepseek-reasoner': { inputPerMillion: 0.55, outputPerMillion: 2.19 },
   'meta-llama/llama-3.3-70b-instruct': { inputPerMillion: 0.13, outputPerMillion: 0.4 },

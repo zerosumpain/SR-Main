@@ -29,7 +29,7 @@
   }
 
   const prompt = $derived(String(config.prompt ?? ''));
-  const model = $derived(String(config.model ?? 'glm-5-turbo'));
+  const model = $derived(String(config.model ?? ''));
   const temperature = $derived.by(() => {
     const raw = config.temperature;
     const n = typeof raw === 'number' ? raw : Number(raw);

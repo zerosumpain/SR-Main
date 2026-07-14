@@ -19,6 +19,7 @@ import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
+import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 
@@ -599,12 +600,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             // conversation's own model via our price table; fall back to
             // Hermes's number only if we can't price the model.
             let dCost = 0;
+            let convProvider = 'zai';
+            let convModel = 'glm-5.2';
             if (dIn > 0 || dOut > 0) {
               const [conv] = await db
                 .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
                 .from(conversations)
                 .where(eq(conversations.id, conversationId))
                 .limit(1);
+              if (conv) {
+                convProvider = conv.provider;
+                convModel = conv.modelId;
+              }
               const pricing = conv ? priceFor(conv.provider, conv.modelId) : null;
               if (pricing) {
                 dCost = computeCost(pricing, dIn, dOut);
@@ -621,6 +628,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
                   costUsd: sql`${conversations.costUsd} + ${dCost.toFixed(6)}`,
                 })
                 .where(eq(conversations.id, conversationId));
+              // Also land this Hermes turn in the durable cost ledger so
+              // /admin/ops/costs reflects /jkai chat spend. Hermes runs outside
+              // the SvelteKit gateway, so installUsageCapture never sees it.
+              recordDurableLLMCall({
+                provider: convProvider,
+                model: convModel,
+                tokensInput: dIn,
+                tokensOutput: dOut,
+                costUsd: dCost,
+                source: 'jkai-chat',
+                sessionId: conversationId,
+              });
             }
           }
         } catch (usageErr) {

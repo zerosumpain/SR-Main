@@ -1094,7 +1094,7 @@ export const conversations = pgTable('jkai_conversations', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   lastMemoryReview: timestamp('last_memory_review', { withTimezone: true }),
   modelProvider: text('model_provider').notNull().default('zai'),
-  modelId: text('model_id').notNull().default('glm-5.1'),
+  modelId: text('model_id').notNull().default('glm-5.2'),
   promptTokens: bigint('prompt_tokens', { mode: 'number' }).notNull().default(0),
   completionTokens: bigint('completion_tokens', { mode: 'number' }).notNull().default(0),
   costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),

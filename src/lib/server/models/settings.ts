@@ -2,7 +2,13 @@ import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
+import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
 import type { ModelContext } from './types';
+
+// Agentic paths (autonomous builder, plan-debate, Hermes delegation children) stay on the
+// fast model: glm-5.2 is ~4x slower and times out on tool-heavy delegation (see
+// reference_glm52_agentic_slowness). General chat/thinking/one-shots use the glm-5.2 flagship.
+const AGENTIC_MODEL_ID = 'glm-5-turbo';
 
 const TTL_MS = 30_000;
 
@@ -40,12 +46,13 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<ModelContext> {
   if (kind === 'chat') {
-    // Chat default is always the configured GLM model.
+    // Chat default is always the configured GLM model (flagship glm-5.2 by default).
     const v = await getSetting<{ modelId?: string }>('jkai.chat.default_glm_model');
-    return { provider: 'zai', modelId: v?.modelId ?? 'glm-5.1' };
+    return { provider: 'zai', modelId: v?.modelId ?? DEFAULT_GLM_MODEL_ID };
   }
+  // Builder is the tool-heavy agentic path — keep it on the fast model, not the slow flagship.
   const v = await getSetting<ModelContext>('jkai.builder.default_model');
-  return v ?? { provider: 'zai', modelId: 'glm-5.1' };
+  return v ?? { provider: 'zai', modelId: AGENTIC_MODEL_ID };
 }
 
 /**
@@ -64,7 +71,8 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
   if (v && typeof v === 'object' && 'modelId' in v && typeof v.modelId === 'string') {
     return { provider: 'zai', modelId: v.modelId };
   }
-  return { provider: 'zai', modelId: 'glm-5.1' };
+  // Thinking tier is one-shot reasoning (plan/clarify), not agentic — use the flagship.
+  return { provider: 'zai', modelId: DEFAULT_GLM_MODEL_ID };
 }
 
 /** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */

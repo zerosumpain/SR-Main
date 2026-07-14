@@ -9,7 +9,7 @@ export const thinkDef: NodeDefinition = {
     temperature: { type: 'number', description: 'Sampling temperature (default 0.3)' },
     maxTokens: { type: 'number', description: 'Max tokens (default 2048)' },
   }, required: ['prompt'] },
-  defaultConfig: { prompt: '', model: 'glm-5-turbo', temperature: 0.3, maxTokens: 2048 },
+  defaultConfig: { prompt: '', model: '', temperature: 0.3, maxTokens: 2048 },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Reasoning' }],
   basicConfig: [

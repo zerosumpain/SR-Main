@@ -15,6 +15,7 @@ const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false,
 
 const ZAI_CAPS: Record<string, ModelCapabilities> = {
   'glm-5': ALL,
+  'glm-5.2': ALL,
   'glm-5.1': ALL,
   'glm-4.5v': IMAGE_ONLY,
   'glm-4v': IMAGE_ONLY,

@@ -25,7 +25,7 @@ export const load: PageServerLoad = async () => {
       glmModelId: glm?.modelId ?? DEFAULT_GLM_MODEL_ID,
       altOpenRouterModelId: alt?.modelId ?? null,
     },
-    builder: builder ?? { provider: 'zai', modelId: 'glm-5.1' } as ModelContext,
+    builder: builder ?? { provider: 'zai', modelId: 'glm-5-turbo' } as ModelContext,
     openrouterKey: {
       configured: dbHasKey || keysJsonHasKey,
       source: dbHasKey ? 'db' : (keysJsonHasKey ? 'keys.json' : 'none'),

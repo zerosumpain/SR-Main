@@ -16,4 +16,4 @@ export const GLM_MODELS: GlmModel[] = [
   // include GLM-5V-Turbo"), so it was an un-selectable dead option.
 ];
 
-export const DEFAULT_GLM_MODEL_ID = 'glm-5.1';
+export const DEFAULT_GLM_MODEL_ID = 'glm-5.2';

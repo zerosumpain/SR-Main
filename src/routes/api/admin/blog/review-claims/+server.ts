@@ -4,7 +4,7 @@ import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
 
-const MODEL_CTX = { provider: 'zai' as const, modelId: 'glm-5.1' };
+const MODEL_CTX = { provider: 'zai' as const, modelId: 'glm-5.2' };
 const MAX_CLAIMS = 12;
 const TAVILY_RESULTS_PER_CLAIM = 8;
 const MAX_CANDIDATES_RETURNED = 4;
