@@ -64,6 +64,7 @@
   let canFullscreen = $state(false);
   let isFullscreen = $state(false);
   let logOpen = $state(false); // standalone bottom-left log — collapsed by default, expands up
+  let topBarEl = $state<HTMLElement>(); // measured so the corner panels always clear it, however it wraps
 
   // the scenario/join dropdown reflects whatever is (or was just) playing
   const selectValue = $derived(
@@ -245,6 +246,20 @@
       sceneHandle = null;
     };
   });
+
+  // Publish the control bar's live height (it wraps to 1–3 rows depending on width) as
+  // --hud-top on the shell, so every corner panel offsets from the bar's real bottom
+  // edge instead of a guessed breakpoint — nothing can overlap the scenario picker.
+  $effect(() => {
+    const el = topBarEl;
+    if (!el || !shell) return;
+    const host = shell;
+    const setVar = () => host.style.setProperty('--hud-top', `${Math.round(el.getBoundingClientRect().height) + 10}px`);
+    const ro = new ResizeObserver(setVar);
+    ro.observe(el);
+    setVar();
+    return () => ro.disconnect();
+  });
 </script>
 
 <svelte:document onfullscreenchange={() => (isFullscreen = document.fullscreenElement === shell)} />
@@ -270,7 +285,7 @@
 
   {#if ready}
     <!-- top bar: scenario picker + mode + ring + view -->
-    <div class="hud top">
+    <div class="hud top" bind:this={topBarEl}>
       {#if !embed}
         <label class="sc-select">
           <span class="sc-select-lab">Scenario</span>
@@ -394,6 +409,28 @@
         {/if}
       </aside>
     {/if}
+
+    <!-- standalone overlays live INSIDE the shell, so they share the top bar's coordinate
+         space (positioned against .sim-shell, not the page) and offset from --hud-top -->
+    {#if standalone}
+      <!-- top-left: central-store counterfactual + scenario explainer (or legend when idle) -->
+      <aside class="hud info-tl">
+        {@render scenarioInfo()}
+      </aside>
+      <!-- bottom-left: exchange log + query contract, collapsed to a bar, expands UPWARD -->
+      <aside class="hud lograil" class:open={logOpen}>
+        {#if logOpen}
+          <div class="lograil-body">
+            {@render exchangeLog()}
+            {@render contractCard()}
+          </div>
+        {/if}
+        <button class="lograil-toggle" onclick={() => (logOpen = !logOpen)} aria-expanded={logOpen}>
+          <span class="p-lab">Exchange log &amp; contract</span>
+          <span class="c-chev up" class:open={logOpen}>▴</span>
+        </button>
+      </aside>
+    {/if}
   {/if}
 </div>
 
@@ -486,27 +523,6 @@
   </div>
 {/if}
 
-<!-- standalone one-screen: everything is an on-canvas overlay, corners kept clear -->
-{#if ready && standalone}
-  <!-- top-left: the central-store counterfactual + the scenario explainer (or legend) -->
-  <aside class="hud info-tl">
-    {@render scenarioInfo()}
-  </aside>
-
-  <!-- bottom-left: exchange log + query contract, collapsed by default, expands upward -->
-  <aside class="hud lograil" class:open={logOpen}>
-    {#if logOpen}
-      <div class="lograil-body">
-        {@render exchangeLog()}
-        {@render contractCard()}
-      </div>
-    {/if}
-    <button class="lograil-toggle" onclick={() => (logOpen = !logOpen)} aria-expanded={logOpen}>
-      <span class="p-lab">Exchange log &amp; contract</span>
-      <span class="c-chev up" class:open={logOpen}>▴</span>
-    </button>
-  </aside>
-{/if}
 
 <style>
   .sim-shell { position: relative; height: max(560px, calc(100vh - var(--topH, 56px) - 54px)); height: max(560px, calc(100svh - var(--topH, 56px) - 54px)); border-block: 1px solid rgba(28,22,17,0.25); overflow: hidden; background: #efe7d5; scroll-margin-top: calc(var(--topH, 56px) + 50px); }
@@ -570,7 +586,7 @@
   .n-text { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(14px, 1.25vw, 17px); line-height: 1.4; color: rgba(28,22,17,0.88); max-width: 120ch; }
 
   /* counters */
-  .counters { top: 54px; right: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .counters { top: calc(var(--hud-top, 46px) + 8px); right: 12px; display: flex; flex-direction: column; gap: 6px; }
   .ct { background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 6px 11px; text-align: right; min-width: 120px; backdrop-filter: blur(4px); }
   .ct b { display: block; font-family: 'Fraunces', serif; font-size: clamp(18px, 1.7vw, 26px); line-height: 1.1; }
   .ct span { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.55); }
@@ -578,8 +594,8 @@
   .ct.hot b { color: var(--accent, #c4570a); }
   .counters-inline { display: none; }
 
-  /* inspector — top-left, so it never collides with the counters + rail on the right */
-  .inspector { left: 12px; top: 54px; width: 252px; background: rgba(241,234,214,0.96); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 12px 14px; }
+  /* inspector — top-left below the control bar (deck); standalone moves it bottom-right */
+  .inspector { left: 12px; top: calc(var(--hud-top, 46px) + 8px); width: 252px; background: rgba(241,234,214,0.96); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 12px 14px; }
   .inspector h4 { font-family: 'Fraunces', serif; font-size: 16px; margin: 0 0 2px; }
   .i-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.55); }
   .i-stats { display: flex; gap: 12px; margin: 8px 0 2px; font-size: 12px; }
@@ -636,7 +652,7 @@
 
   /* standalone corner overlays — everything on-canvas, nothing scrolls the page */
   /* top-left: the central-store counterfactual + the scenario explainer (or legend) */
-  .info-tl { top: 54px; left: 12px; width: min(312px, 31vw); max-height: calc(100% - 210px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .info-tl { top: calc(var(--hud-top, 46px) + 8px); left: 12px; width: min(312px, 31vw); max-height: calc(100% - var(--hud-top, 46px) - 168px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .info-tl :global(.counterfactual), .info-tl :global(.lesson), .info-tl :global(.legend) { background: rgba(241,234,214,0.95); backdrop-filter: blur(6px); }
 
   /* bottom-left: exchange log + query contract — collapsed to a bar, expands UPWARD */
@@ -671,13 +687,6 @@
 
   @media (max-width: 900px) {
     .info-tl, .lograil { display: none; }
-  }
-
-  /* mid widths: the top bar can wrap to two rows, so drop the corner panels clear of it */
-  @media (min-width: 901px) and (max-width: 1240px) {
-    .counters { top: 96px; }
-    .inspector { top: 96px; }
-    .info-tl { top: 96px; max-height: calc(100% - 250px); }
   }
 
   @media (max-width: 900px) {
