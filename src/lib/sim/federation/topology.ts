@@ -8,7 +8,7 @@
 // figures move quarterly); every behaviour simulated on them is illustrative.
 // Everything is deterministic (seeded RNG) and DOM/Three-free so it can be tested.
 
-export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech' | 'la' | 'resolver' | 'registry';
+export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech' | 'aggregator' | 'la' | 'resolver' | 'registry';
 export type SupplierTier = 'major' | 'mid' | 'small';
 
 export interface NetNode {
@@ -26,12 +26,15 @@ export interface NetNode {
   indicative?: boolean;
   /** for holder nodes (kind 'la'): which second world this belongs to */
   sector?: 'la' | 'cross';
+  /** edtech / aggregator nodes: indicative schools-reached figure, surfaced by the
+   *  "approx reach" toggle as a second label line and in the inspector */
+  reach?: number;
 }
 
 export interface Edge {
   from: string;
   to: string;
-  kind: 'member' | 'ring' | 'central' | 'satellite' | 'tendril';
+  kind: 'member' | 'ring' | 'central' | 'satellite' | 'tendril' | 'broker';
 }
 
 export interface SchoolField {
@@ -60,6 +63,8 @@ export interface Topology {
   supplierIds: string[];
   relayIds: string[];
   edtechIds: string[];
+  /** the MIS access brokers (Wonde et al.) — a second toggleable ring layer */
+  aggregatorIds: string[];
   storeIds: string[];
   /** the second-world data-holder domains a join can terminate at (LA + cross-sector) */
   holderIds: string[];
@@ -251,14 +256,20 @@ export interface EdtechSpec {
   /** indicative schools-reached figure — presence also enrols the platform in the
    * digital-homework query panel (see queries.ts) */
   schoolsReached?: number;
+  /** indicative reach shown by the "approx reach" toggle (schools). Falls back to
+   * schoolsReached for the platforms that gate the homework panel, so the display
+   * figure and the query gate never drift apart. */
+  reach?: number;
 }
 
+// The certified-app roster (the ring's "Apps" layer): platforms imagined contributing
+// aggregate intelligence. Reach figures are indicative UK-schools estimates. The MIS
+// access brokers (Wonde, Xporter, Assembly, Salamander) are a SEPARATE layer — see
+// AGGREGATORS below — because they are plumbing, not signal sources.
 export const EDTECH: EdtechSpec[] = [
-  { id: 'edt-wonde', label: 'Wonde', sub: 'access broker · plumbing today', schoolsReached: 9000,
-    desc: 'The broker the daily attendance feed already rides on — proof the tendril pattern exists. In a federation its role inverts: from bulk-access middleman to certified gateway operator.' },
-  { id: 'edt-cpoms', label: 'CPOMS', sub: 'safeguarding logs',
-    desc: 'Safeguarding and pastoral incident logs. Federated intelligence: concern-pattern signals (never case content) that could reach a strategy discussion hours after they cluster, under s.47-grade controls.' },
-  { id: 'edt-classcharts', label: 'Class Charts', sub: 'behaviour & seating',
+  { id: 'edt-cpoms', label: 'CPOMS', sub: 'safeguarding logs', reach: 15000,
+    desc: 'Safeguarding and pastoral incident logs, in a large share of English schools. Federated intelligence: concern-pattern signals (never case content) that could reach a strategy discussion hours after they cluster, under s.47-grade controls.' },
+  { id: 'edt-classcharts', label: 'Class Charts', sub: 'behaviour & seating', reach: 7000,
     desc: 'Behaviour points and seating plans. Federated intelligence: behaviour-climate aggregates that give the attendance numbers their missing context.' },
   { id: 'edt-satchel', label: 'Satchel One', sub: 'homework & engagement', schoolsReached: 4100,
     desc: 'Homework setting and completion. Federated intelligence: engagement-drop signals — the leading indicator that shows up weeks before attendance falls.' },
@@ -266,18 +277,48 @@ export const EDTECH: EdtechSpec[] = [
     desc: 'Adaptive maths homework. Federated intelligence: anonymous mastery distributions by topic — a national curriculum-health readout no census question could collect.' },
   { id: 'edt-ttrs', label: 'TT Rock Stars', sub: 'fluency practice', schoolsReached: 13800,
     desc: 'Times-tables fluency. Federated intelligence: number-fluency cohort curves for the primary phase, aggregated at source, no child named.' },
-  { id: 'edt-tapestry', label: 'Tapestry', sub: 'EYFS evidence journals',
+  { id: 'edt-tapestry', label: 'Tapestry', sub: 'EYFS evidence journals', reach: 12000,
     desc: 'Early-years evidence journals. Federated intelligence: development-milestone aggregates from the phase where the state currently sees least.' },
-  { id: 'edt-parentpay', label: 'ParentPay', sub: 'payments & engagement',
+  { id: 'edt-parentpay', label: 'ParentPay', sub: 'payments & engagement', reach: 10000,
     desc: 'School payments. Federated intelligence: FSM take-up vs eligibility gaps — the difference between entitled and fed, visible only in transaction aggregates.' },
   { id: 'edt-ar', label: 'Accelerated Reader', sub: 'reading practice · Renaissance', schoolsReached: 6100,
     desc: 'Reading practice and quizzing. Federated intelligence: reading-age distributions against chronological age, by region and phase — literacy weather, not literacy anecdotes.' },
-  { id: 'edt-gl', label: 'GL Assessment', sub: 'standardised assessment',
+  { id: 'edt-gl', label: 'GL Assessment', sub: 'standardised assessment', reach: 5000,
     desc: 'CAT4 and standardised assessment. Federated intelligence: ability-vs-attainment gap aggregates — where potential is being missed, at population scale.' },
-  { id: 'edt-unifrog', label: 'Unifrog', sub: 'destinations & careers',
+  { id: 'edt-unifrog', label: 'Unifrog', sub: 'destinations & careers', reach: 4000,
     desc: 'Careers platforms see intentions before outcomes. Federated intelligence: destination-intention flows feeding LEO-style analysis years earlier than tax records can.' },
-  { id: 'edt-provisionmap', label: 'Provision Map', sub: 'SEND provision · Tes',
+  { id: 'edt-provisionmap', label: 'Provision Map', sub: 'SEND provision · Tes', reach: 3000,
     desc: 'SEND provision mapping. Federated intelligence: intervention-coverage aggregates — what support is actually in place against what EHCPs promise.' },
+];
+
+// ---------------------------------------------------------------------------
+// The aggregator layer — the MIS access brokers that already sit between school
+// MIS estates and the apps above. This is how school data moves TODAY: a broker
+// holds a bulk-access agreement with each MIS and re-sells a normalised feed to
+// downstream apps. Drawn as a distinct ring layer because a federation would
+// INVERT their role — from bulk-access middleman to certified gateway operator,
+// answering queries under contract instead of piping copies. Reach figures are
+// indicative UK-schools estimates from vendors' own public claims.
+// ---------------------------------------------------------------------------
+
+export interface AggregatorSpec {
+  id: string;
+  label: string;
+  sub: string;
+  desc: string;
+  /** indicative UK schools this broker reaches */
+  reach: number;
+}
+
+export const AGGREGATORS: AggregatorSpec[] = [
+  { id: 'agg-wonde', label: 'Wonde', sub: 'access broker · the plumbing today', reach: 13000,
+    desc: 'The broker the daily attendance feed already rides on, plugged into every major MIS — proof the middleman pattern already works at national scale. In a federation its role inverts: from bulk-access reseller to a certified gateway that answers queries under contract, with each access on the ledger.' },
+  { id: 'agg-xporter', label: 'Groupcall Xporter', sub: 'MIS extraction · The Access Group', reach: 10000,
+    desc: 'The long-standing MIS extraction agent — an on-site connector pulling from SIMS and the rest and syncing it out to third parties. The federation question it poses: why run an extraction agent at all, when a gateway could answer the question in place?' },
+  { id: 'agg-assembly', label: 'Assembly', sub: 'MIS data platform · analytics', reach: 5000,
+    desc: 'A newer MIS data platform aggregating school data for analytics and MAT reporting. The kind of value-added layer a federation should make easy to build on top of a certified feed — instead of each rebuilding its own bulk pipe.' },
+  { id: 'agg-salamander', label: 'Salamander', sub: 'MIS sync · account provisioning', reach: 2500,
+    desc: 'MIS synchronisation for identity and account provisioning — the quiet plumbing that keeps logins and groups in step with the school roll. A reminder that "integration" already means dozens of standing copies, each its own risk surface.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -499,7 +540,21 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     nodes.push({
       id: e.id, kind: 'edtech', label: e.label, sub: e.sub, desc: e.desc,
       pos: [Math.cos(theta) * r, LAYERS_Y.ring + (i % 2 === 0 ? 1.6 : -1.8) + (i % 4) * 0.5, Math.sin(theta) * r],
-      size: 0.5,
+      size: 0.5, reach: e.reach ?? e.schoolsReached,
+    });
+  });
+
+  // --- aggregators: the MIS access brokers, a tighter inner ring just off the
+  //     exchange — the plumbing that carries school data today (toggle layer) ---
+  const aggregatorIds: string[] = [];
+  AGGREGATORS.forEach((a, i) => {
+    const theta = ((i + 0.5) / AGGREGATORS.length) * Math.PI * 2 + Math.PI * 0.13;
+    const r = RING_RADIUS + 3.4;
+    aggregatorIds.push(a.id);
+    nodes.push({
+      id: a.id, kind: 'aggregator', label: a.label, sub: a.sub, desc: a.desc,
+      pos: [Math.cos(theta) * r, LAYERS_Y.ring + 2.6 + (i % 2) * 1.1, Math.sin(theta) * r],
+      size: 0.85, reach: a.reach,
     });
   });
 
@@ -602,6 +657,9 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     if (n.kind === 'edtech') {
       edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'tendril' });
     }
+    if (n.kind === 'aggregator') {
+      edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'broker' });
+    }
     // LA-side data holders answer through their own gateway onto the ring, like any member
     if (n.kind === 'la') {
       edges.push({ from: n.id, to: nearestRelay(n.pos), kind: 'member' });
@@ -615,6 +673,7 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     supplierIds: SUPPLIERS.map((s) => s.id),
     relayIds,
     edtechIds,
+    aggregatorIds,
     storeIds,
     holderIds,
     byId,
@@ -628,7 +687,7 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
 export type ArchMode = 'federated' | 'central';
 
 function memberEdgeTarget(topo: Topology, id: string): string | null {
-  const e = topo.edges.find((e) => (e.kind === 'member' || e.kind === 'tendril' || e.kind === 'satellite') && e.from === id);
+  const e = topo.edges.find((e) => (e.kind === 'member' || e.kind === 'tendril' || e.kind === 'satellite' || e.kind === 'broker') && e.from === id);
   return e ? e.to : null;
 }
 

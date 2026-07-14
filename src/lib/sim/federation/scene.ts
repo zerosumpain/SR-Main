@@ -22,6 +22,10 @@ export interface SceneHandle {
   applyEvent(e: SimEvent): void;
   setMode(mode: ArchMode): void;
   setEdtech(on: boolean): void;
+  /** show/hide the MIS-broker (aggregator) ring layer */
+  setAggregators(on: boolean): void;
+  /** overlay indicative schools-reached figures on the visible ring layer */
+  setReach(on: boolean): void;
   addTick(fn: (dtMs: number) => void): void;
   resetView(): void;
   zoom(factor: number): void;
@@ -224,15 +228,37 @@ export function createFederationScene(
   // the edtech ring is toggleable: its meshes, labels and tendril edges live here
   const edtechGroup = new THREE.Group();
   scene.add(edtechGroup);
+  // the aggregator (MIS-broker) ring is a second, independently toggleable layer
+  const aggregatorGroup = new THREE.Group();
+  scene.add(aggregatorGroup);
 
   function nodeMaterial(hex: string): THREE.MeshLambertMaterial {
     return new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
   }
 
+  // reach overlay: the second line of ring-node labels, hidden until setReach(true)
+  const reachEls: HTMLElement[] = [];
+  let reachOn = false;
+  function fmtReach(n: number): string {
+    return n >= 1000 ? `${Math.round(n / 100) / 10}k`.replace('.0k', 'k') : String(n);
+  }
+
   function labelFor(n: NetNode, cls: string): CSS2DObject {
     const el = document.createElement('div');
     el.className = `fed-label ${cls}`;
-    el.textContent = n.label;
+    if (n.reach != null) {
+      const name = document.createElement('span');
+      name.className = 'l-name';
+      name.textContent = n.label;
+      const reach = document.createElement('span');
+      reach.className = 'l-reach';
+      reach.textContent = `~${fmtReach(n.reach)} schools`;
+      reach.style.display = reachOn ? 'block' : 'none';
+      reachEls.push(reach);
+      el.append(name, reach);
+    } else {
+      el.textContent = n.label;
+    }
     const obj = new CSS2DObject(el);
     obj.position.set(0, n.size + 1.1, 0);
     return obj;
@@ -282,6 +308,20 @@ export function createFederationScene(
       const lbl = labelFor(n, 'edt');
       lbl.position.y = n.size + 0.9;
       mesh.add(lbl);
+    } else if (n.kind === 'aggregator') {
+      // MIS access broker: a squat hexagonal coupling with a collar — reads as "plumbing"
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size * 0.92, n.size * 0.92, n.size * 0.8, 6), nodeMaterial('#67707a'));
+      mesh.rotation.y = Math.PI / 6;
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const collar = new THREE.Mesh(
+        new THREE.TorusGeometry(n.size * 1.16, 0.06, 6, 24),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color('#67707a'), transparent: true, opacity: 0.6 }),
+      );
+      collar.rotation.x = Math.PI / 2;
+      mesh.add(collar);
+      const lbl = labelFor(n, 'agg');
+      lbl.position.y = n.size + 1.0;
+      mesh.add(lbl);
     } else if (n.kind === 'la') {
       // second-world data holders: LA case systems (teal) + cross-sector worlds (amber)
       const hex = n.sector === 'cross' ? '#9a6a2f' : '#356b74';
@@ -327,7 +367,7 @@ export function createFederationScene(
       mesh.userData.nodeId = n.id;
       nodeMeshes.set(n.id, mesh);
       nodeBaseColor.set(n.id, (mesh.material as THREE.MeshLambertMaterial).color.clone());
-      (n.kind === 'edtech' ? edtechGroup : scene).add(mesh);
+      (n.kind === 'edtech' ? edtechGroup : n.kind === 'aggregator' ? aggregatorGroup : scene).add(mesh);
       if (n.kind !== 'relay') pickables.push(mesh);
     }
   }
@@ -404,6 +444,8 @@ export function createFederationScene(
   scene.add(centralEdges);
   const tendrilEdges = edgeLines(['tendril'], INK_SOFT, 0.22);
   edtechGroup.add(tendrilEdges);
+  const brokerEdges = edgeLines(['broker'], new THREE.Color('#67707a'), 0.32);
+  aggregatorGroup.add(brokerEdges);
 
   // hidden until toggled on — CSS2D labels need their own visible flags flipped,
   // so the toggle traverses (which includes the group itself) rather than
@@ -415,6 +457,18 @@ export function createFederationScene(
     edtechGroup.traverse((o) => { o.visible = on; });
     // strip any highlight rings left around tendrils that just vanished
     if (!on) highlight(Array.from(highlightRings.keys()).filter(isEdtech), false);
+  }
+
+  // the aggregator (broker) layer — an independent toggle, no scenario traffic
+  function setAggregators(on: boolean) {
+    aggregatorGroup.traverse((o) => { o.visible = on; });
+  }
+
+  // reach overlay — flip every ring-node's second label line; hidden lines inside
+  // a hidden layer stay hidden regardless, so this is a single global flag
+  function setReach(on: boolean) {
+    reachOn = on;
+    for (const el of reachEls) el.style.display = on ? 'block' : 'none';
   }
 
   // --- pulse pool ------------------------------------------------------------
@@ -528,8 +582,9 @@ export function createFederationScene(
     }
   }
 
-  // the ring starts hidden (call sits below highlightRings' declaration on purpose)
+  // both ring layers start hidden (call sits below highlightRings' declaration on purpose)
   setEdtech(false);
+  setAggregators(false);
 
   function clearTransients() {
     for (const p of active.splice(0)) { releaseSprite(p.sprite); releaseSprite(p.trail); }
@@ -802,6 +857,8 @@ export function createFederationScene(
     applyEvent,
     setMode,
     setEdtech,
+    setAggregators,
+    setReach,
     addTick: (fn) => tickFns.push(fn),
     resetView,
     zoom: (factor) => zoomBy(factor),

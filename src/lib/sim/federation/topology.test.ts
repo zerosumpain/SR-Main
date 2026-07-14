@@ -157,10 +157,22 @@ describe('routePath', () => {
   });
 
   it('routes edtech tendrils via their relay', () => {
-    const p = routePath(topo, 'edt-wonde', 'sup-arbor', 'federated');
+    const p = routePath(topo, 'edt-cpoms', 'sup-arbor', 'federated');
     expect(p.length).toBeGreaterThanOrEqual(3);
-    expect(p[0]).toEqual(topo.byId.get('edt-wonde')!.pos);
+    expect(p[0]).toEqual(topo.byId.get('edt-cpoms')!.pos);
     expect(p[p.length - 1]).toEqual(topo.byId.get('sup-arbor')!.pos);
+  });
+
+  it('routes aggregator brokers via their relay', () => {
+    expect(topo.aggregatorIds).toContain('agg-wonde');
+    const p = routePath(topo, 'agg-wonde', 'sup-arbor', 'federated');
+    expect(p.length).toBeGreaterThanOrEqual(3);
+    expect(p[0]).toEqual(topo.byId.get('agg-wonde')!.pos);
+    for (const id of topo.aggregatorIds) {
+      const e = topo.edges.find((e) => e.kind === 'broker' && e.from === id);
+      expect(e, `${id} has no broker edge`).toBeDefined();
+      expect(topo.relayIds).toContain(e!.to);
+    }
   });
 
   it('returns empty for unknown nodes', () => {

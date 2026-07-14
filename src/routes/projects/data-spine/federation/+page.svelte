@@ -32,7 +32,8 @@
     { term: 'The obelisk', means: 'The audit ledger at the heart of the ring — every query stamped, citizen-readable. Estonia’s best export, whatever the architecture.' },
     { term: 'The upper shapes', means: 'Consumers: DfE, 153 local authorities, children’s social care, accredited research, Ofsted — and the learner-held Education Record, wired through the DfE gateway that operates it, not straight to the ring.' },
     { term: 'The satellites', means: 'The department’s existing stores orbiting the DfE — NPD, LEO, ILR, LDS. Drawn honestly: this is the central estate a federation would progressively relieve, not pretend never existed.' },
-    { term: 'The tendrils', means: 'Toggle the edtech ring on: Wonde, CPOMS, Satchel One, Sparx, Tapestry and friends as certified spurs on the exchange — imagined contributors of aggregate intelligence, never account data.' },
+    { term: 'The ring · Apps', means: 'Flip the ring to Apps: CPOMS, Satchel One, Sparx, TT Rock Stars, Tapestry and friends as certified spurs on the exchange — imagined contributors of aggregate intelligence, never account data. Toggle “reach” to overlay each platform’s approximate school count.' },
+    { term: 'The ring · Brokers', means: 'Flip the ring to Brokers to see how school data actually moves today: the MIS access brokers — Wonde, Groupcall Xporter, Assembly, Salamander — that hold bulk-access deals with every MIS and resell the feed. A federation would invert them from middlemen into certified gateways answering under contract.' },
     { term: 'The red cylinder', means: 'The counterfactual. Flip to “Central store” and the same traffic becomes bulk copies into one national database — the design England built once and switched off.' },
   ];
 

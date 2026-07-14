@@ -20,7 +20,10 @@
   const isGov = (href: string) => href.endsWith('/governance');
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
   const active = (href: string) => pathname === href.replace(/\/$/, '');
-  const current = $derived(SECTIONS.find((n) => active(n.href))?.label ?? 'Sections');
+  // the live 3-D model lives outside the 7 sections; keep its own obvious CTA
+  const SIM_HREF = '/projects/data-spine/federation/sim';
+  const onSim = $derived(pathname.startsWith('/projects/data-spine/federation'));
+  const current = $derived(onSim ? 'Live simulator' : (SECTIONS.find((n) => active(n.href))?.label ?? 'Sections'));
   let menuOpen = $state(false);
 </script>
 
@@ -29,6 +32,7 @@
     {#each SECTIONS as n}
       <a class="tab" class:gov={isGov(n.href)} class:active={active(n.href)} href={n.href}>{isGov(n.href) ? '⚖ ' : ''}{n.label}</a>
     {/each}
+    <a class="tab simlink" class:active={onSim} href={SIM_HREF} title="Open the live 3-D federation simulator">▶ Live simulator</a>
   </nav>
 
   <button class="burger" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-label="Sections menu">
@@ -53,6 +57,7 @@
       {#each SECTIONS as n}
         <a class="nm-item" class:active={active(n.href)} href={n.href} onclick={() => (menuOpen = false)}>{n.label}</a>
       {/each}
+      <a class="nm-item simlink" class:active={onSim} href={SIM_HREF} onclick={() => (menuOpen = false)}>▶ Live simulator</a>
     </nav>
   {/if}
 </div>
@@ -68,6 +73,11 @@
   .tab.gov { border-width: 1.5px; border-color: rgba(138,45,58,0.6); color: #8a2d3a; background: var(--error-bg); }
   .tab.gov:hover { background: var(--error-bg); border-color: #8a2d3a; }
   .tab.gov.active { background: #8a2d3a; color: var(--paper); border-color: #8a2d3a; }
+
+  /* the live-simulator CTA — deliberately the loudest thing in the bar */
+  .tab.simlink { background: var(--accent-ink); color: #fff; border-color: var(--accent-ink); font-weight: 600; margin-left: 6px; letter-spacing: 0.01em; }
+  .tab.simlink:hover { background: #0b4a53; border-color: #0b4a53; color: #fff; }
+  .tab.simlink.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
   .detail { display: inline-flex; align-items: center; gap: 7px; }
   .d-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
@@ -90,6 +100,8 @@
     padding: 9px 12px; border-radius: var(--radius-round); border: 1px solid transparent; }
   .nm-item:hover { background: rgba(28,22,17,0.06); }
   .nm-item.active { background: var(--ink); color: var(--paper); }
+  .nm-item.simlink { background: var(--accent-ink); color: #fff; font-weight: 600; margin-top: 6px; }
+  .nm-item.simlink.active { background: var(--ink); color: var(--paper); }
 
   @media (max-width: 860px) {
     .tabs { display: none; }

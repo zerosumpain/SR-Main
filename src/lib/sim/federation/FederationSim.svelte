@@ -47,9 +47,11 @@
   let ended = $state(false);
   // the current stage has fully played and is looping its visuals — Next advances
   let awaitingNext = $state(false);
-  let speed = $state(1);
   let mode = $state<'federated' | 'central'>('federated');
-  let edtechOn = $state(false);
+  // the ring around the exchange has two mutually-exclusive layers: the certified
+  // apps, or the MIS access brokers (aggregators). 'off' shows neither.
+  let ringLayer = $state<'off' | 'apps' | 'brokers'>('off');
+  let showReach = $state(false); // overlay indicative schools-reached on the ring
   // the single source of truth for what is (or was just) playing — catalogue
   // scenarios and generated ask-the-federation scenarios alike
   let activeScenario = $state<Scenario | null>(null);
@@ -59,11 +61,24 @@
   let inspectorNode = $state<NetNode | null>(null);
   let inspectorSchool = $state<SchoolInfo | null>(null);
   let contractOpen = $state(true);
-  let pickerOpen = $state(false); // mobile scenario drawer
   let canFullscreen = $state(false);
   let isFullscreen = $state(false);
-  let catalogue = $state<'scenarios' | 'joins'>('scenarios'); // catalogue tab
   let logOpen = $state(true); // standalone overlay log collapse
+
+  // the scenario/join dropdown reflects whatever is (or was just) playing
+  const selectValue = $derived(
+    activeId == null ? ''
+      : activeId.startsWith('join-') ? `join:${activeId.slice(5)}`
+      : `sc:${activeId}`,
+  );
+  function onPickScenario(e: Event) {
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    if (v.startsWith('sc:')) run(v.slice(3));
+    else if (v.startsWith('join:')) {
+      const q = JOIN_QUERIES.find((x) => x.id === v.slice(5));
+      if (q) runJoin(q);
+    }
+  }
 
 
   const COUNTER_META: Array<{ key: CounterKey; label: string; hot?: boolean }> = [
@@ -101,7 +116,7 @@
         // sits on the start EVENT (not just playScenario) so replay/restart
         // paths also force the tendril ring visible for edtech scenarios
         const s = engine?.activeScenario ?? null;
-        if (s && (s.usesEdtech ?? touchesEdtech(s)) && !edtechOn) setEdtech(true);
+        if (s && (s.usesEdtech ?? touchesEdtech(s)) && ringLayer !== 'apps') applyRing('apps');
         onActiveScenario?.(s);
         break;
       }
@@ -160,7 +175,6 @@
   export function runScenario(s: Scenario) {
     if (!engine || !ready) return; // dead engine when WebGL failed — don't fake a run
     activeScenario = s;
-    pickerOpen = false;
     engine.loadScenario(s);
     if (!standalone) shell?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -170,12 +184,17 @@
     runScenario(buildJoinScenario(runJoinQuery(q)));
   }
 
-  const JOIN_CHIP: Record<string, string> = { current: 'today', emerging: 'new law', future: 'frontier' };
-
-  function setEdtech(on: boolean) {
-    edtechOn = on;
-    sceneHandle?.setEdtech(on);
-    if (engine) engine.edtechActive = on;
+  /** switch the ring layer (off / certified apps / MIS brokers). Only the apps layer
+   *  carries ambient + scenario traffic, so the engine's edtech flag tracks it. */
+  function applyRing(layer: 'off' | 'apps' | 'brokers') {
+    ringLayer = layer;
+    sceneHandle?.setEdtech(layer === 'apps');
+    sceneHandle?.setAggregators(layer === 'brokers');
+    if (engine) engine.edtechActive = layer === 'apps';
+  }
+  function toggleReach() {
+    showReach = !showReach;
+    sceneHandle?.setReach(showReach);
   }
 
   function togglePlay() {
@@ -185,9 +204,7 @@
     playing = engine.playing;
   }
   function stepFwd() { engine?.stepForward(); }
-  function restart() { engine?.restart(); }
   function stopScenario() { engine?.stop(); }
-  function setSpeed(x: number) { speed = x; engine?.setSpeed(x); }
   function setMode(m: 'federated' | 'central') { mode = m; sceneHandle?.setMode(m); }
 
   function toggleFullscreen() {
@@ -248,15 +265,43 @@
   {/if}
 
   {#if ready}
-    <!-- top bar: mode + view -->
+    <!-- top bar: scenario picker + mode + ring + view -->
     <div class="hud top">
+      {#if !embed}
+        <label class="sc-select">
+          <span class="sc-select-lab">Scenario</span>
+          <select value={selectValue} onchange={onPickScenario} aria-label="Choose a scenario or cross-context join">
+            <option value="" disabled>Pick a scenario…</option>
+            {#each SCENARIO_GROUPS as g}
+              <optgroup label={g}>
+                {#each SCENARIOS.filter((s) => s.group === g) as s}
+                  <option value={`sc:${s.id}`}>{s.title}</option>
+                {/each}
+              </optgroup>
+            {/each}
+            {#each JOIN_GROUPS as g}
+              <optgroup label={`Join · ${g.label}`}>
+                {#each JOIN_QUERIES.filter((q) => q.horizon === g.key) as q}
+                  <option value={`join:${q.id}`}>{q.question} — {q.difficulty}</option>
+                {/each}
+              </optgroup>
+            {/each}
+          </select>
+        </label>
+      {/if}
       <div class="mode-seg" role="group" aria-label="Architecture mode">
         <button class:on={mode === 'federated'} onclick={() => setMode('federated')} title="Federated exchange — records stay at source; queries travel.">Federated</button>
         <button class:on={mode === 'central'} class="danger" onclick={() => setMode('central')} title="Central store counterfactual — everything copied to one national database.">Central store</button>
       </div>
-      <button class="ghost" class:lit={edtechOn} onclick={() => setEdtech(!edtechOn)} title="Toggle the edtech tendrils — real platforms imagined as certified spurs on the exchange">
-        ◇ edtech ring{edtechOn ? ' · on' : ''}
-      </button>
+      <span class="ring-seg" role="group" aria-label="Outer ring layer">
+        <span class="seg-lab">◇ Ring</span>
+        <button class:on={ringLayer === 'off'} onclick={() => applyRing('off')} title="Hide the outer ring">Off</button>
+        <button class:on={ringLayer === 'apps'} onclick={() => applyRing('apps')} title="Certified edtech apps as spurs on the exchange — imagined contributors of aggregate intelligence">Apps</button>
+        <button class:on={ringLayer === 'brokers'} onclick={() => applyRing('brokers')} title="MIS access brokers (Wonde, Xporter, Assembly, Salamander) — the plumbing that moves school data today">Brokers</button>
+      </span>
+      {#if ringLayer !== 'off'}
+        <button class="ghost" class:lit={showReach} onclick={toggleReach} title="Overlay each platform's approximate school reach">＃ reach{showReach ? ' · on' : ''}</button>
+      {/if}
       <span class="zoom-seg" role="group" aria-label="Zoom">
         <button onclick={() => sceneHandle?.zoom(0.82)} title="Zoom in (or ⌘/Ctrl-scroll)" aria-label="Zoom in">+</button>
         <button onclick={() => sceneHandle?.zoom(1.22)} title="Zoom out (or ⌘/Ctrl-scroll)" aria-label="Zoom out">−</button>
@@ -267,69 +312,23 @@
           {isFullscreen ? '⤡ exit' : '⛶ full screen'}
         </button>
       {/if}
-      {#if !embed}
-        <button class="ghost picker-toggle" onclick={() => (pickerOpen = !pickerOpen)} aria-expanded={pickerOpen}>☰ scenarios</button>
-      {/if}
     </div>
 
-    <!-- scenario browser (hidden in deck-embed mode: slides drive scenarios) -->
-    {#if !embed}
-    <aside class="hud panel scenarios" class:open={pickerOpen}>
-      <div class="cat-tabs" role="tablist">
-        <button role="tab" class:on={catalogue === 'scenarios'} onclick={() => (catalogue = 'scenarios')}>Scenarios</button>
-        <button role="tab" class:on={catalogue === 'joins'} onclick={() => (catalogue = 'joins')}>Joins ✦</button>
-      </div>
-      {#if catalogue === 'scenarios'}
-        {#each SCENARIO_GROUPS as g}
-          <div class="sc-group">
-            <span class="sc-g">{g}</span>
-            {#each SCENARIOS.filter((s) => s.group === g) as s}
-              <button class="sc-item" class:on={activeId === s.id} onclick={() => run(s.id)} title={s.tagline}>{s.title}</button>
-            {/each}
-          </div>
-        {/each}
-      {:else}
-        <p class="cat-note">Questions that join <b>two context spaces</b> — schools × local authorities (and, at the frontier, health). Each returns a match confidence, not a certainty.</p>
-        {#each JOIN_GROUPS as g}
-          <div class="sc-group">
-            <span class="sc-g">{g.label}</span>
-            {#each JOIN_QUERIES.filter((q) => q.horizon === g.key) as q}
-              <button class="sc-item join" class:on={activeId === `join-${q.id}`} onclick={() => runJoin(q)} title={q.question}>
-                <span class="ji-q">{q.question}</span>
-                <span class="ji-meta">
-                  <em class="ji-diff {q.difficulty}">{q.difficulty}</em>
-                  {#if q.singleContext}<em class="ji-base">baseline</em>{:else}<em class="ji-h">{JOIN_CHIP[q.horizon]}</em>{/if}
-                </span>
-              </button>
-            {/each}
-          </div>
-        {/each}
-      {/if}
-    </aside>
-    {/if}
-
-    <!-- transport + narration -->
-    <div class="hud narrate">
+    <!-- transport + narration (compact caption band) -->
+    <div class="hud narrate" class:idle={!activeScenario}>
       {#if activeScenario}
         <div class="n-head">
           <span class="n-title">{activeScenario.title}</span>
           {#if phase}<span class="n-phase">{phase}</span>{/if}
           {#if stepCount}<span class="n-step">{stepIndex}/{stepCount}</span>{/if}
-          {#if awaitingNext}<span class="n-hint">stage repeats every 5 s</span>{/if}
           <div class="transport">
             {#if !ended}
               <button class="next-btn" class:ready={awaitingNext} onclick={stepFwd} title="Advance to the next stage">
-                {stepIndex >= stepCount ? 'Finish' : 'Next stage'} ▸
+                {stepIndex >= stepCount ? 'Finish' : 'Next'} ▸
               </button>
             {/if}
             <button onclick={togglePlay} title={ended ? 'Replay' : playing ? 'Pause' : 'Play'}>{ended ? '↺' : playing ? '❚❚' : '▶'}</button>
-            <button onclick={restart} title="Restart">⟲</button>
             <button onclick={stopScenario} title="Exit scenario">✕</button>
-            <span class="speed">
-              {#each [1, 2, 3] as x}
-                <button class:on={speed === x} onclick={() => setSpeed(x)}>{x}×</button>
-              {/each}
-            </span>
           </div>
         </div>
       {/if}
@@ -348,7 +347,8 @@
         {#if inspectorNode}
           <span class="p-lab">
             {inspectorNode.kind === 'store' ? 'DfE estate · existing store'
-              : inspectorNode.kind === 'edtech' ? 'edtech tendril · imagined'
+              : inspectorNode.kind === 'edtech' ? 'edtech app · imagined contributor'
+              : inspectorNode.kind === 'aggregator' ? 'MIS access broker · the plumbing today'
               : inspectorNode.kind === 'la' ? (inspectorNode.sector === 'cross' ? 'cross-sector world' : 'local-authority data')
               : inspectorNode.kind === 'resolver' ? 'the spine · identity resolver'
               : inspectorNode.kind === 'registry' ? 'the spine · registry'
@@ -371,6 +371,11 @@
               </div>
               <span class="i-src">key: {h.key}</span>
             {/if}
+          {:else if inspectorNode.reach != null}
+            <div class="i-stats">
+              <span><b>~{inspectorNode.reach.toLocaleString('en-GB')}</b> schools reached</span>
+            </div>
+            <span class="i-src">Indicative reach — vendors’ own public figures</span>
           {/if}
           <p>{inspectorNode.desc}</p>
         {:else if inspectorSchool}
@@ -449,6 +454,8 @@
           <li><i style="background:#2f7d4f"></i> verified / aggregate answer</li>
           <li><i style="background:#8a2d3a"></i> refusal · breach · outage</li>
           <li><i style="background:#2f6b73"></i> local authorities — the second context space</li>
+          <li><i style="background:#7d6e58"></i> edtech apps — imagined certified contributors <em>(Ring · Apps)</em></li>
+          <li><i style="background:#67707a"></i> MIS brokers — the plumbing that moves data today <em>(Ring · Brokers)</em></li>
         </ul>
         <p class="lg-note">Drag to orbit · <b>+ / −</b> or ⌘/Ctrl-scroll to zoom · click to inspect. Plain scroll moves the page.</p>
       </div>
@@ -499,7 +506,14 @@
   .p-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(28,22,17,0.5); margin-bottom: 6px; }
 
   /* top bar */
-  .top { top: 10px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; }
+  .top { top: 10px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* scenario dropdown — replaces the old left catalogue panel */
+  .sc-select { display: inline-flex; align-items: center; gap: 7px; background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); padding: 3px 8px 3px 12px; backdrop-filter: blur(4px); max-width: min(46vw, 340px); }
+  .sc-select-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); flex: 0 0 auto; }
+  .sc-select select { flex: 1 1 auto; min-width: 0; max-width: 260px; background: transparent; border: none; color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; padding: 5px 2px; cursor: pointer; text-overflow: ellipsis; }
+  .sc-select select:focus { outline: none; }
+
   .mode-seg { display: inline-flex; background: rgba(241,234,214,0.92); padding: 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.25); backdrop-filter: blur(4px); }
   .mode-seg button { background: transparent; border: none; color: var(--ink); padding: 6px 12px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
   .mode-seg button.on { background: var(--accent-ink); color: #fff; }
@@ -510,38 +524,32 @@
   .zoom-seg { display: inline-flex; background: rgba(241,234,214,0.92); padding: 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.25); backdrop-filter: blur(4px); }
   .zoom-seg button { background: transparent; border: none; color: var(--ink); width: 24px; height: 22px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1; cursor: pointer; }
   .zoom-seg button:hover { background: rgba(28,22,17,0.08); }
-  .picker-toggle { display: none; margin-left: auto; }
 
-  /* scenario browser */
-  .scenarios { top: 54px; left: 12px; bottom: 118px; width: 218px; overflow-y: auto; background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 12px 12px 10px; backdrop-filter: blur(5px); }
-  .sc-group { margin-bottom: 10px; }
-  .sc-g { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin: 4px 0; }
-  .sc-item { display: block; width: 100%; text-align: left; background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 500; padding: 6px 9px; margin: 3px 0; cursor: pointer; }
-  .sc-item:hover { border-color: rgba(28,22,17,0.45); }
-  .sc-item.on { background: var(--ink); color: var(--paper, #f1ead6); border-color: var(--ink); }
+  /* ring-layer segmented control (Off / Apps / Brokers) */
+  .ring-seg { display: inline-flex; align-items: center; gap: 2px; background: rgba(241,234,214,0.92); padding: 2px 6px 2px 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.25); backdrop-filter: blur(4px); }
+  .seg-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.55); padding: 0 6px 0 8px; }
+  .ring-seg button { background: transparent; border: none; color: var(--ink); padding: 5px 10px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
+  .ring-seg button.on { background: var(--accent-ink); color: #fff; }
 
-  /* narration + transport — the presentation caption band */
-  .narrate { left: 50%; transform: translateX(-50%); width: min(1240px, calc(100% - 24px)); bottom: 14px; background: rgba(241,234,214,0.95); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 14px 22px 16px; backdrop-filter: blur(6px); }
-  .n-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-  .n-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(17px, 1.8vw, 24px); letter-spacing: -0.01em; }
-  .n-phase { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: #fff; background: var(--accent-ink); border-radius: var(--radius-sharp); padding: 3px 9px; }
-  .n-step { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(28,22,17,0.55); }
+  /* narration + transport — the presentation caption band (compact) */
+  .narrate { left: 50%; transform: translateX(-50%); width: min(1180px, calc(100% - 24px)); bottom: 12px; background: rgba(241,234,214,0.95); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 9px 18px 10px; backdrop-filter: blur(6px); }
+  .narrate.idle { width: min(760px, calc(100% - 24px)); }
+  .n-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 3px; }
+  .n-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(14px, 1.3vw, 17px); letter-spacing: -0.01em; }
+  .n-phase { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; color: #fff; background: var(--accent-ink); border-radius: var(--radius-sharp); padding: 2px 8px; }
+  .n-step { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.55); }
   .transport { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-  .transport > button { background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); width: 30px; height: 26px; cursor: pointer; color: var(--ink); font-size: 11px; line-height: 1; }
+  .transport > button { background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); width: 28px; height: 24px; cursor: pointer; color: var(--ink); font-size: 11px; line-height: 1; }
   .transport > button:hover:not(:disabled) { border-color: var(--ink); }
   .transport > button:disabled { opacity: 0.4; cursor: default; }
-  .transport > .next-btn { width: auto; padding: 0 14px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; background: var(--ink); border-color: var(--ink); color: var(--paper, #f1ead6); }
+  .transport > .next-btn { width: auto; padding: 0 13px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; background: var(--ink); border-color: var(--ink); color: var(--paper, #f1ead6); }
   .transport > .next-btn:hover { background: #000; }
   .transport > .next-btn.ready { animation: next-nudge 2.4s ease-in-out infinite; }
   @keyframes next-nudge {
     0%, 100% { background: var(--ink); border-color: var(--ink); }
     50% { background: var(--accent-ink); border-color: var(--accent-ink); }
   }
-  .n-hint { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
-  .speed { display: inline-flex; background: rgba(28,22,17,0.07); border: 1px solid rgba(28,22,17,0.15); border-radius: var(--radius-round); padding: 1px; margin-left: 4px; }
-  .speed button { background: transparent; border: none; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; padding: 4px 7px; cursor: pointer; color: var(--ink); border-radius: var(--radius-round); }
-  .speed button.on { background: var(--ink); color: #fff; }
-  .n-text { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(16px, 1.7vw, 23px); line-height: 1.42; color: rgba(28,22,17,0.88); max-width: 110ch; }
+  .n-text { margin: 0; font-family: 'Fraunces', serif; font-size: clamp(14px, 1.25vw, 17px); line-height: 1.4; color: rgba(28,22,17,0.88); max-width: 120ch; }
 
   /* counters */
   .counters { top: 54px; right: 12px; display: flex; flex-direction: column; gap: 6px; }
@@ -552,8 +560,8 @@
   .ct.hot b { color: var(--accent, #c4570a); }
   .counters-inline { display: none; }
 
-  /* inspector */
-  .inspector { right: 12px; bottom: 118px; width: 250px; background: rgba(241,234,214,0.96); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 12px 14px; }
+  /* inspector — top-left, so it never collides with the counters + rail on the right */
+  .inspector { left: 12px; top: 54px; width: 252px; background: rgba(241,234,214,0.96); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 12px 14px; }
   .inspector h4 { font-family: 'Fraunces', serif; font-size: 16px; margin: 0 0 2px; }
   .i-sub { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.55); }
   .i-stats { display: flex; gap: 12px; margin: 8px 0 2px; font-size: 12px; }
@@ -608,23 +616,6 @@
 
   .i-src { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); margin-top: 4px; }
 
-  /* catalogue tabs + join items */
-  .cat-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-  .cat-tabs button { flex: 1; background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 4px; cursor: pointer; color: var(--ink); }
-  .cat-tabs button.on { background: var(--ink); color: var(--paper, #f1ead6); border-color: var(--ink); }
-  .cat-note { font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.66); margin: 0 0 8px; }
-  .cat-note b { color: var(--ink); }
-  .sc-item.join { display: flex; flex-direction: column; gap: 5px; align-items: stretch; padding: 8px 9px; }
-  .ji-q { font-size: 12px; line-height: 1.3; }
-  .ji-meta { display: flex; gap: 5px; flex-wrap: wrap; }
-  .ji-meta em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 5px; border-radius: var(--radius-sharp); }
-  .ji-diff.hard { background: rgba(138,45,58,0.14); color: #8a2d3a; }
-  .ji-diff.medium { background: rgba(176,137,42,0.18); color: #8a6a1a; }
-  .ji-diff.easy { background: rgba(47,125,79,0.14); color: #2f7d4f; }
-  .ji-h, .ji-base { background: rgba(28,22,17,0.08); color: rgba(28,22,17,0.6); }
-  .sc-item.join.on .ji-q { color: var(--paper, #f1ead6); }
-  .sc-item.join.on em { opacity: 0.92; }
-
   /* standalone right rail: exchange log + contract as an on-canvas overlay */
   .rail { top: 250px; right: 12px; bottom: 116px; width: min(330px, 42vw); display: flex; flex-direction: column; background: rgba(241,234,214,0.94); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); backdrop-filter: blur(5px); overflow: hidden; }
   .rail.collapsed { bottom: auto; }
@@ -644,6 +635,8 @@
   :global(.fed-label.central) { color: #8a2d3a; font-weight: 600; font-size: 11px; }
   :global(.fed-label.store) { color: rgba(138,84,80,1); font-size: 8.5px; }
   :global(.fed-label.edt) { color: rgba(125,110,88,0.95); font-size: 8px; letter-spacing: 0.08em; }
+  :global(.fed-label.agg) { color: rgba(74,84,96,1); font-weight: 600; font-size: 8.5px; letter-spacing: 0.08em; }
+  :global(.fed-label .l-reach) { font-size: 7.5px; letter-spacing: 0.03em; color: rgba(28,22,17,0.6); font-weight: 500; margin-top: 1px; }
   :global(.fed-label.la) { color: rgba(47,107,115,0.98); font-weight: 600; font-size: 8.5px; }
   :global(.fed-label.la.cross) { color: rgba(154,106,47,1); }
   :global(.fed-label.resolver) { color: rgba(168,90,42,1); font-weight: 700; font-size: 9px; letter-spacing: 0.14em; }
@@ -654,19 +647,24 @@
     .rail { display: none; }
   }
 
+  /* mid widths: the top bar can wrap to two rows, so drop the corner panels clear of it */
+  @media (min-width: 901px) and (max-width: 1240px) {
+    .counters { top: 96px; }
+    .inspector { top: 96px; }
+    .rail { top: 292px; }
+  }
+
   @media (max-width: 900px) {
     .sim-shell { height: max(480px, calc(100svh - var(--topH, 56px) - 50px)); }
-    .narrate { padding: 10px 14px 12px; }
-    .n-text { font-size: 14px; }
-    .n-title { font-size: 16px; }
-    .picker-toggle { display: inline-block; }
-    .scenarios { display: none; }
-    .scenarios.open { display: block; width: min(260px, 78vw); z-index: 8; }
+    .narrate, .narrate.idle { width: calc(100% - 16px); padding: 8px 12px 9px; }
+    .n-text { font-size: 13.5px; }
+    .n-title { font-size: 15px; }
+    .sc-select { max-width: none; flex: 1 1 100%; }
     .counters { display: none; }
     .counters-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .counters-inline .ct { min-width: 0; flex: 1 1 30%; padding: 4px 8px; text-align: left; }
     .counters-inline .ct b { font-size: 14px; }
-    .inspector { bottom: auto; top: 54px; }
+    .inspector { top: auto; bottom: 88px; left: 8px; right: 8px; width: auto; }
     .under { grid-template-columns: 1fr; }
   }
 </style>
