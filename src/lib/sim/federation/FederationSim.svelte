@@ -63,7 +63,7 @@
   let contractOpen = $state(true);
   let canFullscreen = $state(false);
   let isFullscreen = $state(false);
-  let logOpen = $state(true); // standalone overlay log collapse
+  let logOpen = $state(false); // standalone bottom-left log — collapsed by default, expands up
 
   // the scenario/join dropdown reflects whatever is (or was just) playing
   const selectValue = $derived(
@@ -190,7 +190,10 @@
     ringLayer = layer;
     sceneHandle?.setEdtech(layer === 'apps');
     sceneHandle?.setAggregators(layer === 'brokers');
-    if (engine) engine.edtechActive = layer === 'apps';
+    if (engine) {
+      engine.edtechActive = layer === 'apps';
+      engine.aggregatorsActive = layer === 'brokers'; // brokers drive the ambient plumbing
+    }
   }
   function toggleReach() {
     showReach = !showReach;
@@ -222,6 +225,7 @@
       hub: DFE_ID,
       ledger: LEDGER_ID,
       edtech: topo.edtechIds,
+      aggregators: topo.aggregatorIds,
     });
     let unsub = () => {};
     try {
@@ -342,7 +346,7 @@
 
     <!-- inspector -->
     {#if inspectorNode || inspectorSchool}
-      <aside class="hud panel inspector">
+      <aside class="hud panel inspector" class:sa={standalone}>
         <button class="close" onclick={() => { inspectorNode = null; inspectorSchool = null; }} aria-label="Close">✕</button>
         {#if inspectorNode}
           <span class="p-lab">
@@ -412,54 +416,62 @@
   </div>
 {/snippet}
 
+{#snippet contractCard()}
+  {#if activeScenario?.contract}
+    <div class="contract">
+      <button class="c-head" onclick={() => (contractOpen = !contractOpen)} aria-expanded={contractOpen}>
+        <span class="p-lab">Query contract</span>
+        <span class="c-chev" class:open={contractOpen}>▾</span>
+      </button>
+      {#if contractOpen}
+        {@const c = activeScenario.contract}
+        <dl>
+          <dt>Requester</dt><dd>{c.requester}</dd>
+          <dt>Purpose</dt><dd>{c.purpose}</dd>
+          <dt>Legal basis</dt><dd>{c.legalBasis}</dd>
+          <dt>Fields</dt><dd>{c.fields.join(' · ')}</dd>
+          <dt>Population</dt><dd>{c.population}</dd>
+          <dt>Aggregation</dt><dd>{c.aggregation}</dd>
+          <dt>Retention</dt><dd>{c.retention}</dd>
+        </dl>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet scenarioInfo()}
+  {#if activeScenario}
+    <div class="counterfactual">
+      <span class="p-lab">The central-store counterfactual</span>
+      <p><b>Records:</b> {activeScenario.central.records}</p>
+      {#if activeScenario.central.exposure !== '—'}<p><b>Exposure:</b> {activeScenario.central.exposure}</p>{/if}
+      <p class="cf-note">{activeScenario.central.note}</p>
+    </div>
+    <div class="lesson">
+      <span class="p-lab">What this scenario argues</span>
+      <p>{activeScenario.lesson}</p>
+    </div>
+  {:else}
+    <div class="legend">
+      <span class="p-lab">Colour language</span>
+      <ul>
+        <li><i style="background:var(--accent-ink)"></i> query / contract — the question travelling</li>
+        <li><i style="background:var(--accent)"></i> record content — pupil-level data moving</li>
+        <li><i style="background:#2f7d4f"></i> verified / aggregate answer</li>
+        <li><i style="background:#8a2d3a"></i> refusal · breach · outage</li>
+        <li><i style="background:#2f6b73"></i> local authorities — the second context space</li>
+        <li><i style="background:#7d6e58"></i> edtech apps — imagined certified contributors <em>(Ring · Apps)</em></li>
+        <li><i style="background:#67707a"></i> MIS brokers — the plumbing that moves data today <em>(Ring · Brokers)</em></li>
+      </ul>
+      <p class="lg-note">Drag to orbit · <b>+ / −</b> or ⌘/Ctrl-scroll to zoom · click to inspect. Plain scroll moves the page.</p>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet sideStack()}
   <div class="side-stack">
-    {#if activeScenario?.contract}
-      <div class="contract">
-        <button class="c-head" onclick={() => (contractOpen = !contractOpen)} aria-expanded={contractOpen}>
-          <span class="p-lab">Query contract</span>
-          <span class="c-chev" class:open={contractOpen}>▾</span>
-        </button>
-        {#if contractOpen}
-          {@const c = activeScenario.contract}
-          <dl>
-            <dt>Requester</dt><dd>{c.requester}</dd>
-            <dt>Purpose</dt><dd>{c.purpose}</dd>
-            <dt>Legal basis</dt><dd>{c.legalBasis}</dd>
-            <dt>Fields</dt><dd>{c.fields.join(' · ')}</dd>
-            <dt>Population</dt><dd>{c.population}</dd>
-            <dt>Aggregation</dt><dd>{c.aggregation}</dd>
-            <dt>Retention</dt><dd>{c.retention}</dd>
-          </dl>
-        {/if}
-      </div>
-    {/if}
-    {#if activeScenario}
-      <div class="counterfactual">
-        <span class="p-lab">The central-store counterfactual</span>
-        <p><b>Records:</b> {activeScenario.central.records}</p>
-        {#if activeScenario.central.exposure !== '—'}<p><b>Exposure:</b> {activeScenario.central.exposure}</p>{/if}
-        <p class="cf-note">{activeScenario.central.note}</p>
-      </div>
-      <div class="lesson">
-        <span class="p-lab">What this scenario argues</span>
-        <p>{activeScenario.lesson}</p>
-      </div>
-    {:else}
-      <div class="legend">
-        <span class="p-lab">Colour language</span>
-        <ul>
-          <li><i style="background:var(--accent-ink)"></i> query / contract — the question travelling</li>
-          <li><i style="background:var(--accent)"></i> record content — pupil-level data moving</li>
-          <li><i style="background:#2f7d4f"></i> verified / aggregate answer</li>
-          <li><i style="background:#8a2d3a"></i> refusal · breach · outage</li>
-          <li><i style="background:#2f6b73"></i> local authorities — the second context space</li>
-          <li><i style="background:#7d6e58"></i> edtech apps — imagined certified contributors <em>(Ring · Apps)</em></li>
-          <li><i style="background:#67707a"></i> MIS brokers — the plumbing that moves data today <em>(Ring · Brokers)</em></li>
-        </ul>
-        <p class="lg-note">Drag to orbit · <b>+ / −</b> or ⌘/Ctrl-scroll to zoom · click to inspect. Plain scroll moves the page.</p>
-      </div>
-    {/if}
+    {@render contractCard()}
+    {@render scenarioInfo()}
   </div>
 {/snippet}
 
@@ -474,19 +486,25 @@
   </div>
 {/if}
 
-<!-- standalone one-screen: log + contract are on-canvas overlays -->
+<!-- standalone one-screen: everything is an on-canvas overlay, corners kept clear -->
 {#if ready && standalone}
-  <aside class="hud rail" class:collapsed={!logOpen}>
-    <button class="rail-toggle" onclick={() => (logOpen = !logOpen)} aria-expanded={logOpen}>
-      <span class="p-lab">Exchange log &amp; contract</span>
-      <span class="c-chev" class:open={logOpen}>▾</span>
-    </button>
+  <!-- top-left: the central-store counterfactual + the scenario explainer (or legend) -->
+  <aside class="hud info-tl">
+    {@render scenarioInfo()}
+  </aside>
+
+  <!-- bottom-left: exchange log + query contract, collapsed by default, expands upward -->
+  <aside class="hud lograil" class:open={logOpen}>
     {#if logOpen}
-      <div class="rail-body">
+      <div class="lograil-body">
         {@render exchangeLog()}
-        {@render sideStack()}
+        {@render contractCard()}
       </div>
     {/if}
+    <button class="lograil-toggle" onclick={() => (logOpen = !logOpen)} aria-expanded={logOpen}>
+      <span class="p-lab">Exchange log &amp; contract</span>
+      <span class="c-chev up" class:open={logOpen}>▴</span>
+    </button>
   </aside>
 {/if}
 
@@ -616,15 +634,23 @@
 
   .i-src { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); margin-top: 4px; }
 
-  /* standalone right rail: exchange log + contract as an on-canvas overlay */
-  .rail { top: 250px; right: 12px; bottom: 116px; width: min(330px, 42vw); display: flex; flex-direction: column; background: rgba(241,234,214,0.94); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); backdrop-filter: blur(5px); overflow: hidden; }
-  .rail.collapsed { bottom: auto; }
-  .rail-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; background: none; border: none; cursor: pointer; padding: 9px 12px; }
-  .rail-toggle .p-lab { margin: 0; }
-  .rail-body { overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
-  .rail-body :global(.log-wrap), .rail-body :global(.side-stack) { border: none; background: none; padding: 0; }
-  .rail-body :global(.log) { max-height: 32vh; }
+  /* standalone corner overlays — everything on-canvas, nothing scrolls the page */
+  /* top-left: the central-store counterfactual + the scenario explainer (or legend) */
+  .info-tl { top: 54px; left: 12px; width: min(312px, 31vw); max-height: calc(100% - 210px); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .info-tl :global(.counterfactual), .info-tl :global(.lesson), .info-tl :global(.legend) { background: rgba(241,234,214,0.95); backdrop-filter: blur(6px); }
+
+  /* bottom-left: exchange log + query contract — collapsed to a bar, expands UPWARD */
+  .lograil { left: 12px; bottom: 76px; width: min(342px, 42vw); display: flex; flex-direction: column; z-index: 8; }
+  .lograil-body { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; background: rgba(241,234,214,0.96); border: 1px solid rgba(28,22,17,0.22); border-bottom: none; border-radius: var(--radius-round) var(--radius-round) 0 0; padding: 10px 10px 6px; backdrop-filter: blur(6px); }
+  .lograil-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; background: rgba(241,234,214,0.96); border: 1px solid rgba(28,22,17,0.24); border-radius: var(--radius-round); cursor: pointer; padding: 9px 12px; backdrop-filter: blur(6px); }
+  .lograil.open .lograil-toggle { border-radius: 0 0 var(--radius-round) var(--radius-round); border-top: none; }
+  .lograil-toggle .p-lab { margin: 0; }
+  .lograil-body :global(.log-wrap) { border: none; background: none; padding: 0; }
+  .lograil-body :global(.log) { max-height: 28vh; }
+
+  /* inspector: default top-left (deck); standalone moves it bottom-right, clear of the corners */
   .inspector { z-index: 9; }
+  .inspector.sa { top: auto; left: auto; bottom: 76px; right: 12px; }
 
   /* labels rendered by CSS2DRenderer live outside Svelte's scope */
   :global(.fed-label) { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.72); text-shadow: 0 0 6px rgba(239,231,213,0.9); white-space: nowrap; }
@@ -644,14 +670,14 @@
   :global(.fed-label.spine-lab) { color: rgba(20,105,115,1); font-weight: 700; font-size: 9.5px; letter-spacing: 0.18em; text-shadow: 0 0 8px rgba(239,231,213,0.95); }
 
   @media (max-width: 900px) {
-    .rail { display: none; }
+    .info-tl, .lograil { display: none; }
   }
 
   /* mid widths: the top bar can wrap to two rows, so drop the corner panels clear of it */
   @media (min-width: 901px) and (max-width: 1240px) {
     .counters { top: 96px; }
     .inspector { top: 96px; }
-    .rail { top: 292px; }
+    .info-tl { top: 96px; max-height: calc(100% - 250px); }
   }
 
   @media (max-width: 900px) {
@@ -664,7 +690,7 @@
     .counters-inline { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .counters-inline .ct { min-width: 0; flex: 1 1 30%; padding: 4px 8px; text-align: left; }
     .counters-inline .ct b { font-size: 14px; }
-    .inspector { top: auto; bottom: 88px; left: 8px; right: 8px; width: auto; }
+    .inspector, .inspector.sa { top: auto; bottom: 88px; left: 8px; right: 8px; width: auto; }
     .under { grid-template-columns: 1fr; }
   }
 </style>

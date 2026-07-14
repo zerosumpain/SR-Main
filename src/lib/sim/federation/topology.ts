@@ -199,7 +199,6 @@ export interface ConsumerSpec {
 export const DFE_ID = 'con-dfe';
 export const LEDGER_ID = 'ledger';
 export const CENTRAL_ID = 'central-store';
-export const RECORD_ID = 'con-record';
 
 export const CONSUMERS: ConsumerSpec[] = [
   { id: 'con-dfe', label: 'DfE', sub: 'department · statistics & policy', size: 2.1,
@@ -212,8 +211,6 @@ export const CONSUMERS: ConsumerSpec[] = [
     desc: 'Accredited researchers working in a trusted research environment: statistical queries with small-cell suppression and noise, never record-level extracts.' },
   { id: 'con-ofsted', label: 'Ofsted', sub: 'inspection · pre-visit packs', size: 1.2,
     desc: 'Inspection: a pre-visit evidence pack assembled by query on demand, instead of schools compiling spreadsheets the night before.' },
-  { id: 'con-record', label: 'Education Record', sub: 'learner-held · brokered by DfE', size: 1.3, brokeredBy: DFE_ID,
-    desc: 'The learner-held record: the young person carries and shares their own attainment history. The one consumer that is also the data subject — and note its wiring: DfE operates the Education Record service, so the citizen’s view reaches the federation through the DfE gateway, stamped on the ledger like anyone else’s.' },
   { id: 'con-xgov', label: 'Cross-government', sub: 'other departments · MoUs', size: 1.1,
     desc: 'Other departments arriving with memoranda of understanding — the DWP, the Home Office, the Cabinet Office. Historically the least visible users of children’s data, and the reason the refusal path matters as much as the query path.' },
 ];

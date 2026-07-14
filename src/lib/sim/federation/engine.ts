@@ -62,7 +62,9 @@ export interface LogEntry {
 
 export type SimEvent =
   | { type: 'narrate'; text: string; phase?: string; stepIndex: number; stepCount: number }
-  | { type: 'pulse'; from: string; to: string; color: PulseColor; durMs: number }
+  /** direct: draw a straight spur between the two nodes, bypassing the exchange ring
+   *  (used for the broker plumbing, which does NOT route through the federation) */
+  | { type: 'pulse'; from: string; to: string; color: PulseColor; durMs: number; direct?: boolean }
   | { type: 'fanout'; supplier: string; count: number; color: PulseColor }
   | { type: 'flash'; node: string; color: PulseColor }
   | { type: 'highlight'; nodes: string[]; on: boolean }
@@ -96,6 +98,8 @@ export interface AmbientPool {
   ledger: string;
   /** edtech tendrils — only breathe when the edtech ring is toggled on */
   edtech?: string[];
+  /** MIS access brokers — only breathe when the broker ring is toggled on */
+  aggregators?: string[];
 }
 
 export class SimEngine {
@@ -119,6 +123,8 @@ export class SimEngine {
   speed = 1;
   /** when true (and the pool has tendrils), ambient traffic includes edtech spurs */
   edtechActive = false;
+  /** when true (and the pool has brokers), ambient traffic includes the broker plumbing */
+  aggregatorsActive = false;
 
   constructor(private ambient: AmbientPool) {}
 
@@ -325,6 +331,18 @@ export class SimEngine {
       const dest = this.rng() < 0.6 ? sup : this.ambient.hub;
       this.emit({ type: 'pulse', from: edt, to: dest, color: 'ambient', durMs: 2000 });
       this.emit({ type: 'counter', key: 'exchanges', delta: 1 });
+      return;
+    }
+    const brokers = this.ambient.aggregators ?? [];
+    if (this.aggregatorsActive && brokers.length && this.rng() < 0.55) {
+      // the plumbing that moves data TODAY: a broker pulls bulk record content
+      // straight out of an MIS estate (or pushes it onward), bypassing the exchange.
+      // Drawn in the 'data' colour — record content on the move — and direct, off-ring.
+      const br = brokers[Math.floor(this.rng() * brokers.length)];
+      const dest = this.rng() < 0.72 ? sup : this.ambient.hub;
+      const from = this.rng() < 0.5 ? br : sup; // extract vs sync-back, both directions read as plumbing
+      const to = from === br ? dest : br;
+      this.emit({ type: 'pulse', from, to, color: 'data', durMs: 1900, direct: true });
       return;
     }
     const roll = this.rng();

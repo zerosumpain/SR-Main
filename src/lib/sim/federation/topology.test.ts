@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildTopology, routePath, schoolInfo, sampleSchools, supplierCounts,
   SUPPLIERS, CONSUMERS, STORES, EDTECH, RELAY_COUNT, DEFAULT_SCHOOL_COUNT,
-  STATE_CENSUS_TOTAL, DFE_ID, RECORD_ID,
+  STATE_CENSUS_TOTAL, DFE_ID,
 } from './topology';
 
 describe('the MIS market', () => {
@@ -91,11 +91,6 @@ describe('buildTopology', () => {
     expect(topo.edges.filter((e) => e.kind === 'ring')).toHaveLength(RELAY_COUNT);
   });
 
-  it('brokers the Education Record through DfE', () => {
-    const memberEdge = topo.edges.find((e) => e.kind === 'member' && e.from === RECORD_ID);
-    expect(memberEdge?.to).toBe(DFE_ID);
-  });
-
   it('hangs the satellite stores (NPD/LEO/ILR/LDS) off DfE', () => {
     expect(topo.storeIds).toEqual(['store-npd', 'store-leo', 'store-ilr', 'store-lds']);
     for (const id of topo.storeIds) {
@@ -139,16 +134,6 @@ describe('routePath', () => {
   it('routes to the ledger without a member edge', () => {
     const p = routePath(topo, 'sup-arbor', 'ledger', 'federated');
     expect(p[p.length - 1]).toEqual(topo.byId.get('ledger')!.pos);
-  });
-
-  it('routes Education Record traffic through the DfE gateway', () => {
-    const p = routePath(topo, RECORD_ID, 'sup-arbor', 'federated');
-    expect(p[0]).toEqual(topo.byId.get(RECORD_ID)!.pos);
-    expect(p[1]).toEqual(topo.byId.get(DFE_ID)!.pos); // brokered hop
-    expect(p[p.length - 1]).toEqual(topo.byId.get('sup-arbor')!.pos);
-    // and the broker hop never transits the ring, in either direction
-    expect(routePath(topo, RECORD_ID, DFE_ID, 'federated')).toHaveLength(2);
-    expect(routePath(topo, DFE_ID, RECORD_ID, 'federated')).toHaveLength(2);
   });
 
   it('routes DfE ↔ satellite-store traffic directly, both directions', () => {

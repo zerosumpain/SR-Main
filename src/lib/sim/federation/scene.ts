@@ -50,7 +50,6 @@ const NODE_BASE: Record<string, string> = {
   'con-csc': '#b0892a',
   'con-tre': '#7a5aa6',
   'con-ofsted': '#4a4038',
-  'con-record': '#2f7d4f',
   'con-xgov': '#6b5d50',
   [LEDGER_ID]: '#1c1611',
   [CENTRAL_ID]: '#8a2d3a',
@@ -451,7 +450,9 @@ export function createFederationScene(
   // so the toggle traverses (which includes the group itself) rather than
   // relying on group visibility alone
   let edtechOn = false;
+  let aggOn = false;
   const isEdtech = (id: string) => id.startsWith('edt-');
+  const isAgg = (id: string) => id.startsWith('agg-');
   function setEdtech(on: boolean) {
     edtechOn = on;
     edtechGroup.traverse((o) => { o.visible = on; });
@@ -459,8 +460,10 @@ export function createFederationScene(
     if (!on) highlight(Array.from(highlightRings.keys()).filter(isEdtech), false);
   }
 
-  // the aggregator (broker) layer — an independent toggle, no scenario traffic
+  // the aggregator (broker) layer — an independent toggle; carries only the ambient
+  // broker plumbing (direct off-ring pulses), no scenario traffic
   function setAggregators(on: boolean) {
+    aggOn = on;
     aggregatorGroup.traverse((o) => { o.visible = on; });
   }
 
@@ -489,10 +492,21 @@ export function createFederationScene(
 
   let mode: ArchMode = 'federated';
 
-  function spawnPulse(fromId: string, toId: string, color: PulseColor, durMs: number) {
+  function spawnPulse(fromId: string, toId: string, color: PulseColor, durMs: number, direct = false) {
     if (active.length > 140) return; // saturation guard
     if (!edtechOn && (isEdtech(fromId) || isEdtech(toId))) return; // no pulses to hidden tendrils
-    const way = routePath(topo, fromId, toId, mode);
+    if (!aggOn && (isAgg(fromId) || isAgg(toId))) return; // no broker plumbing while the layer is hidden
+    // direct = a straight spur between the two nodes (broker plumbing bypasses the ring);
+    // otherwise route through the federation exchange as usual
+    let way: [number, number, number][];
+    if (direct) {
+      const a = topo.byId.get(fromId);
+      const b = topo.byId.get(toId);
+      if (!a || !b) return;
+      way = [a.pos, b.pos];
+    } else {
+      way = routePath(topo, fromId, toId, mode);
+    }
     if (way.length < 2) return;
     const pts: THREE.Vector3[] = [];
     for (const p of way) {
@@ -813,7 +827,7 @@ export function createFederationScene(
   // --- event application --------------------------------------------------------
   function applyEvent(e: SimEvent) {
     switch (e.type) {
-      case 'pulse': spawnPulse(e.from, e.to, e.color, e.durMs); break;
+      case 'pulse': spawnPulse(e.from, e.to, e.color, e.durMs, e.direct); break;
       case 'fanout': fanout(e.supplier, e.count, e.color); break;
       case 'flash': flash(e.node, e.color); break;
       case 'highlight': highlight(e.nodes, e.on); break;

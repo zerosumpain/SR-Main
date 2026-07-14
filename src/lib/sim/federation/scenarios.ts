@@ -844,7 +844,7 @@ export const SCENARIOS: Scenario[] = [
     group: 'Trust & failure modes',
     title: 'The family that says no',
     tagline: 'Consent enforced where the data lives, not remembered where it’s copied.',
-    description: 'A family objects to their child’s data being used for research. The objection registers once — through the learner-held record — and every subsequent query honours it at source.',
+    description: 'A family objects to their child’s data being used for research. The objection registers once — in the exchange’s consent & opt-out register — and every subsequent query honours it at source.',
     lesson: 'In a central store an opt-out is a row the centre must remember to respect on every extract, forever. At the edge, the objection lives beside the record it protects — the next research query simply returns n−1, automatically.',
     contract: {
       requester: '(The data subject, for once)',
@@ -862,13 +862,13 @@ export const SCENARIOS: Scenario[] = [
     },
     steps: [
       {
-        narration: 'A family reads the ledger — who has asked about our child? — and decides they don’t want the research uses. Through the learner-held Education Record they register an objection — watch it travel through the DfE gateway that operates the Record service. One tap; Article 21.',
+        narration: 'A family reads the ledger — who has asked about our child? — and decides they don’t want the research uses. They lodge the objection once, in the exchange’s consent & opt-out register at the heart of the spine — watch it travel out to the school’s own MIS, where the record actually lives. One tap; Article 21.',
         phase: 'OBJECTION', holdMs: 4800,
         actions: [
-          { kind: 'highlight', nodes: ['con-record'], on: true },
-          { kind: 'flash', node: 'con-record', color: 'ok' },
-          { kind: 'pulse', from: 'con-record', to: 'sup-arbor', color: 'query', delayMs: 600 },
-          { kind: 'log', log: 'contract', text: 'Education Record (via DfE gateway) → Arbor: objection registered · research uses · Art. 21' },
+          { kind: 'highlight', nodes: ['reg-consent'], on: true },
+          { kind: 'flash', node: 'reg-consent', color: 'ok' },
+          { kind: 'pulse', from: 'reg-consent', to: 'sup-arbor', color: 'query', delayMs: 600 },
+          { kind: 'log', log: 'contract', text: 'Consent register → Arbor: objection registered · research uses · Art. 21' },
           { kind: 'counter', key: 'exchanges', delta: 1 },
         ],
       },
@@ -891,7 +891,7 @@ export const SCENARIOS: Scenario[] = [
           ...spray(ALL_SUPPLIERS, 'con-tre', 'ok', 2200, 100),
           { kind: 'counter', key: 'aggregatesReturned', delta: N_SUP, delayMs: 3400 },
           { kind: 'log', log: 'return', text: 'Cohort n=118,204 (−1) · objection honoured at source, invisibly to the researcher', delayMs: 3600 },
-          { kind: 'highlight', nodes: ['con-record'], on: false, delayMs: 4200 },
+          { kind: 'highlight', nodes: ['reg-consent'], on: false, delayMs: 4200 },
         ],
       },
     ],
