@@ -8,7 +8,7 @@
 // figures move quarterly); every behaviour simulated on them is illustrative.
 // Everything is deterministic (seeded RNG) and DOM/Three-free so it can be tested.
 
-export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech' | 'la' | 'resolver';
+export type NodeKind = 'supplier' | 'consumer' | 'relay' | 'ledger' | 'central' | 'store' | 'edtech' | 'la' | 'resolver' | 'registry';
 export type SupplierTier = 'major' | 'mid' | 'small';
 
 export interface NetNode {
@@ -343,6 +343,32 @@ export function laHolderById(id: string): LaHolderSpec | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// THE SPINE — the shared trust registries at the centre. This is the whole thesis
+// made spatial: "centralise the trust, not the data". The data stays out at the
+// edges (schools, LAs, health); the small thing in the middle is a set of registries
+// and a protocol — the identity resolver, a record locator, a consent register, a
+// policy/rules engine, and the citizen-readable ledger (rendered separately as the
+// obelisk). These are the only new national infrastructure a federation actually builds.
+// ---------------------------------------------------------------------------
+
+export interface SpineNode { id: string; label: string; sub: string; desc: string; }
+
+// The RESOLVER (identity) and the LEDGER are their own node kinds; these three are the
+// remaining registry primitives that complete the central spine.
+export const SPINE_NODES: SpineNode[] = [
+  { id: 'reg-locator', label: 'Record locator', sub: 'find-a-record · pointers, not content',
+    desc: 'The directory the whole federation turns on: given a resolved identity, which estates hold a record for this child? It returns pointers, never case content — the NHS PDS / National Record Locator pattern. No locator, no federation; a central store instead.' },
+  { id: 'reg-consent', label: 'Consent & opt-out register', sub: 'a family’s “no”, enforced at source',
+    desc: 'Where a family’s objection lives — beside the record it protects, not in a central list the middle must remember to consult. Every query checks it; a voluntary ask it can decline honours it, a statutory ask overrides it and logs the objection.' },
+  { id: 'reg-policy', label: 'Policy & rules engine', sub: 'which basis unlocks which fields',
+    desc: 'Law as configuration: a machine-readable registry of which statutory basis unlocks which fields at which level of aggregation. It is the thing every gateway checks before answering — the difference between “privacy-respecting” as a slogan and as an enforced rule.' },
+];
+
+export function spineNodeById(id: string): SpineNode | undefined {
+  return SPINE_NODES.find((n) => n.id === id);
+}
+
+// ---------------------------------------------------------------------------
 // Layout — a layered composition echoing the study's five-layer anatomy:
 // provider field (ground) → supplier gateways → exchange ring (+ ledger,
 // + edtech tendrils) → consumers (+ DfE satellite stores). The LA context space
@@ -378,9 +404,10 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     const mid = acc + (b + pad) / 2;
     acc += b + pad;
     const theta = (mid / arcTotal) * Math.PI * 2;
-    // larger estates sit slightly further out, forming the "shore"; the exchange ring
-    // is the hub. (Arc width already ∝ blob radius, so majors claim more of the circle.)
-    const r = 30 + b * 0.9;
+    // The school estate is pushed out into an OUTER ANNULUS, leaving the centre clear for
+    // the spine + ring — so the composition reads "data at the edges, trust in the middle".
+    // (Arc width already ∝ blob radius, so majors claim more of the circle.)
+    const r = 37 + b * 0.7;
     return [Math.cos(theta) * r, Math.sin(theta) * r];
   });
 
@@ -481,10 +508,11 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
   // The LA world is a DISTINCT ISLAND off to one side, beyond the school cloud, so the
   // "two context spaces" reading is literal: schools fill the main disc, local
   // authorities sit apart, and the resolver bridges the gap between them.
-  // The LA world floats as a distinct island in the "sky" BEHIND the exchange (away
-  // from the camera → the HUD-free upper-centre of the screen), elevated above the
-  // school cloud so the two context spaces read as separate, bridged by the resolver.
-  const LA_SECTOR = Math.PI * 1.2;          // back of the composition (upper-centre on screen)
+  // Two distinct back-world ISLANDS so the entity types read separately: local
+  // authorities to the back-LEFT, the cross-sector worlds (health, earnings) to the
+  // back-RIGHT. Schools fill the front and sides; the spine registries own the centre.
+  const LA_SECTOR = Math.PI * 1.0;     // back-left
+  const CROSS_SECTOR = Math.PI * 1.62; // back-right
   const holderIds: string[] = [];
   const laH = ALL_HOLDERS.filter((h) => h.sector === 'la');
   const crossH = ALL_HOLDERS.filter((h) => h.sector === 'cross');
@@ -494,15 +522,15 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     if (h.sector === 'la') {
       const i = laH.indexOf(h);
       const frac = laH.length > 1 ? i / (laH.length - 1) : 0.5;
-      const theta = LA_SECTOR + (frac - 0.5) * Math.PI * 0.42; // ±38° arc
-      const r = 47;
+      const theta = LA_SECTOR + (frac - 0.5) * Math.PI * 0.5;
+      const r = 31;
       pos = [Math.cos(theta) * r, LAYERS_Y.suppliers + 5, Math.sin(theta) * r];
     } else {
-      // the cross-sector worlds flank the LA island, raised higher and further out
       const i = crossH.indexOf(h);
-      const theta = LA_SECTOR + (i === 0 ? -0.36 : 0.36) * Math.PI * 0.42;
-      const r = 54;
-      pos = [Math.cos(theta) * r, LAYERS_Y.suppliers + 10, Math.sin(theta) * r];
+      const frac = crossH.length > 1 ? i / (crossH.length - 1) : 0.5;
+      const theta = CROSS_SECTOR + (frac - 0.5) * Math.PI * 0.34;
+      const r = 31;
+      pos = [Math.cos(theta) * r, LAYERS_Y.suppliers + 8, Math.sin(theta) * r];
     }
     nodes.push({
       id: h.id, kind: 'la', label: h.label, sub: h.sub, desc: h.desc,
@@ -510,23 +538,36 @@ export function buildTopology(opts: { schoolCount?: number; seed?: number } = {}
     });
   });
 
-  // the 153 local authorities as a raised ground patch beneath the LA island
+  // the 153 local authorities as a raised, floating shelf beneath the LA island (back-left)
   const laPositions = new Float32Array(LA_COUNT * 3);
   for (let i = 0; i < LA_COUNT; i++) {
-    const theta = LA_SECTOR + gaussian(rng) * 0.28;
-    const rr = 46 + gaussian(rng) * 4.5;
+    const theta = LA_SECTOR + gaussian(rng) * 0.3;
+    const rr = 30 + gaussian(rng) * 4;
     laPositions[i * 3] = Math.cos(theta) * rr;
-    laPositions[i * 3 + 1] = LAYERS_Y.suppliers - 4 + rng() * 0.6; // a raised shelf, not the school floor
+    laPositions[i * 3 + 1] = LAYERS_Y.suppliers - 1 + rng() * 0.8;
     laPositions[i * 3 + 2] = Math.sin(theta) * rr;
   }
 
-  // the resolver: where a school-side UPN is matched to an LA-side case ID. It sits
-  // between the two estates — on the line from the ring out to the LA island.
+  // --- THE SPINE: the shared registries at dead centre. The identity resolver and the
+  //     three registry primitives ring the ledger obelisk (pushed below) — a small,
+  //     elevated trust core that every world reaches. "Centralise the trust, not the data." ---
+  const HUB_R = 6.6;
+  const HUB_Y0 = LAYERS_Y.suppliers + 2; // ≈11, base of an ascending "spiral" spine core
+  // the resolver (identity register) faces camera-front so cross-context joins visibly converge here
   nodes.push({
     id: RESOLVER_ID, kind: 'resolver', label: 'Identity resolver', sub: 'UPN ↔ LA case ID · match confidence',
-    desc: 'The hardest, least-built part of any cross-context join: matching a child’s school-side identifier (UPN) to their LA-side case-management ID, with no shared analytic key. It resolves what it can, scores the confidence, and drops what it cannot match — honestly. There is no published standard for this today; the study names it as the missing piece.',
-    pos: [Math.cos(LA_SECTOR) * 30, LAYERS_Y.suppliers + 4, Math.sin(LA_SECTOR) * 30],
-    size: 1.4,
+    desc: 'The hardest, least-built registry: matching a child’s school-side identifier (UPN) to their LA-side case-management ID, with no shared analytic key. It resolves what it can, scores the confidence, and drops what it cannot match — honestly. There is no published standard for this today; the study names it as the missing piece.',
+    pos: [Math.cos(Math.PI * 0.25) * HUB_R, HUB_Y0, Math.sin(Math.PI * 0.25) * HUB_R],
+    size: 1.3,
+  });
+  // registries spiral UP around the ledger, so their labels stagger in height instead of stacking
+  SPINE_NODES.forEach((s, i) => {
+    const theta = Math.PI * (0.75 + i * 0.5); // 0.75π, 1.25π, 1.75π around the ledger
+    const y = HUB_Y0 + 2.2 + i * 2.2;
+    nodes.push({
+      id: s.id, kind: 'registry', label: s.label, sub: s.sub, desc: s.desc,
+      pos: [Math.cos(theta) * HUB_R, y, Math.sin(theta) * HUB_R], size: 1.05,
+    });
   });
 
   // --- the central-store counterfactual node (hidden in federated mode) ---

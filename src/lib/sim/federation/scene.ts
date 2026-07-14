@@ -24,6 +24,7 @@ export interface SceneHandle {
   setEdtech(on: boolean): void;
   addTick(fn: (dtMs: number) => void): void;
   resetView(): void;
+  zoom(factor: number): void;
   dispose(): void;
 }
 
@@ -139,10 +140,31 @@ export function createFederationScene(
   controls.minDistance = 26;
   controls.maxDistance = 170;
   controls.maxPolarAngle = Math.PI * 0.49;
+  // Plain wheel must scroll the PAGE, not zoom the canvas (the sim used to trap scroll).
+  // Zoom is on the +/- buttons and ⌘/Ctrl-scroll; drag still orbits, pinch still zooms via manual dolly.
+  controls.enableZoom = false;
   const reducedMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   controls.autoRotate = !reducedMotion;
   controls.autoRotateSpeed = 0.35;
   controls.addEventListener('start', () => { controls.autoRotate = false; });
+
+  // Manual dolly (used by the zoom buttons and ⌘/Ctrl-scroll), clamped to the orbit range.
+  const _zdir = new THREE.Vector3();
+  function zoomBy(factor: number) {
+    _zdir.copy(camera.position).sub(controls.target);
+    const d = _zdir.length();
+    const nd = Math.max(controls.minDistance, Math.min(controls.maxDistance, d * factor));
+    camera.position.copy(controls.target).add(_zdir.setLength(nd));
+    controls.update();
+  }
+  const onWheel = (e: WheelEvent) => {
+    // only capture the wheel when the user explicitly asks to zoom — otherwise let the page scroll
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      zoomBy(e.deltaY > 0 ? 1.12 : 0.89);
+    }
+  };
+  renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
   const hemi = new THREE.HemisphereLight(0xfffaf0, 0x8a7a64, 1.15);
   scene.add(hemi);
@@ -222,7 +244,9 @@ export function createFederationScene(
       const h = n.size * 1.7;
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size * 0.72, n.size * 0.95, h, 6), nodeMaterial('#3a2f24'));
       mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
-      mesh.add(labelFor(n, n.tier === 'major' ? 'sup major' : 'sup'));
+      // only the three majors carry a persistent label — the long tail declutters the
+      // centre and is read by clicking a cluster (the inspector names it + its count)
+      if (n.tier === 'major') mesh.add(labelFor(n, 'sup major'));
       // stem from gateway down toward its estate
       const stem = new THREE.Mesh(
         new THREE.CylinderGeometry(0.05, 0.05, n.pos[1], 4),
@@ -274,11 +298,18 @@ export function createFederationScene(
       stem.position.y = -n.pos[1] / 2;
       mesh.add(stem);
     } else if (n.kind === 'resolver') {
-      // the identity resolver: a faceted knot between the worlds — where UPN meets LA case ID
+      // the identity resolver: a faceted knot at the heart of the spine — where UPN meets LA case ID
       mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(n.size * 0.62, n.size * 0.2, 72, 10), nodeMaterial('#a85a2a'));
       mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
       const lbl = labelFor(n, 'resolver');
-      lbl.position.y = n.size * 1.7;
+      lbl.position.y = n.size * 1.9;
+      mesh.add(lbl);
+    } else if (n.kind === 'registry') {
+      // a spine registry primitive — a slim trust-teal monument in the central hub
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size * 0.32, n.size * 0.5, n.size * 3.0, 6), nodeMaterial('#1d6f78'));
+      mesh.position.set(n.pos[0], n.pos[1], n.pos[2]);
+      const lbl = labelFor(n, 'registry');
+      lbl.position.y = n.size * 2.0;
       mesh.add(lbl);
     } else if (n.kind === 'central') {
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(n.size, n.size, 7.5, 24), nodeMaterial(NODE_BASE[CENTRAL_ID]));
@@ -326,6 +357,32 @@ export function createFederationScene(
     ringGroup.add(lbl);
   }
   scene.add(ringGroup);
+
+  // --- spine hub platform: a faint trust-teal disc + ring grouping the central
+  //     registries so they read as one thing — "the spine" ---
+  {
+    const hubY = LAYERS_Y.suppliers + 1;
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(8.4, 44),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color('#1d6f78'), transparent: true, opacity: 0.07, side: THREE.DoubleSide }),
+    );
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = hubY;
+    scene.add(disc);
+    const hubRing = new THREE.Mesh(
+      new THREE.TorusGeometry(8.2, 0.05, 6, 72),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color('#1d6f78'), transparent: true, opacity: 0.42 }),
+    );
+    hubRing.rotation.x = Math.PI / 2;
+    hubRing.position.y = hubY;
+    scene.add(hubRing);
+    const el = document.createElement('div');
+    el.className = 'fed-label spine-lab';
+    el.textContent = 'THE SPINE · shared registries';
+    const lbl = new CSS2DObject(el);
+    lbl.position.set(0, hubY - 0.4, 8.6);
+    scene.add(lbl);
+  }
 
   // --- edges ---------------------------------------------------------------
   function edgeLines(kinds: string[], color: THREE.Color, opacity: number): THREE.LineSegments {
@@ -721,6 +778,7 @@ export function createFederationScene(
     ro.disconnect();
     renderer.domElement.removeEventListener('pointerdown', onDown);
     renderer.domElement.removeEventListener('pointerup', onUp);
+    renderer.domElement.removeEventListener('wheel', onWheel);
     controls.dispose();
     clearTransients();
     for (const s of pulsePool) s.material.dispose(); // parked sprites left the scene graph
@@ -746,6 +804,7 @@ export function createFederationScene(
     setEdtech,
     addTick: (fn) => tickFns.push(fn),
     resetView,
+    zoom: (factor) => zoomBy(factor),
     dispose,
   };
 }

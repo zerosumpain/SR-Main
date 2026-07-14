@@ -257,6 +257,10 @@
       <button class="ghost" class:lit={edtechOn} onclick={() => setEdtech(!edtechOn)} title="Toggle the edtech tendrils — real platforms imagined as certified spurs on the exchange">
         ◇ edtech ring{edtechOn ? ' · on' : ''}
       </button>
+      <span class="zoom-seg" role="group" aria-label="Zoom">
+        <button onclick={() => sceneHandle?.zoom(0.82)} title="Zoom in (or ⌘/Ctrl-scroll)" aria-label="Zoom in">+</button>
+        <button onclick={() => sceneHandle?.zoom(1.22)} title="Zoom out (or ⌘/Ctrl-scroll)" aria-label="Zoom out">−</button>
+      </span>
       <button class="ghost" onclick={() => sceneHandle?.resetView()} title="Reset the camera">⌂ view</button>
       {#if canFullscreen}
         <button class="ghost" onclick={toggleFullscreen} title={isFullscreen ? 'Exit full screen' : 'Fill the screen'}>
@@ -346,7 +350,8 @@
             {inspectorNode.kind === 'store' ? 'DfE estate · existing store'
               : inspectorNode.kind === 'edtech' ? 'edtech tendril · imagined'
               : inspectorNode.kind === 'la' ? (inspectorNode.sector === 'cross' ? 'cross-sector world' : 'local-authority data')
-              : inspectorNode.kind === 'resolver' ? 'identity resolver'
+              : inspectorNode.kind === 'resolver' ? 'the spine · identity resolver'
+              : inspectorNode.kind === 'registry' ? 'the spine · registry'
               : inspectorNode.kind === 'supplier' ? 'MIS supplier · gateway'
               : inspectorNode.kind}
           </span>
@@ -445,7 +450,7 @@
           <li><i style="background:#8a2d3a"></i> refusal · breach · outage</li>
           <li><i style="background:#2f6b73"></i> local authorities — the second context space</li>
         </ul>
-        <p class="lg-note">Drag to orbit · scroll to zoom · click any structure or dot to inspect it.</p>
+        <p class="lg-note">Drag to orbit · <b>+ / −</b> or ⌘/Ctrl-scroll to zoom · click to inspect. Plain scroll moves the page.</p>
       </div>
     {/if}
   </div>
@@ -502,6 +507,9 @@
   .ghost { background: rgba(241,234,214,0.92); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 7px 11px; cursor: pointer; backdrop-filter: blur(4px); }
   .ghost:hover { border-color: rgba(28,22,17,0.5); }
   .ghost.lit { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
+  .zoom-seg { display: inline-flex; background: rgba(241,234,214,0.92); padding: 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.25); backdrop-filter: blur(4px); }
+  .zoom-seg button { background: transparent; border: none; color: var(--ink); width: 24px; height: 22px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1; cursor: pointer; }
+  .zoom-seg button:hover { background: rgba(28,22,17,0.08); }
   .picker-toggle { display: none; margin-left: auto; }
 
   /* scenario browser */
@@ -639,6 +647,8 @@
   :global(.fed-label.la) { color: rgba(47,107,115,0.98); font-weight: 600; font-size: 8.5px; }
   :global(.fed-label.la.cross) { color: rgba(154,106,47,1); }
   :global(.fed-label.resolver) { color: rgba(168,90,42,1); font-weight: 700; font-size: 9px; letter-spacing: 0.14em; }
+  :global(.fed-label.registry) { color: rgba(20,105,115,1); font-weight: 600; font-size: 8.5px; }
+  :global(.fed-label.spine-lab) { color: rgba(20,105,115,1); font-weight: 700; font-size: 9.5px; letter-spacing: 0.18em; text-shadow: 0 0 8px rgba(239,231,213,0.95); }
 
   @media (max-width: 900px) {
     .rail { display: none; }
