@@ -18,6 +18,12 @@ export interface PickResult {
   schoolIndex?: number;
 }
 
+/** The meaningful clusters the Focus panel can hide, so a presenter can strip the
+ *  scene down to exactly the entities a given scenario/join argues about. The rings
+ *  (edtech apps / MIS brokers) and the central-store counterfactual are toggled by
+ *  their own controls, so they are deliberately NOT focus groups. */
+export type FocusGroup = 'schools' | 'las' | 'cross' | 'stores' | 'consumers' | 'spine' | 'exchange';
+
 export interface SceneHandle {
   applyEvent(e: SimEvent): void;
   setMode(mode: ArchMode): void;
@@ -26,6 +32,9 @@ export interface SceneHandle {
   setAggregators(on: boolean): void;
   /** overlay indicative schools-reached figures on the visible ring layer */
   setReach(on: boolean): void;
+  /** show/hide a whole cluster (schools, LAs, the spine, …) and re-draw the batched
+   *  member edges so no connector dangles to a hidden node */
+  setGroupVisible(group: FocusGroup, on: boolean): void;
   addTick(fn: (dtMs: number) => void): void;
   resetView(): void;
   zoom(factor: number): void;
@@ -398,16 +407,19 @@ export function createFederationScene(
   scene.add(ringGroup);
 
   // --- spine hub platform: a faint trust-teal disc + ring grouping the central
-  //     registries so they read as one thing — "the spine" ---
+  //     registries so they read as one thing — "the spine". Its decorations join the
+  //     resolver/registry meshes under the 'spine' focus group, so hiding the spine
+  //     also hides the platform. ---
+  const spineDecor: THREE.Object3D[] = [];
   {
     const hubY = LAYERS_Y.suppliers + 1;
-    const disc = new THREE.Mesh(
+    const hubDisc = new THREE.Mesh(
       new THREE.CircleGeometry(8.4, 44),
       new THREE.MeshBasicMaterial({ color: new THREE.Color('#1d6f78'), transparent: true, opacity: 0.07, side: THREE.DoubleSide }),
     );
-    disc.rotation.x = -Math.PI / 2;
-    disc.position.y = hubY;
-    scene.add(disc);
+    hubDisc.rotation.x = -Math.PI / 2;
+    hubDisc.position.y = hubY;
+    scene.add(hubDisc);
     const hubRing = new THREE.Mesh(
       new THREE.TorusGeometry(8.2, 0.05, 6, 72),
       new THREE.MeshBasicMaterial({ color: new THREE.Color('#1d6f78'), transparent: true, opacity: 0.42 }),
@@ -421,6 +433,7 @@ export function createFederationScene(
     const lbl = new CSS2DObject(el);
     lbl.position.set(0, hubY - 0.4, 8.6);
     scene.add(lbl);
+    spineDecor.push(hubDisc, hubRing, lbl);
   }
 
   // --- edges ---------------------------------------------------------------
@@ -472,6 +485,76 @@ export function createFederationScene(
   function setReach(on: boolean) {
     reachOn = on;
     for (const el of reachEls) el.style.display = on ? 'block' : 'none';
+  }
+
+  // --- focus groups: hide/show whole clusters -------------------------------
+  // Which cluster a structural node belongs to. edtech/aggregator/central return
+  // null — those are owned by the ring segment and the mode toggle, never the panel.
+  function groupOf(n: NetNode): FocusGroup | null {
+    switch (n.kind) {
+      case 'supplier': return 'schools';
+      case 'la': return n.sector === 'cross' ? 'cross' : 'las';
+      case 'store': return 'stores';
+      case 'consumer': return 'consumers';
+      case 'resolver':
+      case 'registry': return 'spine';
+      case 'relay':
+      case 'ledger': return 'exchange';
+      default: return null;
+    }
+  }
+  const hiddenGroups = new Set<FocusGroup>();
+
+  // A node counts as "present" for edge purposes when its group is visible; nodes
+  // outside every focus group (edtech/aggregator/central) never appear on a
+  // member/ring/satellite edge, so they default to present.
+  function nodePresent(id: string): boolean {
+    const n = topo.byId.get(id);
+    if (!n) return false;
+    const g = groupOf(n);
+    return g == null ? true : !hiddenGroups.has(g);
+  }
+  // Redraw the batched member/ring/satellite edges, dropping any whose endpoint is
+  // hidden — so toggling a cluster off leaves no connector dangling into empty space.
+  function rebuildMemberEdges() {
+    const pts: number[] = [];
+    for (const e of topo.edges) {
+      if (e.kind !== 'member' && e.kind !== 'ring' && e.kind !== 'satellite') continue;
+      if (!nodePresent(e.from) || !nodePresent(e.to)) continue;
+      const a = topo.byId.get(e.from)!.pos;
+      const b = topo.byId.get(e.to)!.pos;
+      pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    memberEdges.geometry.dispose();
+    memberEdges.geometry = geo;
+  }
+
+  // The scene objects that make up a cluster: its node meshes (with their labels +
+  // stems as children) plus the point fields / platform decorations that belong to it.
+  function groupObjects(group: FocusGroup): THREE.Object3D[] {
+    const objs: THREE.Object3D[] = [];
+    for (const n of topo.nodes) {
+      if (groupOf(n) === group) {
+        const m = nodeMeshes.get(n.id);
+        if (m) objs.push(m);
+      }
+    }
+    if (group === 'schools') objs.push(schoolPoints);
+    if (group === 'las') objs.push(laPoints);
+    if (group === 'spine') objs.push(...spineDecor);
+    if (group === 'exchange') objs.push(ringGroup);
+    return objs;
+  }
+
+  function setGroupVisible(group: FocusGroup, on: boolean) {
+    if (on) hiddenGroups.delete(group);
+    else hiddenGroups.add(group);
+    // traverse (not group.visible alone) so CSS2D labels flip their own flag too —
+    // same reason setEdtech traverses; also keeps hidden meshes/points unpickable.
+    for (const o of groupObjects(group)) o.traverse((c) => { c.visible = on; });
+    rebuildMemberEdges();
   }
 
   // --- pulse pool ------------------------------------------------------------
@@ -649,10 +732,14 @@ export function createFederationScene(
       opts.onPick?.({ kind: 'node', nodeId: meshHits[0].object.userData.nodeId as string });
       return;
     }
-    const ptHits = raycaster.intersectObject(schoolPoints, false);
-    if (ptHits.length && ptHits[0].index !== undefined) {
-      opts.onPick?.({ kind: 'school', schoolIndex: ptHits[0].index });
-      return;
+    // Raycaster.intersectObject ignores .visible, so guard the point field explicitly —
+    // otherwise a Focus-hidden school estate is still clickable where its dots used to be.
+    if (schoolPoints.visible) {
+      const ptHits = raycaster.intersectObject(schoolPoints, false);
+      if (ptHits.length && ptHits[0].index !== undefined) {
+        opts.onPick?.({ kind: 'school', schoolIndex: ptHits[0].index });
+        return;
+      }
     }
     opts.onPick?.(null);
   }
@@ -873,6 +960,7 @@ export function createFederationScene(
     setEdtech,
     setAggregators,
     setReach,
+    setGroupVisible,
     addTick: (fn) => tickFns.push(fn),
     resetView,
     zoom: (factor) => zoomBy(factor),

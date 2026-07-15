@@ -7,7 +7,7 @@
   import { SimEngine, type SimEvent, type LogEntry, type CounterKey, type Scenario } from './engine';
   import { SCENARIOS, SCENARIO_GROUPS, scenarioById } from './scenarios';
   import { JOIN_QUERIES, JOIN_GROUPS, runJoinQuery, buildJoinScenario, type JoinQuery } from './joins';
-  import { createFederationScene, type SceneHandle, type PickResult } from './scene';
+  import { createFederationScene, type SceneHandle, type PickResult, type FocusGroup } from './scene';
 
   let {
     onActiveScenario,
@@ -65,6 +65,46 @@
   let isFullscreen = $state(false);
   let logOpen = $state(false); // standalone bottom-left log — collapsed by default, expands up
   let topBarEl = $state<HTMLElement>(); // measured so the corner panels always clear it, however it wraps
+
+  // --- focus panel: hide/show whole clusters of the diagram (collapsed by default) ---
+  // true = visible. The rings (apps/brokers) + central store keep their own top-bar
+  // controls, so they are not focus groups here.
+  let focusOpen = $state(false);
+  let focus = $state<Record<FocusGroup, boolean>>({
+    schools: true, las: true, cross: true, stores: true, consumers: true, spine: true, exchange: true,
+  });
+  const hiddenCount = $derived(Object.values(focus).filter((v) => !v).length);
+  // The clusters, grouped the way the scenarios read the network: the estates where
+  // data lives, and the exchange in the middle (plus who asks).
+  const FOCUS_GROUPS: Array<{ key: FocusGroup; label: string; section: 'estates' | 'exchange' }> = [
+    { key: 'schools', label: 'Schools + MIS gateways', section: 'estates' },
+    { key: 'las', label: 'Local authorities', section: 'estates' },
+    { key: 'cross', label: 'Cross-sector (health · earnings)', section: 'estates' },
+    { key: 'stores', label: 'DfE stores (NPD · LEO · ILR · LDS)', section: 'estates' },
+    { key: 'consumers', label: 'Consumers (DfE · CSC · TRE · …)', section: 'exchange' },
+    { key: 'spine', label: 'Spine registries + resolver', section: 'exchange' },
+    { key: 'exchange', label: 'Exchange ring + audit ledger', section: 'exchange' },
+  ];
+  // One-click compositions for a specific demonstration.
+  const FOCUS_PRESETS: Array<{ name: string; hide: FocusGroup[] }> = [
+    { name: 'All', hide: [] },
+    { name: 'Estates only', hide: ['consumers', 'spine', 'exchange'] },
+    { name: 'The spine', hide: ['schools', 'las', 'cross', 'stores', 'consumers'] },
+  ];
+  function toggleGroup(key: FocusGroup) {
+    focus[key] = !focus[key];
+    sceneHandle?.setGroupVisible(key, focus[key]);
+  }
+  function applyFocusPreset(hide: FocusGroup[]) {
+    const off = new Set(hide);
+    for (const g of FOCUS_GROUPS) {
+      const on = !off.has(g.key);
+      if (focus[g.key] !== on) {
+        focus[g.key] = on;
+        sceneHandle?.setGroupVisible(g.key, on);
+      }
+    }
+  }
 
   // the scenario/join dropdown reflects whatever is (or was just) playing
   const selectValue = $derived(
@@ -321,6 +361,9 @@
       {#if ringLayer !== 'off'}
         <button class="ghost" class:lit={showReach} onclick={toggleReach} title="Overlay each platform's approximate school reach">＃ reach{showReach ? ' · on' : ''}</button>
       {/if}
+      {#if !embed}
+        <button class="ghost" class:lit={focusOpen || hiddenCount > 0} onclick={() => (focusOpen = !focusOpen)} aria-expanded={focusOpen} title="Show or hide clusters of the diagram — strip it down to one specific demonstration">◱ Focus{hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ''}</button>
+      {/if}
       <span class="zoom-seg" role="group" aria-label="Zoom">
         <button onclick={() => sceneHandle?.zoom(0.82)} title="Zoom in (or ⌘/Ctrl-scroll)" aria-label="Zoom in">+</button>
         <button onclick={() => sceneHandle?.zoom(1.22)} title="Zoom out (or ⌘/Ctrl-scroll)" aria-label="Zoom out">−</button>
@@ -332,6 +375,41 @@
         </button>
       {/if}
     </div>
+
+    <!-- focus panel: collapsible cluster show/hide, anchored under the top bar -->
+    {#if !embed && focusOpen}
+      <aside class="hud focus-panel">
+        <div class="fp-head">
+          <span class="p-lab">Focus · show &amp; hide clusters</span>
+          <button class="fp-close" onclick={() => (focusOpen = false)} aria-label="Close focus panel">✕</button>
+        </div>
+        <div class="fp-presets">
+          <span class="fp-presets-lab">Jump to</span>
+          {#each FOCUS_PRESETS as p}
+            <button class="fp-preset" onclick={() => applyFocusPreset(p.hide)}>{p.name}</button>
+          {/each}
+        </div>
+        <div class="fp-sec">
+          <span class="fp-sec-lab">Estates · where data lives</span>
+          {#each FOCUS_GROUPS.filter((g) => g.section === 'estates') as g}
+            <label class="fp-row">
+              <input type="checkbox" checked={focus[g.key]} onchange={() => toggleGroup(g.key)} />
+              <span class="fp-name" class:off={!focus[g.key]}>{g.label}</span>
+            </label>
+          {/each}
+        </div>
+        <div class="fp-sec">
+          <span class="fp-sec-lab">The exchange · the middle &amp; who asks</span>
+          {#each FOCUS_GROUPS.filter((g) => g.section === 'exchange') as g}
+            <label class="fp-row">
+              <input type="checkbox" checked={focus[g.key]} onchange={() => toggleGroup(g.key)} />
+              <span class="fp-name" class:off={!focus[g.key]}>{g.label}</span>
+            </label>
+          {/each}
+        </div>
+        <p class="fp-note">The apps / brokers rings and the central-store counterfactual keep their own controls on the top bar.</p>
+      </aside>
+    {/if}
 
     <!-- transport + narration (compact caption band) -->
     <div class="hud narrate" class:idle={!activeScenario}>
@@ -668,6 +746,25 @@
   .inspector { z-index: 9; }
   .inspector.sa { top: auto; left: auto; bottom: 76px; right: 12px; }
 
+  /* focus panel — a collapsible popover under the top bar; opaque paper, no shadow,
+     offsets from --hud-top so it always clears the (possibly wrapped) control bar */
+  .focus-panel { top: calc(var(--hud-top, 46px) + 8px); left: 12px; width: min(302px, 72vw); max-height: calc(100% - var(--hud-top, 46px) - 92px); overflow-y: auto; z-index: 12; background: rgba(241,234,214,0.97); border: 1.5px solid rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 11px 14px 10px; backdrop-filter: blur(6px); }
+  .fp-head { display: flex; align-items: center; justify-content: space-between; }
+  .fp-head .p-lab { margin: 0; color: var(--accent-ink); }
+  .fp-close { background: none; border: none; color: rgba(28,22,17,0.5); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 2px; }
+  .fp-close:hover { color: var(--ink); }
+  .fp-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 9px 0 2px; }
+  .fp-presets-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); margin-right: 2px; }
+  .fp-preset { background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 4px 9px; cursor: pointer; }
+  .fp-preset:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
+  .fp-sec { margin-top: 11px; }
+  .fp-sec-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 4px; }
+  .fp-row { display: flex; align-items: center; gap: 9px; padding: 4px 2px; cursor: pointer; }
+  .fp-row input { width: 15px; height: 15px; accent-color: var(--accent-ink); cursor: pointer; flex: 0 0 auto; }
+  .fp-name { font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--ink); }
+  .fp-name.off { color: rgba(28,22,17,0.42); text-decoration: line-through; }
+  .fp-note { margin: 11px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 9px; line-height: 1.55; color: rgba(28,22,17,0.5); }
+
   /* labels rendered by CSS2DRenderer live outside Svelte's scope */
   :global(.fed-label) { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.72); text-shadow: 0 0 6px rgba(239,231,213,0.9); white-space: nowrap; }
   :global(.fed-label.sup.major) { font-size: 10.5px; font-weight: 600; color: rgba(28,22,17,0.9); }
@@ -701,5 +798,6 @@
     .counters-inline .ct b { font-size: 14px; }
     .inspector, .inspector.sa { top: auto; bottom: 88px; left: 8px; right: 8px; width: auto; }
     .under { grid-template-columns: 1fr; }
+    .focus-panel { left: 8px; right: 8px; width: auto; }
   }
 </style>
