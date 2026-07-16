@@ -5,6 +5,11 @@ import { workflows, workflowNodes, workflowEdges, workflowRuns } from '$lib/db/s
 import { eq } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
+import {
+  isWebhookAuthorized,
+  WEBHOOK_SECRET_HEADER,
+  type TriggerLike,
+} from '$lib/workflows/webhook-secret';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -13,9 +18,16 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   // Check trigger type is webhook
-  const trigger = workflow.trigger as { type?: string } | null;
+  const trigger = workflow.trigger as TriggerLike | null;
   if (trigger?.type !== 'webhook') {
     return json({ error: 'Workflow does not accept webhook triggers' }, { status: 400 });
+  }
+
+  // D4 — per-workflow shared secret. When the trigger config carries a secret,
+  // require a matching X-Webhook-Secret header (timing-safe). No secret
+  // configured ⇒ open, byte-for-byte the historical behaviour.
+  if (!isWebhookAuthorized(trigger, request.headers.get(WEBHOOK_SECRET_HEADER))) {
+    return json({ error: 'Invalid or missing webhook secret' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));

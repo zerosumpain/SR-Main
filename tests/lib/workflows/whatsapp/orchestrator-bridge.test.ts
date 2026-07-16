@@ -74,6 +74,14 @@ vi.mock('$lib/workflows/chat/general-chat', () => ({
 	generalChat: (...args: unknown[]) => mockGeneralChat(...args),
 }));
 
+// Mock the D2 approval-reply interceptor. The real module (via engine-resume)
+// eagerly imports the whole node-registry barrel, which this test deliberately
+// does not stub; the bridge only needs its {handled} contract here.
+const mockHandleApprovalReply = vi.fn();
+vi.mock('$lib/workflows/whatsapp/approval-inbound', () => ({
+	handleApprovalReply: (...args: unknown[]) => mockHandleApprovalReply(...args),
+}));
+
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from '$lib/workflows/whatsapp/types';
 
@@ -89,6 +97,7 @@ describe('OrchestratorBridge', () => {
 		bridge = new OrchestratorBridge(sendFn as unknown as SendFn);
 		mockDbChain.orderBy.mockResolvedValue([]);
 		mockDbChain.limit.mockResolvedValue([{ id: mockConvId }]);
+		mockHandleApprovalReply.mockResolvedValue({ handled: false });
 	});
 
 	it('detects /clear command', () => {
@@ -151,6 +160,24 @@ describe('OrchestratorBridge', () => {
 			'447359228511',
 			'Something went wrong. Try again in a moment.',
 		);
+	});
+
+	it('intercepts a handled approval reply and does not forward to chat', async () => {
+		mockHandleApprovalReply.mockResolvedValue({ handled: true, reply: 'Approved ABC123.' });
+
+		const msg: WhatsAppInboundMessage = {
+			from: '447359228511',
+			text: 'APPROVE ABC123',
+			timestamp: Date.now(),
+			messageId: 'msg-approve',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		expect(mockHandleApprovalReply).toHaveBeenCalledWith('447359228511', 'APPROVE ABC123');
+		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Approved ABC123.');
+		expect(mockGeneralChat).not.toHaveBeenCalled();
 	});
 
 	it('uses replyJid for LID messages', async () => {

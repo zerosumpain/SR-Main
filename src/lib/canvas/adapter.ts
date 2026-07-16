@@ -1,6 +1,7 @@
 import type { NodeHandles } from './handles';
 import { nodeDefinitions } from '$lib/workflows/registry-client';
 import { isDisplayOnlyType, type NodeDefinition } from '$lib/workflows/types';
+import type { WorkflowNotifications } from '$lib/db/schema';
 
 export type NodeKind =
   | 'input'
@@ -64,6 +65,8 @@ export type Canvas = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   messagesByChat: Record<string, ChatMessage[]>;
+  /** D1 — per-workflow run-outcome notification prefs; null when never set. */
+  notifications: WorkflowNotifications | null;
 };
 
 export type NodeTypeOption = {

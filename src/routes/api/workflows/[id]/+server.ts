@@ -1,10 +1,29 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges } from '$lib/db/schema';
+import { workflows, workflowNodes, workflowEdges, type WorkflowNotifications } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { recordAuditBatch } from '$lib/canvas/audit';
+import { recordAudit, recordAuditBatch } from '$lib/canvas/audit';
 import { diffWorkflowPatch } from '$lib/canvas/audit-diff';
+
+/** Normalise an arbitrary body value into a stored WorkflowNotifications config,
+ *  or `null` to clear it. Only known fields are kept; unknown keys are dropped. */
+function normaliseNotifications(raw: unknown): WorkflowNotifications | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const out: WorkflowNotifications = {};
+  if (typeof r.onFailure === 'boolean') out.onFailure = r.onFailure;
+  if (typeof r.onCompletion === 'boolean') out.onCompletion = r.onCompletion;
+  if (typeof r.approvals === 'boolean') out.approvals = r.approvals;
+  if (r.channel === 'whatsapp') out.channel = 'whatsapp';
+  if (typeof r.digestField === 'string' && r.digestField.trim()) {
+    out.digestField = r.digestField.trim().slice(0, 200);
+  }
+  // Nothing meaningful set → store null so the default-silent path holds.
+  if (out.onFailure !== true && out.onCompletion !== true && out.approvals !== true) return null;
+  return out;
+}
 
 export const GET: RequestHandler = async ({ params }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
@@ -85,6 +104,48 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   }
 
   return json({ success: true });
+};
+
+/**
+ * PATCH /api/workflows/:id — partial workflow-level metadata updates.
+ * Currently accepts `{ notifications }` (D1 run-outcome notifications). Additive:
+ * only fields present in the body are touched; the rest of the row is untouched.
+ */
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const body = await request.json().catch(() => ({}));
+
+  const [existing] = await db.select().from(workflows).where(eq(workflows.id, params.id));
+  if (!existing) {
+    return json({ error: 'Not found' }, { status: 404 });
+  }
+
+  const patch: Record<string, unknown> = {};
+  if ('notifications' in body) {
+    patch.notifications = normaliseNotifications(body.notifications);
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return json({ error: 'No supported fields to update' }, { status: 400 });
+  }
+
+  patch.updatedAt = new Date();
+  await db.update(workflows).set(patch).where(eq(workflows.id, params.id));
+
+  if ('notifications' in patch) {
+    await recordAudit({
+      workflowId: params.id,
+      entity: 'workflow',
+      entityId: params.id,
+      action: 'update',
+      details: {
+        field: 'notifications',
+        old: (existing.notifications as WorkflowNotifications | null) ?? null,
+        new: patch.notifications ?? null,
+      },
+    }).catch(() => {});
+  }
+
+  return json({ success: true, notifications: patch.notifications ?? null });
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {

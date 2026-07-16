@@ -33,6 +33,7 @@ import { and, eq } from 'drizzle-orm';
 import { mergeUpstreamInput } from './engine-node-runner';
 import { flushPendingDedupeRecords, discardPendingDedupeRecords } from './nodes/dedupe';
 import { loadStoreSnapshot } from './nodes/data-store';
+import { notifyRunOutcome } from './run-notifications';
 import {
   resolveStateTemplatesDeep,
   scanUnknownTemplateVars,
@@ -933,6 +934,30 @@ export class WorkflowEngine {
         emit('run_failed');
         discardPendingDedupeRecords(runId);
       }
+
+      // D1: fire-and-forget run-outcome notification (engine-level so worker-mode
+      // runs alert too). Silent unless the workflow opted in; never throws.
+      // Merge terminal-node outputs (nodes with no outgoing edges) so a
+      // completion digest can pull `digestField` from the run's final results.
+      const terminalOutputs: Record<string, unknown> = {};
+      for (const nodeId of graph.nodeIds) {
+        const outs = graph.edgesBySource.get(nodeId);
+        if (!outs || outs.length === 0) {
+          const o = nodeOutputs.get(nodeId);
+          if (o && typeof o === 'object') Object.assign(terminalOutputs, o);
+        }
+      }
+      void notifyRunOutcome({
+        workflowId: effectiveWorkflowId,
+        workflowName: workflow.name,
+        runId,
+        status: finalStatus,
+        error: nodeErrors.size > 0 ? Array.from(nodeErrors.values()).join('; ') : undefined,
+        terminalOutputs,
+      }).catch((e) =>
+        console.error('[engine] notifyRunOutcome failed:', e instanceof Error ? e.message : e),
+      );
+
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();
@@ -961,6 +986,18 @@ export class WorkflowEngine {
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
       discardPendingDedupeRecords(runId);
+      // D1: fire-and-forget failure notification for the thrown-error path too.
+      // No terminalOutputs here (graph is unavailable in this scope) — a failed
+      // run never sends a completion digest anyway. Never throws.
+      void notifyRunOutcome({
+        workflowId: workflowId ?? workflow.id,
+        workflowName: workflow.name,
+        runId,
+        status: 'failed',
+        error: message,
+      }).catch((e) =>
+        console.error('[engine] notifyRunOutcome failed:', e instanceof Error ? e.message : e),
+      );
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();

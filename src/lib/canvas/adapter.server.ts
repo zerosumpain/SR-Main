@@ -463,6 +463,13 @@ export async function loadCanvas(slug: string): Promise<Canvas | null> {
     .from(workflowEdges)
     .where(eq(workflowEdges.workflowId, workflowId));
 
+  // D1 — per-workflow run-outcome notification prefs (null when never set).
+  const [wfRow] = await db
+    .select({ notifications: workflows.notifications })
+    .from(workflows)
+    .where(eq(workflows.id, workflowId))
+    .limit(1);
+
   // Latest run (may not exist yet)
   const [latestRun] = await db
     .select()
@@ -602,5 +609,6 @@ export async function loadCanvas(slug: string): Promise<Canvas | null> {
     nodes: canvasNodes,
     edges: canvasEdges,
     messagesByChat,
+    notifications: wfRow?.notifications ?? null,
   };
 }

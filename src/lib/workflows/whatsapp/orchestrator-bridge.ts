@@ -74,6 +74,19 @@ export class OrchestratorBridge {
 			return;
 		}
 
+		// D2 — approval-via-WhatsApp: intercept an owner "APPROVE <code>" /
+		// "DENY <code>" (yes/no aliases) reply and resolve the paused workflow run
+		// through the same path the canvas uses, BEFORE falling through to general
+		// chat. Non-owner or non-matching messages are left untouched.
+		// Imported lazily: approval-inbound pulls in engine-resume → the eager
+		// node-registry barrel, which must not widen the bridge's static graph.
+		const { handleApprovalReply } = await import('./approval-inbound');
+		const approval = await handleApprovalReply(from, text ?? '');
+		if (approval.handled) {
+			if (approval.reply) await this.sendFn(replyTo, approval.reply);
+			return;
+		}
+
 		try {
 			// Show typing indicator
 			await this.typingFn?.(replyTo);

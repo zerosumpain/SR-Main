@@ -2078,6 +2078,15 @@
   let configDirty = $state(false);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
+  // D1 — workflow-level run-outcome notification toggles (persisted via PATCH).
+  let savingNotif = $state(false);
+  let notifSaveError = $state<string | null>(null);
+  // D4 — webhook trigger hardening UI (copy URL / secret, send test).
+  let savingWebhookSecret = $state(false);
+  let webhookUrlCopied = $state(false);
+  let webhookSecretCopied = $state(false);
+  let webhookTestState = $state<'idle' | 'sending' | 'ok' | 'fail'>('idle');
+  let webhookTestMsg = $state<string | null>(null);
   let labelInputEl = $state<HTMLInputElement | undefined>(undefined);
   let renameRequested = $state(false);
 
@@ -2924,6 +2933,132 @@
       saveError = err instanceof Error ? err.message : String(err);
     } finally {
       saving = false;
+    }
+  }
+
+  // D1 — persist the workflow-level notifications config. No local draft: reads
+  // the current value from `canvas.notifications`, merges the toggled field, and
+  // PATCHes; invalidateAll() refreshes canvas.notifications so the checkboxes
+  // reflect the stored state.
+  async function saveNotifications(partial: { onFailure?: boolean; onCompletion?: boolean; approvals?: boolean }) {
+    if (savingNotif) return;
+    savingNotif = true;
+    notifSaveError = null;
+    try {
+      const current = canvas?.notifications ?? {};
+      const next = {
+        onFailure: current.onFailure === true,
+        onCompletion: current.onCompletion === true,
+        approvals: current.approvals === true,
+        channel: 'whatsapp' as const,
+        ...partial,
+      };
+      const res = await fetch(`/api/workflows/${canvas.workflowId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notifications: next }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      await invalidateAll();
+    } catch (err) {
+      notifSaveError = err instanceof Error ? err.message : String(err);
+    } finally {
+      savingNotif = false;
+    }
+  }
+
+  // D4 — webhook hardening helpers. The absolute URL is what external callers
+  // POST to; the "send test" button fires against the same-origin relative path
+  // so it works in dev and prod without CORS.
+  function webhookAbsoluteUrl() {
+    return `https://strangeramblings.com/api/workflows/webhook/${canvas.workflowId}`;
+  }
+  function webhookRelativePath() {
+    return `/api/workflows/webhook/${canvas.workflowId}`;
+  }
+
+  async function copyWebhookText(text: string, which: 'url' | 'secret') {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (which === 'url') {
+        webhookUrlCopied = true;
+        setTimeout(() => (webhookUrlCopied = false), 1500);
+      } else {
+        webhookSecretCopied = true;
+        setTimeout(() => (webhookSecretCopied = false), 1500);
+      }
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : 'clipboard not available';
+    }
+  }
+
+  // Persist the webhook secret through the existing trigger PUT route (keeps its
+  // triple-write sync). An empty string clears it. Optimistically mirrors into
+  // configDraft so the field updates before invalidateAll re-syncs from the DB.
+  async function persistWebhookSecret(secret: string) {
+    if (savingWebhookSecret) return;
+    savingWebhookSecret = true;
+    saveError = null;
+    try {
+      setConfigField('secret', secret);
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/trigger`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'webhook',
+          enabled: configDraft.enabled !== false,
+          secret,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      await invalidateAll();
+    } catch (err) {
+      saveError = err instanceof Error ? err.message : String(err);
+    } finally {
+      savingWebhookSecret = false;
+    }
+  }
+
+  function generateWebhookSecret() {
+    void persistWebhookSecret(crypto.randomUUID().replace(/-/g, ''));
+  }
+
+  function clearWebhookSecret() {
+    if (!confirm('Remove the webhook secret? Callers will no longer need the X-Webhook-Secret header.'))
+      return;
+    void persistWebhookSecret('');
+  }
+
+  async function sendWebhookTest() {
+    if (webhookTestState === 'sending') return;
+    webhookTestState = 'sending';
+    webhookTestMsg = null;
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const secret = (configDraft.secret as string) || '';
+      if (secret) headers['X-Webhook-Secret'] = secret;
+      const res = await fetch(webhookRelativePath(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ test: true, sentAt: new Date().toISOString() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        webhookTestState = 'ok';
+        webhookTestMsg = body.runId
+          ? `Accepted — run ${String(body.runId).slice(0, 8)}`
+          : 'Accepted';
+      } else {
+        webhookTestState = 'fail';
+        webhookTestMsg = body.error || `HTTP ${res.status}`;
+      }
+    } catch (err) {
+      webhookTestState = 'fail';
+      webhookTestMsg = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -4666,9 +4801,88 @@
                       <span class="nm-sec-meta">POST to fire the workflow</span>
                     </div>
                     <div class="nm-field nm-field-read">
-                      <pre>POST https://strangeramblings.com/api/workflows/webhook/{canvas.workflowId}</pre>
+                      <pre>POST {webhookAbsoluteUrl()}</pre>
                     </div>
+                    <div class="wh-actions">
+                      <button
+                        class="nm-btn-ghost"
+                        onclick={() => copyWebhookText(webhookAbsoluteUrl(), 'url')}
+                      >
+                        {webhookUrlCopied ? 'Copied ✓' : 'Copy URL'}
+                      </button>
+                      <button
+                        class="nm-btn-ghost"
+                        onclick={sendWebhookTest}
+                        disabled={webhookTestState === 'sending'}
+                      >
+                        {webhookTestState === 'sending' ? 'Sending…' : 'Send test'}
+                      </button>
+                    </div>
+                    {#if webhookTestState === 'ok' || webhookTestState === 'fail'}
+                      <span
+                        class="wh-test-result"
+                        class:ok={webhookTestState === 'ok'}
+                        class:fail={webhookTestState === 'fail'}
+                        title={webhookTestMsg ?? ''}
+                      >
+                        {webhookTestState === 'ok' ? '✓' : '⚠'} {webhookTestMsg}
+                      </span>
+                    {/if}
                   </section>
+
+                  <!-- D4 — optional shared secret. When set, callers must send it
+                       as the X-Webhook-Secret header or the POST is rejected 401. -->
+                  <section class="nm-sec">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">SECRET</span>
+                      <span class="nm-sec-meta">require an X-Webhook-Secret header</span>
+                    </div>
+                    {#if configDraft.secret}
+                      <button
+                        type="button"
+                        class="nm-field nm-field-read wh-secret"
+                        title="Click to copy"
+                        onclick={() => copyWebhookText(configDraft.secret as string, 'secret')}
+                      >
+                        <pre>{webhookSecretCopied
+                            ? 'Copied ✓'
+                            : `X-Webhook-Secret: ${configDraft.secret}`}</pre>
+                      </button>
+                      <div class="wh-actions">
+                        <button
+                          class="nm-btn-ghost"
+                          onclick={generateWebhookSecret}
+                          disabled={savingWebhookSecret}
+                        >
+                          {savingWebhookSecret ? 'Saving…' : 'Regenerate'}
+                        </button>
+                        <button
+                          class="nm-btn-ghost"
+                          onclick={clearWebhookSecret}
+                          disabled={savingWebhookSecret}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    {:else}
+                      <div class="chat-explainer">
+                        <p>
+                          No secret — this webhook accepts any POST. Add one to require
+                          callers to send a matching <code>X-Webhook-Secret</code> header.
+                        </p>
+                      </div>
+                      <div class="wh-actions">
+                        <button
+                          class="nm-save-btn"
+                          onclick={generateWebhookSecret}
+                          disabled={savingWebhookSecret}
+                        >
+                          {savingWebhookSecret ? 'Saving…' : 'Generate secret'}
+                        </button>
+                      </div>
+                    {/if}
+                  </section>
+
                   <section class="nm-sec">
                     <div class="chat-explainer">
                       <p>
@@ -4731,6 +4945,49 @@
                     />
                     <span>Fire on matching signal</span>
                   </label>
+                </section>
+
+                <!-- D1 — run-outcome notifications (workflow-level; saved on toggle). -->
+                <section class="nm-sec">
+                  <div class="nm-sec-hd">
+                    <span class="sr-label-tight">NOTIFICATIONS</span>
+                    <span class="nm-sec-meta">WhatsApp me about this workflow's runs</span>
+                  </div>
+                  <label class="nm-toggle">
+                    <input
+                      type="checkbox"
+                      checked={canvas.notifications?.onFailure === true}
+                      disabled={savingNotif}
+                      onchange={(e) =>
+                        saveNotifications({ onFailure: (e.target as HTMLInputElement).checked })}
+                    />
+                    <span>Alert me on failure</span>
+                  </label>
+                  <label class="nm-toggle">
+                    <input
+                      type="checkbox"
+                      checked={canvas.notifications?.onCompletion === true}
+                      disabled={savingNotif}
+                      onchange={(e) =>
+                        saveNotifications({ onCompletion: (e.target as HTMLInputElement).checked })}
+                    />
+                    <span>Message me on completion</span>
+                  </label>
+                  <label class="nm-toggle">
+                    <input
+                      type="checkbox"
+                      checked={canvas.notifications?.approvals === true}
+                      disabled={savingNotif}
+                      onchange={(e) =>
+                        saveNotifications({ approvals: (e.target as HTMLInputElement).checked })}
+                    />
+                    <span>Ask me to approve on WhatsApp (reply APPROVE/DENY)</span>
+                  </label>
+                  {#if notifSaveError}
+                    <span class="nm-save-err" title={notifSaveError}
+                      >⚠ {notifSaveError}</span
+                    >
+                  {/if}
                 </section>
               {:else if menuNode.kind === 'chat'}
                 <section class="nm-sec">
@@ -7228,6 +7485,36 @@
   }
   .nm-field-read {
     background: var(--bg-section);
+  }
+  /* D4 — webhook trigger panel affordances. */
+  .wh-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  button.wh-secret {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+  }
+  button.wh-secret:hover {
+    border-color: var(--text-primary);
+  }
+  .wh-test-result {
+    display: inline-block;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    word-break: break-word;
+  }
+  .wh-test-result.ok {
+    color: var(--success, #3a7d44);
+  }
+  .wh-test-result.fail {
+    color: var(--error);
   }
   .nm-select {
     font-family: var(--font-mono);
