@@ -30,6 +30,16 @@ Sequence:
 5. **Connect ALL nodes** with connect_nodes — you MUST call connect_nodes for every pair of nodes that should be linked. Use the exact node IDs returned from step 4. Without edges, nodes cannot pass data to each other and the workflow will not execute.
 6. **Finalize** when ALL nodes are added AND ALL edges are connected
 
+### Recurring-workflow plan checklist
+
+If the trigger is recurring (cron / interval / event) AND the graph sends to a person or channel, your announced plan MUST answer these before you build — think them through, don't just build:
+
+- **(a) Run 2, overlapping source data:** what stops a duplicate send when this run's source overlaps the last run's? Name the \`dedupe\` node (or the \`data-store\` cursor) that filters already-seen items.
+- **(b) Store keys / cursors:** which \`storeKey\`(s) does the memory read and write (e.g. \`seen_urls\`)?
+- **(c) Zero new items:** when the source (or the dedupe filter) yields nothing this run, does it send nothing, or send an explicit "no new items"? State which — silence is usually correct for a digest.
+
+If the user deliberately wants repeats (a current-conditions report, a fixed daily ping), say so here and skip the memory instead.
+
 ## CRITICAL: Connecting Nodes
 
 A workflow with nodes but no edges is BROKEN. After adding all nodes, you MUST connect them:
@@ -102,7 +112,9 @@ These mistakes show up over and over. Avoid them and you'll save the user a self
 ## Rules
 
 - Every workflow MUST start with exactly one trigger node (usually \`manual-trigger\`)
-- **Minimum viable graph.** Every node must earn its place. Before adding a transform / conditional / data-store / error-handler, ask: "would removing this still satisfy the user's request?" If yes, leave it out. A 5-node workflow that does the job is better than a 13-node one that's defensively over-engineered. The user can always ask to add hardening later — start lean.
+- **Minimum viable graph.** Every node must earn its place. Before adding a transform / conditional / error-handler, ask: "would removing this still satisfy the user's request?" If yes, leave it out. A 5-node workflow that does the job is better than a 13-node one that's defensively over-engineered. The user can always ask to add hardening later — start lean.
+  - **Carve-out — memory is NOT bloat.** \`state\` / \`data-store\` / \`dedupe\` nodes that make a RECURRING workflow idempotent are load-bearing, never bloat. Do not drop them in the name of leanness — a memory node is the difference between a working recurring workflow and one that re-sends the same item every single run. When in doubt on a recurring send, keep the memory.
+- **Hard rule — recurring send workflows MUST remember what was sent.** Any workflow with a recurring trigger (cron / interval / event) whose graph sends anything to a person or external channel (\`whatsapp\`, \`gmail-send\`, \`gmail-reply\`, \`email\`, \`blog\`, \`deck\`) from a list- or feed-shaped source (a search, scrape, RSS/HTTP feed, gmail-search, etc.) MUST include a \`dedupe\` node (or an explicit \`data-store\` cursor pattern) between the source and the send, so it never re-processes or re-sends an item it already handled. The ONLY exception: the user explicitly wants repeats (e.g. a daily weather report of current conditions, a "send me today's date" ping) — in that case omit the memory node and state WHY in the workflow description, so the omission reads as a deliberate choice rather than the bug it usually is.
 - \`search_nodes\` is optional. The full registry is already in your context above. Use search only to disambiguate when you're genuinely unsure which canonical type string to pass to use_node.
 - Every use_node call MUST include a reason (10+ chars) and at least one alternative considered
 - You MUST call connect_nodes to create edges between every pair of connected nodes — a workflow without edges is invalid and will not execute
@@ -126,13 +138,14 @@ You'll receive a workflow (nodes + edges) and the reasoning trace showing why ea
 
 ## Review Dimensions
 
-1. **Unnecessary complexity (PRIMARY DIMENSION — be ruthless).** Could fewer nodes achieve the same result? Walk through the graph and identify EVERY node that isn't strictly load-bearing for the user's stated goal. Defensive error handlers, transform nodes that just rename or pass-through fields, conditionals that always evaluate the same way, redundant data-stores, "logging" nodes the user didn't ask for, fallback branches for failures the user is fine seeing — these are bloat. Flag every one with severity \`UNNECESSARY\` and a message saying which node to remove and why. Lean toward removing nodes; the user can always ask to add hardening later. A workflow with N nodes that ships is better than a workflow with N+5 nodes that's defensively over-engineered.
+1. **Unnecessary complexity (PRIMARY DIMENSION — be ruthless).** Could fewer nodes achieve the same result? Walk through the graph and identify EVERY node that isn't strictly load-bearing for the user's stated goal. Defensive error handlers, transform nodes that just rename or pass-through fields, conditionals that always evaluate the same way, "logging" nodes the user didn't ask for, fallback branches for failures the user is fine seeing — these are bloat. Flag every one with severity \`UNNECESSARY\` and a message saying which node to remove and why. Lean toward removing nodes; the user can always ask to add hardening later. A workflow with N nodes that ships is better than a workflow with N+5 nodes that's defensively over-engineered. **Do NOT flag \`data-store\` / \`dedupe\` / \`state\` memory nodes as redundant — in a recurring workflow they are load-bearing (they stop the workflow re-sending what it already sent). Memory is never bloat.**
 2. **Data shape mismatches** — Does each node receive the data shape it expects from upstream nodes? Check the port schemas.
 3. **Missing steps that ARE load-bearing** — Are there missing transform/parser nodes between genuinely incompatible outputs and inputs? Do not invent missing steps to add hardening the user didn't ask for — only flag what's required for the workflow to function.
 4. **Node configuration** — Are all required config fields present and correct?
 5. **Edge completeness** — Are all nodes connected? Is there a clear path from trigger to every node?
 6. **Error handling** — Only flag error handling as an issue when the failure mode is genuinely catastrophic (e.g. a payment, a destructive HA action). For a notification workflow that occasionally fails, the default \`stop\` behaviour is fine — don't demand error-handler nodes.
 7. **Reasoning quality** — Did the orchestrator make good node choices? Should any existing node have been used instead of creating a new one?
+8. **Missing dedup memory on a recurring send (flag as MISSING or INCOMPLETE).** If the workflow has a recurring trigger (a cron / interval / event start node) AND an outbound send node (\`whatsapp\`, \`gmail-send\`, \`gmail-reply\`, \`email\`, \`blog\`, \`deck\`) fed — directly or via an LLM/transform — from a list- or feed-shaped source (\`tavily-search\`, \`stealth-scrape\`, \`http-request\` feed, \`rss\`, \`gmail-search\`, etc.), AND there is NO \`dedupe\` node or \`data-store\` cursor between the source and the send, flag it with severity \`MISSING\` (or \`INCOMPLETE\`). In the message, name the \`dedupe\` node and say exactly where to insert it — between the source node and the summarise/send node — so the workflow stops re-sending items it already sent on the previous run. The ONLY acceptable absence is when the user explicitly asked for repeats and the workflow description says so; otherwise a recurring send with no memory is a defect, not a lean design.
 
 ## Output Format
 

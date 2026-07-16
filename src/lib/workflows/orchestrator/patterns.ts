@@ -70,14 +70,15 @@ export const workflowPatterns: WorkflowPattern[] = [
   },
   {
     name: 'Scrape-Diff-Notify',
-    description: 'Read a website with a saved stealth script, diff against previously-seen items, format new ones, notify the user, persist what was sent.',
-    trigger: 'When the user wants alerts for new listings/jobs/prices/posts on a site. Prefer this over http-request for any human-facing web page (it runs on a residential IP with cookies, handles JS, and has a reusable saved script).',
-    nodeSequence: ['trigger', 'data-store (get sent_ids)', 'stealth-scrape', 'merge', 'transform (diff)', 'llm-call (format HTML)', 'gmail-send / whatsapp (bodyHtml)', 'data-store (set sent_ids)'],
-    edgePattern: 'trigger → data-store-get; trigger → stealth-scrape. Both → merge → transform (newItems = items minus sent). transform → llm-call → gmail/whatsapp. transform → data-store-set (parallel edge carries the updated id list via valuePath).',
+    description: 'Pull items from a source (a website via a saved stealth script, or a search / feed / API), keep only the ones NOT seen in previous runs, format those, notify the user, and persist what was sent. The modern one-node form uses a `dedupe` node to hold the seen-id set; the older manual form uses a data-store get → merge → transform-diff → data-store-set dance (see the worked example).',
+    trigger: 'When the user wants a RECURRING digest / briefing / monitor / alert / round-up of items from a site or feed — anything where each run should surface only what is genuinely new since last time (listings, jobs, prices, posts, search results, headlines, news). This applies EVEN WHEN the request never says "new" or "already seen": a "daily news briefing", a "morning digest", "keep me posted on X", or "monitor X" is this pattern. Prefer this (with a `dedupe`/`data-store` memory node) over a flat fetch → send, which would re-send the same items every run. Use stealth-scrape over http-request for any human-facing web page (residential IP, cookies, JS, reusable saved script).',
+    nodeSequence: ['trigger (cron/interval)', 'source (tavily-search / stealth-scrape / http-request / rss)', 'dedupe (filter already-seen by id)', 'llm-call (format only the new items)', 'gmail-send / whatsapp'],
+    edgePattern: 'trigger → source → dedupe → llm-call → send. The `dedupe` node holds the seen-id set in the workflow data-store and passes only unseen items onward (downstream reads its `items` / `newCount`). Optionally place a `conditional` (expression `input.newCount > 0`) between dedupe and the LLM so a run with nothing new sends nothing. The older manual form replaces the single `dedupe` node with data-store-get + merge + transform-diff + data-store-set (parallel edges; the diff carries the updated id list via valuePath).',
     examples: [
+      'Daily news briefing about a topic to WhatsApp — only stories I have not seen',
+      'Every morning, monitor a site for new listings and email me the new ones',
       'Email me new civil-service data engineer roles within 20 miles of Darlington',
-      'WhatsApp me when new listings appear on Rightmove for a saved search',
-      'Daily digest of new hackernews front-page items I haven\'t seen',
+      'Weekly digest of blog posts I have not already been sent',
     ],
   },
 ];
@@ -95,9 +96,10 @@ export function getPatternsForOrchestrator(): string {
  * exact edge wiring.
  *
  * These are few-shot exemplars, not abstract patterns. Every `type` here is a
- * real entry in the registry (manual-trigger, stealth-scrape, llm-call, email,
- * http-request, whatsapp, gmail-trigger, gmail-fetch, gmail-reply, gmail-label,
- * conditional, loop, data-store, merge, transform), and every `config` snippet
+ * real entry in the registry (manual-trigger, stealth-scrape, tavily-search,
+ * llm-call, email, http-request, whatsapp, gmail-trigger, gmail-fetch,
+ * gmail-reply, gmail-label, conditional, loop, data-store, dedupe, merge,
+ * transform), and every `config` snippet
  * uses the node's ACTUAL config keys (verified against the node definitions).
  * The orchestrator should be able to translate one of these almost verbatim
  * into use_node + connect_nodes calls.
@@ -178,6 +180,25 @@ export const goldenExemplars: GoldenExemplar[] = [
     ],
     edges: ['trigger → fetch', 'fetch → shape', 'shape → digest'],
     note: 'Loop example: `loop` is a MAP-TRANSFORM, not a control-flow loop. It applies `expression` to each element of input.body.posts and emits { results, count } ONCE. Downstream nodes run once with the whole array — so the digest llm-call embeds {{input.results}} in a single batch prompt rather than running per item. Do NOT place a per-item llm-call/http-request after a loop.',
+  },
+  {
+    request: 'Every morning at 7, search for news about renewable energy and WhatsApp me a briefing.',
+    trigger: 'cron — trigger.config.expression = "0 7 * * *"',
+    nodes: [
+      { id: 'search', type: 'tavily-search', config: `query: "renewable energy", topic: "news", days: 1, maxResults: 10` },
+      { id: 'dedupe', type: 'dedupe', config: `itemsPath: "results", idPath: "url", storeKey: "seen_news_urls"` },
+      { id: 'guard', type: 'conditional', config: `expression: "input.newCount > 0"` },
+      { id: 'brief', type: 'llm-call', config: `userPrompt: "Today is {{today}}. Write a short WhatsApp news briefing from these fresh stories — one line each, most important first:\\n\\n{{input.items}}"  (leave model unset → admin default)` },
+      { id: 'send', type: 'whatsapp', config: `to: "+447359228511", message: "{{input.text}}"` },
+    ],
+    edges: [
+      'trigger → search',
+      'search → dedupe',
+      'dedupe → guard',
+      'guard → brief (sourceHandle: "true")',
+      'brief → send',
+    ],
+    note: 'THE recurring-digest shape, and the fix for the "re-sends the same story every morning" bug. `dedupe` sits BETWEEN the source and the send: it reads tavily\'s `results`, filters out any URL already in the `seen_news_urls` set (persisted in the workflow data-store), records the new URLs, and passes { items: [...only new...], newCount, seenCount, allItems } onward — so downstream reads `input.items` (the new stories only). The `conditional` guard (expression `input.newCount > 0`) fans out only the "true" handle, so a morning with nothing new sends NOTHING rather than an empty briefing. `{{today}}` in the LLM prompt resolves to the real date at run time, so the model never invents one. This whole flow is a `dedupe` node instead of the 4-node data-store diff dance below.',
   },
   {
     request: 'Daily at 8am, scrape new job listings, skip any I have already seen, and email me only the new ones.',

@@ -88,25 +88,64 @@ async function buildWorkflowsSection(currentWorkflowId?: string | null): Promise
   }
 }
 
+const WORKFLOW_MEMORY_HEADING = '### Workflow memory';
+
+/** ≤120-char single-line preview of a stored value. */
+export function previewStoreValue(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  const oneLine = str.replace(/\s+/g, ' ').trim();
+  return oneLine.length > 120 ? `${oneLine.slice(0, 120)}…` : oneLine;
+}
+
+/**
+ * Render the always-on "Workflow memory" section from data-store rows. Pure, so
+ * it's unit-testable without a DB. Empty rows → the empty-state guidance that
+ * points the model at {{state.KEY}}; populated rows → key + updated_at + a short
+ * value preview per key.
+ */
+export function renderWorkflowMemorySection(
+  rows: Array<{ key: string; value: unknown; updatedAt?: Date | string | null }>,
+): string {
+  if (rows.length === 0) {
+    return (
+      `${WORKFLOW_MEMORY_HEADING}\n  - No stored keys yet — dedupe/data-store nodes create them on ` +
+      'first run; reference future keys via {{state.KEY}}.'
+    );
+  }
+  const lines = rows.map((r) => {
+    const when = r.updatedAt ? new Date(r.updatedAt).toISOString() : '?';
+    return `  - \`${r.key}\` (updated ${when}): ${previewStoreValue(r.value)}`;
+  });
+  return `${WORKFLOW_MEMORY_HEADING}\n${lines.join('\n')}`;
+}
+
+/**
+ * Workflow memory (B8): ALWAYS rendered for generation so the model knows the
+ * dedupe/data-store keys it can read via {{state.KEY}}. When keys exist it lists
+ * each with its updated_at and a short value preview; when none exist (or no
+ * workflow id yet) it states the empty case and points at {{state.KEY}}.
+ */
 async function buildDataStoreSection(workflowId?: string | null): Promise<string | null> {
-  if (!workflowId) return null;
+  if (!workflowId) return renderWorkflowMemorySection([]);
+
   try {
     const rows = await db
-      .select({ key: workflowDataStore.key, value: workflowDataStore.value })
+      .select({
+        key: workflowDataStore.key,
+        value: workflowDataStore.value,
+        updatedAt: workflowDataStore.updatedAt,
+      })
       .from(workflowDataStore)
       .where(eq(workflowDataStore.workflowId, workflowId))
       .orderBy(asc(workflowDataStore.key))
       .limit(MAX_DATA_STORE_KEYS);
 
-    if (rows.length === 0) return null;
-
-    const lines = rows.map((r) => {
-      const t = r.value === null || r.value === undefined ? 'null' : Array.isArray(r.value) ? 'array' : typeof r.value;
-      return `  - key: \`${r.key}\` (${t})`;
-    });
-    return `### Data store keys (current workflow)\n${lines.join('\n')}`;
+    return renderWorkflowMemorySection(rows);
   } catch {
-    return null;
+    // Still surface the section (with guidance) rather than dropping it — the
+    // point of B8 is that generation ALWAYS sees the memory guidance.
+    return `${WORKFLOW_MEMORY_HEADING}\n  - (memory unavailable — dedupe/data-store nodes persist keys; reference via {{state.KEY}}).`;
   }
 }
 

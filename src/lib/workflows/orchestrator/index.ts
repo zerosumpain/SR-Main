@@ -1,4 +1,5 @@
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getModel } from '$lib/deepdive/keys';
+import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 import { db } from '$lib/db';
 import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions } from '$lib/db/schema';
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
@@ -187,12 +188,14 @@ function getOutputSchema(type: string, config: Record<string, unknown>): JsonSch
 export function runWorkflowVerification(
   nodes: WorkflowNodeDef[],
   edges: WorkflowEdgeDef[],
+  trigger?: { type: string; config?: Record<string, unknown> },
 ) {
   return verifyWorkflow(
     nodes,
     edges,
     (type) => registry.getDefinition(type),
     getOutputSchema,
+    trigger,
   );
 }
 
@@ -221,7 +224,6 @@ async function runToolLoop(
   description?: string;
   followUp?: string;
 }> {
-  const client = getOpenAIClient();
   const model = getModel();
   const draft = existingDraft ?? createEmptyDraft();
   if (!existingDraft) resetNodeCounter();
@@ -242,29 +244,18 @@ async function runToolLoop(
   let behaviouralVerifyAttempts = 0;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    // Retry with backoff on 429 rate limits
-    let response;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        response = await client.chat.completions.create({
-          model,
-          messages,
-          tools: tools as any,
-          tool_choice: 'auto',
-          temperature: 0.7,
-          max_tokens: 4096,
-        });
-        break;
-      } catch (err: any) {
-        if (err?.status === 429 && attempt < 2) {
-          const wait = (attempt + 1) * 5000; // 5s, 10s
-          onChunk?.(`Rate limited — waiting ${wait / 1000}s before retry...\n`);
-          await new Promise(r => setTimeout(r, wait));
-          continue;
-        }
-        throw err;
-      }
-    }
+    // Resilient generation call (B7): the $lib/llm workflow gateway owns 429
+    // retry/backoff AND z.ai→OpenRouter failover on rate-limit/timeout. Do NOT
+    // wrap this in a second retry loop — that would stack on the gateway's
+    // withRetry and multiply latency. `model` (empty/'default' → admin default)
+    // is resolved by the gateway's resolveLLMClient.
+    const response = await resilientChatCompletion(model, {
+      messages,
+      temperature: 0.7,
+      max_tokens: 4096,
+      tools: tools as any,
+      tool_choice: 'auto',
+    });
     if (!response) break;
 
     const choice = response.choices[0];
@@ -449,6 +440,7 @@ async function runToolLoop(
           assembled.edges,
           (type) => registry.getDefinition(type),
           getOutputSchema,
+          assembled.trigger,
         );
 
         if (issues.length > 0 && verifyAttempts < MAX_VERIFY_ROUNDS) {
@@ -501,7 +493,6 @@ async function runCriticRound(
   workflow: GeneratedWorkflow,
   draft: WorkflowDraft,
 ): Promise<{ issues: CritiqueIssue[]; verdict: 'pass' | 'fail' }> {
-  const client = getOpenAIClient();
   const model = getModel();
 
   const workflowSummary = JSON.stringify({
@@ -515,28 +506,23 @@ async function runCriticRound(
     .join('\n');
 
   let response;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: buildCriticPrompt() },
-          { role: 'user', content: `## Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Reasoning Trace\n\n${reasoningTrace}` },
-        ],
-        temperature: 0.5,
-        max_tokens: 2048,
-        response_format: { type: 'json_object' },
-      });
-      break;
-    } catch (err: any) {
-      if (err?.status === 429 && attempt < 2) {
-        await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
-        continue;
-      }
-      // Critic failure is non-fatal — skip review
-      console.warn('[orchestrator] Critic round failed:', err?.message);
-      return { issues: [], verdict: 'pass' as const };
-    }
+  try {
+    // Routed through the resilience gateway (B7) — same 429 retry + z.ai→OpenRouter
+    // fallback as the generation loop. Critic failure stays non-fatal: on any
+    // error we skip review rather than block the workflow from being saved.
+    response = await resilientChatCompletion(model, {
+      messages: [
+        { role: 'system', content: buildCriticPrompt() },
+        { role: 'user', content: `## Workflow\n\n\`\`\`json\n${workflowSummary}\n\`\`\`\n\n## Reasoning Trace\n\n${reasoningTrace}` },
+      ],
+      temperature: 0.5,
+      max_tokens: 2048,
+      response_format: { type: 'json_object' },
+    });
+  } catch (err: any) {
+    // Critic failure is non-fatal — skip review
+    console.warn('[orchestrator] Critic round failed:', err?.message);
+    return { issues: [], verdict: 'pass' as const };
   }
 
   const text = response?.choices[0]?.message?.content ?? '{}';
@@ -781,7 +767,7 @@ export async function generateWorkflow(
   // revision round to fix them by name; if they remain, save anyway and let
   // the caller surface them to the user.
   if (opts?.skipVerification) {
-    const lateIssues = runWorkflowVerification(finalWorkflow.nodes, finalWorkflow.edges);
+    const lateIssues = runWorkflowVerification(finalWorkflow.nodes, finalWorkflow.edges, finalWorkflow.trigger);
     if (lateIssues.length > 0) {
       onChunk?.(`Post-build check: ${lateIssues.length} config issue(s) — asking the builder to fix.\n`);
       const issuesSummary = formatIssues(lateIssues);
