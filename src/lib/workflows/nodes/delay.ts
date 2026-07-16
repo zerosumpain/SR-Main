@@ -57,4 +57,6 @@ export const delayDef: NodeDefinition = {
       min: 0,
     },
   ],
+  llmDescription: `Pause the run for a fixed duration (\`milliseconds\`), then pass the input through unchanged. Use to space out API calls (rate limiting) or to wait between steps. Not for scheduling — use a cron trigger for that.`,
+  llmExamples: [{ milliseconds: 1000 }, { milliseconds: 5000 }],
 };

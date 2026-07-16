@@ -45,6 +45,39 @@
     return 1024;
   });
 
+  // ---------- Structured output ----------------------------------------
+  // outputSchema is stored either as an object (advanced JSON) or a JSON
+  // string (edited here). We render whatever is stored as pretty JSON text
+  // and write back the raw string; the executor accepts both shapes.
+  const outputSchemaText = $derived.by(() => {
+    const raw = config.outputSchema;
+    if (raw === undefined || raw === null || raw === '') return '';
+    if (typeof raw === 'string') return raw;
+    try {
+      return JSON.stringify(raw, null, 2);
+    } catch {
+      return '';
+    }
+  });
+  let schemaInvalid = $state(false);
+  function setOutputSchema(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      schemaInvalid = false;
+      set('outputSchema', '');
+      return;
+    }
+    try {
+      JSON.parse(trimmed);
+      schemaInvalid = false;
+    } catch {
+      schemaInvalid = true;
+    }
+    // Persist the raw text either way so the user can keep typing.
+    set('outputSchema', text);
+  }
+  let showSchema = $state(!!(config.outputSchema && config.outputSchema !== ''));
+
   // ---------- Raw JSON --------------------------------------------------
 
   let showRawJson = $state(false);
@@ -105,6 +138,23 @@
     onChange={(v) => set('maxTokens', v)}
     hint="Maximum length of the AI response (roughly 4 characters per token). Default 1024."
   />
+
+  <!-- Structured output (optional) -->
+  <details class="lc-schema" bind:open={showSchema}>
+    <summary><span class="sr-label-tight">Structured output — JSON schema (optional)</span></summary>
+    <textarea
+      class="lc-code"
+      rows="8"
+      spellcheck="false"
+      placeholder={`{\n  "type": "object",\n  "properties": { "sentiment": { "type": "string" }, "score": { "type": "number" } },\n  "required": ["sentiment", "score"]\n}`}
+      value={outputSchemaText}
+      oninput={(e) => setOutputSchema((e.currentTarget as HTMLTextAreaElement).value)}
+    ></textarea>
+    <span class="lc-hint">
+      When set, the model must return JSON. The parsed object is on <code>data</code>; <code>required</code> keys are validated (one retry).
+      {#if schemaInvalid}<span class="lc-warn">invalid JSON — fix before running</span>{/if}
+    </span>
+  </details>
 
   <!-- On failure -->
   <OnErrorBlock
@@ -196,6 +246,14 @@
   input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus {
     border-color: var(--text-muted);
   }
+
+  .lc-schema {
+    margin-top: 4px;
+    border-top: 1px dashed var(--card-border);
+    padding-top: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .lc-schema summary { cursor: pointer; margin-bottom: 4px; }
 
   .lc-raw {
     margin-top: 4px;

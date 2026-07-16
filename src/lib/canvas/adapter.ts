@@ -451,6 +451,30 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
     deskOnly: true, // live node on the Research Desk; no workflow executor
   },
+  {
+    type: 'file-search',
+    label: 'File search (RAG)',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'Semantic search over the content of /drive files (text, images, audio). Returns ranked passages.',
+    defaultConfig: { query: '{{input.query}}', topK: 5, fileTypes: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
+  {
+    type: 'research-search',
+    label: 'Research search (RAG)',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'Cross-session semantic search over all deep-dive research materials. Returns ranked passages.',
+    defaultConfig: { query: '{{input.query}}', topK: 8 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
 
   // ————————————————————————— Intel & Web
   {
@@ -698,6 +722,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     handles: {
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
+    },
+  },
+  {
+    type: 'deck-build',
+    label: 'Deck build (presentation)',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Publish workflow results as an sr. decks presentation; returns the deck url + share link.',
+    defaultConfig: { title: '', description: '', spec: '[]', share: true, isPublic: false },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
     },
   },
   {
@@ -1057,6 +1093,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'research-report') return 'research-report';
   if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
+  if (type === 'file-search' || type === 'research-search') return 'intel';
   if (type === 'webpage') return 'webpage';
   if (type === 'builder-chat' || type === 'builder-pi' || type === 'build-view') return 'builder';
   return 'output';

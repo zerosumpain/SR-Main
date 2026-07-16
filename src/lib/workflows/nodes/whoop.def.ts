@@ -92,4 +92,9 @@ export const whoopDef: NodeDefinition = {
       advancedOnly: true,
     },
   ],
+  llmDescription: `Read Whoop health data (requires Whoop connected in Health settings). Prefer the DB-backed ops — they're fast and free: \`get_summary\` (aggregates over the last N days), \`get_recent\` (per-day rows), \`query_recovery\` (a single metric series: hrv | recovery | rhr | sleep_performance | strain). The \`get_*\` API ops (get_cycles/get_recovery/get_sleep/get_workouts) hit the Whoop API directly and are rate-limited. Read-only.`,
+  llmExamples: [
+    { operation: 'get_summary', days: 7 },
+    { operation: 'query_recovery', metric: 'hrv' },
+  ],
 };

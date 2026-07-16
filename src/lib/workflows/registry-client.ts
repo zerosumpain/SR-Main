@@ -33,6 +33,10 @@ import { homeAssistantDef } from './nodes/home-assistant.def';
 import { healthQueryDef } from './nodes/health-query.def';
 import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
+import { siteToolDef } from './nodes/site-tool.def';
+import { fileSearchDef } from './nodes/file-search.def';
+import { researchSearchDef } from './nodes/research-search.def';
+import { deckBuildDef } from './nodes/deck-build.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
@@ -859,6 +863,10 @@ const builtInDefinitions: NodeDefinition[] = [
   healthQueryDef,
   blogDef,
   jkaiDef,
+  siteToolDef,
+  fileSearchDef,
+  researchSearchDef,
+  deckBuildDef,
   deepDiveDef,
   webScrapeDef,
   stealthScrapeDef,

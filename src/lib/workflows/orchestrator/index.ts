@@ -5,7 +5,7 @@ import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecuti
 import { getCompiledPrompt } from '$lib/workflows/prompts/loader';
 import { eq, asc, desc, and, isNotNull } from 'drizzle-orm';
 import { buildToolUseSystemPrompt, buildCriticPrompt, buildRevisionPrompt, buildModifySystemPrompt } from './prompts';
-import { buildNodeGrounding, type ExecutionExample } from './grounding';
+import { buildNodeGrounding, buildSiteToolCatalog, type ExecutionExample } from './grounding';
 import { buildWorkspaceResources } from './workspace-grounding';
 import { openaiTools, toolSchemas } from './tools';
 import { processToolCall, assembleWorkflow, resetNodeCounter } from './loop';
@@ -160,7 +160,11 @@ async function buildGrounding(): Promise<string> {
   const examples = await getRecentExecutionExamples();
   // Use registry.listDefinitions() to include both built-in and dynamic nodes
   const allDefinitions = registry.listDefinitions();
-  return buildNodeGrounding(allDefinitions.length > 0 ? allDefinitions : nodeDefinitions, examples);
+  const nodeDocs = buildNodeGrounding(allDefinitions.length > 0 ? allDefinitions : nodeDefinitions, examples);
+  // Append the site-tool catalog (B8) so the planner knows which tool-only
+  // capabilities exist + their destructive flag when reaching for `site-tool`.
+  const catalog = await buildSiteToolCatalog();
+  return catalog ? `${nodeDocs}\n\n${catalog}` : nodeDocs;
 }
 
 function createEmptyDraft(): WorkflowDraft {

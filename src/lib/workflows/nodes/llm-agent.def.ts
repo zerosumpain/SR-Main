@@ -37,6 +37,18 @@ export const llmAgentDef: NodeDefinition = {
         description:
           'JSON object mapping node IDs to { name?, description? } overrides for tool definitions',
       },
+      toolSource: {
+        type: 'string',
+        enum: ['edges', 'site-tools'],
+        description:
+          'Where the agent gets its tools. "edges" (default) = every downstream connected node. "site-tools" = an allowlisted set of non-destructive registry tools (no wiring needed).',
+      },
+      siteToolAllowlist: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'REQUIRED when toolSource="site-tools": exact registry tool names the agent may call. Destructive and denylisted tools are always excluded. Never left empty (an agent is never granted all tools).',
+      },
     },
     required: ['userPrompt'],
   },
@@ -48,6 +60,8 @@ export const llmAgentDef: NodeDefinition = {
     maxTokens: 2048,
     maxIterations: 10,
     maxTotalTokens: 0,
+    toolSource: 'edges',
+    siteToolAllowlist: [],
     timeoutMs: 0,
     toolOverrides: '{}',
   },
@@ -127,6 +141,27 @@ export const llmAgentDef: NodeDefinition = {
       description: 'Max execution time in milliseconds (0 = disabled)',
     },
     {
+      key: 'toolSource',
+      label: 'Tool source',
+      type: 'dropdown',
+      section: 'TOOLS',
+      description:
+        'Edges = every downstream connected node becomes a tool. Site tools = an allowlist of non-destructive registry tools (no wiring needed).',
+      options: [
+        { value: 'edges', label: 'Connected nodes (edges)' },
+        { value: 'site-tools', label: 'Site tools (allowlist)' },
+      ],
+    },
+    {
+      key: 'siteToolAllowlist',
+      label: 'Allowed site tools',
+      type: 'chip-input',
+      section: 'TOOLS',
+      description:
+        'Exact registry tool names the agent may call (e.g. file_search, research_search, render_chart). Destructive/denylisted tools are always excluded.',
+      visibleWhen: { key: 'toolSource', equals: 'site-tools' },
+    },
+    {
       key: 'toolOverrides',
       label: 'Tool Overrides',
       type: 'textarea',
@@ -137,13 +172,20 @@ export const llmAgentDef: NodeDefinition = {
     },
   ],
   llmDescription:
-    'Use when the task requires multi-step reasoning with tool use. The agent can call connected nodes as tools in a loop until it has the answer. Best for complex tasks that need planning, research, or iterative refinement.',
+    'Use when the task requires multi-step reasoning with tool use. Two tool sources: (1) toolSource="edges" (default) — every downstream connected node becomes a callable tool; (2) toolSource="site-tools" — provide siteToolAllowlist (exact non-destructive registry tool names, e.g. ["file_search","research_search"]) and the agent can call them directly with no wiring. Destructive tools are NEVER exposed to an agent regardless of the allowlist; the allowlist must be non-empty. Every sub-tool call is run with a per-call timeout and its LLM cost is captured. Best for complex tasks that need planning, research, or iterative refinement.',
   llmExamples: [
     {
       // model omitted on purpose — defaults to the site admin default.
       systemPrompt: 'You are a research assistant. Use the available tools to answer questions.',
       userPrompt: '{{input.question}}',
       maxIterations: 5,
+    },
+    {
+      systemPrompt: 'You answer questions using the user\'s uploaded files and past research.',
+      userPrompt: '{{input.question}}',
+      toolSource: 'site-tools',
+      siteToolAllowlist: ['file_search', 'research_search'],
+      maxIterations: 6,
     },
   ],
 };

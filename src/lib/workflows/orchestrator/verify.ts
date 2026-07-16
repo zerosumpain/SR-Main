@@ -412,6 +412,65 @@ function detectMissingDedupMemory(
 }
 
 /**
+ * Author-time enforcement of the `site-tool` destructive-gating rule (C1): a
+ * `site-tool` node with `allowDestructive: true` MUST have an `approval` node
+ * somewhere upstream on its path, so a destructive site capability (send /
+ * publish / delete) can never fire without human sign-off. This is the PRIMARY
+ * guard — the executor's runtime check is belt-and-braces.
+ *
+ * Detection = reverse walk from each flagged site-tool node over incoming edges;
+ * if no `approval` node is reachable upstream, error. The message names the fix.
+ */
+function detectSiteToolApprovalGaps(
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+): VerificationIssue[] {
+  const flagged = nodes.filter(
+    (n) => n.type === 'site-tool' && (n.config as Record<string, unknown>)?.allowDestructive === true,
+  );
+  if (flagged.length === 0) return [];
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const predecessors = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = predecessors.get(e.targetNodeId) ?? [];
+    list.push(e.sourceNodeId);
+    predecessors.set(e.targetNodeId, list);
+  }
+
+  const hasUpstreamApproval = (startId: string): boolean => {
+    const seen = new Set<string>();
+    const queue = [...(predecessors.get(startId) ?? [])];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (nodeById.get(id)?.type === 'approval') return true;
+      for (const p of predecessors.get(id) ?? []) queue.push(p);
+    }
+    return false;
+  };
+
+  const issues: VerificationIssue[] = [];
+  for (const node of flagged) {
+    if (hasUpstreamApproval(node.id)) continue;
+    const toolName = String((node.config as Record<string, unknown>)?.toolName ?? '(unset)');
+    issues.push({
+      nodeId: node.id,
+      nodeLabel: node.label,
+      field: 'allowDestructive',
+      issue:
+        `site-tool "${node.label}" invokes the destructive tool "${toolName}" with allowDestructive:true ` +
+        `but has no approval node upstream. Add an approval node before this node so the run pauses for ` +
+        `human sign-off before the destructive action fires (or set allowDestructive:false and pick a ` +
+        `non-destructive tool).`,
+      severity: 'error',
+    });
+  }
+  return issues;
+}
+
+/**
  * Verify a workflow graph for data-shape issues.
  *
  * For each node:
@@ -543,6 +602,9 @@ export function verifyWorkflow(
 
   // --- Graph-level: recurring send without dedup memory (B3) ---
   issues.push(...detectMissingDedupMemory(nodes, edges, trigger));
+
+  // --- Graph-level: destructive site-tool without upstream approval (C1) ---
+  issues.push(...detectSiteToolApprovalGaps(nodes, edges));
 
   return issues;
 }

@@ -12,7 +12,7 @@ export const jkaiDef: NodeDefinition = {
       prompt: { type: 'string', description: 'Build prompt for start. Supports templates.' },
       title: { type: 'string', description: 'Optional build title. Supports templates.' },
       buildId: { type: 'string', description: 'Build ID for status/control. Supports templates.' },
-      action: { type: 'string', description: 'Control action (pause | resume | cancel)' },
+      action: { type: 'string', description: 'Control action (pause | resume | stop | publish)' },
     },
     required: ['operation'],
   },
@@ -50,11 +50,12 @@ export const jkaiDef: NodeDefinition = {
     },
     {
       key: 'action', label: 'Control Action', type: 'dropdown',
-      description: 'What to do with the running build',
+      description: 'What to do with the build',
       options: [
         { value: 'pause', label: 'Pause' },
         { value: 'resume', label: 'Resume' },
-        { value: 'cancel', label: 'Cancel' },
+        { value: 'stop', label: 'Stop' },
+        { value: 'publish', label: 'Publish' },
       ],
       visibleWhen: { key: 'operation', equals: 'control' },
     },
@@ -62,9 +63,9 @@ export const jkaiDef: NodeDefinition = {
   llmDescription: `Manage JKAI autonomous code builds in a Docker sandbox. Supports four operations:
 
 1. **start** — Start a new build with a prompt (and optional title)
-2. **status** — Check the status of a build by ID
+2. **status** — Full build overview + iterations for a build by ID
 3. **list** — List all builds (most recent first, up to 50)
-4. **control** — Control a running build (pause, resume, cancel)
+4. **control** — Control a build (pause, resume, stop, publish)
 
 IMPORTANT: Downstream nodes access this node's result as \`input.success\`, \`input.data\`, \`input.error\` (the upstream output is merged directly into the downstream input).
 
@@ -73,6 +74,6 @@ All text fields support \`{{input.field}}\` template interpolation.`,
     { operation: 'list' },
     { operation: 'start', prompt: 'Build a React dashboard with charts', title: 'Dashboard Build' },
     { operation: 'status', buildId: '{{input.data.id}}' },
-    { operation: 'control', buildId: '{{input.data.id}}', action: 'cancel' },
+    { operation: 'control', buildId: '{{input.data.id}}', action: 'stop' },
   ],
 };

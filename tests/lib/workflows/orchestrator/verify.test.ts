@@ -160,3 +160,42 @@ describe('verifyWorkflow — B3 recurring send without dedup memory', () => {
     expect(issues[0].nodeId).toBe(tavily.id);
   });
 });
+
+/** Only the graph-level "destructive site-tool without approval" findings. */
+function siteToolApprovalIssues(nodes: WorkflowNodeDef[], edges: WorkflowEdgeDef[]) {
+  return verifyWorkflow(nodes, edges, getDefinition, getOutputSchema).filter(
+    (i) => i.field === 'allowDestructive',
+  );
+}
+
+describe('verifyWorkflow — C1 destructive site-tool needs an upstream approval node', () => {
+  it('errors when a site-tool with allowDestructive:true has no approval upstream', () => {
+    const trigger = node('trigger', { kind: 'manual' });
+    const st = node('site-tool', { toolName: 'whatsapp_send', allowDestructive: true }, 'Send WA');
+    const nodes = [trigger, st];
+    const edges = [edge(trigger, st)];
+    const issues = siteToolApprovalIssues(nodes, edges);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].severity).toBe('error');
+    expect(issues[0].nodeId).toBe(st.id);
+    expect(issues[0].issue).toContain('whatsapp_send');
+    expect(issues[0].issue.toLowerCase()).toContain('approval');
+  });
+
+  it('passes when an approval node sits upstream (directly or transitively)', () => {
+    const trigger = node('trigger', { kind: 'manual' });
+    const approval = node('approval', {}, 'Sign off');
+    const transform = node('transform', {}, 'Prep');
+    const st = node('site-tool', { toolName: 'publish_page', allowDestructive: true }, 'Publish');
+    const nodes = [trigger, approval, transform, st];
+    // trigger → approval → transform → site-tool (approval is transitively upstream)
+    const edges = [edge(trigger, approval), edge(approval, transform), edge(transform, st)];
+    expect(siteToolApprovalIssues(nodes, edges)).toHaveLength(0);
+  });
+
+  it('does not flag a non-destructive site-tool (allowDestructive falsy)', () => {
+    const trigger = node('trigger', { kind: 'manual' });
+    const st = node('site-tool', { toolName: 'save_memory' }, 'Remember');
+    expect(siteToolApprovalIssues([trigger, st], [edge(trigger, st)])).toHaveLength(0);
+  });
+});

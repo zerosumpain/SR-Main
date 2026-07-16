@@ -30,6 +30,10 @@ import { homeAssistantDef, homeAssistantExecutor } from './nodes/home-assistant'
 import { healthQueryDef, healthQueryExecutor } from './nodes/health-query';
 import { blogDef, blogExecutor } from './nodes/blog';
 import { jkaiDef, jkaiExecutor } from './nodes/jkai';
+import { siteToolDef, siteToolExecutor } from './nodes/site-tool';
+import { fileSearchDef, fileSearchExecutor } from './nodes/file-search';
+import { researchSearchDef, researchSearchExecutor } from './nodes/research-search';
+import { deckBuildDef, deckBuildExecutor } from './nodes/deck-build';
 import {
   builderChatDef, builderChatExecutor,
   builderPiDef, builderPiExecutor,
@@ -133,6 +137,10 @@ registry.register(homeAssistantDef, homeAssistantExecutor);
 registry.register(healthQueryDef, healthQueryExecutor);
 registry.register(blogDef, blogExecutor);
 registry.register(jkaiDef, jkaiExecutor);
+registry.register(siteToolDef, siteToolExecutor);
+registry.register(fileSearchDef, fileSearchExecutor);
+registry.register(researchSearchDef, researchSearchExecutor);
+registry.register(deckBuildDef, deckBuildExecutor);
 registry.register(builderChatDef, builderChatExecutor);
 registry.register(builderPiDef, builderPiExecutor);
 registry.register(buildViewDef, buildViewExecutor);

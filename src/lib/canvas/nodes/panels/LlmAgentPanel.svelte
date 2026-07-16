@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import TemplatedTextarea from './shared/TemplatedTextarea.svelte';
@@ -76,6 +77,40 @@
     set('toolOverrides', text);
   }
 
+  // ---------- Tool source (edges vs site-tools) ---------------------------
+
+  const toolSource = $derived(config.toolSource === 'site-tools' ? 'site-tools' : 'edges');
+  const allowlist = $derived(
+    Array.isArray(config.siteToolAllowlist) ? (config.siteToolAllowlist as string[]) : [],
+  );
+
+  let availableTools = $state<{ name: string; toolset: string; destructive: boolean }[]>([]);
+  let toolInput = $state('');
+
+  onMount(async () => {
+    try {
+      const res = await fetch('/api/workflows/site-tools');
+      if (!res.ok) return;
+      const body = await res.json();
+      availableTools = (body.tools ?? []).filter(
+        (t: { destructive: boolean }) => !t.destructive,
+      );
+    } catch {
+      /* datalist is a nicety — silently skip if unavailable */
+    }
+  });
+
+  function addTool(name: string) {
+    const n = name.trim();
+    if (!n) return;
+    if (allowlist.includes(n)) { toolInput = ''; return; }
+    set('siteToolAllowlist', [...allowlist, n]);
+    toolInput = '';
+  }
+  function removeTool(name: string) {
+    set('siteToolAllowlist', allowlist.filter((t) => t !== name));
+  }
+
   // ---------- Raw JSON disclosure -----------------------------------------
 
   let showRawJson = $state(false);
@@ -134,6 +169,64 @@
       bandLabels={['Focused', 'Balanced', 'Exploratory', 'Creative']}
       hint='<span class="la-temp-scale-row"><span>0 · Focused</span><span>0.7 · Balanced</span><span>1.5+ · Creative</span></span>'
     />
+  </section>
+
+  <!-- Section 1b: Tools -->
+  <section class="la-sec">
+    <header class="la-sec-hdr"><span class="sr-label-tight">Tools</span></header>
+    <label class="la-field">
+      <span class="la-label">Tool source</span>
+      <select
+        value={toolSource}
+        onchange={(e) => set('toolSource', (e.currentTarget as HTMLSelectElement).value)}
+      >
+        <option value="edges">Connected nodes (edges)</option>
+        <option value="site-tools">Site tools (allowlist)</option>
+      </select>
+      <span class="la-hint">
+        {#if toolSource === 'site-tools'}
+          The agent calls the allowlisted registry tools directly — no wiring needed.
+        {:else}
+          Every <em>downstream</em> connected node becomes a callable tool.
+        {/if}
+      </span>
+    </label>
+
+    {#if toolSource === 'site-tools'}
+      <label class="la-field">
+        <span class="la-label">Allowed site tools <span class="la-req">required</span></span>
+        {#if allowlist.length > 0}
+          <div class="la-chips">
+            {#each allowlist as name (name)}
+              <span class="la-chip">
+                {name}
+                <button type="button" class="la-chip-x" onclick={() => removeTool(name)} aria-label={`remove ${name}`}>×</button>
+              </span>
+            {/each}
+          </div>
+        {/if}
+        <input
+          type="text"
+          list="la-site-tools"
+          placeholder="type a tool name and press Enter (e.g. file_search)"
+          value={toolInput}
+          oninput={(e) => (toolInput = (e.currentTarget as HTMLInputElement).value)}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addTool(toolInput); }
+          }}
+          onchange={(e) => addTool((e.currentTarget as HTMLInputElement).value)}
+        />
+        <datalist id="la-site-tools">
+          {#each availableTools as t (t.name)}
+            <option value={t.name}>{t.toolset}</option>
+          {/each}
+        </datalist>
+        <span class="la-hint">
+          Non-destructive registry tools only. Destructive/denylisted tools are excluded —
+          the agent runs autonomously with no per-call approval.
+        </span>
+      </label>
+    {/if}
   </section>
 
   <!-- Section 2: Loop limits & timeouts (collapsed by default) -->
@@ -320,6 +413,21 @@
 
   .la-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
   .la-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
+
+  .la-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .la-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--font-mono); font-size: 11px;
+    background: color-mix(in srgb, var(--card-border) 18%, transparent);
+    border: 1px solid var(--card-border);
+    padding: 1px 4px 1px 6px;
+    color: var(--text-primary);
+  }
+  .la-chip-x {
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 13px; line-height: 1; padding: 0 2px;
+  }
+  .la-chip-x:hover { color: var(--status-error, #c0392b); }
 
   .la-collapsible {
     border: 1px solid var(--card-border);

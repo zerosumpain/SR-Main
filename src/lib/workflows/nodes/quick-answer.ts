@@ -112,4 +112,9 @@ export const quickAnswerDef: NodeDefinition = {
       section: 'ADVANCED',
     },
   ],
+  llmDescription: `Run a fast single-topic research session (Tavily search + LLM synthesis) and wait for it to complete. Returns a written answer plus sources. Cheaper/faster than the full \`deep-research\` node — use for a quick briefing on one \`topic\` (supports {{input.*}}/{{item.*}}). Output includes researchReport, researchSources, researchStatus.`,
+  llmExamples: [
+    { topic: 'Latest developments in {{input.subject}}' },
+    { topic: '{{item.title}}', goals: ['key players', 'risks'] },
+  ],
 };

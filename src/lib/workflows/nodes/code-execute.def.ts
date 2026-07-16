@@ -52,4 +52,9 @@ export const codeExecuteDef: NodeDefinition = {
       advancedOnly: true,
     },
   ],
+  llmDescription: `Run a snippet of JavaScript (Node.js), Python 3, or Bash in a sandbox. The upstream payload is available as \`input\` (JS/Python) — return or print JSON to pass data downstream. Use for custom transforms, math, or glue logic that no dedicated node covers. Prefer \`transform\` for simple JS reshaping; use this for Python/Bash or multi-step logic. Declare \`outputSchema\` to give downstream nodes autocomplete.`,
+  llmExamples: [
+    { language: 'javascript', code: 'return { total: input.items.length };' },
+    { language: 'python', code: 'import json\nprint(json.dumps({"n": len(input["rows"])}))' },
+  ],
 };

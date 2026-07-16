@@ -125,4 +125,6 @@ export const intelligenceDef: NodeDefinition = {
       section: 'QUERY',
     },
   ],
+  llmDescription: `Filtered view onto the personal intel knowledge graph. Like \`intel-query\` but also returns a structured \`intelItems\` array (+ \`intelCount\`) alongside the prose \`intelContext\`, and supports \`facets\` (entityTypes, tags, timeRange, ordering). Use when a downstream node needs to iterate over the matched items, not just read prose. Read-only.`,
+  llmExamples: [{ query: 'recent projects' }, { query: '', facets: { tags: ['dfe'], ordering: 'recent' } }],
 };

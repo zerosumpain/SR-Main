@@ -6,6 +6,9 @@ import type {
 } from '../types';
 import { interpolateTemplateStrict } from './template';
 import { resolveLLMClient } from './llm-helpers';
+import { isDenylistedTool } from './site-tool-denylist';
+import { withNodeTimeout, nodeTimeoutMs } from '../engine-runtime';
+import { executionContext, recordLLMCall, type LLMCallRecord } from '../execution-context';
 
 export { llmAgentDef } from './llm-agent.def';
 
@@ -34,6 +37,50 @@ function sanitizeToolName(label: string): string {
     .replace(/^_+|_+$/g, '')
     .replace(/_+/g, '_')
     || 'tool';
+}
+
+/**
+ * Run one agent sub-call (a downstream node's executor, or a site-tool handler)
+ * with (a) a per-sub-call hard timeout via `withNodeTimeout` and (b) LLM cost
+ * capture: the sub-call runs inside a fresh `executionContext` store, and any
+ * LLM calls it records are re-attributed to the AGENT node's rollup afterwards.
+ * This mirrors how engine.ts wraps each node's `executor.execute`, so agent
+ * sub-calls get the same timeout + telemetry treatment as top-level nodes.
+ *
+ * Exported for unit testing (verifies cost capture is invoked).
+ */
+export async function runAgentSubCall<T>(
+  label: string,
+  timeoutMs: number,
+  parentSignal: AbortSignal,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const onAbort = () => {
+    try { controller.abort(); } catch { /* noop */ }
+  };
+  if (parentSignal.aborted) controller.abort();
+  else parentSignal.addEventListener('abort', onAbort, { once: true });
+
+  const parent = executionContext.getStore();
+  const subCalls: LLMCallRecord[] = [];
+  const subCtx = {
+    workflowId: parent?.workflowId ?? '',
+    runId: parent?.runId ?? '',
+    nodeId: label,
+    llmCalls: subCalls,
+  };
+
+  try {
+    return await withNodeTimeout(label, 'agent-subcall', timeoutMs, controller, () =>
+      executionContext.run(subCtx, fn),
+    );
+  } finally {
+    parentSignal.removeEventListener('abort', onAbort);
+    // Re-attribute the sub-call's LLM cost to the agent node's rollup (no-op
+    // when there is no parent context, e.g. a standalone unit test).
+    for (const c of subCalls) recordLLMCall(c);
+  }
 }
 
 /**
@@ -103,6 +150,70 @@ export function discoverTools(
   return { tools, toolMap };
 }
 
+/** Normalise the allowlist config into a clean string[] (array or CSV string). */
+function parseAllowlist(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof raw === 'string') return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
+/**
+ * Build the agent's tool set from the site-tool registry, restricted to the
+ * allowlist. Destructive tools are NEVER exposed to an agent regardless of the
+ * allowlist (an agent runs autonomously with no per-call approval), and the
+ * hard denylist applies too. An empty allowlist is an error — an agent is never
+ * given "all tools".
+ */
+async function discoverSiteTools(
+  allowlist: string[],
+): Promise<{ tools: ToolDef[]; allowed: Set<string> }> {
+  if (allowlist.length === 0) {
+    throw new Error(
+      'llm-agent: toolSource "site-tools" requires a non-empty siteToolAllowlist. An agent is never granted all tools — list the exact tool names it may use.',
+    );
+  }
+  const { getTool } = await import('$lib/workflows/site-tools/registry');
+  const tools: ToolDef[] = [];
+  const allowed = new Set<string>();
+  const skipped: string[] = [];
+  for (const name of allowlist) {
+    if (isDenylistedTool(name)) { skipped.push(`${name} (denylisted)`); continue; }
+    const tool = getTool(name);
+    if (!tool) { skipped.push(`${name} (unknown)`); continue; }
+    if (tool.destructive) { skipped.push(`${name} (destructive — never allowed in an agent)`); continue; }
+    tools.push({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters as JsonSchema,
+      },
+    });
+    allowed.add(name);
+  }
+  if (tools.length === 0) {
+    throw new Error(
+      `llm-agent: none of the tools in siteToolAllowlist are usable — ${skipped.join('; ')}.`,
+    );
+  }
+  return { tools, allowed };
+}
+
+/** Execute one allowlisted, non-destructive site tool and return its envelope. */
+async function runSiteTool(
+  name: string,
+  args: Record<string, unknown>,
+  allowed: Set<string>,
+): Promise<unknown> {
+  if (!allowed.has(name)) return { error: `Tool "${name}" is not in this agent's allowlist.` };
+  if (isDenylistedTool(name)) return { error: `Tool "${name}" is denylisted and cannot be run.` };
+  const { getTool } = await import('$lib/workflows/site-tools/registry');
+  const tool = getTool(name);
+  if (!tool) return { error: `Unknown tool: ${name}` };
+  if (tool.destructive) return { error: `Tool "${name}" is destructive and cannot be run by an agent.` };
+  return await tool.handler(args);
+}
+
 export const llmAgentExecutor: NodeExecutor = {
   type: 'llm-agent',
 
@@ -125,7 +236,22 @@ export const llmAgentExecutor: NodeExecutor = {
 
     const agentNodeId = (context as any)._currentNodeId;
     const registry = (context as any)._registry;
-    const { tools, toolMap } = discoverTools(agentNodeId, config, context);
+
+    // Tool source: 'edges' (default) = downstream connected nodes as tools;
+    // 'site-tools' = an allowlisted set of non-destructive registry tools.
+    const toolSource = config.toolSource === 'site-tools' ? 'site-tools' : 'edges';
+    let tools: ToolDef[] = [];
+    let toolMap = new Map<string, ToolMapEntry>();
+    let allowedSiteTools = new Set<string>();
+    if (toolSource === 'site-tools') {
+      const disc = await discoverSiteTools(parseAllowlist(config.siteToolAllowlist));
+      tools = disc.tools;
+      allowedSiteTools = disc.allowed;
+    } else {
+      const disc = discoverTools(agentNodeId, config, context);
+      tools = disc.tools;
+      toolMap = disc.toolMap;
+    }
 
     const { client, model } = await resolveLLMClient(config.model as string | undefined);
 
@@ -200,8 +326,9 @@ export const llmAgentExecutor: NodeExecutor = {
           args = {};
         }
 
-        const entry = toolMap.get(toolName);
-        if (!entry) {
+        // Resolve target + per-sub-call timeout by tool source.
+        const entry = toolSource === 'edges' ? toolMap.get(toolName) : undefined;
+        if (toolSource === 'edges' && !entry) {
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -209,42 +336,57 @@ export const llmAgentExecutor: NodeExecutor = {
           });
           continue;
         }
+        if (toolSource === 'site-tools' && !allowedSiteTools.has(toolName)) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: JSON.stringify({ error: `Tool "${toolName}" is not in this agent's allowlist.` }),
+          });
+          continue;
+        }
 
+        const emitNodeId = entry?.targetNodeId ?? agentNodeId;
+        const subTimeoutMs = entry ? nodeTimeoutMs(entry.nodeType) : nodeTimeoutMs('site-tool');
         const toolStart = Date.now();
         try {
-          const executor = registry.getExecutor(entry.nodeType);
-          if (!executor) throw new Error(`No executor for type: ${entry.nodeType}`);
-
           context.emit({
             type: 'node_started',
             runId: context.runId,
-            nodeId: entry.targetNodeId,
+            nodeId: emitNodeId,
             data: { tool: toolName, input: args },
             timestamp: new Date().toISOString(),
           });
 
-          const toolResult = await executor.execute(args, entry.nodeConfig, context);
+          const output = await runAgentSubCall(
+            `agent-tool:${toolName}`,
+            subTimeoutMs,
+            context.abortSignal,
+            async () => {
+              if (toolSource === 'edges') {
+                const executor = registry.getExecutor(entry!.nodeType);
+                if (!executor) throw new Error(`No executor for type: ${entry!.nodeType}`);
+                const r = await executor.execute(args, entry!.nodeConfig, context);
+                return r.output;
+              }
+              return await runSiteTool(toolName, args, allowedSiteTools);
+            },
+          );
           const durationMs = Date.now() - toolStart;
 
           context.emit({
             type: 'node_completed',
             runId: context.runId,
-            nodeId: entry.targetNodeId,
+            nodeId: emitNodeId,
             data: { tool: toolName, durationMs },
             timestamp: new Date().toISOString(),
           });
 
-          toolCallHistory.push({
-            tool: toolName,
-            input: args,
-            output: toolResult.output,
-            durationMs,
-          });
+          toolCallHistory.push({ tool: toolName, input: args, output, durationMs });
 
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: JSON.stringify(toolResult.output),
+            content: JSON.stringify(output),
           });
         } catch (err: any) {
           const durationMs = Date.now() - toolStart;
@@ -253,7 +395,7 @@ export const llmAgentExecutor: NodeExecutor = {
           context.emit({
             type: 'node_failed',
             runId: context.runId,
-            nodeId: entry.targetNodeId,
+            nodeId: emitNodeId,
             data: { tool: toolName, error: errorMsg },
             timestamp: new Date().toISOString(),
           });
@@ -303,6 +445,7 @@ export const llmAgentExecutor: NodeExecutor = {
         iterationCount,
         stopReason,
         tokensUsed,
+        toolSource,
       },
       rowCount: 1,
     };
@@ -345,4 +488,3 @@ export const llmAgentExecutor: NodeExecutor = {
     };
   },
 };
-

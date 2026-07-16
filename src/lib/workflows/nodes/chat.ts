@@ -249,4 +249,6 @@ export const chatDef: NodeDefinition = {
   inputs: [],
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   basicConfig: [],
+  llmDescription: `Conversational node backed by the jkai/Hermes agent (full tool access). Wired as a trigger, the user's typed message flows downstream as the agent's reply on \`response\`; wired mid-graph, the upstream output becomes the prompt and the reply streams into the canvas chat panel. Unwired, it's just the canvas orchestrator panel and takes no part in execution. Use for an interactive, tool-using assistant step; use \`llm-call\` for a plain stateless prompt→completion.`,
+  llmExamples: [{}],
 };
