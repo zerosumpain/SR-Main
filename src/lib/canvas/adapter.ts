@@ -403,6 +403,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
       outputs: [{ id: 'result', kinds: ['research-result', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
   {
     type: 'quick-answer',
@@ -427,6 +428,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
   {
     type: 'research-chat',
@@ -465,6 +467,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
       outputs: [{ id: 'out', kinds: ['json', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
   {
     type: 'research-search',
@@ -477,6 +480,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
       outputs: [{ id: 'out', kinds: ['json', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
 
   // ————————————————————————— Intel & Web

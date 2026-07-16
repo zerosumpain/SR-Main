@@ -24,4 +24,25 @@ describe('canvas palette ↔ registry parity', () => {
       expect(entry!.handles.inputs.length + entry!.handles.outputs.length).toBeGreaterThan(0);
     }
   });
+
+  // E4: the RAG + research capability nodes must sit together in one coherent
+  // "Intelligence" group so the builder can find them, with a positive default
+  // weight so they surface in ranked suggestions rather than sinking to zero.
+  it('groups the intelligence/RAG nodes under "Intelligence" with a sensible weight', () => {
+    for (const t of ['file-search', 'research-search', 'deep-research', 'research-result']) {
+      const entry = byType(t);
+      expect(entry, `missing palette entry for ${t}`).toBeTruthy();
+      expect(entry!.group, `${t} should be in the Intelligence group`).toBe('Intelligence');
+      expect(entry!.defaultWeight ?? 0, `${t} should have a positive default weight`).toBeGreaterThan(0);
+    }
+  });
+
+  it('exposes the webpage node for the research desk palette (E4 parity)', () => {
+    const entry = byType('webpage');
+    expect(entry).toBeTruthy();
+    // The desk renders the same webpage kind; it must not be marked deskOnly
+    // (which would hide it from the workflow canvas), and it must be wireable.
+    expect(entry!.kind).toBe('webpage');
+    expect(entry!.handles.inputs.length + entry!.handles.outputs.length).toBeGreaterThan(0);
+  });
 });

@@ -26,11 +26,28 @@
   import BuildViewNode from '$lib/canvas/nodes/BuildViewNode.svelte';
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
+  // Shared canvas-shell geometry (E1). These are the SAME formulas this surface
+  // already shipped, extracted so the research desk shares one implementation.
+  // The local wrappers below keep their names + signatures; only their bodies
+  // delegate here. State ownership stays in this component.
+  import {
+    clampZoom as shellClampZoom,
+    zoomAtPoint as shellZoomAtPoint,
+    pinchZoom as shellPinchZoom,
+    screenToWorld as shellScreenToWorld,
+    viewportCenterInWorld as shellViewportCenterInWorld,
+    fitToBounds as shellFitToBounds,
+    resolveOverlap as shellResolveOverlap,
+    orthPath as shellOrthPath,
+  } from '$lib/canvas/shell/geometry';
+  import { computeMinimap } from '$lib/canvas/shell/minimap';
+  import { createKeymap } from '$lib/canvas/keymap';
   import { byType as byNodeType, allTypes as allNodeTypes, mapTypeToKind, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
   import { getDefinition } from '$lib/workflows/registry-client';
   import { summarizeNode } from '$lib/workflows/node-summary';
+  import { memoryBadgeFor } from '$lib/canvas/memory-badge';
   import { computeUpstreamFields, computeUpstreamCollisions } from '$lib/canvas/upstream-fields';
 
   // Node types that always render a config panel (specialised panels), in addition
@@ -1016,42 +1033,11 @@
    * connector back through the source body.
    */
   function orthPath(from: CanvasNode, to: CanvasNode): string {
-    const fw = nodeW(from);
-    const fh = nodeH(from);
-    const tw = nodeW(to);
-    const th = nodeH(to);
-    const sCx = from.x + fw / 2;
-    const sCy = from.y + fh / 2;
-    const tCx = to.x + tw / 2;
-    const tCy = to.y + th / 2;
-    const dx = tCx - sCx;
-    const dy = tCy - sCy;
-
-    const overlapX = from.x < to.x + tw && to.x < from.x + fw;
-    const overlapY = from.y < to.y + th && to.y < from.y + fh;
-
-    let horizontal: boolean;
-    if (overlapX && !overlapY) {
-      horizontal = false;
-    } else if (overlapY && !overlapX) {
-      horizontal = true;
-    } else {
-      horizontal = Math.abs(dx) >= Math.abs(dy);
-    }
-
-    if (horizontal) {
-      const [x1, x2] = dx >= 0 ? [from.x + fw, to.x] : [from.x, to.x + tw];
-      const y1 = sCy;
-      const y2 = tCy;
-      const midX = (x1 + x2) / 2;
-      return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
-    }
-
-    const [y1, y2] = dy >= 0 ? [from.y + fh, to.y] : [from.y, to.y + th];
-    const x1 = sCx;
-    const x2 = tCx;
-    const midY = (y1 + y2) / 2;
-    return `M${x1} ${y1} L${x1} ${midY} L${x2} ${midY} L${x2} ${y2}`;
+    // Adapt CanvasNode + nodeW/nodeH → the shell's box-accessor form.
+    return shellOrthPath(
+      { x: from.x, y: from.y, w: nodeW(from), h: nodeH(from) },
+      { x: to.x, y: to.y, w: nodeW(to), h: nodeH(to) },
+    );
   }
 
   const KIND_COLOR: Record<string, string> = {
@@ -1125,6 +1111,8 @@
   const MINIMAP_PAD = 4;
   const minimap = $derived.by(() => {
     if (viewNodes.length === 0 || viewportW === 0 || viewportH === 0) return null;
+    // Item-bounds accumulation stays here (uses this surface's nodeW/nodeH);
+    // the shared viewport-frame folding + projection lives in the shell.
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -1137,34 +1125,12 @@
       if (r > maxX) maxX = r;
       if (b > maxY) maxY = b;
     }
-    const viewLeft = -panX / zoom;
-    const viewTop = -panY / zoom;
-    const viewRight = (viewportW - panX) / zoom;
-    const viewBottom = (viewportH - panY) / zoom;
-    if (viewLeft < minX) minX = viewLeft;
-    if (viewTop < minY) minY = viewTop;
-    if (viewRight > maxX) maxX = viewRight;
-    if (viewBottom > maxY) maxY = viewBottom;
-    const worldW = Math.max(1, maxX - minX);
-    const worldH = Math.max(1, maxY - minY);
-    const innerW = MINIMAP_BODY_W - MINIMAP_PAD * 2;
-    const innerH = MINIMAP_BODY_H - MINIMAP_PAD * 2;
-    const scale = Math.min(innerW / worldW, innerH / worldH);
-    const offsetX = MINIMAP_PAD + (innerW - worldW * scale) / 2;
-    const offsetY = MINIMAP_PAD + (innerH - worldH * scale) / 2;
-    return {
-      scale,
-      offsetX,
-      offsetY,
-      minX,
-      minY,
-      frame: {
-        x: offsetX + (viewLeft - minX) * scale,
-        y: offsetY + (viewTop - minY) * scale,
-        w: Math.max(2, (viewRight - viewLeft) * scale),
-        h: Math.max(2, (viewBottom - viewTop) * scale),
-      },
-    };
+    return computeMinimap(
+      { minX, minY, maxX, maxY },
+      { panX, panY, zoom },
+      { width: viewportW, height: viewportH },
+      { bodyW: MINIMAP_BODY_W, bodyH: MINIMAP_BODY_H, pad: MINIMAP_PAD },
+    );
   });
 
   // ——— Chat lifecycle (decoupled from workflow runs) ———
@@ -1870,17 +1836,17 @@
   } | null>(null);
 
   function clampZoom(z: number) {
-    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    return shellClampZoom(z, MIN_ZOOM, MAX_ZOOM);
   }
 
   function zoomAt(cx: number, cy: number, factor: number) {
-    const newZoom = clampZoom(zoom * factor);
-    if (newZoom === zoom) return;
-    const worldX = (cx - panX) / zoom;
-    const worldY = (cy - panY) / zoom;
-    zoom = newZoom;
-    panX = cx - worldX * newZoom;
-    panY = cy - worldY * newZoom;
+    const next = shellZoomAtPoint({ panX, panY, zoom }, { x: cx, y: cy }, factor, {
+      min: MIN_ZOOM,
+      max: MAX_ZOOM,
+    });
+    zoom = next.zoom;
+    panX = next.panX;
+    panY = next.panY;
   }
 
   function zoomCentered(factor: number) {
@@ -1892,25 +1858,99 @@
   function fit() {
     if (!viewportEl || canvas.nodes.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
-    const pad = 48;
-    const minX = Math.min(...canvas.nodes.map((n) => n.x)) - pad;
-    const minY = Math.min(...canvas.nodes.map((n) => n.y)) - pad;
-    const maxX = Math.max(...canvas.nodes.map((n) => n.x + nodeW(n))) + pad;
-    const maxY = Math.max(...canvas.nodes.map((n) => n.y + nodeH(n))) + pad;
-    const contentW = maxX - minX;
-    const contentH = maxY - minY;
-    const availW = Math.max(200, vp.width - 24);
-    const availH = Math.max(200, vp.height - 24);
-    const fitZ = clampZoom(Math.min(availW / contentW, availH / contentH, 1));
-    zoom = fitZ;
-    panX = 12 + (availW - contentW * fitZ) / 2 - minX * fitZ;
-    panY = 12 + (availH - contentH * fitZ) / 2 - minY * fitZ;
+    // Raw content bounds (no padding — the shell applies pad/inset/pan-inset).
+    const next = shellFitToBounds(
+      {
+        minX: Math.min(...canvas.nodes.map((n) => n.x)),
+        minY: Math.min(...canvas.nodes.map((n) => n.y)),
+        maxX: Math.max(...canvas.nodes.map((n) => n.x + nodeW(n))),
+        maxY: Math.max(...canvas.nodes.map((n) => n.y + nodeH(n))),
+      },
+      { width: vp.width, height: vp.height },
+      { min: MIN_ZOOM, max: MAX_ZOOM },
+    );
+    zoom = next.zoom;
+    panX = next.panX;
+    panY = next.panY;
   }
 
   function reset() {
     panX = 0;
     panY = 0;
     zoom = 1;
+  }
+
+  // ——— Memory panel (E3): live view of the workflow data-store ———
+  // All fetch-on-demand; no polling / EventSource / $effect so there's no
+  // read-own-write cycle. memoryEntries is replaced wholesale on each load.
+  type MemoryEntry = {
+    key: string;
+    value: string;
+    truncated: boolean;
+    itemCount: number | null;
+    updatedAt: string | null;
+  };
+  let memoryOpen = $state(false);
+  let memoryLoading = $state(false);
+  let memoryError = $state<string | null>(null);
+  let memoryEntries = $state<MemoryEntry[]>([]);
+  // Two-click inline confirm: the key currently awaiting a "Confirm clear".
+  let memoryConfirmKey = $state<string | null>(null);
+
+  async function loadMemory() {
+    if (!canvas.workflowId) {
+      memoryEntries = [];
+      return;
+    }
+    memoryLoading = true;
+    memoryError = null;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/data-store`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const entries = (body.keys ?? []) as MemoryEntry[];
+      // Most-recently-updated first.
+      entries.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
+      memoryEntries = entries;
+    } catch (err) {
+      memoryError = err instanceof Error ? err.message : String(err);
+    } finally {
+      memoryLoading = false;
+    }
+  }
+
+  function openMemory() {
+    memoryOpen = true;
+    memoryConfirmKey = null;
+    void loadMemory();
+  }
+  function closeMemory() {
+    memoryOpen = false;
+    memoryConfirmKey = null;
+  }
+  function toggleMemory() {
+    if (memoryOpen) closeMemory();
+    else openMemory();
+  }
+
+  async function clearMemoryKey(key: string) {
+    // First click on "Clear" arms the confirm; the confirm button re-invokes.
+    if (memoryConfirmKey !== key) {
+      memoryConfirmKey = key;
+      return;
+    }
+    memoryConfirmKey = null;
+    if (!canvas.workflowId) return;
+    try {
+      const res = await fetch(
+        `/api/workflows/${canvas.workflowId}/data-store/${encodeURIComponent(key)}`,
+        { method: 'DELETE' },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      memoryError = err instanceof Error ? err.message : String(err);
+    }
+    await loadMemory();
   }
 
   async function scrollToNode(nodeId: string) {
@@ -2169,35 +2209,22 @@
   function viewportCenterInWorld(): { x: number; y: number } {
     if (!viewportEl) return { x: 320, y: 120 };
     const vp = viewportEl.getBoundingClientRect();
-    const cx = (vp.width / 2 - panX) / zoom;
-    const cy = (vp.height / 2 - panY) / zoom;
-    // Snap to grid, and offset by half a node so center, not corner, is centered
-    const x = Math.round((cx - NODE_W / 2) / 20) * 20;
-    const y = Math.round((cy - NODE_H / 2) / 20) * 20;
-    return { x, y };
+    // Offset by half a node so center, not corner, is centered; grid-snapped.
+    return shellViewportCenterInWorld(
+      { panX, panY, zoom },
+      { width: vp.width, height: vp.height },
+      { w: NODE_W, h: NODE_H },
+    );
   }
 
   function screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
     if (!viewportEl) return { x: 0, y: 0 };
     const vp = viewportEl.getBoundingClientRect();
-    return {
-      x: (clientX - vp.left - panX) / zoom,
-      y: (clientY - vp.top - panY) / zoom,
-    };
+    return shellScreenToWorld({ panX, panY, zoom }, { x: clientX, y: clientY }, { x: vp.left, y: vp.top });
   }
 
   function resolveOverlap(p: { x: number; y: number }): { x: number; y: number } {
-    let { x, y } = p;
-    const limit = 20;
-    for (let i = 0; i < limit; i++) {
-      const clashes = (canvas?.nodes ?? []).some(
-        (n) => Math.hypot(n.x - x, n.y - y) < 40,
-      );
-      if (!clashes) return { x, y };
-      x += 24;
-      y += 24;
-    }
-    return { x, y };
+    return shellResolveOverlap(p, canvas?.nodes ?? []);
   }
 
   function inputsFor(type: string): HandleSpec[] {
@@ -2369,12 +2396,11 @@
         const dist1 = pinchDistance(t1, t2);
         const midX1 = (t1.clientX + t2.clientX) / 2;
         const midY1 = (t1.clientY + t2.clientY) / 2;
-        const ratio = dist1 / pinch.dist0;
-        // Clamp zoom to a sensible range.
-        const z1 = Math.max(0.1, Math.min(4, pinch.zoom0 * ratio));
-        zoom = z1;
-        panX = midX1 - pinch.worldX * z1;
-        panY = midY1 - pinch.worldY * z1;
+        // Shell pinch clamp defaults to the wider 0.1–4 range this surface uses.
+        const next = shellPinchZoom(pinch, { x: midX1, y: midY1 }, dist1);
+        zoom = next.zoom;
+        panX = next.panX;
+        panY = next.panY;
         return;
       }
       // Single-finger pan.
@@ -3240,103 +3266,154 @@
     menuForNodeId = null;
   }
 
-  // Global Escape closes the inspector on mobile (in addition to the ✕
-  // button and the backdrop click) — fallback for any UI quirk that
-  // makes the close affordances hard to reach.
-  $effect(() => {
-    if (!isMobile || !menuNode) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeMenu();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
   function isTypingTarget(t: EventTarget | null): boolean {
     if (!(t instanceof HTMLElement)) return false;
     const tag = t.tagName;
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable;
   }
 
+  // Consolidated canvas keymap (E5). A single window keydown listener dispatches
+  // through an ordered registry, replacing four former independent listeners
+  // (run-summary Escape, mobile-inspector Escape, global keymap, palette
+  // shortcuts). The two Escape *closers* (run-summary + mobile) return `false`
+  // so the chain continues — this preserves the exact original behaviour where
+  // all Escape listeners fired on a single press (close run summary + close
+  // mobile inspector + global deselect all happen together). Handlers that
+  // exclusively own their keys return `true` to short-circuit. NodePalette keeps
+  // its own component-scoped Escape handler (coordinated via `paletteOpen`).
   $effect(() => {
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key === 'Escape') {
-        // Menu only closes via its Close button — don't dismiss it on Escape.
-        selectedId = null;
-        selectedEdgeId = null;
-        pipePickerOpen = false;
-        edgeInspectorFor = null;
-      } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
-        // Let the chat textarea's own handler send the draft
-        if (isTypingTarget(ev.target)) return;
-        ev.preventDefault();
-        runCanvas();
-      } else if (
-        (ev.key === 'Delete' || ev.key === 'Backspace') &&
-        selectedEdgeId &&
-        !menuForNodeId &&
-        !isTypingTarget(ev.target)
-      ) {
-        ev.preventDefault();
-        deleteEdge(selectedEdgeId);
-      } else if (
-        (ev.key === 'Delete' || ev.key === 'Backspace') &&
-        selectedId &&
-        !menuForNodeId &&
-        !isTypingTarget(ev.target)
-      ) {
-        ev.preventDefault();
-        deleteNode(selectedId);
-      } else if (
-        ev.key === 'F2' &&
-        selectedId &&
-        !isTypingTarget(ev.target)
-      ) {
-        ev.preventDefault();
-        beginRename(selectedId);
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+    const keymap = createKeymap();
 
-  // Global keyboard triggers for the node palette (cmd/ctrl-K, slash)
-  $effect(() => {
-    function onGlobalKey(e: KeyboardEvent) {
-      if (!NEW_PALETTE) return;
-      if (paletteOpen) return; // palette handles its own keys while open
-      const target = e.target as HTMLElement | null;
-      const typing =
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable;
-      const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
-      const metaKey = isMac ? e.metaKey : e.ctrlKey;
-      if (metaKey && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
-      } else if (e.key === '/' && !typing) {
-        e.preventDefault();
-        openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
-      } else if (!typing && (e.key === 'f' || e.key === 'F') && !metaKey) {
-        // Fit canvas — recovery shortcut when the toolbar is hidden behind
-        // an extreme zoom level.
-        e.preventDefault();
-        fit();
-      } else if (!typing && e.key === '0' && !metaKey) {
-        // Reset pan + zoom to 1× / origin.
-        e.preventDefault();
-        reset();
-      } else if (!typing && (e.key === '+' || e.key === '=') && !metaKey) {
-        e.preventDefault();
-        zoomCentered(1.2);
-      } else if (!typing && (e.key === '-' || e.key === '_') && !metaKey) {
-        e.preventDefault();
-        zoomCentered(1 / 1.2);
-      }
-    }
-    window.addEventListener('keydown', onGlobalKey);
-    return () => window.removeEventListener('keydown', onGlobalKey);
+    // 100 — run-summary Escape (was the <svelte:window> handler). Returns false
+    // so the mobile + global Escape handlers still fire, exactly as when this
+    // was an independent window listener.
+    const offRunSummary = keymap.register(
+      'run-summary-escape',
+      (e) => {
+        if (runSummary && e.key === 'Escape') closeRunSummary();
+        return false;
+      },
+      { priority: 100 },
+    );
+
+    // 80 — mobile: Escape closes the inspector (in addition to the ✕ button and
+    // the backdrop click) — fallback for any UI quirk that makes the close
+    // affordances hard to reach. The former effect only *registered* while
+    // (isMobile && menuNode); here the handler reads those live and no-ops
+    // otherwise. Returns false so the global Escape still fires.
+    const offMobile = keymap.register(
+      'mobile-inspector-escape',
+      (e) => {
+        if (!isMobile || !menuNode) return false;
+        if (e.key === 'Escape') closeMenu();
+        return false;
+      },
+      { priority: 80 },
+    );
+
+    // 60 — global canvas keymap (Escape deselect / Cmd+Enter run / Delete
+    // edge|node / F2 rename).
+    const offGlobal = keymap.register(
+      'global-keymap',
+      (ev) => {
+        if (ev.key === 'Escape') {
+          // Menu only closes via its Close button — don't dismiss it on Escape.
+          selectedId = null;
+          selectedEdgeId = null;
+          pipePickerOpen = false;
+          edgeInspectorFor = null;
+          return true;
+        } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+          // Let the chat textarea's own handler send the draft
+          if (isTypingTarget(ev.target)) return false;
+          ev.preventDefault();
+          runCanvas();
+          return true;
+        } else if (
+          (ev.key === 'Delete' || ev.key === 'Backspace') &&
+          selectedEdgeId &&
+          !menuForNodeId &&
+          !isTypingTarget(ev.target)
+        ) {
+          ev.preventDefault();
+          deleteEdge(selectedEdgeId);
+          return true;
+        } else if (
+          (ev.key === 'Delete' || ev.key === 'Backspace') &&
+          selectedId &&
+          !menuForNodeId &&
+          !isTypingTarget(ev.target)
+        ) {
+          ev.preventDefault();
+          deleteNode(selectedId);
+          return true;
+        } else if (ev.key === 'F2' && selectedId && !isTypingTarget(ev.target)) {
+          ev.preventDefault();
+          beginRename(selectedId);
+          return true;
+        }
+        return false;
+      },
+      { priority: 60 },
+    );
+
+    // 40 — node-palette shortcuts (cmd/ctrl-K, slash, fit/reset/zoom).
+    const offPalette = keymap.register(
+      'palette-shortcuts',
+      (e) => {
+        if (!NEW_PALETTE) return false;
+        if (paletteOpen) return false; // palette handles its own keys while open
+        const target = e.target as HTMLElement | null;
+        const typing =
+          target?.tagName === 'INPUT' ||
+          target?.tagName === 'TEXTAREA' ||
+          target?.isContentEditable;
+        const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
+        const metaKey = isMac ? e.metaKey : e.ctrlKey;
+        if (metaKey && (e.key === 'k' || e.key === 'K')) {
+          e.preventDefault();
+          openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+          return true;
+        } else if (e.key === '/' && !typing) {
+          e.preventDefault();
+          openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
+          return true;
+        } else if (!typing && (e.key === 'f' || e.key === 'F') && !metaKey) {
+          // Fit canvas — recovery shortcut when the toolbar is hidden behind
+          // an extreme zoom level.
+          e.preventDefault();
+          fit();
+          return true;
+        } else if (!typing && e.key === '0' && !metaKey) {
+          // Reset pan + zoom to 1× / origin.
+          e.preventDefault();
+          reset();
+          return true;
+        } else if (!typing && (e.key === '+' || e.key === '=') && !metaKey) {
+          e.preventDefault();
+          zoomCentered(1.2);
+          return true;
+        } else if (!typing && (e.key === '-' || e.key === '_') && !metaKey) {
+          e.preventDefault();
+          zoomCentered(1 / 1.2);
+          return true;
+        }
+        return false;
+      },
+      { priority: 40 },
+    );
+
+    const onKeydown = (e: KeyboardEvent) => {
+      keymap.handleKeydown(e);
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => {
+      window.removeEventListener('keydown', onKeydown);
+      offRunSummary();
+      offMobile();
+      offGlobal();
+      offPalette();
+    };
   });
 
   // Resume SSE if the server says there's an in-flight run at load
@@ -3474,6 +3551,13 @@
       >+ Add node</button>
       <button class="composer-pill" onclick={fit} title="Fit canvas">Fit</button>
       <button class="composer-pill" onclick={reset} title="Reset pan/zoom">Reset</button>
+      <button
+        class="composer-pill"
+        class:active={memoryOpen}
+        onclick={toggleMemory}
+        disabled={!canvas.workflowId}
+        title="Inspect this workflow's memory (data-store keys)"
+      >Memory</button>
       <span class="sep-v"></span>
       <button
         class="composer-pill annotation-pill"
@@ -4475,10 +4559,14 @@
               {@const _def = getDefinition(n.type)}
               {@const _summary = (n as { actionSummary?: string }).actionSummary
                 || summarizeNode(n.type, n.config as Record<string, unknown>, _def?.description).line}
+              {@const _memBadge = memoryBadgeFor(n)}
               <div class="trig-stack">
                 <span class="wf-name">{n.name}</span>
                 {#if _summary && _summary !== n.name}
                   <span class="trig-summary wf-summary" title={_summary}>{_summary.length > 90 ? _summary.slice(0, 89) + '…' : _summary}</span>
+                {/if}
+                {#if _memBadge}
+                  <span class="wf-mem-badge" title="This node reads/writes persistent workflow memory">{_memBadge}</span>
                 {/if}
               </div>
             {/if}
@@ -5864,6 +5952,48 @@
         {/if}
       </div>
     </div>
+
+    <!-- Memory panel (E3): live workflow data-store keys -->
+    {#if memoryOpen}
+      <div class="mem-panel" role="dialog" aria-label="Workflow memory">
+        <div class="mem-panel-hd">
+          <span class="sr-label">Memory</span>
+          <span class="mem-panel-sub">workflow data-store</span>
+          <button class="mem-x" onclick={closeMemory} aria-label="Close memory panel" title="Close">✕</button>
+        </div>
+        <div class="mem-panel-body">
+          {#if memoryLoading}
+            <p class="mem-empty">Loading…</p>
+          {:else if memoryError}
+            <p class="mem-empty mem-err">Couldn't load memory: {memoryError}</p>
+            <button class="composer-pill" onclick={() => void loadMemory()}>↻ Retry</button>
+          {:else if memoryEntries.length === 0}
+            <p class="mem-empty">This workflow has no memory yet — dedupe and data-store nodes create it.</p>
+          {:else}
+            {#each memoryEntries as e (e.key)}
+              <section class="nm-sec mem-entry">
+                <div class="nm-sec-hd">
+                  <span class="sr-label-tight">{e.key}</span>
+                  <span class="nm-sec-meta">
+                    {#if e.itemCount !== null}{e.itemCount} item{e.itemCount === 1 ? '' : 's'} · {/if}{e.updatedAt ? new Date(e.updatedAt).toLocaleString() : 'never'}
+                  </span>
+                </div>
+                <pre class="mem-val">{e.value}{e.truncated ? '…' : ''}</pre>
+                <div class="mem-actions">
+                  {#if memoryConfirmKey === e.key}
+                    <button class="mem-clear mem-clear-confirm" onclick={() => void clearMemoryKey(e.key)}>Confirm clear</button>
+                    <button class="mem-cancel" onclick={() => { memoryConfirmKey = null; }}>Cancel</button>
+                  {:else}
+                    <button class="mem-clear" onclick={() => clearMemoryKey(e.key)}>Clear</button>
+                  {/if}
+                </div>
+              </section>
+            {/each}
+            <button class="composer-pill mem-refresh" onclick={() => void loadMemory()} title="Refresh from server">↻ Refresh</button>
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
   </div>
 </div>
@@ -6017,7 +6147,7 @@
   </div>
 {/if}
 
-<svelte:window onkeydown={(e) => { if (runSummary && e.key === 'Escape') closeRunSummary(); }} />
+<!-- Run-summary Escape is handled by the consolidated canvas keymap (E5). -->
 
 <style>
   .page-shell {
@@ -6766,6 +6896,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Memory chip on data-store / dedupe cards (E3). */
+  .wf-mem-badge {
+    margin-top: 2px;
+    align-self: flex-start;
+    max-width: 100%;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    color: var(--accent-ink, var(--accent));
+    background: var(--accent-tint-08, transparent);
+    border: 1px solid var(--card-border);
+    padding: 1px 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   /* Trigger menu — type-picker pills */
   .trig-pills {
@@ -6960,6 +7106,94 @@
     pointer-events: none;
     transition: left 60ms linear, top 60ms linear, width 60ms linear, height 60ms linear;
   }
+
+  /* ——— Memory panel (E3) ——— */
+  .mem-panel {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 320px;
+    max-height: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-elevated, var(--bg));
+    border: 1px solid var(--card-border);
+    z-index: 40;
+    box-sizing: border-box;
+  }
+  .mem-panel-hd {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--divider);
+    background: var(--bg-section, var(--bg));
+  }
+  .mem-panel-sub {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .mem-x {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 4px;
+  }
+  .mem-x:hover { color: var(--text-primary); }
+  .mem-panel-body {
+    overflow-y: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .mem-empty {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .mem-empty.mem-err { color: var(--status-error, #c0392b); }
+  .mem-entry { gap: 6px; }
+  .mem-val {
+    margin: 0;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    max-height: 120px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .mem-actions { display: flex; gap: 6px; }
+  .mem-clear, .mem-cancel {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 10px;
+    background: var(--bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .mem-clear:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .mem-clear-confirm {
+    color: var(--status-error, #c0392b);
+    border-color: var(--status-error, #c0392b);
+  }
+  .mem-refresh { align-self: flex-start; }
 
   /* ——— Edge inspector ——— */
   .edge-inspector {
