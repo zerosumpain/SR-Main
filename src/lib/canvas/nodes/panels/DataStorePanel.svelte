@@ -18,6 +18,38 @@
     upstreamFields?: string[];
   } = $props();
 
+  type Op = 'get' | 'set' | 'append' | 'add_to_set' | 'has' | 'increment' | 'delete';
+
+  const OPS: { value: Op; label: string; hint: string }[] = [
+    { value: 'get', label: 'Get', hint: 'Read a stored value. Outputs { value, found }.' },
+    { value: 'set', label: 'Set', hint: 'Overwrite the stored value.' },
+    { value: 'append', label: 'Append', hint: 'Push a value onto a persistent list (atomic).' },
+    { value: 'add_to_set', label: 'Add to set', hint: 'Union a value into a set — no duplicates (atomic).' },
+    { value: 'has', label: 'Has', hint: 'Test set membership. Outputs { value: boolean }.' },
+    { value: 'increment', label: 'Increment', hint: 'Add to a numeric counter (atomic).' },
+    { value: 'delete', label: 'Delete', hint: 'Remove the key.' },
+  ];
+
+  // Legacy aliases the executor still absorbs at runtime; normalise on any edit.
+  function normaliseOp(raw: unknown): Op {
+    const s = String(raw ?? 'get').toLowerCase().trim();
+    if (s === 'read') return 'get';
+    if (s === 'write') return 'set';
+    if (OPS.some((o) => o.value === s)) return s as Op;
+    return 'get';
+  }
+
+  const operation = $derived(normaliseOp(config.operation));
+  const activeHint = $derived(OPS.find((o) => o.value === operation)?.hint ?? '');
+
+  // Write-ish ops may create a new key; read-ish ops pick an existing one.
+  const keyMode = $derived<'get' | 'set'>(
+    operation === 'get' || operation === 'has' || operation === 'delete' ? 'get' : 'set',
+  );
+
+  const showValuePath = $derived(['set', 'append', 'add_to_set', 'has'].includes(operation));
+  const showMaxItems = $derived(operation === 'append' || operation === 'add_to_set');
+
   async function fetchKeys(): Promise<Array<{ key: string; meta?: string }>> {
     if (!workflowId) return [];
     const res = await fetch(`/api/workflows/${workflowId}/data-store`);
@@ -26,78 +58,22 @@
     return (body.keys ?? []) as Array<{ key: string; meta?: string }>;
   }
 
-  // ---------- Operation (canonical 'get' | 'set') -------------------------
-  // The executor leniently absorbs read→get and write→set at runtime, but on
-  // save we always normalise to the canonical form so persisted configs stay
-  // clean. We also do not auto-write the migration on mount — only when the
-  // user touches a control — to avoid spurious "dirty" markers.
-
-  function normaliseOp(raw: unknown): 'get' | 'set' {
-    const s = String(raw ?? 'get').toLowerCase().trim();
-    if (s === 'read') return 'get';
-    if (s === 'write') return 'set';
-    if (s === 'set') return 'set';
-    return 'get';
-  }
-
-  const operation = $derived(normaliseOp(config.operation));
-
-  function set(key: string, value: unknown) {
+  function set(patchKey: string, value: unknown) {
     // Always normalise operation alongside whatever is being changed so the
     // first save after loading a legacy 'read'/'write' config writes back the
     // canonical form.
-    onChange({ ...config, operation, [key]: value });
+    onChange({ ...config, operation, [patchKey]: value });
   }
-  function setOperation(next: 'get' | 'set') {
-    if (next === 'get') {
-      // Switching to Get clears any value-pick state — those keys are Set-only
-      // and would just be noise on a Get config.
-      onChange({ ...config, operation: 'get' });
-    } else {
-      onChange({ ...config, operation: 'set' });
-    }
+  function setOperation(next: Op) {
+    onChange({ ...config, operation: next });
   }
-
-  // ---------- Key ---------------------------------------------------------
 
   const key = $derived(String(config.key ?? ''));
   const keyMissing = $derived(!key.trim());
-
-  // ---------- Value source (Set-only) -------------------------------------
-  // Two modes:
-  //  - "whole"  → no valuePath; executor falls back to input.value or input.
-  //  - "field"  → valuePath is a non-empty dot-path.
-  // We auto-detect the mode on load from whether valuePath is set, and
-  // remember the last user choice while the panel is mounted.
-
   const valuePath = $derived(String(config.valuePath ?? ''));
-  let valueMode = $state<'whole' | 'field'>(valuePath.trim() ? 'field' : 'whole');
-  let valuePathInputEl: HTMLInputElement | null = $state(null);
-
-  function selectValueMode(mode: 'whole' | 'field') {
-    valueMode = mode;
-    if (mode === 'whole') {
-      // Clear valuePath so the executor falls back cleanly.
-      onChange({ ...config, operation, valuePath: '' });
-    } else {
-      // Focus the input on next tick. We don't write anything yet — the user
-      // will type and that will populate valuePath via its oninput.
-      queueMicrotask(() => valuePathInputEl?.focus());
-    }
-  }
-
-  // ---------- Existing entries section ------------------------------------
-  // Decision: omitted. The workflowId isn't passed into the panel's $props
-  // (the shared panel API is { config, onChange, definition }), and resolving
-  // it via $page would couple this panel to canvas page-server data shape,
-  // making it brittle and harder to reuse outside the canvas. The user can
-  // inspect raw entries via pgweb (http://homeserv:8085/pgweb/) on the
-  // workflow_data_store table — referenced inline in the help hint below.
-
-  // ---------- Raw JSON ----------------------------------------------------
+  const passthrough = $derived(Boolean(config.passthrough));
 
   let showRawJson = $state(false);
-
   void definition;
 </script>
 
@@ -107,36 +83,19 @@
     <header class="ds-sec-hdr">
       <span class="sr-label-tight">Operation</span>
     </header>
-    <div class="ds-pillbar" role="radiogroup" aria-label="Operation">
-      <button
-        type="button"
-        role="radio"
-        aria-checked={operation === 'get'}
-        class="ds-pill"
-        class:ds-pill-active={operation === 'get'}
-        onclick={() => setOperation('get')}
-      >Get</button>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={operation === 'set'}
-        class="ds-pill"
-        class:ds-pill-active={operation === 'set'}
-        onclick={() => setOperation('set')}
-      >Set</button>
-    </div>
-    <p class="ds-caption">
-      {#if operation === 'get'}
-        Read a previously stored value. Outputs <code>{`{ value, found }`}</code>.
-      {:else}
-        Write a value to the store. Outputs <code>{`{ saved, key, value }`}</code>.
-      {/if}
-    </p>
+    <select
+      class="ds-select"
+      value={operation}
+      onchange={(e) => setOperation((e.currentTarget as HTMLSelectElement).value as Op)}
+    >
+      {#each OPS as o (o.value)}
+        <option value={o.value}>{o.label}</option>
+      {/each}
+    </select>
+    <p class="ds-caption">{activeHint}</p>
   </section>
 
-  <!-- Key — picker over the existing data-store keys for this workflow,
-       with create-new mode for `set` operations and a `{{template}}`
-       escape hatch for dynamic keys. -->
+  <!-- Key -->
   <section class="ds-sec">
     <header class="ds-sec-hdr">
       <span class="sr-label-tight">Key</span>
@@ -144,63 +103,108 @@
     </header>
     <StoreKeyPicker
       value={key}
-      mode={operation}
+      mode={keyMode}
       fetcher={fetchKeys}
       onChange={(v) => set('key', v)}
-      placeholder={operation === 'get' ? 'pick a key to read' : 'pick existing or create new'}
+      placeholder={keyMode === 'get' ? 'pick a key' : 'pick existing or create new'}
     />
   </section>
 
-  <!-- Value to store (Set-only) -->
-  {#if operation === 'set'}
+  <!-- Value source -->
+  {#if showValuePath}
     <section class="ds-sec">
       <header class="ds-sec-hdr">
-        <span class="sr-label-tight">Value to store</span>
+        <span class="sr-label-tight">{operation === 'has' ? 'Value to check' : 'Value to store'}</span>
       </header>
-      <div class="ds-mode-list">
-        <label class="ds-mode-row">
-          <input
-            type="radio"
-            name="ds-value-mode"
-            value="whole"
-            checked={valueMode === 'whole'}
-            onchange={() => selectValueMode('whole')}
-          />
-          <span class="ds-mode-text">
-            <span class="ds-mode-title">Whole input</span>
-            <span class="ds-mode-sub">Stores <code>input.value</code> if present, otherwise the entire input object.</span>
-          </span>
-        </label>
-        <label class="ds-mode-row">
-          <input
-            type="radio"
-            name="ds-value-mode"
-            value="field"
-            checked={valueMode === 'field'}
-            onchange={() => selectValueMode('field')}
-          />
-          <span class="ds-mode-text">
-            <span class="ds-mode-title">Pick a field</span>
-            <span class="ds-mode-sub">Pull a specific value out of the input by dot-path.</span>
-          </span>
-        </label>
-      </div>
-      {#if valueMode === 'field'}
+      <UpstreamFieldPicker
+        label="Value path"
+        value={valuePath}
+        {upstreamFields}
+        placeholder="leave empty for input.value / whole input"
+        allowCustom={true}
+        onChange={(v) => set('valuePath', v)}
+      />
+      <p class="ds-hint">
+        {#if operation === 'add_to_set'}
+          If the value is an array, every element is unioned into the set.
+        {:else if operation === 'append'}
+          The value is pushed as one element onto the list.
+        {:else}
+          Dot-path into the input. Empty = <code>input.value</code> or the whole input.
+        {/if}
+      </p>
+    </section>
+  {/if}
+
+  <!-- Increment amount -->
+  {#if operation === 'increment'}
+    <section class="ds-sec">
+      <header class="ds-sec-hdr"><span class="sr-label-tight">Amount</span></header>
+      <input
+        type="number"
+        class="ds-num"
+        value={String(config.amount ?? '')}
+        placeholder="1"
+        oninput={(e) => set('amount', (e.currentTarget as HTMLInputElement).value)}
+      />
+      <p class="ds-hint">How much to add (default 1). Leave empty to use <code>input.value</code>.</p>
+    </section>
+  {/if}
+
+  <!-- Max items (bounded list / set) -->
+  {#if showMaxItems}
+    <section class="ds-sec">
+      <header class="ds-sec-hdr"><span class="sr-label-tight">Max items</span></header>
+      <input
+        type="number"
+        class="ds-num"
+        value={String(config.maxItems ?? '')}
+        placeholder="unbounded"
+        oninput={(e) => set('maxItems', (e.currentTarget as HTMLInputElement).value)}
+      />
+      <p class="ds-hint">Keep only the most recent N elements (oldest trimmed). Empty = unbounded.</p>
+    </section>
+  {/if}
+
+  <!-- Get: default + passthrough -->
+  {#if operation === 'get'}
+    <section class="ds-sec">
+      <header class="ds-sec-hdr"><span class="sr-label-tight">Not-found default</span></header>
+      <input
+        type="text"
+        class="ds-num"
+        value={String(config.default ?? '')}
+        placeholder="null"
+        oninput={(e) => set('default', (e.currentTarget as HTMLInputElement).value)}
+      />
+      <p class="ds-hint">Returned when the key does not exist.</p>
+    </section>
+    <section class="ds-sec">
+      <label class="ds-toggle-row">
+        <input
+          type="checkbox"
+          checked={passthrough}
+          onchange={(e) => set('passthrough', (e.currentTarget as HTMLInputElement).checked)}
+        />
+        <span class="ds-mode-text">
+          <span class="ds-mode-title">Merge into input</span>
+          <span class="ds-mode-sub">Output the whole input with the looked-up value merged in — so a Get never drops upstream data.</span>
+        </span>
+      </label>
+      {#if passthrough}
         <label class="ds-field">
-          <UpstreamFieldPicker
-            label="Value path"
-            value={valuePath}
-            upstreamFields={upstreamFields}
-            placeholder="pick the field to store"
-            allowCustom={true}
-            onChange={(v) => set('valuePath', v)}
+          <span class="ds-label">Output key</span>
+          <input
+            type="text"
+            value={String(config.outputKey ?? '')}
+            placeholder="value"
+            oninput={(e) => set('outputKey', (e.currentTarget as HTMLInputElement).value)}
           />
         </label>
       {/if}
     </section>
   {/if}
 
-  <!-- Existing entries: omitted by design (see comment in script). -->
   <p class="ds-inspect-note">
     Inspect stored entries on the
     <code>workflow_data_store</code> table via pgweb
@@ -208,13 +212,11 @@
     <code>(workflowId, key)</code>.
   </p>
 
-  <!-- On failure -->
   <OnErrorBlock
     value={config._onError as Record<string, unknown> | undefined}
     onChange={(v) => set('_onError', v)}
   />
 
-  <!-- Advanced raw JSON -->
   <details class="ds-raw" bind:open={showRawJson}>
     <summary><span class="sr-label-tight">Advanced — raw JSON config</span></summary>
     <textarea
@@ -242,33 +244,18 @@
     padding-bottom: 4px;
   }
 
-  /* Operation pillbar */
-  .ds-pillbar {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    border: 1px solid var(--card-border);
+  .ds-select {
+    width: 100%;
+    padding: 8px 10px;
     background: var(--bg);
-  }
-  .ds-pill {
-    padding: 10px 14px;
-    background: transparent;
-    color: var(--text-muted);
-    border: none;
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
     font-family: var(--font-mono);
     font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    cursor: pointer;
+    box-sizing: border-box;
     outline: none;
   }
-  .ds-pill + .ds-pill { border-left: 1px solid var(--card-border); }
-  .ds-pill:hover { color: var(--text-primary); }
-  .ds-pill-active {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    color: var(--accent);
-  }
-  .ds-pill-active:hover { color: var(--accent); }
+  .ds-select:focus { border-color: var(--text-muted); }
 
   .ds-caption {
     margin: 0;
@@ -278,8 +265,7 @@
   }
   .ds-caption code { font-size: 11px; color: var(--text-primary); }
 
-  /* Key textarea */
-  .ds-key-input {
+  .ds-num {
     width: 100%;
     padding: 6px 8px;
     background: var(--bg);
@@ -290,14 +276,10 @@
     font-size: 12px;
     box-sizing: border-box;
     outline: none;
-    resize: vertical;
-    min-height: 32px;
   }
-  .ds-key-input:focus { border-color: var(--text-muted); }
+  .ds-num:focus { border-color: var(--text-muted); }
 
-  /* Value mode radios */
-  .ds-mode-list { display: flex; flex-direction: column; gap: 4px; }
-  .ds-mode-row {
+  .ds-toggle-row {
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -306,8 +288,8 @@
     background: var(--bg);
     cursor: pointer;
   }
-  .ds-mode-row:hover { border-color: var(--text-muted); }
-  .ds-mode-row input[type='radio'] { margin-top: 3px; }
+  .ds-toggle-row:hover { border-color: var(--text-muted); }
+  .ds-toggle-row input[type='checkbox'] { margin-top: 3px; }
   .ds-mode-text { display: flex; flex-direction: column; gap: 2px; }
   .ds-mode-title {
     font-family: var(--font-mono);
@@ -317,9 +299,7 @@
     color: var(--text-primary);
   }
   .ds-mode-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
-  .ds-mode-sub code { font-size: 11px; color: var(--text-primary); }
 
-  /* Generic field */
   .ds-field { display: flex; flex-direction: column; gap: 4px; }
   .ds-label {
     font-family: var(--font-mono); font-size: 10px;
@@ -327,7 +307,7 @@
     color: var(--text-muted);
   }
 
-  .ds-hint { font-size: 11px; color: var(--text-ghost); }
+  .ds-hint { font-size: 11px; color: var(--text-ghost); margin: 0; line-height: 1.4; }
   .ds-hint code { font-size: 11px; color: var(--text-muted); }
 
   .ds-warn {
@@ -345,7 +325,6 @@
   }
   .ds-inspect-note code { font-size: 11px; color: var(--text-muted); }
 
-  /* Raw JSON */
   .ds-code {
     width: 100%;
     padding: 8px;
@@ -366,7 +345,7 @@
   }
   .ds-raw summary { cursor: pointer; }
 
-  input[type='text'], textarea {
+  input[type='text'], input[type='number'], textarea {
     width: 100%;
     padding: 6px 8px;
     background: var(--bg);
@@ -376,5 +355,5 @@
     box-sizing: border-box;
     outline: none;
   }
-  input[type='text']:focus, textarea:focus { border-color: var(--text-muted); }
+  input[type='text']:focus, input[type='number']:focus, textarea:focus { border-color: var(--text-muted); }
 </style>

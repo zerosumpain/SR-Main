@@ -17,6 +17,7 @@ import ConditionalPanel from './ConditionalPanel.svelte';
 import SwitchPanel from './SwitchPanel.svelte';
 import TransformPanel from './TransformPanel.svelte';
 import DataStorePanel from './DataStorePanel.svelte';
+import DedupePanel from './DedupePanel.svelte';
 import DelayPanel from './DelayPanel.svelte';
 import TavilySearchPanel from './TavilySearchPanel.svelte';
 import WebScrapePanel from './WebScrapePanel.svelte';
@@ -107,6 +108,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'switch': SwitchPanel as unknown as Component<PanelProps>,
   'transform': TransformPanel as unknown as Component<PanelProps>,
   'data-store': DataStorePanel as unknown as Component<PanelProps>,
+  'dedupe': DedupePanel as unknown as Component<PanelProps>,
   'delay': DelayPanel as unknown as Component<PanelProps>,
   'tavily-search': TavilySearchPanel as unknown as Component<PanelProps>,
   'web-scrape': WebScrapePanel as unknown as Component<PanelProps>,

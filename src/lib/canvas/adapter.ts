@@ -351,6 +351,25 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       outputs: [{ id: 'out', kinds: ['any'] }],
     },
   },
+  {
+    type: 'dedupe',
+    label: 'Dedupe',
+    kind: 'parse',
+    group: 'Parse & Transform',
+    description:
+      'Filter a list against a persistent seen-set so only genuinely new items continue. Put between a fetch/search node and the summarise/send nodes so recurring workflows never re-send the same item.',
+    defaultConfig: {
+      itemsPath: '',
+      idPath: '',
+      storeKey: 'seen_ids',
+      maxRemembered: 500,
+      recordMode: 'immediate',
+    },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'any'] }],
+    },
+  },
 
   // ————————————————————————— Intelligence
   {

@@ -9,6 +9,7 @@
 
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema, NodeDefinition } from '../types';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
+import { extractTemplateTokens, classifyTemplateToken } from '../state-templates';
 
 export interface VerificationIssue {
   nodeId: string;
@@ -194,7 +195,7 @@ export function validateNodeConfigPreSubmit(
     if (typeof v !== 'string') continue;
     const bad = detectUnsupportedTemplateSyntax(v);
     if (bad) {
-      errors.push(`Field "${field.key}" uses ${bad}. Only {{input.field}} interpolation is supported. For loops or conditionals, add a transform node upstream that builds the string.`);
+      errors.push(`Field "${field.key}" uses ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. For loops or conditionals, add a transform node upstream that builds the string.`);
     }
   }
 
@@ -301,7 +302,7 @@ export function verifyWorkflow(
       if (bad) {
         issues.push({
           nodeId: node.id, nodeLabel: node.label, field: field.key,
-          issue: `Contains ${bad}. Only {{input.field}} interpolation is supported. Build the string in an upstream transform node instead.`,
+          issue: `Contains ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. Build the string in an upstream transform node instead.`,
           severity: 'error',
         });
       }
@@ -320,6 +321,27 @@ export function verifyWorkflow(
     // --- Per-operation semantic gaps (G4) ---
     for (const gap of detectSemanticGaps(node)) {
       issues.push({ nodeId: node.id, nodeLabel: node.label, ...gap });
+    }
+
+    // --- Unknown template-variable warnings (A4) ---
+    // Any {{...}} token that isn't {{input.*}} / {{state.*}} / {{today}} /
+    // {{now}} won't be substituted at runtime. Warn (don't block) — block/helper
+    // syntax is already reported as an error above, so skip that class here.
+    for (const [field, value] of Object.entries(node.config)) {
+      if (typeof value !== 'string') continue;
+      const flagged = new Set<string>();
+      for (const inner of extractTemplateTokens(value)) {
+        if (flagged.has(inner)) continue;
+        if (classifyTemplateToken(inner) !== 'unknown') continue;
+        flagged.add(inner);
+        issues.push({
+          nodeId: node.id,
+          nodeLabel: node.label,
+          field,
+          issue: `Unknown template variable {{${inner}}} — it will not be substituted. Supported: {{input.field}}, {{state.KEY}}, {{today}}, {{now}}.`,
+          severity: 'warning',
+        });
+      }
     }
 
     // --- Upstream schema resolution ---

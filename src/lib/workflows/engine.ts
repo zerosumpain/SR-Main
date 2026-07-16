@@ -31,6 +31,13 @@ import { db } from '$lib/db';
 import { nodeExecutions } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { mergeUpstreamInput } from './engine-node-runner';
+import { flushPendingDedupeRecords, discardPendingDedupeRecords } from './nodes/dedupe';
+import { loadStoreSnapshot } from './nodes/data-store';
+import {
+  resolveStateTemplatesDeep,
+  scanUnknownTemplateVars,
+  workflowUsesStateTemplates,
+} from './state-templates';
 
 /**
  * Module-level run registry (shared across the singleton engine instance).
@@ -353,6 +360,32 @@ export class WorkflowEngine {
       const graph = buildGraph(workflow.nodes, workflow.edges);
       const levels = topologicalSort(graph);
 
+      // {{state.KEY}} pre-resolution: load the whole workflow store ONCE at run
+      // start, but only if any node actually references `{{state...}}` (keeps
+      // DB-free workflows DB-free). Refreshed after each data-store/dedupe write
+      // so a later level sees what an earlier one persisted. {{today}}/{{now}}
+      // need no snapshot. The snapshot never mutates the persisted node config —
+      // resolution produces a per-node copy handed to the executor.
+      const effectiveWorkflowId = workflowId ?? workflow.id;
+      const needsState = workflowUsesStateTemplates(workflow.nodes);
+      let storeSnapshot = new Map<string, unknown>();
+      if (needsState) {
+        try {
+          storeSnapshot = await loadStoreSnapshot(effectiveWorkflowId);
+        } catch (e) {
+          console.warn(`[engine] state snapshot load failed run=${runId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      const refreshStoreSnapshot = async (nodeType: string): Promise<void> => {
+        if (!needsState) return;
+        if (nodeType !== 'data-store' && nodeType !== 'dedupe') return;
+        try {
+          storeSnapshot = await loadStoreSnapshot(effectiveWorkflowId);
+        } catch (e) {
+          console.warn(`[engine] state snapshot refresh failed run=${runId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      };
+
       for (const level of levels) {
         // #11 CANCEL: stop scheduling further node levels once the run has been
         // cancelled. In-flight nodes from the previous level have already been
@@ -538,6 +571,21 @@ export class WorkflowEngine {
           const timeoutMs = nodeTimeoutMs(nodeDef.type, nodeDef.config?._timeoutMs);
           console.log(`[engine] node.start run=${runId} node=${nodeId} type=${nodeDef.type} timeout=${Math.round(timeoutMs / 1000)}s`);
 
+          // Engine-level template pre-resolution: {{state.KEY}} / {{today}} /
+          // {{now}} are substituted into a per-node config COPY (nodeDef.config
+          // is never mutated). {{input.*}} is intentionally left for the
+          // executor. Then scan the RESOLVED copy for {{...}} tokens that still
+          // won't substitute (missing input field, unknown state key, unknown
+          // namespace) and surface them as a non-fatal node_warning + _warnings.
+          const { config: resolvedConfig } = resolveStateTemplatesDeep(nodeDef.config, {
+            store: storeSnapshot,
+            now: new Date(),
+          });
+          const configWarnings = scanUnknownTemplateVars(resolvedConfig, mergedInput);
+          if (configWarnings.length > 0) {
+            emit('node_warning', nodeId, { warnings: configWarnings });
+          }
+
           try {
             // Retry wrapper: re-attempt up to `onErrorRetries` times before
             // letting the caught path run. Pause signals propagate immediately
@@ -549,7 +597,7 @@ export class WorkflowEngine {
               try {
                 result = await withNodeTimeout(nodeId, nodeDef.type, timeoutMs, nodeController, () =>
                   executionContext.run(execCtx, () =>
-                    executor.execute(mergedInput, nodeDef.config, context),
+                    executor.execute(mergedInput, resolvedConfig, context),
                   ),
                 );
                 attemptErr = null;
@@ -572,6 +620,11 @@ export class WorkflowEngine {
             }
 
             const rowCount = typeof r.rowCount === 'number' ? r.rowCount : 1;
+            // Surface template warnings in the stored output so the inspector
+            // shows them, without clobbering an executor-provided _warnings.
+            if (configWarnings.length > 0 && r.output && typeof r.output === 'object' && !('_warnings' in r.output)) {
+              (r.output as Record<string, unknown>)._warnings = configWarnings;
+            }
             nodeOutputs.set(nodeId, r.output);
             const _durationMs = Date.now() - nodeStartedAt;
             console.log(`[engine] node.end run=${runId} node=${nodeId} type=${nodeDef.type} rows=${rowCount} duration=${_durationMs}ms`);
@@ -594,6 +647,9 @@ export class WorkflowEngine {
             }
 
             finishNodeOk();
+            // A data-store / dedupe write may have changed the store — refresh
+            // the {{state.*}} snapshot so downstream levels resolve fresh values.
+            await refreshStoreSnapshot(nodeDef.type);
           } catch (err: unknown) {
             // Let pause signals propagate immediately — do not heal them.
             if (err instanceof PauseForHumanSignal) throw err;
@@ -784,10 +840,15 @@ export class WorkflowEngine {
                 const retryStartedAt = Date.now();
                 emit('node_started', nodeId);
                 try {
+                  // Re-apply engine template resolution to the healed config.
+                  const { config: resolvedRetryConfig } = resolveStateTemplatesDeep(currentConfig, {
+                    store: storeSnapshot,
+                    now: new Date(),
+                  });
                   const retryResult: NodeResult = await withNodeTimeout(
                     nodeId, nodeDef.type, timeoutMs, nodeController,
                     () => executionContext.run(execCtx, () =>
-                      executor.execute(mergedInput, currentConfig, context),
+                      executor.execute(mergedInput, resolvedRetryConfig, context),
                     ),
                   );
                   const retryRowCount = typeof retryResult.rowCount === 'number' ? retryResult.rowCount : 1;
@@ -808,6 +869,7 @@ export class WorkflowEngine {
 
                   healed = true;
                   finishNodeOk();
+                  await refreshStoreSnapshot(nodeDef.type);
                   break;
                 } catch (retryErr: unknown) {
                   currentError = retryErr instanceof Error ? retryErr.message : String(retryErr);
@@ -858,10 +920,18 @@ export class WorkflowEngine {
 
       if (finalStatus === 'completed') {
         emit('run_completed');
+        // Commit any deferred dedupe records (recordMode: 'downstream-success')
+        // now that the run has finished cleanly — items were only marked seen
+        // once every downstream node (e.g. the send) actually succeeded.
+        await flushPendingDedupeRecords(runId);
       } else if (finalStatus === 'completed_with_errors') {
         emit('run_completed_with_errors');
+        // Some node failed — do NOT record deferred dedupe ids (a failed send
+        // must not mark its items as seen); they retry next run.
+        discardPendingDedupeRecords(runId);
       } else {
         emit('run_failed');
+        discardPendingDedupeRecords(runId);
       }
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
@@ -890,6 +960,7 @@ export class WorkflowEngine {
 
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
+      discardPendingDedupeRecords(runId);
       cleanupRunEmitter(runId);
       this.activeBreakpoints.delete(runId);
       stopHeartbeat();

@@ -18,6 +18,7 @@ import { subWorkflowDef } from './nodes/sub-workflow.def';
 import { codeExecuteDef } from './nodes/code-execute.def';
 import { llmCallDef } from './nodes/llm-call.def';
 import { dataStoreDef } from './nodes/data-store.def';
+import { dedupeDef } from './nodes/dedupe.def';
 import { emailDef } from './nodes/email.def';
 import { loopDef } from './nodes/loop.def';
 import { stravaDef } from './nodes/strava.def';
@@ -836,6 +837,7 @@ const builtInDefinitions: NodeDefinition[] = [
   llmCallDef,
   emailDef,
   dataStoreDef,
+  dedupeDef,
   loopDef,
   conditionalDef,
   switchDef,
