@@ -87,6 +87,20 @@ export class OrchestratorBridge {
 			return;
 		}
 
+		// D3 — whatsapp-trigger: intercept an owner message whose text matches a
+		// whatsapp-trigger keyword and dispatch that workflow (input = the
+		// keyword-stripped message), BEFORE falling through to general chat. Runs
+		// AFTER the approval intercept so approve/deny/yes/no always resolve an
+		// approval first. Non-owner / non-matching messages fall through untouched.
+		// Imported lazily: workflow-dispatch pulls in the engine barrel, which must
+		// not widen the bridge's static import graph (same reason as above).
+		const { dispatchWhatsAppWorkflow } = await import('./workflow-dispatch');
+		const dispatch = await dispatchWhatsAppWorkflow(from, text ?? '');
+		if (dispatch.dispatched) {
+			await this.sendFn(replyTo, `▶ Started ${dispatch.workflowName}`);
+			return;
+		}
+
 		try {
 			// Show typing indicator
 			await this.typingFn?.(replyTo);

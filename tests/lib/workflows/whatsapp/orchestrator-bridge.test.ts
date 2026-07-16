@@ -82,6 +82,13 @@ vi.mock('$lib/workflows/whatsapp/approval-inbound', () => ({
 	handleApprovalReply: (...args: unknown[]) => mockHandleApprovalReply(...args),
 }));
 
+// Mock the D3 whatsapp-trigger dispatcher. The real module pulls in the engine
+// barrel; the bridge only needs its { dispatched } contract here.
+const mockDispatchWhatsAppWorkflow = vi.fn();
+vi.mock('$lib/workflows/whatsapp/workflow-dispatch', () => ({
+	dispatchWhatsAppWorkflow: (...args: unknown[]) => mockDispatchWhatsAppWorkflow(...args),
+}));
+
 import { OrchestratorBridge } from '$lib/workflows/whatsapp/orchestrator-bridge';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from '$lib/workflows/whatsapp/types';
 
@@ -98,6 +105,7 @@ describe('OrchestratorBridge', () => {
 		mockDbChain.orderBy.mockResolvedValue([]);
 		mockDbChain.limit.mockResolvedValue([{ id: mockConvId }]);
 		mockHandleApprovalReply.mockResolvedValue({ handled: false });
+		mockDispatchWhatsAppWorkflow.mockResolvedValue({ dispatched: false });
 	});
 
 	it('detects /clear command', () => {
@@ -178,6 +186,68 @@ describe('OrchestratorBridge', () => {
 		expect(mockHandleApprovalReply).toHaveBeenCalledWith('447359228511', 'APPROVE ABC123');
 		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Approved ABC123.');
 		expect(mockGeneralChat).not.toHaveBeenCalled();
+	});
+
+	it('dispatches a matching whatsapp-trigger workflow and does not forward to chat', async () => {
+		mockDispatchWhatsAppWorkflow.mockResolvedValue({ dispatched: true, workflowName: 'News Digest' });
+
+		const msg: WhatsAppInboundMessage = {
+			from: '447359228511',
+			text: 'news bitcoin',
+			timestamp: Date.now(),
+			messageId: 'msg-wf',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		expect(mockDispatchWhatsAppWorkflow).toHaveBeenCalledWith('447359228511', 'news bitcoin');
+		expect(sendFn).toHaveBeenCalledWith('447359228511', '▶ Started News Digest');
+		expect(mockGeneralChat).not.toHaveBeenCalled();
+	});
+
+	it('runs the approval intercept BEFORE workflow dispatch (approval wins)', async () => {
+		mockHandleApprovalReply.mockResolvedValue({ handled: true, reply: '✓ Approved.' });
+
+		const msg: WhatsAppInboundMessage = {
+			from: '447359228511',
+			text: 'approve ABC123',
+			timestamp: Date.now(),
+			messageId: 'msg-order',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		expect(mockHandleApprovalReply).toHaveBeenCalled();
+		expect(mockDispatchWhatsAppWorkflow).not.toHaveBeenCalled();
+		expect(mockGeneralChat).not.toHaveBeenCalled();
+		expect(sendFn).toHaveBeenCalledWith('447359228511', '✓ Approved.');
+	});
+
+	it('orders interceptors approval → workflow dispatch → chat for an unmatched message', async () => {
+		mockGeneralChat.mockResolvedValue({ response: 'Sure!' });
+
+		const msg: WhatsAppInboundMessage = {
+			from: '447359228511',
+			text: 'hello there',
+			timestamp: Date.now(),
+			messageId: 'msg-fallthrough',
+			isGroup: false,
+		};
+
+		await bridge.handleMessage(msg);
+
+		// All three ran, in order, and chat produced the reply.
+		expect(mockHandleApprovalReply).toHaveBeenCalled();
+		expect(mockDispatchWhatsAppWorkflow).toHaveBeenCalledWith('447359228511', 'hello there');
+		expect(mockGeneralChat).toHaveBeenCalled();
+		const approvalOrder = mockHandleApprovalReply.mock.invocationCallOrder[0];
+		const dispatchOrder = mockDispatchWhatsAppWorkflow.mock.invocationCallOrder[0];
+		const chatOrder = mockGeneralChat.mock.invocationCallOrder[0];
+		expect(approvalOrder).toBeLessThan(dispatchOrder);
+		expect(dispatchOrder).toBeLessThan(chatOrder);
+		expect(sendFn).toHaveBeenCalledWith('447359228511', 'Sure!');
 	});
 
 	it('uses replyJid for LID messages', async () => {

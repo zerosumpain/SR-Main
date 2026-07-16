@@ -179,7 +179,7 @@ export const goldenExemplars: GoldenExemplar[] = [
       { id: 'digest', type: 'llm-call', config: `userPrompt: "Write a digest from this list of posts:\\n\\n{{input.results}}"` },
     ],
     edges: ['trigger → fetch', 'fetch → shape', 'shape → digest'],
-    note: 'Loop example: `loop` is a MAP-TRANSFORM, not a control-flow loop. It applies `expression` to each element of input.body.posts and emits { results, count } ONCE. Downstream nodes run once with the whole array — so the digest llm-call embeds {{input.results}} in a single batch prompt rather than running per item. Do NOT place a per-item llm-call/http-request after a loop.',
+    note: "Loop example: in its default MAP mode `loop` applies `expression` to each element of input.body.posts and emits { results, count } ONCE. Downstream nodes run once with the whole array — so the digest llm-call embeds {{input.results}} in a single batch prompt rather than running per item. Do NOT place a per-item llm-call/http-request after a MAP-mode loop. If you genuinely need per-item SIDE EFFECTS or a multi-node pipeline per element, set the loop's `mode: 'subworkflow'` and `subWorkflowId` — it invokes a saved workflow once per item (input { item, index }) with bounded concurrency, and returns per-item results { results:[{index,status,output,error}], succeeded, failed, count }.",
   },
   {
     request: 'Every morning at 7, search for news about renewable energy and WhatsApp me a briefing.',

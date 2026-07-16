@@ -49,6 +49,7 @@ import { stealthScrapeDef, stealthScrapeExecutor } from './nodes/stealth-scrape'
 import { siteMapperDef, siteMapperExecutor } from './nodes/site-mapper';
 import { stealthScrapeLlmDef, stealthScrapeLlmExecutor } from './nodes/stealth-scrape-llm';
 import { gmailTriggerDef, gmailTriggerExecutor } from './nodes/gmail-trigger';
+import { whatsappTriggerDef, whatsappTriggerExecutor } from './nodes/whatsapp-trigger';
 import { gmailFetchDef, gmailFetchExecutor } from './nodes/gmail-fetch';
 import { gmailSendDef, gmailSendExecutor } from './nodes/gmail-send';
 import { gmailReplyDef, gmailReplyExecutor } from './nodes/gmail-reply';
@@ -154,6 +155,7 @@ registry.register(stealthScrapeDef, stealthScrapeExecutor);
 registry.register(stealthScrapeLlmDef, stealthScrapeLlmExecutor);
 registry.register(siteMapperDef, siteMapperExecutor);
 registry.register(gmailTriggerDef, gmailTriggerExecutor);
+registry.register(whatsappTriggerDef, whatsappTriggerExecutor);
 registry.register(gmailFetchDef, gmailFetchExecutor);
 registry.register(gmailSendDef, gmailSendExecutor);
 registry.register(gmailReplyDef, gmailReplyExecutor);

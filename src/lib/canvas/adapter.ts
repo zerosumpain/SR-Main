@@ -624,6 +624,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'whatsapp-trigger',
+    label: 'WhatsApp Trigger',
+    kind: 'trigger',
+    group: 'Integrations',
+    description: 'Fires when an inbound WhatsApp message from the owner matches a keyword.',
+    defaultConfig: { keyword: '', matchMode: 'prefix', stripKeyword: true },
+    handles: {
+      inputs: [],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'gmail-fetch',
     label: 'Gmail · Fetch Message',
     kind: 'output',
