@@ -1,22 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ExecutionContext } from '$lib/workflows/types';
 
-// Mock the data-store boundary: dedupe reads the seen-set via getStoreValue and
-// records via addToSetAtomic. Spying these lets us assert filter + record
-// behaviour without a database.
+// Mock the data-store boundary. dedupe now decides "which ids are new" via the
+// ATOMIC claim (addToSetReturningNew) in immediate mode, defers via an embedded
+// output record in downstream-success mode, and only touches getStoreValue for
+// the (read-only) dry-run + downstream-success filter. Spying these lets us
+// assert filter + record behaviour without a database.
 const mockGetStoreValue = vi.fn();
 const mockAddToSetAtomic = vi.fn();
+const mockAddToSetReturningNew = vi.fn();
 
 vi.mock('$lib/workflows/nodes/data-store', () => ({
   getStoreValue: mockGetStoreValue,
   addToSetAtomic: mockAddToSetAtomic,
+  addToSetReturningNew: mockAddToSetReturningNew,
 }));
 
 const {
   dedupeExecutor,
   dedupeDef,
-  flushPendingDedupeRecords,
-  discardPendingDedupeRecords,
+  commitDeferredDedupeRecords,
+  PENDING_DEDUPE_KEY,
 } = await import('$lib/workflows/nodes/dedupe');
 
 function ctx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
@@ -40,11 +44,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetStoreValue.mockResolvedValue({ value: [], found: false });
   mockAddToSetAtomic.mockResolvedValue([]);
+  // Default: the atomic claim treats every candidate as new (empty stored set).
+  mockAddToSetReturningNew.mockImplementation(async (_wf, _key, ids) => ids);
 });
 
-describe('dedupeExecutor', () => {
-  it('filters out already-seen items by url and records the new ones (immediate)', async () => {
-    mockGetStoreValue.mockResolvedValue({ value: ['a'], found: true });
+describe('dedupeExecutor (immediate mode — atomic claim)', () => {
+  it('emits + records only the ids the atomic claim returned as new', async () => {
+    // Model a concurrent run having already claimed "a": the atomic op returns
+    // only "b" even though this node passed both candidates in.
+    mockAddToSetReturningNew.mockResolvedValue(['b']);
     const result = await dedupeExecutor.execute(
       { results: [{ url: 'a' }, { url: 'b' }] },
       { itemsPath: 'results', idPath: 'url', storeKey: 'seen_urls', maxRemembered: 500 },
@@ -54,8 +62,22 @@ describe('dedupeExecutor', () => {
     expect(result.output.newCount).toBe(1);
     expect(result.output.seenCount).toBe(1);
     expect(result.output.allItems).toEqual([{ url: 'a' }, { url: 'b' }]);
-    // Only the genuinely-new id is recorded.
-    expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'seen_urls', ['b'], 500);
+    // The claim (not a stale getStoreValue read) is the authority on newness.
+    expect(mockAddToSetReturningNew).toHaveBeenCalledWith('wf-1', 'seen_urls', ['a', 'b'], 500);
+    expect(mockAddToSetAtomic).not.toHaveBeenCalled();
+  });
+
+  it('does not consult the stale getStoreValue read to decide newness', async () => {
+    // Stale read is empty (would pass both), but the atomic op claims only "b".
+    mockGetStoreValue.mockResolvedValue({ value: [], found: false });
+    mockAddToSetReturningNew.mockResolvedValue(['b']);
+    const result = await dedupeExecutor.execute(
+      { results: [{ url: 'a' }, { url: 'b' }] },
+      { itemsPath: 'results', idPath: 'url', storeKey: 'seen' },
+      ctx(),
+    );
+    expect(result.output.items).toEqual([{ url: 'b' }]);
+    expect(mockGetStoreValue).not.toHaveBeenCalled();
   });
 
   it('passes through other top-level input keys and drops the items-source key', async () => {
@@ -83,40 +105,42 @@ describe('dedupeExecutor', () => {
   });
 
   it('falls back to url then id when idPath is not set', async () => {
-    mockGetStoreValue.mockResolvedValue({ value: ['keep-me'], found: true });
+    mockAddToSetReturningNew.mockResolvedValue(['new-one']);
     const result = await dedupeExecutor.execute(
       { results: [{ id: 'keep-me' }, { id: 'new-one' }] },
       { itemsPath: 'results' },
       ctx(),
     );
     expect(result.output.items).toEqual([{ id: 'new-one' }]);
-    expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'seen_ids', ['new-one'], 500);
+    expect(mockAddToSetReturningNew).toHaveBeenCalledWith('wf-1', 'seen_ids', ['keep-me', 'new-one'], 500);
   });
 
   it('passes items with no id through as new but does not store an undefined id', async () => {
+    mockAddToSetReturningNew.mockResolvedValue(['a']);
     const result = await dedupeExecutor.execute(
       { results: [{ url: 'a' }, { title: 'no id here' }] },
       { itemsPath: 'results', idPath: 'url' },
       ctx(),
     );
-    expect(result.output.items).toHaveLength(2); // both new
+    expect(result.output.items).toHaveLength(2); // both new (one via id, one id-less)
     expect(result.output.newCount).toBe(2);
-    // Only the item with a resolvable id is remembered.
-    expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'seen_ids', ['a'], 500);
+    // Only the item with a resolvable id is put through the claim.
+    expect(mockAddToSetReturningNew).toHaveBeenCalledWith('wf-1', 'seen_ids', ['a'], 500);
   });
 
-  it('coerces ids to strings when matching the stored set', async () => {
-    mockGetStoreValue.mockResolvedValue({ value: ['1'], found: true }); // stored as strings
+  it('coerces candidate ids to strings before the atomic claim', async () => {
+    mockAddToSetReturningNew.mockResolvedValue(['2']);
     const result = await dedupeExecutor.execute(
       { results: [{ id: 1 }, { id: 2 }] },
       { itemsPath: 'results', idPath: 'id' },
       ctx(),
     );
     expect(result.output.items).toEqual([{ id: 2 }]);
-    expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'seen_ids', ['2'], 500);
+    expect(mockAddToSetReturningNew).toHaveBeenCalledWith('wf-1', 'seen_ids', ['1', '2'], 500);
   });
 
-  it('dryRun filters but never records', async () => {
+  it('dryRun filters against the stored set but never writes', async () => {
+    mockGetStoreValue.mockResolvedValue({ value: [], found: false });
     const result = await dedupeExecutor.execute(
       { results: [{ url: 'a' }] },
       { itemsPath: 'results', idPath: 'url' },
@@ -124,45 +148,71 @@ describe('dedupeExecutor', () => {
     );
     expect(result.output.items).toEqual([{ url: 'a' }]);
     expect(result.output.dryRun).toBe(true);
+    expect(mockGetStoreValue).toHaveBeenCalled();
+    expect(mockAddToSetReturningNew).not.toHaveBeenCalled();
     expect(mockAddToSetAtomic).not.toHaveBeenCalled();
   });
 
-  it('records nothing when there are no new items', async () => {
-    mockGetStoreValue.mockResolvedValue({ value: ['a'], found: true });
+  it('records nothing new when the atomic claim returns no ids', async () => {
+    mockAddToSetReturningNew.mockResolvedValue([]);
     const result = await dedupeExecutor.execute(
       { results: [{ url: 'a' }] },
       { itemsPath: 'results', idPath: 'url' },
       ctx(),
     );
     expect(result.output.newCount).toBe(0);
-    expect(mockAddToSetAtomic).not.toHaveBeenCalled();
+    expect(result.output.items).toEqual([]);
   });
 
-  describe('recordMode: downstream-success', () => {
-    it('defers recording until the run flush', async () => {
-      const runId = 'run-defer';
-      await dedupeExecutor.execute(
+  describe('recordMode: downstream-success (durable deferred record)', () => {
+    it('embeds a durable deferred record in the output instead of writing immediately', async () => {
+      const result = await dedupeExecutor.execute(
         { results: [{ url: 'a' }, { url: 'b' }] },
         { itemsPath: 'results', idPath: 'url', storeKey: 'sent', recordMode: 'downstream-success' },
-        ctx({ runId }),
+        ctx({ runId: 'run-defer' }),
       );
-      // Nothing written yet.
+      // Nothing written yet — neither the atomic claim nor an immediate append.
+      expect(mockAddToSetReturningNew).not.toHaveBeenCalled();
       expect(mockAddToSetAtomic).not.toHaveBeenCalled();
+      // The deferred record travels in the node output (durable across pause/resume).
+      expect(result.output[PENDING_DEDUPE_KEY]).toEqual({
+        workflowId: 'wf-1', storeKey: 'sent', ids: ['a', 'b'], maxRemembered: 500,
+      });
+      expect(result.output.items).toEqual([{ url: 'a' }, { url: 'b' }]);
 
-      // Flush on run success commits the deferred ids.
-      await flushPendingDedupeRecords(runId);
+      // The engine commits on overall run success by scanning the node outputs.
+      await commitDeferredDedupeRecords([result.output]);
       expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'sent', ['a', 'b'], 500);
     });
 
-    it('discards deferred records on failure — nothing is stored', async () => {
-      const runId = 'run-discard';
-      await dedupeExecutor.execute(
+    it('a failed run never commits the deferred record — nothing is stored', async () => {
+      const result = await dedupeExecutor.execute(
         { results: [{ url: 'a' }] },
         { itemsPath: 'results', idPath: 'url', recordMode: 'downstream-success' },
-        ctx({ runId }),
+        ctx({ runId: 'run-fail' }),
       );
-      discardPendingDedupeRecords(runId);
-      await flushPendingDedupeRecords(runId); // no-op now
+      expect(result.output[PENDING_DEDUPE_KEY]).toMatchObject({ ids: ['a'] });
+      // On failure the engine simply does NOT call commit → nothing stored.
+      expect(mockAddToSetAtomic).not.toHaveBeenCalled();
+    });
+
+    it('deferred record survives an awaiting_human pause that resumes in another process', async () => {
+      // The dedupe node runs in the original process and produces an output; the
+      // run pauses; a DIFFERENT process re-seeds that persisted output and
+      // completes. commit must still fire with no shared module state — proven by
+      // JSON round-tripping the output (models DB persist + resume re-seed).
+      const { output } = await dedupeExecutor.execute(
+        { results: [{ url: 'story-1' }] },
+        { itemsPath: 'results', idPath: 'url', storeKey: 'sent_stories', recordMode: 'downstream-success' },
+        ctx({ runId: 'run-A' }),
+      );
+      const reseeded = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+      await commitDeferredDedupeRecords([reseeded]);
+      expect(mockAddToSetAtomic).toHaveBeenCalledWith('wf-1', 'sent_stories', ['story-1'], 500);
+    });
+
+    it('commit is a no-op for outputs with no deferred record', async () => {
+      await commitDeferredDedupeRecords([{ items: [] }, undefined, { [PENDING_DEDUPE_KEY]: { ids: [] } }]);
       expect(mockAddToSetAtomic).not.toHaveBeenCalled();
     });
   });

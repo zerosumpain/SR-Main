@@ -74,30 +74,16 @@ export class OrchestratorBridge {
 			return;
 		}
 
-		// D2 — approval-via-WhatsApp: intercept an owner "APPROVE <code>" /
-		// "DENY <code>" (yes/no aliases) reply and resolve the paused workflow run
-		// through the same path the canvas uses, BEFORE falling through to general
-		// chat. Non-owner or non-matching messages are left untouched.
-		// Imported lazily: approval-inbound pulls in engine-resume → the eager
-		// node-registry barrel, which must not widen the bridge's static graph.
-		const { handleApprovalReply } = await import('./approval-inbound');
-		const approval = await handleApprovalReply(from, text ?? '');
-		if (approval.handled) {
-			if (approval.reply) await this.sendFn(replyTo, approval.reply);
-			return;
-		}
-
-		// D3 — whatsapp-trigger: intercept an owner message whose text matches a
-		// whatsapp-trigger keyword and dispatch that workflow (input = the
-		// keyword-stripped message), BEFORE falling through to general chat. Runs
-		// AFTER the approval intercept so approve/deny/yes/no always resolve an
-		// approval first. Non-owner / non-matching messages fall through untouched.
-		// Imported lazily: workflow-dispatch pulls in the engine barrel, which must
-		// not widen the bridge's static import graph (same reason as above).
-		const { dispatchWhatsAppWorkflow } = await import('./workflow-dispatch');
-		const dispatch = await dispatchWhatsAppWorkflow(from, text ?? '');
-		if (dispatch.dispatched) {
-			await this.sendFn(replyTo, `▶ Started ${dispatch.workflowName}`);
+		// D2/D3 — owner-inbound intercept: an "APPROVE <code>" / "DENY <code>"
+		// (yes/no) approval reply, then a whatsapp-trigger keyword dispatch, BEFORE
+		// falling through to general chat. Shared with the delegated-mode HTTP entry
+		// point (/api/whatsapp/inbound) so both topologies run identical logic.
+		// Imported lazily: the intercept pulls engine-resume → the eager node-
+		// registry barrel, which must not widen the bridge's static import graph.
+		const { interceptOwnerInbound } = await import('./inbound-intercept');
+		const intercept = await interceptOwnerInbound(from, text ?? '');
+		if (intercept.handled) {
+			if (intercept.reply) await this.sendFn(replyTo, intercept.reply);
 			return;
 		}
 

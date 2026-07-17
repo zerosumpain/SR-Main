@@ -13,12 +13,14 @@ const mockInsertValues = vi.fn(() => ({ onConflictDoUpdate: mockOnConflictDoUpda
 const mockInsert = vi.fn(() => ({ values: mockInsertValues }));
 
 const mockExecute = vi.fn();
+const mockTransaction = vi.fn();
 
 vi.mock('$lib/db', () => ({
   db: {
     select: mockSelect,
     insert: mockInsert,
     execute: mockExecute,
+    transaction: mockTransaction,
   },
 }));
 
@@ -43,7 +45,7 @@ vi.mock('drizzle-orm', async (importOriginal) => {
   };
 });
 
-const { dataStoreExecutor, dataStoreDef, addToSetAtomic } = await import(
+const { dataStoreExecutor, dataStoreDef, addToSetAtomic, addToSetReturningNew } = await import(
   '$lib/workflows/nodes/data-store'
 );
 
@@ -300,6 +302,43 @@ describe('dataStoreExecutor', () => {
         dataStoreExecutor.execute({}, { operation: 'get', key: 'x' }, ctx),
       ).rejects.toThrow(/workflowId not available/);
     });
+  });
+});
+
+describe('addToSetReturningNew (atomic claim — dedupe TOCTOU fix)', () => {
+  it('returns only genuinely-new ids and writes the union under a row lock', async () => {
+    // Existing stored set is ['a']; candidates ['a','b','c'] → new = ['b','c'].
+    const txExecute = vi.fn()
+      .mockResolvedValueOnce({ rows: [] }) // INSERT ... ON CONFLICT DO NOTHING (ensure row)
+      .mockResolvedValueOnce({ rows: [{ value: ['a'] }] }) // SELECT ... FOR UPDATE
+      .mockResolvedValueOnce({ rows: [] }); // UPDATE
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({ execute: txExecute }));
+
+    const newIds = await addToSetReturningNew('wf', 'k', ['a', 'b', 'c'], 500);
+    expect(newIds).toEqual(['b', 'c']);
+    expect(txExecute).toHaveBeenCalledTimes(3);
+    const dialect2 = new PgDialect();
+    const lockSql = dialect2.sqlToQuery(txExecute.mock.calls[1][0]).sql;
+    expect(lockSql).toMatch(/FOR UPDATE/);
+    const updateSql = dialect2.sqlToQuery(txExecute.mock.calls[2][0]).sql;
+    expect(updateSql).toMatch(/UPDATE workflow_data_store/);
+  });
+
+  it('writes nothing and returns [] when every candidate is already present', async () => {
+    const txExecute = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ value: ['a', 'b'] }] });
+    mockTransaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({ execute: txExecute }));
+
+    const newIds = await addToSetReturningNew('wf', 'k', ['a', 'b'], null);
+    expect(newIds).toEqual([]);
+    expect(txExecute).toHaveBeenCalledTimes(2); // no UPDATE issued
+  });
+
+  it('short-circuits (no transaction) when there are no candidates', async () => {
+    const newIds = await addToSetReturningNew('wf', 'k', [], 500);
+    expect(newIds).toEqual([]);
+    expect(mockTransaction).not.toHaveBeenCalled();
   });
 });
 

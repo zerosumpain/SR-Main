@@ -1,5 +1,5 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { getStoreValue, addToSetAtomic } from './data-store';
+import { getStoreValue, addToSetAtomic, addToSetReturningNew } from './data-store';
 
 export { dedupeDef } from './dedupe.def';
 
@@ -8,44 +8,46 @@ export { dedupeDef } from './dedupe.def';
 //
 // In this mode the dedupe node filters immediately but does NOT write the new
 // ids to the seen-set until the whole run finishes successfully. The engine
-// flushes on overall success and discards on failure — so a run whose send
-// step fails does NOT mark the items as seen, and they will be retried next
-// run. Records are keyed by runId; a run may contain several dedupe nodes.
+// commits on overall success and simply drops them on failure — so a run whose
+// send step fails does NOT mark the items as seen, and they will be retried
+// next run.
+//
+// The deferred record is embedded IN THE NODE'S OUTPUT (under `_pendingDedupe`)
+// rather than in a process-local map. Node outputs are persisted to
+// node_executions and re-seeded on resume, so a record survives an
+// `awaiting_human` pause that resumes in a DIFFERENT process (worker → web) or
+// after a restart during the human pause — where the old module-global map was
+// lost, silently re-sending the same items on the next run.
 // ————————————————————————————————————————————————————————————————
 
-interface PendingDedupeRecord {
+/** Output key carrying a deferred (downstream-success) dedupe record. */
+export const PENDING_DEDUPE_KEY = '_pendingDedupe';
+
+export interface EmbeddedDedupeRecord {
   workflowId: string;
   storeKey: string;
   ids: string[];
   maxRemembered: number | null;
 }
 
-const pendingByRun = new Map<string, PendingDedupeRecord[]>();
-
-export function registerPendingDedupeRecords(runId: string, record: PendingDedupeRecord): void {
-  if (!runId || record.ids.length === 0) return;
-  const existing = pendingByRun.get(runId);
-  if (existing) existing.push(record);
-  else pendingByRun.set(runId, [record]);
-}
-
-/** Commit all deferred dedupe records for a successful run, then clear them. */
-export async function flushPendingDedupeRecords(runId: string): Promise<void> {
-  const records = pendingByRun.get(runId);
-  if (!records) return;
-  pendingByRun.delete(runId);
-  for (const rec of records) {
+/**
+ * Commit every deferred dedupe record found in a run's node outputs, now the
+ * whole run has succeeded. Reads the records from the OUTPUTS (durable across the
+ * pause/resume process boundary) rather than a module-global map. `addToSetAtomic`
+ * is a set-union upsert, so committing the same ids twice is a harmless no-op.
+ */
+export async function commitDeferredDedupeRecords(
+  outputs: Iterable<Record<string, unknown> | undefined>,
+): Promise<void> {
+  for (const output of outputs) {
+    const rec = output?.[PENDING_DEDUPE_KEY] as EmbeddedDedupeRecord | undefined;
+    if (!rec || !Array.isArray(rec.ids) || rec.ids.length === 0) continue;
     try {
       await addToSetAtomic(rec.workflowId, rec.storeKey, rec.ids, rec.maxRemembered);
     } catch (err) {
-      console.error(`[dedupe] failed to flush seen-ids for run ${runId} key ${rec.storeKey}:`, err);
+      console.error(`[dedupe] failed to commit deferred seen-ids for key ${rec.storeKey}:`, err);
     }
   }
-}
-
-/** Drop all deferred dedupe records for a run (failure / cancel path). */
-export function discardPendingDedupeRecords(runId: string): void {
-  pendingByRun.delete(runId);
 }
 
 function normaliseMax(raw: unknown, fallback: number): number | null {
@@ -117,38 +119,64 @@ export const dedupeExecutor: NodeExecutor = {
       sourceTopKey = detected?.key;
     }
 
-    // Load the seen-set.
-    const { value: storedSet } = await getStoreValue(workflowId, storeKey);
-    const seen = new Set<string>(Array.isArray(storedSet) ? storedSet.map((v) => String(v)) : []);
-
-    // Filter to unseen, collecting the new ids we should remember.
-    const unseen: unknown[] = [];
-    const newIds = new Set<string>();
-    for (const item of originalArray) {
+    // Pair each item with its resolved id (string) or null (no id → always new).
+    const itemsWithIds = originalArray.map((item) => {
       const rawId = extractId(item, idPath);
-      if (rawId === undefined || rawId === null) {
-        // No id → treat as new (pass through) but do NOT store undefined.
-        unseen.push(item);
-        continue;
+      return { item, id: rawId === undefined || rawId === null ? null : String(rawId) };
+    });
+    // Ordered distinct candidate ids (first occurrence wins).
+    const candidateIds: string[] = [];
+    const candidateSeen = new Set<string>();
+    for (const { id } of itemsWithIds) {
+      if (id !== null && !candidateSeen.has(id)) {
+        candidateSeen.add(id);
+        candidateIds.push(id);
       }
-      const idStr = String(rawId);
-      if (seen.has(idStr)) continue; // already seen → drop
-      unseen.push(item);
-      newIds.add(idStr);
     }
 
-    // Record the new ids (unless a dry run).
-    const ids = [...newIds];
-    if (!context.dryRun && ids.length > 0) {
-      if (recordMode === 'immediate') {
-        await addToSetAtomic(workflowId, storeKey, ids, maxRemembered);
-      } else {
-        registerPendingDedupeRecords(context.runId, {
-          workflowId,
-          storeKey,
-          ids,
-          maxRemembered,
-        });
+    let unseen: unknown[];
+    let pendingRecord: EmbeddedDedupeRecord | null = null;
+
+    if (context.dryRun) {
+      // DRY RUN: filter against the current stored set but NEVER write.
+      const { value: storedSet } = await getStoreValue(workflowId, storeKey);
+      const seen = new Set<string>(Array.isArray(storedSet) ? storedSet.map((v) => String(v)) : []);
+      unseen = itemsWithIds.filter(({ id }) => id === null || !seen.has(id)).map(({ item }) => item);
+    } else if (recordMode === 'immediate') {
+      // ATOMIC claim: the has()-decision AND the record happen under one row lock,
+      // so two overlapping runs of this workflow can't both classify an id as new
+      // (dedupe TOCTOU fix). Only ids this call actually claimed pass downstream.
+      const claimedNew =
+        candidateIds.length > 0
+          ? await addToSetReturningNew(workflowId, storeKey, candidateIds, maxRemembered)
+          : [];
+      const newIdSet = new Set(claimedNew);
+      unseen = itemsWithIds.filter(({ id }) => id === null || newIdSet.has(id)).map(({ item }) => item);
+    } else {
+      // downstream-success: defer the write to run-completion so a failed send
+      // does NOT mark its items seen. The has()-decision is a point-in-time read
+      // (the atomic claim can't be used — the write must wait for success), so
+      // this mode trades concurrency-safety for retry-safety by design.
+      const { value: storedSet } = await getStoreValue(workflowId, storeKey);
+      const seen = new Set<string>(Array.isArray(storedSet) ? storedSet.map((v) => String(v)) : []);
+      const passed: unknown[] = [];
+      const recordIds: string[] = [];
+      const recordSeen = new Set<string>();
+      for (const { item, id } of itemsWithIds) {
+        if (id === null) {
+          passed.push(item);
+          continue;
+        }
+        if (seen.has(id)) continue; // already seen → drop
+        passed.push(item);
+        if (!recordSeen.has(id)) {
+          recordSeen.add(id);
+          recordIds.push(id);
+        }
+      }
+      unseen = passed;
+      if (recordIds.length > 0) {
+        pendingRecord = { workflowId, storeKey, ids: recordIds, maxRemembered };
       }
     }
 
@@ -164,6 +192,10 @@ export const dedupeExecutor: NodeExecutor = {
       allItems: originalArray,
     };
     if (context.dryRun) output.dryRun = true;
+    // Embed the deferred record durably in the output — the engine commits it on
+    // overall run success (survives an awaiting_human pause/resume across process
+    // boundaries, unlike the old module-global map).
+    if (pendingRecord) output[PENDING_DEDUPE_KEY] = pendingRecord;
 
     return { output, rowCount: unseen.length };
   },

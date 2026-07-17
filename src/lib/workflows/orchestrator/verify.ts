@@ -278,23 +278,30 @@ const OUTBOUND_SEND_TYPES = new Set([
 
 /** Nodes that emit a LIST of items fetched from the outside world. Piped
  *  straight into a send on a recurring schedule, they re-deliver the same items
- *  every run unless a memory node filters them first. */
+ *  every run unless a memory node filters them first.
+ *
+ *  `gmail-fetch` is deliberately NOT here: it fetches a SINGLE message by
+ *  messageId (per-message idempotent, driven by a gmail-trigger that fires once
+ *  per new message), so it never re-delivers a list. Only `gmail-search` (which
+ *  returns a list) is a feed source — matching the generator's own hard-rule /
+ *  critic prompts, which name gmail-search and never gmail-fetch. Listing
+ *  gmail-fetch here made the canonical gmail auto-reply exemplars trip a bogus
+ *  dedupe finding on every build. */
 const LIST_SOURCE_TYPES = new Set([
   'tavily-search',
   'web-scrape',
   'stealth-scrape',
   'stealth-scrape-llm',
   'gmail-search',
-  'gmail-fetch',
   'http-request',
   'site-mapper',
 ]);
 
-/** Sources whose output may just as well be a scalar snapshot (a health check,
- *  a single fetched message) as a list of items. Flagging those as hard errors
- *  would send legitimate "poll a value and message me" monitors through
- *  spurious revision rounds — so they warn instead of erroring. */
-const AMBIGUOUS_SOURCE_TYPES = new Set(['http-request', 'gmail-fetch']);
+/** Sources whose output may just as well be a scalar snapshot (a health check)
+ *  as a list of items. Flagging those as hard errors would send legitimate
+ *  "poll a value and message me" monitors through spurious revision rounds — so
+ *  they warn instead of erroring. */
+const AMBIGUOUS_SOURCE_TYPES = new Set(['http-request']);
 
 /** Memory nodes that break the "re-send" chain: `dedupe` filters seen ids;
  *  `data-store` persists a cursor/set the author can gate on. */
@@ -364,7 +371,33 @@ function detectMissingDedupMemory(
     predecessors.set(e.targetNodeId, list);
   }
 
-  // Reverse-BFS from a send node; stop at memory nodes; return the first
+  // Does `nodeId` have a memory node anywhere in its transitive upstream? Used
+  // to recognise a FAN-IN (merge/join) that pulls a memory value in on one of
+  // its branches — the manual "diff-dance" dedup shape (data-store get → merge →
+  // transform-diff → send), where the memory guards the send even though it sits
+  // on a PARALLEL branch rather than on the source→send chain itself.
+  const memoryUpstreamCache = new Map<string, boolean>();
+  const hasMemoryUpstream = (startId: string): boolean => {
+    const cached = memoryUpstreamCache.get(startId);
+    if (cached !== undefined) return cached;
+    const seen = new Set<string>();
+    const queue = [...(predecessors.get(startId) ?? [])];
+    let found = false;
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (MEMORY_TYPES.has(nodeById.get(id)?.type ?? '')) {
+        found = true;
+        break;
+      }
+      for (const p of predecessors.get(id) ?? []) queue.push(p);
+    }
+    memoryUpstreamCache.set(startId, found);
+    return found;
+  };
+
+  // Reverse-BFS from a send node; stop at memory barriers; return the first
   // list-source that reaches the send without passing through memory.
   const findUnguardedSource = (sendId: string): WorkflowNodeDef | null => {
     const seen = new Set<string>();
@@ -376,8 +409,16 @@ function detectMissingDedupMemory(
       const node = nodeById.get(id);
       if (!node) continue;
       if (MEMORY_TYPES.has(node.type)) continue; // barrier — memory protects the send
+      // Check source BEFORE the fan-in barrier so a source that ALSO feeds the
+      // send via a direct (bypass) edge is still flagged.
       if (LIST_SOURCE_TYPES.has(node.type)) return node;
-      for (const p of predecessors.get(id) ?? []) queue.push(p);
+      // Fan-in barrier: a join node (≥2 inputs) that pulls a memory value in on
+      // one branch carries that memory forward (a downstream transform can dedup
+      // against it), so it protects every source feeding the same join. This is
+      // the diff-dance topology — without it, exemplar 7 flags its own scrape.
+      const incoming = predecessors.get(id) ?? [];
+      if (incoming.length >= 2 && hasMemoryUpstream(id)) continue;
+      for (const p of incoming) queue.push(p);
     }
     return null;
   };

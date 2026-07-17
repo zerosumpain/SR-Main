@@ -158,6 +158,72 @@ export function addToSetAtomic(
   return arrayUpsert(workflowId, key, values, { dedupe: true, maxItems });
 }
 
+/**
+ * Atomically claim the genuinely-new ids from `candidateIds` and record them.
+ *
+ * Unlike `addToSetAtomic` (which only serialises the append), this serialises the
+ * whole read-decide-write: inside a single transaction it locks the
+ * (workflowId,key) row with `SELECT ... FOR UPDATE`, reads the current seen-set,
+ * computes which candidates are NOT already present, unions them in (order-
+ * preserving, most-recent-window trim), and RETURNS only the ids that were newly
+ * added. Because the has()-decision and the write happen under the same row lock,
+ * two overlapping runs of the SAME workflow can't both classify the same id as
+ * new — closing the dedupe TOCTOU (webhook double-delivery, loop fan-out, a cron
+ * firing while the prior run is still executing). The row is per (workflowId,key)
+ * so contention is limited to genuinely-racing runs of the same dedupe key.
+ */
+export async function addToSetReturningNew(
+  workflowId: string,
+  key: string,
+  candidateIds: string[],
+  maxItems?: number | null,
+): Promise<string[]> {
+  if (candidateIds.length === 0) return [];
+  // De-dupe the incoming batch, preserving first-occurrence order.
+  const batch: string[] = [];
+  const batchSeen = new Set<string>();
+  for (const id of candidateIds) {
+    if (!batchSeen.has(id)) {
+      batchSeen.add(id);
+      batch.push(id);
+    }
+  }
+
+  return db.transaction(async (tx) => {
+    // Ensure the row exists so FOR UPDATE has something to lock on the first run.
+    await tx.execute(sql`
+      INSERT INTO workflow_data_store (workflow_id, key, value, updated_at)
+      VALUES (${workflowId}, ${key}, '[]'::jsonb, now())
+      ON CONFLICT (workflow_id, key) DO NOTHING
+    `);
+    // Lock the row + read the current set. Concurrent claimers of the same key
+    // block here until the holder commits, then observe its committed writes.
+    const res = await tx.execute(sql`
+      SELECT value FROM workflow_data_store
+      WHERE workflow_id = ${workflowId} AND key = ${key}
+      FOR UPDATE
+    `);
+    const row = (res as { rows?: Array<Record<string, unknown>> }).rows?.[0];
+    const rawExisting = row?.value;
+    const existing = Array.isArray(rawExisting) ? rawExisting.map((v) => String(v)) : [];
+    const existingSet = new Set(existing);
+    const newIds = batch.filter((id) => !existingSet.has(id));
+    if (newIds.length === 0) return [];
+
+    // existing is already distinct; newIds are distinct and disjoint from it.
+    let merged = [...existing, ...newIds];
+    if (maxItems != null && Number.isFinite(maxItems) && maxItems > 0 && merged.length > maxItems) {
+      merged = merged.slice(merged.length - maxItems); // keep the most-recent window
+    }
+    await tx.execute(sql`
+      UPDATE workflow_data_store
+      SET value = ${JSON.stringify(merged)}::jsonb, updated_at = now()
+      WHERE workflow_id = ${workflowId} AND key = ${key}
+    `);
+    return newIds;
+  });
+}
+
 /** Atomically add `by` to the stored numeric value (0 if absent / non-numeric). */
 export async function incrementAtomic(
   workflowId: string,

@@ -123,6 +123,11 @@ export async function notifyRunOutcome(args: NotifyRunOutcomeArgs): Promise<void
     const isCompletion = status === 'completed';
     if (!isFailure && !isCompletion) return;
 
+    // Child invocations (sub-workflow node / loop subworkflow mode) carry a
+    // `sub-` runId prefix. Their outcome surfaces through the PARENT run's
+    // node result — notifying per child would spam N messages for one fan-out.
+    if (runId.startsWith('sub-')) return;
+
     const [row] = await db
       .select({
         name: workflows.name,

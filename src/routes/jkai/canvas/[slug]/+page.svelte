@@ -5803,14 +5803,19 @@
                   </div>
                 {/if}
                 <div class="menu-config-section">
-                  <Panel
-                    config={configDraft}
-                    onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
-                    definition={menuDefinition}
-                    nodeId={menuNode.id}
-                    workflowId={canvas.workflowId}
-                    upstreamFields={_upstreamFields}
-                  />
+                  <!-- Keyed on node id: switching between two nodes of the SAME
+                       type must remount the panel, or its internal editor state
+                       (JSON drafts, pickers) leaks from one node to the other. -->
+                  {#key menuNode.id}
+                    <Panel
+                      config={configDraft}
+                      onChange={(cfg) => { configDraft = cfg; configDirty = true; }}
+                      definition={menuDefinition}
+                      nodeId={menuNode.id}
+                      workflowId={canvas.workflowId}
+                      upstreamFields={_upstreamFields}
+                    />
+                  {/key}
                 </div>
               {/if}
 

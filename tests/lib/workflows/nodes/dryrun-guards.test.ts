@@ -35,6 +35,7 @@ vi.mock('$lib/file-store/storage', () => ({
 
 const { blogCreateExecutor, blogUpdateExecutor } = await import('$lib/workflows/nodes/blog-ops');
 const { fileWriteExecutor, fileDeleteExecutor } = await import('$lib/workflows/nodes/file-ops');
+const { jkaiExecutor } = await import('$lib/workflows/nodes/jkai');
 
 function ctx(dryRun: boolean): ExecutionContext {
   return {
@@ -75,5 +76,27 @@ describe('dryRun guards — file ops', () => {
   it('file-delete simulates without touching db/disk', async () => {
     const r = await fileDeleteExecutor.execute({}, { fileName: 'gone.csv' }, ctx(true));
     expect(r.output).toMatchObject({ ok: true, dryRun: true, deleted: false, name: 'gone.csv' });
+  });
+});
+
+describe('dryRun guards — jkai builder ops', () => {
+  it('jkai start does NOT spawn a real build during a dry run', async () => {
+    const r = await jkaiExecutor.execute(
+      { topic: 'a timer' },
+      { operation: 'start', prompt: 'Build {{input.topic}}', title: 'Timer' },
+      ctx(true),
+    );
+    expect(r.output).toMatchObject({ success: true, dryRun: true, wouldInvoke: 'build_create' });
+    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
+  });
+
+  it('jkai control (publish) does NOT publish to production during a dry run', async () => {
+    const r = await jkaiExecutor.execute(
+      {},
+      { operation: 'control', buildId: 'b1', action: 'publish' },
+      ctx(true),
+    );
+    expect(r.output).toMatchObject({ success: true, dryRun: true, wouldInvoke: 'build_control' });
+    expect(mockExecuteSiteTool).not.toHaveBeenCalled();
   });
 });

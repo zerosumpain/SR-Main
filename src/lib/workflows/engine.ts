@@ -31,7 +31,7 @@ import { db } from '$lib/db';
 import { nodeExecutions } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { mergeUpstreamInput } from './engine-node-runner';
-import { flushPendingDedupeRecords, discardPendingDedupeRecords } from './nodes/dedupe';
+import { commitDeferredDedupeRecords } from './nodes/dedupe';
 import { loadStoreSnapshot } from './nodes/data-store';
 import { notifyRunOutcome } from './run-notifications';
 import {
@@ -923,16 +923,23 @@ export class WorkflowEngine {
         emit('run_completed');
         // Commit any deferred dedupe records (recordMode: 'downstream-success')
         // now that the run has finished cleanly — items were only marked seen
-        // once every downstream node (e.g. the send) actually succeeded.
-        await flushPendingDedupeRecords(runId);
+        // once every downstream node (e.g. the send) actually succeeded. The
+        // records are read from the dedupe nodes' OUTPUTS (persisted + resume-
+        // seeded), so they survive an awaiting_human pause that resumes in a
+        // different process — a module-global map used to lose them there,
+        // silently re-sending the same items on the next run.
+        const dedupeOutputs: Array<Record<string, unknown> | undefined> = [];
+        for (const [nid, out] of nodeOutputs) {
+          if (graph.nodeMap.get(nid)?.type === 'dedupe') dedupeOutputs.push(out);
+        }
+        await commitDeferredDedupeRecords(dedupeOutputs);
       } else if (finalStatus === 'completed_with_errors') {
         emit('run_completed_with_errors');
-        // Some node failed — do NOT record deferred dedupe ids (a failed send
-        // must not mark its items as seen); they retry next run.
-        discardPendingDedupeRecords(runId);
+        // Some node failed — do NOT commit deferred dedupe ids (a failed send
+        // must not mark its items as seen); they retry next run. Deferred records
+        // live only in the node outputs, which are simply left uncommitted.
       } else {
         emit('run_failed');
-        discardPendingDedupeRecords(runId);
       }
 
       // D1: fire-and-forget run-outcome notification (engine-level so worker-mode
@@ -985,7 +992,8 @@ export class WorkflowEngine {
 
       const message = err instanceof Error ? err.message : String(err);
       emit('run_failed', undefined, { error: message });
-      discardPendingDedupeRecords(runId);
+      // Deferred dedupe records (recordMode: 'downstream-success') live only in
+      // the node outputs and are simply left uncommitted on failure.
       // D1: fire-and-forget failure notification for the thrown-error path too.
       // No terminalOutputs here (graph is unavailable in this scope) — a failed
       // run never sends a completion digest anyway. Never throws.

@@ -447,10 +447,16 @@ async function runToolLoop(
           assembled.trigger,
         );
 
-        if (issues.length > 0 && verifyAttempts < MAX_VERIFY_ROUNDS) {
+        // Only ERROR-severity issues force a revision round. Warnings (e.g. an
+        // ambiguous scalar-vs-list source) are advisory: the AMBIGUOUS→warning
+        // downgrade exists precisely to avoid spurious revision rounds, so the
+        // finalize gate must honour severity here too — a warning-only result
+        // used to burn all three rounds with no legitimate way to clear it.
+        const errorIssues = issues.filter((i) => i.severity === 'error');
+        if (errorIssues.length > 0 && verifyAttempts < MAX_VERIFY_ROUNDS) {
           verifyAttempts++;
-          const issueText = formatIssues(issues);
-          onChunk?.(`Verification round ${verifyAttempts}: found ${issues.length} issue(s), asking builder to fix...\n`);
+          const issueText = formatIssues(issues); // include warnings for context
+          onChunk?.(`Verification round ${verifyAttempts}: found ${errorIssues.length} error(s), asking builder to fix...\n`);
 
           messages.push({
             role: 'tool',
@@ -463,8 +469,8 @@ async function runToolLoop(
           continue; // Re-enter the tool loop so the LLM can fix issues
         }
 
-        if (issues.length > 0) {
-          onChunk?.(`Verification: ${issues.length} issue(s) remain after ${verifyAttempts} rounds — proceeding with warnings.\n`);
+        if (errorIssues.length > 0) {
+          onChunk?.(`Verification: ${errorIssues.length} error(s) remain after ${verifyAttempts} rounds — proceeding anyway.\n`);
         } else if (verifyAttempts > 0) {
           onChunk?.('Verification passed after corrections.\n');
         }

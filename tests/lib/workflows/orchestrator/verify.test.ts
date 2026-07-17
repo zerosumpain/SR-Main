@@ -65,7 +65,7 @@ describe('verifyWorkflow — B3 recurring send without dedup memory', () => {
     expect(issues[0].issue).toContain('idPath');
   });
 
-  it('demotes ambiguous sources (http-request, gmail-fetch) to a warning — scalar monitors are legitimate', () => {
+  it('demotes an ambiguous http-request source to a warning — scalar monitors are legitimate', () => {
     const trigger = node('trigger', { kind: 'cron', cron: '0 * * * *' });
     const http = node('http-request', { url: 'https://example.com/health' }, 'Health Check');
     const wa = node('whatsapp', { message: '{{input.body}}' }, 'Notify Me');
@@ -76,6 +76,40 @@ describe('verifyWorkflow — B3 recurring send without dedup memory', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0].severity).toBe('warning'); // must NOT burn revision rounds
     expect(issues[0].issue).toContain('single current value');
+  });
+
+  it('does NOT flag a gmail auto-reply — gmail-fetch is a single-message fetch, not a feed', () => {
+    // Golden exemplars 3 & 4: gmail-trigger → gmail-fetch → llm → gmail-reply.
+    // gmail-fetch pulls ONE message by id (per-message idempotent), so it must
+    // not trip the dedupe rule even though the gmail-trigger makes it recurring.
+    const trigger = node('gmail-trigger', { accountId: 1 });
+    const full = node('gmail-fetch', { accountId: 1, messageId: '{{trigger.output.messageId}}' }, 'Fetch full');
+    const draft = node('llm-call', { userPrompt: 'Draft a reply' }, 'Draft');
+    const reply = node('gmail-reply', { accountId: 1, to: 'x@y.z', threadId: 't', bodyText: 'b' }, 'Reply');
+    const nodes = [trigger, full, draft, reply];
+    const edges = [edge(trigger, full), edge(full, draft), edge(draft, reply)];
+    expect(dedupeIssues(nodes, edges)).toHaveLength(0);
+  });
+
+  it('does NOT flag the manual diff-dance — data-store on a parallel merge branch guards the send (golden exemplar 7)', () => {
+    // trigger → seen(data-store get) → merge ; trigger → scrape → merge ;
+    // merge → diff(transform) → email ; diff → save(data-store set).
+    // The memory node sits on a PARALLEL branch feeding the merge, so the naive
+    // barrier walk (source→send chain only) used to false-positive on scrape.
+    const trigger = node('trigger', { kind: 'cron', cron: '0 8 * * *' });
+    const seen = node('data-store', { operation: 'get', key: 'seen_job_ids' }, 'Load seen');
+    const scrape = node('stealth-scrape', { url: 'https://jobs.example.com' }, 'Scrape jobs');
+    const merge = node('merge', {}, 'Merge');
+    const diff = node('transform', { expression: 'return { newLinks: [] }' }, 'Diff');
+    const email = node('email', { to: 'me@x.z', subject: 'New jobs', body: '{{input.newLinks}}' }, 'Email');
+    const save = node('data-store', { operation: 'set', key: 'seen_job_ids', valuePath: 'allLinks' }, 'Save seen');
+    const nodes = [trigger, seen, scrape, merge, diff, email, save];
+    const edges = [
+      edge(trigger, seen), edge(trigger, scrape),
+      edge(seen, merge), edge(scrape, merge),
+      edge(merge, diff), edge(diff, email), edge(diff, save),
+    ];
+    expect(dedupeIssues(nodes, edges, CRON)).toHaveLength(0);
   });
 
   it('detects the schedule from a cron trigger NODE even with no workflow-level trigger', () => {
