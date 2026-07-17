@@ -79,6 +79,83 @@ export function buildSingleNodeGrounding(
   return buildNodeGrounding([{ ...def, hidden: false }], recentExecutions);
 }
 
+/** First sentence (or first ~120 chars) of a tool description, single-line. */
+function firstSentence(desc: string): string {
+  const clean = desc.replace(/\s+/g, ' ').trim();
+  const m = clean.match(/^(.*?[.!?])(\s|$)/);
+  const s = m ? m[1] : clean;
+  return s.length > 120 ? `${s.slice(0, 117)}…` : s;
+}
+
+/**
+ * Compact catalog of the site tools reachable via the generic `site-tool` node,
+ * grouped by toolset. Denylisted tools (arbitrary-code / self-modification /
+ * irreversible-wipe surfaces) are excluded — they can never run from a workflow.
+ * Destructive tools are flagged so the planner knows they need `allowDestructive`
+ * + an upstream `approval` node.
+ *
+ * Lazy-imports the registry (server-only domain modules; circular-init hazard).
+ * Returns '' when the registry can't be loaded (e.g. client bundle). Kept under
+ * ~6KB: falls back to name-only lines if the detailed form would exceed it.
+ */
+interface CatalogTool { name: string; description: string; toolset: string; destructive?: boolean }
+
+export async function buildSiteToolCatalog(): Promise<string> {
+  let getTools: () => ReadonlyArray<CatalogTool>;
+  let isDenylistedTool: (name: string) => boolean;
+  try {
+    ({ getTools } = await import('$lib/workflows/site-tools/registry'));
+    ({ isDenylistedTool } = await import('$lib/workflows/nodes/site-tool-denylist'));
+  } catch {
+    return '';
+  }
+
+  const tools: CatalogTool[] = getTools()
+    .filter((t) => !isDenylistedTool(t.name))
+    .slice()
+    .sort((a, b) => a.toolset.localeCompare(b.toolset) || a.name.localeCompare(b.name));
+  if (tools.length === 0) return '';
+
+  const byToolset = new Map<string, CatalogTool[]>();
+  for (const t of tools) {
+    const arr = byToolset.get(t.toolset);
+    if (arr) arr.push(t);
+    else byToolset.set(t.toolset, [t]);
+  }
+
+  const header =
+    '## Site tools (via the `site-tool` node)\n' +
+    'Any of these can be invoked with a `site-tool` node (set `toolName` + templated `args`). ' +
+    'Read-only tools run directly; tools marked **DESTRUCTIVE** require `allowDestructive: true` AND an ' +
+    '`approval` node upstream on the same path. Prefer a dedicated node (`file-search`, `research-search`, ' +
+    '`deck-build`, blog/gmail nodes) where one exists.';
+
+  const renderDetailed = () => {
+    const sections: string[] = [];
+    for (const [toolset, list] of byToolset) {
+      const lines = list.map((t) => {
+        const flag = t.destructive ? ' — **DESTRUCTIVE**' : '';
+        return `- \`${t.name}\` — ${firstSentence(t.description)}${flag}`;
+      });
+      sections.push(`### ${toolset}\n${lines.join('\n')}`);
+    }
+    return `${header}\n\n${sections.join('\n\n')}`;
+  };
+
+  const renderCompact = () => {
+    const sections: string[] = [];
+    for (const [toolset, list] of byToolset) {
+      const names = list.map((t) => `\`${t.name}\`${t.destructive ? '*' : ''}`).join(', ');
+      sections.push(`- **${toolset}**: ${names}`);
+    }
+    return `${header}\n(compact — \`*\` marks DESTRUCTIVE)\n\n${sections.join('\n')}`;
+  };
+
+  const MAX_BYTES = 6000;
+  const detailed = renderDetailed();
+  return Buffer.byteLength(detailed, 'utf8') <= MAX_BYTES ? detailed : renderCompact();
+}
+
 export function buildNodeGrounding(
   nodeDefinitions: NodeDefinition[],
   recentExecutions: ExecutionExample[],

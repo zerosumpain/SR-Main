@@ -79,13 +79,16 @@ export const blogGetDef: NodeDefinition = {
 
 export const blogCreateExecutor: NodeExecutor = {
   type: 'blog-create',
-  async execute(input, config, _ctx: ExecutionContext): Promise<NodeResult> {
+  async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const title = interpolateTemplate((config.title as string) || '', input).trim();
     if (!title) throw new Error('blog-create: title is required');
     const content = interpolateTemplate((config.content as string) || '', input);
     const args: Record<string, unknown> = { title, content };
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
+    if (ctx.dryRun) {
+      return { output: { success: true, dryRun: true, data: { simulated: true, action: 'create', title } }, rowCount: 1 };
+    }
     const result = await executeSiteTool('site_blog_create', args);
     return { output: result, rowCount: 1 };
   },
@@ -131,7 +134,7 @@ export const blogCreateDef: NodeDefinition = {
 
 export const blogUpdateExecutor: NodeExecutor = {
   type: 'blog-update',
-  async execute(input, config, _ctx: ExecutionContext): Promise<NodeResult> {
+  async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const postId = interpolateTemplate((config.postId as string) || '', input).trim();
     if (!postId) throw new Error('blog-update: postId is required');
     const args: Record<string, unknown> = { postId };
@@ -139,6 +142,9 @@ export const blogUpdateExecutor: NodeExecutor = {
     if (config.content) args.content = interpolateTemplate((config.content as string), input);
     if (config.status) args.status = config.status;
     if (config.tags) args.tags = config.tags;
+    if (ctx.dryRun) {
+      return { output: { success: true, dryRun: true, data: { simulated: true, action: 'update', postId } }, rowCount: 1 };
+    }
     const result = await executeSiteTool('site_blog_update', args);
     return { output: result, rowCount: 1 };
   },

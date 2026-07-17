@@ -185,6 +185,7 @@ export type WorkflowEventType =
   | 'node_started'
   | 'node_completed'
   | 'node_failed'
+  | 'node_warning'
   | 'node_paused'
   | 'node_skipped'
   | 'breakpoint_hit'

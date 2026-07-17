@@ -5,6 +5,7 @@ import { workflows, workflowNodes, workflowSchedules } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { registerCronJob, unregisterCronJob } from '$lib/workflows/scheduler';
 import { recordAudit } from '$lib/canvas/audit';
+import { getWebhookSecret, type TriggerLike } from '$lib/workflows/webhook-secret';
 
 /**
  * PUT /api/workflows/:id/trigger
@@ -40,6 +41,12 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   const sourceWorkflowId =
     typeof body.sourceWorkflowId === 'string' ? body.sourceWorkflowId : '';
   const enabled = body.enabled !== false;
+  // D4 — optional webhook secret. When the caller sends a `secret` string we
+  // honour it verbatim (empty string clears it); when the field is absent we
+  // preserve whatever is already stored so unrelated trigger saves don't drop
+  // the secret. Only meaningful for kind=webhook.
+  const secretProvided = typeof body.secret === 'string';
+  const secretInput = secretProvided ? (body.secret as string).trim() : '';
 
   if (kind === 'cron' && !cron) {
     return json({ error: 'cron expression required when kind=cron' }, { status: 400 });
@@ -51,6 +58,11 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   const [workflow] = await db.select().from(workflows).where(eq(workflows.id, params.id));
   if (!workflow) return json({ error: 'Workflow not found' }, { status: 404 });
 
+  // Resolve the effective webhook secret: an explicit `secret` in the body wins
+  // (empty string clears it); otherwise carry forward the stored value.
+  const existingSecret = getWebhookSecret(workflow.trigger as TriggerLike | null);
+  const secret = secretProvided ? secretInput : existingSecret;
+
   // 1. Update workflows.trigger
   const triggerMetadata: Record<string, unknown> = { type: kind };
   if (kind === 'cron') triggerMetadata.cron = cron;
@@ -58,6 +70,8 @@ export const PUT: RequestHandler = async ({ params, request }) => {
     triggerMetadata.eventType = eventType;
     if (sourceWorkflowId) triggerMetadata.sourceWorkflowId = sourceWorkflowId;
   }
+  // Secret is only carried for webhook triggers (dropped when switching kind).
+  if (kind === 'webhook' && secret) triggerMetadata.secret = secret;
   await db
     .update(workflows)
     .set({ trigger: triggerMetadata, updatedAt: new Date() })
@@ -108,6 +122,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
   if (cron) nodeConfig.cron = cron;
   if (eventType) nodeConfig.eventType = eventType;
   if (sourceWorkflowId) nodeConfig.sourceWorkflowId = sourceWorkflowId;
+  // Mirror the secret so the canvas trigger panel can read it back and offer
+  // copy / send-test without a second round-trip.
+  if (kind === 'webhook' && secret) nodeConfig.secret = secret;
   for (const t of triggerNode) {
     await db.update(workflowNodes).set({ config: nodeConfig }).where(eq(workflowNodes.id, t.id));
   }
@@ -124,6 +141,8 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         cron: kind === 'cron' ? cron : null,
         eventType: kind === 'event' ? eventType : null,
         enabled,
+        // Record only whether a secret is set — never the value itself.
+        hasSecret: kind === 'webhook' ? Boolean(secret) : false,
       },
     },
   });

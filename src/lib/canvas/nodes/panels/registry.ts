@@ -17,6 +17,7 @@ import ConditionalPanel from './ConditionalPanel.svelte';
 import SwitchPanel from './SwitchPanel.svelte';
 import TransformPanel from './TransformPanel.svelte';
 import DataStorePanel from './DataStorePanel.svelte';
+import DedupePanel from './DedupePanel.svelte';
 import DelayPanel from './DelayPanel.svelte';
 import TavilySearchPanel from './TavilySearchPanel.svelte';
 import WebScrapePanel from './WebScrapePanel.svelte';
@@ -55,6 +56,7 @@ import LoopPanel from './LoopPanel.svelte';
 import SubWorkflowPanel from './SubWorkflowPanel.svelte';
 import OpenRouterPanel from './OpenRouterPanel.svelte';
 import JkaiPanel from './JkaiPanel.svelte';
+import SiteToolPanel from './SiteToolPanel.svelte';
 import BuilderChatPanel from './BuilderChatPanel.svelte';
 import BuilderPiPanel from './BuilderPiPanel.svelte';
 import BuildViewPanel from './BuildViewPanel.svelte';
@@ -107,6 +109,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'switch': SwitchPanel as unknown as Component<PanelProps>,
   'transform': TransformPanel as unknown as Component<PanelProps>,
   'data-store': DataStorePanel as unknown as Component<PanelProps>,
+  'dedupe': DedupePanel as unknown as Component<PanelProps>,
   'delay': DelayPanel as unknown as Component<PanelProps>,
   'tavily-search': TavilySearchPanel as unknown as Component<PanelProps>,
   'web-scrape': WebScrapePanel as unknown as Component<PanelProps>,
@@ -145,6 +148,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'sub-workflow': SubWorkflowPanel as unknown as Component<PanelProps>,
   'openrouter': OpenRouterPanel as unknown as Component<PanelProps>,
   'jkai': JkaiPanel as unknown as Component<PanelProps>,
+  'site-tool': SiteToolPanel as unknown as Component<PanelProps>,
   'builder-chat': BuilderChatPanel as unknown as Component<PanelProps>,
   'builder-pi': BuilderPiPanel as unknown as Component<PanelProps>,
   'build-view': BuildViewPanel as unknown as Component<PanelProps>,

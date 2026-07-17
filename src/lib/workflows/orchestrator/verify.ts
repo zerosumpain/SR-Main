@@ -9,6 +9,7 @@
 
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema, NodeDefinition } from '../types';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
+import { extractTemplateTokens, classifyTemplateToken } from '../state-templates';
 
 export interface VerificationIssue {
   nodeId: string;
@@ -194,7 +195,7 @@ export function validateNodeConfigPreSubmit(
     if (typeof v !== 'string') continue;
     const bad = detectUnsupportedTemplateSyntax(v);
     if (bad) {
-      errors.push(`Field "${field.key}" uses ${bad}. Only {{input.field}} interpolation is supported. For loops or conditionals, add a transform node upstream that builds the string.`);
+      errors.push(`Field "${field.key}" uses ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. For loops or conditionals, add a transform node upstream that builds the string.`);
     }
   }
 
@@ -255,6 +256,261 @@ function pathHasValidRoot(ref: string, knownPaths: Set<string>): boolean {
   return knownPaths.has(firstSegment);
 }
 
+/** Workflow-level trigger descriptor (mirrors `workflows.trigger` / the
+ *  assembled GeneratedWorkflow.trigger). Optional on `verifyWorkflow` so
+ *  existing 4-arg callers keep working; when supplied it lets the semantic-gap
+ *  rule below know the workflow is scheduled/recurring even when the cron lives
+ *  only in the workflow row (not a trigger node). */
+export interface VerifyTrigger {
+  type: string;
+  config?: Record<string, unknown>;
+}
+
+/** Outbound "send" nodes — reaching one produces a side-effecting delivery. */
+const OUTBOUND_SEND_TYPES = new Set([
+  'whatsapp',
+  'gmail-send',
+  'gmail-reply',
+  'email',
+  'blog',
+  'deck-build',
+]);
+
+/** Nodes that emit a LIST of items fetched from the outside world. Piped
+ *  straight into a send on a recurring schedule, they re-deliver the same items
+ *  every run unless a memory node filters them first.
+ *
+ *  `gmail-fetch` is deliberately NOT here: it fetches a SINGLE message by
+ *  messageId (per-message idempotent, driven by a gmail-trigger that fires once
+ *  per new message), so it never re-delivers a list. Only `gmail-search` (which
+ *  returns a list) is a feed source — matching the generator's own hard-rule /
+ *  critic prompts, which name gmail-search and never gmail-fetch. Listing
+ *  gmail-fetch here made the canonical gmail auto-reply exemplars trip a bogus
+ *  dedupe finding on every build. */
+const LIST_SOURCE_TYPES = new Set([
+  'tavily-search',
+  'web-scrape',
+  'stealth-scrape',
+  'stealth-scrape-llm',
+  'gmail-search',
+  'http-request',
+  'site-mapper',
+]);
+
+/** Sources whose output may just as well be a scalar snapshot (a health check)
+ *  as a list of items. Flagging those as hard errors would send legitimate
+ *  "poll a value and message me" monitors through spurious revision rounds — so
+ *  they warn instead of erroring. */
+const AMBIGUOUS_SOURCE_TYPES = new Set(['http-request']);
+
+/** Memory nodes that break the "re-send" chain: `dedupe` filters seen ids;
+ *  `data-store` persists a cursor/set the author can gate on. */
+const MEMORY_TYPES = new Set(['dedupe', 'data-store']);
+
+/** A `blog` node only "sends" when it creates/updates a post. */
+function isOutboundSend(node: WorkflowNodeDef): boolean {
+  if (!OUTBOUND_SEND_TYPES.has(node.type)) return false;
+  if (node.type === 'blog') {
+    const op = (node.config as Record<string, unknown>)?.operation;
+    return op === 'create' || op === 'update' || op === undefined;
+  }
+  return true;
+}
+
+/**
+ * True when the workflow fires on a recurring schedule/event (cron, interval,
+ * platform event, or a gmail-trigger) — the class of workflow for which
+ * "re-sends across runs" is a real failure. Manual/webhook-only triggers are
+ * NOT treated as recurring (a manual run re-sending is expected).
+ */
+export function isRecurringWorkflow(
+  nodes: WorkflowNodeDef[],
+  trigger?: VerifyTrigger,
+): boolean {
+  const t = (trigger?.type ?? '').toLowerCase();
+  if (t === 'cron' || t === 'interval' || t === 'schedule' || t === 'event') return true;
+  for (const n of nodes) {
+    // gmail-trigger fires on every matching inbound message — inherently recurring.
+    if (n.type === 'gmail-trigger') return true;
+    if (n.type === 'trigger') {
+      const cfg = (n.config ?? {}) as Record<string, unknown>;
+      const kind = String(cfg.kind ?? '').toLowerCase();
+      if (kind === 'cron' || kind === 'interval' || kind === 'event') return true;
+      if (typeof cfg.cron === 'string' && cfg.cron.trim().length > 0) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Graph-level semantic-gap rule (B3): a recurring workflow that pipes a
+ * list-producing source into an outbound send with NO dedupe/data-store node on
+ * the path between them will re-send previously-sent items on every run. This
+ * is exactly the live "news pipeline re-sends the same story" failure.
+ *
+ * Detection = reverse walk from each send node over incoming edges, treating any
+ * memory node (dedupe/data-store) as a barrier we do NOT expand past. If that
+ * barrier-respecting walk still reaches a list source, that source→send path is
+ * unguarded ⇒ error. The message names the fix so the self-heal/revision loop
+ * (which consumes error-severity issues) can auto-insert the dedupe node.
+ */
+function detectMissingDedupMemory(
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+  trigger?: VerifyTrigger,
+): VerificationIssue[] {
+  if (!isRecurringWorkflow(nodes, trigger)) return [];
+  const sends = nodes.filter(isOutboundSend);
+  if (sends.length === 0) return [];
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const predecessors = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = predecessors.get(e.targetNodeId) ?? [];
+    list.push(e.sourceNodeId);
+    predecessors.set(e.targetNodeId, list);
+  }
+
+  // Does `nodeId` have a memory node anywhere in its transitive upstream? Used
+  // to recognise a FAN-IN (merge/join) that pulls a memory value in on one of
+  // its branches — the manual "diff-dance" dedup shape (data-store get → merge →
+  // transform-diff → send), where the memory guards the send even though it sits
+  // on a PARALLEL branch rather than on the source→send chain itself.
+  const memoryUpstreamCache = new Map<string, boolean>();
+  const hasMemoryUpstream = (startId: string): boolean => {
+    const cached = memoryUpstreamCache.get(startId);
+    if (cached !== undefined) return cached;
+    const seen = new Set<string>();
+    const queue = [...(predecessors.get(startId) ?? [])];
+    let found = false;
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (MEMORY_TYPES.has(nodeById.get(id)?.type ?? '')) {
+        found = true;
+        break;
+      }
+      for (const p of predecessors.get(id) ?? []) queue.push(p);
+    }
+    memoryUpstreamCache.set(startId, found);
+    return found;
+  };
+
+  // Reverse-BFS from a send node; stop at memory barriers; return the first
+  // list-source that reaches the send without passing through memory.
+  const findUnguardedSource = (sendId: string): WorkflowNodeDef | null => {
+    const seen = new Set<string>();
+    const queue = [...(predecessors.get(sendId) ?? [])];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const node = nodeById.get(id);
+      if (!node) continue;
+      if (MEMORY_TYPES.has(node.type)) continue; // barrier — memory protects the send
+      // Check source BEFORE the fan-in barrier so a source that ALSO feeds the
+      // send via a direct (bypass) edge is still flagged.
+      if (LIST_SOURCE_TYPES.has(node.type)) return node;
+      // Fan-in barrier: a join node (≥2 inputs) that pulls a memory value in on
+      // one branch carries that memory forward (a downstream transform can dedup
+      // against it), so it protects every source feeding the same join. This is
+      // the diff-dance topology — without it, exemplar 7 flags its own scrape.
+      const incoming = predecessors.get(id) ?? [];
+      if (incoming.length >= 2 && hasMemoryUpstream(id)) continue;
+      for (const p of incoming) queue.push(p);
+    }
+    return null;
+  };
+
+  // Report each unguarded source once (a single dedupe insert fixes all its sends).
+  const flagged = new Map<string, { source: WorkflowNodeDef; send: WorkflowNodeDef }>();
+  for (const send of sends) {
+    const source = findUnguardedSource(send.id);
+    if (source && !flagged.has(source.id)) flagged.set(source.id, { source, send });
+  }
+
+  return [...flagged.values()].map(({ source, send }) => {
+    const ambiguous = AMBIGUOUS_SOURCE_TYPES.has(source.type);
+    return {
+      nodeId: source.id,
+      nodeLabel: source.label,
+      field: 'dedupe',
+      issue: ambiguous
+        ? `Recurring workflow: "${source.label}" (${source.type}) feeds the send node ` +
+          `"${send.label}" (${send.type}) with no dedupe or data-store between them. If it returns ` +
+          `a LIST of items, every scheduled run will re-send items already sent — insert a dedupe ` +
+          `node after "${source.label}" and gate the send on its newCount. If it returns a single ` +
+          `current value (status/snapshot) that SHOULD be sent every run, this is fine as-is.`
+        : `Recurring workflow: "${source.label}" (${source.type}) produces a list that flows to the ` +
+          `send node "${send.label}" (${send.type}) with no dedupe or data-store between them — ` +
+          `every scheduled run will re-send items already sent. Insert a dedupe node immediately after ` +
+          `"${source.label}" (idPath "url", falling back to "id"), before the send, so only genuinely ` +
+          `new items continue downstream. Then gate the send on the dedupe's newCount (skip when 0).`,
+      severity: ambiguous ? ('warning' as const) : ('error' as const),
+    };
+  });
+}
+
+/**
+ * Author-time enforcement of the `site-tool` destructive-gating rule (C1): a
+ * `site-tool` node with `allowDestructive: true` MUST have an `approval` node
+ * somewhere upstream on its path, so a destructive site capability (send /
+ * publish / delete) can never fire without human sign-off. This is the PRIMARY
+ * guard — the executor's runtime check is belt-and-braces.
+ *
+ * Detection = reverse walk from each flagged site-tool node over incoming edges;
+ * if no `approval` node is reachable upstream, error. The message names the fix.
+ */
+function detectSiteToolApprovalGaps(
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+): VerificationIssue[] {
+  const flagged = nodes.filter(
+    (n) => n.type === 'site-tool' && (n.config as Record<string, unknown>)?.allowDestructive === true,
+  );
+  if (flagged.length === 0) return [];
+
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const predecessors = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = predecessors.get(e.targetNodeId) ?? [];
+    list.push(e.sourceNodeId);
+    predecessors.set(e.targetNodeId, list);
+  }
+
+  const hasUpstreamApproval = (startId: string): boolean => {
+    const seen = new Set<string>();
+    const queue = [...(predecessors.get(startId) ?? [])];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (nodeById.get(id)?.type === 'approval') return true;
+      for (const p of predecessors.get(id) ?? []) queue.push(p);
+    }
+    return false;
+  };
+
+  const issues: VerificationIssue[] = [];
+  for (const node of flagged) {
+    if (hasUpstreamApproval(node.id)) continue;
+    const toolName = String((node.config as Record<string, unknown>)?.toolName ?? '(unset)');
+    issues.push({
+      nodeId: node.id,
+      nodeLabel: node.label,
+      field: 'allowDestructive',
+      issue:
+        `site-tool "${node.label}" invokes the destructive tool "${toolName}" with allowDestructive:true ` +
+        `but has no approval node upstream. Add an approval node before this node so the run pauses for ` +
+        `human sign-off before the destructive action fires (or set allowDestructive:false and pick a ` +
+        `non-destructive tool).`,
+      severity: 'error',
+    });
+  }
+  return issues;
+}
+
 /**
  * Verify a workflow graph for data-shape issues.
  *
@@ -263,12 +519,18 @@ function pathHasValidRoot(ref: string, knownPaths: Set<string>): boolean {
  * 2. Scans config string values for {{input.X}} and input.X references.
  * 3. Flags references that don't match the upstream schema.
  * 4. Validates config keys against the node definition's configSchema.
+ *
+ * After the per-node pass, a graph-level rule (B3) flags recurring send
+ * workflows that lack dedup memory. Pass `trigger` (the workflow-level trigger
+ * descriptor) so the rule can see cron/interval schedules stored on the
+ * workflow row rather than on a trigger node.
  */
 export function verifyWorkflow(
   nodes: WorkflowNodeDef[],
   edges: WorkflowEdgeDef[],
   getDefinition: DefinitionGetter,
   getOutputSchema: OutputSchemaGetter,
+  trigger?: VerifyTrigger,
 ): VerificationIssue[] {
   const issues: VerificationIssue[] = [];
 
@@ -301,7 +563,7 @@ export function verifyWorkflow(
       if (bad) {
         issues.push({
           nodeId: node.id, nodeLabel: node.label, field: field.key,
-          issue: `Contains ${bad}. Only {{input.field}} interpolation is supported. Build the string in an upstream transform node instead.`,
+          issue: `Contains ${bad}. Supported template syntax is {{input.field}}, {{state.KEY}}, {{today}} and {{now}} only. Build the string in an upstream transform node instead.`,
           severity: 'error',
         });
       }
@@ -320,6 +582,27 @@ export function verifyWorkflow(
     // --- Per-operation semantic gaps (G4) ---
     for (const gap of detectSemanticGaps(node)) {
       issues.push({ nodeId: node.id, nodeLabel: node.label, ...gap });
+    }
+
+    // --- Unknown template-variable warnings (A4) ---
+    // Any {{...}} token that isn't {{input.*}} / {{state.*}} / {{today}} /
+    // {{now}} won't be substituted at runtime. Warn (don't block) — block/helper
+    // syntax is already reported as an error above, so skip that class here.
+    for (const [field, value] of Object.entries(node.config)) {
+      if (typeof value !== 'string') continue;
+      const flagged = new Set<string>();
+      for (const inner of extractTemplateTokens(value)) {
+        if (flagged.has(inner)) continue;
+        if (classifyTemplateToken(inner) !== 'unknown') continue;
+        flagged.add(inner);
+        issues.push({
+          nodeId: node.id,
+          nodeLabel: node.label,
+          field,
+          issue: `Unknown template variable {{${inner}}} — it will not be substituted. Supported: {{input.field}}, {{state.KEY}}, {{today}}, {{now}}.`,
+          severity: 'warning',
+        });
+      }
     }
 
     // --- Upstream schema resolution ---
@@ -357,6 +640,12 @@ export function verifyWorkflow(
       }
     }
   }
+
+  // --- Graph-level: recurring send without dedup memory (B3) ---
+  issues.push(...detectMissingDedupMemory(nodes, edges, trigger));
+
+  // --- Graph-level: destructive site-tool without upstream approval (C1) ---
+  issues.push(...detectSiteToolApprovalGaps(nodes, edges));
 
   return issues;
 }

@@ -14,12 +14,87 @@ import {
   workflowEdges,
   nodeExecutions,
   workflows,
+  workflowInteractions,
 } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { emitObs } from '$lib/workflows/observability-bus';
+import { emitWorkflowEvent } from '$lib/workflows/events';
+
+export type ResolveInteractionReason =
+  | 'not_pending'
+  | 'cancelled';
+
+export interface ResolveInteractionResult {
+  resolved: boolean;
+  reason?: ResolveInteractionReason;
+}
+
+/**
+ * Resolve a pending workflow interaction and, if the run was paused
+ * (`awaiting_human`), resume it. This is the single underlying code path the
+ * canvas resolve API route uses — the inbound WhatsApp approval handler calls
+ * it directly (no HTTP self-hop) so resume works identically in worker mode.
+ *
+ * Mirrors the route's semantics: flip resolvedAt/resolvedBy/formValues, emit the
+ * `interaction_resolved` SSE event, and only call `resumeRun` when the run is
+ * actually awaiting_human (a CAPTCHA-style inline interaction leaves the run in
+ * `running` and its executor polls resolvedAt itself).
+ */
+export async function resolveInteraction(opts: {
+  runId: string;
+  nodeId: string;
+  formValues: Record<string, unknown>;
+  resolvedBy?: string | null;
+}): Promise<ResolveInteractionResult> {
+  const { runId, nodeId, formValues, resolvedBy = null } = opts;
+
+  const [pending] = await db
+    .select()
+    .from(workflowInteractions)
+    .where(
+      and(
+        eq(workflowInteractions.runId, runId),
+        eq(workflowInteractions.nodeId, nodeId),
+        isNull(workflowInteractions.resolvedAt),
+      ),
+    );
+
+  if (!pending) return { resolved: false, reason: 'not_pending' };
+  if (pending.cancelled) return { resolved: false, reason: 'cancelled' };
+
+  await db
+    .update(workflowInteractions)
+    .set({ resolvedAt: new Date(), resolvedBy, formValues })
+    .where(eq(workflowInteractions.id, pending.id));
+
+  emitWorkflowEvent({
+    type: 'interaction_resolved',
+    runId,
+    nodeId,
+    data: { interactionId: pending.id },
+    timestamp: new Date().toISOString(),
+  });
+
+  const [run] = await db
+    .select({ status: workflowRuns.status })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.id, runId));
+
+  if (run?.status === 'awaiting_human') {
+    const nodeOutput = {
+      completed: true,
+      completedAt: new Date().toISOString(),
+      formValues,
+      durationMs: Date.now() - new Date(pending.openedAt).getTime(),
+    };
+    await resumeRun(runId, { [nodeId]: nodeOutput });
+  }
+
+  return { resolved: true };
+}
 
 /**
  * Resume a run that is currently in `awaiting_human` status.

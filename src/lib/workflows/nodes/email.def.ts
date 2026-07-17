@@ -50,4 +50,9 @@ export const emailDef: NodeDefinition = {
       advancedOnly: true,
     },
   ],
+  llmDescription: `Send an email via the server's SMTP transport. \`to\`, \`subject\`, and \`body\` support {{input.field}} templates. The body is sent as HTML if it starts with an HTML tag, otherwise as plain text. \`from\` defaults to the SMTP_FROM env var. Use for report/notification delivery to an inbox; use the \`whatsapp\` node for WhatsApp. Output: { success, messageId?, error? }.`,
+  llmExamples: [
+    { to: '{{input.email}}', subject: 'Daily report {{today}}', body: '<p>{{input.summary}}</p>' },
+    { to: 'me@example.com', subject: 'Alert', body: 'Threshold exceeded: {{input.value}}' },
+  ],
 };

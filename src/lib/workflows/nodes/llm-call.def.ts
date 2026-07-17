@@ -13,6 +13,7 @@ export const llmCallDef: NodeDefinition = {
       userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
       temperature: { type: 'number', description: 'Sampling temperature 0–2 (default 0.7)' },
       maxTokens: { type: 'number', description: 'Max tokens to generate (default 2048). Note: reasoning-heavy models (GLM, o1, etc.) charge reasoning tokens against this cap — values below ~1000 frequently return an empty content with finish_reason=length. Bias high.' },
+      outputSchema: { type: 'object', description: 'Optional JSON Schema. When set, the node requests a JSON response, parses it, validates that top-level `required` keys are present, retries once on failure, and returns the parsed object under `data` (raw text still on `response`). Use for reliable data extraction.' },
     },
     required: ['userPrompt'],
   },
@@ -69,6 +70,34 @@ export const llmCallDef: NodeDefinition = {
       min: 1,
       section: 'ADVANCED',
       advancedOnly: true,
+    },
+    {
+      key: 'outputSchema',
+      label: 'Output JSON schema (optional)',
+      type: 'code',
+      language: 'json',
+      description: 'Set to force a structured JSON response. The parsed object is returned under `data`; top-level `required` keys are validated with one retry.',
+      section: 'ADVANCED',
+      advancedOnly: true,
+      cheatsheet: [
+        'Leave blank for a normal text reply.',
+        'Example: { "type": "object", "properties": { "sentiment": { "type": "string" }, "score": { "type": "number" } }, "required": ["sentiment", "score"] }',
+      ],
+    },
+  ],
+  llmDescription: `Call an LLM with a system + user prompt. Both prompts support {{input.field}} templates. Leave \`model\` empty to use the site default (recommended); a slashed id like "openai/gpt-4o" routes via OpenRouter.
+
+Two modes:
+1. TEXT (default): returns the model's reply as a string on \`response\`. Downstream nodes read \`{{input.response}}\`.
+2. STRUCTURED: set \`outputSchema\` to a JSON Schema. The node requests a JSON object, parses it, validates that the schema's top-level \`required\` keys are present, retries ONCE with the error appended, then fails into On-failure. The parsed object is returned on \`data\` (read \`{{input.data.field}}\`); the raw JSON string stays on \`response\`. Use this for reliable extraction/classification instead of parsing prose downstream.
+
+Reasoning models (GLM) burn reasoning tokens from max_tokens — in structured mode the node auto-raises the budget to ≥3000 and disables thinking for z.ai.`,
+  llmExamples: [
+    { userPrompt: 'Summarise this in one sentence: {{input.text}}' },
+    {
+      systemPrompt: 'You are a precise data extractor.',
+      userPrompt: 'Classify the sentiment of: {{input.review}}',
+      outputSchema: { type: 'object', properties: { sentiment: { type: 'string' }, score: { type: 'number' } }, required: ['sentiment', 'score'] },
     },
   ],
 };

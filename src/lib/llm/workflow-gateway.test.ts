@@ -35,6 +35,13 @@ function rate429() {
 function ok(content: string, model = 'glm-5-turbo') {
   return { choices: [{ message: { content } }], usage: { prompt_tokens: 1, completion_tokens: 1 }, model };
 }
+function okToolCall(name = 'use_node', args = '{}', model = 'glm-5-turbo') {
+  return {
+    choices: [{ message: { content: null, tool_calls: [{ id: 't1', type: 'function', function: { name, arguments: args } }] } }],
+    usage: { prompt_tokens: 1, completion_tokens: 1 },
+    model,
+  };
+}
 const body = { messages: [{ role: 'user' as const, content: 'hi' }], temperature: 0.5, max_tokens: 100 };
 
 describe('resilientChatCompletion', () => {
@@ -114,5 +121,38 @@ describe('resilientChatCompletion', () => {
     await p;
     const [fbArgs] = mockFallbackCreate.mock.calls[0];
     expect(fbArgs).not.toHaveProperty('response_format');
+  });
+
+  // --- Tool-calling passthrough (B7: the orchestrator generation loop needs
+  //     tools/tool_choice forwarded, and tool_calls to survive on the result) ---
+  it('forwards tools + tool_choice to the provider and surfaces tool_calls', async () => {
+    mockPrimaryCreate.mockResolvedValueOnce(okToolCall('use_node', '{"nodeType":"trigger"}'));
+    const tools = [{ type: 'function', function: { name: 'use_node', parameters: { type: 'object' } } }];
+    const r = await resilientChatCompletion('glm-5-turbo', { ...body, tools, tool_choice: 'auto' });
+    const [sentBody] = mockPrimaryCreate.mock.calls[0];
+    expect(sentBody.tools).toEqual(tools);
+    expect(sentBody.tool_choice).toBe('auto');
+    const tc = r.choices[0].message.tool_calls?.[0] as { function?: { name: string } } | undefined;
+    expect(tc?.function?.name).toBe('use_node');
+  });
+
+  it('keeps tools on the OpenRouter fallback (strips only response_format)', async () => {
+    mockPrimaryCreate.mockRejectedValue(rate429());
+    mockFallbackCreate.mockResolvedValueOnce(okToolCall('finalize_workflow', '{}', 'anthropic/claude-3-5-haiku'));
+    const tools = [{ type: 'function', function: { name: 'finalize_workflow', parameters: { type: 'object' } } }];
+    const p = resilientChatCompletion('glm-5-turbo', {
+      ...body,
+      tools,
+      tool_choice: 'auto',
+      response_format: { type: 'json_object' },
+    });
+    await vi.runAllTimersAsync();
+    const r = await p;
+    const [fbBody] = mockFallbackCreate.mock.calls[0];
+    expect(fbBody.tools).toEqual(tools);
+    expect(fbBody.tool_choice).toBe('auto');
+    expect(fbBody).not.toHaveProperty('response_format');
+    const tc = r.choices[0].message.tool_calls?.[0] as { function?: { name: string } } | undefined;
+    expect(tc?.function?.name).toBe('finalize_workflow');
   });
 });

@@ -45,9 +45,18 @@ function deriveTriggerShape(trigger: { type: string; config?: Record<string, unk
     };
   }
   if (type === 'webhook') {
+    // D4 — a generator-authored webhook may include an optional shared secret
+    // (`trigger.config.secret`). Hoist a validated string to the canonical
+    // top-level `workflows.trigger.secret` (matching the trigger PUT route),
+    // and mirror it onto the trigger node config so the canvas can read it back.
+    const secret = typeof cfg.secret === 'string' ? cfg.secret.trim() : '';
+    const workflowsTrigger: Record<string, unknown> = { type: 'webhook', config: cfg };
+    if (secret) workflowsTrigger.secret = secret;
+    const nodeConfig: Record<string, unknown> = { kind: 'webhook', ...cfg };
+    if (secret) nodeConfig.secret = secret;
     return {
-      workflowsTrigger: { type: 'webhook', config: cfg },
-      nodeConfig: { kind: 'webhook', ...cfg },
+      workflowsTrigger,
+      nodeConfig,
       scheduleRow: null,
     };
   }
@@ -332,7 +341,7 @@ register({
       trigger: {
         type: 'object',
         description:
-          'How the workflow fires. type ∈ {manual, cron, webhook, event}. For cron, set config.expression to a 5-field cron string (e.g. "*/15 * * * *"). For event, set config.eventType.',
+          'How the workflow fires. type ∈ {manual, cron, webhook, event}. For cron, set config.expression to a 5-field cron string (e.g. "*/15 * * * *"). For event, set config.eventType. For webhook, optionally set config.secret to a shared secret — callers must then send it as the X-Webhook-Secret header or the POST is rejected with 401.',
         properties: {
           type: { type: 'string' },
           config: { type: 'object' },

@@ -50,11 +50,23 @@ export interface ChatBody {
   temperature?: number;
   max_tokens?: number;
   response_format?: unknown;
+  /** z.ai-specific reasoning toggle (e.g. `{ type: 'disabled' }`). Passed
+   *  straight through to z.ai; STRIPPED before the OpenRouter fallback because
+   *  non-z.ai providers reject an unknown `thinking` param. */
+  thinking?: unknown;
+  /** Tool/function-calling schemas — passed straight through to the provider
+   *  (both z.ai and the OpenRouter fallback support tool calls). Present so the
+   *  orchestrator's generation loop can route through this gateway without a
+   *  separate raw-client code path. */
+  tools?: unknown;
+  tool_choice?: unknown;
 }
 
-/** OpenRouter (Anthropic) models reject response_format; strip it for fallback. */
+/** OpenRouter (Anthropic) models reject response_format + z.ai's `thinking`;
+ *  strip both for the fallback path. Tools/tool_choice are preserved — the
+ *  fallback model still needs them. */
 function stripResponseFormat(body: ChatBody): ChatBody {
-  const { response_format: _omit, ...rest } = body;
+  const { response_format: _omitRf, thinking: _omitThinking, ...rest } = body;
   return rest;
 }
 

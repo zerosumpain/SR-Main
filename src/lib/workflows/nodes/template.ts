@@ -48,8 +48,15 @@ function resolvePath(obj: Record<string, unknown>, path: string): unknown {
   return current;
 }
 
-function resolvePathWithPresence(
-  obj: Record<string, unknown>,
+/**
+ * Resolve a dot-path into an arbitrary value, tracking presence.
+ * A path is "present" only when every segment exists; a null leaf counts as
+ * present (present-but-empty), a missing segment does not. Exported so the
+ * engine-level template resolver and the author-time verifier can share the
+ * exact same presence semantics as `{{input.*}}` interpolation.
+ */
+export function resolvePathWithPresence(
+  obj: unknown,
   path: string,
 ): { exists: boolean; value: unknown } {
   const parts = path.split('.');

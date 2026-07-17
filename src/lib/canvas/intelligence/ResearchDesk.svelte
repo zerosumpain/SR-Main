@@ -14,6 +14,7 @@
   import InspectorDrawer from './desk/InspectorDrawer.svelte';
   import ResearchChatNode from './desk/ResearchChatNode.svelte';
   import ReportNode from './desk/ReportNode.svelte';
+  import WebpageNode, { type WebpageConfig } from '$lib/canvas/nodes/WebpageNode.svelte';
   import { createDeskStore, type DeskCard, type QuickInitial } from './desk/store.svelte';
   import {
     pileLayout,
@@ -30,6 +31,21 @@
   import { persistArtefactPosition } from './desk/persist-position';
   import { isRunning, type DeskStatus } from './desk/deskControls';
   import { samePos } from './desk/samePos';
+  // Shared canvas-shell geometry (E1) — one implementation with the workflow
+  // canvas. These wrappers keep their local names/signatures; only the bodies
+  // delegate. Desk state ($state pan/zoom) stays owned here.
+  import {
+    type Box,
+    clampZoom as shellClampZoom,
+    zoomAtPoint as shellZoomAtPoint,
+    pinchZoom as shellPinchZoom,
+    screenToWorld as shellScreenToWorld,
+    viewportCenterInWorld as shellViewportCenterInWorld,
+    fitToBounds as shellFitToBounds,
+    resolveOverlap as shellResolveOverlap,
+    orthPath as shellOrthPath,
+  } from '$lib/canvas/shell/geometry';
+  import { computeMinimap } from '$lib/canvas/shell/minimap';
 
   let {
     sessionId,
@@ -790,33 +806,9 @@
     return m;
   });
 
-  // ——— orthPath ———
-  type Box = { x: number; y: number; w: number; h: number };
+  // ——— orthPath (shared shell; box-accessor form) ———
   function orthPath(from: Box, to: Box): string {
-    const sCx = from.x + from.w / 2;
-    const sCy = from.y + from.h / 2;
-    const tCx = to.x + to.w / 2;
-    const tCy = to.y + to.h / 2;
-    const dx = tCx - sCx;
-    const dy = tCy - sCy;
-    const overlapX = from.x < to.x + to.w && to.x < from.x + from.w;
-    const overlapY = from.y < to.y + to.h && to.y < from.y + from.h;
-    let horizontal: boolean;
-    if (overlapX && !overlapY) horizontal = false;
-    else if (overlapY && !overlapX) horizontal = true;
-    else horizontal = Math.abs(dx) >= Math.abs(dy);
-    if (horizontal) {
-      const [x1, x2] = dx >= 0 ? [from.x + from.w, to.x] : [from.x, to.x + to.w];
-      const y1 = sCy;
-      const y2 = tCy;
-      const midX = (x1 + x2) / 2;
-      return `M${x1} ${y1} L${midX} ${y1} L${midX} ${y2} L${x2} ${y2}`;
-    }
-    const [y1, y2] = dy >= 0 ? [from.y + from.h, to.y] : [from.y, to.y + to.h];
-    const x1 = sCx;
-    const x2 = tCx;
-    const midY = (y1 + y2) / 2;
-    return `M${x1} ${y1} L${x1} ${midY} L${x2} ${midY} L${x2} ${y2}`;
+    return shellOrthPath(from, to);
   }
 
   const edgePaths = $derived.by(() => {
@@ -897,6 +889,7 @@
   const DESK_NODE_DEFAULTS: Record<string, { w: number; h: number }> = {
     'research-chat': { w: 320, h: 360 },
     'research-report': { w: 360, h: 320 },
+    'webpage': { w: 480, h: 360 },
   };
   const RESIZE_MIN_W = 260;
   const RESIZE_MIN_H = 180;
@@ -1094,7 +1087,17 @@
   const DESK_PALETTE_TYPES = [
     'research-chat',
     'research-report',
+    'webpage',
   ];
+
+  // Wholesale-replace a desk node's config (deskNodes is $state.raw — never
+  // mutate in place). Used by the webpage node's onConfigChange so URL/mode
+  // edits persist into the ephemeral desk-node list.
+  function updateDeskNodeConfig(id: string, patch: Record<string, unknown>) {
+    deskNodes = deskNodes.map((nd) =>
+      nd.id === id ? { ...nd, config: { ...nd.config, ...patch } } : nd,
+    );
+  }
 
   // ——— pan/zoom ———
   const MIN_ZOOM = 0.25;
@@ -1109,16 +1112,16 @@
   let panStart = $state<{ x: number; y: number; panX: number; panY: number; pointerId: number } | null>(null);
 
   function clampZoom(z: number) {
-    return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    return shellClampZoom(z, MIN_ZOOM, MAX_ZOOM);
   }
   function zoomAt(cx: number, cy: number, factor: number) {
-    const newZoom = clampZoom(zoom * factor);
-    if (newZoom === zoom) return;
-    const worldX = (cx - panX) / zoom;
-    const worldY = (cy - panY) / zoom;
-    zoom = newZoom;
-    panX = cx - worldX * newZoom;
-    panY = cy - worldY * newZoom;
+    const next = shellZoomAtPoint({ panX, panY, zoom }, { x: cx, y: cy }, factor, {
+      min: MIN_ZOOM,
+      max: MAX_ZOOM,
+    });
+    zoom = next.zoom;
+    panX = next.panX;
+    panY = next.panY;
   }
   function zoomCentered(factor: number) {
     const vp = viewportEl?.getBoundingClientRect();
@@ -1133,33 +1136,22 @@
   function screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
     if (!viewportEl) return { x: 0, y: 0 };
     const vp = viewportEl.getBoundingClientRect();
-    return {
-      x: (clientX - vp.left - panX) / zoom,
-      y: (clientY - vp.top - panY) / zoom,
-    };
+    return shellScreenToWorld({ panX, panY, zoom }, { x: clientX, y: clientY }, { x: vp.left, y: vp.top });
   }
 
   function viewportCenterInWorld(): { x: number; y: number } {
     if (!viewportEl) return { x: 320, y: 120 };
     const vp = viewportEl.getBoundingClientRect();
-    const cx = (vp.width / 2 - panX) / zoom;
-    const cy = (vp.height / 2 - panY) / zoom;
-    const x = Math.round((cx - DESK_NODE_W / 2) / 20) * 20;
-    const y = Math.round((cy - DESK_NODE_H / 2) / 20) * 20;
-    return { x, y };
+    return shellViewportCenterInWorld(
+      { panX, panY, zoom },
+      { width: vp.width, height: vp.height },
+      { w: DESK_NODE_W, h: DESK_NODE_H },
+    );
   }
 
   // Nudge a new node off any existing node so they don't stack exactly.
   function resolveOverlap(p: { x: number; y: number }): { x: number; y: number } {
-    let { x, y } = p;
-    const limit = 20;
-    for (let i = 0; i < limit; i++) {
-      const clashes = deskNodes.some((n) => Math.hypot(n.x - x, n.y - y) < 40);
-      if (!clashes) return { x, y };
-      x += 24;
-      y += 24;
-    }
-    return { x, y };
+    return shellResolveOverlap(p, deskNodes);
   }
 
   // ——— node palette (right-click → add node) ———
@@ -1218,20 +1210,21 @@
     const cards = visibleCards;
     if (!viewportEl || cards.length === 0) return;
     const vp = viewportEl.getBoundingClientRect();
-    const pad = 48;
+    // Raw content bounds (no padding — the shell applies pad/inset/pan-inset).
     const xs = cards.map((c) => posFor(c));
-    const minX = Math.min(...xs.map((p) => p.x)) - pad;
-    const minY = Math.min(...xs.map((p) => p.y)) - pad;
-    const maxX = Math.max(...cards.map((c) => posFor(c).x + cardW(c))) + pad;
-    const maxY = Math.max(...cards.map((c) => posFor(c).y + cardH(c))) + pad;
-    const contentW = maxX - minX;
-    const contentH = maxY - minY;
-    const availW = Math.max(200, vp.width - 24);
-    const availH = Math.max(200, vp.height - 24);
-    const fitZ = clampZoom(Math.min(availW / contentW, availH / contentH, 1));
-    zoom = fitZ;
-    panX = 12 + (availW - contentW * fitZ) / 2 - minX * fitZ;
-    panY = 12 + (availH - contentH * fitZ) / 2 - minY * fitZ;
+    const next = shellFitToBounds(
+      {
+        minX: Math.min(...xs.map((p) => p.x)),
+        minY: Math.min(...xs.map((p) => p.y)),
+        maxX: Math.max(...cards.map((c) => posFor(c).x + cardW(c))),
+        maxY: Math.max(...cards.map((c) => posFor(c).y + cardH(c))),
+      },
+      { width: vp.width, height: vp.height },
+      { min: MIN_ZOOM, max: MAX_ZOOM },
+    );
+    zoom = next.zoom;
+    panX = next.panX;
+    panY = next.panY;
   }
   function reset() {
     panX = 0;
@@ -1281,12 +1274,53 @@
     } catch { /* no-op */ }
   }
   function onWheel(e: WheelEvent) {
+    // Drift fix (M5a): mirror the workflow canvas's scrollable-child guard so a
+    // wheel inside a scrollable desk-node interior (research-chat message list /
+    // composer, report body/brief) scrolls natively instead of zooming the desk.
+    const target = e.target as HTMLElement | null;
+    if (target && target.closest('.rc-scroll, .rc-input, .report-node, .rn-brief-input')) {
+      return;
+    }
     e.preventDefault();
     const vp = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const cx = e.clientX - vp.left;
     const cy = e.clientY - vp.top;
     const factor = Math.exp(-e.deltaY * 0.0015);
     zoomAt(cx, cy, factor);
+  }
+
+  // ——— mobile two-finger pinch-zoom (M5a drift fix; ported from the workflow
+  // canvas). Single-finger pan stays on the existing pointer handlers above;
+  // only the two-finger pinch gesture is added here. `pinch` is a plain `let`
+  // (an internal gesture handle read only from these handlers) — never $state,
+  // per the svelte5-pitfalls no-handle-in-$state rule. ———
+  let pinch: { dist0: number; worldX: number; worldY: number; zoom0: number } | null = null;
+  function pinchDistance(t1: Touch, t2: Touch): number {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  }
+  function onViewportTouchStart(e: TouchEvent) {
+    if (e.touches.length < 2) return;
+    const [t1, t2] = [e.touches[0], e.touches[1]];
+    const midX = (t1.clientX + t2.clientX) / 2;
+    const midY = (t1.clientY + t2.clientY) / 2;
+    const world = screenToWorld(midX, midY);
+    pinch = { dist0: pinchDistance(t1, t2), worldX: world.x, worldY: world.y, zoom0: zoom };
+    // Cancel any pointer-pan the first finger started so pan + pinch don't fight.
+    panStart = null;
+  }
+  function onViewportTouchMove(e: TouchEvent) {
+    if (!pinch || e.touches.length < 2) return;
+    e.preventDefault(); // stop the browser from also pinch-zooming the page
+    const [t1, t2] = [e.touches[0], e.touches[1]];
+    const dist1 = pinchDistance(t1, t2);
+    const mid = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+    const next = shellPinchZoom(pinch, mid, dist1);
+    zoom = next.zoom;
+    panX = next.panX;
+    panY = next.panY;
+  }
+  function onViewportTouchEnd(e: TouchEvent) {
+    if (e.touches.length < 2) pinch = null;
   }
 
   // ——— node drag + grid-snap ———
@@ -1391,6 +1425,8 @@
   const minimap = $derived.by(() => {
     const cards = visibleCards;
     if (cards.length === 0 || viewportW === 0 || viewportH === 0) return null;
+    // Item-bounds accumulation stays here (uses this surface's positions +
+    // cardW/cardH); the shared viewport-frame folding + projection is in the shell.
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const c of cards) {
       const p = positionById.get(c.id) ?? posOf(c);
@@ -1401,30 +1437,12 @@
       if (r > maxX) maxX = r;
       if (b > maxY) maxY = b;
     }
-    const viewLeft = -panX / zoom;
-    const viewTop = -panY / zoom;
-    const viewRight = (viewportW - panX) / zoom;
-    const viewBottom = (viewportH - panY) / zoom;
-    if (viewLeft < minX) minX = viewLeft;
-    if (viewTop < minY) minY = viewTop;
-    if (viewRight > maxX) maxX = viewRight;
-    if (viewBottom > maxY) maxY = viewBottom;
-    const worldW = Math.max(1, maxX - minX);
-    const worldH = Math.max(1, maxY - minY);
-    const innerW = MINIMAP_BODY_W - MINIMAP_PAD * 2;
-    const innerH = MINIMAP_BODY_H - MINIMAP_PAD * 2;
-    const scale = Math.min(innerW / worldW, innerH / worldH);
-    const offsetX = MINIMAP_PAD + (innerW - worldW * scale) / 2;
-    const offsetY = MINIMAP_PAD + (innerH - worldH * scale) / 2;
-    return {
-      scale, offsetX, offsetY, minX, minY,
-      frame: {
-        x: offsetX + (viewLeft - minX) * scale,
-        y: offsetY + (viewTop - minY) * scale,
-        w: Math.max(2, (viewRight - viewLeft) * scale),
-        h: Math.max(2, (viewBottom - viewTop) * scale),
-      },
-    };
+    return computeMinimap(
+      { minX, minY, maxX, maxY },
+      { panX, panY, zoom },
+      { width: viewportW, height: viewportH },
+      { bodyW: MINIMAP_BODY_W, bodyH: MINIMAP_BODY_H, pad: MINIMAP_PAD },
+    );
   });
 
   // ——— morph gating ———
@@ -1511,6 +1529,10 @@
       onpointermove={onPointerMove}
       onpointerup={onPointerUp}
       onpointercancel={onPointerUp}
+      ontouchstart={onViewportTouchStart}
+      ontouchmove={onViewportTouchMove}
+      ontouchend={onViewportTouchEnd}
+      ontouchcancel={onViewportTouchEnd}
       onwheel={onWheel}
       oncontextmenu={(e) => {
         if (readonly || deskMode === 'quick') return;
@@ -1687,6 +1709,23 @@
                 {canRegenerate}
                 onexport={(kind) => handleExport(kind)}
               />
+            {:else if n.kind === 'webpage'}
+              <!-- E4 parity: the real workflow-canvas WebpageNode (self-contained
+                   props — no workflow state), wrapped with a grab-header so the
+                   node stays draggable while the iframe/URL bar stay interactive. -->
+              <div class="desk-webpage-wrap">
+                <div class="desk-webpage-hdr">
+                  <span class="desk-webpage-tag">WEB</span>
+                  <span class="desk-webpage-name">{byNodeType(n.type)?.label ?? 'Webpage'}</span>
+                </div>
+                <div class="desk-webpage-body" onpointerdown={(e) => e.stopPropagation()}>
+                  <WebpageNode
+                    nodeId={n.id}
+                    config={(n.config as WebpageConfig) ?? { url: '', mode: null, size: { w: 480, h: 360 } }}
+                    onConfigChange={(patch) => updateDeskNodeConfig(n.id, patch as Record<string, unknown>)}
+                  />
+                </div>
+              </div>
             {:else}
               <span class="desk-node-bar" style:background={'var(--accent-ink)'}></span>
               <div class="desk-node-body">
@@ -2115,6 +2154,50 @@
   }
   .desk-node-host :global(.rn-head) {
     cursor: grab;
+  }
+
+  /* Webpage desk node (E4 parity). The grab-header bubbles pointerdown to the
+     host for drag; the body stops propagation so the iframe/URL bar stay live. */
+  .desk-webpage-wrap {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .desk-webpage-hdr {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--divider);
+    background: var(--surface-elevated);
+    cursor: grab;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+  .desk-webpage-tag { color: var(--accent-ink, var(--accent)); }
+  .desk-webpage-name {
+    color: var(--text-primary);
+    text-transform: none;
+    letter-spacing: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .desk-webpage-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .desk-webpage-body :global(.webpage-node) {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
   }
 
   /* Resize handle — 10×10 px, bottom-right corner, sits above all children. */

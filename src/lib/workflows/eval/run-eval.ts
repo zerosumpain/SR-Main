@@ -20,6 +20,7 @@
 
 import {
   scoreGraph,
+  applyIdempotency,
   aggregate,
   formatReport,
   type EvalGraph,
@@ -77,7 +78,11 @@ export async function runEval(): Promise<number> {
         selfHealed: (out.thinking?.debate.revisions.length ?? 0) > 0,
       };
 
-      scored.push({ name: c.name, result: scoreGraph(graph, c.expect) });
+      let result = scoreGraph(graph, c.expect);
+      // Opt-in two-run idempotency: prove the accepted graph's dedupe node
+      // filters a re-run to zero new items against the source fixture (B6).
+      if (c.idempotency) result = applyIdempotency(result, graph, c.idempotency);
+      scored.push({ name: c.name, result });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       scored.push({

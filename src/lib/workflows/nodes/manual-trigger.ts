@@ -34,4 +34,6 @@ export const manualTriggerDef: NodeDefinition = {
   outputs: [{ name: 'output', type: 'any', label: 'Output' }],
   // Trigger-only node — no configuration needed.
   basicConfig: [],
+  llmDescription: `Workflow entry point fired by the user clicking Run (or a chat send). Any data supplied at run start is passed straight through to downstream nodes. Use as the start node for a workflow a person kicks off on demand. For scheduled/webhook/event starts use the \`trigger\` node instead.`,
+  llmExamples: [{}],
 };

@@ -109,4 +109,9 @@ export const stravaDef: NodeDefinition = {
       advancedOnly: true,
     },
   ],
+  llmDescription: `Read Strava activity data (requires Strava connected in Health settings). Prefer the DB-backed ops — fast, free, and queryable: \`get_summary\` (totals over a range, optionally by sportType) and \`query_activities\` (filtered activity rows). The API ops — \`list_activities\`, \`get_activity\`, \`get_athlete_stats\` — hit the Strava API directly and are rate-limited. Read-only.`,
+  llmExamples: [
+    { operation: 'get_summary', days: 30, sportType: 'Run' },
+    { operation: 'query_activities', days: 7 },
+  ],
 };

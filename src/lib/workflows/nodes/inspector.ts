@@ -51,4 +51,6 @@ export const inspectorDef: NodeDefinition = {
   inputs: [{ name: 'input', type: 'any', label: 'Captured' }],
   outputs: [{ name: 'output', type: 'any', label: 'Passthrough' }],
   basicConfig: [],
+  llmDescription: `Debug tap. Captures the upstream node's output and renders it on the canvas (JSON tables, HTML, images, media, or text) for inspection during a run. It forwards its input onward unchanged, so it can sit mid-graph. No configuration. Add one when you need to see what a node is actually emitting.`,
+  llmExamples: [{}],
 };

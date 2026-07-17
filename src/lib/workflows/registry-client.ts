@@ -18,6 +18,7 @@ import { subWorkflowDef } from './nodes/sub-workflow.def';
 import { codeExecuteDef } from './nodes/code-execute.def';
 import { llmCallDef } from './nodes/llm-call.def';
 import { dataStoreDef } from './nodes/data-store.def';
+import { dedupeDef } from './nodes/dedupe.def';
 import { emailDef } from './nodes/email.def';
 import { loopDef } from './nodes/loop.def';
 import { stravaDef } from './nodes/strava.def';
@@ -32,11 +33,16 @@ import { homeAssistantDef } from './nodes/home-assistant.def';
 import { healthQueryDef } from './nodes/health-query.def';
 import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
+import { siteToolDef } from './nodes/site-tool.def';
+import { fileSearchDef } from './nodes/file-search.def';
+import { researchSearchDef } from './nodes/research-search.def';
+import { deckBuildDef } from './nodes/deck-build.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
 import { stealthScrapeLlmDef } from './nodes/stealth-scrape-llm.def';
 import { gmailTriggerDef } from './nodes/gmail-trigger.def';
+import { whatsappTriggerDef } from './nodes/whatsapp-trigger.def';
 import { gmailFetchDef } from './nodes/gmail-fetch.def';
 import { gmailSendDef } from './nodes/gmail-send.def';
 import { gmailReplyDef } from './nodes/gmail-reply.def';
@@ -836,6 +842,7 @@ const builtInDefinitions: NodeDefinition[] = [
   llmCallDef,
   emailDef,
   dataStoreDef,
+  dedupeDef,
   loopDef,
   conditionalDef,
   switchDef,
@@ -857,11 +864,16 @@ const builtInDefinitions: NodeDefinition[] = [
   healthQueryDef,
   blogDef,
   jkaiDef,
+  siteToolDef,
+  fileSearchDef,
+  researchSearchDef,
+  deckBuildDef,
   deepDiveDef,
   webScrapeDef,
   stealthScrapeDef,
   stealthScrapeLlmDef,
   gmailTriggerDef,
+  whatsappTriggerDef,
   gmailFetchDef,
   gmailSendDef,
   gmailReplyDef,

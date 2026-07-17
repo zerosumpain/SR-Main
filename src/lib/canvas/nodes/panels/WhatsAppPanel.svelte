@@ -56,6 +56,24 @@
   const messageLen = $derived(messageValue.length);
   const messageOver = $derived(messageLen > MESSAGE_LIMIT);
 
+  // ---------- Options / Media -----------------------------------------
+  const formatMarkdown = $derived(config.formatMarkdown !== false); // default true
+  const maxChunks = $derived.by(() => {
+    const raw = config.maxChunks;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 3;
+  });
+  const suppressMins = $derived.by(() => {
+    const raw = config.suppressDuplicateWindowMins;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  });
+  const mediaPathValue = $derived(String(config.mediaPath ?? ''));
+  const mediaUrlValue = $derived(String(config.mediaUrl ?? ''));
+  const captionValue = $derived(String(config.caption ?? ''));
+
+  let showMedia = $state(!!(config.mediaPath || config.mediaUrl));
+
   // ---------- Raw JSON -------------------------------------------------
 
   let showRawJson = $state(false);
@@ -131,6 +149,87 @@
       <span class="wa-hint">Templates: <code>{`{{input.field}}`}</code></span>
     </label>
   </section>
+
+  <!-- Options -->
+  <section class="wa-sec">
+    <header class="wa-sec-hdr">
+      <span class="sr-label-tight">Options</span>
+    </header>
+    <label class="wa-opt">
+      <input
+        type="checkbox"
+        checked={formatMarkdown}
+        onchange={(e) => set('formatMarkdown', (e.currentTarget as HTMLInputElement).checked)}
+      />
+      <span>
+        <span class="wa-label">Convert Markdown</span>
+        <span class="wa-hint"><code>**bold**</code> → <code>*bold*</code>, <code>##</code> headings → bold lines, <code>[text](url)</code> → text (url), <code>-</code> bullets → •.</span>
+      </span>
+    </label>
+    <div class="wa-opt-row">
+      <label class="wa-field wa-field-narrow">
+        <span class="wa-label">Max chunks</span>
+        <input
+          type="number"
+          min="0"
+          value={maxChunks}
+          oninput={(e) => set('maxChunks', Number((e.currentTarget as HTMLInputElement).value))}
+        />
+        <span class="wa-hint">Split &gt;4096-char messages into up to N sends. 0 = no cap.</span>
+      </label>
+      <label class="wa-field wa-field-narrow">
+        <span class="wa-label">Suppress duplicates (mins)</span>
+        <input
+          type="number"
+          min="0"
+          value={suppressMins}
+          oninput={(e) => set('suppressDuplicateWindowMins', Number((e.currentTarget as HTMLInputElement).value))}
+        />
+        <span class="wa-hint">Skip an identical send to the same number within N minutes. 0 = off.</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- Media (optional) -->
+  <details class="wa-media" bind:open={showMedia}>
+    <summary><span class="sr-label-tight">Media attachment (optional)</span></summary>
+    <label class="wa-field">
+      <span class="wa-label">Media file path</span>
+      <textarea
+        class="wa-code"
+        rows="1"
+        spellcheck="false"
+        placeholder={`/path/to/file.png or {{input.filePath}}`}
+        value={mediaPathValue}
+        oninput={(e) => set('mediaPath', (e.currentTarget as HTMLTextAreaElement).value)}
+      ></textarea>
+      <span class="wa-hint">Local file to send. Requires the Hermes bridge.</span>
+    </label>
+    <label class="wa-field">
+      <span class="wa-label">Media URL</span>
+      <textarea
+        class="wa-code"
+        rows="1"
+        spellcheck="false"
+        placeholder="https://…/image.png"
+        value={mediaUrlValue}
+        oninput={(e) => set('mediaUrl', (e.currentTarget as HTMLTextAreaElement).value)}
+      ></textarea>
+      <span class="wa-hint">Downloaded and sent as an attachment.</span>
+    </label>
+    <label class="wa-field">
+      <span class="wa-label">Caption</span>
+      <textarea
+        class="wa-code"
+        rows="2"
+        spellcheck="true"
+        placeholder="Optional caption"
+        value={captionValue}
+        oninput={(e) => set('caption', (e.currentTarget as HTMLTextAreaElement).value)}
+      ></textarea>
+      <span class="wa-hint">Falls back to the message text. Templates: <code>{`{{input.field}}`}</code>.</span>
+    </label>
+  </details>
 
   <!-- On failure -->
   <OnErrorBlock
@@ -224,6 +323,22 @@
     outline: none;
   }
   input[type='text']:focus, input[type='tel']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
+
+  .wa-opt {
+    display: flex; gap: 8px; align-items: flex-start;
+    cursor: pointer;
+  }
+  .wa-opt input[type='checkbox'] { margin-top: 2px; width: auto; }
+  .wa-opt > span { display: flex; flex-direction: column; gap: 2px; }
+  .wa-opt-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+  .wa-media {
+    border-top: 1px dashed var(--card-border);
+    padding-top: 8px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .wa-media summary { cursor: pointer; margin-bottom: 4px; }
+  .wa-media[open] summary { margin-bottom: 6px; }
 
   .wa-raw {
     margin-top: 4px;

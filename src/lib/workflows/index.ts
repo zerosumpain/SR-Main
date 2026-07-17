@@ -8,6 +8,7 @@ import { httpRequestDef, httpRequestExecutor } from './nodes/http-request';
 import { llmCallDef, llmCallExecutor } from './nodes/llm-call';
 import { emailDef, emailExecutor } from './nodes/email';
 import { dataStoreDef, dataStoreExecutor } from './nodes/data-store';
+import { dedupeDef, dedupeExecutor } from './nodes/dedupe';
 import { loopDef, loopExecutor } from './nodes/loop';
 import { conditionalDef, conditionalExecutor } from './nodes/conditional';
 import { switchDef, switchExecutor } from './nodes/switch';
@@ -29,6 +30,10 @@ import { homeAssistantDef, homeAssistantExecutor } from './nodes/home-assistant'
 import { healthQueryDef, healthQueryExecutor } from './nodes/health-query';
 import { blogDef, blogExecutor } from './nodes/blog';
 import { jkaiDef, jkaiExecutor } from './nodes/jkai';
+import { siteToolDef, siteToolExecutor } from './nodes/site-tool';
+import { fileSearchDef, fileSearchExecutor } from './nodes/file-search';
+import { researchSearchDef, researchSearchExecutor } from './nodes/research-search';
+import { deckBuildDef, deckBuildExecutor } from './nodes/deck-build';
 import {
   builderChatDef, builderChatExecutor,
   builderPiDef, builderPiExecutor,
@@ -44,6 +49,7 @@ import { stealthScrapeDef, stealthScrapeExecutor } from './nodes/stealth-scrape'
 import { siteMapperDef, siteMapperExecutor } from './nodes/site-mapper';
 import { stealthScrapeLlmDef, stealthScrapeLlmExecutor } from './nodes/stealth-scrape-llm';
 import { gmailTriggerDef, gmailTriggerExecutor } from './nodes/gmail-trigger';
+import { whatsappTriggerDef, whatsappTriggerExecutor } from './nodes/whatsapp-trigger';
 import { gmailFetchDef, gmailFetchExecutor } from './nodes/gmail-fetch';
 import { gmailSendDef, gmailSendExecutor } from './nodes/gmail-send';
 import { gmailReplyDef, gmailReplyExecutor } from './nodes/gmail-reply';
@@ -110,6 +116,7 @@ registry.register(httpRequestDef, httpRequestExecutor);
 registry.register(llmCallDef, llmCallExecutor);
 registry.register(emailDef, emailExecutor);
 registry.register(dataStoreDef, dataStoreExecutor);
+registry.register(dedupeDef, dedupeExecutor);
 registry.register(loopDef, loopExecutor);
 registry.register(conditionalDef, conditionalExecutor);
 registry.register(switchDef, switchExecutor);
@@ -131,6 +138,10 @@ registry.register(homeAssistantDef, homeAssistantExecutor);
 registry.register(healthQueryDef, healthQueryExecutor);
 registry.register(blogDef, blogExecutor);
 registry.register(jkaiDef, jkaiExecutor);
+registry.register(siteToolDef, siteToolExecutor);
+registry.register(fileSearchDef, fileSearchExecutor);
+registry.register(researchSearchDef, researchSearchExecutor);
+registry.register(deckBuildDef, deckBuildExecutor);
 registry.register(builderChatDef, builderChatExecutor);
 registry.register(builderPiDef, builderPiExecutor);
 registry.register(buildViewDef, buildViewExecutor);
@@ -144,6 +155,7 @@ registry.register(stealthScrapeDef, stealthScrapeExecutor);
 registry.register(stealthScrapeLlmDef, stealthScrapeLlmExecutor);
 registry.register(siteMapperDef, siteMapperExecutor);
 registry.register(gmailTriggerDef, gmailTriggerExecutor);
+registry.register(whatsappTriggerDef, whatsappTriggerExecutor);
 registry.register(gmailFetchDef, gmailFetchExecutor);
 registry.register(gmailSendDef, gmailSendExecutor);
 registry.register(gmailReplyDef, gmailReplyExecutor);

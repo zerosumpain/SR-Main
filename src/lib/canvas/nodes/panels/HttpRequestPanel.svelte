@@ -146,6 +146,38 @@
     onChange({ ...config, [key]: value });
   }
 
+  // ---------- Pagination --------------------------------------------------
+  // Stored as a nested `config.pagination` object (absent = off). The executor
+  // auto-follows pages and concatenates each page's `itemsPath` array into
+  // output.items, adding output.pages.
+
+  const pag = $derived.by(() => {
+    const p = config.pagination;
+    return p && typeof p === 'object' && !Array.isArray(p) ? (p as Record<string, unknown>) : null;
+  });
+  const pagEnabled = $derived(!!pag && (pag.mode === 'cursor' || pag.mode === 'page'));
+  const pagMode = $derived(String(pag?.mode ?? 'page'));
+
+  function enablePagination(on: boolean) {
+    if (on) {
+      onChange({
+        ...config,
+        pagination: { mode: 'page', pageParam: 'page', startPage: 1, itemsPath: '', maxPages: 3 },
+      });
+    } else {
+      const next = { ...config };
+      delete next.pagination;
+      onChange(next);
+    }
+  }
+  function setPag(key: string, value: unknown) {
+    const cur =
+      config.pagination && typeof config.pagination === 'object' && !Array.isArray(config.pagination)
+        ? (config.pagination as Record<string, unknown>)
+        : {};
+    onChange({ ...config, pagination: { ...cur, [key]: value } });
+  }
+
   // ---------- Raw JSON --------------------------------------------------
 
   let showRawJson = $state(false);
@@ -286,6 +318,100 @@
     </section>
   {/if}
 
+  <!-- Pagination -->
+  <section class="hp-sec">
+    <header class="hp-sec-hdr">
+      <span class="sr-label-tight">Pagination</span>
+      <label class="hp-toggle">
+        <input
+          type="checkbox"
+          checked={pagEnabled}
+          onchange={(e) => enablePagination((e.currentTarget as HTMLInputElement).checked)}
+        />
+        <span>{pagEnabled ? 'On' : 'Off'}</span>
+      </label>
+    </header>
+    {#if !pagEnabled}
+      <p class="hp-empty">Off — a single request is made. Enable to auto-follow pages and concatenate results.</p>
+    {:else}
+      <label class="hp-field">
+        <span class="hp-label">Mode</span>
+        <select value={pagMode} onchange={(e) => setPag('mode', (e.currentTarget as HTMLSelectElement).value)}>
+          <option value="page">Page number (?page=1,2,3…)</option>
+          <option value="cursor">Cursor (follow next-cursor from the response)</option>
+        </select>
+      </label>
+      <label class="hp-field">
+        <span class="hp-label">Items path</span>
+        <input
+          type="text"
+          spellcheck="false"
+          placeholder="results — dot-path to each page's array (blank = the body is the array)"
+          value={String(pag?.itemsPath ?? '')}
+          oninput={(e) => setPag('itemsPath', (e.currentTarget as HTMLInputElement).value)}
+        />
+      </label>
+      {#if pagMode === 'page'}
+        <div class="hp-row">
+          <label class="hp-field">
+            <span class="hp-label">Page param</span>
+            <input
+              type="text"
+              spellcheck="false"
+              placeholder="page"
+              value={String(pag?.pageParam ?? 'page')}
+              oninput={(e) => setPag('pageParam', (e.currentTarget as HTMLInputElement).value)}
+            />
+          </label>
+          <label class="hp-field">
+            <span class="hp-label">Start page</span>
+            <input
+              type="number"
+              min="0"
+              value={Number(pag?.startPage ?? 1)}
+              oninput={(e) => setPag('startPage', Number((e.currentTarget as HTMLInputElement).value))}
+            />
+          </label>
+        </div>
+      {:else}
+        <label class="hp-field">
+          <span class="hp-label">Cursor path (in response body)</span>
+          <input
+            type="text"
+            spellcheck="false"
+            placeholder="next_cursor  or  meta.next"
+            value={String(pag?.cursorPath ?? '')}
+            oninput={(e) => setPag('cursorPath', (e.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+        <label class="hp-field">
+          <span class="hp-label">Cursor query param</span>
+          <input
+            type="text"
+            spellcheck="false"
+            placeholder="cursor"
+            value={String(pag?.cursorParam ?? '')}
+            oninput={(e) => setPag('cursorParam', (e.currentTarget as HTMLInputElement).value)}
+          />
+        </label>
+      {/if}
+      <label class="hp-field">
+        <span class="hp-label">Max pages (1–10)</span>
+        <input
+          type="number"
+          min="1"
+          max="10"
+          value={Number(pag?.maxPages ?? 3)}
+          oninput={(e) => setPag('maxPages', Number((e.currentTarget as HTMLInputElement).value))}
+        />
+      </label>
+      <p class="hp-hint">
+        Output gains <code>items</code> (all pages concatenated) and <code>pages</code>. Stops on an empty page, a
+        missing cursor, or max pages.
+      </p>
+    {/if}
+  </section>
+
   <!-- On failure -->
   <OnErrorBlock
     value={config._onError as Record<string, unknown> | undefined}
@@ -404,7 +530,7 @@
   .hp-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
   .hp-info { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
 
-  input[type='text'], select, textarea {
+  input[type='text'], input[type='number'], select, textarea {
     width: 100%;
     padding: 6px 8px;
     background: var(--bg);
@@ -414,7 +540,14 @@
     box-sizing: border-box;
     outline: none;
   }
-  input[type='text']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
+  input[type='text']:focus, input[type='number']:focus, select:focus, textarea:focus { border-color: var(--text-muted); }
+
+  .hp-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); cursor: pointer;
+  }
+  .hp-toggle input[type='checkbox'] { width: auto; margin: 0; cursor: pointer; }
 
   .hp-raw {
     margin-top: 4px;

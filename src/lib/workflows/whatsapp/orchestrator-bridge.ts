@@ -74,6 +74,19 @@ export class OrchestratorBridge {
 			return;
 		}
 
+		// D2/D3 — owner-inbound intercept: an "APPROVE <code>" / "DENY <code>"
+		// (yes/no) approval reply, then a whatsapp-trigger keyword dispatch, BEFORE
+		// falling through to general chat. Shared with the delegated-mode HTTP entry
+		// point (/api/whatsapp/inbound) so both topologies run identical logic.
+		// Imported lazily: the intercept pulls engine-resume → the eager node-
+		// registry barrel, which must not widen the bridge's static import graph.
+		const { interceptOwnerInbound } = await import('./inbound-intercept');
+		const intercept = await interceptOwnerInbound(from, text ?? '');
+		if (intercept.handled) {
+			if (intercept.reply) await this.sendFn(replyTo, intercept.reply);
+			return;
+		}
+
 		try {
 			// Show typing indicator
 			await this.typingFn?.(replyTo);

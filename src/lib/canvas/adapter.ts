@@ -1,6 +1,7 @@
 import type { NodeHandles } from './handles';
 import { nodeDefinitions } from '$lib/workflows/registry-client';
 import { isDisplayOnlyType, type NodeDefinition } from '$lib/workflows/types';
+import type { WorkflowNotifications } from '$lib/db/schema';
 
 export type NodeKind =
   | 'input'
@@ -64,6 +65,8 @@ export type Canvas = {
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   messagesByChat: Record<string, ChatMessage[]>;
+  /** D1 — per-workflow run-outcome notification prefs; null when never set. */
+  notifications: WorkflowNotifications | null;
 };
 
 export type NodeTypeOption = {
@@ -351,6 +354,25 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       outputs: [{ id: 'out', kinds: ['any'] }],
     },
   },
+  {
+    type: 'dedupe',
+    label: 'Dedupe',
+    kind: 'parse',
+    group: 'Parse & Transform',
+    description:
+      'Filter a list against a persistent seen-set so only genuinely new items continue. Put between a fetch/search node and the summarise/send nodes so recurring workflows never re-send the same item.',
+    defaultConfig: {
+      itemsPath: '',
+      idPath: '',
+      storeKey: 'seen_ids',
+      maxRemembered: 500,
+      recordMode: 'immediate',
+    },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'any'] }],
+    },
+  },
 
   // ————————————————————————— Intelligence
   {
@@ -381,6 +403,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text', 'intel-session'] }],
       outputs: [{ id: 'result', kinds: ['research-result', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
   {
     type: 'quick-answer',
@@ -405,6 +428,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['research-result', 'text'] }],
     },
+    defaultWeight: 0.2,
   },
   {
     type: 'research-chat',
@@ -431,6 +455,32 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       outputs: [{ id: 'out', kinds: ['text'] }],
     },
     deskOnly: true, // live node on the Research Desk; no workflow executor
+  },
+  {
+    type: 'file-search',
+    label: 'File search (RAG)',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'Semantic search over the content of /drive files (text, images, audio). Returns ranked passages.',
+    defaultConfig: { query: '{{input.query}}', topK: 5, fileTypes: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+    defaultWeight: 0.2,
+  },
+  {
+    type: 'research-search',
+    label: 'Research search (RAG)',
+    kind: 'intel',
+    group: 'Intelligence',
+    description: 'Cross-session semantic search over all deep-dive research materials. Returns ranked passages.',
+    defaultConfig: { query: '{{input.query}}', topK: 8 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+    defaultWeight: 0.2,
   },
 
   // ————————————————————————— Intel & Web
@@ -574,6 +624,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'whatsapp-trigger',
+    label: 'WhatsApp Trigger',
+    kind: 'trigger',
+    group: 'Integrations',
+    description: 'Fires when an inbound WhatsApp message from the owner matches a keyword.',
+    defaultConfig: { keyword: '', matchMode: 'prefix', stripKeyword: true },
+    handles: {
+      inputs: [],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'gmail-fetch',
     label: 'Gmail · Fetch Message',
     kind: 'output',
@@ -679,6 +741,18 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     handles: {
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
+    },
+  },
+  {
+    type: 'deck-build',
+    label: 'Deck build (presentation)',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Publish workflow results as an sr. decks presentation; returns the deck url + share link.',
+    defaultConfig: { title: '', description: '', spec: '[]', share: true, isPublic: false },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
     },
   },
   {
@@ -1038,6 +1112,7 @@ export function mapTypeToKind(type: string): NodeKind {
   if (type === 'research-report') return 'research-report';
   if (type === 'quick-answer') return 'intel';
   if (type === 'deep-research') return 'intel';
+  if (type === 'file-search' || type === 'research-search') return 'intel';
   if (type === 'webpage') return 'webpage';
   if (type === 'builder-chat' || type === 'builder-pi' || type === 'build-view') return 'builder';
   return 'output';

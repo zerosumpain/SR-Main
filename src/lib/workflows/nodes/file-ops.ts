@@ -125,11 +125,14 @@ export const fileReadDef: NodeDefinition = {
 
 export const fileWriteExecutor: NodeExecutor = {
   type: 'file-write',
-  async execute(input, config, _ctx: ExecutionContext): Promise<NodeResult> {
+  async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-write: fileName is required');
     const encoding = (config.encoding as 'utf8' | 'base64') || 'utf8';
     const append = !!config.append;
+    if (ctx.dryRun) {
+      return { output: { ok: true, dryRun: true, name: fileName, mode: append ? 'append' : 'write' }, rowCount: 1 };
+    }
     const contentPath = config.contentPath as string | undefined;
     const raw = contentPath
       ? resolvePath(input, contentPath)
@@ -227,9 +230,12 @@ export const fileWriteDef: NodeDefinition = {
 
 export const fileDeleteExecutor: NodeExecutor = {
   type: 'file-delete',
-  async execute(input, config, _ctx: ExecutionContext): Promise<NodeResult> {
+  async execute(input, config, ctx: ExecutionContext): Promise<NodeResult> {
     const fileName = interpolateTemplate((config.fileName as string) || '', input).trim();
     if (!fileName) throw new Error('file-delete: fileName is required');
+    if (ctx.dryRun) {
+      return { output: { ok: true, dryRun: true, deleted: false, name: fileName }, rowCount: 1 };
+    }
     const [existing] = await db.select().from(workflowFiles).where(eq(workflowFiles.name, fileName));
     if (!existing) return { output: { ok: true, deleted: false, reason: 'not-found', name: fileName }, rowCount: 1 };
     const perms = permissionsFor(existing.permissions);

@@ -921,11 +921,37 @@ export type JkaiBuildNote = typeof jkaiBuildNotes.$inferSelect;
 // Workflows — Visual Automation Engine
 // ==========================================
 
+/**
+ * Per-workflow run-outcome notification preferences (D1). Stored on the
+ * additive nullable `workflows.notifications` jsonb column. `null`/absent means
+ * silent — existing workflows are unaffected and never ping. The engine reads
+ * this at terminal-status time (see `src/lib/workflows/run-notifications.ts`).
+ *
+ *  - onFailure   — WhatsApp the owner when a run ends failed / completed_with_errors.
+ *  - onCompletion — WhatsApp the owner a short digest when a run completes cleanly.
+ *  - channel     — delivery channel; only 'whatsapp' is wired today.
+ *  - digestField — dot-path into the merged terminal-node outputs whose value is
+ *                  appended to the completion message (truncated); optional.
+ */
+export type WorkflowNotifications = {
+  onFailure?: boolean;
+  onCompletion?: boolean;
+  channel?: 'whatsapp';
+  digestField?: string;
+  // D2 — when true (and channel is whatsapp), an approval node that pauses the
+  // run pings the owner on WhatsApp with a one-time code they can reply
+  // APPROVE/DENY to, resuming the run remotely.
+  approvals?: boolean;
+};
+
 export const workflows = pgTable('workflows', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   name: text('name').notNull(),
   description: text('description'),
   trigger: jsonb('trigger').default(sql`'{"type":"manual"}'::jsonb`),
+  // D1 — additive nullable opt-in run-outcome notifications. Nullable so the
+  // drizzle-kit push is non-destructive; default silent when null/absent.
+  notifications: jsonb('notifications').$type<WorkflowNotifications>(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

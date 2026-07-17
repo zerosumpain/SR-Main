@@ -1,5 +1,10 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { createInteraction } from '$lib/workflows/engine-interactions';
+import {
+  planApprovalNotification,
+  sendApprovalPendingMessage,
+  WA_APPROVAL_SNAPSHOT_KEY,
+} from '$lib/workflows/whatsapp/approval-notify';
 
 export { approvalDef } from './approval.def';
 
@@ -48,6 +53,24 @@ export const approvalExecutor: NodeExecutor = {
       }
     }
 
+    // D2 — opt-in WhatsApp approval: if this workflow enabled it, mint a
+    // one-time code to embed in the interaction snapshot and ping the owner
+    // after the interaction exists. planApprovalNotification never throws and
+    // returns null when the workflow hasn't opted in (the default). Skipped in
+    // dryRun (verify) so a dry-run never pings the phone.
+    const waPlan = context.dryRun ? null : await planApprovalNotification(context.workflowId);
+
+    const configSnapshot: Record<string, unknown> = {
+      // Surface a single boolean field for the resolve form. On resume the
+      // engine seeds this node's output with { completed, formValues, ... };
+      // downstream nodes read the decision from formValues.approved (or the
+      // top-level approved value the resolver may attach).
+      fields: [{ name: 'approved', type: 'boolean', label: prompt }],
+    };
+    if (waPlan) {
+      configSnapshot[WA_APPROVAL_SNAPSHOT_KEY] = { code: waPlan.code, expiresAt: waPlan.expiresAt };
+    }
+
     // Human path: register a pending interaction and return the pause sentinel.
     // Reuses the SAME engine pause/resume primitive as interactive-step
     // (createInteraction + pause: { reason: 'awaiting_human', interactionId }).
@@ -58,15 +81,15 @@ export const approvalExecutor: NodeExecutor = {
       nodeId: context._currentNodeId ?? '',
       mode: 'confirm',
       prompt,
-      configSnapshot: {
-        // Surface a single boolean field for the resolve form. On resume the
-        // engine seeds this node's output with { completed, formValues, ... };
-        // downstream nodes read the decision from formValues.approved (or the
-        // top-level approved value the resolver may attach).
-        fields: [{ name: 'approved', type: 'boolean', label: prompt }],
-      },
+      configSnapshot,
       timeoutMinutes,
     });
+
+    // Fire-and-forget the WhatsApp ping (never throws). Sent after the
+    // interaction is persisted so an inbound reply always finds a matching row.
+    if (waPlan) {
+      void sendApprovalPendingMessage(waPlan, prompt);
+    }
 
     return {
       output: {},

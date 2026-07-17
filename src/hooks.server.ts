@@ -333,6 +333,26 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/workflows/webhook/[id] is the INBOUND webhook trigger — external
+  // services POST here with no user session (that is the entire point of a
+  // webhook). The route itself enforces the optional per-workflow secret
+  // (X-Webhook-Secret, timing-safe) and only fires workflows whose trigger
+  // type is 'webhook'; a rate limit is applied above. Without this bypass the
+  // owner-gate below 401s every external caller and webhooks are dead code.
+  if (/^\/api\/workflows\/webhook\/[^/]+$/.test(pathname) && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
+  // /api/whatsapp/inbound is service-to-service: in delegated (production) mode
+  // Hermes relays owner WhatsApp messages here to run the approval-reply /
+  // whatsapp-trigger intercepts, with no user session. The handler
+  // self-authenticates via `Authorization: Bearer WHATSAPP_INBOUND_SECRET` (and
+  // is disabled 503 if the secret is unset), so it bypasses the Auth.js gate
+  // (mirrors /api/policy-engine above).
+  if (pathname === '/api/whatsapp/inbound' && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
   // /api/health/workflow-engine is consumed by the systemd watchdog timer
   // (curl from 127.0.0.1) — no user session, no service token. Restrict to
   // loopback to prevent it being scraped externally for run counts.
