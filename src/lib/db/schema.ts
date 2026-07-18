@@ -2274,3 +2274,97 @@ export const claudeSessionStages = pgTable(
 );
 export type ClaudeSessionStage = typeof claudeSessionStages.$inferSelect;
 export type NewClaudeSessionStage = typeof claudeSessionStages.$inferInsert;
+
+// ==========================================
+// Datastore — permanent, flexible, sitewide store
+// ==========================================
+//
+// Three tables behind the single access layer `$lib/datastore/` (the only place
+// permissions are enforced). Collections hold jsonb records with natural-key
+// upsert, row-level capability-map permissions (precedent: workflow_files),
+// optional JSON-Schema validation, TTL/expiry, optimistic `version`, and a
+// before/after audit log that doubles as revision history. Feature-2 engine
+// state dogfoods these tables via `isSystem` collections — no dedicated tables.
+
+export const datastoreCollections = pgTable(
+  'datastore_collections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    slug: text('slug').notNull(),
+    name: text('name'),
+    description: text('description'),
+    schema: jsonb('schema'), // JSON-Schema subset, nullable = no validation
+    defaultPermissions: jsonb('default_permissions'), // PermissionSet | null
+    settings: jsonb('settings'), // { ttlSeconds?, maxRecords?, maxPayloadBytes? }
+    isSystem: boolean('is_system').notNull().default(false),
+    createdBy: text('created_by'), // actor string
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    bySlug: uniqueIndex('datastore_collections_slug_idx').on(t.slug),
+  }),
+);
+
+export type DatastoreCollectionRow = typeof datastoreCollections.$inferSelect;
+export type NewDatastoreCollectionRow = typeof datastoreCollections.$inferInsert;
+
+export const datastoreRecords = pgTable(
+  'datastore_records',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    collectionId: uuid('collection_id')
+      .notNull()
+      .references(() => datastoreCollections.id, { onDelete: 'cascade' }),
+    key: text('key'), // natural key, nullable
+    data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+    permissions: jsonb('permissions'), // row-level PermissionSet override | null
+    version: integer('version').notNull().default(1),
+    createdBy: text('created_by'),
+    updatedBy: text('updated_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+  },
+  (t) => ({
+    // Partial unique index: a natural key is unique within a collection, but many
+    // records may have no key (key IS NULL) — those are exempt from the constraint.
+    byCollectionKey: uniqueIndex('datastore_records_collection_key_idx')
+      .on(t.collectionId, t.key)
+      .where(sql`key IS NOT NULL`),
+    byCollectionUpdated: index('datastore_records_collection_updated_idx').on(
+      t.collectionId,
+      t.updatedAt,
+    ),
+  }),
+);
+
+export type DatastoreRecordRow = typeof datastoreRecords.$inferSelect;
+export type NewDatastoreRecordRow = typeof datastoreRecords.$inferInsert;
+
+export const datastoreAuditLog = pgTable(
+  'datastore_audit_log',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // No FK on collection_id/record_id: audit rows must survive record/collection
+    // deletion (the delete audit entry references a row that no longer exists).
+    collectionId: uuid('collection_id'),
+    recordId: uuid('record_id'),
+    actor: text('actor').notNull(),
+    // insert | update | delete | expire | permissions | collection_create |
+    // collection_update | collection_delete
+    action: text('action').notNull(),
+    before: jsonb('before'),
+    after: jsonb('after'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byCollectionCreated: index('datastore_audit_log_collection_created_idx').on(
+      t.collectionId,
+      t.createdAt,
+    ),
+  }),
+);
+
+export type DatastoreAuditLogRow = typeof datastoreAuditLog.$inferSelect;
+export type NewDatastoreAuditLogRow = typeof datastoreAuditLog.$inferInsert;
