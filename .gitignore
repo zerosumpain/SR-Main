@@ -32,6 +32,7 @@ keys.json
 # Published jkai projects (runtime data)
 data/jkai-projects/
 data/whatsapp-auth/
+data/uploads/
 
 # Webframe service
 services/webframe/node_modules
