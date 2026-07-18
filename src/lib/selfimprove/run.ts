@@ -245,7 +245,7 @@ export async function runImprovementNow(
         },
       ],
       ['discover', async () => discoverApis(state.insights, budget)],
-      ['build', async () => buildTool(state.insights, state.signals, budget)],
+      ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
     ];
 
     for (const [name, fn] of phases) {

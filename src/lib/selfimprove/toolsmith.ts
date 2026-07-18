@@ -9,11 +9,54 @@
 
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
-import { errMsg, type QuestionInsights, type RunAction } from './types';
+import { upsertRecord } from '$lib/datastore';
+import {
+  COLLECTIONS,
+  SYSTEM_ACTOR,
+  asData,
+  errMsg,
+  type QuestionInsights,
+  type RunAction,
+  type ToolAttemptData,
+} from './types';
 import type { Budget } from './run';
 import type { GatheredSignals } from './analyze';
 
 const TEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Persist one tool-build attempt (created or rejected) to the `tool_attempts`
+ * collection with the full generated code + reason. Best-effort: a logging
+ * failure must never fail the build phase.
+ */
+async function recordAttempt(
+  runId: string,
+  spec: ToolSpec,
+  status: 'created' | 'rejected',
+  reason?: string,
+): Promise<void> {
+  const data: ToolAttemptData = {
+    runId,
+    name: spec.name,
+    description: spec.description,
+    toolset: spec.toolset,
+    status,
+    reason,
+    handlerCode: spec.handler_code,
+    parameters: spec.parameters as unknown as Record<string, unknown>,
+    sampleArgs: spec.sample_args,
+    attemptedAt: new Date().toISOString(),
+  };
+  try {
+    await upsertRecord(
+      COLLECTIONS.toolAttempts,
+      { key: `${runId}:${spec.name}`, data: asData(data) },
+      SYSTEM_ACTOR,
+    );
+  } catch (err) {
+    console.error('[selfimprove] recordAttempt failed:', errMsg(err));
+  }
+}
 
 interface ToolSpec {
   name: string;
@@ -98,6 +141,7 @@ export async function buildTool(
   insights: QuestionInsights | undefined,
   signals: GatheredSignals | undefined,
   budget: Budget,
+  runId: string,
 ): Promise<RunAction[]> {
   const actions: RunAction[] = [];
 
@@ -145,17 +189,19 @@ export async function buildTool(
         handlerCode: spec.handler_code,
         createdBy: 'self-improvement',
       });
+      await recordAttempt(runId, spec, 'created');
       actions.push({ kind: 'tool_created', detail: `${spec.name}: ${spec.description}` });
     } else {
       unregister(spec.name);
-      actions.push({
-        kind: 'tool_rejected',
-        detail: `${spec.name}: smoke test failed — ${result.error ?? 'no data'}`,
-      });
+      const reason = `smoke test failed — ${result.error ?? 'no data'}`;
+      await recordAttempt(runId, spec, 'rejected', reason);
+      actions.push({ kind: 'tool_rejected', detail: `${spec.name}: ${reason}` });
     }
   } catch (err) {
     if (registered) unregister(spec.name);
-    actions.push({ kind: 'tool_rejected', detail: `${spec.name}: ${errMsg(err).slice(0, 200)}` });
+    const reason = errMsg(err).slice(0, 500);
+    await recordAttempt(runId, spec, 'rejected', reason);
+    actions.push({ kind: 'tool_rejected', detail: `${spec.name}: ${reason.slice(0, 200)}` });
   }
 
   return actions;

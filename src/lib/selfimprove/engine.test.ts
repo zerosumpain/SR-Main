@@ -63,11 +63,13 @@ beforeEach(() => {
 });
 
 describe('ensureSystemCollections', () => {
-  it('ensures all three system collections (idempotent create-if-absent)', async () => {
+  it('ensures all four system collections (idempotent create-if-absent)', async () => {
     await ensureSystemCollections();
-    expect(ensureCollection).toHaveBeenCalledTimes(3);
+    expect(ensureCollection).toHaveBeenCalledTimes(4);
     const slugs = vi.mocked(ensureCollection).mock.calls.map((c) => c[0]);
-    expect(slugs).toEqual(expect.arrayContaining(['api_catalog', 'question_insights', 'improvement_runs']));
+    expect(slugs).toEqual(
+      expect.arrayContaining(['api_catalog', 'question_insights', 'improvement_runs', 'tool_attempts']),
+    );
   });
 });
 

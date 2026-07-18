@@ -18,6 +18,10 @@ export const COLLECTIONS = {
   apiCatalog: 'api_catalog',
   questionInsights: 'question_insights',
   improvementRuns: 'improvement_runs',
+  // Full forensic record of every tool BUILD attempt — created AND rejected —
+  // including the generated handler code and the failure reason. `custom_tools`
+  // only keeps surviving tools; this keeps the ones the engine tried and dropped.
+  toolAttempts: 'tool_attempts',
 } as const;
 
 /** app_settings kill-switch key. Default (unset/null) is treated as enabled. */
@@ -100,6 +104,24 @@ export interface QuestionInsights {
   summary?: string;
 }
 
+/** Shape of a `tool_attempts` record's `data` — one per BUILD attempt. */
+export interface ToolAttemptData {
+  runId: string;
+  name: string;
+  description: string;
+  toolset: string;
+  status: 'created' | 'rejected';
+  /** Why it was rejected (only set when status === 'rejected'). */
+  reason?: string;
+  /** The full generated handler body — the "what it tried to build". */
+  handlerCode: string;
+  /** The parameter schema the model proposed. */
+  parameters: Record<string, unknown>;
+  /** The sample args used for the smoke test. */
+  sampleArgs: Record<string, unknown>;
+  attemptedAt: string;
+}
+
 /** Auth spec stored in an api_catalog record (env-var NAMES only, never secrets). */
 export type ApiAuth =
   | { kind: 'none' }
@@ -136,6 +158,12 @@ export const SYSTEM_PERMISSIONS: Record<string, PermissionSet> = {
   // Run records: readable by the admin UI + jkai; written by the engine (system)
   // and owner.
   improvement_runs: {
+    read: ['owner', 'jkai', 'system'],
+    write: ['system', 'owner'],
+    delete: ['owner', 'system'],
+  },
+  // Tool-build attempts (incl. rejected code): same as run records.
+  tool_attempts: {
     read: ['owner', 'jkai', 'system'],
     write: ['system', 'owner'],
     delete: ['owner', 'system'],

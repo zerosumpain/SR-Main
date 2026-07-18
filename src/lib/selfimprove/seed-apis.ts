@@ -206,6 +206,16 @@ export async function ensureSystemCollections(): Promise<void> {
     },
     SYSTEM_ACTOR,
   );
+  await ensureCollection(
+    COLLECTIONS.toolAttempts,
+    {
+      name: 'Tool Attempts',
+      description: 'Every runtime tool the engine tried to build — created AND rejected — with the generated code and failure reason.',
+      isSystem: true,
+      defaultPermissions: SYSTEM_PERMISSIONS.tool_attempts,
+    },
+    SYSTEM_ACTOR,
+  );
 }
 
 /**
