@@ -17,6 +17,7 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
   switch (toolName) {
     case 'workflow_delete':          return `Delete workflow "${(args.name as string) ?? args.workflowId ?? 'unknown'}"? This cannot be undone.`;
     case 'workflow_clear_data_store': return `Clear the data store for workflow "${args.workflowId ?? 'unknown'}"? Stored keys will be wiped.`;
+    case 'datastore_delete':          return `Delete datastore record ${args.id ? `"${args.id}"` : `key "${args.key ?? 'unknown'}"`} from collection "${args.collection ?? 'unknown'}"? This cannot be undone.`;
     case 'build_delete':             return `Delete build "${args.buildId ?? 'unknown'}"? This cannot be undone.`;
     case 'build_control':            return args.action === 'publish' ? `Publish build "${args.buildId ?? 'unknown'}" to a public /projects page?` : `Run ${String(args.action ?? 'action')} on build "${args.buildId ?? 'unknown'}"?`;
     case 'scraper_script_delete':    return `Delete scraper script "${args.scriptId ?? args.name ?? 'unknown'}"?`;

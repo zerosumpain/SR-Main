@@ -816,6 +816,19 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'database',
+    label: 'Database',
+    kind: 'output',
+    group: 'Integrations',
+    description:
+      'Permanent, sitewide datastore. Full CRUD over jsonb records in named collections (insert/upsert/get/query/update/patch/delete/count/aggregate). Shared across workflows.',
+    defaultConfig: { operation: 'query', collection: '', autoCreate: true },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['any'] }],
+    },
+  },
+  {
     type: 'file-store',
     label: 'File store',
     kind: 'output',

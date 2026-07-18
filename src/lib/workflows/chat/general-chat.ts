@@ -631,6 +631,14 @@ export async function generalChat(
     ? `\n\n--- Web scraping ---\nThe \`stealth-scrape\` node is the pattern for reading live web pages — job boards, listings, prices, schedules, content behind cookie walls. It runs a stealth-patched Playwright on homeserv's residential IP and dispatches through a saved Python script keyed to a stable per-domain \`profile\` (e.g. \`civilservicejobs-gov-uk\`). Scripts have \`page\` (persistent context, cookies retained) and \`vars\` (string dict) in scope and \`return\` a list of dicts.\n\nWhen designing a scrape:\n1. \`scraper_script_list\` first — reuse an existing profile if one matches.\n2. If editing: \`scraper_script_read\` → modify → \`scraper_script_save\` → \`scraper_script_test\` to verify.\n3. If none exists: set \`goal\` + \`searchQuery\` on the \`stealth-scrape\` node — the first run authors and saves a script; subsequent runs replay it.\n\nTypical scrape canvas: \`trigger → (data-store get, stealth-scrape) → merge → transform (diff vs stored URLs) → llm-call (format) → gmail-send / whatsapp → data-store set\`. Keep transforms small (in-process, no sandbox); cap LLM prompts (few hundred chars per description); use \`bodyHtml\` not \`bodyText\` on \`gmail-send\` when output has links or lists.`
     : '';
 
+  // API-first data answering — always on and deliberately compact. For any
+  // factual / numeric / current / external question the model should reach a
+  // real data source (api_search → api_call) before answering from memory.
+  // The tools it names (api_search, api_call, datastore_query) are
+  // ESSENTIAL_TOOL_NAMES, so they stay reachable regardless of which toolsets
+  // the classifier activated — hence unconditional rather than inferred-gated.
+  const apiFirstSection = `\n\n--- API-first data answering ---\nFor questions about current, factual, numeric, or external data, prefer a live source over model memory: (1) call \`api_search\` first to find a catalogued API for the ask; (2) fetch with \`api_call\` and cite the API you used inline, where its figure lands; (3) fall back to your own knowledge only when no API fits — and say so; (4) if you hit a useful API that isn't catalogued yet, \`api_register\` it. Recurring structured data worth querying again belongs in the datastore — \`datastore_save\` to record it, \`datastore_query\` to read it back — not \`save_memory\`, which is for distilled personal facts.`;
+
   // Plan/clarify gates only fire when there's a UI to render the card and
   // PATCH the ack — that's /jkai today. Canvas chat (workflowId set) does
   // not consume plan/clarify SSE events, so the prompt must not invite the
@@ -645,7 +653,7 @@ export async function generalChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
-  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${clarifySection}${planSection}`;
+  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [

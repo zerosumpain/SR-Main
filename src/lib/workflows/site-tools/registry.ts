@@ -32,6 +32,8 @@ import './tools/web';
 import './tools/node-builder';
 import './tools/site-signals';
 import './tools/presentations';
+import './tools/datastore';
+import './tools/apis';
 
 // --- Public API ---
 
@@ -96,6 +98,9 @@ export function getToolsetManifest(): Array<{
     'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
     'site-signals': 'Live site signals (read-only) — current GPS walk/ride status, family presence (who is home), and DfE policy-engine tracking indicators',
+    decks: 'sr. decks presentations — list, build from a spec, inspect, and manage block-based slide decks',
+    datastore: 'Permanent sitewide datastore — full CRUD over collections of JSON records with filters/aggregates and row-level permissions (structured/queryable data that persists across chats and workflows)',
+    apis: 'API catalogue — search catalogued external data sources, call them for live data (SSRF-guarded, env-ref auth), and register newly-discovered APIs',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({

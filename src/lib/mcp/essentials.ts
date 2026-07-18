@@ -34,6 +34,13 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // New-presentation path (sr. decks). Same design-first flow: outline agreed
   // in chat, then one build call — must survive the meta-tool squeeze.
   'presentation_build_from_spec',
+  // API-first answering. `api_search`/`api_call` are the entry points for
+  // fetching live/factual data before falling back to model knowledge, and
+  // `datastore_query` reads the permanent structured store — all three must
+  // stay visible so the model reaches for them without a meta-tool round-trip.
+  'api_search',
+  'api_call',
+  'datastore_query',
 ]);
 
 export function isMetaToolEnabled(): boolean {
