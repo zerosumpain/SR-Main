@@ -73,7 +73,7 @@
     value={model}
     onChange={(v) => set('model', v)}
     fetcher={fetchThinkModels}
-    hint="Bare IDs (e.g. <code>glm-5-turbo</code>) route via the jkai default provider. Slashed IDs (e.g. <code>openai/gpt-4o</code>) route via OpenRouter — full live OpenRouter catalogue is in the picker."
+    hint="Prefer full OpenRouter slugs (e.g. <code>z-ai/glm-5.2</code>, <code>openai/gpt-4o</code>) — the full live OpenRouter catalogue is in the picker. Bare IDs (e.g. <code>glm-5-turbo</code>) are legacy GLM ids, mapped to their <code>z-ai/*</code> slugs."
   />
 
   <TemperatureField

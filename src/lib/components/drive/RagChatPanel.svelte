@@ -3,7 +3,7 @@
   import { Marked } from 'marked';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import ModelPicker from '$lib/components/jkai/ModelPicker.svelte';
-  import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+  import { DEFAULT_CHAT_MODEL_ID, LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
   import type { ModelContext } from '$lib/server/models/types';
   import type { RagCollection } from '$lib/db/schema';
 
@@ -25,8 +25,8 @@
   let loadError = $state<string | null>(null);
 
   // Generation model for the chat (separate from the collection's embedding
-  // model). Defaults to the site GLM chat model; the choice persists locally.
-  let chatModel = $state<ModelContext>({ provider: 'zai', modelId: DEFAULT_GLM_MODEL_ID });
+  // model). Defaults to the site chat model (OpenRouter); the choice persists locally.
+  let chatModel = $state<ModelContext>({ provider: 'openrouter', modelId: DEFAULT_CHAT_MODEL_ID });
   const MODEL_KEY = 'drive:rag:chatModel';
   let modelLoaded = false;
 
@@ -89,8 +89,11 @@
       const saved = localStorage.getItem(MODEL_KEY);
       if (saved) {
         const m = JSON.parse(saved);
-        if (m && (m.provider === 'zai' || m.provider === 'openrouter') && typeof m.modelId === 'string') {
-          chatModel = m;
+        if (m && typeof m.modelId === 'string') {
+          // Coerce legacy persisted selections (provider 'zai' and/or bare GLM
+          // ids) onto OpenRouter — never restore a dead 'zai' context.
+          const modelId = LEGACY_GLM_TO_OPENROUTER[m.modelId] ?? m.modelId;
+          chatModel = { provider: 'openrouter', modelId };
         }
       }
     } catch { /* ignore */ }

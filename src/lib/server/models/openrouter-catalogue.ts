@@ -41,13 +41,13 @@ export function mapOpenRouterModel(raw: OpenRouterRawModel) {
 /**
  * The OpenRouter /models list doesn't carry throughput, and the public
  * `/v1/models/{slug}/endpoints` API returns the throughput field nulled out.
- * The real numbers live on the frontend stats endpoint that powers the
- * website's per-provider throughput charts: each endpoint exposes
- * `stats.p50_throughput` (median tokens/sec over the last window). We take the
- * max p50 across a model's provider endpoints as its headline tokens/sec.
- * Variants that share a base slug (e.g. `:free`) resolve to the same permaslug,
- * so we dedupe by base slug to keep the request count down. Failures are
- * swallowed per model — a missing throughput just shows as "—" in the UI.
+ * The real numbers lived on the undocumented frontend stats endpoint that
+ * powers the website's per-provider throughput charts (`stats.p50_throughput`,
+ * median tokens/sec). That endpoint started 404ing in 2026-07 — it is probed
+ * once per refresh, and when it is dead (or fails per model) the PREVIOUSLY
+ * stored throughput is carried forward rather than nulled, so the hybrid
+ * score's speed axis keeps its last-known-good data. A missing throughput just
+ * shows as "—" in the UI and scores neutral.
  */
 async function fetchThroughput(baseSlug: string): Promise<number | null> {
   try {
@@ -56,6 +56,8 @@ async function fetchThroughput(baseSlug: string): Promise<number | null> {
       { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) },
     );
     if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('json')) return null;
     const body = await res.json();
     const endpoints: OpenRouterEndpointStats[] = Array.isArray(body) ? body : (body?.data ?? []);
     let max: number | null = null;
@@ -68,6 +70,21 @@ async function fetchThroughput(baseSlug: string): Promise<number | null> {
     return max;
   } catch {
     return null;
+  }
+}
+
+/** True when the frontend stats endpoint is serving JSON at all (it 404s with
+ *  an HTML shell when dead). Distinguishes "endpoint gone" from "this model
+ *  has no stats", so a revived endpoint isn't skipped. */
+async function statsEndpointAlive(baseSlug: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://openrouter.ai/api/frontend/stats/endpoint?permaslug=${baseSlug}`,
+      { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) },
+    );
+    return res.ok && (res.headers.get('content-type') ?? '').includes('json');
+  } catch {
+    return false;
   }
 }
 
@@ -94,16 +111,32 @@ export async function refreshOpenRouterCatalogue(): Promise<{ count: number }> {
   const models: OpenRouterRawModel[] = json.data ?? [];
   const mapped = models.map(mapOpenRouterModel);
 
+  // Last-known-good throughput per model id, carried forward when the stats
+  // source can't provide a fresh number (the delete+reinsert below would
+  // otherwise wipe it).
+  const previous = new Map(
+    (
+      await db
+        .select({ id: openrouterModels.id, throughput: openrouterModels.throughput })
+        .from(openrouterModels)
+    ).map((r) => [r.id, r.throughput]),
+  );
+
   // Enrich with throughput, keyed by base slug (strip any `:variant` suffix)
-  // so we hit the endpoints API once per distinct model.
+  // so we hit the stats API once per distinct model. Probe one slug first —
+  // when the endpoint is dead entirely, skip the other ~340 requests.
   const baseSlugs = [...new Set(mapped.map((m) => m.id.split(':')[0]))];
   const throughputBySlug = new Map<string, number | null>();
-  await mapPool(baseSlugs, 10, async (slug) => {
-    throughputBySlug.set(slug, await fetchThroughput(slug));
-  });
+  if (baseSlugs.length && (await statsEndpointAlive(baseSlugs[0]))) {
+    await mapPool(baseSlugs, 10, async (slug) => {
+      throughputBySlug.set(slug, await fetchThroughput(slug));
+    });
+  } else {
+    console.warn('[openrouter-catalogue] frontend stats endpoint unavailable — carrying forward stored throughput');
+  }
   for (const m of mapped) {
     const t = throughputBySlug.get(m.id.split(':')[0]);
-    m.throughput = t == null ? null : String(t);
+    m.throughput = t != null ? String(t) : (previous.get(m.id) ?? null);
   }
 
   await db.transaction(async (tx) => {

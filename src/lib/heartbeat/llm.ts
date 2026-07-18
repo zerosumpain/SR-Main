@@ -3,6 +3,7 @@ import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
 
@@ -48,7 +49,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
 
   const ctx = opts.model ?? (
     conv.modelProvider && conv.modelId
-      ? { provider: conv.modelProvider as 'zai' | 'openrouter', modelId: conv.modelId }
+      ? coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId })
       : await resolveDefaultModel('chat')
   );
   const { client, model } = await getLLMClient(ctx);

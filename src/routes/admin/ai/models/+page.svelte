@@ -14,7 +14,7 @@
   <PageHeader
     kicker="AI Config"
     title="LLM Models"
-    sub="Choose the models jkai uses. Chat has a default GLM model and an optional OpenRouter alternate — the in-chat toggle flips between them."
+    sub="All models route through OpenRouter. Pick the site default from the full catalogue — the best-combo score blends tool-use quality, price and token speed."
   />
 
   <div class="model-stack">
@@ -26,8 +26,9 @@
       lastRefreshed={data.lastRefreshed}
     />
     <OpenRouterModelBrowser
+      defaultModelId={data.chat.defaultModelId}
       chatAltOpenRouterModelId={data.chat.altOpenRouterModelId}
-      builderModelId={data.builder.provider === 'openrouter' ? data.builder.modelId : null}
+      builderModelId={data.builder.modelId}
     />
   </div>
 </PageWrap>

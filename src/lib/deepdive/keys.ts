@@ -6,9 +6,6 @@ import { installUsageCapture } from '$lib/jkai/usage-capture';
 const KEYS_PATH = join(process.cwd(), 'keys.json');
 
 export interface DeepDiveKeys {
-  zaiApiKey?: string;
-  zaiBaseUrl?: string;
-  zaiModel?: string;
   tavilyApiKey?: string;
   openrouterApiKey?: string;
   openrouterFallbackModel?: string;
@@ -30,9 +27,6 @@ export function loadKeys(): DeepDiveKeys {
   // keys.json still takes precedence when both are set.
   const env = process.env;
   return {
-    zaiApiKey: fileKeys.zaiApiKey ?? env.ZAI_API_KEY,
-    zaiBaseUrl: fileKeys.zaiBaseUrl ?? env.ZAI_BASE_URL,
-    zaiModel: fileKeys.zaiModel ?? env.ZAI_MODEL,
     tavilyApiKey: fileKeys.tavilyApiKey ?? env.TAVILY_API_KEY,
     openrouterApiKey: fileKeys.openrouterApiKey ?? env.OPENROUTER_API_KEY,
     openrouterFallbackModel: fileKeys.openrouterFallbackModel ?? env.OPENROUTER_FALLBACK_MODEL,
@@ -45,23 +39,6 @@ export function saveKeys(keys: DeepDiveKeys): void {
   writeFileSync(KEYS_PATH, JSON.stringify(keys, null, 2), 'utf-8');
 }
 
-export function getOpenAIClient(): OpenAI {
-  const keys = loadKeys();
-  if (!keys.zaiApiKey) throw new Error('Z.AI API key not configured');
-  return installUsageCapture(
-    new OpenAI({
-      apiKey: keys.zaiApiKey,
-      baseURL: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-    }),
-    'zai',
-  );
-}
-
-export function getModel(): string {
-  const keys = loadKeys();
-  return keys.zaiModel || 'glm-5.2';
-}
-
 export function getTavilyKey(): string {
   const keys = loadKeys();
   if (!keys.tavilyApiKey) throw new Error('Tavily API key not configured');
@@ -71,10 +48,9 @@ export function getTavilyKey(): string {
 export function getOpenRouterClient(): OpenAI {
   const keys = loadKeys();
   if (!keys.openrouterApiKey) throw new Error('OpenRouter API key not configured');
-  // Wrapped like getOpenAIClient so fallback CHAT usage is cost-captured (was a
-  // raw client, so every z.ai->OpenRouter fallback recorded zero cost). Embeddings
-  // via this client are still uncaptured — installUsageCapture only patches
-  // chat.completions.create, not embeddings.create.
+  // Wrapped so CHAT usage is cost-captured. Embeddings via this client are
+  // still uncaptured — installUsageCapture only patches chat.completions.create,
+  // not embeddings.create.
   return installUsageCapture(
     new OpenAI({
       apiKey: keys.openrouterApiKey,
@@ -95,9 +71,9 @@ export function getEmbeddingModel(): string {
   return keys.embeddingModel || 'openai/text-embedding-3-large';
 }
 
-/** Returns the OpenRouter model to use as a rate-limit/timeout fallback for z.ai
- *  calls. Default = Gemini 3.1 Flash Lite (preview): fast + cheap, ideal for a
- *  degraded-availability fallback when the z.ai flagship (glm-5.2) is limited.
+/** Returns the OpenRouter model used as a rate-limit/timeout fallback when the
+ *  primary model is limited or slow. Default = Gemini 3.1 Flash Lite (preview):
+ *  fast + cheap, ideal for a degraded-availability fallback.
  *  MUST be a live OpenRouter id — a dead id makes failover die silently (the
  *  previous anthropic/claude-3-5-haiku default was REMOVED by OpenRouter and
  *  broke every fallback until caught on 2026-07-11). Verified live 2026-07-14. */
@@ -111,22 +87,18 @@ export function hasOpenRouter(): boolean {
 }
 
 export function getKeysStatus(): {
-  zaiConfigured: boolean;
   tavilyConfigured: boolean;
   openrouterConfigured: boolean;
   elevenlabsConfigured: boolean;
-  zaiBaseUrl: string;
-  zaiModel: string;
+  fallbackModel: string;
   embeddingModel: string;
 } {
   const keys = loadKeys();
   return {
-    zaiConfigured: !!keys.zaiApiKey,
     tavilyConfigured: !!keys.tavilyApiKey,
     openrouterConfigured: !!keys.openrouterApiKey,
     elevenlabsConfigured: !!keys.elevenlabsApiKey,
-    zaiBaseUrl: keys.zaiBaseUrl || 'https://api.z.ai/api/coding/paas/v4/',
-    zaiModel: keys.zaiModel || 'glm-5.2',
+    fallbackModel: getFallbackModel(),
     embeddingModel: keys.embeddingModel || 'openai/text-embedding-3-large',
   };
 }

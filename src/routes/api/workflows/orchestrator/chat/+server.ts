@@ -13,6 +13,7 @@ import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
@@ -594,14 +595,14 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           if (conversationId && capturedUsage) {
             const dIn = Math.max(0, Math.round(capturedUsage.input_tokens ?? 0));
             const dOut = Math.max(0, Math.round(capturedUsage.output_tokens ?? 0));
-            // Hermes reports token counts but its own cost estimate is
-            // unreliable for z.ai GLM models (its pricing tables don't cover
-            // the coding-paas endpoint — it returns 0). Compute cost from the
+            // Hermes reports token counts but its own cost estimate can be
+            // unreliable for some models (its pricing tables don't always cover
+            // the OpenRouter slug — it returns 0). Compute cost from the
             // conversation's own model via our price table; fall back to
             // Hermes's number only if we can't price the model.
             let dCost = 0;
-            let convProvider = 'zai';
-            let convModel = 'glm-5.2';
+            let convProvider = 'openrouter';
+            let convModel = 'z-ai/glm-5.2';
             if (dIn > 0 || dOut > 0) {
               const [conv] = await db
                 .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
@@ -740,7 +741,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     let ctx: ModelContext = await resolveDefaultModel(defaultKind);
     if (conversationId) {
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-      if (conv) ctx = { provider: conv.modelProvider as 'zai' | 'openrouter', modelId: conv.modelId };
+      if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
     }
     const caps = getModelCapabilities(ctx);
     for (const a of attachmentRows) {
@@ -909,10 +910,10 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
             .where(eq(conversations.id, conversationId))
             .limit(1);
           if (conv) {
-            modelContext = {
-              provider: conv.modelProvider as 'zai' | 'openrouter',
+            modelContext = coerceModelContext({
+              provider: conv.modelProvider,
               modelId: conv.modelId,
-            };
+            });
             priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
           }
         }

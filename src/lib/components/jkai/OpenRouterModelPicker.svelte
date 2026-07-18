@@ -1,6 +1,5 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { GLM_MODELS } from '$lib/constants/glm-models';
   import type { ModelContext } from '$lib/server/models/types';
 
   // Local body-portal. NOT the shared $lib/canvas/portal — that one restores the
@@ -149,23 +148,6 @@
       <button type="button" class="picker-close" onclick={close} aria-label="Close">✕</button>
     </header>
 
-    <!-- GLM defaults: kept selectable alongside the OpenRouter catalogue -->
-    <div class="glm-row">
-      <span class="glm-label">Z.AI</span>
-      {#each GLM_MODELS as m (m.id)}
-        {@const active = current.provider === 'zai' && current.modelId === m.id}
-        <button
-          type="button"
-          class="glm-pill"
-          class:active={active}
-          title={m.description}
-          onclick={() => pick({ provider: 'zai', modelId: m.id })}
-        >
-          {m.label}
-        </button>
-      {/each}
-    </div>
-
     <input
       class="picker-search"
       placeholder="Filter OpenRouter models by name or id…"
@@ -290,38 +272,6 @@
     border-radius: var(--radius-round);
   }
   .picker-close:hover { color: var(--text-primary); background: var(--surface-overlay); }
-
-  .glm-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--divider);
-  }
-  .glm-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-ghost);
-    font-family: var(--font-mono);
-    margin-right: 2px;
-  }
-  .glm-pill {
-    border-radius: var(--radius-pill);
-    padding: 4px 12px;
-    font-size: 12px;
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-    border: 1px solid var(--card-border);
-    transition: background-color 120ms, color 120ms;
-  }
-  .glm-pill:hover { color: var(--text-primary); }
-  .glm-pill.active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-  }
 
   .picker-search {
     margin: 12px 16px 4px;

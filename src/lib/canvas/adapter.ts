@@ -1081,7 +1081,7 @@ export function byType(type: string): NodeTypeOption | undefined {
 export type ModelOption = { value: string; label: string };
 export type ModelCatalogue = {
   defaultLabel: string; // what "" resolves to, for the first option
-  glm: ModelOption[];
+  glm: ModelOption[]; // GLM models — values are full OpenRouter slugs (z-ai/glm-*)
   openrouter: ModelOption[];
 };
 

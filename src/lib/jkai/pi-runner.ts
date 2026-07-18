@@ -7,7 +7,6 @@ import { recordBuildUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ActionRecord, FailureEnvelope, FailureKind } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
-import { loadKeys } from '$lib/deepdive/keys';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 
@@ -68,18 +67,13 @@ export interface PiRunResult {
 
 // --- Provider resolution ---
 
-async function resolveApiKey(provider: string): Promise<{ envVar: string; value: string }> {
-  if (provider === 'zai') {
-    const keys = loadKeys();
-    if (!keys.zaiApiKey) throw new Error('Z.AI API key not configured');
-    return { envVar: 'ZAI_API_KEY', value: keys.zaiApiKey };
-  }
-  if (provider === 'openrouter') {
-    const key = await getOpenRouterApiKey();
-    if (!key) throw new Error('OpenRouter API key not configured');
-    return { envVar: 'OPENROUTER_API_KEY', value: key };
-  }
-  throw new Error(`Unsupported provider for pi: ${provider}`);
+async function resolveApiKey(_provider: string): Promise<{ envVar: string; value: string }> {
+  // All providers now resolve to OpenRouter. Legacy build rows persisted with
+  // provider 'zai' (direct-z.ai era) also land here and get the OpenRouter key
+  // instead of throwing — GLM is served via OpenRouter's z-ai/* slugs.
+  const key = await getOpenRouterApiKey();
+  if (!key) throw new Error('OpenRouter API key not configured');
+  return { envVar: 'OPENROUTER_API_KEY', value: key };
 }
 
 // --- Shell-escape helper ---
@@ -285,7 +279,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   // Two-stage watchdog:
   //  - FIRST_EVENT_TIMEOUT_MS (240s) covers time-to-first-token, which can be
-  //    slow when upstream (zai) is under load but still recoverable.
+  //    slow when upstream (OpenRouter) is under load but still recoverable.
   //  - IDLE_TIMEOUT_MS (180s) applies once streaming has started; if the
   //    stream goes quiet mid-flight for this long, the connection has stalled.
   // A stream that never starts hits the first-event cap; one that starts and

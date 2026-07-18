@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FailureEnvelope } from '$lib/jkai/types';
+  import { coerceModelContext } from '$lib/constants/default-models';
 
   interface Props {
     buildId: string;
@@ -12,19 +13,22 @@
   let { buildId, failure, currentProvider, currentModelId, onContinued }: Props = $props();
 
   const MODEL_OPTIONS = [
-    { provider: 'zai', modelId: 'glm-5-turbo', label: 'zai / glm-5-turbo (recommended — avoids glm-5.1 rate limit)' },
-    { provider: 'zai', modelId: 'glm-4.6', label: 'zai / glm-4.6' },
-    { provider: 'zai', modelId: 'glm-5.1', label: 'zai / glm-5.1' },
+    { provider: 'openrouter', modelId: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo (recommended — avoids glm-5.1 rate limit)' },
+    { provider: 'openrouter', modelId: 'z-ai/glm-4.7', label: 'GLM 4.7' },
+    { provider: 'openrouter', modelId: 'z-ai/glm-5.1', label: 'GLM 5.1' },
     { provider: 'openrouter', modelId: 'anthropic/claude-sonnet-4.5', label: 'openrouter / claude-sonnet-4.5' },
     { provider: 'openrouter', modelId: 'anthropic/claude-opus-4.7', label: 'openrouter / claude-opus-4.7' },
   ];
 
+  // Coerce the failed build's model (which may carry a legacy 'zai' provider or
+  // bare GLM id) onto OpenRouter so the retry never posts a dead 'zai' key.
   // Default to glm-5-turbo when the current model is glm-5.1 (rate-limit / stall
   // prone) — the most common recovery path right now.
+  const currentModel = coerceModelContext({ provider: currentProvider, modelId: currentModelId });
   const suggestedKey =
-    currentProvider === 'zai' && currentModelId === 'glm-5.1'
-      ? 'zai::glm-5-turbo'
-      : `${currentProvider}::${currentModelId}`;
+    currentModel.modelId === 'z-ai/glm-5.1'
+      ? 'openrouter::z-ai/glm-5-turbo'
+      : `${currentModel.provider}::${currentModel.modelId}`;
   let selectedKey = $state(suggestedKey);
   let improvementPrompt = $state('');
   let submitting = $state(false);

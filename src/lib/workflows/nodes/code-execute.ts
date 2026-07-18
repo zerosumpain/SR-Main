@@ -14,7 +14,6 @@ async function collectSandboxEnv(): Promise<Record<string, string>> {
   const keys = loadKeys();
   const env: Record<string, string> = {};
   if (keys.tavilyApiKey) env.TAVILY_API_KEY = keys.tavilyApiKey;
-  if (keys.zaiApiKey) env.ZAI_API_KEY = keys.zaiApiKey;
   if (keys.elevenlabsApiKey) env.ELEVENLABS_API_KEY = keys.elevenlabsApiKey;
   // OpenRouter lives in the DB (primary) with keys.json fallback
   try {

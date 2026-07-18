@@ -66,34 +66,41 @@ describe('app_settings helpers', () => {
   beforeEach(() => {
     clearSettingsCache();
     store.clear();
-    store.set('jkai.chat.default_glm_model', { modelId: 'glm-5-turbo' });
+    store.set('jkai.chat.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5-turbo' });
     vi.mocked(loadKeys).mockReturnValue({ openrouterApiKey: 'sk-or-from-keys-json' });
   });
 
   it('getSetting returns typed value', async () => {
-    const v = await getSetting<{ modelId: string }>('jkai.chat.default_glm_model');
-    expect(v).toEqual({ modelId: 'glm-5-turbo' });
+    const v = await getSetting<{ modelId: string }>('jkai.chat.default_model');
+    expect(v).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5-turbo' });
   });
 
   it('setSetting upserts and invalidates cache', async () => {
-    await setSetting('jkai.chat.default_glm_model', { modelId: 'glm-5.1' });
+    await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
     clearSettingsCache();
-    const v = await getSetting<{ modelId: string }>('jkai.chat.default_glm_model');
-    expect(v).toEqual({ modelId: 'glm-5.1' });
+    const v = await getSetting<{ modelId: string }>('jkai.chat.default_model');
+    expect(v).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') returns the configured GLM model", async () => {
-    await setSetting('jkai.chat.default_glm_model', { modelId: 'glm-5.1' });
+  it("resolveDefaultModel('chat') returns the configured model", async () => {
+    await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
     clearSettingsCache();
     const ctx = await resolveDefaultModel('chat');
-    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
+    expect(ctx).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') falls back to glm-5.1 when unset", async () => {
-    store.delete('jkai.chat.default_glm_model');
+  it("resolveDefaultModel('chat') falls back to the code default when unset", async () => {
+    store.delete('jkai.chat.default_model');
     clearSettingsCache();
     const ctx = await resolveDefaultModel('chat');
-    expect(ctx).toEqual({ provider: 'zai', modelId: 'glm-5.1' });
+    expect(ctx).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.2' });
+  });
+
+  it("resolveDefaultModel('chat') coerces a stored legacy bare GLM id", async () => {
+    store.set('jkai.chat.default_model', { modelId: 'glm-5.2' });
+    clearSettingsCache();
+    const ctx = await resolveDefaultModel('chat');
+    expect(ctx).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.2' });
   });
 
   it('resolveChatAltOpenRouterModel returns null when unset', async () => {

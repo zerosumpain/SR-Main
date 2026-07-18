@@ -1,13 +1,16 @@
 /**
  * Lightweight cost estimation for heartbeat LLM turns. Uses
  * priceSnapshot.{promptPrice,completionPrice} when available (set on
- * conversations using OpenRouter), falls back to a baked-in zai map for
+ * conversations using OpenRouter), falls back to a baked-in GLM map for
  * the GLM family.
  *
- * Prices are USD per 1M tokens. Refine if zai publishes a SKU page.
+ * Prices are USD per 1M tokens. The map is keyed by the bare GLM ids of the
+ * direct-z.ai era — kept only as a fallback for legacy conversation rows that
+ * still carry a bare model id (new rows use OpenRouter z-ai/* slugs and carry
+ * a priceSnapshot).
  */
 
-const ZAI_PRICES_USD_PER_M: Record<string, [number, number]> = {
+const LEGACY_GLM_PRICES_USD_PER_M: Record<string, [number, number]> = {
   'glm-5-turbo': [0.5, 1.5],
   'glm-5.1': [0.5, 1.5],
   'glm-5': [0.6, 1.6],
@@ -22,7 +25,7 @@ export interface PriceLike {
 }
 
 export function getModelDefaultPrice(modelId: string): PriceLike {
-  const entry = ZAI_PRICES_USD_PER_M[modelId];
+  const entry = LEGACY_GLM_PRICES_USD_PER_M[modelId];
   if (!entry) return { promptPrice: 0.5e-6, completionPrice: 1.5e-6 };
   return { promptPrice: entry[0] / 1_000_000, completionPrice: entry[1] / 1_000_000 };
 }

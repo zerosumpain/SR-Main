@@ -1,5 +1,7 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { getOpenAIClient, getModel, getOpenRouterClient, getEmbeddingModel, getFallbackModel, hasOpenRouter } from './keys';
+import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from './keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import {
   isRateLimitError,
   isOurTimeoutAbort,
@@ -10,17 +12,22 @@ import {
 // Re-export so existing importers of these from $lib/deepdive/ai keep working.
 export { isRateLimitError };
 
-// z.ai's glm-5-turbo / glm-5.1 spend a lot of reasoning time: a medium 2k-token
+/** Primary client + model: the admin-configured site default (OpenRouter). */
+async function getPrimary(): Promise<{ client: import('openai').default; model: string }> {
+  return getLLMClient(await resolveDefaultModel('chat'));
+}
+
+// GLM-class reasoning models spend a lot of reasoning time: a medium 2k-token
 // completion measures ~25s end-to-end, and a large clustering prompt (up to 200
 // facts) routinely exceeds 30s. A 30s ceiling therefore aborted nearly every
 // real deepdive call (synthesis clustering + the report executive summary),
 // surfacing as APIUserAbortError "every time". These are background / streamed
 // operations, so a generous ceiling is acceptable; genuinely-stuck calls fall
-// back to OpenRouter below (see isOurTimeoutAbort).
-const ZAI_NONSTREAM_TIMEOUT_MS = 90_000;
+// back to the fallback model below (see isOurTimeoutAbort).
+const PRIMARY_NONSTREAM_TIMEOUT_MS = 90_000;
 // Idle gap between streamed tokens. Reasoning models can take >30s to emit the
 // FIRST token, so allow 45s before the watchdog fires.
-const ZAI_STREAM_IDLE_TIMEOUT_MS = 45_000;
+const PRIMARY_STREAM_IDLE_TIMEOUT_MS = 45_000;
 
 /** Attempt to close truncated JSON by balancing brackets/braces and removing trailing partial tokens */
 function repairJson(text: string): string {
@@ -86,8 +93,7 @@ export async function chatCompletion(
   userPrompt: string,
   options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
 ): Promise<string> {
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getPrimary();
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: userPrompt },
@@ -100,16 +106,17 @@ export async function chatCompletion(
       () =>
         client.chat.completions.create(
           { model, messages, temperature, max_tokens: maxTokens },
-          { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
+          { signal: combineSignals(options?.signal, PRIMARY_NONSTREAM_TIMEOUT_MS) as any },
         ),
       'chatCompletion',
     );
     return response.choices[0]?.message?.content ?? '';
   } catch (err: any) {
-    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && hasOpenRouter()) {
-      const fallbackModel = getFallbackModel();
+    // Fall back to a DIFFERENT OpenRouter model; retrying the same id would
+    // just hit the same limit.
+    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && getFallbackModel() !== model) {
       const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
-      console.log(`[deepdive] chatCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
+      console.log(`[deepdive] chatCompletion: ${model} ${why}, falling back to ${getFallbackModel()}`);
       return openRouterChat(messages, { temperature, maxTokens, signal: options?.signal });
     }
     throw err;
@@ -136,8 +143,7 @@ export async function jsonCompletion<T>(
   userPrompt: string,
   options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
 ): Promise<T> {
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getPrimary();
   const jsonSystemPrompt = systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.';
   const messages = [
     { role: 'system' as const, content: jsonSystemPrompt },
@@ -157,16 +163,15 @@ export async function jsonCompletion<T>(
             max_tokens: maxTokens,
             response_format: { type: 'json_object' },
           },
-          { signal: combineSignals(options?.signal, ZAI_NONSTREAM_TIMEOUT_MS) as any },
+          { signal: combineSignals(options?.signal, PRIMARY_NONSTREAM_TIMEOUT_MS) as any },
         ),
       'jsonCompletion',
     );
     return parseJsonText<T>(response.choices[0]?.message?.content ?? '{}');
   } catch (err: any) {
-    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && hasOpenRouter()) {
-      const fallbackModel = getFallbackModel();
+    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && getFallbackModel() !== model) {
       const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
-      console.log(`[deepdive] jsonCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
+      console.log(`[deepdive] jsonCompletion: ${model} ${why}, falling back to ${getFallbackModel()}`);
       // json: true signals openRouterChat to omit response_format (Anthropic models don't support it)
       const text = await openRouterChat(messages, { temperature, maxTokens, signal: options?.signal, json: true });
       return parseJsonText<T>(text || '{}');
@@ -179,9 +184,9 @@ async function runStream(
   client: import('openai').default,
   model: string,
   messages: ChatCompletionMessageParam[],
-  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void; disableThinking?: boolean },
+  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void },
 ): Promise<{ text: string; tokensUsed: number }> {
-  // Watchdog: abort the stream if no token arrives within ZAI_STREAM_IDLE_TIMEOUT_MS.
+  // Watchdog: abort the stream if no token arrives within PRIMARY_STREAM_IDLE_TIMEOUT_MS.
   const idleAc = new AbortController();
   const onExternalAbort = () => idleAc.abort(opts.signal.reason);
   if (opts.signal.aborted) {
@@ -194,21 +199,18 @@ async function runStream(
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       idleAc.abort(new Error('Stream idle timeout'));
-    }, ZAI_STREAM_IDLE_TIMEOUT_MS);
+    }, PRIMARY_STREAM_IDLE_TIMEOUT_MS);
   };
   resetIdleTimer();
 
   try {
-    // The `thinking` field is z.ai-proprietary; cast to any to bypass SDK types,
-    // then re-cast the result as the streaming type so the for-await loop is typed.
-    const stream = (await (client.chat.completions.create as any)(
+    const stream = (await client.chat.completions.create(
       {
         model,
         messages,
         temperature: opts.temperature,
         max_tokens: opts.maxTokens,
         stream: true,
-        ...(opts.disableThinking ? { thinking: { type: 'disabled' } } : {}),
       },
       { signal: idleAc.signal as any },
     )) as AsyncIterable<import('openai/resources').ChatCompletionChunk>;
@@ -242,12 +244,13 @@ export async function streamCompletion(
     signal?: AbortSignal;
     model?: string;
     onToken?: (token: string) => void;
-    disableThinking?: boolean;
   },
 ): Promise<{ text: string; tokensUsed: number }> {
-  const useOpenRouter = !!options?.model;
-  const client = useOpenRouter ? getOpenRouterClient() : getOpenAIClient();
-  const model = options?.model ?? getModel();
+  // An explicitly-passed model is the caller's deliberate choice — no fallback.
+  const explicitModel = !!options?.model;
+  const { client, model } = explicitModel
+    ? { client: getOpenRouterClient(), model: options!.model! }
+    : await getPrimary();
   const messages = [
     { role: 'system' as const, content: systemPrompt },
     { role: 'user' as const, content: userPrompt },
@@ -264,7 +267,7 @@ export async function streamCompletion(
 
   // Track whether ANY token reached the caller. The fallback re-streams from
   // scratch, so it is only safe BEFORE the first token — otherwise the client
-  // would receive duplicated/garbled output. (For z.ai's slow-reasoning case the
+  // would receive duplicated/garbled output. (For slow-reasoning models the
   // abort almost always fires before the first token; this just makes it safe.)
   let emittedAny = false;
   const onToken = options?.onToken
@@ -277,17 +280,17 @@ export async function streamCompletion(
       maxTokens,
       signal: externalAc.signal,
       onToken,
-      disableThinking: options?.disableThinking,
     });
   } catch (err: any) {
     // Only fall back on the INITIAL create error (before any tokens); never mid-stream.
-    // Also skip fallback if the caller already explicitly chose a model (useOpenRouter path).
-    // A z.ai idle-timeout abort (our watchdog, not a caller cancellation) is
+    // Skip fallback if the caller explicitly chose a model, or if the fallback
+    // id equals the primary (retrying the same model would hit the same limit).
+    // An idle-timeout abort (our watchdog, not a caller cancellation) is
     // fallback-eligible just like a rate-limit.
-    if (!useOpenRouter && !emittedAny && (isRateLimitError(err) || isOurTimeoutAbort(err, externalSignal)) && hasOpenRouter()) {
-      const fallbackModel = getFallbackModel();
+    const fallbackModel = getFallbackModel();
+    if (!explicitModel && !emittedAny && fallbackModel !== model && (isRateLimitError(err) || isOurTimeoutAbort(err, externalSignal))) {
       const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
-      console.log(`[deepdive] streamCompletion: z.ai ${why}, falling back to OpenRouter ${fallbackModel}`);
+      console.log(`[deepdive] streamCompletion: ${model} ${why}, falling back to ${fallbackModel}`);
       const fallbackAc = new AbortController();
       if (externalSignal) {
         if (externalSignal.aborted) fallbackAc.abort(externalSignal.reason);
@@ -298,7 +301,6 @@ export async function streamCompletion(
         maxTokens,
         signal: fallbackAc.signal,
         onToken,
-        disableThinking: options?.disableThinking,
       });
     }
     throw err;

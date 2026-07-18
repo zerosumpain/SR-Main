@@ -193,7 +193,6 @@
           onchange={(e) => set('modelProvider', (e.currentTarget as HTMLSelectElement).value)}
         >
           <option value="">(default)</option>
-          <option value="zai">zai (GLM)</option>
           <option value="openrouter">openrouter</option>
         </select>
       </label>
@@ -202,7 +201,7 @@
         <input
           type="text"
           spellcheck="false"
-          placeholder={modelProvider === 'openrouter' ? 'openai/gpt-4o' : 'glm-4.6'}
+          placeholder={'z-ai/glm-5.2 or openai/gpt-4o'}
           value={modelId}
           oninput={(e) => set('modelId', (e.currentTarget as HTMLInputElement).value)}
         />

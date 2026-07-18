@@ -48,9 +48,9 @@ export const llmCallDef: NodeDefinition = {
       // orchestrator + admin /tools listing.
       options: [
         { value: '', label: 'Default (site setting)' },
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (direct)' },
-        { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI (direct)' },
-        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI (direct)' },
+        { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
+        { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
+        { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
       ],
     },
     {
@@ -91,7 +91,7 @@ Two modes:
 1. TEXT (default): returns the model's reply as a string on \`response\`. Downstream nodes read \`{{input.response}}\`.
 2. STRUCTURED: set \`outputSchema\` to a JSON Schema. The node requests a JSON object, parses it, validates that the schema's top-level \`required\` keys are present, retries ONCE with the error appended, then fails into On-failure. The parsed object is returned on \`data\` (read \`{{input.data.field}}\`); the raw JSON string stays on \`response\`. Use this for reliable extraction/classification instead of parsing prose downstream.
 
-Reasoning models (GLM) burn reasoning tokens from max_tokens — in structured mode the node auto-raises the budget to ≥3000 and disables thinking for z.ai.`,
+Reasoning models (GLM) burn reasoning tokens from max_tokens — in structured mode the node auto-raises the budget to ≥3000 for GLM models.`,
   llmExamples: [
     { userPrompt: 'Summarise this in one sentence: {{input.text}}' },
     {

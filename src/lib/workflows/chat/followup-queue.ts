@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { generalChat } from './general-chat';
 import type { HistoryMessage } from './conversation-history';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 
 export interface FollowUpCheck {
@@ -222,10 +223,10 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       .where(eq(conversations.id, item.conversationId))
       .limit(1);
     if (conv) {
-      modelContext = {
-        provider: conv.modelProvider as 'zai' | 'openrouter',
+      modelContext = coerceModelContext({
+        provider: conv.modelProvider,
         modelId: conv.modelId,
-      };
+      });
       priceSnapshot = conv.priceSnapshot as PriceSnapshot | null;
     }
 

@@ -1,4 +1,5 @@
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { HealingContext, HealingDiagnosis, NodeDefinition } from '../types';
 
 export function buildHealingPrompt(context: HealingContext): string {
@@ -105,8 +106,7 @@ export async function diagnoseAndFix(
   context: HealingContext,
   onProgress?: (text: string) => void,
 ): Promise<HealingDiagnosis> {
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
   const userPrompt = buildHealingPrompt(context);
   onProgress?.(`Diagnosing: ${context.error.slice(0, 100)}`);

@@ -1,18 +1,19 @@
 // Shared model option lists for LLM-flavoured node panels.
 //
-// Despite the filename, the canonical chat default for jkai is z.ai (GLM*),
-// not Vertex/Anthropic. The naming reflects what `$lib/vertex` *would have*
-// been if the project had landed on Vertex — instead we route through
-// `resolveLLMClient` (src/lib/workflows/nodes/llm-helpers.ts):
+// All LLM traffic now routes through OpenRouter (the direct z.ai subscription
+// was decommissioned 2026-07-17). GLM models remain available via OpenRouter's
+// `z-ai/*` slugs. Routing via `resolveLLMClient`
+// (src/lib/workflows/nodes/llm-helpers.ts):
 //
-//   - empty / sentinel       → admin chat default (currently `glm-5-turbo`)
-//   - bare id (no slash)     → admin default's provider with this modelId
-//   - slashed id (e.g.       → OpenRouter
-//     `openai/gpt-4o`)
+//   - empty / sentinel       → admin chat default (an OpenRouter slug)
+//   - slashed id (e.g.       → OpenRouter, used verbatim
+//     `z-ai/glm-5.2`, `openai/gpt-4o`)
+//   - bare id (legacy, no    → mapped to its `z-ai/*` slug, then OpenRouter
+//     slash, e.g. `glm-5.2`)
 //
-// So the panels list a curated mix of bare GLM ids + slashed OpenRouter ids
-// and the routing falls out automatically. This file just keeps the list
-// in one place so all the panels render the same options.
+// So the panels list slashed OpenRouter ids (the default provider is
+// OpenRouter) and the routing falls out automatically. This file just keeps
+// the list in one place so all the panels render the same options.
 
 export interface ModelOption {
   /** Stored as `config.model`. Empty string → admin default. */
@@ -28,9 +29,9 @@ export interface ModelOption {
  */
 export const VERTEX_MODEL_OPTIONS: ModelOption[] = [
   { value: '', label: 'Default (site setting)' },
-  { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-  { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI' },
-  { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
+  { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
+  { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
+  { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
   { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
   { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
   { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
@@ -40,12 +41,12 @@ export const VERTEX_MODEL_OPTIONS: ModelOption[] = [
 
 /**
  * Variant for the Think node — defaults to a concrete model rather than the
- * admin sentinel (the node itself defaults to `glm-5-turbo`).
+ * admin sentinel (the jkai default is `z-ai/glm-5-turbo`).
  */
 export const THINK_MODEL_OPTIONS: ModelOption[] = [
-  { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
-  { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI' },
-  { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
+  { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo (jkai default)' },
+  { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
+  { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
   { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
   { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
   { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
@@ -60,9 +61,9 @@ export const THINK_MODEL_OPTIONS: ModelOption[] = [
  * panel (LlmCall, LlmAgent, LlmRouter, Think) renders the same list and
  * users aren't constrained to the hand-picked subset.
  *
- * Static options come first so "Default" stays at the top and the GLM ids
- * (which are NOT slashed and route via Z.AI direct, not OpenRouter) remain
- * visible. Dedups by value to keep the list clean.
+ * Static options come first so "Default" stays at the top and the curated
+ * GLM slugs (`z-ai/*`) stay visible above the full catalogue. Dedups by value
+ * to keep the list clean.
  */
 export interface FetchedModel { value: string; label: string; meta?: string }
 

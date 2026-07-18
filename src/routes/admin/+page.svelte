@@ -143,7 +143,7 @@
         <a class="nm-tile" href={`/admin/ai/keys${t}`}>
           <div class="nm-tile-eyebrow">Keys</div>
           <div class="nm-tile-title">API Providers</div>
-          <div class="nm-tile-sub">Z.AI, OpenRouter, ElevenLabs, Tavily — one place to update them all.</div>
+          <div class="nm-tile-sub">OpenRouter, ElevenLabs, Tavily — one place to update them all.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
         <a class="nm-tile" href={`/admin/ai/models${t}`}>

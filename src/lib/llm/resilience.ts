@@ -9,12 +9,11 @@
 import { APIUserAbortError, APIConnectionTimeoutError } from 'openai';
 
 /**
- * Returns true when an error indicates a rate-limit from z.ai or OpenRouter.
- * z.ai surfaces these as HTTP 429 (err.status) or proprietary code 1302 (err.code).
+ * Returns true when an error indicates a rate-limit (HTTP 429 or a
+ * rate-limit-worded error body).
  */
 export function isRateLimitError(err: any): boolean {
   if (err?.status === 429) return true;
-  if (err?.code === '1302' || err?.code === 1302) return true;
   if (/rate.?limit/i.test(String(err?.message ?? ''))) return true;
   if (/rate.?limit/i.test(String(err?.error?.message ?? ''))) return true;
   return false;

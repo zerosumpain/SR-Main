@@ -2,13 +2,12 @@ import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
-import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+import {
+  DEFAULT_CHAT_MODEL_ID,
+  DEFAULT_AGENTIC_MODEL_ID,
+  coerceModelContext,
+} from '$lib/constants/default-models';
 import type { ModelContext } from './types';
-
-// Agentic paths (autonomous builder, plan-debate, Hermes delegation children) stay on the
-// fast model: glm-5.2 is ~4x slower and times out on tool-heavy delegation (see
-// reference_glm52_agentic_slowness). General chat/thinking/one-shots use the glm-5.2 flagship.
-const AGENTIC_MODEL_ID = 'glm-5-turbo';
 
 const TTL_MS = 30_000;
 
@@ -46,13 +45,14 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<ModelContext> {
   if (kind === 'chat') {
-    // Chat default is always the configured GLM model (flagship glm-5.2 by default).
-    const v = await getSetting<{ modelId?: string }>('jkai.chat.default_glm_model');
-    return { provider: 'zai', modelId: v?.modelId ?? DEFAULT_GLM_MODEL_ID };
+    // Site-wide default — set from /admin/ai/models. Stored values (and any
+    // legacy bare GLM ids) are coerced to OpenRouter contexts.
+    const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.chat.default_model');
+    return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_CHAT_MODEL_ID });
   }
   // Builder is the tool-heavy agentic path — keep it on the fast model, not the slow flagship.
-  const v = await getSetting<ModelContext>('jkai.builder.default_model');
-  return v ?? { provider: 'zai', modelId: AGENTIC_MODEL_ID };
+  const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.builder.default_model');
+  return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_AGENTIC_MODEL_ID });
 }
 
 /**
@@ -67,12 +67,11 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
     'jkai.builder.thinking_model',
   );
   if (v && typeof v === 'object' && 'disabled' in v && v.disabled) return null;
-  if (v && typeof v === 'object' && 'provider' in v && 'modelId' in v) return v as ModelContext;
   if (v && typeof v === 'object' && 'modelId' in v && typeof v.modelId === 'string') {
-    return { provider: 'zai', modelId: v.modelId };
+    return coerceModelContext({ modelId: v.modelId });
   }
   // Thinking tier is one-shot reasoning (plan/clarify), not agentic — use the flagship.
-  return { provider: 'zai', modelId: DEFAULT_GLM_MODEL_ID };
+  return coerceModelContext({ modelId: DEFAULT_CHAT_MODEL_ID });
 }
 
 /** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */
@@ -80,11 +79,6 @@ export async function resolveChatAltOpenRouterModel(): Promise<ModelContext | nu
   const v = await getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model');
   if (!v?.modelId) return null;
   return { provider: 'openrouter', modelId: v.modelId };
-}
-
-/** Chat-only: the configured GLM default as a ModelContext. */
-export async function resolveChatGlmModel(): Promise<ModelContext> {
-  return resolveDefaultModel('chat');
 }
 
 /** /jkai approval-prompt UI behaviour — drives the inline Approve / Deny

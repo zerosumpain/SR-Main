@@ -24,10 +24,10 @@ export const thinkDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM runs this step. Bare IDs route to the jkai default provider (Z.AI). Slashed IDs go via OpenRouter.',
+      description: 'Which LLM runs this step. Prefer full OpenRouter slugs (e.g. z-ai/glm-5.2, openai/gpt-4o). Bare GLM ids are legacy and mapped to their z-ai/* slugs.',
       options: [
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI (jkai default)' },
-        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
+        { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo (jkai default)' },
+        { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
         { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },

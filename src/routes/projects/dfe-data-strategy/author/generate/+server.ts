@@ -12,7 +12,8 @@ import { error, json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
 import { coerceJson } from '../../lib/jsonsafe';
 import { TEMPLATE_BY_ID } from '../../lib/author/templates';
@@ -83,7 +84,7 @@ export const POST: RequestHandler = async (event) => {
   const answers = cleanAnswers(body?.answers);
   const questions = questionsForDepth(depth);
   const skeleton = SKELETONS[length];
-  const client = getOpenAIClient();
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
   if (mode === 'outline') {
     const digest = digestAnswers(questions, answers) || '- (no answers given — write a balanced, evidence-led strategy)';
@@ -97,16 +98,15 @@ Provide a brief for EVERY section id.`;
     const generate = async () => {
       const completion = await client.chat.completions.create(
         {
-          model: getModel(),
+          model,
           messages: [
             { role: 'system', content: sys },
             { role: 'user', content: user },
           ],
           temperature: 0.4,
           max_tokens: 2200,
-          thinking: { type: 'disabled' },
           response_format: { type: 'json_object' },
-        } as any,
+        },
         { signal: AbortSignal.timeout(90_000) as any },
       );
       return coerceJson<any>(completion.choices?.[0]?.message?.content ?? '{}');
@@ -191,15 +191,14 @@ Target length: ${section.words} words (stay within ${lo}–${hi}). Return ONLY t
   try {
     const completion = await client.chat.completions.create(
       {
-        model: getModel(),
+        model,
         messages: [
           { role: 'system', content: sys },
           { role: 'user', content: user },
         ],
         temperature: 0.45,
         max_tokens: maxTokens,
-        thinking: { type: 'disabled' },
-      } as any,
+      },
       { signal: AbortSignal.timeout(150_000) as any },
     );
     md = String(completion.choices?.[0]?.message?.content ?? '').trim();

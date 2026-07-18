@@ -103,7 +103,7 @@ export const builderChatExecutor: NodeExecutor = {
     let ctx: ModelContext;
     const provider = tplString(config.modelProvider, input).trim();
     const modelId = tplString(config.modelId, input).trim();
-    if ((provider === 'zai' || provider === 'openrouter') && modelId) {
+    if (provider === 'openrouter' && modelId) {
       ctx = { provider, modelId };
     } else {
       ctx = await resolveDefaultModel('builder');

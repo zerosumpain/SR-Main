@@ -1,4 +1,4 @@
-import { getModel } from '$lib/deepdive/keys';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
 import { db } from '$lib/db';
 import { orchestratorChats, workflows, workflowNodes, workflowEdges, nodeExecutions } from '$lib/db/schema';
@@ -228,7 +228,7 @@ async function runToolLoop(
   description?: string;
   followUp?: string;
 }> {
-  const model = getModel();
+  const model = (await resolveDefaultModel('chat')).modelId;
   const draft = existingDraft ?? createEmptyDraft();
   if (!existingDraft) resetNodeCounter();
   const deps = getToolCallDeps();
@@ -249,10 +249,10 @@ async function runToolLoop(
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Resilient generation call (B7): the $lib/llm workflow gateway owns 429
-    // retry/backoff AND z.ai→OpenRouter failover on rate-limit/timeout. Do NOT
-    // wrap this in a second retry loop — that would stack on the gateway's
-    // withRetry and multiply latency. `model` (empty/'default' → admin default)
-    // is resolved by the gateway's resolveLLMClient.
+    // retry/backoff AND primary→fallback-model failover on rate-limit/timeout.
+    // Do NOT wrap this in a second retry loop — that would stack on the
+    // gateway's withRetry and multiply latency. `model` (empty/'default' →
+    // admin default) is resolved by the gateway's resolveLLMClient.
     const response = await resilientChatCompletion(model, {
       messages,
       temperature: 0.7,
@@ -503,7 +503,7 @@ async function runCriticRound(
   workflow: GeneratedWorkflow,
   draft: WorkflowDraft,
 ): Promise<{ issues: CritiqueIssue[]; verdict: 'pass' | 'fail' }> {
-  const model = getModel();
+  const model = (await resolveDefaultModel('chat')).modelId;
 
   const workflowSummary = JSON.stringify({
     name: workflow.name,
@@ -517,8 +517,8 @@ async function runCriticRound(
 
   let response;
   try {
-    // Routed through the resilience gateway (B7) — same 429 retry + z.ai→OpenRouter
-    // fallback as the generation loop. Critic failure stays non-fatal: on any
+    // Routed through the resilience gateway (B7) — same 429 retry + fallback-model
+    // failover as the generation loop. Critic failure stays non-fatal: on any
     // error we skip review rather than block the workflow from being saved.
     response = await resilientChatCompletion(model, {
       messages: [

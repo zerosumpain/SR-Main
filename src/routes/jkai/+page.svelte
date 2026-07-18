@@ -340,7 +340,7 @@
         initialMessages={activeMessages}
         conversation={activeConversation}
         modelCapabilities={activeModelCaps}
-        defaultGlmModelId={data.defaultChatModel.modelId}
+        defaultChatModelId={data.defaultChatModel.modelId}
         altOpenRouterModel={data.chatAltOpenRouterModel}
         messageCount={activeMessages.length}
         approvalUi={data.approvalUi}

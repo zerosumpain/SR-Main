@@ -5,11 +5,11 @@ import { loadKeys } from '$lib/deepdive/keys';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { sql } from 'drizzle-orm';
-import { DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+import { DEFAULT_CHAT_MODEL_ID, DEFAULT_AGENTIC_MODEL_ID } from '$lib/constants/default-models';
 
 export const load: PageServerLoad = async () => {
-  const [glm, alt, builder, orKey, lastRefreshed, [{ count }]] = await Promise.all([
-    getSetting<{ modelId?: string }>('jkai.chat.default_glm_model'),
+  const [chatDefault, alt, builder, orKey, lastRefreshed, [{ count }]] = await Promise.all([
+    getSetting<{ modelId?: string }>('jkai.chat.default_model'),
     getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model'),
     getSetting<ModelContext>('jkai.builder.default_model'),
     getSetting<{ value?: string }>('openrouter.api_key'),
@@ -22,10 +22,10 @@ export const load: PageServerLoad = async () => {
 
   return {
     chat: {
-      glmModelId: glm?.modelId ?? DEFAULT_GLM_MODEL_ID,
+      defaultModelId: chatDefault?.modelId ?? DEFAULT_CHAT_MODEL_ID,
       altOpenRouterModelId: alt?.modelId ?? null,
     },
-    builder: builder ?? { provider: 'zai', modelId: 'glm-5-turbo' } as ModelContext,
+    builder: builder ?? ({ provider: 'openrouter', modelId: DEFAULT_AGENTIC_MODEL_ID } as ModelContext),
     openrouterKey: {
       configured: dbHasKey || keysJsonHasKey,
       source: dbHasKey ? 'db' : (keysJsonHasKey ? 'keys.json' : 'none'),

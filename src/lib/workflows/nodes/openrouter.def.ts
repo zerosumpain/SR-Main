@@ -91,7 +91,7 @@ export const openrouterDef: NodeDefinition = {
       visibleWhen: { key: 'operation', equals: 'chat_completion' },
     },
   ],
-  llmDescription: `OpenRouter integration. \`chat_completion\` runs a prompt against a specific OpenRouter model (system/user prompts support {{input.field}}); \`list_models\` returns the live model catalogue; \`get_usage\` returns your OpenRouter credit/usage stats. For general LLM calls prefer the \`llm-call\` node (it uses the site default with z.ai→OpenRouter fallback) — use this node only when you need a specific OpenRouter model or the models/usage metadata.`,
+  llmDescription: `OpenRouter integration. \`chat_completion\` runs a prompt against a specific OpenRouter model (system/user prompts support {{input.field}}); \`list_models\` returns the live model catalogue; \`get_usage\` returns your OpenRouter credit/usage stats. For general LLM calls prefer the \`llm-call\` node (it uses the site default with OpenRouter model fallback) — use this node only when you need a specific OpenRouter model or the models/usage metadata.`,
   llmExamples: [
     { operation: 'chat_completion', model: 'openai/gpt-4o-mini', userPrompt: 'Summarise: {{input.text}}' },
     { operation: 'list_models' },

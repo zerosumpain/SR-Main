@@ -172,9 +172,9 @@ register({
       ? session.report
       : JSON.stringify(session.report);
 
-    const { getOpenAIClient, getModel } = await import('$lib/deepdive/keys');
-    const client = getOpenAIClient();
-    const model = getModel();
+    const { getLLMClient } = await import('$lib/jkai/llm-client');
+    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+    const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
     const systemPrompt = `You are answering a question using ONLY the research findings provided below. Do not use any external knowledge.
 
@@ -313,9 +313,9 @@ register({
     const instruction = formatInstructions[format];
     if (!instruction) return { success: false, error: `Unknown format: ${format}. Use: blog_draft, build_prompt, workflow_description, or summary` };
 
-    const { getOpenAIClient, getModel } = await import('$lib/deepdive/keys');
-    const client = getOpenAIClient();
-    const model = getModel();
+    const { getLLMClient } = await import('$lib/jkai/llm-client');
+    const { resolveDefaultModel } = await import('$lib/server/models/settings');
+    const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
     const systemPrompt = `Research Topic: ${session.topic}\n\nResearch Findings:\n${reportText}\n\n${instruction}${focus ? `\n\nFocus specifically on: ${focus}` : ''}`;
 

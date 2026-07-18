@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { interpolateTemplateStrict } from './template';
 import { resilientChatCompletion, resilientChatStream } from '$lib/llm/workflow-gateway';
+import { isGlmModel } from '$lib/constants/default-models';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 export { llmCallDef } from './llm-call.def';
@@ -116,7 +117,7 @@ export const llmCallExecutor: NodeExecutor = {
     let usedModel = configuredModel ?? 'default';
 
     if (chatNodeId) {
-      // Streamed: resilient (concurrency + idle-timeout + z.ai→OpenRouter
+      // Streamed: resilient (concurrency + idle-timeout + OpenRouter model
       // fallback before the first token). Token deltas stream to the chat pane.
       const r = await resilientChatStream(
         configuredModel,
@@ -232,14 +233,13 @@ async function runStructured(args: {
     { role: 'user', content: userPrompt },
   ];
 
-  // GLM burns reasoning tokens from max_tokens (feedback_glm_reasoning_tokens):
-  // ensure a generous budget, and disable thinking when the call routes to z.ai
-  // (a bare/empty/default model id — anything WITHOUT a "/" resolves to the
-  // admin default provider, i.e. z.ai; a "/" id routes to OpenRouter which
-  // rejects the `thinking` param).
-  const structuredMaxTokens = Math.max(maxTokens, 3000);
-  const routesToZai = !String(configuredModel ?? '').includes('/');
-  const thinking = routesToZai ? { type: 'disabled' as const } : undefined;
+  // GLM burns reasoning tokens from max_tokens (feedback_glm_reasoning_tokens),
+  // and this applies via OpenRouter too — so keep a generous floor for GLM
+  // models. An empty/default model id resolves to the GLM site default, so it
+  // counts as GLM. Non-GLM slugs keep their configured budget. The z.ai-only
+  // `thinking` param is gone: everything routes via OpenRouter, which rejects it.
+  const isGlm = !configuredModel || isGlmModel(configuredModel);
+  const structuredMaxTokens = isGlm ? Math.max(maxTokens, 3000) : maxTokens;
 
   const attempt = async (messages: ChatCompletionMessageParam[]) => {
     const response = await resilientChatCompletion(
@@ -249,7 +249,6 @@ async function runStructured(args: {
         temperature,
         max_tokens: structuredMaxTokens,
         response_format: { type: 'json_object' },
-        ...(thinking ? { thinking } : {}),
       },
       { signal: context.abortSignal },
     );

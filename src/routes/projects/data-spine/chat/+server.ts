@@ -5,7 +5,8 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { rateLimit } from '$lib/server/rate-limit';
 import { retrieve, type Retrieved } from '../lib/retrieval.server';
 
@@ -66,12 +67,10 @@ export const POST: RequestHandler = async (event) => {
       };
       send({ type: 'sources', sources });
       try {
-        // `thinking: disabled` is REQUIRED: GLM-5.1 otherwise spends the token
-        // budget on reasoning and returns an empty answer.
-        const client = getOpenAIClient();
+        const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
         const completion = await client.chat.completions.create(
           {
-            model: getModel(),
+            model,
             messages: [
               { role: 'system', content: SYSTEM },
               { role: 'user', content: userPrompt },
@@ -79,10 +78,9 @@ export const POST: RequestHandler = async (event) => {
             temperature: 0.3,
             max_tokens: 1000,
             stream: true,
-            thinking: { type: 'disabled' },
-          } as any,
+          },
           // The signal spans the WHOLE stream, not time-to-first-token — sized so a
-          // slow glm generation of max_tokens=1000 isn't cut off mid-answer.
+          // slow generation of max_tokens=1000 isn't cut off mid-answer.
           { signal: AbortSignal.timeout(120_000) as any },
         );
         let any = false;

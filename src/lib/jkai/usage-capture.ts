@@ -16,7 +16,7 @@ export interface CompletionUsage {
  *  call regardless of where it originated). Robust to missing fields: if usage
  *  is absent, tokens/cost record as null — never a fabricated zero. */
 function captureUsage(
-  provider: 'zai' | 'openrouter',
+  provider: 'openrouter',
   model: string,
   usage: CompletionUsage | null | undefined,
 ): void {
@@ -68,7 +68,7 @@ function captureUsage(
  *  on iteration to observe the final usage-bearing chunk. */
 function wrapStreamForUsage(
   stream: AsyncIterable<{ usage?: CompletionUsage }>,
-  provider: 'zai' | 'openrouter',
+  provider: 'openrouter',
   model: string,
 ): AsyncIterable<{ usage?: CompletionUsage }> {
   let lastUsage: CompletionUsage | undefined;
@@ -115,7 +115,7 @@ function wrapStreamForUsage(
  *  ledger. For streams we ensure the provider emits a final usage chunk
  *  (stream_options.include_usage) and observe it transparently as the stream is
  *  consumed. Embeddings are not intercepted (only chat.completions). */
-export function installUsageCapture(client: OpenAI, provider: 'zai' | 'openrouter'): OpenAI {
+export function installUsageCapture(client: OpenAI, provider: 'openrouter'): OpenAI {
   type CreateFn = typeof client.chat.completions.create;
   const completions = client.chat.completions as unknown as { create: CreateFn };
   const original = completions.create.bind(completions);

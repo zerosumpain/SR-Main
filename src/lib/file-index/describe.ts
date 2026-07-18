@@ -3,14 +3,14 @@
 // Image → caption + OCR: mirrors $lib/jkai/intel/preprocess.ts:ocrHandwriting
 // (chat.completions with an image_url data-URL through the canonical gateway),
 // but PINS an explicit OpenRouter vision model rather than the default builder
-// model (glm-5.1, whose vision support is unverified), with a fallback to the
+// model (a GLM model, whose vision support is unverified), with a fallback to the
 // builder default and finally null. The prompt is tuned for *search* — dense,
 // literal descriptions of people, clothing, colours, objects, scene, plus a
 // verbatim OCR of any visible text — so a query like "blue shirt and glasses"
 // matches.
 //
 // Audio → transcript: the OpenAI whisper /audio/transcriptions endpoint is NOT
-// reachable through this repo's gateway (z.ai + OpenRouter only), so transcription
+// reachable through this repo's gateway (OpenRouter only), so transcription
 // goes through a multimodal chat model that accepts an `input_audio` content part
 // (Gemini on OpenRouter). Best-effort: size-capped and try/catch → null, so a
 // failure just leaves the file filename-searchable rather than breaking indexing.
@@ -59,7 +59,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
   if (buf.byteLength > MAX_IMAGE_BYTES) return null;
   const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`;
 
-  const attempt = async (ctx: { provider: 'openrouter' | 'zai'; modelId: string }): Promise<string | null> => {
+  const attempt = async (ctx: { provider: 'openrouter'; modelId: string }): Promise<string | null> => {
     const { client, model } = await getLLMClient(ctx);
     const response = await client.chat.completions.create({
       model,
@@ -84,7 +84,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
     console.warn(`[file-index] ${VISION_MODEL} caption failed (${(err as Error).message}); trying builder default`);
     try {
       const fallback = await resolveDefaultModel('builder');
-      return await attempt({ provider: fallback.provider as 'openrouter' | 'zai', modelId: fallback.modelId });
+      return await attempt({ provider: fallback.provider, modelId: fallback.modelId });
     } catch (err2) {
       console.warn(`[file-index] image caption fully failed: ${(err2 as Error).message}`);
       return null;

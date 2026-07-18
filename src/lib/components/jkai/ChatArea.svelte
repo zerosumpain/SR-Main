@@ -35,7 +35,7 @@
     conversationId,
     initialMessages = [],
     conversation = null,
-    defaultGlmModelId,
+    defaultChatModelId,
     altOpenRouterModel = null,
     messageCount = 0,
     onmodelchange,
@@ -55,7 +55,7 @@
       createdAt?: string;
     }>;
     conversation?: { modelProvider?: string; modelId?: string } | null;
-    defaultGlmModelId: string;
+    defaultChatModelId: string;
     altOpenRouterModel?: ModelContext | null;
     messageCount?: number;
     onmodelchange?: (ctx: ModelContext) => void;
@@ -1294,17 +1294,16 @@
   // show a static label.
   let modelPickerOpen = $state(false);
   const currentModel = $derived({
-    provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'zai',
-    modelId: conversation?.modelId ?? defaultGlmModelId,
+    provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'openrouter',
+    modelId: conversation?.modelId ?? defaultChatModelId,
   });
   function shortModelLabel(id: string): string {
     return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
   }
   // Show the chosen model once the user has picked one; otherwise prompt them to.
-  // The conversation defaults to the GLM default until an explicit choice is made.
+  // The conversation defaults to the site default until an explicit choice is made.
   const modelChosen = $derived(
-    !!conversation?.modelId &&
-      !(currentModel.provider === 'zai' && currentModel.modelId === defaultGlmModelId),
+    !!conversation?.modelId && currentModel.modelId !== defaultChatModelId,
   );
   const modelTriggerLabel = $derived(
     modelChosen ? shortModelLabel(currentModel.modelId) : 'Click to select',
@@ -1343,7 +1342,7 @@
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `/model ${modelId} --provider ${provider}`, conversationId, silent: true }),
+        body: JSON.stringify({ message: `/model ${modelId} --provider openrouter`, conversationId, silent: true }),
       });
       const data = await res.json().catch(() => null);
       const jobId = data?.jobId;
@@ -1601,7 +1600,7 @@
       {/if}
       <!-- Calm by default: the pulsing dot + phase label are enough signal that
            work is happening. The transient/infra states (jitter "checking",
-           "z.ai slow", "server slow", a live second-counter) were anxiety-
+           "provider slow", "server slow", a live second-counter) were anxiety-
            inducing plumbing the user can't act on, so they're gone. The one
            genuinely actionable escalation — a real stall — still surfaces, with
            a Cancel. -->

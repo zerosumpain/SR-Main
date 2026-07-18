@@ -7,7 +7,8 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { keystoneIntel, keystoneIntelRuns } from '$lib/db/schema';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { STRATEGIES } from './strategies';
 import { PRESSURES } from './pressures';
 import { VALID_REFS } from './policy';
@@ -195,16 +196,15 @@ STRATEGY INDEX:
 ${strategyIndex()}`;
   const user = `NEW ITEM:\nTitle: ${c.title}\nPublisher: ${c.publisher ?? '—'}\nType: ${c.docType ?? '—'}\nDate: ${c.publishedAt?.toISOString()?.slice(0, 10) ?? '—'}\nDescription: ${c.description ?? '—'}\nURL: ${c.url}`;
   try {
-    const client = getOpenAIClient();
+    const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
     const res = await client.chat.completions.create(
       {
-        model: getModel(),
+        model,
         messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
         temperature: 0.2,
         max_tokens: 1500,
         response_format: { type: 'json_object' },
-        thinking: { type: 'disabled' },
-      } as any,
+      },
       { signal: AbortSignal.timeout(60_000) as any },
     );
     const p = coerceJson(res.choices?.[0]?.message?.content ?? '{}');

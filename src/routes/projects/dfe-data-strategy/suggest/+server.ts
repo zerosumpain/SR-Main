@@ -6,7 +6,8 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { buildStrategyContext, targetBrief } from '../lib/policy';
 import { coerceJson } from '../lib/jsonsafe';
 
@@ -41,6 +42,8 @@ ${buildStrategyContext()}`;
 
   const user = `ITEM TO DRAFT POLICIES FOR:\n${targetBrief(kind, id, label)}`;
 
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -49,17 +52,15 @@ ${buildStrategyContext()}`;
       };
       try { controller.enqueue(encoder.encode(': keystone\n\n')); } catch { /* noop */ }
       const generate = async (): Promise<string> => {
-        const client = getOpenAIClient();
         const completion = await client.chat.completions.create(
           {
-            model: getModel(),
+            model,
             messages: [{ role: 'system', content: sys }, { role: 'user', content: user }],
             temperature: 0.4,
             max_tokens: 1400,
             stream: true,
-            thinking: { type: 'disabled' },
             response_format: { type: 'json_object' },
-          } as any,
+          },
           { signal: AbortSignal.timeout(90_000) as any },
         );
         let acc = '';

@@ -1,6 +1,6 @@
 // The slide art director. Raw content in (text + media links + picker-attached
 // blocks), one composed slide out: an LLM (through the resilient workflow
-// gateway — timeout, z.ai→OpenRouter failover, concurrency cap) chooses the
+// gateway — timeout, primary→fallback failover, concurrency cap) chooses the
 // most impactful layout and blocks; the deterministic heuristic composes
 // instead whenever the LLM is unavailable or returns something the registry
 // rejects. Every output passes the same validation gate the editor and jkai
@@ -20,8 +20,9 @@ import type { Block, QuoteBlock } from '$lib/presentation/types';
 
 /** Art direction is a one-shot composition, not an agentic loop — GLM 5.2's
  *  quality is worth its latency here (turbo/5.1 stay the agentic models).
- *  The failover pin keeps 5.2 across providers when z.ai is down/limited. */
-const ART_DIRECTOR_MODEL = 'glm-5.2';
+ *  Both slugs are the same OpenRouter model; the gateway's same-model guard
+ *  suppresses a self-fallback, so this just pins 5.2 as the art director. */
+const ART_DIRECTOR_MODEL = 'z-ai/glm-5.2';
 const ART_DIRECTOR_FALLBACK = 'z-ai/glm-5.2';
 
 export interface ComposeContext {

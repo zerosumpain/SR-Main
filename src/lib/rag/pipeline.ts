@@ -152,9 +152,9 @@ export type AnswerResult = { text: string; citations: RagCitation[]; usedContext
 
 /**
  * Stream a chat completion through the canonical LLM gateway (getLLMClient),
- * which handles both z.ai (GLM) and OpenRouter providers — so the caller can
- * pick ANY model the site's ModelPicker offers. GLM burns reasoning from
- * max_tokens, so thinking is disabled for z.ai (feedback_glm_reasoning_tokens).
+ * which routes through OpenRouter — so the caller can pick ANY model the
+ * site's ModelPicker offers. GLM burns reasoning out of max_tokens, so the
+ * ceiling stays generous (feedback_glm_reasoning_tokens).
  */
 const STREAM_IDLE_TIMEOUT_MS = 45_000; // reasoning models can be slow to first token
 
@@ -165,7 +165,6 @@ async function streamAnswer(
   opts: { onToken?: (t: string) => void; signal?: AbortSignal },
 ): Promise<string> {
   const { client, model } = await getLLMClient(ctx);
-  const isGlm = ctx.provider === 'zai';
 
   // Idle watchdog: abort if no token arrives within the timeout, so a stuck
   // provider can't hang the request forever (getLLMClient has no built-in one).
@@ -192,7 +191,6 @@ async function streamAnswer(
         temperature: 0.3,
         max_tokens: 3000,
         stream: true,
-        ...(isGlm ? { thinking: { type: 'disabled' } } : {}),
       },
       { signal: idleAc.signal },
     ));

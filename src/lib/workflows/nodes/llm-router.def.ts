@@ -45,9 +45,9 @@ export const llmRouterDef: NodeDefinition = {
       description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override.',
       options: [
         { value: '', label: 'Default (site setting)' },
-        { value: 'glm-5-turbo', label: 'GLM 5 Turbo — Z.AI' },
-        { value: 'glm-5.2', label: 'GLM 5.2 — Z.AI' },
-        { value: 'glm-5.1', label: 'GLM 5.1 — Z.AI' },
+        { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
+        { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
+        { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
         { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },

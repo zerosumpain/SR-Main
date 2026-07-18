@@ -77,7 +77,7 @@ export async function runPhase2(
   const goals = (session.goals ?? []) as string[];
 
   // Concurrency limiter: cap how many sources are processed in parallel to
-  // avoid saturating z.ai with bursts of simultaneous LLM calls.
+  // avoid saturating the LLM provider with bursts of simultaneous LLM calls.
   // Each source fires up to 3 LLM calls (facts, NER, relationships).
   // Default 3 → ≤9 in-flight LLM calls at any time. Override via
   // DEEPDIVE_LLM_CONCURRENCY env var.

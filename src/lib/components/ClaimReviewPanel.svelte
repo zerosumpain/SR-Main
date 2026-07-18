@@ -232,7 +232,7 @@
   {/if}
 
   {#if !isRunning && claims.length === 0 && !error}
-    <p class="muted">Click <strong>Review claims</strong> to extract factual statements and find reputable sources via Tavily + GLM 5.1.</p>
+    <p class="muted">Click <strong>Review claims</strong> to extract factual statements and find reputable sources via Tavily + the default model.</p>
   {/if}
 
   {#if claims.length > 0}

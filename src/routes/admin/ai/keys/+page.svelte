@@ -8,9 +8,6 @@
   let { data }: { data: PageData } = $props();
   const adminToken = getContext<string>('adminToken');
 
-  let zaiApiKey = $state('');
-  let zaiBaseUrl = $state(data.keys.zaiBaseUrl);
-  let zaiModel = $state(data.keys.zaiModel);
   let tavilyApiKey = $state('');
   let openrouterApiKey = $state('');
   let embeddingModel = $state(data.keys.embeddingModel);
@@ -19,8 +16,6 @@
   let saving = $state(false);
   let saveMsg = $state('');
 
-  let zaiTest = $state<'idle' | 'testing' | 'pass' | 'fail'>('idle');
-  let zaiTestError = $state('');
   let tavilyTest = $state<'idle' | 'testing' | 'pass' | 'fail'>('idle');
   let tavilyTestError = $state('');
 
@@ -30,8 +25,7 @@
     try {
       const pending: Promise<Response>[] = [];
 
-      const fileBody: Record<string, string> = { zaiBaseUrl, zaiModel, embeddingModel };
-      if (zaiApiKey) fileBody.zaiApiKey = zaiApiKey;
+      const fileBody: Record<string, string> = { embeddingModel };
       if (tavilyApiKey) fileBody.tavilyApiKey = tavilyApiKey;
       if (elevenlabsApiKey) fileBody.elevenlabsApiKey = elevenlabsApiKey;
       pending.push(fetch(`/api/admin/deepdive/keys?token=${adminToken}`, {
@@ -53,7 +47,6 @@
 
       if (allOk) {
         saveMsg = 'Saved — reload to refresh status badges';
-        zaiApiKey = '';
         tavilyApiKey = '';
         openrouterApiKey = '';
         elevenlabsApiKey = '';
@@ -63,20 +56,6 @@
       }
     } finally {
       saving = false;
-    }
-  }
-
-  async function testZai() {
-    zaiTest = 'testing';
-    zaiTestError = '';
-    try {
-      const res = await fetch(`/api/admin/deepdive/test-zai?token=${adminToken}`, { method: 'POST' });
-      const result = await res.json();
-      if (result.success) zaiTest = 'pass';
-      else { zaiTest = 'fail'; zaiTestError = result.error ?? 'Unknown error'; }
-    } catch (e: any) {
-      zaiTest = 'fail';
-      zaiTestError = e.message ?? 'Network error';
     }
   }
 
@@ -99,7 +78,7 @@
   <PageHeader
     kicker="AI Config"
     title="API Keys"
-    sub="One place to update Z.AI, OpenRouter, ElevenLabs, and Tavily credentials. Use the in-page test buttons to verify before saving."
+    sub="One place to update OpenRouter, ElevenLabs, and Tavily credentials. Use the in-page test buttons to verify before saving."
   >
     {#snippet actions()}
       {#if saveMsg}<span class="save-msg">{saveMsg}</span>{/if}
@@ -107,50 +86,15 @@
     {/snippet}
   </PageHeader>
 
-  <!-- Z.AI -->
+  <!-- OpenRouter (primary LLM provider) -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Z.AI · LLM provider</span>
-      <span class="nm-pill" data-state={data.keys.zaiConfigured ? 'connected' : 'disconnected'}>
-        {data.keys.zaiConfigured ? 'Configured' : 'Not set'}
-      </span>
-    </div>
-    <p class="muted">Primary chat model. Used by /jkai orchestrator and deep-dive research.</p>
-
-    <div class="nm-form-row">
-      <label class="nm-field">
-        <span class="sr-label-tight">API Key</span>
-        <input class="nm-text-input" type="password" bind:value={zaiApiKey}
-          placeholder={data.keys.zaiConfigured ? '********' : 'Enter API key'} />
-      </label>
-      <label class="nm-field">
-        <span class="sr-label-tight">Base URL</span>
-        <input class="nm-text-input" type="text" bind:value={zaiBaseUrl} />
-      </label>
-    </div>
-    <label class="nm-field">
-      <span class="sr-label-tight">Model</span>
-      <input class="nm-text-input" type="text" bind:value={zaiModel} />
-    </label>
-    <div class="test-row">
-      <button class="nm-btn-ghost" onclick={testZai} disabled={zaiTest === 'testing'}>
-        {zaiTest === 'testing' ? 'Testing…' : 'Test connection'}
-      </button>
-      {#if zaiTest === 'pass'}<span class="result-ok">Pass</span>
-      {:else if zaiTest === 'fail'}<span class="result-bad">{zaiTestError}</span>
-      {/if}
-    </div>
-  </section>
-
-  <!-- OpenRouter -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">OpenRouter</span>
+      <span class="sr-label-tight">OpenRouter · LLM provider</span>
       <span class="nm-pill" data-state={data.keys.openrouterConfigured ? 'connected' : 'disconnected'}>
         {data.keys.openrouterConfigured ? `Configured · ${(data.keys as any).openrouterSource}` : 'Not set'}
       </span>
     </div>
-    <p class="muted">Alternate chat models, embeddings (pgvector fact dedup), and image generation (FLUX). Pick models + browse catalogue at <a class="link" href={`/admin/ai/models?token=${adminToken}`}>/admin/ai/models</a>.</p>
+    <p class="muted">Primary LLM provider — powers the /jkai orchestrator, deep-dive research, and all chat models (GLM via <code>z-ai/*</code> slugs). Also embeddings (pgvector fact dedup) and image generation (FLUX). Pick models + browse catalogue at <a class="link" href={`/admin/ai/models?token=${adminToken}`}>/admin/ai/models</a>.</p>
 
     <div class="nm-form-row">
       <label class="nm-field">

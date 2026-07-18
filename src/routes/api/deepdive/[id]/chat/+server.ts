@@ -3,8 +3,8 @@
 // Desk session. Streams SSE-over-POST: a `sources` frame, then `token` frames,
 // then `done`. Mirrors projects/policy-engine/chat/+server.ts (transport) and
 // reuses the similar-facts pgvector retrieval. All LLM I/O goes through the
-// deepdive streamCompletion gateway (disableThinking to stop GLM reasoning
-// starvation; keeps the OpenRouter 429 fallback + idle watchdog).
+// deepdive streamCompletion gateway (keeps the OpenRouter 429 fallback + idle
+// watchdog).
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/db';
@@ -137,7 +137,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
       send({ type: 'sources', sources: citationSources });
       try {
         const { text } = await streamCompletion(system, user, {
-          disableThinking: true,
           maxTokens: 3072,
           temperature: 0.3,
           signal: request.signal,

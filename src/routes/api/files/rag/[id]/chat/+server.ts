@@ -6,6 +6,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { ragMessages } from '$lib/db/schema';
 import { getOwnedCollection, answer } from '$lib/rag/pipeline';
+import { coerceModelContext } from '$lib/constants/default-models';
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const session = await locals.auth();
@@ -20,10 +21,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   // Optional generation-model override (from the chat's ModelPicker). Validate the
   // shape; anything malformed falls back to the site default inside answer().
+  // Legacy 'zai' overrides (and bare GLM ids) are coerced to an OpenRouter
+  // context rather than rejected.
   const m = body.model;
   const model =
-    m && (m.provider === 'zai' || m.provider === 'openrouter') && typeof m.modelId === 'string' && m.modelId
-      ? { provider: m.provider as 'zai' | 'openrouter', modelId: m.modelId }
+    m && typeof m.modelId === 'string' && m.modelId
+      ? coerceModelContext({ provider: m.provider, modelId: m.modelId })
       : undefined;
 
   // Persist the user turn immediately so the transcript survives a disconnect.

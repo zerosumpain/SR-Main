@@ -4,12 +4,12 @@
 // `client.chat.completions.create()` that workflow node executors used directly
 // with the same resilience the deep-research gateway has:
 //   - concurrency throttle (a counting-semaphore caps parallel LLM calls so a
-//     wide DAG can't fire dozens of z.ai requests at once),
-//   - per-call timeout (z.ai reasoning models can hang; without this a node
+//     wide DAG can't fire dozens of requests at once),
+//   - per-call timeout (reasoning models can hang; without this a node
 //     waits forever),
-//   - z.ai → OpenRouter fallback on rate-limit / our-timeout (the primary node
-//     model is usually z.ai; a slow/limited z.ai now degrades to a fast
-//     OpenRouter model instead of failing the run).
+//   - primary-model → fallback-model failover on rate-limit / our-timeout (a
+//     slow/limited primary degrades to a fast, cheap fallback model instead of
+//     failing the run).
 //
 // The provider-agnostic mechanics live in $lib/llm/resilience. Provider/key
 // resolution reuses the workflow's own resolveLLMClient + the unified
@@ -29,7 +29,7 @@ import {
 } from '$lib/llm/resilience';
 
 /** Per-call ceiling for a non-streaming workflow LLM call. Generous, because
- *  z.ai reasoning models can take tens of seconds; a stuck call falls back. */
+ *  reasoning models can take tens of seconds; a stuck call falls back. */
 const NONSTREAM_TIMEOUT_MS = 90_000;
 /** Idle gap allowed between streamed tokens before the watchdog aborts. */
 const STREAM_IDLE_TIMEOUT_MS = 45_000;
@@ -50,23 +50,18 @@ export interface ChatBody {
   temperature?: number;
   max_tokens?: number;
   response_format?: unknown;
-  /** z.ai-specific reasoning toggle (e.g. `{ type: 'disabled' }`). Passed
-   *  straight through to z.ai; STRIPPED before the OpenRouter fallback because
-   *  non-z.ai providers reject an unknown `thinking` param. */
-  thinking?: unknown;
-  /** Tool/function-calling schemas — passed straight through to the provider
-   *  (both z.ai and the OpenRouter fallback support tool calls). Present so the
-   *  orchestrator's generation loop can route through this gateway without a
-   *  separate raw-client code path. */
+  /** Tool/function-calling schemas — passed straight through to the provider.
+   *  Present so the orchestrator's generation loop can route through this
+   *  gateway without a separate raw-client code path. */
   tools?: unknown;
   tool_choice?: unknown;
 }
 
-/** OpenRouter (Anthropic) models reject response_format + z.ai's `thinking`;
- *  strip both for the fallback path. Tools/tool_choice are preserved — the
- *  fallback model still needs them. */
+/** Some fallback models (e.g. Anthropic via OpenRouter) reject
+ *  response_format; strip it for the fallback path. Tools/tool_choice are
+ *  preserved — the fallback model still needs them. */
 function stripResponseFormat(body: ChatBody): ChatBody {
-  const { response_format: _omitRf, thinking: _omitThinking, ...rest } = body;
+  const { response_format: _omitRf, ...rest } = body;
   return rest;
 }
 
@@ -86,7 +81,7 @@ export async function resilientChatCompletion(
     fallbackModel?: string;
   },
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  const { client, model, provider } = await resolveLLMClient(configuredModel);
+  const { client, model } = await resolveLLMClient(configuredModel);
 
   const call = (c: OpenAI, m: string, b: ChatBody) =>
     withRetry(
@@ -101,15 +96,18 @@ export async function resilientChatCompletion(
   try {
     return await limit(() => call(client, model, body));
   } catch (err) {
-    if (provider !== 'openrouter' && (isRateLimitError(err) || isOurTimeoutAbort(err, opts?.signal))) {
+    // Fail over to a DIFFERENT model — when the primary already IS the
+    // fallback id, retrying it would just hit the same limit.
+    const fallbackModel = opts?.fallbackModel ?? getFallbackModel();
+    if (fallbackModel !== model && (isRateLimitError(err) || isOurTimeoutAbort(err, opts?.signal))) {
       try {
-        const fb = await getLLMClient({ provider: 'openrouter', modelId: opts?.fallbackModel ?? getFallbackModel() });
+        const fb = await getLLMClient({ provider: 'openrouter', modelId: fallbackModel });
         console.warn(
-          `[workflow-llm] z.ai ${isRateLimitError(err) ? 'rate-limited' : 'timed out'}; falling back to OpenRouter ${fb.model}`,
+          `[workflow-llm] ${model} ${isRateLimitError(err) ? 'rate-limited' : 'timed out'}; falling back to ${fb.model}`,
         );
         return await limit(() => call(fb.client, fb.model, stripResponseFormat(body)));
       } catch {
-        throw err; // fallback unavailable (no OR key) or also failed → surface original
+        throw err; // fallback unavailable or also failed → surface original
       }
     }
     throw err;
@@ -184,7 +182,7 @@ export async function resilientChatStream(
   body: ChatBody,
   opts: { signal?: AbortSignal; onToken: (delta: string) => void },
 ): Promise<StreamResult> {
-  const { client, model, provider } = await resolveLLMClient(configuredModel);
+  const { client, model } = await resolveLLMClient(configuredModel);
 
   let emittedAny = false;
   const onToken = (d: string) => {
@@ -195,11 +193,12 @@ export async function resilientChatStream(
   try {
     return await limit(() => runStream(client, model, body, { signal: opts.signal, onToken, idleMs: STREAM_IDLE_TIMEOUT_MS }));
   } catch (err) {
-    if (!emittedAny && provider !== 'openrouter' && (isRateLimitError(err) || isOurTimeoutAbort(err, opts.signal))) {
+    const fallbackModel = getFallbackModel();
+    if (!emittedAny && fallbackModel !== model && (isRateLimitError(err) || isOurTimeoutAbort(err, opts.signal))) {
       try {
-        const fb = await getLLMClient({ provider: 'openrouter', modelId: getFallbackModel() });
+        const fb = await getLLMClient({ provider: 'openrouter', modelId: fallbackModel });
         console.warn(
-          `[workflow-llm] z.ai stream ${isRateLimitError(err) ? 'rate-limited' : 'timed out'}; falling back to OpenRouter ${fb.model}`,
+          `[workflow-llm] ${model} stream ${isRateLimitError(err) ? 'rate-limited' : 'timed out'}; falling back to ${fb.model}`,
         );
         return await limit(() =>
           runStream(fb.client, fb.model, stripResponseFormat(body), { signal: opts.signal, onToken, idleMs: STREAM_IDLE_TIMEOUT_MS }),

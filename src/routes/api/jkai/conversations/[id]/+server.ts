@@ -5,6 +5,7 @@ import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds } from '$
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
+import { coerceModelContext } from '$lib/constants/default-models';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const [conv] = await db
@@ -53,11 +54,11 @@ export const GET: RequestHandler = async ({ params }) => {
 		attachments: attachmentsByMsg.get(m.id) ?? [],
 	}));
 
-	// Get model capabilities from conversation's pinned model
-	const modelCaps = getModelCapabilities({
-		provider: conv.modelProvider as 'zai' | 'openrouter',
-		modelId: conv.modelId,
-	});
+	// Get model capabilities from conversation's pinned model. Legacy rows can
+	// still carry provider 'zai' + a bare GLM id — coerce to an OpenRouter
+	// context so old conversations render (and price) as openrouter.
+	const pinnedModel = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
+	const modelCaps = getModelCapabilities(pinnedModel);
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
 	const [activeBuild] = await db
@@ -77,7 +78,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		.limit(1);
 
 	return json({
-		conversation: conv,
+		conversation: { ...conv, modelProvider: pinnedModel.provider, modelId: pinnedModel.modelId },
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
 		activeBuild: activeBuild ?? null,
@@ -91,7 +92,7 @@ export const DELETE: RequestHandler = async ({ params }) => {
 
 /**
  * PATCH: change the pinned model on a conversation BEFORE any message has been sent.
- * Body: { modelProvider: 'zai' | 'openrouter', modelId: string }
+ * Body: { modelProvider: 'openrouter', modelId: string }
  * 403 if any messages exist on the conversation (locked after first message).
  */
 export const PATCH: RequestHandler = async ({ params, request }) => {
@@ -138,8 +139,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	const { modelProvider, modelId } = body;
 
-	if (modelProvider !== 'zai' && modelProvider !== 'openrouter') {
-		throw error(400, 'modelProvider must be zai or openrouter');
+	if (modelProvider !== 'openrouter') {
+		throw error(400, 'modelProvider must be openrouter');
 	}
 	if (typeof modelId !== 'string' || modelId.length === 0) {
 		throw error(400, 'modelId is required');

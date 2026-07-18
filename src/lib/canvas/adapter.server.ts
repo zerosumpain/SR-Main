@@ -9,7 +9,7 @@ import {
   orchestratorChats,
 } from '$lib/db/schema';
 import { eq, desc, asc, and, or, inArray } from 'drizzle-orm';
-import { GLM_MODELS, DEFAULT_GLM_MODEL_ID } from '$lib/constants/glm-models';
+import { DEFAULT_CHAT_MODEL_ID } from '$lib/constants/default-models';
 import { getSetting } from '$lib/server/models/settings';
 import { slugify as _slugify } from './slug';
 import { mapTypeToKind } from './adapter';
@@ -35,10 +35,19 @@ export type {
   CanvasSummary,
 } from './adapter';
 
+// GLM models surfaced in the canvas model picker. The direct z.ai provider
+// was decommissioned (2026-07-17); GLM now bills through OpenRouter, so these
+// carry full z-ai/* slugs as their values.
+const GLM_MODELS: ModelOption[] = [
+  { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
+  { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
+  { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
+];
+
 /** Pull the model catalogue the user configured on /admin/ai/models. */
 export async function loadModelCatalogue(): Promise<ModelCatalogue> {
   const [glmSetting, orAltSetting, orModels] = await Promise.all([
-    getSetting<{ modelId?: string }>('jkai.chat.default_glm_model'),
+    getSetting<{ modelId?: string }>('jkai.chat.default_model'),
     getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model'),
     db
       .select({
@@ -49,7 +58,7 @@ export async function loadModelCatalogue(): Promise<ModelCatalogue> {
       .orderBy(asc(openrouterModels.id)),
   ]);
 
-  const defaultGlmId = glmSetting?.modelId ?? DEFAULT_GLM_MODEL_ID;
+  const defaultGlmId = glmSetting?.modelId ?? DEFAULT_CHAT_MODEL_ID;
   const altOrId = orAltSetting?.modelId ?? null;
   const defaultLabel = altOrId
     ? `Default → ${defaultGlmId} / alt: ${altOrId}`
@@ -57,7 +66,7 @@ export async function loadModelCatalogue(): Promise<ModelCatalogue> {
 
   return {
     defaultLabel,
-    glm: GLM_MODELS.map((m) => ({ value: m.id, label: m.label })),
+    glm: GLM_MODELS.map((m) => ({ value: m.value, label: m.label })),
     openrouter: orModels.map((m) => ({
       value: m.id,
       label: m.name ? `${m.name} (${m.id})` : m.id,
@@ -101,7 +110,7 @@ const SEED_NODES: SeedNode[] = [
   {
     localId: 'llm_primary',
     type: 'llm-call',
-    label: 'glm-4-flash',
+    label: 'GLM 5.2',
     x: COL[0],
     y: 40,
     config: {

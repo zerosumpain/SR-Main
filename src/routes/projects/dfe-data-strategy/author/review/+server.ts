@@ -8,7 +8,8 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { retrieve } from '../../lib/retrieval.server';
 import { coerceJson } from '../../lib/jsonsafe';
 import { validateReview } from '../../lib/author/reviewValidate';
@@ -71,6 +72,8 @@ export const POST: RequestHandler = async (event) => {
   const nonEmpty = sections.filter((s) => s.text.trim().length > 0);
   if (!nonEmpty.length) throw error(400, 'The draft is empty — write something first.');
 
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -123,13 +126,12 @@ RETRIEVED EVIDENCE:\n${chunks.map((c, i) => `[${i + 1}] ${c.title}\n${c.text.sli
           .join('\n\n---\n\n')}`;
 
         const messages = [
-          { role: 'system', content: sys },
-          { role: 'user', content: user },
+          { role: 'system' as const, content: sys },
+          { role: 'user' as const, content: user },
         ];
         const generate = async (): Promise<string> => {
-          const client = getOpenAIClient();
           const completion = await client.chat.completions.create(
-            { model: getModel(), messages, temperature: 0.2, max_tokens: 7000, stream: true, thinking: { type: 'disabled' }, response_format: { type: 'json_object' } } as any,
+            { model, messages, temperature: 0.2, max_tokens: 7000, stream: true, response_format: { type: 'json_object' } },
             { signal: AbortSignal.timeout(140_000) as any },
           );
           let acc = '';

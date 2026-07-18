@@ -1,10 +1,10 @@
 import type { RequestHandler } from './$types';
 import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { hostnameOf, isReputable } from '$lib/blog/reputable-domains';
 import { plainTextFromHtml } from '$lib/blog/readability';
 
-const MODEL_CTX = { provider: 'zai' as const, modelId: 'glm-5.2' };
 const MAX_CLAIMS = 12;
 const TAVILY_RESULTS_PER_CLAIM = 8;
 const MAX_CANDIDATES_RETURNED = 4;
@@ -58,7 +58,7 @@ function safeJSON<T>(raw: string): T | null {
 }
 
 async function extractClaims(plain: string): Promise<ClaimSeed[]> {
-  const { client, model } = await getLLMClient(MODEL_CTX);
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
   const res = await client.chat.completions.create({
     model,
     messages: [
@@ -138,7 +138,7 @@ export const POST: RequestHandler = async ({ request }) => {
           return;
         }
 
-        send({ type: 'phase', phase: 'extracting', message: 'Reading post and extracting factual claims with GLM 5.1…' });
+        send({ type: 'phase', phase: 'extracting', message: 'Reading post and extracting factual claims with the site default model…' });
 
         let seeds: ClaimSeed[];
         try {

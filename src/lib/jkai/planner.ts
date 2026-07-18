@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
+import { DEFAULT_AGENTIC_MODEL_ID } from '$lib/constants/default-models';
 import { listWorkspaceFiles } from './sandbox';
 import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
@@ -153,8 +154,8 @@ export async function planBuild(
 ): Promise<void> {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
   const { client, model } = await getLLMClient({
-    provider: (build?.modelProvider ?? 'zai') as 'zai' | 'openrouter',
-    modelId: build?.modelId ?? 'glm-5-turbo',
+    provider: 'openrouter',
+    modelId: build?.modelId ?? DEFAULT_AGENTIC_MODEL_ID,
   });
   const priceSnapshot = (build?.priceSnapshot ?? null) as PriceSnapshot | null;
   const deadline = Date.now() + timeLimitMs;
@@ -336,8 +337,8 @@ export async function replanBuild(buildId: string): Promise<boolean> {
   if (!build) return false;
 
   const { client, model } = await getLLMClient({
-    provider: (build.modelProvider ?? 'zai') as 'zai' | 'openrouter',
-    modelId: build.modelId ?? 'glm-5-turbo',
+    provider: 'openrouter',
+    modelId: build.modelId ?? DEFAULT_AGENTIC_MODEL_ID,
   });
   const priceSnapshot = (build.priceSnapshot ?? null) as PriceSnapshot | null;
 

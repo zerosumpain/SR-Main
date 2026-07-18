@@ -5093,7 +5093,7 @@
                   >
                     <option value="">{modelCatalogue.defaultLabel}</option>
                     {#if modelCatalogue.glm.length}
-                      <optgroup label="GLM · Z.AI">
+                      <optgroup label="GLM (OpenRouter)">
                         {#each modelCatalogue.glm as opt (opt.value)}
                           <option value={opt.value}>{opt.label}</option>
                         {/each}
@@ -5193,7 +5193,7 @@
                     >
                       <option value="">{modelCatalogue.defaultLabel}</option>
                       {#if modelCatalogue.glm.length}
-                        <optgroup label="GLM · Z.AI">
+                        <optgroup label="GLM (OpenRouter)">
                           {#each modelCatalogue.glm as opt (opt.value)}
                             <option value={opt.value}>{opt.label}</option>
                           {/each}

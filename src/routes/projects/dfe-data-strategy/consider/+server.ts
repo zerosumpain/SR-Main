@@ -10,7 +10,8 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { referenceIndex, STAKEHOLDERS, VALID_REFS } from '../lib/policy';
 import { retrieve } from '../lib/retrieval.server';
 import { coerceJson } from '../lib/jsonsafe';
@@ -72,6 +73,8 @@ export const POST: RequestHandler = async (event) => {
   const statement = String(body?.statement ?? '').slice(0, 2000).trim();
   if (!statement) throw error(400, 'Write a policy statement first.');
 
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -117,13 +120,12 @@ RETRIEVED EVIDENCE (most relevant corpus material for THIS policy — ground her
 ${chunks.map((c, i) => `[${i + 1}] ${c.title}${c.url ? ` (${c.url})` : ''}\n${c.text.slice(0, 800)}`).join('\n\n')}`;
 
         const messages = [
-          { role: 'system', content: sys },
-          { role: 'user', content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
+          { role: 'system' as const, content: sys },
+          { role: 'user' as const, content: `HEADLINE POLICY${title ? ` — "${title}"` : ''}:\n${statement}` },
         ];
         const generate = async (): Promise<string> => {
-          const client = getOpenAIClient();
           const completion = await client.chat.completions.create(
-            { model: getModel(), messages, temperature: 0.2, max_tokens: 6000, stream: true, thinking: { type: 'disabled' }, response_format: { type: 'json_object' } } as any,
+            { model, messages, temperature: 0.2, max_tokens: 6000, stream: true, response_format: { type: 'json_object' } },
             { signal: AbortSignal.timeout(110_000) as any },
           );
           let acc = '';

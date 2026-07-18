@@ -47,7 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const { client, model } = await getLLMClient(ctx);
 
   // max_tokens generous so GLM's reasoning budget doesn't truncate the answer
-  // (see feedback_glm_reasoning_tokens: thinking deducts from max_tokens).
+  // (see feedback_glm_reasoning_tokens: reasoning deducts from max_tokens).
   const resp = await client.chat.completions.create({
     model,
     messages: [

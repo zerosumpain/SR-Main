@@ -1,16 +1,15 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { GLM_MODELS } from '$lib/constants/glm-models';
   import type { ModelContext } from '$lib/server/models/types';
 
   let { chat, builder }: {
-    chat: { glmModelId: string; altOpenRouterModelId: string | null };
-    builder: { provider: 'zai' | 'openrouter'; modelId: string };
+    chat: { defaultModelId: string; altOpenRouterModelId: string | null };
+    builder: ModelContext;
   } = $props();
 
-  let chatGlm = $state<string>(untrack(() => chat.glmModelId));
+  let chatDefault = $state<string>(untrack(() => chat.defaultModelId));
   let chatAlt = $state<string | null>(untrack(() => chat.altOpenRouterModelId));
-  let builderCtx = $state<ModelContext>(untrack(() => ({ ...builder })));
+  let builderModelId = $state<string>(untrack(() => builder.modelId));
 
   let openrouterOptions = $state<{ id: string; name: string }[]>([]);
   let loadingOr = $state(true);
@@ -20,7 +19,7 @@
 
   async function loadOpenRouter() {
     try {
-      const res = await fetch('/api/admin/models/openrouter?pageSize=500');
+      const res = await fetch('/api/admin/models/openrouter?pageSize=500&sortBy=id');
       if (res.ok) {
         const data = await res.json();
         openrouterOptions = data.rows.map((r: any) => ({ id: r.id, name: r.name }));
@@ -32,25 +31,13 @@
 
   $effect(() => { loadOpenRouter(); });
 
-  function parseBuilderOption(v: string): ModelContext {
-    if (v.startsWith('zai:')) return { provider: 'zai', modelId: v.slice(4) };
-    return { provider: 'openrouter', modelId: v.slice('or:'.length) };
-  }
-  function serialiseBuilder(ctx: ModelContext): string {
-    return ctx.provider === 'zai' ? `zai:${ctx.modelId}` : `or:${ctx.modelId}`;
-  }
-
-  function ctxChanged(a: ModelContext, b: ModelContext): boolean {
-    return a.provider !== b.provider || a.modelId !== b.modelId;
-  }
-
   async function save() {
     saving = true; errorMsg = null; saved = false;
     try {
       const body: Record<string, unknown> = {};
-      if (chatGlm !== chat.glmModelId) body.chatGlmModelId = chatGlm;
+      if (chatDefault !== chat.defaultModelId) body.chatDefaultModelId = chatDefault;
       if (chatAlt !== chat.altOpenRouterModelId) body.chatAltOpenRouterModelId = chatAlt;
-      if (ctxChanged(builderCtx, builder)) body.builder = builderCtx;
+      if (builderModelId !== builder.modelId) body.builder = { provider: 'openrouter', modelId: builderModelId };
 
       if (Object.keys(body).length === 0) {
         saved = true;
@@ -86,37 +73,42 @@
   </h2>
 
   <div class="flex flex-col gap-5">
-    <!-- Chat — GLM default -->
+    <!-- Site default -->
     <div>
       <div
         class="text-[10px] uppercase tracking-wider mb-2"
         style="color: var(--text-ghost); font-family: var(--font-mono);"
       >
-        Chat — GLM default
+        Site default
       </div>
       <label class="flex flex-col gap-1">
         <span class="text-xs" style="color: var(--text-secondary);">
-          GLM model the chat uses by default
+          The OpenRouter model every chat/workflow/one-shot uses unless overridden.
+          Pick from the browser below ("Set default") or here.
         </span>
         <select
           class="rounded px-3 py-2 text-sm"
           style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
-          bind:value={chatGlm}
+          bind:value={chatDefault}
+          disabled={loadingOr}
         >
-          {#each GLM_MODELS as m}
-            <option value={m.id}>{m.label} — {m.description}</option>
+          {#if !openrouterOptions.some((m) => m.id === chatDefault)}
+            <option value={chatDefault}>{chatDefault}</option>
+          {/if}
+          {#each openrouterOptions as m}
+            <option value={m.id}>{m.name} ({m.id})</option>
           {/each}
         </select>
       </label>
     </div>
 
-    <!-- Chat — OpenRouter alternate -->
+    <!-- Chat — alternate -->
     <div>
       <div
         class="text-[10px] uppercase tracking-wider mb-2"
         style="color: var(--text-ghost); font-family: var(--font-mono);"
       >
-        Chat — OpenRouter alternate
+        Chat — alternate
       </div>
       <label class="flex flex-col gap-1">
         <span class="text-xs" style="color: var(--text-secondary);">
@@ -143,34 +135,30 @@
       {/if}
     </div>
 
-    <!-- Builder default -->
+    <!-- Builder / agentic default -->
     <div>
       <div
         class="text-[10px] uppercase tracking-wider mb-2"
         style="color: var(--text-ghost); font-family: var(--font-mono);"
       >
-        Builder default
+        Builder / agentic default
       </div>
       <label class="flex flex-col gap-1">
         <span class="text-xs" style="color: var(--text-secondary);">
-          Combined dropdown — Z.AI or OpenRouter
+          Tool-heavy agentic paths (autonomous builder, delegation) — keep this on a fast model
         </span>
         <select
           class="rounded px-3 py-2 text-sm"
           style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
-          value={serialiseBuilder(builderCtx)}
-          onchange={(e) => (builderCtx = parseBuilderOption(e.currentTarget.value))}
+          bind:value={builderModelId}
+          disabled={loadingOr}
         >
-          <optgroup label="Z.AI">
-            {#each GLM_MODELS as m}
-              <option value={`zai:${m.id}`}>{m.label}</option>
-            {/each}
-          </optgroup>
-          <optgroup label="OpenRouter">
-            {#each openrouterOptions as m}
-              <option value={`or:${m.id}`}>{m.name} ({m.id})</option>
-            {/each}
-          </optgroup>
+          {#if !openrouterOptions.some((m) => m.id === builderModelId)}
+            <option value={builderModelId}>{builderModelId}</option>
+          {/if}
+          {#each openrouterOptions as m}
+            <option value={m.id}>{m.name} ({m.id})</option>
+          {/each}
         </select>
       </label>
     </div>

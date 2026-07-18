@@ -127,7 +127,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
       try {
         const { text } = await streamCompletion(system, user, {
-          disableThinking: true,
           maxTokens: 4096,
           temperature: 0.3,
           signal: request.signal,

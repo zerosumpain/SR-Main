@@ -9,7 +9,8 @@ import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { extractText, synthesize } from '$lib/jkai/extract';
 import { isOwnerEmail } from '$lib/server/access';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { MATURITY_DIMENSIONS } from '../lib/maturity';
 import { PRESSURES } from '../lib/pressures';
 import { POSTURE_AXES } from '../lib/postures';
@@ -92,20 +93,19 @@ For posture nudges, value is −1…1 (−1=left label, +1=right label). For all
 VOCABULARY:
 ${vocab()}`;
 
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
   let parsed: any;
   try {
-    const client = getOpenAIClient();
     const completion = await client.chat.completions.create(
       {
-        model: getModel(),
+        model,
         messages: [
           { role: 'system', content: sys },
           { role: 'user', content: `DOCUMENT (${extracted.kind}, "${(file as File).name}"):\n\n${text}` },
         ],
         temperature: 0.2,
         max_tokens: 1200,
-        thinking: { type: 'disabled' },
-      } as any,
+      },
       { signal: AbortSignal.timeout(60_000) as any },
     );
     parsed = parseJson(completion.choices?.[0]?.message?.content ?? '{}');

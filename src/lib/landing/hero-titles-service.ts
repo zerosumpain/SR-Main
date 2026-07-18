@@ -328,10 +328,6 @@ async function callBatchLLM(
         temperature: 0.9,
         // Sized to the batch — ~260 tokens per entry plus headroom, capped.
         max_tokens: Math.min(16000, 400 + unitCount * 260),
-        // Disable GLM's extended reasoning — these prompts need JSON, not a
-        // chain of thought. `thinking` is a z.ai-specific param.
-        // @ts-expect-error -- z.ai extension, absent from the OpenAI types
-        thinking: { type: 'disabled' },
       },
       { signal: controller.signal },
     );

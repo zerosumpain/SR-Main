@@ -143,9 +143,9 @@ async function callLLM(input: HeroCopyInput): Promise<HeroCopy | null> {
           { role: 'user', content: user },
         ],
         temperature: 0.9,
-        // GLM consumes reasoning tokens out of max_tokens before any visible
-        // output — 800 was getting truncated mid-strap. Reasoning often eats
-        // 700-1500 tokens on its own; give it room for both.
+        // The default model (a GLM) consumes reasoning tokens out of max_tokens
+        // before any visible output — 800 was getting truncated mid-strap.
+        // Reasoning often eats 700-1500 tokens on its own; give it room for both.
         max_tokens: 3000,
       },
       { signal: controller.signal },

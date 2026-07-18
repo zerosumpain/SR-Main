@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { GLM_MODELS } from '$lib/constants/glm-models';
   import type { ModelContext } from '$lib/server/models/types';
 
   let {
@@ -8,15 +7,15 @@
     modelId,
     messageCount,
     altOpenRouterModel,
-    defaultGlmModelId,
+    defaultChatModelId,
     onChanged,
   }: {
     conversationId: string;
-    modelProvider: 'zai' | 'openrouter';
+    modelProvider: 'openrouter';
     modelId: string;
     messageCount: number;
     altOpenRouterModel: ModelContext | null;
-    defaultGlmModelId: string;
+    defaultChatModelId: string;
     onChanged?: (ctx: ModelContext) => void;
   } = $props();
 
@@ -26,9 +25,13 @@
     if (messageCount > 0) locked = true;
   });
 
-  let glmPillLabel = $derived(
-    GLM_MODELS.find((m) => m.id === defaultGlmModelId)?.label ?? defaultGlmModelId,
-  );
+  // Both pills are OpenRouter now — distinguish by model id, not provider.
+  function shortLabel(id: string): string {
+    return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
+  }
+  let defaultPillLabel = $derived(shortLabel(defaultChatModelId));
+  let isDefaultActive = $derived(modelId === defaultChatModelId);
+  let isAltActive = $derived(!!altOpenRouterModel && modelId === altOpenRouterModel.modelId);
   let orLabel = $state<string | null>(null);
   let pending = $state(false);
   let error = $state<string | null>(null);
@@ -96,29 +99,29 @@
     <button
       type="button"
       disabled={pending}
-      aria-pressed={modelProvider === 'zai'}
-      onclick={() => choose({ provider: 'zai', modelId: defaultGlmModelId })}
+      aria-pressed={isDefaultActive}
+      onclick={() => choose({ provider: 'openrouter', modelId: defaultChatModelId })}
       class="model-pill"
       style={
-        modelProvider === 'zai'
+        isDefaultActive
           ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
           : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'
       }
     >
-      {glmPillLabel}
+      {defaultPillLabel}
     </button>
 
     <button
       type="button"
       disabled={pending || !altOpenRouterModel}
-      aria-pressed={modelProvider === 'openrouter'}
+      aria-pressed={isAltActive}
       title={altOpenRouterModel ? undefined : 'Set an OpenRouter alternate in admin'}
       onclick={() => altOpenRouterModel && choose(altOpenRouterModel)}
       class="model-pill"
       style={
         !altOpenRouterModel
           ? 'background: transparent; color: var(--text-ghost); border: 1px dashed var(--card-border); cursor: not-allowed;'
-          : modelProvider === 'openrouter'
+          : isAltActive
             ? 'background: var(--accent); color: white; border: 1px solid var(--accent);'
             : 'background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'
       }

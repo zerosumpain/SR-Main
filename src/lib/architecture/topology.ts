@@ -77,8 +77,7 @@ export const NODES: ArchNode[] = [
   { id: 'google', label: 'Google', kind: 'external', group: 'google', note: 'OAuth · Gmail · Calendar' },
 
   // LLM
-  { id: 'openrouter', label: 'OpenRouter', kind: 'external', group: 'llm', note: 'most models' },
-  { id: 'zai', label: 'z.ai (GLM)', kind: 'external', group: 'llm', note: 'coding paas' },
+  { id: 'openrouter', label: 'OpenRouter', kind: 'external', group: 'llm', note: 'all models · incl. GLM via z-ai/*' },
 
   // Messaging
   { id: 'whatsapp', label: 'WhatsApp', kind: 'external', group: 'messaging', note: 'via Hermes bridge' },
@@ -98,7 +97,6 @@ export const EDGES: ArchEdge[] = [
   { from: 'az-blob', to: 'az-containers' },
   { from: 'vps-app', to: 'google', label: 'OAuth · Gmail', kind: 'data' },
   { from: 'vps-app', to: 'openrouter', label: 'LLM gateway', kind: 'data' },
-  { from: 'vps-app', to: 'zai', label: 'GLM', kind: 'data' },
   { from: 'vps-app', to: 'hs-svc', label: 'scrape proxy (Tailscale)', kind: 'control' },
   { from: 'vps-app', to: 'hs-hermes', label: 'Hermes bridge (Tailscale)', kind: 'control' },
   { from: 'hs-svc', to: 'hs-sandbox', label: 'stealth scrape' },

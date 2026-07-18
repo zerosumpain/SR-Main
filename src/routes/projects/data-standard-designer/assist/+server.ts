@@ -11,7 +11,8 @@
 
 import { json, error } from '@sveltejs/kit';
 import { requireProjectPublic } from '$lib/projects/guard';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { IDENTIFIERS, CATALOG } from '../lib/knowledge';
 import { CODELISTS } from '../lib/codelists';
 import { LEGAL_LEAVES } from '../lib/legalBasis';
@@ -78,8 +79,7 @@ export const POST: RequestHandler = async (event) => {
     : body.mode === 'find-standards' ? 'find-standards'
     : 'design';
 
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
   let system: string;
   let user: string;
@@ -148,11 +148,7 @@ export const POST: RequestHandler = async (event) => {
       temperature: 0.3,
       max_tokens: 6000,
       response_format: { type: 'json_object' },
-      // GLM burns reasoning tokens from max_tokens, which can starve the JSON
-      // output and truncate `fields`. This is structured generation, not a
-      // reasoning task — disable thinking so the whole object is emitted.
-      ...( { thinking: { type: 'disabled' } } as any),
-    } as any);
+    });
     const parsed = JSON.parse(res.choices?.[0]?.message?.content ?? '{}');
     // For find-standards, drop any pick whose refId wasn't a real candidate.
     if (mode === 'find-standards' && parsed && Array.isArray(parsed.standards)) {

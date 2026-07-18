@@ -1,4 +1,4 @@
-export type ModelProvider = 'zai' | 'openrouter';
+export type ModelProvider = 'openrouter';
 
 export interface ModelContext {
   provider: ModelProvider;

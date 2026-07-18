@@ -3,7 +3,8 @@
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiMemories } from '$lib/db/schema';
 import { eq, and, isNull, lt, desc, gt, or } from 'drizzle-orm';
-import { getOpenAIClient, getModel } from '$lib/deepdive/keys';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 
 const REVIEW_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // conversation idle for 30 min
@@ -72,8 +73,7 @@ async function reviewConversation(conversationId: string): Promise<number> {
   const prompt = EXTRACTION_PROMPT.replace('{EXISTING_MEMORIES}', existingText);
 
   // Call LLM for extraction
-  const client = getOpenAIClient();
-  const model = getModel();
+  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
 
   let response;
   try {

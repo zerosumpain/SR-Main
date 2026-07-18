@@ -183,7 +183,7 @@ export const chatExecutor: NodeExecutor = {
       const tokensIn = turnUsage.input_tokens ?? null;
       const tokensOut = turnUsage.output_tokens ?? null;
       // Hermes reports token counts but its own cost estimate is unreliable
-      // for z.ai GLM models (it returns 0). Re-derive cost from our price
+      // for GLM models (it returns 0). Re-derive cost from our price
       // table when we can price the model; fall back to Hermes's number only
       // if the model is unknown to us.
       const pricing = priceFor(provider, model);
