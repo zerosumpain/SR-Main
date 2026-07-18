@@ -15,6 +15,7 @@
 // (deduplicated). Any action key absent from the chosen source falls back to the
 // built-in default for that action.
 
+import { sql, type SQL } from 'drizzle-orm';
 import { DatastoreError } from './types';
 import type {
   DatastoreCollection,
@@ -99,4 +100,35 @@ export function assertCan(
       `actor "${actor}" is not permitted to ${action} this resource`,
     );
   }
+}
+
+/**
+ * A SQL boolean fragment true for exactly the rows `actor` may READ — the
+ * in-database equivalent of `canDo('read', resolvePermissions(row, collection),
+ * actor)`. Used by queryRecords / countRecords / aggregateRecords so row-level
+ * permissions are enforced INSIDE the query (before LIMIT/OFFSET and inside
+ * counts/aggregates), instead of a post-fetch JS filter that breaks pagination
+ * and leaks restricted rows through totals and aggregates.
+ *
+ * Must be evaluated with `datastore_records` as the FROM table (references the
+ * `permissions` and `created_by` columns unqualified).
+ */
+export function readableSqlPredicate(
+  collection: Pick<DatastoreCollection, 'defaultPermissions' | 'createdBy'>,
+  actor: string,
+): SQL {
+  if (actor === 'owner') return sql`TRUE`;
+
+  const colRead = collection.defaultPermissions?.read;
+  const colReadJson = Array.isArray(colRead)
+    ? sql`${JSON.stringify(colRead)}::jsonb`
+    : sql`NULL`;
+  const creator = collection.createdBy ?? 'owner';
+  const builtin = sql`jsonb_build_array(coalesce(created_by, ${creator}), 'owner', 'jkai')`;
+  // resolvePermissions precedence: row perms → collection default → builtin.
+  const eff = sql`coalesce(permissions -> 'read', ${colReadJson}, ${builtin})`;
+  const wildcardWorkflow = actor.startsWith('workflow:')
+    ? sql` OR ${eff} @> '"workflow:*"'::jsonb`
+    : sql``;
+  return sql`(${eff} @> to_jsonb(${actor}::text) OR ${eff} @> '"*"'::jsonb${wildcardWorkflow})`;
 }

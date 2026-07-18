@@ -57,6 +57,31 @@ function pathParam(segments: string[]): string {
   return toPgArrayLiteral(segments);
 }
 
+/**
+ * Validate a dotted path and return its Postgres `text[]` array literal. Shared
+ * with records.ts (aggregates) so path parsing/escaping lives in one place.
+ */
+export function pathLiteral(path: string): string {
+  return toPgArrayLiteral(parsePath(path));
+}
+
+/**
+ * A numeric operand for a comparison, or null when the value is not numeric.
+ * Ordered comparators (gt/gte/lt/lte) additionally accept numeric *strings*
+ * (tool args often arrive stringified); eq/ne only coerce real JS numbers so a
+ * zero-padded code like "007" is not silently matched as 7.
+ */
+function coerceNumericOperand(op: string, value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if ((op === 'gt' || op === 'gte' || op === 'lt' || op === 'lte') && typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 /** Compile one filter to a boolean SQL fragment. */
 function compileOne(filter: QueryFilter): SQL {
   const segments = parsePath(filter.path);
@@ -83,10 +108,15 @@ function compileOne(filter: QueryFilter): SQL {
     throw new DatastoreError('validation', `unknown filter operator: ${JSON.stringify(filter.op)}`);
   }
 
-  // Numeric operand → cast the extracted text to numeric for a true numeric
-  // comparison; otherwise compare as text.
-  if (typeof filter.value === 'number') {
-    return sql`(data #>> ${pl}::text[])::numeric ${sql.raw(symbol)} ${filter.value}`;
+  // Numeric operand → compare as numbers, but GUARD the cast with a CASE on
+  // jsonb_typeof so a single non-numeric row at this path cannot raise
+  // "invalid input syntax for type numeric" and abort the whole query. CASE is
+  // the only construct Postgres guarantees short-circuits (a bare `typeof=...
+  // AND x::numeric` can still evaluate the cast first and throw). Non-numeric
+  // rows yield NULL and are simply excluded.
+  const num = coerceNumericOperand(filter.op, filter.value);
+  if (num !== null) {
+    return sql`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END) ${sql.raw(symbol)} ${num}`;
   }
   return sql`data #>> ${pl}::text[] ${sql.raw(symbol)} ${String(filter.value ?? '')}`;
 }
@@ -111,7 +141,11 @@ export function compileSort(sort: QuerySort | undefined): SQL {
   }
   if (sort?.path) {
     const pl = pathParam(parsePath(sort.path));
-    return sql`data #>> ${pl}::text[] ${dir}`;
+    // Sort on the jsonb value (`#>`), not its text form (`#>>`): jsonb ordering
+    // compares numbers numerically (so a numeric field sorts 2 < 10, not
+    // "10" < "2"), and groups by type otherwise. NULLS LAST keeps missing paths
+    // at the end in both directions.
+    return sql`data #> ${pl}::text[] ${dir} NULLS LAST`;
   }
   return sql`updated_at ${dir}`;
 }

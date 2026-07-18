@@ -24,19 +24,31 @@ describe('compileFilters — operator matrix', () => {
     expect(params).toEqual(['{"status"}', 'open']);
   });
 
-  it('eq on a numeric operand casts the extracted value to numeric', () => {
+  it('eq on a numeric operand casts the extracted value to numeric, guarded by jsonb_typeof', () => {
     const { sql, params } = one([{ path: 'count', op: 'eq', value: 5 }]);
     expect(sql).toContain('::text[])::numeric');
-    expect(sql).toContain('= $2');
-    expect(params).toEqual(['{"count"}', 5]);
+    // CASE-guarded so a non-numeric row cannot raise a cast error.
+    expect(sql).toContain("jsonb_typeof(data #> $1::text[]) = 'number'");
+    expect(sql).toContain('= $3'); // operand is the 3rd param (path, path, value)
+    expect(params).toEqual(['{"count"}', '{"count"}', 5]);
   });
 
   it('supports ne / gt / gte / lt / lte comparators', () => {
+    // ne with a string operand stays a text comparison.
     expect(one([{ path: 'a', op: 'ne', value: 'x' }]).sql).toContain('<> $2');
-    expect(one([{ path: 'a', op: 'gt', value: 1 }]).sql).toContain('> $2');
-    expect(one([{ path: 'a', op: 'gte', value: 1 }]).sql).toContain('>= $2');
-    expect(one([{ path: 'a', op: 'lt', value: 1 }]).sql).toContain('< $2');
-    expect(one([{ path: 'a', op: 'lte', value: 1 }]).sql).toContain('<= $2');
+    // Ordered comparators with a numeric operand are numeric-guarded.
+    for (const op of ['gt', 'gte', 'lt', 'lte'] as const) {
+      const sym = { gt: '>', gte: '>=', lt: '<', lte: '<=' }[op];
+      const { sql } = one([{ path: 'a', op, value: 1 }]);
+      expect(sql).toContain(`${sym} $3`);
+      expect(sql).toContain('::numeric');
+    }
+  });
+
+  it('ordered comparators coerce a numeric STRING operand to a numeric compare', () => {
+    const { sql } = one([{ path: 'age', op: 'gt', value: '18' }]);
+    expect(sql).toContain('::numeric');
+    expect(sql).toContain("jsonb_typeof(data #> $1::text[]) = 'number'");
   });
 
   it('contains compiles to the jsonb @> containment operator', () => {
@@ -105,9 +117,12 @@ describe('compileSort', () => {
     expect(sql.toLowerCase()).toContain('desc');
   });
 
-  it('orders by a jsonb path when path is given', () => {
+  it('orders by the jsonb value (numeric-correct) when path is given', () => {
     const { sql, params } = render(compileSort({ path: 'score', dir: 'asc' }) as SQL);
-    expect(sql).toContain('#>> $1::text[]');
+    // Sort on the jsonb value (`#>`), not text (`#>>`), so numbers order numerically.
+    expect(sql).toContain('#> $1::text[]');
+    expect(sql).not.toContain('#>> $1::text[]');
+    expect(sql.toLowerCase()).toContain('nulls last');
     expect(params[0]).toBe('{"score"}');
     expect(sql.toLowerCase()).toContain('asc');
   });

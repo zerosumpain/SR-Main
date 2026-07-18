@@ -110,3 +110,32 @@ export async function assertPublicUrl(
   }
   return parsed;
 }
+
+/**
+ * Validate an outbound URL AND return the exact public IP the caller should
+ * connect to. Callers must pin the socket to `address` (e.g. via an undici
+ * dispatcher `lookup`) so a DNS rebind between validation and connect cannot
+ * redirect the request to an internal host — the classic SSRF-guard TOCTOU.
+ *
+ * Throws `Error('ssrf_blocked: ...')` on any unsafe URL/host, same as
+ * `assertPublicUrl`.
+ */
+export async function resolvePinnedUrl(
+  url: string,
+): Promise<{ url: URL; address: string; family: 4 | 6 }> {
+  const parsed = await assertPublicUrl(url);
+  const host = parsed.hostname.replace(/^\[|\]$/g, '');
+
+  const literal = isIP(host);
+  if (literal) return { url: parsed, address: host, family: literal as 4 | 6 };
+
+  // Re-resolve and pick a still-public address to pin. assertPublicUrl already
+  // rejected private results; this final re-check guards the pinned address.
+  const records = await lookup(host, { all: true });
+  for (const rec of records) {
+    if (!isBlockedIP(rec.address)) {
+      return { url: parsed, address: rec.address, family: (rec.family === 6 ? 6 : 4) as 4 | 6 };
+    }
+  }
+  throw new Error(`ssrf_blocked: ${host} has no public address to pin`);
+}

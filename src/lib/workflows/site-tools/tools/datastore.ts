@@ -31,17 +31,9 @@ import {
   type QueryFilter,
   type QuerySort,
 } from '$lib/datastore';
+import { toToolError } from './_datastore-errors';
 
 const ACTOR = 'jkai';
-
-/** Map an access-layer error to a friendly `{success:false}` tool result. */
-function toToolError(err: unknown): ToolResult {
-  if (err instanceof DatastoreError || (err as { name?: string })?.name === 'DatastoreError') {
-    const e = err as DatastoreError;
-    return { success: false, error: e.message, data: { code: e.code } };
-  }
-  return { success: false, error: err instanceof Error ? err.message : 'datastore error' };
-}
 
 function requireSlug(args: Record<string, unknown>): string {
   const slug = (args.collection ?? args.slug) as string | undefined;

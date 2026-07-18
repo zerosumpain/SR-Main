@@ -11,9 +11,10 @@
 // Raw secrets are never stored in records — only env-var *names*; the value is
 // injected at call time. All datastore access runs as actor `jkai`.
 
+import { Agent, fetch as undiciFetch } from 'undici';
 import { register } from '../registry-internal';
 import type { ToolDefinition, ToolResult } from '../registry-internal';
-import { assertPublicUrl } from '$lib/server/ssrf-guard';
+import { assertPublicUrl, resolvePinnedUrl } from '$lib/server/ssrf-guard';
 import {
   DatastoreError,
   getRecordByKey,
@@ -21,6 +22,7 @@ import {
   updateRecord,
   upsertRecord,
 } from '$lib/datastore';
+import { toToolError } from './_datastore-errors';
 
 const API_CATALOG = 'api_catalog';
 const ACTOR = 'jkai';
@@ -56,12 +58,24 @@ export function slugifyName(name: string): string {
     .slice(0, 80);
 }
 
-function toToolError(err: unknown): ToolResult {
-  if (err instanceof DatastoreError || (err as { name?: string })?.name === 'DatastoreError') {
-    const e = err as DatastoreError;
-    return { success: false, error: e.message, data: { code: e.code } };
+/**
+ * True only when `url` is on the SAME origin as `baseUrl` and its path is at or
+ * below the baseUrl path. A parsed-origin comparison — NOT a raw string prefix,
+ * which `https://api.example.com.evil.net` and `https://api.example.com@evil.net`
+ * both satisfy, exfiltrating the entry's injected auth secret to the attacker.
+ */
+export function urlIsWithinBase(url: string, baseUrl: string): boolean {
+  let u: URL;
+  let b: URL;
+  try {
+    u = new URL(url);
+    b = new URL(baseUrl);
+  } catch {
+    return false;
   }
-  return { success: false, error: err instanceof Error ? err.message : 'api error' };
+  if (u.origin !== b.origin) return false;
+  const basePath = b.pathname.endsWith('/') ? b.pathname : b.pathname + '/';
+  return u.pathname === b.pathname || (u.pathname + '/').startsWith(basePath);
 }
 
 function tokenize(...parts: (string | string[] | undefined)[]): string[] {
@@ -128,7 +142,7 @@ export async function handleApiSearch(args: Record<string, unknown>): Promise<To
 
     return { success: true, data: { count: top.length, apis: top } };
   } catch (err) {
-    return toToolError(err);
+    return toToolError(err, 'api error');
   }
 }
 
@@ -170,41 +184,106 @@ function resolveAuthHeaders(entry: ApiEntry): Record<string, string> {
   return {};
 }
 
-/** Fetch with SSRF guard, timeout, and a hard response-size cap. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 3;
+const AUTH_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization']);
+
+/**
+ * Fetch with a full SSRF guard, timeout, and a hard response-size cap.
+ *
+ * Every hop (initial + each redirect) is re-validated AND the socket is pinned
+ * to the exact public IP we resolved (`resolvePinnedUrl` + an undici dispatcher
+ * whose `lookup` returns only that address) — so a DNS rebind between check and
+ * connect cannot reach an internal host. Redirects are followed MANUALLY
+ * (`redirect: 'manual'`) so no request is ever issued to an unvalidated target,
+ * and auth/cookie headers are dropped the moment a redirect leaves the original
+ * origin. `undici`'s own `fetch` is used so the dispatcher is honoured.
+ */
 async function guardedFetch(
   url: string,
   opts: { method?: string; headers?: Record<string, string>; body?: unknown } = {},
 ): Promise<{ status: number; ok: boolean; contentType: string; text: string; truncated: boolean }> {
-  await assertPublicUrl(url);
-  const method = (opts.method ?? 'GET').toUpperCase();
-  const headers: Record<string, string> = { Accept: 'application/json, text/*;q=0.8', ...(opts.headers ?? {}) };
+  const baseHeaders: Record<string, string> = {
+    Accept: 'application/json, text/*;q=0.8',
+    ...(opts.headers ?? {}),
+  };
+  let method = (opts.method ?? 'GET').toUpperCase();
   let body: string | undefined;
   if (opts.body !== undefined && method !== 'GET' && method !== 'HEAD') {
     body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
-    if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
-      headers['Content-Type'] = 'application/json';
+    if (!Object.keys(baseHeaders).some((h) => h.toLowerCase() === 'content-type')) {
+      baseHeaders['Content-Type'] = 'application/json';
     }
   }
 
+  const originalOrigin = new URL(url).origin;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
+
+  let current = url;
   let res: Response;
+  let dispatcher: Agent | undefined;
   try {
-    res = await fetch(url, { method, headers, body, signal: controller.signal, redirect: 'follow' });
-  } catch (err: unknown) {
-    clearTimeout(timer);
-    if ((err as { name?: string })?.name === 'AbortError') {
-      throw new Error(`request timed out after ${CALL_TIMEOUT_MS}ms`);
+    for (let hop = 0; ; hop++) {
+      const pinned = await resolvePinnedUrl(current); // validates + gives the IP to pin
+      const { address, family } = pinned;
+      dispatcher = new Agent({
+        connect: {
+          lookup: (_hostname, options, cb) => {
+            if (options && (options as { all?: boolean }).all) cb(null, [{ address, family }]);
+            else (cb as (e: Error | null, a: string, f: number) => void)(null, address, family);
+          },
+        },
+      });
+
+      // Strip auth/cookie headers once we have left the original origin.
+      const headers = { ...baseHeaders };
+      if (new URL(current).origin !== originalOrigin) {
+        for (const h of Object.keys(headers)) {
+          if (AUTH_HEADERS.has(h.toLowerCase())) delete headers[h];
+        }
+      }
+
+      try {
+        res = await undiciFetch(current, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+          redirect: 'manual',
+          dispatcher,
+        }) as unknown as Response;
+      } catch (err: unknown) {
+        if ((err as { name?: string })?.name === 'AbortError') {
+          throw new Error(`request timed out after ${CALL_TIMEOUT_MS}ms`);
+        }
+        throw new Error((err as Error)?.message ?? 'network error');
+      }
+
+      if (REDIRECT_STATUSES.has(res.status)) {
+        const loc = res.headers.get('location');
+        if (!loc) break; // nothing to follow; treat as the final response
+        if (hop >= MAX_REDIRECTS) throw new Error('too many redirects');
+        try { await res.body?.cancel(); } catch { /* ignore */ }
+        await dispatcher.close();
+        dispatcher = undefined;
+        current = new URL(loc, current).toString();
+        // 307/308 preserve method+body; others degrade to a bodyless GET.
+        if (res.status !== 307 && res.status !== 308) {
+          method = 'GET';
+          body = undefined;
+        }
+        continue;
+      }
+      break;
     }
-    throw new Error((err as Error)?.message ?? 'network error');
+  } finally {
+    clearTimeout(timer);
+    if (dispatcher) { try { await dispatcher.close(); } catch { /* ignore */ } }
   }
-  clearTimeout(timer);
 
-  // Re-validate the final URL after redirects (open-redirect defence).
-  if (res.url && res.url !== url) await assertPublicUrl(res.url);
-
-  const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
-  const reader = res.body?.getReader();
+  const contentType = (res!.headers.get('content-type') ?? '').toLowerCase();
+  const reader = res!.body?.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   let truncated = false;
@@ -223,7 +302,7 @@ async function guardedFetch(
     }
   }
   const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8').slice(0, MAX_RESPONSE_BYTES);
-  return { status: res.status, ok: res.ok, contentType, text, truncated };
+  return { status: res!.status, ok: res!.ok, contentType, text, truncated };
 }
 
 /** Best-effort catalogue status update after a call (never throws). */
@@ -250,8 +329,8 @@ export async function handleApiCall(args: Record<string, unknown>): Promise<Tool
     }
     const { key, entry } = found;
 
-    if (!entry.baseUrl || !url.startsWith(entry.baseUrl)) {
-      return { success: false, error: `url must start with the API's baseUrl (${entry.baseUrl}). Refusing to call outside the catalogued host.` };
+    if (!entry.baseUrl || !urlIsWithinBase(url, entry.baseUrl)) {
+      return { success: false, error: `url must be on the API's catalogued host and path (${entry.baseUrl}). Refusing to call outside it.` };
     }
 
     let authHeaders: Record<string, string>;
@@ -298,7 +377,7 @@ export async function handleApiCall(args: Record<string, unknown>): Promise<Tool
       },
     };
   } catch (err) {
-    return toToolError(err);
+    return toToolError(err, 'api error');
   }
 }
 
@@ -352,7 +431,7 @@ export async function handleApiRegister(args: Record<string, unknown>): Promise<
     const rec = await upsertRecord(API_CATALOG, { key, data: data as unknown as Record<string, unknown> }, ACTOR);
     return { success: true, data: { key, status: data.status, id: rec.id } };
   } catch (err) {
-    return toToolError(err);
+    return toToolError(err, 'api error');
   }
 }
 

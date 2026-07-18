@@ -21,9 +21,9 @@ import type {
   RecordRef,
 } from './types';
 import { getCollectionBySlug } from './collections';
-import { assertCan, canDo, resolvePermissions } from './permissions';
+import { assertCan, resolvePermissions, readableSqlPredicate } from './permissions';
 import { validateAgainstSchema } from './validate';
-import { compileFilters, compileSort, clampLimit, clampOffset } from './query';
+import { compileFilters, compileSort, clampLimit, clampOffset, pathLiteral } from './query';
 import { auditDatastore } from './audit';
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 262144; // 256 KB
@@ -101,6 +101,34 @@ async function countInCollection(collectionId: string, filters?: QueryFilter[]):
   return Number(row?.count ?? 0);
 }
 
+/** WHERE fragment scoped to a collection AND restricted to rows the actor may read. */
+function readableWhere(collection: DatastoreCollection, actor: string, filters?: QueryFilter[]): SQL {
+  return sql`${scopedWhere(collection.id, filters)} AND ${readableSqlPredicate(collection, actor)}`;
+}
+
+/** Count only the rows `actor` is permitted to read (for read-facing totals). */
+async function countReadable(
+  collection: DatastoreCollection,
+  actor: string,
+  filters?: QueryFilter[],
+): Promise<number> {
+  const res = await db.execute(
+    sql`SELECT count(*)::int AS count FROM datastore_records WHERE ${readableWhere(collection, actor, filters)}`,
+  );
+  const [row] = rowsOf(res);
+  return Number(row?.count ?? 0);
+}
+
+/** Record counts for every collection in a single grouped query (owner-only admin views). */
+export async function recordCountsByCollection(): Promise<Record<string, number>> {
+  const res = await db.execute(
+    sql`SELECT collection_id, count(*)::int AS count FROM datastore_records GROUP BY collection_id`,
+  );
+  const out: Record<string, number> = {};
+  for (const r of rowsOf(res)) out[String(r.collection_id)] = Number(r.count ?? 0);
+  return out;
+}
+
 async function fetchRow(collection: DatastoreCollection, ref: RecordRef): Promise<DatastoreRecord | null> {
   let res;
   if (ref.id) {
@@ -133,8 +161,12 @@ export async function insertRecord(
 ): Promise<DatastoreRecord> {
   const collection = await getCollectionOrThrow(slug);
 
-  // Write gate is the collection default (the record does not exist yet).
-  assertCan('write', resolvePermissions({ permissions: null, createdBy: actor }, collection), actor);
+  // Write gate is the collection default (the record does not exist yet). Do NOT
+  // seed the fallback with the calling actor — otherwise the built-in default
+  // `[creator,'owner','jkai']` would auto-grant whoever is inserting, so a
+  // collection with no explicit defaultPermissions would have no insert-time
+  // access control across actors. Fall back to the collection's own creator.
+  assertCan('write', resolvePermissions({ permissions: null, createdBy: null }, collection), actor);
   assertSchemaValid(collection, input.data);
   assertPayloadWithinLimit(collection, input.data);
 
@@ -197,12 +229,31 @@ export async function upsertRecord(
   assertSchemaValid(collection, input.data);
   assertPayloadWithinLimit(collection, input.data);
 
-  // Row-level write gate: honour an existing row's override if present.
+  // Row-level write gate: honour an existing row's override if present; for a
+  // brand-new row fall back to the collection default WITHOUT auto-granting the
+  // calling actor (same reasoning as insertRecord).
   const existing = await fetchRow(collection, { key: input.key });
   const gatePerms = existing
     ? resolvePermissions(existing, collection)
-    : resolvePermissions({ permissions: null, createdBy: actor }, collection);
+    : resolvePermissions({ permissions: null, createdBy: null }, collection);
   assertCan('write', gatePerms, actor);
+
+  // A new row via upsert must respect the collection's maxRecords cap too
+  // (insertRecord enforces it; the upsert path previously bypassed it).
+  if (!existing) {
+    const max = settingsOf(collection).maxRecords ?? DEFAULT_MAX_RECORDS;
+    if ((await countInCollection(collection.id)) >= max) {
+      throw new DatastoreError('limit', `collection "${slug}" is at its maxRecords limit (${max})`);
+    }
+  }
+
+  // Preserve an existing row's permissions when the caller does not supply any
+  // (the common data-only update). Overwriting with excluded.permissions (NULL
+  // when omitted) would silently widen a restricted row to the collection default.
+  const permsOnConflict =
+    input.permissions !== undefined && input.permissions !== null
+      ? sql`excluded.permissions`
+      : sql`datastore_records.permissions`;
 
   const res = await db.execute(sql`
     INSERT INTO datastore_records
@@ -218,7 +269,7 @@ export async function upsertRecord(
     )
     ON CONFLICT (collection_id, key) WHERE key IS NOT NULL DO UPDATE SET
       data = excluded.data,
-      permissions = excluded.permissions,
+      permissions = ${permsOnConflict},
       version = datastore_records.version + 1,
       updated_at = now(),
       updated_by = ${actor},
@@ -246,7 +297,15 @@ export async function updateRecord(
   const collection = await getCollectionOrThrow(slug);
   const existing = await fetchRow(collection, ref);
   if (!existing) throw new DatastoreError('not_found', `record not found in "${slug}"`);
-  assertCan('write', resolvePermissions(existing, collection), actor);
+  const effectivePerms = resolvePermissions(existing, collection);
+  assertCan('write', effectivePerms, actor);
+
+  // Rewriting the permission map is an ownership-level action: a plain `write`
+  // actor must not be able to grant itself delete/`*` or lock other actors out.
+  // Require delete-level authority (owner always passes) to change permissions.
+  if (changes.permissions !== undefined) {
+    assertCan('delete', effectivePerms, actor);
+  }
 
   if (changes.expectedVersion !== undefined && changes.expectedVersion !== existing.version) {
     throw new DatastoreError(
@@ -341,7 +400,10 @@ export async function queryRecords(
   const collection = await getCollectionOrThrow(slug);
   assertCollectionReadable(collection, actor);
 
-  const where = scopedWhere(collection.id, opts.filters);
+  // Row-level read permissions are enforced INSIDE the query so LIMIT/OFFSET
+  // page over only the rows the actor may read (a post-fetch JS filter returned
+  // short pages and made restricted rows unreachable).
+  const where = readableWhere(collection, actor, opts.filters);
   const order = compileSort(opts.sort);
   const limit = clampLimit(opts.limit);
   const offset = clampOffset(opts.offset);
@@ -349,14 +411,11 @@ export async function queryRecords(
   const res = await db.execute(sql`
     SELECT * FROM datastore_records WHERE ${where} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset}
   `);
-  // Row-level read filter: honour any row that is MORE restrictive than the
-  // collection default (owner always passes via canDo).
-  const records = rowsOf(res)
-    .map(mapRecordRow)
-    .filter((rec) => canDo('read', resolvePermissions(rec, collection), actor));
+  const records = rowsOf(res).map(mapRecordRow);
 
   if (opts.includeTotal) {
-    const total = await countInCollection(collection.id, opts.filters);
+    // Total is over readable rows only — never leak the count of hidden rows.
+    const total = await countReadable(collection, actor, opts.filters);
     return { records, total };
   }
   return { records };
@@ -369,7 +428,7 @@ export async function countRecords(
 ): Promise<number> {
   const collection = await getCollectionOrThrow(slug);
   assertCollectionReadable(collection, actor);
-  return countInCollection(collection.id, filters);
+  return countReadable(collection, actor, filters);
 }
 
 export async function aggregateRecords(
@@ -380,7 +439,9 @@ export async function aggregateRecords(
   const collection = await getCollectionOrThrow(slug);
   assertCollectionReadable(collection, actor);
 
-  const where = scopedWhere(collection.id, opts.filters);
+  // Aggregate only over rows the actor may read — otherwise sum/avg/count leak
+  // values from restricted rows.
+  const where = readableWhere(collection, actor, opts.filters);
 
   let valueExpr: SQL;
   if (opts.op === 'count') {
@@ -389,8 +450,10 @@ export async function aggregateRecords(
     if (!opts.path) {
       throw new DatastoreError('validation', `aggregate "${opts.op}" requires a numeric path`);
     }
-    const pl = toPathLiteral(opts.path); // validates the path (throws on injection)
-    const inner = sql`(data #>> ${pl}::text[])::numeric`;
+    const pl = pathLiteral(opts.path); // validates the path (throws on injection)
+    // CASE-guard the numeric cast so a non-numeric value at this path yields
+    // NULL (ignored by the aggregate) instead of aborting the whole query.
+    const inner = sql`(CASE WHEN jsonb_typeof(data #> ${pl}::text[]) = 'number' THEN (data #>> ${pl}::text[])::numeric END)`;
     valueExpr =
       opts.op === 'sum'
         ? sql`sum(${inner})`
@@ -402,7 +465,7 @@ export async function aggregateRecords(
   }
 
   if (opts.groupBy) {
-    const gl = toPathLiteral(opts.groupBy);
+    const gl = pathLiteral(opts.groupBy);
     const res = await db.execute(sql`
       SELECT data #>> ${gl}::text[] AS grp, ${valueExpr} AS value
       FROM datastore_records WHERE ${where}
@@ -420,16 +483,4 @@ export async function aggregateRecords(
   );
   const [row] = rowsOf(res);
   return { value: Number(row?.value ?? 0) };
-}
-
-/** Validate + build a `::text[]` path literal (shared with query.ts semantics). */
-function toPathLiteral(path: string): string {
-  if (!/^[a-zA-Z0-9_.]+$/.test(path)) {
-    throw new DatastoreError('validation', `invalid path: ${JSON.stringify(path)}`);
-  }
-  const segments = path.split('.');
-  if (segments.some((s) => s.length === 0)) {
-    throw new DatastoreError('validation', `invalid path (empty segment): ${JSON.stringify(path)}`);
-  }
-  return `{${segments.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 }

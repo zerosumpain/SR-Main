@@ -29,6 +29,7 @@ export {
   deleteRecord,
   countRecords,
   aggregateRecords,
+  recordCountsByCollection,
 } from './records';
 
 // Permission primitives (surfaces derive their own actor; these are the checks).

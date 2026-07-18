@@ -147,9 +147,11 @@ export async function isUserActive(withinMs: number = IDLE_WINDOW_MS): Promise<b
       .limit(1);
     return rows.length > 0;
   } catch (err) {
-    // A DB hiccup must not force-run the loop; treat as "unknown → not active".
-    console.error('[selfimprove] idle check failed:', errMsg(err));
-    return false;
+    // Fail CLOSED: if we cannot tell whether the user is active, assume they are
+    // and skip the run. A DB hiccup must never cause the nightly loop to spend
+    // LLM budget while the user is in fact using the site.
+    console.error('[selfimprove] idle check failed — treating user as active:', errMsg(err));
+    return true;
   }
 }
 
