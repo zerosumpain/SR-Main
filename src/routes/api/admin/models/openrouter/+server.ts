@@ -3,19 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { and, or, sql, ilike, gte, lte, inArray, isNotNull, type SQL } from 'drizzle-orm';
-import type { PgColumn } from 'drizzle-orm/pg-core';
 import { getSetting } from '$lib/server/models/settings';
-
-const SORT_COLUMNS: Record<string, PgColumn> = {
-  id: openrouterModels.id,
-  name: openrouterModels.name,
-  provider: openrouterModels.provider,
-  modality: openrouterModels.modality,
-  contextLength: openrouterModels.contextLength,
-  promptPrice: openrouterModels.promptPrice,
-  completionPrice: openrouterModels.completionPrice,
-  throughput: openrouterModels.throughput,
-};
 
 interface RawBenchmarks {
   intelligence_index?: number;
@@ -34,8 +22,8 @@ interface EnrichedRow extends Row {
   agenticIndex: number | null;
   codingIndex: number | null;
   intelligenceIndex: number | null;
-  /** Hybrid score in [0,1] — only set when sortBy=score; null for models
-   *  missing the quality/price inputs (the "unrated" bucket). */
+  /** Hybrid best-combo score in [0,1]; null for models missing the
+   *  quality/price inputs (the "unrated" bucket). */
   score: number | null;
 }
 
@@ -48,8 +36,12 @@ function enrich(row: Row): EnrichedRow {
   const bench = raw.benchmarks?.artificial_analysis ?? {};
   const prompt = row.promptPrice != null ? Number(row.promptPrice) : null;
   const completion = row.completionPrice != null ? Number(row.completionPrice) : null;
+  // OpenRouter uses -1 as a "variable pricing" sentinel on router pseudo-models
+  // (openrouter/auto) — treat negative prices as unpriced.
   const blendedPerM =
-    prompt != null && completion != null && Number.isFinite(prompt) && Number.isFinite(completion)
+    prompt != null && completion != null &&
+    Number.isFinite(prompt) && Number.isFinite(completion) &&
+    prompt >= 0 && completion >= 0
       ? ((3 * prompt + completion) / 4) * 1_000_000
       : null;
   return {
@@ -88,6 +80,24 @@ function applyHybridScores(rows: EnrichedRow[], wq: number, wp: number, wt: numb
   }
 }
 
+// Sort-value extractor per column. Numeric extractors return null for missing
+// values; nulls always sink to the bottom regardless of direction (the SQL
+// NULLS LAST behaviour this endpoint used to get from Postgres).
+const SORT_VALUE: Record<string, (r: EnrichedRow) => string | number | null> = {
+  id: (r) => r.id,
+  name: (r) => r.name,
+  provider: (r) => r.provider,
+  modality: (r) => r.modality,
+  contextLength: (r) => r.contextLength,
+  promptPrice: (r) => (r.promptPrice != null ? Number(r.promptPrice) : null),
+  completionPrice: (r) => (r.completionPrice != null ? Number(r.completionPrice) : null),
+  throughput: (r) => (r.throughput != null ? Number(r.throughput) : null),
+  blendedPerM: (r) => r.blendedPerM,
+  agenticIndex: (r) => r.agenticIndex,
+  score: (r) => r.score,
+  toolsSupported: (r) => (r.toolsSupported ? 1 : 0),
+};
+
 export const GET: RequestHandler = async ({ url }) => {
   const q = url.searchParams.get('q')?.trim();
   const providers = url.searchParams.getAll('provider').filter(Boolean);
@@ -95,25 +105,23 @@ export const GET: RequestHandler = async ({ url }) => {
   const minContext = num(url.searchParams.get('minContext'));
   const maxCostPerM = num(url.searchParams.get('maxCostPerM')); // USD per 1M completion tokens
   const page = Math.max(1, num(url.searchParams.get('page')) ?? 1);
-  const pageSize = Math.min(100, Math.max(1, num(url.searchParams.get('pageSize')) ?? 50));
+  const pageSize = Math.min(500, Math.max(1, num(url.searchParams.get('pageSize')) ?? 50));
   const sortBy = url.searchParams.get('sortBy') ?? 'id';
   const sortDirParam = url.searchParams.get('sortDir');
-  // Score reads best-first by default; every other column defaults ascending.
-  const sortDir =
-    sortDirParam === 'desc' || (sortBy === 'score' && sortDirParam !== 'asc') ? 'desc' : 'asc';
+  const sortDir = sortDirParam === 'desc' ? 'desc' : sortDirParam === 'asc' ? 'asc' : defaultDir(sortBy);
   // toolsOnly: restrict to models whose supported_parameters include "tools".
   // The jkai orchestrator is an agent and requires tool use — models without it
   // (e.g. morph/relace "apply" models) 404 with "No endpoints found that
   // support tool use". The chat model picker sets this.
   const toolsOnly = url.searchParams.get('toolsOnly') === '1';
-  // Hybrid-score weights (quality / price / throughput), used when sortBy=score.
+  // Hybrid-score weights (quality / price / throughput). Scores are computed on
+  // every request so the Score column is populated in any sort mode.
   const wq = num(url.searchParams.get('wq')) ?? 0.5;
   const wp = num(url.searchParams.get('wp')) ?? 0.3;
   const wt = num(url.searchParams.get('wt')) ?? 0.2;
 
-  const scoreMode = sortBy === 'score';
-  const sortCol = SORT_COLUMNS[sortBy];
-  if (!scoreMode && !sortCol) throw error(400, `invalid sortBy: ${sortBy}`);
+  const sortValue = SORT_VALUE[sortBy];
+  if (!sortValue) throw error(400, `invalid sortBy: ${sortBy}`);
 
   const conditions: SQL[] = [];
   if (q) conditions.push(or(ilike(openrouterModels.name, `%${q}%`), ilike(openrouterModels.id, `%${q}%`))!);
@@ -130,10 +138,13 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const where = conditions.length ? and(...conditions) : undefined;
 
-  // Facets: distinct provider/modality across the entire catalogue (not the filtered set)
-  // so users can always see the full option list. Excludes nulls.
-  const [countRows, providerRows, modalityRows] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(openrouterModels).where(where),
+  // The catalogue is small (~350 rows), so the filtered set is loaded whole,
+  // enriched + scored + sorted in JS, and paginated here. That is what lets
+  // every column — including the derived ones (score, agentic, blended price,
+  // tools) — sort without SQL expressions.
+  // Facets stay distinct across the entire catalogue so users always see the
+  // full option list.
+  const [providerRows, modalityRows, all] = await Promise.all([
     db
       .selectDistinct({ value: openrouterModels.provider })
       .from(openrouterModels)
@@ -144,40 +155,29 @@ export const GET: RequestHandler = async ({ url }) => {
       .from(openrouterModels)
       .where(isNotNull(openrouterModels.modality))
       .orderBy(openrouterModels.modality),
+    db.select().from(openrouterModels).where(where),
   ]);
 
-  let rows: EnrichedRow[];
-  if (scoreMode) {
-    // Score is a cross-row computation (min-max within the candidate set), so
-    // load the full filtered set (~350 rows max), score in JS, paginate here.
-    const all = (await db.select().from(openrouterModels).where(where)).map(enrich);
-    applyHybridScores(all, wq, wp, wt);
-    all.sort((a, b) => {
-      if (a.score == null && b.score == null) return (a.blendedPerM ?? Infinity) - (b.blendedPerM ?? Infinity);
-      if (a.score == null) return 1; // unrated bucket sinks below every rated row
-      if (b.score == null) return -1;
-      return sortDir === 'asc' ? a.score - b.score : b.score - a.score;
-    });
-    rows = all.slice((page - 1) * pageSize, page * pageSize);
-  } else {
-    rows = (
-      await db
-        .select()
-        .from(openrouterModels)
-        .where(where)
-        // NULLS LAST so unpriced / no-throughput models never sort above real
-        // values (Postgres defaults to NULLS FIRST for DESC).
-        .orderBy(sql`${sortCol} ${sql.raw(sortDir === 'desc' ? 'desc' : 'asc')} nulls last`)
-        .limit(pageSize)
-        .offset((page - 1) * pageSize)
-    ).map(enrich);
-  }
+  const rows = all.map(enrich);
+  applyHybridScores(rows, wq, wp, wt);
 
+  const dir = sortDir === 'desc' ? -1 : 1;
+  rows.sort((a, b) => {
+    const va = sortValue(a);
+    const vb = sortValue(b);
+    if (va == null && vb == null) return a.id.localeCompare(b.id);
+    if (va == null) return 1; // nulls sink regardless of direction
+    if (vb == null) return -1;
+    const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number);
+    return cmp === 0 ? a.id.localeCompare(b.id) : dir * cmp;
+  });
+
+  const paged = rows.slice((page - 1) * pageSize, page * pageSize);
   const lastRefreshed = await getSetting<string>('openrouter.last_refreshed_at');
 
   return json({
-    rows,
-    total: countRows[0]?.count ?? 0,
+    rows: paged,
+    total: rows.length,
     page,
     pageSize,
     lastRefreshed,
@@ -190,6 +190,14 @@ export const GET: RequestHandler = async ({ url }) => {
     },
   });
 };
+
+/** Best-first default per column: quality/speed/context/tools read best
+ *  descending, prices ascending (cheapest first), text ascending. */
+function defaultDir(sortBy: string): 'asc' | 'desc' {
+  return ['score', 'agenticIndex', 'throughput', 'contextLength', 'toolsSupported'].includes(sortBy)
+    ? 'desc'
+    : 'asc';
+}
 
 function num(v: string | null): number | undefined {
   if (v == null) return undefined;

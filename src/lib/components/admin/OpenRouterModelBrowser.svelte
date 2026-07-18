@@ -23,11 +23,13 @@
     | 'score'
     | 'id'
     | 'name'
-    | 'provider'
-    | 'contextLength'
+    | 'agenticIndex'
     | 'promptPrice'
     | 'completionPrice'
-    | 'throughput';
+    | 'blendedPerM'
+    | 'throughput'
+    | 'contextLength'
+    | 'toolsSupported';
 
   let {
     defaultModelId = null,
@@ -58,7 +60,9 @@
   let total = $state(0);
   let facetProviders = $state<string[]>([]);
   let facetModalities = $state<string[]>([]);
+  let lastRefreshed = $state<string | null>(null);
   let loading = $state(false);
+  let refreshing = $state(false);
   let actionBusy = $state<string | null>(null);
   let flash = $state<{ text: string; tone: 'ok' | 'err' } | null>(null);
 
@@ -74,11 +78,9 @@
       if (toolsOnly) params.set('toolsOnly', '1');
       params.set('sortBy', sortBy);
       params.set('sortDir', sortDir);
-      if (sortBy === 'score') {
-        params.set('wq', String(wq));
-        params.set('wp', String(wp));
-        params.set('wt', String(wt));
-      }
+      params.set('wq', String(wq));
+      params.set('wp', String(wp));
+      params.set('wt', String(wt));
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
       const res = await fetch(`/api/admin/models/openrouter?${params}`);
@@ -86,6 +88,7 @@
         const data = await res.json();
         rows = data.rows;
         total = data.total;
+        lastRefreshed = data.lastRefreshed ?? null;
         if (data.facets) {
           facetProviders = data.facets.providers;
           facetModalities = data.facets.modalities;
@@ -115,6 +118,25 @@
     untrack(() => load());
   });
 
+  /** Re-pull the catalogue from OpenRouter (prices, benchmarks, new models),
+   *  then reload — scores recalculate against the fresh data. */
+  async function refreshCatalogue() {
+    refreshing = true;
+    flash = null;
+    try {
+      const res = await fetch('/api/admin/models/openrouter/refresh', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      flash = { text: `Catalogue refreshed — ${data.count} models`, tone: 'ok' };
+      await load();
+    } catch (e: any) {
+      flash = { text: e.message ?? String(e), tone: 'err' };
+    } finally {
+      refreshing = false;
+      setTimeout(() => { flash = null; }, 4000);
+    }
+  }
+
   function toggleSet(set: Set<string>, value: string): Set<string> {
     const next = new Set(set);
     if (next.has(value)) next.delete(value);
@@ -139,13 +161,15 @@
     page = 1;
   }
 
+  // Best-first default per column (mirrors the API's defaultDir).
+  const DESC_FIRST: SortKey[] = ['score', 'agenticIndex', 'throughput', 'contextLength', 'toolsSupported'];
+
   function sortByColumn(col: SortKey) {
     if (sortBy === col) {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       sortBy = col;
-      // Score/throughput/context read best descending; text and price ascending.
-      sortDir = col === 'score' || col === 'throughput' || col === 'contextLength' ? 'desc' : 'asc';
+      sortDir = DESC_FIRST.includes(col) ? 'desc' : 'asc';
     }
     page = 1;
   }
@@ -180,6 +204,12 @@
     return v == null ? 'unrated' : (v * 100).toFixed(0);
   }
 
+  function fmtRefreshed(iso: string | null): string {
+    if (!iso) return 'never';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  }
+
   async function postSettings(body: Record<string, unknown>, label: string, rowKey: string) {
     actionBusy = rowKey;
     flash = null;
@@ -204,12 +234,13 @@
     await postSettings({ chatDefaultModelId: id }, `Set ${id} as SITE DEFAULT`, `default:${id}`);
   }
 
+  /** Toggle: clicking on the current alt clears it (the alternate is optional). */
   async function setAsChatAlt(id: string) {
-    await postSettings(
-      { chatAltOpenRouterModelId: id },
-      `Set ${id} as chat alternate`,
-      `chat:${id}`,
-    );
+    if (chatAltOpenRouterModelId === id) {
+      await postSettings({ chatAltOpenRouterModelId: null }, 'Cleared chat alternate', `chat:${id}`);
+    } else {
+      await postSettings({ chatAltOpenRouterModelId: id }, `Set ${id} as chat alternate`, `chat:${id}`);
+    }
   }
 
   async function setAsBuilder(id: string) {
@@ -219,18 +250,73 @@
       `builder:${id}`,
     );
   }
+
+  async function clearChatAlt() {
+    await postSettings({ chatAltOpenRouterModelId: null }, 'Cleared chat alternate', 'chat:clear');
+  }
 </script>
 
 <section
   class="p-5"
   style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
 >
-  <h2
-    class="text-sm uppercase tracking-wider mb-4"
-    style="color: var(--text-ghost); font-family: var(--font-mono);"
-  >
-    Browse OpenRouter models
-  </h2>
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h2
+      class="text-sm uppercase tracking-wider"
+      style="color: var(--text-ghost); font-family: var(--font-mono);"
+    >
+      OpenRouter models
+    </h2>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+        refreshed {fmtRefreshed(lastRefreshed)}
+      </span>
+      <button
+        class="rounded px-3 py-1.5 text-xs border"
+        style="border-color: var(--card-border); color: var(--text-secondary); background: var(--surface-overlay); {refreshing ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+        onclick={refreshCatalogue}
+        disabled={refreshing}
+        title="Re-pull the catalogue from OpenRouter (prices, benchmarks, new models) and recalculate scores"
+      >
+        {refreshing ? 'Refreshing…' : 'Refresh + recalculate'}
+      </button>
+    </div>
+  </div>
+
+  <!-- Current selections — set via the row actions in the table below -->
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="text-[10px] uppercase tracking-wider" style="color: var(--text-ghost); font-family: var(--font-mono);">Current</span>
+    <span
+      class="px-2 py-0.5 rounded text-[11px]"
+      style="background: var(--accent); color: white; font-family: var(--font-mono);"
+      title="Site default — used by every chat/workflow/one-shot unless overridden"
+    >
+      default · {defaultModelId ?? '—'}
+    </span>
+    <span
+      class="px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1"
+      style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border); font-family: var(--font-mono);"
+      title="Optional alternate the in-chat toggle flips to"
+    >
+      chat alt · {chatAltOpenRouterModelId ?? 'none'}
+      {#if chatAltOpenRouterModelId}
+        <button
+          class="clear-x"
+          onclick={clearChatAlt}
+          disabled={actionBusy === 'chat:clear'}
+          title="Clear the chat alternate"
+          aria-label="Clear the chat alternate"
+        >×</button>
+      {/if}
+    </span>
+    <span
+      class="px-2 py-0.5 rounded text-[11px]"
+      style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border); font-family: var(--font-mono);"
+      title="Tool-heavy agentic paths (autonomous builder, delegation) — keep this fast"
+    >
+      builder · {builderModelId ?? '—'}
+    </span>
+  </div>
 
   <!-- Top-row filters: search + numeric ranges + tools toggle -->
   <div class="flex flex-wrap gap-2 mb-3 items-center">
@@ -407,8 +493,14 @@
               Score{sortIndicator('score')}
             </button>
           </th>
-          <th class="text-right px-2 py-2" title="Artificial Analysis agentic index — tool-use quality">
-            Agentic
+          <th class="text-right px-2 py-2" aria-sort={ariaDir('agenticIndex')}>
+            <button
+              class="sort-btn sort-btn--right"
+              onclick={() => sortByColumn('agenticIndex')}
+              title="Artificial Analysis agentic index — tool-use quality"
+            >
+              Agentic{sortIndicator('agenticIndex')}
+            </button>
           </th>
           <th class="text-right px-2 py-2" aria-sort={ariaDir('promptPrice')}>
             <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('promptPrice')}>
@@ -420,8 +512,14 @@
               Out $/1M{sortIndicator('completionPrice')}
             </button>
           </th>
-          <th class="text-right px-2 py-2" title="Blended $/1M at a 3:1 input:output ratio">
-            Blend $/1M
+          <th class="text-right px-2 py-2" aria-sort={ariaDir('blendedPerM')}>
+            <button
+              class="sort-btn sort-btn--right"
+              onclick={() => sortByColumn('blendedPerM')}
+              title="Blended $/1M at a 3:1 input:output ratio"
+            >
+              Blend $/1M{sortIndicator('blendedPerM')}
+            </button>
           </th>
           <th class="text-right px-2 py-2" aria-sort={ariaDir('throughput')}>
             <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('throughput')} title="Median tokens/sec across provider endpoints">
@@ -433,7 +531,15 @@
               Context{sortIndicator('contextLength')}
             </button>
           </th>
-          <th class="text-center px-2 py-2" title="Supports tool/function calling">Tools</th>
+          <th class="text-center px-2 py-2" aria-sort={ariaDir('toolsSupported')}>
+            <button
+              class="sort-btn sort-btn--center"
+              onclick={() => sortByColumn('toolsSupported')}
+              title="Supports tool/function calling"
+            >
+              Tools{sortIndicator('toolsSupported')}
+            </button>
+          </th>
           <th class="text-right px-2 py-2">Actions</th>
         </tr>
       </thead>
@@ -491,7 +597,7 @@
                 class="rounded px-2 py-1 text-[10px] border"
                 style="border-color: {isDefault ? 'var(--accent)' : 'var(--card-border)'}; color: {isDefault ? 'white' : 'var(--text-secondary)'}; background: {isDefault ? 'var(--accent)' : 'var(--surface-overlay)'}; {actionBusy === `default:${m.id}` ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                 onclick={() => setAsDefault(m.id)}
-                disabled={actionBusy === `default:${m.id}`}
+                disabled={actionBusy === `default:${m.id}` || isDefault}
                 title="Make this the site-wide default model"
               >
                 {actionBusy === `default:${m.id}` ? '…' : 'Set default'}
@@ -501,15 +607,15 @@
                 style="border-color: {isChatAlt ? 'var(--accent)' : 'var(--card-border)'}; color: {isChatAlt ? 'var(--accent)' : 'var(--text-secondary)'}; background: var(--surface-overlay); {actionBusy === `chat:${m.id}` ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                 onclick={() => setAsChatAlt(m.id)}
                 disabled={actionBusy === `chat:${m.id}`}
-                title="Use this model as the chat alternate"
+                title={isChatAlt ? 'Clear the chat alternate' : 'Use this model as the chat alternate'}
               >
-                {actionBusy === `chat:${m.id}` ? '…' : 'Chat alt'}
+                {actionBusy === `chat:${m.id}` ? '…' : isChatAlt ? 'Clear alt' : 'Chat alt'}
               </button>
               <button
                 class="rounded px-2 py-1 text-[10px] border ml-1"
                 style="border-color: {isBuilder ? 'var(--accent)' : 'var(--card-border)'}; color: {isBuilder ? 'var(--accent)' : 'var(--text-secondary)'}; background: var(--surface-overlay); {actionBusy === `builder:${m.id}` ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
                 onclick={() => setAsBuilder(m.id)}
-                disabled={actionBusy === `builder:${m.id}`}
+                disabled={actionBusy === `builder:${m.id}` || isBuilder}
                 title="Set this model as the builder default"
               >
                 {actionBusy === `builder:${m.id}` ? '…' : 'Builder'}
@@ -567,8 +673,23 @@
   .sort-btn--right {
     text-align: right;
   }
+  .sort-btn--center {
+    text-align: center;
+  }
   .sort-btn:hover {
     color: var(--text-secondary);
+  }
+  .clear-x {
+    background: none;
+    border: 0;
+    padding: 0 0 0 2px;
+    color: var(--text-ghost);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .clear-x:hover {
+    color: var(--error);
   }
   input[type='range'] {
     accent-color: var(--accent);

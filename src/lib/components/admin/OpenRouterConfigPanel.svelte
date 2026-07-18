@@ -1,10 +1,9 @@
 <script lang="ts">
-  let { configured, source, modelCount, lastRefreshed }:
-    { configured: boolean; source: string; modelCount: number; lastRefreshed: string | null } = $props();
+  let { configured, source, modelCount }:
+    { configured: boolean; source: string; modelCount: number } = $props();
 
   let keyInput = $state('');
   let saving = $state(false);
-  let refreshing = $state(false);
   let errorMsg = $state<string | null>(null);
   let msg = $state<string | null>(null);
 
@@ -22,17 +21,6 @@
     } catch (e: any) { errorMsg = e.message; }
     finally { saving = false; }
   }
-
-  async function refresh() {
-    refreshing = true; errorMsg = null; msg = null;
-    try {
-      const res = await fetch('/api/admin/models/openrouter/refresh', { method: 'POST' });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      msg = `Refreshed — ${data.count} models cached.`;
-    } catch (e: any) { errorMsg = e.message; }
-    finally { refreshing = false; }
-  }
 </script>
 
 <section
@@ -43,7 +31,7 @@
     class="text-sm uppercase tracking-wider mb-4"
     style="color: var(--text-ghost); font-family: var(--font-mono);"
   >
-    OpenRouter
+    OpenRouter API key
   </h2>
 
   <!-- Status line -->
@@ -71,9 +59,6 @@
       Cache:
       <strong style="color: var(--text-primary);">{modelCount}</strong>
       models
-      {#if lastRefreshed}
-        <span style="color: var(--text-ghost);">· last refreshed {new Date(lastRefreshed).toLocaleString()}</span>
-      {/if}
     </span>
   </div>
 
@@ -98,14 +83,6 @@
         disabled={saving || keyInput.length === 0}
       >
         {saving ? 'Saving…' : 'Save key'}
-      </button>
-      <button
-        class="rounded px-3 py-1.5 text-xs border"
-        style="border-color: var(--card-border); color: var(--text-secondary); background: var(--surface-overlay); {refreshing ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
-        onclick={refresh}
-        disabled={refreshing}
-      >
-        {refreshing ? 'Refreshing…' : 'Refresh model list'}
       </button>
       {#if msg}
         <span class="text-xs" style="color: var(--accent);">{msg}</span>
