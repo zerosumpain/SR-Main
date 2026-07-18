@@ -13,6 +13,8 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - `src/lib/workflows/` — workflow engine nodes and runners
 - `src/routes/admin/` — admin UIs (blog, biome, scraper, gmail, jkai)
 - `src/routes/jkai/` — jkai chat hub + autonomous builder
+- `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
+- `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`): learns question intents, grows the `api_catalog`, authors runtime custom tools. Dashboard: `/admin/ai/improvement`
 
 ### Web scraper (stealth Playwright)
 
