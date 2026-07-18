@@ -91,6 +91,17 @@ startScheduledEngine().catch((err) => {
   console.error('[hooks.server] Scheduled engine failed to start:', err);
 });
 
+// Datastore TTL reaper + nightly self-improvement engine. The reaper sweeps
+// expired records hourly; the self-improvement engine seeds its system
+// collections on every boot and (in production only) schedules the nightly
+// idle-time run. Neither belongs in the jkai-builder sidecar process.
+import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
+import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+if (process.env.JKAI_BUILDER_PROCESS !== '1') {
+  startDatastoreReaper();
+  startSelfImprovement();
+}
+
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
 import { stopScheduler as stopHealthScheduler } from '$lib/health/scheduler';
 import { stopScheduler as stopWorkflowScheduler } from '$lib/workflows/scheduler';
@@ -118,6 +129,8 @@ async function gracefulShutdown() {
   stopHeroTitlesScheduler();
   stopGmailWatcher();
   unregisterGmailBridge();
+  stopDatastoreReaper();
+  stopSelfImprovement();
   process.exit(0);
 }
 
