@@ -99,7 +99,21 @@
               <span class="mo-chip">last {fmt(m.lastRunAt)}</span>
               <span class="mo-chip">next {fmt(m.nextRunAt)}</span>
               {#if m.lastStatus}<span class="mo-chip mo-status-{m.lastStatus}">{m.lastStatus}</span>{/if}
+              {#if m.hits.length}<span class="mo-chip mo-chip-hit">{m.hits.reduce((s, h) => s + h.newCount, 0)} found</span>{/if}
             </div>
+            {#if m.hits.length}
+              <details class="mo-hits">
+                <summary><span class="sr-label-tight">Recent finds ({m.hits.length})</span></summary>
+                <ul class="mo-hit-list">
+                  {#each m.hits as h, i (i)}
+                    <li class="mo-hit">
+                      <span class="mo-hit-hd">{fmt(h.at)} · {h.newCount} new</span>
+                      {#if h.preview}<span class="mo-hit-prev">{h.preview}</span>{/if}
+                    </li>
+                  {/each}
+                </ul>
+              </details>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -147,4 +161,13 @@
   .mo-chip { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); background: color-mix(in srgb, var(--card-border) 18%, transparent); padding: 1px 6px; }
   .mo-status-completed { color: var(--status-success, #2a9d4a); }
   .mo-status-failed { color: var(--status-error, #c0392b); }
+  .mo-chip-hit { color: var(--accent-ink, var(--accent, #c4570a)); border: 1px solid currentColor; }
+
+  .mo-hits { margin-top: 8px; }
+  .mo-hits summary { cursor: pointer; }
+  .mo-hit-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mo-hit { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--card-border); padding-left: 8px; }
+  .mo-hit-hd { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .mo-hit-prev { font-size: 12px; color: var(--text-muted); word-break: break-word; }
+  .sr-label-tight { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
 </style>

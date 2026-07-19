@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { AgentDef } from '$lib/agents/types';
   import { invalidateAll } from '$app/navigation';
+  import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
+  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+
+  type LiveStep = { toolCallId: string; tool: string; args: Record<string, unknown>; result?: unknown; status: 'running' | 'done' | 'error'; summary?: string; expanded?: boolean };
+  type LiveAgent = { agentId: string; task: string; status: 'running' | 'done' | 'error'; summary?: string; liveTokens: string; toolSteps: LiveStep[]; startedAt?: number };
 
   let { data }: { data: { agents: AgentDef[] } } = $props();
   const agents = $derived(data.agents ?? []);
@@ -65,21 +70,62 @@
   let delRunning = $state(false);
   let delResult = $state<{ agent: string; role: string; response: string } | null>(null);
   let delErr = $state<string | null>(null);
+  let liveAgent = $state<LiveAgent | null>(null);
+
+  function toggleStep(_agentId: string, toolCallId: string) {
+    if (!liveAgent) return;
+    liveAgent = { ...liveAgent, toolSteps: liveAgent.toolSteps.map((s) => (s.toolCallId === toolCallId ? { ...s, expanded: !s.expanded } : s)) };
+  }
+
+  function handleFrame(msg: { type: string; event?: Record<string, unknown>; result?: { agent: string; role: string; response: string }; message?: string }) {
+    if (!liveAgent) return;
+    if (msg.type === 'event' && msg.event) {
+      const e = msg.event as { type: string; tool?: string; args?: Record<string, unknown>; toolCallId?: string; summary?: string; result?: unknown; status?: 'done' | 'error'; delta?: string };
+      if (e.type === 'tool_start') {
+        const id = e.toolCallId ?? `s${liveAgent.toolSteps.length}`;
+        liveAgent = { ...liveAgent, toolSteps: [...liveAgent.toolSteps, { toolCallId: id, tool: e.tool ?? 'tool', args: e.args ?? {}, status: 'running', summary: e.summary }] };
+      } else if (e.type === 'tool_result') {
+        liveAgent = { ...liveAgent, toolSteps: liveAgent.toolSteps.map((s) => (s.toolCallId === e.toolCallId ? { ...s, result: e.result, status: e.status ?? 'done', summary: e.summary ?? s.summary } : s)) };
+      } else if (e.type === 'token') {
+        liveAgent = { ...liveAgent, liveTokens: (liveAgent.liveTokens + (e.delta ?? '')).slice(-2000) };
+      }
+    } else if (msg.type === 'done' && msg.result) {
+      delResult = msg.result;
+      liveAgent = { ...liveAgent, status: 'done', summary: msg.result.response.split('\n').find((l) => l.trim()) };
+    } else if (msg.type === 'error') {
+      delErr = msg.message ?? 'Delegation failed';
+      liveAgent = { ...liveAgent, status: 'error' };
+    }
+  }
 
   async function delegate() {
     if (!delAgent || !delTask.trim() || delRunning) return;
     delRunning = true; delErr = null; delResult = null;
+    liveAgent = { agentId: delAgent, task: delTask.trim(), status: 'running', liveTokens: '', toolSteps: [], startedAt: Date.now() };
     try {
-      const res = await fetch('/api/jkai/agents/delegate', {
+      const res = await fetch('/api/jkai/agents/delegate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent: delAgent, task: delTask.trim() }),
       });
-      const b = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
-      delResult = b.result;
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop() ?? '';
+        for (const p of parts) {
+          const line = p.split('\n').find((l) => l.startsWith('data: '));
+          if (line) { try { handleFrame(JSON.parse(line.slice(6))); } catch { /* skip bad frame */ } }
+        }
+      }
     } catch (e) {
       delErr = e instanceof Error ? e.message : 'Delegation failed';
+      if (liveAgent) liveAgent = { ...liveAgent, status: 'error' };
     } finally {
       delRunning = false;
     }
@@ -107,10 +153,13 @@
     </div>
     <textarea class="ag-task" rows="2" placeholder="what should this specialist do?" bind:value={delTask}></textarea>
     {#if delErr}<p class="ag-err">⚠ {delErr}</p>{/if}
+    {#if liveAgent}
+      <div class="ag-live"><SubAgentBubble agent={liveAgent} onToggleStep={toggleStep} /></div>
+    {/if}
     {#if delResult}
       <div class="ag-result">
         <div class="ag-result-hd"><span class="sr-label-tight">{delResult.role} responded</span></div>
-        <div class="ag-result-body">{delResult.response}</div>
+        <div class="ag-result-body"><ChatMarkdown content={delResult.response} /></div>
       </div>
     {/if}
   </section>
@@ -184,6 +233,7 @@
   .ag-task { width: 100%; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-size: 13px; padding: 8px 10px; outline: none; box-sizing: border-box; resize: vertical; }
 
   .ag-err { color: var(--status-error, #c0392b); font-size: 12px; margin: 6px 0 0; }
+  .ag-live { margin-top: 12px; }
   .ag-result { margin-top: 12px; border: 1px solid var(--card-border); padding: 12px; }
   .ag-result-hd { margin-bottom: 6px; }
   .ag-result-body { font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--text-muted); }

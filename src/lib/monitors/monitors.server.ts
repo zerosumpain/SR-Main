@@ -4,8 +4,8 @@
 // records a marker in the `monitors` datastore collection so the /jkai/monitors
 // page can list + manage them. SERVER ONLY (generator + DB + scheduler).
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, workflowSchedules, workflowRuns } from '$lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { workflows, workflowNodes, workflowEdges, workflowSchedules, workflowRuns, nodeExecutions } from '$lib/db/schema';
+import { eq, desc, inArray } from 'drizzle-orm';
 import { ensureCollection, upsertRecord, queryRecords, deleteRecord, DatastoreError } from '$lib/datastore';
 
 export const MONITORS_COLLECTION = 'monitors';
@@ -20,13 +20,54 @@ export interface MonitorMarker {
   createdAt: string;
 }
 
+export interface MonitorHit {
+  at: string;
+  newCount: number;
+  preview: string;
+}
+
 export interface MonitorStatus extends MonitorMarker {
   enabled: boolean;
   scheduleId: string | null;
   lastRunAt: string | null;
   nextRunAt: string | null;
   lastStatus: string | null;
+  hits: MonitorHit[];
   url: string;
+}
+
+/**
+ * Recent "hits" a monitor surfaced — runs where a dedupe node reported new items
+ * (`outputData.newCount > 0`). This is the "what did it find" view. Best-effort.
+ */
+export async function getMonitorHits(workflowId: string, limit = 4): Promise<MonitorHit[]> {
+  const runs = await db
+    .select({ id: workflowRuns.id, startedAt: workflowRuns.startedAt })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.workflowId, workflowId))
+    .orderBy(desc(workflowRuns.startedAt))
+    .limit(30);
+  if (!runs.length) return [];
+  const runAt = new Map(runs.map((r) => [r.id, r.startedAt?.toISOString() ?? '']));
+  const execs = await db
+    .select({ runId: nodeExecutions.runId, outputData: nodeExecutions.outputData })
+    .from(nodeExecutions)
+    .where(inArray(nodeExecutions.runId, runs.map((r) => r.id)));
+  const hits: MonitorHit[] = [];
+  for (const ex of execs) {
+    const out = ex.outputData as { newCount?: number; items?: unknown[]; newItems?: unknown[] } | null;
+    const newCount = out && typeof out.newCount === 'number' ? out.newCount : 0;
+    if (newCount > 0) {
+      const items = Array.isArray(out?.newItems) ? out!.newItems : Array.isArray(out?.items) ? out!.items : [];
+      const preview = items
+        .slice(0, 3)
+        .map((i) => (typeof i === 'string' ? i : JSON.stringify(i)))
+        .join(' · ')
+        .slice(0, 300);
+      hits.push({ at: runAt.get(ex.runId) ?? '', newCount, preview });
+    }
+  }
+  return hits.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
 
 const PERMS = { read: ['owner', 'jkai', 'system'], write: ['owner', 'jkai', 'system'], delete: ['owner', 'system'] };
@@ -141,6 +182,7 @@ export async function listMonitors(): Promise<MonitorStatus[]> {
       lastRunAt: sched?.lastRunAt ? sched.lastRunAt.toISOString() : null,
       nextRunAt: sched?.nextRunAt ? sched.nextRunAt.toISOString() : null,
       lastStatus: lastRun?.status ?? null,
+      hits: await getMonitorHits(m.workflowId),
       url: `${baseUrl()}/jkai/canvas/${m.slug}`,
     });
   }

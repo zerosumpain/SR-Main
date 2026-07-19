@@ -6,6 +6,7 @@
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
+import type { JobEvent } from '$lib/workflows/chat/job-store';
 import { getAgent } from './store';
 import { TEAM_MEMORY_COLLECTION } from './types';
 
@@ -19,7 +20,11 @@ export interface DelegationResult {
   response: string;
 }
 
-export async function delegateToAgent(agentName: string, task: string): Promise<DelegationResult> {
+export async function delegateToAgent(
+  agentName: string,
+  task: string,
+  onEvent?: (e: JobEvent) => void,
+): Promise<DelegationResult> {
   const trimmed = (task ?? '').trim();
   if (!trimmed) throw new Error('task is required');
 
@@ -49,6 +54,7 @@ export async function delegateToAgent(agentName: string, task: string): Promise<
       toolWhitelist: whitelist,
       personaPrompt: persona,
       useIntelContext: false,
+      onStreamEvent: onEvent,
     },
   );
 

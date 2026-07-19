@@ -3214,6 +3214,25 @@
     edgeInspectorFor = null;
   }
 
+  // Hover-to-inspect: pausing on an edge (~220ms) opens the data inspector, so
+  // you can preview what's flowing across a connection without double-clicking.
+  // A quick pass-over cancels (the timer clears on leave). Plain handle — set/
+  // cleared only in pointer handlers, never read from an $effect.
+  let edgeHoverTimer: ReturnType<typeof setTimeout> | null = null;
+  function onEdgeEnter(edgeId: string) {
+    if (edgeHoverTimer) clearTimeout(edgeHoverTimer);
+    edgeHoverTimer = setTimeout(() => {
+      edgeInspectorFor = edgeId;
+      selectedEdgeId = edgeId;
+    }, 220);
+  }
+  function onEdgeLeave() {
+    if (edgeHoverTimer) {
+      clearTimeout(edgeHoverTimer);
+      edgeHoverTimer = null;
+    }
+  }
+
   // Single-click edge select (separate from the full inspector on dblclick).
   // Re-uses edgeInspectorFor highlighting but without opening the inspector
   // panel — Delete/Backspace then removes the selected edge.
@@ -3773,6 +3792,8 @@
               ev.stopPropagation();
               openEdgeInspector(ev, e.id);
             }}
+            onpointerenter={() => onEdgeEnter(e.id)}
+            onpointerleave={onEdgeLeave}
           />
           <path
             class="edge-stroke"

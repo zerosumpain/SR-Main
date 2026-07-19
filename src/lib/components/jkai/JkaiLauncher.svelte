@@ -4,7 +4,36 @@
 
   let { open = false, onClose }: { open?: boolean; onClose: () => void } = $props();
 
-  type NavItem = { code: string; label: string; href: string; desc: string; keywords: string };
+  type NavItem = { code: string; label: string; desc: string; keywords: string; href?: string; run?: () => void | Promise<void> };
+
+  // Quick actions — the palette DOES things, not just navigates.
+  let actionStatus = $state<string | null>(null);
+  let actionBusy = $state(false);
+
+  async function runBriefing() {
+    actionBusy = true;
+    actionStatus = 'Generating briefing…';
+    try {
+      const res = await fetch('/api/admin/briefing/run', { method: 'POST' });
+      actionStatus = res.ok ? 'Briefing generated ✓' : 'Briefing failed';
+    } catch {
+      actionStatus = 'Briefing failed';
+    } finally {
+      actionBusy = false;
+    }
+  }
+  function navTo(href: string) {
+    onClose();
+    void goto(href);
+  }
+
+  const ACTIONS: NavItem[] = [
+    { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
+    { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
+    { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/monitors') },
+    { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/knowledge') },
+  ];
+
   const NAV: { section: string; items: NavItem[] }[] = [
     {
       section: 'Create',
@@ -40,7 +69,7 @@
     },
   ];
 
-  const SECTION_COLOR: Record<string, number> = { Create: 0, 'Recall & agents': 1, Proactive: 2, Ops: 3 };
+  const SECTION_COLOR: Record<string, number> = { Actions: 0, Create: 1, 'Recall & agents': 2, Proactive: 3, Ops: 0 };
 
   let query = $state('');
   let selected = $state(0);
@@ -48,11 +77,12 @@
 
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
+    const match = (i: NavItem) => !q || `${i.label} ${i.desc} ${i.keywords}`.toLowerCase().includes(q);
     const out: { section: string; items: NavItem[] }[] = [];
+    const acts = ACTIONS.filter(match);
+    if (acts.length) out.push({ section: 'Actions', items: acts });
     for (const grp of NAV) {
-      const items = q
-        ? grp.items.filter((i) => `${i.label} ${i.desc} ${i.keywords}`.toLowerCase().includes(q))
-        : grp.items;
+      const items = grp.items.filter(match);
       if (items.length) out.push({ section: grp.section, items });
     }
     return out;
@@ -68,9 +98,11 @@
   }
 
   function go(item: NavItem) {
+    // Actions run in place (feedback stays visible / they navigate themselves).
+    if (item.run) { void item.run(); return; }
     onClose();
     query = '';
-    void goto(item.href);
+    void goto(item.href!);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -144,6 +176,9 @@
           <p class="jl-empty">No workspace matches “{query}”.</p>
         {/if}
       </div>
+      {#if actionStatus}
+        <div class="jl-status" class:busy={actionBusy}>{actionStatus}</div>
+      {/if}
       <div class="jl-foot">
         <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
         <span><kbd>↵</kbd> open</span>
@@ -188,6 +223,18 @@
   .jl-desc { font-size: 11px; color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .jl-empty { padding: 20px 14px; color: var(--text-ghost); font-size: 13px; }
 
+  .jl-status { padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: 12px; color: var(--status-success, #2a9d4a); }
+  .jl-status.busy { color: var(--text-muted); }
   .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: 10px; color: var(--text-ghost); }
   .jl-foot kbd { font-family: var(--font-mono); border: 1px solid var(--card-border); padding: 0 3px; margin-right: 2px; }
+
+  /* Mobile / PWA: give the panel room, drop the keyboard-hint footer on very
+     small screens, and respect the notch. */
+  @media (max-width: 640px) {
+    .jl-bg { padding: 8vh 10px 10px; align-items: flex-start; }
+    .jl { max-height: 80vh; }
+    .jl-input { font-size: 16px; } /* ≥16px stops iOS auto-zoom on focus */
+    .jl-foot { display: none; }
+    .jl-desc { white-space: normal; }
+  }
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BriefingData } from '$lib/briefing/types';
   import { invalidateAll } from '$app/navigation';
+  import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
 
   let { data }: {
     data: { briefings: BriefingData[]; enabled: boolean; topics: string[]; running: boolean; schedule: { display: string } };
@@ -82,7 +83,7 @@
     <section class="br-sec">
       <div class="br-sec-hd"><span class="sr-label-tight">{latest.title}</span><span class="br-when">{fmt(latest.startedAt)} · {latest.status}</span></div>
       {#if latest.status === 'complete'}
-        <div class="br-body">{latest.markdown}</div>
+        <div class="br-body"><ChatMarkdown content={latest.markdown} /></div>
         <div class="br-meta">{latest.sources.join(' · ') || 'no signals'} · {latest.llmCalls} call · ${latest.costUsd.toFixed(3)}</div>
       {:else}
         <p class="br-empty">{latest.status === 'failed' ? `Failed: ${latest.error ?? 'unknown'}` : latest.status}</p>
@@ -100,7 +101,7 @@
           <li class="br-past-item">
             <details>
               <summary><span class="br-past-title">{b.title}</span><span class="br-when">{fmt(b.startedAt)} · {b.status}</span></summary>
-              {#if b.status === 'complete'}<div class="br-body br-body-sm">{b.markdown}</div>{:else}<p class="br-empty">{b.error ?? b.status}</p>{/if}
+              {#if b.status === 'complete'}<div class="br-body br-body-sm"><ChatMarkdown content={b.markdown} /></div>{:else}<p class="br-empty">{b.error ?? b.status}</p>{/if}
             </details>
           </li>
         {/each}
@@ -136,8 +137,8 @@
   .br-ok { color: var(--status-success, #2a9d4a); font-size: 12px; }
   .br-err { color: var(--status-error, #c0392b); font-size: 12px; }
 
-  .br-body { font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; color: var(--text-primary); }
-  .br-body-sm { font-size: 13px; margin-top: 8px; }
+  .br-body { color: var(--text-primary); }
+  .br-body-sm { margin-top: 8px; }
   .br-meta { margin-top: 12px; font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
   .br-empty { color: var(--text-ghost); font-size: 13px; }
 

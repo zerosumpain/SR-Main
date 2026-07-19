@@ -5,6 +5,7 @@
   import OfflineBanner from '$lib/components/jkai/OfflineBanner.svelte';
   import PushOptInCard from '$lib/components/jkai/PushOptInCard.svelte';
   import JkaiLauncher from '$lib/components/jkai/JkaiLauncher.svelte';
+  import ActivityStrip from '$lib/components/jkai/ActivityStrip.svelte';
   import { PUBLIC_VAPID_PUBLIC_KEY } from '$env/static/public';
 
   let { children } = $props();
@@ -42,6 +43,7 @@
 <div class="jkai-root">
   <OfflineBanner />
   <PushOptInCard vapidPublicKey={PUBLIC_VAPID_PUBLIC_KEY} />
+  <ActivityStrip />
   {@render children()}
 
   <button
@@ -69,7 +71,7 @@
   .jkai-launch-btn {
     position: fixed;
     left: 16px;
-    bottom: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
     z-index: 150;
     width: 38px;
     height: 38px;
@@ -88,5 +90,16 @@
   .jkai-launch-btn:hover {
     opacity: 1;
     color: var(--accent-ink, var(--accent, #c4570a));
+  }
+  /* On mobile the composer/nav occupy the bottom — move the launcher to the
+     top-right, below the notch, clear of the chat input. */
+  @media (max-width: 640px) {
+    .jkai-launch-btn {
+      left: auto;
+      bottom: auto;
+      right: 12px;
+      top: max(12px, env(safe-area-inset-top));
+      opacity: 0.85;
+    }
   }
 </style>
