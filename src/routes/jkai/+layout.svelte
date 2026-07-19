@@ -91,13 +91,16 @@
     opacity: 1;
     color: var(--accent-ink, var(--accent, #c4570a));
   }
-  /* On mobile the composer/nav occupy the bottom — move the launcher to the
-     top-right, below the notch, clear of the chat input. */
+  /* On mobile the composer docks at the bottom (chat) and the minimap sits
+     bottom-left (canvas), so the launcher lives in the top band. The nav
+     burger owns the top-right corner (38px wide at right:16px → occupies the
+     right-most ~54px), so tuck the launcher just to its left with an 8px gap.
+     Aligns with the sticky header, below the notch. */
   @media (max-width: 640px) {
     .jkai-launch-btn {
       left: auto;
       bottom: auto;
-      right: 12px;
+      right: 62px;
       top: max(12px, env(safe-area-inset-top));
       opacity: 0.85;
     }
