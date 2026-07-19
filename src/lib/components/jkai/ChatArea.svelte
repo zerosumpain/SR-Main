@@ -1209,6 +1209,7 @@
   const MENTION_OPTIONS: { token: string; hint: string }[] = [
     { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
     { token: '@research', hint: 'Search your deep-dive research materials by meaning' },
+    { token: '@knowledge', hint: 'Recall across everything — files, research, memory, and datastore' },
   ];
   const MENTION_RE = /(^|\s)@(\w*)$/;
   let mentionIndex = $state(0);

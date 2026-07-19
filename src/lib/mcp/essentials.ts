@@ -41,6 +41,9 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   'api_search',
   'api_call',
   'datastore_query',
+  // Unified recall across files + research + memory + datastore — the @knowledge
+  // entry point. Kept visible so "what do I know about X" reaches it directly.
+  'knowledge_search',
 ]);
 
 export function isMetaToolEnabled(): boolean {

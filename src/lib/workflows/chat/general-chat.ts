@@ -147,6 +147,10 @@ interface ChatOptions {
   /** When set (>= 1) the call is running as a sub-agent; disables plan phase
       and nested agent_spawn to prevent runaway fan-out. */
   subagentDepth?: number;
+  /** Optional persona/system-prompt prefix. When set, it is prepended to the
+      system prompt so a named specialist agent (see delegate_to_agent) speaks
+      and reasons in its own role. Mirrors the orchestrator's personalityPrompt. */
+  personaPrompt?: string;
   /** Optional tool-name whitelist. When set, only these tool names may be
       executed via this chat. Tools outside the list are filtered from
       activeTools at assembly time and agent_spawn is disabled. */
@@ -653,7 +657,10 @@ export async function generalChat(
     ? `\n\n--- Clarify phase ---\nIf the user's request is genuinely ambiguous — you cannot safely proceed without more information, and making a reasonable assumption would likely produce a wrong answer — emit a clarify block instead of answering or calling tools:\n\n<clarify>{\n  "questions": [\n    {"id": "q1", "text": "Question text", "kind": "freeform"},\n    {"id": "q2", "text": "Pick one", "kind": "choice", "choices": ["a", "b", "c"]}\n  ]\n}</clarify>\n\nLimit to at most 3 questions. Do NOT clarify when a reasonable assumption works. The system will return the user's answers as a plain-text message you can incorporate and then proceed normally.`
     : '';
 
-  const systemContent = `${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
+  const personaSection = options.personaPrompt?.trim()
+    ? `You are acting as a specialist agent. Adopt this role for the whole turn:\n${options.personaPrompt.trim()}\n\n---\n\n`
+    : '';
+  const systemContent = `${personaSection}${basePrompt}${siteSection}${memorySection}${graphSection}${canvasSection}${pastedUrlsSection}${scraperSection}${apiFirstSection}${clarifySection}${planSection}`;
 
   // Build messages
   const messages: Array<any> = [
