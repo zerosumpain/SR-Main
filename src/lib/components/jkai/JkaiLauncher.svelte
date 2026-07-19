@@ -155,7 +155,7 @@
         {#each filtered as grp (grp.section)}
           <div class="jl-group">
             <div class="jl-group-hd">{grp.section}</div>
-            {#each grp.items as item (item.href)}
+            {#each grp.items as item (item.label)}
               {@const idx = flat.indexOf(item)}
               <button
                 class="jl-item"

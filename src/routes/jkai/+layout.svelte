@@ -72,7 +72,10 @@
     position: fixed;
     left: 16px;
     bottom: max(16px, env(safe-area-inset-bottom));
-    z-index: 150;
+    /* Above the ActivityStrip (z-index 160): on mobile the strip's centred pill
+       overlaps the launcher's top-right slot, and the button must stay tappable
+       while a job runs. Below the launcher panel itself (z-index 200). */
+    z-index: 170;
     width: 38px;
     height: 38px;
     display: flex;
