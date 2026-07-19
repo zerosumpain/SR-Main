@@ -97,9 +97,11 @@ startScheduledEngine().catch((err) => {
 // idle-time run. Neither belongs in the jkai-builder sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
+  startBriefingEngine();
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
@@ -131,6 +133,7 @@ async function gracefulShutdown() {
   unregisterGmailBridge();
   stopDatastoreReaper();
   stopSelfImprovement();
+  stopBriefingEngine();
   process.exit(0);
 }
 
