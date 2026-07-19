@@ -60,7 +60,17 @@ async function branchFiles(query: string, limit: number): Promise<KnowledgeHit[]
     passage: clip(h.passage),
     score: h.score,
     matchKind: 'semantic' as const,
-    ref: { fileId: h.fileId, source: h.source, chunkOrd: h.chunkOrd },
+    // Carry the FULL citation identity file_search exposes (modality +
+    // char offsets) so an @knowledge-promoted chip can jump the viewer to
+    // the exact passage, identical to a direct @files chip.
+    ref: {
+      fileId: h.fileId,
+      source: h.source,
+      chunkOrd: h.chunkOrd,
+      modality: h.modality,
+      charStart: h.charStart,
+      charEnd: h.charEnd,
+    },
   }));
 }
 
@@ -152,12 +162,25 @@ export async function searchKnowledge(
   const sources = options.sources?.length ? options.sources : ALL_SOURCES;
   const perSource = Math.min(Math.max(options.limitPerSource ?? 5, 1), 20);
 
+  // Per-branch timeout: without it one hung branch (files/research each await
+  // an embedding provider) blocks the whole response even when every other
+  // store answered in milliseconds. A timed-out branch reports as an error.
+  const BRANCH_TIMEOUT_MS = 15_000;
+  const withTimeout = (p: Promise<KnowledgeHit[]>, source: KnowledgeSource): Promise<KnowledgeHit[]> =>
+    new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`${source} search timed out after ${BRANCH_TIMEOUT_MS}ms`)), BRANCH_TIMEOUT_MS);
+      p.then(
+        (v) => { clearTimeout(t); resolve(v); },
+        (e) => { clearTimeout(t); reject(e); },
+      );
+    });
+
   const branches: Array<[KnowledgeSource, Promise<KnowledgeHit[]>]> = [];
-  if (sources.includes('files')) branches.push(['files', branchFiles(query, perSource)]);
-  if (sources.includes('research')) branches.push(['research', branchResearch(query, perSource)]);
-  if (sources.includes('memory')) branches.push(['memory', branchMemory(query, perSource)]);
+  if (sources.includes('files')) branches.push(['files', withTimeout(branchFiles(query, perSource), 'files')]);
+  if (sources.includes('research')) branches.push(['research', withTimeout(branchResearch(query, perSource), 'research')]);
+  if (sources.includes('memory')) branches.push(['memory', withTimeout(branchMemory(query, perSource), 'memory')]);
   if (sources.includes('datastore'))
-    branches.push(['datastore', branchDatastore(query, perSource, options.datastoreCollections)]);
+    branches.push(['datastore', withTimeout(branchDatastore(query, perSource, options.datastoreCollections), 'datastore')]);
 
   const settled = await Promise.allSettled(branches.map(([, p]) => p));
 

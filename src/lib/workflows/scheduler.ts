@@ -37,10 +37,21 @@ export async function startScheduler(): Promise<void> {
     .from(workflowSchedules)
     .where(and(eq(workflowSchedules.type, 'cron'), eq(workflowSchedules.enabled, true)));
 
+  // Per-schedule guard: one poison row (e.g. an invalid cron expression makes
+  // `new Cron()` throw) must not abort registration of every later schedule.
+  let registered = 0;
   for (const schedule of schedules) {
-    registerCronJob(schedule);
+    try {
+      registerCronJob(schedule);
+      registered++;
+    } catch (err) {
+      console.error(
+        `[scheduler] Failed to register schedule ${schedule.id} (workflow ${schedule.workflowId}):`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
-  console.log(`[scheduler] Registered ${schedules.length} cron jobs`);
+  console.log(`[scheduler] Registered ${registered}/${schedules.length} cron jobs`);
 }
 
 export function stopScheduler(): void {

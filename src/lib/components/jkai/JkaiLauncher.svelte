@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
+  import { recordLauncherPick, getLauncherRecentScores } from './launcher-recents';
 
   let { open = false, onClose }: { open?: boolean; onClose: () => void } = $props();
 
@@ -75,10 +76,26 @@
   let selected = $state(0);
   let status = $state<{ monitors?: { active: number }; briefing?: { latest: string | null } } | null>(null);
 
+  // Recents — loaded once per open (plain snapshot; localStorage isn't reactive).
+  let recentScores = $state<Record<string, number>>({});
+
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
     const match = (i: NavItem) => !q || `${i.label} ${i.desc} ${i.keywords}`.toLowerCase().includes(q);
     const out: { section: string; items: NavItem[] }[] = [];
+    // Recent workspaces float to the top (only when not searching — a query
+    // should rank purely by match).
+    if (!q) {
+      const all = NAV.flatMap((g) => g.items);
+      const recent = all
+        .filter((i) => i.href && (recentScores[i.href] ?? 0) > 0)
+        .sort((a, b) => (recentScores[b.href!] ?? 0) - (recentScores[a.href!] ?? 0))
+        .slice(0, 4)
+        // Clones, not references — each rendered row needs its own identity so
+        // keyboard selection (flat.indexOf) can't highlight the group twin too.
+        .map((i) => ({ ...i }));
+      if (recent.length >= 2) out.push({ section: 'Recent', items: recent });
+    }
     const acts = ACTIONS.filter(match);
     if (acts.length) out.push({ section: 'Actions', items: acts });
     for (const grp of NAV) {
@@ -100,6 +117,7 @@
   function go(item: NavItem) {
     // Actions run in place (feedback stays visible / they navigate themselves).
     if (item.run) { void item.run(); return; }
+    recordLauncherPick(item.href!);
     onClose();
     query = '';
     void goto(item.href!);
@@ -121,6 +139,7 @@
     untrack(() => {
       if (isOpen) {
         selected = 0;
+        recentScores = getLauncherRecentScores();
         if (!statusLoaded) {
           statusLoaded = true;
           fetch('/api/jkai/hub-status')
@@ -155,7 +174,7 @@
         {#each filtered as grp (grp.section)}
           <div class="jl-group">
             <div class="jl-group-hd">{grp.section}</div>
-            {#each grp.items as item (item.label)}
+            {#each grp.items as item (grp.section + ':' + item.label)}
               {@const idx = flat.indexOf(item)}
               <button
                 class="jl-item"

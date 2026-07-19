@@ -67,10 +67,17 @@
     return c.nodeCount;
   }
 
+  // Health board: failing workflows surface in a dedicated bucket ABOVE the
+  // normal grouping, whatever the sort — failures were previously invisible
+  // unless each canvas was opened.
+  const FAILING_STATUSES = new Set(['failed', 'completed_with_errors']);
+
   const groupedCanvases = $derived.by(() => {
     const now = Date.now();
+    const failing = canvases.filter((c) => c.latestRunStatus && FAILING_STATUSES.has(c.latestRunStatus));
+    const rest = canvases.filter((c) => !c.latestRunStatus || !FAILING_STATUSES.has(c.latestRunStatus));
     const bucketed = new Map<string, CanvasSummary[]>();
-    for (const c of canvases) {
+    for (const c of rest) {
       const bucket =
         sortKey === 'lastRun'
           ? bucketLastRun(c, now)
@@ -83,9 +90,11 @@
     for (const list of bucketed.values()) {
       list.sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey));
     }
-    return BUCKET_ORDER[sortKey]
+    failing.sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey));
+    const groups = BUCKET_ORDER[sortKey]
       .filter((name) => bucketed.has(name))
       .map((name) => ({ name, items: bucketed.get(name)! }));
+    return failing.length > 0 ? [{ name: '⚠ Needs attention', items: failing }, ...groups] : groups;
   });
 
   function formatPct(v: number | null) {
@@ -118,6 +127,49 @@
       error = err instanceof Error ? err.message : String(err);
     } finally {
       busy = false;
+    }
+  }
+
+  let dupBusy = $state<string | null>(null);
+  async function duplicateCanvas(slug: string) {
+    if (dupBusy) return;
+    dupBusy = slug;
+    error = null;
+    try {
+      const res = await fetch(`/api/canvas/${slug}/duplicate`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      await goto(`/jkai/canvas/${body.slug}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      dupBusy = null;
+    }
+  }
+
+  let importBusy = $state(false);
+  let importInputEl: HTMLInputElement | undefined = $state();
+  async function onImportPick(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file || importBusy) return;
+    importBusy = true;
+    error = null;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const res = await fetch('/api/canvas/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      await goto(`/jkai/canvas/${body.slug}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Import failed — is this a canvas export file?';
+    } finally {
+      importBusy = false;
+      if (importInputEl) importInputEl.value = '';
     }
   }
 
@@ -193,6 +245,22 @@
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Create canvas</span>
+      <button
+        type="button"
+        class="row-link"
+        disabled={importBusy}
+        title="Create a canvas from an exported JSON file"
+        onclick={() => importInputEl?.click()}
+      >
+        {importBusy ? 'Importing…' : 'Import JSON'}
+      </button>
+      <input
+        bind:this={importInputEl}
+        type="file"
+        accept="application/json,.json"
+        style="display: none"
+        onchange={onImportPick}
+      />
     </div>
     <form class="form" onsubmit={createCanvas}>
       <div class="row">
@@ -299,14 +367,33 @@
                     <span>edited {formatTime(c.updatedAt)}</span>
                   </div>
                 </a>
-                <button
-                  type="button"
-                  class="row-link danger card-del"
-                  title="Delete canvas"
-                  onclick={() => removeCanvas(c.slug, c.title)}
-                >
-                  Delete
-                </button>
+                <div class="card-actions">
+                  <button
+                    type="button"
+                    class="row-link"
+                    title="Duplicate this canvas (nodes + edges; schedule NOT copied)"
+                    disabled={dupBusy === c.slug}
+                    onclick={() => duplicateCanvas(c.slug)}
+                  >
+                    {dupBusy === c.slug ? 'Duplicating…' : 'Duplicate'}
+                  </button>
+                  <a
+                    class="row-link"
+                    href={`/api/canvas/${c.slug}/export`}
+                    download={`canvas-${c.slug}.json`}
+                    title="Download this canvas as JSON"
+                  >
+                    Export
+                  </a>
+                  <button
+                    type="button"
+                    class="row-link danger card-del"
+                    title="Delete canvas"
+                    onclick={() => removeCanvas(c.slug, c.title)}
+                  >
+                    Delete
+                  </button>
+                </div>
               </article>
             {/each}
           </div>
@@ -699,13 +786,24 @@
   .row-link:hover { color: var(--accent-hover); text-decoration: underline; }
   .row-link.danger { color: var(--error); }
   .row-link.danger:hover { color: var(--error-hover); }
-  .card-del {
+  .card-actions {
     position: absolute;
     top: 0.75rem;
     right: 0.85rem;
+    display: flex;
+    gap: 10px;
+    align-items: center;
     opacity: 0;
     transition: opacity 120ms ease;
+    /* Sits above the stretched card link so the actions stay clickable. */
+    z-index: 1;
+    background: var(--bg);
+    padding-left: 6px;
   }
-  .canvas-card:hover .card-del,
-  .card-del:focus-visible { opacity: 1; }
+  .canvas-card:hover .card-actions,
+  .card-actions:focus-within { opacity: 1; }
+  /* Touch devices have no hover — keep the actions visible. */
+  @media (hover: none) {
+    .card-actions { opacity: 1; }
+  }
 </style>

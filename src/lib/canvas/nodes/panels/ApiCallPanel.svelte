@@ -155,7 +155,7 @@
       <p class="ac-base"><span class="ac-base-label">base</span> <code>{selected.baseUrl}</code></p>
       {#if selected.capabilities.length}
         <div class="ac-chips">
-          {#each selected.capabilities.slice(0, 8) as cap (cap)}<span class="ac-chip">{cap}</span>{/each}
+          {#each selected.capabilities.slice(0, 8) as cap, ci (cap + ':' + ci)}<span class="ac-chip">{cap}</span>{/each}
         </div>
       {/if}
       {#if selected.exampleRequests.length}

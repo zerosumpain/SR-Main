@@ -247,6 +247,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   };
   const turnResearchRefs: ResearchRef[] = [];
   const seenResearchRefs = new Set<string>();
+  // Workflow chips: when a builder tool creates/updates a canvas this turn,
+  // attach a deep-link chip to the reply (mirrors turnFileRefs' lifecycle).
+  type WorkflowRef = { workflowId: string; slug: string; name: string; url: string };
+  const turnWorkflowRefs: WorkflowRef[] = [];
+  const seenWorkflowRefs = new Set<string>();
 
   // Per-turn LLM usage captured from the Hermes finalize frame's
   // `metadata.usage`. Populated inside the stream pump; consumed after
@@ -410,9 +415,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               turnFileRefs.push({
                 fileId: ref.fileId,
                 source: ref.source,
-                modality: 'text',
+                modality: typeof ref.modality === 'string' ? ref.modality : 'text',
                 score,
                 chunkOrd: typeof ref.chunkOrd === 'number' ? ref.chunkOrd : undefined,
+                charStart: typeof ref.charStart === 'number' ? ref.charStart : undefined,
+                charEnd: typeof ref.charEnd === 'number' ? ref.charEnd : undefined,
                 passage,
               });
             } else if (h?.source === 'research' && typeof ref.factId === 'string' && typeof ref.sessionId === 'string') {
@@ -431,6 +438,34 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               });
             }
           }
+        }
+      }
+
+      // Promote workflow-builder successes into turnWorkflowRefs so the reply
+      // carries a deep-link chip to the created/updated canvas. The builder
+      // tools' success payloads all include workflowId + slug + url (see
+      // tools/workflows.ts `data`); monitor_create returns the marker shape.
+      const isBuilderTool =
+        e.tool === 'workflow_build_from_spec' || e.tool === 'workflow_create' || e.tool === 'monitor_create';
+      if (isBuilderTool && result.success) {
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        // monitor_create nests the marker under `monitor`; builders are flat.
+        const src = (data.workflowId ? data : (data.monitor ?? {})) as Record<string, unknown>;
+        const workflowId = typeof src.workflowId === 'string' ? src.workflowId : null;
+        const slug = typeof src.slug === 'string' ? src.slug : null;
+        if (workflowId && slug && !seenWorkflowRefs.has(workflowId) && turnWorkflowRefs.length < 6) {
+          seenWorkflowRefs.add(workflowId);
+          turnWorkflowRefs.push({
+            workflowId,
+            slug,
+            name:
+              typeof src.name === 'string' && src.name
+                ? src.name
+                : typeof src.description === 'string' && src.description
+                  ? src.description.slice(0, 60)
+                  : slug,
+            url: `/jkai/canvas/${slug}`,
+          });
         }
       }
     }
@@ -571,6 +606,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
             fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
             researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
+            workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
           };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
@@ -588,6 +624,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           attachments: turnAttachments.length > 0 ? turnAttachments : undefined,
           fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
           researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
+          workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
         };
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
       }
@@ -601,7 +638,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           ? ((job.result as Record<string, unknown>).message as string)
           : '') || job.partialResponse || '';
       const shouldPersist =
-        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0 || turnResearchRefs.length > 0) && (conversationId || workflowId);
+        (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0 || turnResearchRefs.length > 0 || turnWorkflowRefs.length > 0) && (conversationId || workflowId);
       if (shouldPersist) {
         try {
           const assistantMeta: Record<string, unknown> = {};
@@ -614,6 +651,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
           if (turnResearchRefs.length > 0) {
             assistantMeta.researchRefs = turnResearchRefs;
+          }
+          if (turnWorkflowRefs.length > 0) {
+            assistantMeta.workflowRefs = turnWorkflowRefs;
           }
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
           const [insertedAssistant] = await db.insert(orchestratorChats).values({

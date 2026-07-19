@@ -204,8 +204,11 @@ export async function proposeEdgeMapping(params: {
     const parsed = parseLooseJson(content);
     if (parsed) {
       const { actions, configPatch } = sanitizeActions(parsed.actions, keys, ctx.availablePaths);
-      if (actions.some((a) => a.kind === 'set-config')) {
-        const conf = Number(parsed.confidence);
+      const conf = Number(parsed.confidence);
+      // Honour the LLM verdict even when it proposes NO config change — a
+      // note-only / "these don't fit" answer is bridging guidance the user
+      // should see, not a reason to override it with the blunt heuristic.
+      if (actions.length > 0) {
         return {
           ...base,
           actions,

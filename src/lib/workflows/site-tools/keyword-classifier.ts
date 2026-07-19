@@ -19,6 +19,9 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'site-signals', pattern: /who(?:'?s| is)\s+home|family\s+presence|are\s+we\s+home|is\s+(?:anyone|any\s?one|katie|fintan|jemima|rory)\s+home|live\s+walk|on\s+a\s+(?:walk|ride)|policy[-\s]?engine|tracking\s+indicators?|dfe\s+(?:indicators?|tracking)|on[-\s]?track|off[-\s]?track/i },
   { toolset: 'datastore', pattern: /\bdatabase\b|\bdataset\b|\brecords?\b|\btables?\b|\bcollections?\b|store\s+this\s+data|save\s+this\s+(?:record|data|dataset|table)|remember\s+this\s+(?:data|dataset|table|record)|query\s+(?:the\s+)?(?:datastore|records?|dataset|collection)/i },
   { toolset: 'apis', pattern: /\bapis?\b|data\s+sources?|live\s+data|current\s+(?:figures?|stats?|numbers?|data|values?)|latest\s+(?:figures?|stats?|numbers?|data)|external\s+data|fetch\s+(?:live|current)\s+data/i },
+  { toolset: 'knowledge', pattern: /@?knowledge|search\s+(?:everything|all\s+(?:my|the)\s+(?:stores?|sources?|knowledge))|across\s+(?:my\s+)?(?:files,?\s*research|everything)|unified\s+(?:search|recall)/i },
+  { toolset: 'agents', pattern: /\bdelegate\b|\bagent\s+team\b|\bspecialists?\b|ask\s+the\s+(?:researcher|analyst|writer|reviewer)|team\s+memory/i },
+  { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
 ];
 
 export function inferToolsets(message: string): string[] {

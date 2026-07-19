@@ -1,6 +1,6 @@
 <svelte:head><title>{data.collection.name || data.collection.slug} — Datastore</title></svelte:head>
 <script lang="ts">
-  import { getContext } from 'svelte';
+  import { getContext, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -48,12 +48,27 @@
   const adminToken = getContext<string>('adminToken');
   const tokenQs = adminToken ? `?token=${adminToken}` : '';
 
-  const slug = data.collection.slug;
-  const collBase = `/api/admin/datastore/collections/${slug}`;
+  // Derived, not init-captured consts: navigating between two collection
+  // slugs REUSES this component (SvelteKit param-only navigation), so a
+  // one-time `const slug = data.collection.slug` would keep pointing every
+  // API call at the first collection.
+  const slug = $derived(data.collection.slug);
+  const collBase = $derived(`/api/admin/datastore/collections/${slug}`);
 
   let collection = $state<Collection>(data.collection as Collection);
   let records = $state<Rec[]>(data.records as Rec[]);
   let total = $state<number>(data.recordCount);
+
+  // Re-sync local editing state when the load data changes (slug navigation).
+  // Tracks only `data`; writes untracked per the repo's prop→state pattern.
+  $effect(() => {
+    const next = data;
+    untrack(() => {
+      collection = next.collection as Collection;
+      records = next.records as Rec[];
+      total = next.recordCount;
+    });
+  });
 
   // ——— Query console ———
   let filters = $state<FilterRow[]>([]);

@@ -933,6 +933,19 @@ export class WorkflowEngine {
           if (graph.nodeMap.get(nid)?.type === 'dedupe') dedupeOutputs.push(out);
         }
         await commitDeferredDedupeRecords(dedupeOutputs);
+        // Monitor-hit web push (fire-and-forget, never throws): if this
+        // workflow is a registered monitor and its dedupe surfaced new items,
+        // push a notification with a deep link. Lazy import keeps the push +
+        // datastore stacks off the engine's module-init path.
+        if (dedupeOutputs.length > 0) {
+          void import('$lib/monitors/push-hits')
+            .then(({ notifyMonitorHit }) =>
+              notifyMonitorHit({ workflowId: effectiveWorkflowId, runId, dedupeOutputs }),
+            )
+            .catch((e) =>
+              console.error('[engine] monitor push failed:', e instanceof Error ? e.message : e),
+            );
+        }
       } else if (finalStatus === 'completed_with_errors') {
         emit('run_completed_with_errors');
         // Some node failed — do NOT commit deferred dedupe ids (a failed send

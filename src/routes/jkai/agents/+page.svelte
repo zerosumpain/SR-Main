@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import type { AgentDef } from '$lib/agents/types';
   import { invalidateAll } from '$app/navigation';
   import SubAgentBubble from '$lib/components/jkai/SubAgentBubble.svelte';
@@ -7,8 +8,16 @@
   type LiveStep = { toolCallId: string; tool: string; args: Record<string, unknown>; result?: unknown; status: 'running' | 'done' | 'error'; summary?: string; expanded?: boolean };
   type LiveAgent = { agentId: string; task: string; status: 'running' | 'done' | 'error'; summary?: string; liveTokens: string; toolSteps: LiveStep[]; startedAt?: number };
 
-  let { data }: { data: { agents: AgentDef[] } } = $props();
+  import type { TeamMemoryEntry } from '$lib/agents/store';
+
+  let { data }: { data: { agents: AgentDef[]; teamMemory: TeamMemoryEntry[] } } = $props();
   const agents = $derived(data.agents ?? []);
+  const teamMemory = $derived(data.teamMemory ?? []);
+
+  async function forgetMemory(id: string) {
+    await fetch(`/api/jkai/agents/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await invalidateAll();
+  }
 
   // ── Edit / create form ──
   let editing = $state<string | null>(null); // agent name being edited, or '' for new, or null=closed
@@ -71,6 +80,19 @@
   let delResult = $state<{ agent: string; role: string; response: string } | null>(null);
   let delErr = $state<string | null>(null);
   let liveAgent = $state<LiveAgent | null>(null);
+  // Abort the SSE reader on navigation/unmount — otherwise the read loop
+  // outlives the component and keeps writing unmounted $state.
+  let delAbort: AbortController | null = null; // plain — never rendered
+  $effect(() => () => delAbort?.abort());
+
+  // Keep the delegate <select> valid when the team changes (delete/rename via
+  // invalidateAll). Tracks agents; writes are untracked (no self-dependency).
+  $effect(() => {
+    const names = agents.map((a) => a.name);
+    untrack(() => {
+      if (!names.includes(delAgent)) delAgent = names[0] ?? '';
+    });
+  });
 
   function toggleStep(_agentId: string, toolCallId: string) {
     if (!liveAgent) return;
@@ -102,11 +124,13 @@
     if (!delAgent || !delTask.trim() || delRunning) return;
     delRunning = true; delErr = null; delResult = null;
     liveAgent = { agentId: delAgent, task: delTask.trim(), status: 'running', liveTokens: '', toolSteps: [], startedAt: Date.now() };
+    delAbort = new AbortController();
     try {
       const res = await fetch('/api/jkai/agents/delegate/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent: delAgent, task: delTask.trim() }),
+        signal: delAbort.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -183,12 +207,33 @@
           </div>
           <p class="ag-persona">{a.persona}</p>
           <div class="ag-tools">
-            {#if a.allowedTools?.length}{#each a.allowedTools as t (t)}<span class="ag-tool">{t}</span>{/each}{:else}<span class="ag-tool ag-tool-all">full toolset</span>{/if}
+            {#if a.allowedTools?.length}{#each a.allowedTools as t, ti (t + ':' + ti)}<span class="ag-tool">{t}</span>{/each}{:else}<span class="ag-tool ag-tool-all">full toolset</span>{/if}
             {#if a.model}<span class="ag-model">{a.model}</span>{/if}
           </div>
         </li>
       {/each}
     </ul>
+  </section>
+
+  <!-- Shared team memory -->
+  <section class="ag-sec">
+    <div class="ag-sec-hd"><span class="sr-label-tight">Team memory ({teamMemory.length})</span></div>
+    {#if teamMemory.length === 0}
+      <p class="ag-mem-empty">No shared findings yet — agents write durable results here as they work.</p>
+    {:else}
+      <ul class="ag-mem-list">
+        {#each teamMemory as m (m.id)}
+          <li class="ag-mem-row">
+            <div class="ag-mem-hd">
+              <span class="ag-mem-key">{m.key ?? m.id.slice(0, 8)}</span>
+              <span class="ag-mem-meta">{m.updatedBy ?? '—'} · {new Date(m.updatedAt).toLocaleString()}</span>
+              <button class="ag-link ag-danger" onclick={() => forgetMemory(m.id)} title="Delete this shared record">forget</button>
+            </div>
+            <pre class="ag-mem-prev">{m.preview}</pre>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </section>
 </main>
 
@@ -233,6 +278,24 @@
   .ag-task { width: 100%; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-size: 13px; padding: 8px 10px; outline: none; box-sizing: border-box; resize: vertical; }
 
   .ag-err { color: var(--status-error, #c0392b); font-size: 12px; margin: 6px 0 0; }
+
+  /* Team memory */
+  .ag-mem-empty { color: var(--text-muted); font-size: 13px; }
+  .ag-mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ag-mem-row { border: 1px solid var(--card-border); padding: 8px 10px; background: var(--bg); }
+  .ag-mem-hd { display: flex; align-items: baseline; gap: 10px; }
+  .ag-mem-key { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+  .ag-mem-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex: 1; }
+  .ag-mem-prev {
+    margin: 6px 0 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 90px;
+    overflow: hidden;
+  }
   .ag-live { margin-top: 12px; }
   .ag-result { margin-top: 12px; border: 1px solid var(--card-border); padding: 12px; }
   .ag-result-hd { margin-bottom: 6px; }

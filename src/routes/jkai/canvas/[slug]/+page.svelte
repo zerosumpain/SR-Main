@@ -42,6 +42,7 @@
   } from '$lib/canvas/shell/geometry';
   import { computeMinimap } from '$lib/canvas/shell/minimap';
   import { createKeymap } from '$lib/canvas/keymap';
+  import { createUndoHistory, type UndoAction } from '$lib/canvas/undo';
   import { byType as byNodeType, allTypes as allNodeTypes, mapTypeToKind, type NodeTypeOption } from '$lib/canvas/adapter';
   import { compatibility, type HandleSpec } from '$lib/canvas/handles';
   import { getPanel } from '$lib/canvas/nodes/panels/registry';
@@ -359,6 +360,10 @@
     runId: string | null;
     plain: { overall: string; perNode: Record<string, string> } | null;
     plainState: 'idle' | 'loading' | 'ready' | 'failed';
+    /** LLM spend for this run, summed from node executions (fetched async
+     *  after capture; null until it lands / when the run had no LLM calls). */
+    costUsd: number | null;
+    tokens: number | null;
   };
   let runSummary = $state<RunSummary | null>(null);
   // Inert canvas decorations that should never count toward run totals.
@@ -1705,8 +1710,35 @@
       runId: activeRunId,
       plain: null,
       plainState: 'idle',
+      costUsd: null,
+      tokens: null,
     };
     void requestPlainSummary();
+    void loadRunCost(activeRunId);
+  }
+
+  /** Fetch the finished run's per-node usage rollup and patch it onto the
+   *  summary card. Best-effort — the card renders without it. */
+  async function loadRunCost(runId: string | null) {
+    if (!runId || !canvas.workflowId) return;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/runs/${runId}`);
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        nodeExecutions?: Array<{ costUsd: string | number | null; tokensInput: number | null; tokensOutput: number | null }>;
+      };
+      let costUsd = 0;
+      let tokens = 0;
+      for (const ex of body.nodeExecutions ?? []) {
+        costUsd += Number(ex.costUsd ?? 0) || 0;
+        tokens += (ex.tokensInput ?? 0) + (ex.tokensOutput ?? 0);
+      }
+      const cur = runSummary;
+      if (!cur || cur.runId !== runId) return; // a newer run replaced the card
+      runSummary = { ...cur, costUsd, tokens };
+    } catch {
+      /* best-effort */
+    }
   }
 
   async function requestPlainSummary() {
@@ -1882,6 +1914,106 @@
     zoom = 1;
   }
 
+  // ——— Runs panel: recent run history; click a run to load its node
+  // outputs into the inspectors (same liveData/liveStatus merge the live
+  // tail uses). Fetch-on-demand like the Memory panel — no polling. ———
+  type RunListEntry = {
+    id: string;
+    status: string;
+    trigger: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    error: string | null;
+  };
+  let runsOpen = $state(false);
+  let runsLoading = $state(false);
+  let runsError = $state<string | null>(null);
+  let runsList = $state<RunListEntry[]>([]);
+  let runsViewing = $state<string | null>(null); // run id whose outputs are loaded
+  let runsViewingCost = $state<{ costUsd: number; tokens: number } | null>(null);
+
+  async function loadRuns() {
+    if (!canvas.workflowId) return;
+    runsLoading = true;
+    runsError = null;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/runs?limit=25`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows = (await res.json()) as Array<Record<string, unknown>>;
+      runsList = rows.map((r) => ({
+        id: String(r.id),
+        status: String(r.status ?? ''),
+        trigger: String(r.trigger ?? 'manual'),
+        startedAt: typeof r.startedAt === 'string' ? r.startedAt : null,
+        completedAt: typeof r.completedAt === 'string' ? r.completedAt : null,
+        error: typeof r.error === 'string' ? r.error : null,
+      }));
+    } catch (err) {
+      runsError = err instanceof Error ? err.message : String(err);
+    } finally {
+      runsLoading = false;
+    }
+  }
+
+  function openRuns() {
+    runsOpen = true;
+    void loadRuns();
+  }
+  function closeRuns() {
+    runsOpen = false;
+  }
+
+  /** Load a past run's node executions into the live overlay so the node
+   *  status pills + inspectors show THAT run's data. */
+  async function viewRun(runId: string) {
+    if (!canvas.workflowId) return;
+    runsError = null;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/runs/${runId}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as {
+        nodeExecutions?: Array<{
+          nodeId: string;
+          status: string;
+          inputData: unknown;
+          outputData: unknown;
+          error: string | null;
+          costUsd: string | number | null;
+          tokensInput: number | null;
+          tokensOutput: number | null;
+        }>;
+      };
+      const execs = body.nodeExecutions ?? [];
+      const nextStatus: Record<string, NodeStatus> = {};
+      const nextData: typeof liveData = {};
+      let costUsd = 0;
+      let tokens = 0;
+      for (const ex of execs) {
+        if (!byId[ex.nodeId]) continue; // node deleted since that run
+        nextStatus[ex.nodeId] =
+          ex.status === 'completed' ? 'ok' : ex.status === 'failed' ? 'failed' : 'idle';
+        nextData[ex.nodeId] = { inputData: ex.inputData, outputData: ex.outputData, error: ex.error };
+        costUsd += Number(ex.costUsd ?? 0) || 0;
+        tokens += (ex.tokensInput ?? 0) + (ex.tokensOutput ?? 0);
+      }
+      // Whole-object writes, same as the live-tail path ($state.raw containers).
+      liveStatus = nextStatus;
+      liveData = nextData;
+      runsViewing = runId;
+      runsViewingCost = { costUsd, tokens };
+    } catch (err) {
+      runsError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  function runDuration(r: RunListEntry): string {
+    if (!r.startedAt || !r.completedAt) return '—';
+    const ms = new Date(r.completedAt).getTime() - new Date(r.startedAt).getTime();
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+  }
+
   // ——— Memory panel (E3): live view of the workflow data-store ———
   // All fetch-on-demand; no polling / EventSource / $effect so there's no
   // read-own-write cycle. memoryEntries is replaced wholesale on each load.
@@ -1967,6 +2099,64 @@
       if (flashNodeId === nodeId) flashNodeId = null;
     }, 800);
   }
+
+  // ——— Find node (⌘F) — type-ahead over labels/types, Enter centers+flashes ———
+  let findOpen = $state(false);
+  let findQuery = $state('');
+  let findSelected = $state(0);
+  let findInputEl: HTMLInputElement | undefined = $state();
+
+  const findMatches = $derived.by(() => {
+    const q = findQuery.trim().toLowerCase();
+    if (!q) return [];
+    return viewNodes
+      .filter((n) => !INERT_NODE_KINDS.has(n.kind))
+      .filter((n) => n.name.toLowerCase().includes(q) || n.type.toLowerCase().includes(q))
+      .slice(0, 8);
+  });
+
+  function openFind() {
+    findOpen = true;
+    findQuery = '';
+    findSelected = 0;
+    findJumped = false;
+    // Focus after render.
+    setTimeout(() => findInputEl?.focus(), 0);
+  }
+  function closeFind() {
+    findOpen = false;
+  }
+  function jumpToMatch(offset: number) {
+    const matches = findMatches;
+    if (!matches.length) return;
+    const idx = ((findSelected + offset) % matches.length + matches.length) % matches.length;
+    findSelected = idx;
+    const m = matches[idx];
+    selectedId = m.id;
+    void scrollToNode(m.id);
+  }
+  function onFindKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeFind();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      // First Enter jumps to the top match; repeat cycles (Shift reverses).
+      jumpToMatch(findJumped ? (e.shiftKey ? -1 : 1) : 0);
+      findJumped = true;
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      jumpToMatch(1);
+      findJumped = true;
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      jumpToMatch(-1);
+      findJumped = true;
+    }
+    // Other keys fall through to the input (typing) — the palette shortcuts
+    // guard on typing targets so nothing else fires.
+  }
+  let findJumped = false; // plain — whether Enter already jumped once this open
 
   function isInteractiveTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
@@ -2084,6 +2274,7 @@
     if (!nodeDrag || nodeDrag.pointerId !== e.pointerId) return;
     const wasMoved = nodeDrag.moved;
     const nodeId = nodeDrag.nodeId;
+    const dragStart = { x: nodeDrag.startX, y: nodeDrag.startY };
     const finalPos = nodePositions[nodeId];
     nodeDrag = null;
     try {
@@ -2100,6 +2291,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ position: finalPos }),
         });
+        undoHistory.push({ kind: 'node-move', nodeId, from: dragStart, to: finalPos });
         await invalidateAll();
       } catch {
         /* keep override so the UI doesn't snap back on network blip */
@@ -2113,6 +2305,11 @@
       selectedId = n.id;
     }
   }
+
+  // ——— Inspector pin-compare: pin one node's output, open another node, and
+  // the pinned snapshot renders alongside its input/output for eyeball-diffing
+  // a mapping across an edge. Snapshot semantics (not live) are deliberate.
+  let pinnedOutput = $state<{ nodeId: string; name: string; data: unknown } | null>(null);
 
   // ——— Inline menu — editable config state ———
   let configDraft = $state<Record<string, unknown>>({});
@@ -2334,6 +2531,7 @@
     // Mobile: dedicated touch handlers manage pan + pinch directly.
     if (isMobile) {
       if (e.touches.length >= 2) {
+        cancelLongPress(); // a second finger means pinch, not a press
         // Pinch start — record initial distance + midpoint + the world
         // coord under the midpoint so we can keep that point under the
         // fingers as zoom changes.
@@ -2352,12 +2550,29 @@
         touchPan = null; // pinch supersedes pan
         return;
       }
-      // Single finger: pan from this point.
+      // Single finger: pan from this point — AND arm long-press-to-add on
+      // empty canvas (parity with desktop right-click). Movement past the
+      // 10px slop or a second finger cancels it (touchmove); firing opens
+      // the palette (bottom sheet) at the pressed world position.
       const target = e.target as HTMLElement | null;
       if (target?.closest('.chat-node, .wf-node')) return;
       const t = e.touches[0];
       if (!t) return;
       touchPan = { startX: t.clientX, startY: t.clientY, panX0: panX, panY0: panY };
+      if (NEW_PALETTE && !paletteOpen) {
+        const pressX = t.clientX;
+        const pressY = t.clientY;
+        longPressStart = { x: pressX, y: pressY };
+        longPressTimer = setTimeout(() => {
+          touchPan = null; // the press is an add, not a pan
+          const world = screenToWorld(pressX, pressY);
+          openPalette({
+            anchor: { x: pressX, y: pressY },
+            mode: { kind: 'workflow-ranked' },
+            worldPosition: world,
+          });
+        }, 450);
+      }
       return;
     }
 
@@ -2387,9 +2602,27 @@
       longPressStart = null;
     };
   });
+  /** Cancel a pending long-press-to-add (movement, extra finger, or lift). */
+  function cancelLongPress() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = null;
+    longPressStart = null;
+  }
+
   function onViewportTouchMove(e: TouchEvent) {
     // Mobile: handle pan + pinch via touch directly.
     if (isMobile) {
+      // Any second finger, or drift past the slop, is a pan/pinch — not a press.
+      if (longPressStart) {
+        const t0 = e.touches[0];
+        if (
+          e.touches.length > 1 ||
+          !t0 ||
+          Math.hypot(t0.clientX - longPressStart.x, t0.clientY - longPressStart.y) > 10
+        ) {
+          cancelLongPress();
+        }
+      }
       // Pinch in progress: update zoom + pan to keep the world point that
       // was under the initial midpoint under the current midpoint.
       if (pinch && e.touches.length >= 2) {
@@ -2436,6 +2669,7 @@
     // optionally restart pan from the remaining finger so transitions are
     // smooth — for now just clear (simpler).
     if (isMobile) {
+      cancelLongPress(); // lifting before the timer fires = a tap/pan, not an add
       if (e.touches.length === 0) {
         touchPan = null;
         pinch = null;
@@ -2483,6 +2717,7 @@
       const newId = body.node?.id as string | undefined;
       await invalidateAll();
       if (newId) {
+        undoHistory.push({ kind: 'node-add', nodeId: newId });
         selectedId = newId;
         return { id: newId };
       }
@@ -2565,16 +2800,162 @@
     }
   }
 
+  // ——— Undo/redo (structural edits: node add/delete/move, edge delete) ———
+  // Plain module instance — never $state (only read from handlers, not templates).
+  const undoHistory = createUndoHistory();
+  let undoBusy = false; // guard against overlapping ⌘Z spam (plain — not rendered)
+
+  /** Apply the INVERSE of `a` (= undo it). Returns false when it couldn't. */
+  async function applyInverse(a: UndoAction): Promise<boolean> {
+    if (a.kind === 'node-delete') {
+      // Recreate the node (new server id) + its edges, then remap history.
+      const res = await postAction(`/api/workflows/${canvas.workflowId}/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: a.node.type,
+          label: a.node.label,
+          position: a.node.position,
+          config: a.node.config,
+        }),
+      });
+      const newId = (res?.node as { id?: string } | undefined)?.id;
+      if (!newId) return false;
+      const oldId = a.node.id;
+      undoHistory.remapNodeId(oldId, newId);
+      a.node.id = newId; // the redo of this entry deletes the recreated node
+      for (const e of a.edges) {
+        const src: string = e.sourceNodeId === oldId ? newId : e.sourceNodeId;
+        const tgt: string = e.targetNodeId === oldId ? newId : e.targetNodeId;
+        // Skip edges whose OTHER endpoint no longer exists on the canvas.
+        const other: string = src === newId ? tgt : src;
+        if (other !== newId && !byId[other]) continue;
+        await postAction(`/api/workflows/${canvas.workflowId}/edges`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourceNodeId: src, targetNodeId: tgt }),
+        });
+      }
+      return true;
+    }
+    if (a.kind === 'node-add') {
+      const res = await postAction(`/api/workflows/${canvas.workflowId}/nodes/${a.nodeId}`, {
+        method: 'DELETE',
+      });
+      return !!res;
+    }
+    if (a.kind === 'node-move') {
+      const res = await postAction(`/api/workflows/${canvas.workflowId}/nodes/${a.nodeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: a.from }),
+      });
+      return !!res;
+    }
+    // edge-delete → recreate the edge
+    const res = await postAction(`/api/workflows/${canvas.workflowId}/edges`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceNodeId: a.edge.sourceNodeId,
+        targetNodeId: a.edge.targetNodeId,
+        sourceHandle: a.edge.sourceHandle,
+        targetHandle: a.edge.targetHandle,
+      }),
+    });
+    return !!res;
+  }
+
+  /** Re-apply `a` (= redo it). Returns false when it couldn't. */
+  async function applyForward(a: UndoAction): Promise<boolean> {
+    if (a.kind === 'node-delete') {
+      const res = await postAction(`/api/workflows/${canvas.workflowId}/nodes/${a.node.id}`, {
+        method: 'DELETE',
+      });
+      return !!res;
+    }
+    if (a.kind === 'node-add') {
+      // Redoing an add would need the original config snapshot; adds are cheap
+      // to repeat manually, so redo of node-add is unsupported.
+      return false;
+    }
+    if (a.kind === 'node-move') {
+      const res = await postAction(`/api/workflows/${canvas.workflowId}/nodes/${a.nodeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: a.to }),
+      });
+      return !!res;
+    }
+    const res = await postAction(
+      `/api/workflows/${canvas.workflowId}/edges?source=${encodeURIComponent(a.edge.sourceNodeId)}&target=${encodeURIComponent(a.edge.targetNodeId)}`,
+      { method: 'DELETE' },
+    );
+    return !!res;
+  }
+
+  async function undoLast() {
+    if (undoBusy) return;
+    const a = undoHistory.popUndo();
+    if (!a) return;
+    undoBusy = true;
+    try {
+      if (await applyInverse(a)) {
+        undoHistory.pushRedo(a);
+        await reloadCanvas();
+      }
+    } finally {
+      undoBusy = false;
+    }
+  }
+
+  async function redoLast() {
+    if (undoBusy) return;
+    const a = undoHistory.popRedo();
+    if (!a) return;
+    undoBusy = true;
+    try {
+      if (await applyForward(a)) {
+        undoHistory.pushUndoOnly(a);
+        await reloadCanvas();
+      }
+    } finally {
+      undoBusy = false;
+    }
+  }
+
   async function deleteNode(id: string, skipConfirm = false) {
     const node = byId[id];
     if (!node) return;
     if (!skipConfirm && !confirm(`Delete node "${node.name}"? This also removes its edges.`)) return;
     actionError = null;
+    // Snapshot node + attached edges BEFORE the delete so undo can restore both.
+    const undoEntry: UndoAction = {
+      kind: 'node-delete',
+      node: {
+        id,
+        type: node.type,
+        label: node.name,
+        position: { x: node.x, y: node.y },
+        config: { ...node.config },
+      },
+      edges: (canvas?.edges ?? [])
+        .filter((e) => e.from === id || e.to === id)
+        .map((e) => ({
+          sourceNodeId: e.from,
+          targetNodeId: e.to,
+          // CanvasEdge doesn't carry handles client-side; the edges POST
+          // defaults them (same as the pipe-to path).
+          sourceHandle: null,
+          targetHandle: null,
+        })),
+    };
     const result = await postAction(
       `/api/workflows/${canvas.workflowId}/nodes/${id}`,
       { method: 'DELETE' },
     );
     if (result) {
+      undoHistory.push(undoEntry);
       if (menuForNodeId === id) closeMenu();
       if (selectedId === id) selectedId = null;
       await reloadCanvas();
@@ -2600,18 +2981,31 @@
     if (result) await reloadCanvas();
   }
 
-  async function actBranch() {
-    if (!menuNode) return;
+  /** Duplicate a node (server 'branch' action: same type+config, offset).
+   *  Shared by the inspector Clone button and the ⌘D shortcut. */
+  async function duplicateNode(nodeId: string) {
     actionError = null;
     const result = await postAction(
-      `/api/workflows/${canvas.workflowId}/nodes/${menuNode.id}`,
+      `/api/workflows/${canvas.workflowId}/nodes/${nodeId}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'branch' }),
       },
     );
-    if (result) await reloadCanvas();
+    if (result) {
+      const newId = (result.node as { id?: string } | undefined)?.id;
+      if (newId) {
+        undoHistory.push({ kind: 'node-add', nodeId: newId });
+        selectedId = newId;
+      }
+      await reloadCanvas();
+    }
+  }
+
+  async function actBranch() {
+    if (!menuNode) return;
+    await duplicateNode(menuNode.id);
   }
 
   // ——— Intelligence node helpers ———
@@ -3246,6 +3640,8 @@
   }
   async function deleteEdge(edgeId: string) {
     actionError = null;
+    // Snapshot endpoints BEFORE deleting so undo can recreate the edge.
+    const edge = (canvas?.edges ?? []).find((e) => e.id === edgeId);
     try {
       const res = await fetch(
         `/api/workflows/${canvas.workflowId}/edges?id=${encodeURIComponent(edgeId)}`,
@@ -3254,6 +3650,12 @@
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}`);
+      }
+      if (edge) {
+        undoHistory.push({
+          kind: 'edge-delete',
+          edge: { sourceNodeId: edge.from, targetNodeId: edge.to, sourceHandle: null, targetHandle: null },
+        });
       }
       if (selectedEdgeId === edgeId) selectedEdgeId = null;
       if (edgeInspectorFor === edgeId) edgeInspectorFor = null;
@@ -3399,12 +3801,29 @@
           selectedEdgeId = null;
           pipePickerOpen = false;
           edgeInspectorFor = null;
+          findOpen = false;
           return true;
         } else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
           // Let the chat textarea's own handler send the draft
           if (isTypingTarget(ev.target)) return false;
           ev.preventDefault();
           runCanvas();
+          return true;
+        } else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z')) {
+          if (isTypingTarget(ev.target)) return false; // text-field undo stays native
+          ev.preventDefault();
+          if (ev.shiftKey) void redoLast();
+          else void undoLast();
+          return true;
+        } else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'd' || ev.key === 'D')) {
+          if (isTypingTarget(ev.target) || !selectedId) return false;
+          ev.preventDefault();
+          void duplicateNode(selectedId);
+          return true;
+        } else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'f' || ev.key === 'F')) {
+          if (isTypingTarget(ev.target)) return false;
+          ev.preventDefault();
+          openFind();
           return true;
         } else if (
           (ev.key === 'Delete' || ev.key === 'Backspace') &&
@@ -3448,9 +3867,10 @@
         const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
         const metaKey = isMac ? e.metaKey : e.ctrlKey;
         if (metaKey && (e.key === 'k' || e.key === 'K')) {
-          e.preventDefault();
-          openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
-          return true;
+          // ⌘K belongs to the GLOBAL jkai launcher (layout listener) — the
+          // canvas palette keeps / and the toolbar button. Handling it here
+          // too made one press open both overlays stacked.
+          return false;
         } else if (e.key === '/' && !typing) {
           e.preventDefault();
           openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } });
@@ -3634,6 +4054,13 @@
         disabled={!canvas.workflowId}
         title="Inspect this workflow's memory (data-store keys)"
       >Memory</button>
+      <button
+        class="composer-pill"
+        class:active={runsOpen}
+        onclick={() => (runsOpen ? closeRuns() : openRuns())}
+        disabled={!canvas.workflowId}
+        title="Run history — click a run to load its outputs into the inspectors"
+      >Runs</button>
       <span class="sep-v"></span>
       <button
         class="composer-pill annotation-pill"
@@ -3680,6 +4107,24 @@
       </button>
     </div>
   </div>
+
+  {#if findOpen}
+    <div class="find-bar" role="search">
+      <span class="find-icon" aria-hidden="true">⌕</span>
+      <input
+        bind:this={findInputEl}
+        class="find-input"
+        placeholder="Find node by name or type…"
+        bind:value={findQuery}
+        oninput={() => { findSelected = 0; findJumped = false; }}
+        onkeydown={onFindKeydown}
+      />
+      <span class="find-count">
+        {findMatches.length ? `${findSelected + 1}/${findMatches.length}` : findQuery.trim() ? '0' : ''}
+      </span>
+      <button class="find-x" onclick={closeFind} aria-label="Close find" title="Close (Esc)">✕</button>
+    </div>
+  {/if}
 
   <!-- Viewport -->
   <div
@@ -5328,6 +5773,22 @@
                   </div>
                 </section>
 
+                {#if pinnedOutput && pinnedOutput.nodeId !== menuNode.id}
+                  <section class="nm-sec nm-pinned">
+                    <div class="nm-sec-hd">
+                      <span class="sr-label-tight">PINNED · {pinnedOutput.name}</span>
+                      <button
+                        class="nm-pin-btn"
+                        onclick={() => (pinnedOutput = null)}
+                        title="Unpin"
+                      >unpin</button>
+                    </div>
+                    <div class="nm-field nm-field-read">
+                      <InspectorBody data={pinnedOutput.data} />
+                    </div>
+                  </section>
+                {/if}
+
                 <section class="nm-sec">
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">INPUT DATA</span>
@@ -5346,6 +5807,17 @@
                   <div class="nm-sec-hd">
                     <span class="sr-label-tight">OUTPUT DATA</span>
                     <span class="nm-sec-meta">pipes to ↓ downstream</span>
+                    {#if menuNode.outputData !== undefined}
+                      {#if pinnedOutput?.nodeId === menuNode.id}
+                        <button class="nm-pin-btn nm-pin-active" onclick={() => (pinnedOutput = null)} title="Unpin this output">pinned ✓</button>
+                      {:else}
+                        <button
+                          class="nm-pin-btn"
+                          onclick={() => (pinnedOutput = { nodeId: menuNode!.id, name: menuNode!.name, data: menuNode!.outputData })}
+                          title="Pin this output, then open another node to compare side-by-side"
+                        >pin</button>
+                      {/if}
+                    {/if}
                   </div>
                   <div class="nm-field nm-field-read">
                     {#if menuNode.status === 'running' && menuHealing?.phase === 'healing'}
@@ -6037,6 +6509,54 @@
     </div>
 
     <!-- Memory panel (E3): live workflow data-store keys -->
+    {#if runsOpen}
+      <div class="mem-panel" role="dialog" aria-label="Run history">
+        <div class="mem-panel-hd">
+          <span class="sr-label">Runs</span>
+          <span class="mem-panel-sub">history · last 25</span>
+          <button class="mem-x" onclick={closeRuns} aria-label="Close runs panel" title="Close">✕</button>
+        </div>
+        <div class="mem-panel-body">
+          {#if runsLoading}
+            <p class="mem-empty">Loading…</p>
+          {:else if runsError}
+            <p class="mem-empty mem-err">Couldn't load runs: {runsError}</p>
+            <button class="composer-pill" onclick={() => void loadRuns()}>↻ Retry</button>
+          {:else if runsList.length === 0}
+            <p class="mem-empty">No runs yet — hit ▶ Run to create the first one.</p>
+          {:else}
+            {#if runsViewing}
+              <div class="runs-viewing">
+                <span>Viewing a past run{#if runsViewingCost && (runsViewingCost.costUsd > 0 || runsViewingCost.tokens > 0)}
+                    · ${runsViewingCost.costUsd.toFixed(4)} · {runsViewingCost.tokens.toLocaleString()} tok{/if}</span>
+                <button
+                  class="composer-pill"
+                  onclick={() => { runsViewing = null; runsViewingCost = null; liveStatus = {}; liveData = {}; }}
+                  title="Clear the loaded run's data from the canvas"
+                >Clear</button>
+              </div>
+            {/if}
+            {#each runsList as r (r.id)}
+              <button
+                class="run-row"
+                class:viewing={runsViewing === r.id}
+                onclick={() => void viewRun(r.id)}
+                title={r.error ?? 'Load this run’s outputs into the node inspectors'}
+              >
+                <span class="run-row-dot" data-status={r.status}></span>
+                <span class="run-row-main">
+                  <span class="run-row-top">{r.status} · {r.trigger}</span>
+                  <span class="run-row-sub">
+                    {r.startedAt ? new Date(r.startedAt).toLocaleString() : '—'} · {runDuration(r)}
+                  </span>
+                </span>
+              </button>
+            {/each}
+            <button class="composer-pill mem-refresh" onclick={() => void loadRuns()} title="Refresh">↻ Refresh</button>
+          {/if}
+        </div>
+      </div>
+    {/if}
     {#if memoryOpen}
       <div class="mem-panel" role="dialog" aria-label="Workflow memory">
         <div class="mem-panel-hd">
@@ -6167,6 +6687,15 @@
           <span class="run-summary-stat-label">Tools used</span>
           <span class="run-summary-stat-value">{runSummary.toolCount}</span>
         </div>
+        {#if runSummary.costUsd !== null && (runSummary.costUsd > 0 || (runSummary.tokens ?? 0) > 0)}
+          <div class="run-summary-stat">
+            <span class="run-summary-stat-label">LLM cost</span>
+            <span class="run-summary-stat-value">
+              ${runSummary.costUsd.toFixed(4)}
+              {#if runSummary.tokens}<span class="run-summary-tok"> · {runSummary.tokens.toLocaleString()} tok</span>{/if}
+            </span>
+          </div>
+        {/if}
       </div>
 
       {#if runSummary.error}
@@ -6425,6 +6954,133 @@
   .hifi-zoomctl .zv {
     padding: 0 10px;
     color: var(--text-muted);
+  }
+
+  /* Inspector pin-compare */
+  .nm-pin-btn {
+    background: none;
+    border: 1px solid var(--card-border);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 1px 6px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .nm-pin-btn:hover { border-color: var(--text-primary); color: var(--text-primary); }
+  .nm-pin-active { border-color: var(--accent-ink, var(--accent)); color: var(--accent-ink, var(--accent)); }
+  .nm-pinned { border-left: 3px solid var(--accent-ink, var(--accent)); }
+
+  /* Runs panel rows (shares .mem-panel chrome). */
+  .runs-viewing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent-ink, var(--accent));
+    padding: 6px 8px;
+    border: 1px solid var(--accent-ink, var(--accent));
+    margin-bottom: 8px;
+  }
+  .run-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--divider);
+    cursor: pointer;
+    color: var(--text-primary);
+  }
+  .run-row:hover { background: var(--bg-section); }
+  .run-row.viewing { background: var(--accent-tint-08, rgba(196, 87, 10, 0.08)); }
+  .run-row-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 100px;
+    flex-shrink: 0;
+    background: var(--text-ghost);
+  }
+  .run-row-dot[data-status='completed'] { background: var(--success, #2d7a3a); }
+  .run-row-dot[data-status='failed'] { background: var(--error, #c44); }
+  .run-row-dot[data-status='completed_with_errors'] { background: var(--warn, #b0892a); }
+  .run-row-dot[data-status='running'] { background: var(--accent, #c4570a); }
+  .run-row-main { display: flex; flex-direction: column; min-width: 0; }
+  .run-row-top { font-family: var(--font-mono); font-size: 11px; }
+  .run-row-sub { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
+
+  /* Find bar (⌘F) — floats below the toolbar, opaque per modal rules.
+     Absolute within .canvas-root; the toolbar is in-flow above the viewport,
+     so 52px clears it at the default single-row height. */
+  .find-bar {
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--surface-elevated, var(--bg));
+    border: 1px solid var(--text-primary);
+    border-radius: 2px;
+    width: min(420px, calc(100vw - 24px));
+    box-sizing: border-box;
+  }
+  .find-icon {
+    color: var(--text-ghost);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .find-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .find-input::placeholder {
+    color: var(--text-ghost);
+  }
+  .find-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .find-x {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .find-x:hover {
+    color: var(--text-primary);
+  }
+  @media (max-width: 768px) {
+    .find-bar {
+      /* The wrapped mobile toolbar is taller — anchor from the bottom
+         instead, clear of the composer-free canvas area. */
+      top: auto;
+      bottom: max(16px, env(safe-area-inset-bottom));
+    }
+    .find-input {
+      font-size: 16px; /* stop iOS zoom-on-focus */
+    }
   }
 
   /* Viewport */
@@ -8489,6 +9145,7 @@
   }
   .run-summary-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
   .run-summary-stat-value { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+  .run-summary-tok { font-size: 10px; font-weight: 400; color: var(--text-muted); }
   .run-summary-failed { color: var(--error); }
   .run-summary-skipped { color: var(--text-muted); }
   .run-summary-plain-overall {

@@ -107,3 +107,52 @@ export async function deleteAgent(name: string): Promise<{ deleted: boolean }> {
     throw err;
   }
 }
+
+// ——— Team memory (shared scratchpad) visibility ———
+
+export interface TeamMemoryEntry {
+  id: string;
+  key: string | null;
+  preview: string;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+/** Recent shared team-memory records for the /jkai/agents page. */
+export async function listTeamMemory(limit = 50): Promise<TeamMemoryEntry[]> {
+  await ensureAgentInfra();
+  const { records } = await queryRecords(
+    TEAM_MEMORY_COLLECTION,
+    { sort: { field: 'updatedAt', dir: 'desc' }, limit },
+    ACTOR,
+  );
+  return records.map((r) => {
+    let preview = '';
+    try {
+      preview = JSON.stringify(r.data);
+    } catch {
+      preview = String(r.data);
+    }
+    return {
+      id: r.id,
+      key: r.key,
+      preview: preview.length > 240 ? `${preview.slice(0, 237)}…` : preview,
+      updatedBy: r.updatedBy ?? r.createdBy,
+      updatedAt: r.updatedAt.toISOString(),
+    };
+  });
+}
+
+/** Delete a team-memory record by id (the /jkai/agents "forget" action). */
+export async function deleteTeamMemory(id: string): Promise<{ deleted: boolean }> {
+  await ensureAgentInfra();
+  try {
+    // The collection's delete perm is owner/system — run this owner-level
+    // action as 'owner' (the page is owner-gated by hooks).
+    await deleteRecord(TEAM_MEMORY_COLLECTION, { id }, 'owner');
+    return { deleted: true };
+  } catch (err) {
+    if (err instanceof DatastoreError && err.code === 'not_found') return { deleted: false };
+    throw err;
+  }
+}

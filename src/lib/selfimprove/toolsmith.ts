@@ -180,7 +180,13 @@ export async function buildTool(
 
     const result = await withTimeout(executeTool(spec.name, spec.sample_args), TEST_TIMEOUT_MS);
     if (result.success) {
-      // Keep it: persist with a self-improvement provenance tag.
+      // STAGE it (enabled:false) rather than deploy it. The handler is
+      // LLM-authored JavaScript compiled with full Node scope, and this path
+      // runs unattended at 03:30 — persisting live would mean unreviewed
+      // arbitrary code auto-loads on every boot (an exfiltration surface if
+      // the authoring prompt is ever steered via ingested content). The owner
+      // reviews + enables staged tools from the improvement dashboard; the
+      // smoke-tested in-memory registration is torn down again below.
       await db.insert(customTools).values({
         name: spec.name,
         description: spec.description,
@@ -188,9 +194,14 @@ export async function buildTool(
         parameters: spec.parameters,
         handlerCode: spec.handler_code,
         createdBy: 'self-improvement',
+        enabled: false,
       });
+      unregister(spec.name);
       await recordAttempt(runId, spec, 'created');
-      actions.push({ kind: 'tool_created', detail: `${spec.name}: ${spec.description}` });
+      actions.push({
+        kind: 'tool_created',
+        detail: `${spec.name}: ${spec.description} (staged — enable it from the improvement dashboard)`,
+      });
     } else {
       unregister(spec.name);
       const reason = `smoke test failed — ${result.error ?? 'no data'}`;

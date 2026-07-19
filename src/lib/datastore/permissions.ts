@@ -125,8 +125,16 @@ export function readableSqlPredicate(
     : sql`NULL`;
   const creator = collection.createdBy ?? 'owner';
   const builtin = sql`jsonb_build_array(coalesce(created_by, ${creator}), 'owner', 'jkai')`;
-  // resolvePermissions precedence: row perms → collection default → builtin.
-  const eff = sql`coalesce(permissions -> 'read', ${colReadJson}, ${builtin})`;
+  // Mirror resolvePermissions' SOURCE-OBJECT precedence exactly: the source is
+  // the row's permissions object when present, else the collection default —
+  // and an absent 'read' key in the CHOSEN source falls to the builtin, never
+  // through to the other source. (The previous flat 3-way coalesce diverged:
+  // a row with permissions = {write:[...]} but no 'read' key leaked reads via
+  // the collection default that per-record getRecord denies.)
+  const eff = sql`CASE
+    WHEN permissions IS NOT NULL THEN coalesce(permissions -> 'read', ${builtin})
+    ELSE coalesce(${colReadJson}, ${builtin})
+  END`;
   const wildcardWorkflow = actor.startsWith('workflow:')
     ? sql` OR ${eff} @> '"workflow:*"'::jsonb`
     : sql``;

@@ -10,6 +10,9 @@
   onMount(() => {
     let alive = true;
     const poll = async () => {
+      // Skip the fetch entirely while the tab is hidden — a backgrounded PWA
+      // shouldn't hit the server 3x/min; visibilitychange refreshes on return.
+      if (document.visibilityState !== 'visible') return;
       try {
         const r = await fetch('/api/jkai/hub-status');
         if (!r.ok || !alive) return;

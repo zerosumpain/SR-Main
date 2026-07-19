@@ -33,9 +33,10 @@ export async function ensureBriefingsCollection(): Promise<void> {
   );
 }
 
-function buildPrompt(signals: BriefingSignals, topics: string[]): string {
+function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = ''): string {
   const parts: string[] = [];
   if (topics.length) parts.push(`The user has told me they care about these topics: ${topics.join(', ')}.`);
+  if (feedbackLine) parts.push(feedbackLine);
   if (signals.insights?.intents.length) {
     parts.push(
       'Recurring things they ask about (intent · count):\n' +
@@ -60,6 +61,15 @@ async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{
   const { getLLMClient } = await import('$lib/jkai/llm-client');
   const { client, model } = await getLLMClient(ctx);
 
+  // Engagement weighting (👍/👎 votes) — best-effort, '' when no signal.
+  let feedbackLine = '';
+  try {
+    const { listVotes, feedbackPromptLine } = await import('./feedback');
+    feedbackLine = feedbackPromptLine(await listVotes());
+  } catch {
+    /* feedback is optional */
+  }
+
   const system =
     'You are the user\'s personal chief-of-staff writing their briefing. Be concise, warm, and useful. ' +
     'Output GitHub-flavoured markdown only — no preamble, no code fences around the whole thing.';
@@ -68,7 +78,7 @@ async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{
     model,
     messages: [
       { role: 'system', content: system },
-      { role: 'user', content: buildPrompt(signals, topics) },
+      { role: 'user', content: buildPrompt(signals, topics, feedbackLine) },
     ],
     max_tokens: 2000,
     temperature: 0.4,
@@ -93,13 +103,25 @@ async function persist(data: BriefingData): Promise<void> {
 }
 
 async function notify(data: BriefingData): Promise<void> {
+  const firstLine = data.markdown.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '') ?? data.title;
   try {
     const { executeTool } = await import('$lib/workflows/site-tools/registry');
-    const firstLine = data.markdown.split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '') ?? data.title;
     const msg = `☕ ${data.title}\n${firstLine.slice(0, 400)}\n${ADMIN_LINK}`;
     await executeTool('whatsapp_send', { to: OWNER_PHONE, message: msg.slice(0, 600) });
   } catch (err) {
     console.error('[briefing] whatsapp notify failed:', errMsg(err));
+  }
+  // Web push too — the tap-to-open-the-PWA channel (deep-links /jkai/briefing).
+  // Independent of the WhatsApp path; both are best-effort.
+  try {
+    const { notifyAllSubscribers } = await import('$lib/server/push');
+    await notifyAllSubscribers({
+      title: `☕ ${data.title}`,
+      body: firstLine.slice(0, 160),
+      url: '/jkai/briefing',
+    });
+  } catch (err) {
+    console.error('[briefing] push notify failed:', errMsg(err));
   }
 }
 

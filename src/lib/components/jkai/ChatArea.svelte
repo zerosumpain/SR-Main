@@ -128,6 +128,8 @@
     /** @research (research_search) references for clickable "research" chips.
      *  Same lifecycle as fileRefs. */
     researchRefs?: ResearchSearchRef[];
+    /** Canvases created/updated this turn — deep-link chips. Same lifecycle. */
+    workflowRefs?: WorkflowChipRef[];
     source?: string;
     /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
      *  reloaded history, `new Date().toISOString()` stamped at the moment
@@ -657,7 +659,7 @@
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
     messages = initialMessages.map((m) => {
-      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[] } | undefined;
+      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[]; workflowRefs?: WorkflowChipRef[] } | undefined;
       const raw = m as Record<string, unknown>;
       return {
         id: m.id,
@@ -672,6 +674,8 @@
         fileRefs: meta?.fileRefs ?? undefined,
         // Hydrate @research references so the "research" chips persist across reloads
         researchRefs: meta?.researchRefs ?? undefined,
+        // Hydrate workflow chips (created/updated canvases) across reloads
+        workflowRefs: meta?.workflowRefs ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
         // mark + an inter-bubble gap. Falls back to undefined for legacy
@@ -1050,6 +1054,7 @@
           attachments?: Message['attachments'];
           fileRefs?: FileSearchRef[];
           researchRefs?: ResearchSearchRef[];
+          workflowRefs?: WorkflowChipRef[];
         };
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
@@ -1064,6 +1069,7 @@
           toolSteps: prior?.toolSteps,
           fileRefs: result.fileRefs ?? undefined,
           researchRefs: result.researchRefs ?? undefined,
+          workflowRefs: result.workflowRefs ?? undefined,
           attachments: result.attachments ?? undefined,
           createdAt: prior?.createdAt ?? new Date().toISOString(),
         };
@@ -1247,6 +1253,9 @@
     sourceTitle: string | null; sourceUrl: string | null; domain: string | null;
     score: number; passage: string;
   };
+  // Workflow chips — a canvas this turn created/updated (workflow_create /
+  // workflow_build_from_spec / monitor_create). Rendered as a deep-link chip.
+  type WorkflowChipRef = { workflowId: string; slug: string; name: string; url: string };
 
   let refModal = $state<{
     file: { id: string; name: string; mimeType: string };
@@ -2053,6 +2062,22 @@
                 onOpenFileRef={openFileRef}
                 onOpenResearchRef={openResearchRef}
               />
+              {#if msg.role === 'assistant' && msg.workflowRefs && msg.workflowRefs.length > 0}
+                <div class="wf-chips">
+                  <span class="wf-chips-label">workflow</span>
+                  {#each msg.workflowRefs as wref (wref.workflowId)}
+                    <a class="wf-chip" href={wref.url} title="Open canvas /{wref.slug}">
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <rect x="1.5" y="5.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="9.5" y="1.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="9.5" y="9.5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M6.5 8 H8 M8 8 V4.5 H9.5 M8 8 V11.5 H9.5" stroke="currentColor" stroke-width="1.2"/>
+                      </svg>
+                      <span class="wf-chip-name">{wref.name}</span>
+                    </a>
+                  {/each}
+                </div>
+              {/if}
               {#if msg.attachments && msg.attachments.length > 0}
                 <MessageAttachments attachments={msg.attachments} />
               {/if}
@@ -2213,6 +2238,44 @@
   .cmd-row.active { background: var(--accent-tint-08); }
   .cmd-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); flex-shrink: 0; }
   .cmd-hint { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Workflow chips — deep-link to a canvas created/updated this turn.
+     Same visual family as the file/research "sources" chips. */
+  .wf-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .wf-chips-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .wf-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid var(--accent-ink, var(--accent));
+    color: var(--accent-ink, var(--accent));
+    border-radius: 2px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-decoration: none;
+    max-width: 260px;
+  }
+  .wf-chip:hover {
+    background: color-mix(in srgb, var(--accent-ink, var(--accent)) 10%, transparent);
+  }
+  .wf-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   /* ── Model switcher (chat header) ── */
   .model-switcher { position: relative; flex-shrink: 0; }

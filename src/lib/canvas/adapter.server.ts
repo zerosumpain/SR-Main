@@ -413,6 +413,158 @@ export async function createCanvas(
   return { workflowId: created.id, slug };
 }
 
+/**
+ * Server-side canvas duplicate: copy the workflow row (fresh slug via
+ * allocateCanvasName), all nodes (new ids, old→new remapped), and all edges.
+ * The copy gets NO schedule row — a cloned monitor/cron workflow must not
+ * silently start running twice; re-arm the schedule on the copy explicitly.
+ */
+export async function duplicateCanvas(slug: string): Promise<{ workflowId: string; slug: string } | null> {
+  const name = workflowNameFor(slug);
+  const [src] = await db.select().from(workflows).where(eq(workflows.name, name));
+  if (!src) return null;
+
+  const srcNodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, src.id));
+  const srcEdges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, src.id));
+
+  const { name: copyName, slug: copySlug } = await allocateCanvasName(`${slug}-copy`);
+  const title = `${src.description || slug} (copy)`;
+
+  const workflowId = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(workflows)
+      .values({
+        name: copyName,
+        description: title,
+        trigger: src.trigger ?? { type: 'manual' },
+        // Deliberately NOT copied: notifications (opt back in per-copy).
+      })
+      .returning();
+
+    // Nodes get fresh DB ids; remember the mapping so edges stay wired.
+    const idMap = new Map<string, string>();
+    for (const n of srcNodes) {
+      const [created2] = await tx
+        .insert(workflowNodes)
+        .values({
+          workflowId: created.id,
+          type: n.type,
+          label: n.label,
+          position: n.position,
+          config: n.config,
+        })
+        .returning({ id: workflowNodes.id });
+      idMap.set(n.id, created2.id);
+    }
+    for (const e of srcEdges) {
+      const sourceNodeId = idMap.get(e.sourceNodeId);
+      const targetNodeId = idMap.get(e.targetNodeId);
+      if (!sourceNodeId || !targetNodeId) continue; // orphan edge in source — skip
+      await tx.insert(workflowEdges).values({
+        workflowId: created.id,
+        sourceNodeId,
+        targetNodeId,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
+      });
+    }
+    return created.id;
+  });
+
+  return { workflowId, slug: copySlug };
+}
+
+/** Portable canvas JSON (export/import). Positions/config carried verbatim;
+ *  node ids are local to the file and remapped on import. */
+export interface CanvasExport {
+  version: 1;
+  title: string;
+  slug: string;
+  trigger: unknown;
+  nodes: Array<{ id: string; type: string; label: string; position: unknown; config: unknown }>;
+  edges: Array<{ sourceNodeId: string; targetNodeId: string; sourceHandle: string | null; targetHandle: string | null }>;
+}
+
+/** Serialise a canvas to portable JSON. */
+export async function exportCanvas(slug: string): Promise<CanvasExport | null> {
+  const name = workflowNameFor(slug);
+  const [src] = await db.select().from(workflows).where(eq(workflows.name, name));
+  if (!src) return null;
+  const nodes = await db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, src.id));
+  const edges = await db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, src.id));
+  return {
+    version: 1,
+    title: src.description || slug,
+    slug,
+    trigger: src.trigger ?? { type: 'manual' },
+    nodes: nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, position: n.position, config: n.config })),
+    edges: edges.map((e) => ({
+      sourceNodeId: e.sourceNodeId,
+      targetNodeId: e.targetNodeId,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    })),
+  };
+}
+
+/** Recreate a canvas from portable JSON under a fresh slug. Same id-remap +
+ *  no-schedule rules as duplicateCanvas. Caps guard against junk files. */
+export async function importCanvas(data: CanvasExport): Promise<{ workflowId: string; slug: string }> {
+  if (!data || data.version !== 1 || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+    throw new Error('Not a canvas export file (expected {version:1, nodes, edges}).');
+  }
+  if (data.nodes.length > 200 || data.edges.length > 500) {
+    throw new Error('Canvas export too large (max 200 nodes / 500 edges).');
+  }
+  const seed = typeof data.slug === 'string' && data.slug ? data.slug : 'imported';
+  const { name: copyName, slug: copySlug } = await allocateCanvasName(seed);
+  const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : copySlug;
+
+  const workflowId = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(workflows)
+      .values({
+        name: copyName,
+        description: title,
+        trigger: (data.trigger as Record<string, unknown>) ?? { type: 'manual' },
+      })
+      .returning();
+    const idMap = new Map<string, string>();
+    for (const n of data.nodes) {
+      if (typeof n.type !== 'string' || !n.type) continue;
+      const [created2] = await tx
+        .insert(workflowNodes)
+        .values({
+          workflowId: created.id,
+          type: n.type,
+          label: typeof n.label === 'string' && n.label ? n.label : n.type,
+          position:
+            n.position && typeof n.position === 'object'
+              ? (n.position as { x: number; y: number })
+              : { x: 40, y: 40 },
+          config: n.config && typeof n.config === 'object' ? (n.config as Record<string, unknown>) : {},
+        })
+        .returning({ id: workflowNodes.id });
+      if (typeof n.id === 'string') idMap.set(n.id, created2.id);
+    }
+    for (const e of data.edges) {
+      const sourceNodeId = idMap.get(String(e.sourceNodeId));
+      const targetNodeId = idMap.get(String(e.targetNodeId));
+      if (!sourceNodeId || !targetNodeId) continue;
+      await tx.insert(workflowEdges).values({
+        workflowId: created.id,
+        sourceNodeId,
+        targetNodeId,
+        sourceHandle: typeof e.sourceHandle === 'string' ? e.sourceHandle : null,
+        targetHandle: typeof e.targetHandle === 'string' ? e.targetHandle : null,
+      });
+    }
+    return created.id;
+  });
+
+  return { workflowId, slug: copySlug };
+}
+
 /** Drop a canvas and everything cascaded to it. */
 export async function deleteCanvas(slug: string): Promise<boolean> {
   const name = workflowNameFor(slug);

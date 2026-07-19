@@ -245,6 +245,19 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'delegate-agent',
+    label: 'Delegate to agent',
+    kind: 'agent',
+    group: 'LLM & AI',
+    description:
+      'Hand a task to a named specialist from the persistent agent team (researcher, analyst, writer, reviewer, …). The agent runs a full tool-using turn with its persona and tool whitelist.',
+    defaultConfig: { agent: 'researcher', task: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
+  {
     type: 'llm-router',
     label: 'LLM router',
     kind: 'llm',

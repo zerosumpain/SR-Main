@@ -48,6 +48,24 @@
     if (!iso) return '';
     try { return new Date(iso).toLocaleString(); } catch { return iso; }
   }
+
+  // 👍/👎 feedback → engagement weighting in future briefings. Voting on the
+  // whole briefing sends what=''; naming a topic scopes the vote to it.
+  let voted = $state<'up' | 'down' | null>(null);
+  let voteWhat = $state('');
+  async function vote(v: 'up' | 'down') {
+    if (!latest) return;
+    voted = v;
+    try {
+      await fetch('/api/admin/briefing/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ briefingId: latest.id, vote: v, what: voteWhat.trim() }),
+      });
+    } catch {
+      voted = null;
+    }
+  }
 </script>
 
 <svelte:head><title>Briefing · JKAI</title></svelte:head>
@@ -85,6 +103,16 @@
       {#if latest.status === 'complete'}
         <div class="br-body"><ChatMarkdown content={latest.markdown} /></div>
         <div class="br-meta">{latest.sources.join(' · ') || 'no signals'} · {latest.llmCalls} call · ${latest.costUsd.toFixed(3)}</div>
+        <div class="br-vote">
+          {#if voted}
+            <span class="br-vote-done">✓ noted — {voted === 'up' ? 'more like this' : 'less of this'}</span>
+          {:else}
+            <span class="sr-label-tight">Rate it</span>
+            <input class="br-vote-what" placeholder="topic (optional — blank = whole briefing)" bind:value={voteWhat} />
+            <button class="br-vote-btn" onclick={() => vote('up')} title="Weight future briefings toward this">More like this</button>
+            <button class="br-vote-btn br-vote-down" onclick={() => vote('down')} title="Weight future briefings away from this">Less of this</button>
+          {/if}
+        </div>
       {:else}
         <p class="br-empty">{latest.status === 'failed' ? `Failed: ${latest.error ?? 'unknown'}` : latest.status}</p>
       {/if}
@@ -140,6 +168,14 @@
   .br-body { color: var(--text-primary); }
   .br-body-sm { margin-top: 8px; }
   .br-meta { margin-top: 12px; font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .br-vote { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--divider); }
+  .br-vote-what { flex: 1; max-width: 320px; font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border: 1px solid var(--card-border); background: var(--bg); color: var(--text-primary); outline: none; }
+  .br-vote-what:focus { border-color: var(--accent); }
+  .br-vote-btn { background: var(--bg); border: 1px solid var(--accent-ink, var(--accent)); color: var(--accent-ink, var(--accent)); padding: 4px 10px; cursor: pointer; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .br-vote-btn:hover { background: var(--accent-ink, var(--accent)); color: var(--bg); }
+  .br-vote-down { border-color: var(--warn, #b0892a); color: var(--warn, #b0892a); }
+  .br-vote-down:hover { background: var(--warn, #b0892a); color: var(--bg); }
+  .br-vote-done { font-family: var(--font-mono); font-size: 11px; color: var(--success, #2d7a3a); }
   .br-empty { color: var(--text-ghost); font-size: 13px; }
 
   .br-past { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

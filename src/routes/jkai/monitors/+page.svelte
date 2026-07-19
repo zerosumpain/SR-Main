@@ -41,6 +41,22 @@
     await invalidateAll();
   }
 
+  async function snooze(m: MonitorStatus, hours: number) {
+    await fetch('/api/jkai/monitors', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workflowId: m.workflowId, snoozeHours: hours }),
+    });
+    await invalidateAll();
+  }
+
+  function snoozedUntil(m: MonitorStatus): string | null {
+    if (!m.snoozeUntil) return null;
+    const t = new Date(m.snoozeUntil).getTime();
+    if (t <= Date.now()) return null;
+    return new Date(m.snoozeUntil).toLocaleString();
+  }
+
   async function remove(m: MonitorStatus) {
     if (!confirm(`Delete monitor "${m.description}"?`)) return;
     await fetch(`/api/jkai/monitors?workflowId=${encodeURIComponent(m.workflowId)}`, { method: 'DELETE' });
@@ -90,11 +106,17 @@
               </label>
               <span class="mo-desc">{m.description}</span>
               <span class="mo-actions">
+                {#if snoozedUntil(m)}
+                  <button class="mo-link" onclick={() => snooze(m, 0)} title="Clear the snooze and re-enable now">wake</button>
+                {:else}
+                  <button class="mo-link" onclick={() => snooze(m, 24)} title="Pause for 24h (auto re-enables)">snooze 24h</button>
+                {/if}
                 <a class="mo-link" href={`/jkai/canvas/${m.slug}`}>open</a>
                 <button class="mo-link mo-danger" onclick={() => remove(m)}>delete</button>
               </span>
             </div>
             <div class="mo-meta">
+              {#if snoozedUntil(m)}<span class="mo-chip mo-chip-snooze">snoozed until {snoozedUntil(m)}</span>{/if}
               <span class="mo-chip">cron {m.cron}</span>
               <span class="mo-chip">last {fmt(m.lastRunAt)}</span>
               <span class="mo-chip">next {fmt(m.nextRunAt)}</span>
@@ -162,6 +184,7 @@
   .mo-status-completed { color: var(--status-success, #2a9d4a); }
   .mo-status-failed { color: var(--status-error, #c0392b); }
   .mo-chip-hit { color: var(--accent-ink, var(--accent, #c4570a)); border: 1px solid currentColor; }
+  .mo-chip-snooze { color: var(--warn, #b0892a); border: 1px solid currentColor; }
 
   .mo-hits { margin-top: 8px; }
   .mo-hits summary { cursor: pointer; }

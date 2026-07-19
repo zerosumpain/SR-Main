@@ -5,6 +5,7 @@
 // single gather→synthesise→deliver flow.
 
 export const BRIEFINGS_COLLECTION = 'briefings';
+export const FEEDBACK_COLLECTION = 'briefing-feedback';
 export const SETTINGS_ENABLED_KEY = 'briefing.enabled';
 export const SETTINGS_TOPICS_KEY = 'briefing.topics';
 

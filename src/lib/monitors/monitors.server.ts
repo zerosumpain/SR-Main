@@ -18,6 +18,9 @@ export interface MonitorMarker {
   description: string;
   cron: string;
   createdAt: string;
+  /** ISO timestamp until which the monitor is snoozed (schedule disabled).
+   *  listMonitors lazily re-enables once past. Absent/null = not snoozed. */
+  snoozeUntil?: string | null;
 }
 
 export interface MonitorHit {
@@ -121,7 +124,19 @@ export async function createMonitor(
     workflow.trigger?.type === 'cron'
       ? (workflow.trigger.config?.expression as string | undefined) ?? (workflow.trigger.config?.cron as string | undefined)
       : undefined;
-  const effectiveCron = (cron ?? genCron ?? DEFAULT_CRON).trim();
+  let effectiveCron = (cron ?? genCron ?? DEFAULT_CRON).trim();
+  // Validate BEFORE persisting — an invalid expression would make `new Cron()`
+  // throw at registration time: the monitor would report as created but never
+  // fire, and the poison row would break scheduler boot for later schedules.
+  try {
+    const { Cron } = await import('croner');
+    new Cron(effectiveCron, { paused: true }).stop();
+  } catch {
+    if (cron) throw new Error(`"${cron}" is not a valid cron expression (e.g. "0 8 * * *" = daily at 8am).`);
+    // A generator-produced bad cron falls back to the safe default.
+    console.warn(`[monitors] generated cron "${effectiveCron}" invalid — using default ${DEFAULT_CRON}`);
+    effectiveCron = DEFAULT_CRON;
+  }
 
   const workflowId = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -161,32 +176,58 @@ export async function createMonitor(
   return marker;
 }
 
-/** List monitors joined with their schedule state + latest run status. */
+/** List monitors joined with their schedule state + latest run status.
+ *  Lazily re-enables any snoozed monitor whose snoozeUntil has passed.
+ *  Batched: schedules in one query, per-monitor run/hit lookups in parallel
+ *  (was a ~4N sequential round-trip N+1). */
 export async function listMonitors(): Promise<MonitorStatus[]> {
   await ensureMonitorsCollection();
   const { records } = await queryRecords(MONITORS_COLLECTION, { sort: { field: 'createdAt', dir: 'desc' }, limit: 200 }, ACTOR);
-  const out: MonitorStatus[] = [];
-  for (const r of records) {
-    const m = r.data as unknown as MonitorMarker;
-    const [sched] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.workflowId, m.workflowId)).limit(1);
-    const [lastRun] = await db
-      .select({ status: workflowRuns.status })
-      .from(workflowRuns)
-      .where(eq(workflowRuns.workflowId, m.workflowId))
-      .orderBy(desc(workflowRuns.startedAt))
-      .limit(1);
-    out.push({
-      ...m,
-      enabled: sched?.enabled ?? false,
-      scheduleId: sched?.id ?? null,
-      lastRunAt: sched?.lastRunAt ? sched.lastRunAt.toISOString() : null,
-      nextRunAt: sched?.nextRunAt ? sched.nextRunAt.toISOString() : null,
-      lastStatus: lastRun?.status ?? null,
-      hits: await getMonitorHits(m.workflowId),
-      url: `${baseUrl()}/jkai/canvas/${m.slug}`,
-    });
+  const markers = records.map((r) => r.data as unknown as MonitorMarker);
+
+  // Snooze expiry: re-enable + clear markers whose snooze has lapsed. Best-effort.
+  for (const m of markers) {
+    if (m.snoozeUntil && new Date(m.snoozeUntil).getTime() <= Date.now()) {
+      try {
+        await setMonitorEnabled(m.workflowId, true);
+        m.snoozeUntil = null;
+        await upsertRecord(MONITORS_COLLECTION, { key: m.workflowId, data: m as unknown as Record<string, unknown> }, ACTOR);
+      } catch (err) {
+        console.error('[monitors] snooze re-enable failed:', err instanceof Error ? err.message : err);
+      }
+    }
   }
-  return out;
+
+  const ids = markers.map((m) => m.workflowId);
+  const scheds = ids.length
+    ? await db.select().from(workflowSchedules).where(inArray(workflowSchedules.workflowId, ids))
+    : [];
+  const schedByWf = new Map(scheds.map((s) => [s.workflowId, s]));
+
+  return Promise.all(
+    markers.map(async (m) => {
+      const sched = schedByWf.get(m.workflowId);
+      const [[lastRun], hits] = await Promise.all([
+        db
+          .select({ status: workflowRuns.status })
+          .from(workflowRuns)
+          .where(eq(workflowRuns.workflowId, m.workflowId))
+          .orderBy(desc(workflowRuns.startedAt))
+          .limit(1),
+        getMonitorHits(m.workflowId),
+      ]);
+      return {
+        ...m,
+        enabled: sched?.enabled ?? false,
+        scheduleId: sched?.id ?? null,
+        lastRunAt: sched?.lastRunAt ? sched.lastRunAt.toISOString() : null,
+        nextRunAt: sched?.nextRunAt ? sched.nextRunAt.toISOString() : null,
+        lastStatus: lastRun?.status ?? null,
+        hits,
+        url: `${baseUrl()}/jkai/canvas/${m.slug}`,
+      };
+    }),
+  );
 }
 
 export async function setMonitorEnabled(workflowId: string, enabled: boolean): Promise<{ ok: boolean }> {
@@ -200,6 +241,34 @@ export async function setMonitorEnabled(workflowId: string, enabled: boolean): P
     console.error('[monitors] reloadSchedule failed:', err instanceof Error ? err.message : err);
   }
   return { ok: true };
+}
+
+/**
+ * Snooze a monitor for N hours: disable its schedule and stamp snoozeUntil on
+ * the marker. Re-enabling is LAZY — checked on listMonitors (the /jkai/monitors
+ * page load). Passing hours <= 0 clears the snooze and re-enables now.
+ */
+export async function snoozeMonitor(workflowId: string, hours: number): Promise<{ ok: boolean; snoozeUntil: string | null }> {
+  await ensureMonitorsCollection();
+  let marker: MonitorMarker;
+  try {
+    const { getRecordByKey } = await import('$lib/datastore/records');
+    const record = await getRecordByKey(MONITORS_COLLECTION, workflowId, ACTOR);
+    marker = record.data as unknown as MonitorMarker;
+  } catch {
+    return { ok: false, snoozeUntil: null };
+  }
+  if (hours <= 0) {
+    marker.snoozeUntil = null;
+    await upsertRecord(MONITORS_COLLECTION, { key: workflowId, data: marker as unknown as Record<string, unknown> }, ACTOR);
+    await setMonitorEnabled(workflowId, true);
+    return { ok: true, snoozeUntil: null };
+  }
+  const until = new Date(Date.now() + hours * 3600_000).toISOString();
+  marker.snoozeUntil = until;
+  await upsertRecord(MONITORS_COLLECTION, { key: workflowId, data: marker as unknown as Record<string, unknown> }, ACTOR);
+  await setMonitorEnabled(workflowId, false);
+  return { ok: true, snoozeUntil: until };
 }
 
 /** Remove the monitor marker + disable its schedule (the workflow itself is kept). */

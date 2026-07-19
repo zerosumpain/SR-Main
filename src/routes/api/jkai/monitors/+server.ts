@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createMonitor, listMonitors, setMonitorEnabled, deleteMonitor } from '$lib/monitors/monitors.server';
+import { createMonitor, listMonitors, setMonitorEnabled, deleteMonitor, snoozeMonitor } from '$lib/monitors/monitors.server';
 
 // Manage natural-language monitors. Owner-gated by hooks.
 
@@ -27,6 +27,10 @@ export const PATCH: RequestHandler = async ({ request }) => {
   const workflowId = typeof body.workflowId === 'string' ? body.workflowId : '';
   if (!workflowId) return json({ error: 'workflowId required' }, { status: 400 });
   try {
+    // Snooze mode: { workflowId, snoozeHours } — 0 clears the snooze.
+    if (typeof body.snoozeHours === 'number' && Number.isFinite(body.snoozeHours)) {
+      return json(await snoozeMonitor(workflowId, body.snoozeHours));
+    }
     return json(await setMonitorEnabled(workflowId, body.enabled !== false));
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'update failed' }, { status: 500 });
