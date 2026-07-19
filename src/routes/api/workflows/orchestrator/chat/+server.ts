@@ -386,6 +386,53 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
         }
       }
+
+      // Promote @knowledge (knowledge_search) hits into the SAME file/research
+      // ref arrays so they inherit the existing clickable-source chips + inline
+      // citations + viewers. A knowledge hit's identity lives under `ref` (not
+      // top-level), so the two branches above skip it — we unwrap it here and
+      // route file/research-backed hits to their viewer. memory/datastore hits
+      // have no viewer, so they stay inline-only (no chip).
+      const maybeKnowledge = e.tool === 'knowledge_search' || e.tool === 'jkai_extended';
+      if (maybeKnowledge && result.success) {
+        const data = (result.data ?? {}) as Record<string, unknown>;
+        const hits = data.hits;
+        if (Array.isArray(hits)) {
+          for (const raw of hits) {
+            const h = raw as Record<string, unknown>;
+            const ref = (h?.ref ?? {}) as Record<string, unknown>;
+            const passage = typeof h?.passage === 'string' ? h.passage.slice(0, 800) : '';
+            const score = typeof h?.score === 'number' ? h.score : 0;
+            if (h?.source === 'files' && typeof ref.fileId === 'string' && typeof ref.source === 'string') {
+              const key = ref.fileId + ':' + (typeof ref.chunkOrd === 'number' ? ref.chunkOrd : '');
+              if (seenFileRefs.has(key) || turnFileRefs.length >= 12) continue;
+              seenFileRefs.add(key);
+              turnFileRefs.push({
+                fileId: ref.fileId,
+                source: ref.source,
+                modality: 'text',
+                score,
+                chunkOrd: typeof ref.chunkOrd === 'number' ? ref.chunkOrd : undefined,
+                passage,
+              });
+            } else if (h?.source === 'research' && typeof ref.factId === 'string' && typeof ref.sessionId === 'string') {
+              if (seenResearchRefs.has(ref.factId) || turnResearchRefs.length >= 12) continue;
+              seenResearchRefs.add(ref.factId);
+              turnResearchRefs.push({
+                factId: ref.factId,
+                sourceId: null,
+                sessionId: ref.sessionId,
+                sessionTopic: typeof h.title === 'string' ? h.title : '',
+                sourceTitle: typeof ref.sourceTitle === 'string' ? ref.sourceTitle : null,
+                sourceUrl: typeof ref.sourceUrl === 'string' ? ref.sourceUrl : null,
+                domain: null,
+                score,
+                passage,
+              });
+            }
+          }
+        }
+      }
     }
   });
 
