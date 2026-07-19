@@ -49,6 +49,8 @@
   import { summarizeNode } from '$lib/workflows/node-summary';
   import { memoryBadgeFor } from '$lib/canvas/memory-badge';
   import { computeUpstreamFields, computeUpstreamCollisions } from '$lib/canvas/upstream-fields';
+  import MappingAssistant from '$lib/canvas/MappingAssistant.svelte';
+  import type { EdgeMappingProposal } from '$lib/workflows/mapping/types';
 
   // Node types that always render a config panel (specialised panels), in addition
   // to anything whose NodeDefinition.basicConfig is populated.
@@ -2631,6 +2633,56 @@
     }
   }
 
+  // ——— Auto-mapping assistant (propose config when two nodes are connected) ———
+
+  let mappingProposal = $state<EdgeMappingProposal | null>(null);
+  let mappingPending = $state(false);
+  let mappingApplying = $state(false);
+
+  /**
+   * After an edge is persisted, ask the server how the source's output should
+   * flow into the target and surface a proposal card. Non-blocking and
+   * failure-tolerant — a slow/errored proposal never affects the connection.
+   */
+  async function proposeMapping(sourceId: string, targetId: string) {
+    mappingProposal = null;
+    mappingPending = true;
+    try {
+      const res = await fetch(`/api/workflows/${canvas.workflowId}/edges/propose`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceNodeId: sourceId, targetNodeId: targetId }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const p = body.proposal as EdgeMappingProposal | undefined;
+        // Only surface the card when there is something to act on.
+        if (p && (p.actions.length > 0 || p.compatibility.level === 'incompatible')) {
+          mappingProposal = p;
+        }
+      }
+    } catch {
+      /* proposal is best-effort */
+    } finally {
+      mappingPending = false;
+    }
+  }
+
+  async function applyMapping(patch: Record<string, unknown>) {
+    const target = mappingProposal?.targetNodeId;
+    if (!target || Object.keys(patch).length === 0) {
+      mappingProposal = null;
+      return;
+    }
+    mappingApplying = true;
+    try {
+      await saveNodeConfig(target, patch);
+    } finally {
+      mappingApplying = false;
+      mappingProposal = null;
+    }
+  }
+
   // ——— Webpage node runtime outputs ———
 
   const webpageOutputs = $state<Record<string, Record<string, string>>>({});
@@ -2878,6 +2930,8 @@
               if (target.type === 'webpage') {
                 await syncWebpageFromUpstream(hoverTargetId);
               }
+              // Offer an auto-mapping for the freshly-connected edge (non-blocking).
+              void proposeMapping(sourceId, hoverTargetId);
             } catch (err) {
               actionError = err instanceof Error ? err.message : String(err);
             }
@@ -2915,14 +2969,18 @@
 
   async function pipeTo(targetId: string) {
     if (!menuNode) return;
+    const sourceId = menuNode.id;
     actionError = null;
     pipePickerOpen = false;
     const result = await postAction(`/api/workflows/${canvas.workflowId}/edges`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceNodeId: menuNode.id, targetNodeId: targetId }),
+      body: JSON.stringify({ sourceNodeId: sourceId, targetNodeId: targetId }),
     });
-    if (result) await reloadCanvas();
+    if (result) {
+      await reloadCanvas();
+      void proposeMapping(sourceId, targetId);
+    }
   }
 
   async function saveTrigger() {
@@ -6011,6 +6069,18 @@
   onPick={onPalettePick}
   onClose={closePalette}
 />
+
+{#if mappingPending || mappingProposal}
+  {#key (mappingProposal?.sourceNodeId ?? '') + '>' + (mappingProposal?.targetNodeId ?? '')}
+    <MappingAssistant
+      proposal={mappingProposal}
+      pending={mappingPending}
+      applying={mappingApplying}
+      onApply={applyMapping}
+      onDismiss={() => { mappingProposal = null; mappingPending = false; }}
+    />
+  {/key}
+{/if}
 
 {#if activeInteraction}
   <InteractiveStepModal

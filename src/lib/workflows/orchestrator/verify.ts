@@ -10,6 +10,7 @@
 import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema, NodeDefinition } from '../types';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
 import { extractTemplateTokens, classifyTemplateToken } from '../state-templates';
+import { validateWorkflowCompatibility } from '../mapping/compatibility';
 
 export interface VerificationIssue {
   nodeId: string;
@@ -647,7 +648,33 @@ export function verifyWorkflow(
   // --- Graph-level: destructive site-tool without upstream approval (C1) ---
   issues.push(...detectSiteToolApprovalGaps(nodes, edges));
 
+  // --- Graph-level: handle-kind compatibility between connected nodes (D) ---
+  issues.push(...detectEdgeIncompatibility(nodes, edges));
+
   return issues;
+}
+
+/**
+ * Warn (never error) on edges whose source output kinds and target input kinds
+ * do not overlap — the generator/spec path can create these (the interactive
+ * canvas already blocks them). Anchored to the target node. Shares the same
+ * handle-kind engine as the interactive auto-mapping assistant.
+ */
+function detectEdgeIncompatibility(
+  nodes: WorkflowNodeDef[],
+  edges: WorkflowEdgeDef[],
+): VerificationIssue[] {
+  const labelById = new Map(nodes.map((n) => [n.id, n.label ?? n.type]));
+  return validateWorkflowCompatibility(
+    nodes.map((n) => ({ id: n.id, type: n.type })),
+    edges.map((e) => ({ sourceNodeId: e.sourceNodeId, targetNodeId: e.targetNodeId })),
+  ).map((c) => ({
+    nodeId: c.targetNodeId,
+    nodeLabel: labelById.get(c.targetNodeId) ?? c.targetType,
+    field: 'connection',
+    issue: c.issue,
+    severity: c.severity,
+  }));
 }
 
 /** Format issues into a string the LLM can act on. */
