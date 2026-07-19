@@ -756,6 +756,19 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'api-call',
+    label: 'API call (catalogue)',
+    kind: 'output',
+    group: 'Integrations',
+    description:
+      'Read / write / update / push / pull from a registered API in the catalogue. Pick an API by name, choose an operation, give a path — auth injected, SSRF-guarded, kept within the API\'s baseUrl.',
+    defaultConfig: { api: '', method: 'GET', path: '', query: '', body: '', headers: '' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
+  {
     type: 'home-assistant',
     label: 'Home Assistant',
     kind: 'output',

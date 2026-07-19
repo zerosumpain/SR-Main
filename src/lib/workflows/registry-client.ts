@@ -38,6 +38,7 @@ import { siteToolDef } from './nodes/site-tool.def';
 import { fileSearchDef } from './nodes/file-search.def';
 import { researchSearchDef } from './nodes/research-search.def';
 import { deckBuildDef } from './nodes/deck-build.def';
+import { apiCallDef } from './nodes/api-call.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
 import { stealthScrapeDef } from './nodes/stealth-scrape.def';
@@ -870,6 +871,7 @@ const builtInDefinitions: NodeDefinition[] = [
   fileSearchDef,
   researchSearchDef,
   deckBuildDef,
+  apiCallDef,
   deepDiveDef,
   webScrapeDef,
   stealthScrapeDef,

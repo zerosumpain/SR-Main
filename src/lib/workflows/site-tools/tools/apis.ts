@@ -150,7 +150,7 @@ export async function handleApiSearch(args: Record<string, unknown>): Promise<To
 // api_call
 // ---------------------------------------------------------------------------
 
-async function findEntry(api: string): Promise<{ key: string; entry: ApiEntry } | null> {
+export async function findApiEntry(api: string): Promise<{ key: string; entry: ApiEntry } | null> {
   const slug = slugifyName(api);
   try {
     const rec = await getRecordByKey(API_CATALOG, slug, ACTOR);
@@ -165,6 +165,182 @@ async function findEntry(api: string): Promise<{ key: string; entry: ApiEntry } 
     ({ key, entry }) => (entry.name ?? '').toLowerCase() === want || key === slug,
   );
   return hit ? { key: hit.key ?? slug, entry: hit.entry } : null;
+}
+
+/**
+ * Build the full request URL for a catalogued API from its `baseUrl` and a
+ * caller-supplied `path` (+ optional query object). This is what lets the
+ * `api-call` workflow node offer a friendly "pick an API, then type a path"
+ * UX instead of forcing a full absolute URL:
+ *   - empty path      -> the baseUrl untouched (no trailing slash forced on);
+ *   - absolute path   -> used as-is (containment is still enforced downstream);
+ *   - relative path   -> resolved BELOW the baseUrl's own path (a leading slash
+ *                        is stripped so `https://api.x/v1` + `schools` stays
+ *                        `.../v1/schools` rather than jumping to the host root).
+ * `query` entries are appended last (blank/null values skipped). May throw if
+ * `baseUrl` is not a valid URL — callers surface that as an error envelope.
+ */
+export function composeApiUrl(
+  baseUrl: string,
+  path: string,
+  query?: Record<string, unknown>,
+): string {
+  const p = String(path ?? '').trim();
+  let url: URL;
+  if (!p) {
+    url = new URL(baseUrl);
+  } else if (/^https?:\/\//i.test(p)) {
+    url = new URL(p);
+  } else {
+    const baseWithSlash = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+    url = new URL(p.replace(/^\/+/, ''), baseWithSlash);
+  }
+  if (query && typeof query === 'object' && !Array.isArray(query)) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v === undefined || v === null || v === '') continue;
+      url.searchParams.set(k, String(v));
+    }
+  }
+  return url.toString();
+}
+
+/**
+ * The single SSRF-guarded call core shared by the `api_call` site tool and the
+ * `api-call` workflow node: enforce host+path containment, inject env-ref auth,
+ * fetch through the pinned guard, roll catalogue status, and parse the body.
+ */
+async function executeApiCall(
+  key: string,
+  entry: ApiEntry,
+  url: string,
+  opts: { method?: string; headers?: Record<string, string>; body?: unknown },
+): Promise<ToolResult> {
+  if (!entry.baseUrl || !urlIsWithinBase(url, entry.baseUrl)) {
+    return {
+      success: false,
+      error: `url must be on the API's catalogued host and path (${entry.baseUrl}). Refusing to call outside it.`,
+    };
+  }
+
+  let authHeaders: Record<string, string>;
+  try {
+    authHeaders = resolveAuthHeaders(entry);
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+
+  let result;
+  try {
+    result = await guardedFetch(url, {
+      method: opts.method,
+      headers: { ...authHeaders, ...(opts.headers ?? {}) },
+      body: opts.body,
+    });
+  } catch (err) {
+    // Network / timeout / SSRF -> a hard failure; mark the entry broken.
+    void markStatus(key, 'broken');
+    return { success: false, error: (err as Error).message };
+  }
+
+  // 2xx -> verified; 5xx -> broken (server-side); 4xx leaves status untouched
+  // (a bad path/params does not condemn the whole API).
+  if (result.ok) void markStatus(key, 'verified');
+  else if (result.status >= 500) void markStatus(key, 'broken');
+
+  let parsed: unknown = undefined;
+  if (!result.truncated && result.contentType.includes('json') && result.text) {
+    try {
+      parsed = JSON.parse(result.text);
+    } catch {
+      /* keep raw text */
+    }
+  }
+
+  return {
+    success: result.ok,
+    error: result.ok ? undefined : `HTTP ${result.status}`,
+    data: {
+      api: entry.name,
+      url,
+      status: result.status,
+      contentType: result.contentType,
+      truncated: result.truncated,
+      json: parsed,
+      text: parsed === undefined ? result.text : undefined,
+    },
+  };
+}
+
+/**
+ * Path-based entry point for the `api-call` workflow node. Resolves the API by
+ * catalogue key/name, composes the URL from its baseUrl + `path`/`query`, and
+ * delegates to the shared guarded core. Returns the same envelope as `api_call`.
+ */
+export async function callCatalogApi(params: {
+  api: string;
+  path?: string;
+  method?: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  query?: Record<string, unknown>;
+}): Promise<ToolResult> {
+  try {
+    const api = String(params.api ?? '').trim();
+    if (!api) return { success: false, error: '"api" (catalogue key or name) is required' };
+
+    const found = await findApiEntry(api);
+    if (!found) {
+      return {
+        success: false,
+        error: `No catalogued API named "${api}". Register it first (api_register) or pick one from the API catalogue.`,
+      };
+    }
+
+    let url: string;
+    try {
+      url = composeApiUrl(found.entry.baseUrl, params.path ?? '', params.query);
+    } catch (err) {
+      return { success: false, error: `could not build request URL: ${(err as Error).message}` };
+    }
+
+    return executeApiCall(found.key, found.entry, url, {
+      method: params.method,
+      headers: params.headers,
+      body: params.body,
+    });
+  } catch (err) {
+    return toToolError(err, 'api error');
+  }
+}
+
+/** The full catalogue, shaped for the api-call node's picker (name-sorted). */
+export async function listCatalogApis(): Promise<
+  Array<{
+    key: string;
+    name: string;
+    baseUrl: string;
+    description: string;
+    capabilities: string[];
+    tags: string[];
+    auth: string;
+    status: string;
+    exampleRequests: Array<{ label?: string; method?: string; url: string; body?: unknown }>;
+  }>
+> {
+  const catalog = await loadCatalog();
+  return catalog
+    .map(({ key, entry }) => ({
+      key: key ?? slugifyName(entry.name),
+      name: entry.name,
+      baseUrl: entry.baseUrl,
+      description: entry.description ?? '',
+      capabilities: entry.capabilities ?? [],
+      tags: entry.tags ?? [],
+      auth: entry.auth?.kind ?? 'none',
+      status: entry.status ?? 'seeded',
+      exampleRequests: entry.exampleRequests ?? [],
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Resolve the auth header for an entry. Throws a clear error if the env is missing. */
@@ -323,59 +499,16 @@ export async function handleApiCall(args: Record<string, unknown>): Promise<Tool
     if (!api) return { success: false, error: '"api" (catalogue key or name) is required' };
     if (!url) return { success: false, error: '"url" is required' };
 
-    const found = await findEntry(api);
+    const found = await findApiEntry(api);
     if (!found) {
       return { success: false, error: `No catalogued API named "${api}". Use api_search to find one, or api_register to add it.` };
     }
-    const { key, entry } = found;
 
-    if (!entry.baseUrl || !urlIsWithinBase(url, entry.baseUrl)) {
-      return { success: false, error: `url must be on the API's catalogued host and path (${entry.baseUrl}). Refusing to call outside it.` };
-    }
-
-    let authHeaders: Record<string, string>;
-    try {
-      authHeaders = resolveAuthHeaders(entry);
-    } catch (err) {
-      return { success: false, error: (err as Error).message };
-    }
-
-    let result;
-    try {
-      result = await guardedFetch(url, {
-        method: args.method as string | undefined,
-        headers: { ...authHeaders, ...((args.headers as Record<string, string> | undefined) ?? {}) },
-        body: args.body,
-      });
-    } catch (err) {
-      // Network / timeout / SSRF -> a hard failure; mark the entry broken.
-      void markStatus(key, 'broken');
-      return { success: false, error: (err as Error).message };
-    }
-
-    // 2xx -> verified; 5xx -> broken (server-side); 4xx leaves status untouched
-    // (a bad path/params does not condemn the whole API).
-    if (result.ok) void markStatus(key, 'verified');
-    else if (result.status >= 500) void markStatus(key, 'broken');
-
-    let parsed: unknown = undefined;
-    if (!result.truncated && result.contentType.includes('json') && result.text) {
-      try { parsed = JSON.parse(result.text); } catch { /* keep raw text */ }
-    }
-
-    return {
-      success: result.ok,
-      error: result.ok ? undefined : `HTTP ${result.status}`,
-      data: {
-        api: entry.name,
-        url,
-        status: result.status,
-        contentType: result.contentType,
-        truncated: result.truncated,
-        json: parsed,
-        text: parsed === undefined ? result.text : undefined,
-      },
-    };
+    return executeApiCall(found.key, found.entry, url, {
+      method: args.method as string | undefined,
+      headers: (args.headers as Record<string, string> | undefined) ?? {},
+      body: args.body,
+    });
   } catch (err) {
     return toToolError(err, 'api error');
   }
