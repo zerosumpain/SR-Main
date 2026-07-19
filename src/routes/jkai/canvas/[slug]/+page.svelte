@@ -3561,7 +3561,6 @@
 </svelte:head>
 
 <div class="page-shell" class:canvas--mobile={isMobile}>
-  {#if isMobile}<div class="mobile-debug-pill">MOBILE</div>{/if}
   <PageHeader title={canvas.title} titleHref="/jkai/canvas">
     {#snippet meta()}
       <span class="canvas-head-meta">
@@ -8626,21 +8625,6 @@
    * handlers manage single-finger pan + two-finger pinch directly — keeps
    * pinch scoped to canvas content rather than zooming the whole page. */
 
-  /* Debug pill: rendered as a conditional element when isMobile. */
-  .mobile-debug-pill {
-    position: fixed;
-    top: 4px;
-    right: 4px;
-    z-index: 9999;
-    font: 600 11px / 1 system-ui, sans-serif;
-    background: var(--success);
-    color: white;
-    padding: 4px 8px;
-    border-radius: var(--radius-sharp);
-    pointer-events: none;
-    opacity: 0.9;
-  }
-
   /* Inspector-as-bottom-sheet. The .nm-inline--mobile class is on the
    * element (added when isMobile) — this works regardless of where the
    * element lives in the DOM after the portal action moves it to body. */
@@ -8699,5 +8683,56 @@
   @keyframes nm-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
+  }
+
+  /* ——— Mobile layout (<=768px, matches useIsMobile breakpoint) ———
+     The toolbar is a dense one-row control strip on desktop. On a phone it
+     overflows off-screen, hiding half the controls. Here it wraps so every
+     control stays reachable, the breadcrumb/duplicate-title (already in the
+     PageHeader) is dropped, tap targets grow, and the decorative overlays
+     step out of the way. */
+  @media (max-width: 768px) {
+    .hifi-toolbar {
+      flex-wrap: wrap;
+      gap: 6px;
+      row-gap: 6px;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    /* Breadcrumb label, separators and the canvas title all duplicate the
+       PageHeader — drop them so the actionable controls lead. Keep the stats,
+       which the PageHeader hides below md. */
+    .hifi-toolbar > .sr-label,
+    .hifi-toolbar > .sr-sep,
+    .hifi-toolbar > .canvas-title {
+      display: none;
+    }
+    .canvas-stats {
+      font-size: 10px;
+    }
+    .toolbar-right {
+      margin-left: 0;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: 100%;
+    }
+    /* Bigger, thumb-friendly tap targets. */
+    .composer-pill {
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 11px;
+    }
+    .hifi-zoomctl button {
+      min-height: 38px;
+      padding: 8px 12px;
+    }
+    /* The colour-key legend is decorative — reclaim the space on a phone. */
+    .legend {
+      display: none;
+    }
+    /* Nudge the minimap clear of the home indicator. */
+    .minimap {
+      left: 12px;
+      bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    }
   }
 </style>

@@ -457,4 +457,51 @@
     text-align: center;
     letter-spacing: 0.05em;
   }
+
+  /* ——— Mobile (<=768px) ———
+     The palette is a fixed 420px box anchored at the tap point — it overflows
+     a phone viewport and clips half its width. On mobile it becomes a
+     full-width bottom sheet (same pattern as the canvas node inspector), with
+     a drag handle, a 16px search input (stops iOS zoom-on-focus), roomier tap
+     rows, and safe-area padding. The inline left/top/transform set in the
+     component script are overridden with !important. */
+  @media (max-width: 768px) {
+    .palette {
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      top: auto !important;
+      transform: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 75dvh !important;
+      border-radius: var(--radius-round) var(--radius-round) 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      /* Fade (not slide): the !important transform above — needed to cancel the
+         inline center-anchor translate — would override a transform keyframe. */
+      animation: palette-fade-in 160ms ease-out;
+    }
+    .palette::before {
+      content: '';
+      display: block;
+      flex: 0 0 auto;
+      width: 40px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--divider);
+      margin: 8px auto 4px;
+    }
+    .palette-search {
+      font-size: 16px;
+      padding: 14px 16px;
+    }
+    .palette-row {
+      padding: 12px 16px;
+    }
+  }
+  @keyframes palette-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 </style>
