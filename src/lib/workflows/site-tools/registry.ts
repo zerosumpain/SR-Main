@@ -29,6 +29,7 @@ import './tools/scraper';
 import './tools/files';
 import './tools/knowledge';
 import './tools/agents';
+import './tools/monitors';
 import './tools/gmail';
 import './tools/web';
 import './tools/node-builder';
@@ -105,6 +106,7 @@ export function getToolsetManifest(): Array<{
     apis: 'API catalogue — search catalogued external data sources, call them for live data (SSRF-guarded, env-ref auth), and register newly-discovered APIs',
     knowledge: 'Unified knowledge recall — one search across /drive files, deep-dive research facts, personal memory, and datastore records (the @knowledge mention)',
     agents: 'Persistent agent team — list/define named specialist agents and delegate a focused sub-task to one (each has its own persona, allowed tools, and shared team memory)',
+    monitors: 'Natural-language monitors — create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/monitors)',
   };
 
   const manifest = getAvailableToolsets().map((ts) => ({
