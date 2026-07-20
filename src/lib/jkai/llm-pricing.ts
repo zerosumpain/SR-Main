@@ -34,6 +34,7 @@ const OPENROUTER_PRICES: Record<string, ModelPricing> = {
   'z-ai/glm-4.7-flash': { inputPerMillion: 0.06, outputPerMillion: 0.4 },
   'z-ai/glm-4.6': { inputPerMillion: 0.5, outputPerMillion: 2 },
   'google/gemini-3.1-flash-lite-preview': { inputPerMillion: 0.25, outputPerMillion: 1.5 },
+  'google/gemini-3.5-flash': { inputPerMillion: 1.5, outputPerMillion: 9 },
   'openai/gpt-4o-mini': { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   'google/gemini-2.0-flash-001': { inputPerMillion: 0.1, outputPerMillion: 0.4 },
 };

@@ -1310,14 +1310,11 @@
   function shortModelLabel(id: string): string {
     return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
   }
-  // Show the chosen model once the user has picked one; otherwise prompt them to.
-  // The conversation defaults to the site default until an explicit choice is made.
-  const modelChosen = $derived(
-    !!conversation?.modelId && currentModel.modelId !== defaultChatModelId,
-  );
-  const modelTriggerLabel = $derived(
-    modelChosen ? shortModelLabel(currentModel.modelId) : 'Click to select',
-  );
+  // Always show the model that will actually answer (the conversation's pin,
+  // falling back to the site default) — "Click to select" hid the effective
+  // model and made the pill look broken.
+  const modelIsDefault = $derived(currentModel.modelId === defaultChatModelId);
+  const modelTriggerLabel = $derived(shortModelLabel(currentModel.modelId));
 
   async function switchModel(provider: ModelContext['provider'], modelId: string) {
     modelPickerOpen = false;
@@ -1679,11 +1676,14 @@
           >
             <span class="model-dot"></span>
             <span class="model-name">{modelTriggerLabel}</span>
+            {#if modelIsDefault}<span class="model-tag">default</span>{/if}
             <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
           </button>
           {#if modelPickerOpen}
             <OpenRouterModelPicker
               current={currentModel}
+              defaultModelId={defaultChatModelId}
+              altModel={altOpenRouterModel}
               onselect={(ctx) => switchModel(ctx.provider, ctx.modelId)}
               onclose={() => (modelPickerOpen = false)}
             />
@@ -2297,7 +2297,20 @@
   .model-btn:disabled { opacity: 0.5; cursor: default; }
   .model-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--accent); flex-shrink: 0; }
   .model-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-tag {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    flex-shrink: 0;
+  }
   .model-caret { opacity: 0.6; flex-shrink: 0; }
+  /* Phones: bigger tap target, let the name breathe a bit less. */
+  @media (max-width: 640px) {
+    .model-btn, .model-label { padding: 0.35rem 0.6rem; }
+    .model-name { max-width: 12ch; }
+    .model-tag { display: none; }
+  }
   .model-backdrop { position: fixed; inset: 0; z-index: 25; }
   .model-menu {
     position: absolute;

@@ -26,10 +26,14 @@
   // lifecycle matches the component's — see the portal note in the template).
   let {
     current,
+    defaultModelId = null,
+    altModel = null,
     onselect,
     onclose,
   }: {
     current: ModelContext;
+    defaultModelId?: string | null;
+    altModel?: ModelContext | null;
     onselect: (ctx: ModelContext) => void;
     onclose: () => void;
   } = $props();
@@ -123,7 +127,25 @@
     onclose();
   }
 
+  // One-tap picks for the two site-configured models (admin default + alt).
+  // Deduped — when the alt IS the default only one chip renders.
+  const quickPicks = $derived.by(() => {
+    const picks: Array<{ id: string; tag: string }> = [];
+    if (defaultModelId) picks.push({ id: defaultModelId, tag: 'default' });
+    if (altModel && altModel.modelId !== defaultModelId) {
+      picks.push({ id: altModel.modelId, tag: 'alt' });
+    }
+    return picks;
+  });
+
   const totalPages = $derived(Math.max(1, Math.ceil(total / pageSize)));
+
+  const SORT_CHIPS: Array<{ key: SortKey; label: string }> = [
+    { key: 'throughput', label: 't/s' },
+    { key: 'promptPrice', label: 'in $' },
+    { key: 'completionPrice', label: 'out $' },
+    { key: 'name', label: 'a–z' },
+  ];
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') close(); }} />
@@ -143,19 +165,51 @@
     aria-label="Choose a model"
     onclick={(e) => e.stopPropagation()}
   >
+    <div class="sheet-handle" aria-hidden="true"></div>
     <header class="picker-head">
       <h2 class="picker-title">Choose a model</h2>
       <button type="button" class="picker-close" onclick={close} aria-label="Close">✕</button>
     </header>
 
+    {#if quickPicks.length > 0}
+      <div class="quick-row" role="group" aria-label="Quick picks">
+        <span class="quick-label">quick pick</span>
+        {#each quickPicks as p (p.id)}
+          <button
+            type="button"
+            class="quick-chip"
+            class:active={current.provider === 'openrouter' && current.modelId === p.id}
+            title={p.id}
+            onclick={() => pick({ provider: 'openrouter', modelId: p.id })}
+          >
+            <span class="quick-chip-name">{shortName(p.id)}</span>
+            <span class="quick-chip-tag">{p.tag}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+
     <input
       class="picker-search"
-      placeholder="Filter OpenRouter models by name or id…"
+      placeholder="Filter models by name or id…"
       aria-label="Filter models"
       bind:value={q}
       oninput={() => { page = 1; }}
     />
     <p class="picker-hint">Only models that support tool use are shown — required for the chat agent.</p>
+
+    <!-- Mobile-only sort control (the sortable column headers are hidden there). -->
+    <div class="sort-chips" role="group" aria-label="Sort models">
+      <span class="quick-label">sort</span>
+      {#each SORT_CHIPS as c (c.key)}
+        <button
+          type="button"
+          class="sort-chip"
+          class:active={sortBy === c.key}
+          onclick={() => sortByColumn(c.key)}
+        >{c.label}{indicator(c.key)}</button>
+      {/each}
+    </div>
 
     <div class="picker-table-wrap">
       <table class="picker-table">
@@ -200,10 +254,10 @@
                 <span class="name-main">{shortName(m.id)}</span>
                 <span class="name-id">{m.id}</span>
               </td>
-              <td class="cell-muted cell-trunc" title={m.modality ?? ''}>{m.modality ?? '—'}</td>
-              <td class="ta-right cell-muted">{perMillion(m.promptPrice)}</td>
-              <td class="ta-right cell-muted">{perMillion(m.completionPrice)}</td>
-              <td class="ta-right cell-muted">{tps(m.throughput)}</td>
+              <td class="cell-muted cell-trunc cell-mod" title={m.modality ?? ''}>{m.modality ?? '—'}</td>
+              <td class="ta-right cell-muted cell-in-price">{perMillion(m.promptPrice)}</td>
+              <td class="ta-right cell-muted cell-out-price">{perMillion(m.completionPrice)}</td>
+              <td class="ta-right cell-muted cell-tps">{tps(m.throughput)}</td>
             </tr>
           {/each}
           {#if rows.length === 0 && !loading}
@@ -249,7 +303,14 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-round);
     overflow: hidden;
+    animation: picker-in 160ms ease-out;
   }
+  @keyframes picker-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  /* Bottom-sheet drag handle — mobile only. */
+  .sheet-handle { display: none; }
   .picker-head {
     display: flex;
     align-items: center;
@@ -273,6 +334,55 @@
   }
   .picker-close:hover { color: var(--text-primary); background: var(--surface-overlay); }
 
+  .quick-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 16px 0;
+  }
+  .quick-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    flex-shrink: 0;
+  }
+  .quick-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    max-width: 100%;
+  }
+  .quick-chip:hover { color: var(--text-primary); border-color: var(--text-ghost); }
+  .quick-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .quick-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+  .quick-chip-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
   .picker-search {
     margin: 12px 16px 4px;
     padding: 9px 12px;
@@ -288,6 +398,9 @@
     color: var(--text-ghost);
     font-family: var(--font-mono);
   }
+
+  /* Mobile-only sort chips (column headers do this job on desktop). */
+  .sort-chips { display: none; }
 
   .picker-table-wrap {
     flex: 1;
@@ -392,4 +505,83 @@
   }
   .pager-btn:hover:not(:disabled) { color: var(--text-primary); }
   .pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* ============ Mobile: full-width bottom sheet, card rows ============ */
+  @media (max-width: 640px) {
+    .picker-overlay {
+      align-items: flex-end;
+      padding: 0;
+    }
+    .picker-modal {
+      width: 100%;
+      max-height: 88dvh;
+      border-radius: 4px 4px 0 0;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      animation: sheet-in 200ms ease-out;
+    }
+    @keyframes sheet-in {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .sheet-handle {
+      display: block;
+      width: 36px;
+      height: 4px;
+      border-radius: var(--radius-pill);
+      background: var(--card-border);
+      margin: 8px auto 0;
+      flex-shrink: 0;
+    }
+    .picker-head { padding: 10px 16px; }
+    /* 16px stops iOS Safari auto-zooming the input on focus. */
+    .picker-search { font-size: 16px; padding: 10px 12px; }
+    .picker-hint { display: none; }
+    .sort-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 0 16px 10px;
+    }
+    .sort-chip {
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--card-border);
+      background: var(--surface-overlay);
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .sort-chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+
+    /* Collapse the table into stacked cards: header row hidden (sort-chips
+       replace it), each row becomes a block with name on top and the numeric
+       cells inlined as labelled mono chips underneath. */
+    .picker-table thead, .picker-table colgroup { display: none; }
+    .picker-table, .picker-table tbody, .picker-table tr { display: block; width: 100%; }
+    .model-row { padding: 10px 12px; }
+    .model-row td { display: block; padding: 0; }
+    .cell-name { margin-bottom: 4px; }
+    .name-main { white-space: normal; }
+    /* Modality is noise at this width. */
+    .cell-mod { display: none; }
+    .cell-in-price, .cell-out-price, .cell-tps {
+      display: inline-block;
+      text-align: left;
+      margin-right: 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .cell-in-price::before { content: 'in '; color: var(--text-ghost); }
+    .cell-out-price::before { content: 'out '; color: var(--text-ghost); }
+    .picker-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .pager-btn { padding: 8px 16px; }
+  }
 </style>

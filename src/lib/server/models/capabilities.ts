@@ -34,7 +34,9 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
   'openai/gpt-4.1': IMAGE_ONLY,
   'google/gemini-2.5-pro': ALL,
   'google/gemini-2.5-flash': ALL,
+  'google/gemini-3.5-flash': ALL,
   'google/gemini-3.1-flash-lite-preview': ALL,
+  'google/gemini-3.1-flash-lite': ALL,
   'x-ai/grok-2-vision': IMAGE_ONLY,
 };
 
