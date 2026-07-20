@@ -568,12 +568,14 @@
     .picker-table, .picker-table tbody, .picker-table tr { display: block; width: 100%; }
     .model-row { padding: 10px 12px; }
     .model-row td { display: block; padding: 0; }
-    .cell-name { margin-bottom: 4px; }
+    .model-row td.cell-name { margin-bottom: 4px; }
     .name-main { white-space: normal; }
-    /* Modality is noise at this width. */
-    .cell-mod { display: none; }
-    .cell-in-price, .cell-out-price, .cell-tps {
+    /* Modality is noise at this width. (td-qualified: .model-row td's
+       display:block outranks a bare class here.) */
+    .model-row td.cell-mod { display: none; }
+    .model-row td.cell-in-price, .model-row td.cell-out-price, .model-row td.cell-tps {
       display: inline-block;
+      width: auto;
       text-align: left;
       margin-right: 12px;
       font-family: var(--font-mono);
