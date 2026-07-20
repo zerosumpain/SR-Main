@@ -1316,6 +1316,60 @@
   const modelIsDefault = $derived(currentModel.modelId === defaultChatModelId);
   const modelTriggerLabel = $derived(shortModelLabel(currentModel.modelId));
 
+  // ── Query-adaptive routing ────────────────────────────────────────────────
+  // On the first message of a fresh conversation the server classifies the query
+  // and returns the model chosen for that profile; we apply it via switchModel
+  // (the same battle-tested path the manual picker uses). After the first reply
+  // a 👍/👎 records whether it got the query right first time — the nightly
+  // selection biases toward models that do. Best-effort throughout.
+  let routedInfo = $state<{ profileLabel: string; modelId: string; reason: string } | null>(null);
+  let routingVote = $state<'up' | 'down' | null>(null);
+  const assistantReplyCount = $derived(messages.filter((m) => m.role === 'assistant' && !m.isProgress).length);
+  const showRoutingFeedback = $derived(
+    hermesEnabled && !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
+  );
+
+  async function applyRouting(text: string): Promise<void> {
+    // Only route the FIRST message of a conversation (model locks after it) and
+    // only on the Hermes engine (the switchModel /model path needs it).
+    if (!hermesEnabled || !conversationId || messages.length > 0) return;
+    try {
+      const res = await fetch('/api/jkai/routing/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          conversationId,
+          hasAttachments: pendingAttachments.some((a) => !a.uploading && !a.error && !a.incompatible),
+        }),
+      });
+      if (!res.ok) return;
+      const r = await res.json();
+      if (r?.enabled && r.modelId) {
+        routedInfo = { profileLabel: r.profileLabel, modelId: r.modelId, reason: r.reason };
+        if (r.modelId !== currentModel.modelId) {
+          await switchModel('openrouter', r.modelId);
+        }
+      }
+    } catch {
+      /* routing is best-effort — never block the send */
+    }
+  }
+
+  async function voteRouting(vote: 'up' | 'down') {
+    if (!conversationId) return;
+    routingVote = vote;
+    try {
+      await fetch('/api/jkai/routing/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, vote }),
+      });
+    } catch {
+      /* the vote is best-effort */
+    }
+  }
+
   async function switchModel(provider: ModelContext['provider'], modelId: string) {
     modelPickerOpen = false;
     if (!conversationId || loading) return;
@@ -1371,6 +1425,11 @@
   async function send() {
     const text = input.trim();
     if (!text || loading || !conversationId) return;
+
+    // Query-adaptive model pick — runs before `loading` so it can reuse
+    // switchModel (which no-ops while loading). First message only.
+    await applyRouting(text);
+    if (loading) return; // a concurrent send won the race during routing
 
     input = '';
     loading = true;
@@ -2091,6 +2150,21 @@
     {/if}
   </div>
 
+  <!-- Query-routing feedback: did the auto-picked model get it right first try? -->
+  {#if showRoutingFeedback}
+    <div class="route-fb">
+      <span class="route-fb-txt">
+        Routed to <span class="route-fb-model" title={routedInfo?.modelId}>{shortModelLabel(routedInfo?.modelId ?? '')}</span>
+        <span class="route-fb-why">· {routedInfo?.profileLabel}</span>
+      </span>
+      <span class="route-fb-ask">Right first time?</span>
+      <button type="button" class="route-fb-btn" aria-label="Yes, correct first time" onclick={() => voteRouting('up')}>👍</button>
+      <button type="button" class="route-fb-btn" aria-label="No, needed correcting" onclick={() => voteRouting('down')}>👎</button>
+    </div>
+  {:else if routingVote}
+    <div class="route-fb route-fb--done"><span class="route-fb-txt">Thanks — noted for model selection.</span></div>
+  {/if}
+
   <!-- Input -->
   {#if conversationId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -2311,6 +2385,23 @@
     .model-name { max-width: 12ch; }
     .model-tag { display: none; }
   }
+
+  /* ── Query-routing feedback bar ── */
+  .route-fb {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    max-width: 48rem; margin: 0 auto; padding: 6px 12px;
+    font-size: 11px; color: var(--text-ghost);
+  }
+  .route-fb-txt { color: var(--text-secondary); }
+  .route-fb-model { font-family: var(--font-mono); color: var(--accent); }
+  .route-fb-why { color: var(--text-ghost); }
+  .route-fb-ask { margin-left: auto; }
+  .route-fb-btn {
+    border: 1px solid var(--card-border); background: var(--surface-overlay);
+    border-radius: var(--radius-pill); padding: 2px 9px; font-size: 13px; line-height: 1.1; cursor: pointer;
+  }
+  .route-fb-btn:hover { border-color: var(--accent); }
+  .route-fb--done { color: var(--success); }
   .model-backdrop { position: fixed; inset: 0; z-index: 25; }
   .model-menu {
     position: absolute;

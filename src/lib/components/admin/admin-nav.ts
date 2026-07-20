@@ -60,6 +60,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     items: [
       { label: 'Keys', href: '/admin/ai/keys' },
       { label: 'Models', href: '/admin/ai/models' },
+      { label: 'Routing', href: '/admin/ai/model-routing' },
       { label: 'Tools', href: '/admin/ai/tools' },
       { label: 'Datastore', href: '/admin/ai/datastore' },
       { label: 'Improvement', href: '/admin/ai/improvement' },

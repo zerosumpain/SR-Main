@@ -98,10 +98,12 @@ startScheduledEngine().catch((err) => {
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
+import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
   startBriefingEngine();
+  startModelRouting();
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
@@ -134,6 +136,7 @@ async function gracefulShutdown() {
   stopDatastoreReaper();
   stopSelfImprovement();
   stopBriefingEngine();
+  stopModelRouting();
   process.exit(0);
 }
 
