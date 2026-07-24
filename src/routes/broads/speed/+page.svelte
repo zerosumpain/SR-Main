@@ -280,9 +280,9 @@
     return `${hrs}h ${mins % 60}m ago`;
   }
 
-  $: active = data?.activeJourney;
-  $: past = data?.recentJourneys || [];
-  $: pos = data?.currentPosition;
+  let active = $derived(data?.activeJourney);
+  let past = $derived(data?.recentJourneys || []);
+  let pos = $derived(data?.currentPosition);
 </script>
 
 <svelte:head>

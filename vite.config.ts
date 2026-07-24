@@ -12,10 +12,8 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			injectRegister: false,
 			scope: '/jkai/',
-			strategies: 'injectManifest',
-			srcDir: 'src',
-			filename: 'jkai-sw.ts',
-			injectManifest: {
+			strategies: 'generateSW',
+			workbox: {
 				globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
 			},
 			manifest: {
