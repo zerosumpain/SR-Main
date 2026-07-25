@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { selectForProfile, percentile, NEUTRAL_PRIOR, type Candidate } from './scoring';
+import { selectForProfile, enrichRow, NEUTRAL_PRIOR, type Candidate } from './scoring';
 import { wilsonLower, buildSuccessIndex, successForProfile } from './success';
 import { classifyQuery } from './classify';
-import { DEFAULT_CONFIG, type RoutingEvent } from './types';
+import { DEFAULT_CONFIG, PRICE_WEIGHT_CAP, type RoutingEvent } from './types';
 
 const noSuccess = () => ({ rate: null, samples: 0 });
 
@@ -14,29 +14,24 @@ function cand(over: Partial<Candidate> & { id: string }): Candidate {
     agenticIndex: 50,
     throughput: 100,
     contextLength: 128_000,
+    openWeights: false,
     ...over,
   };
 }
 
-describe('percentile', () => {
-  it('nearest-rank', () => {
-    expect(percentile([10, 20, 30, 40, 50], 0)).toBe(10);
-    expect(percentile([10, 20, 30, 40, 50], 100)).toBe(50);
-    expect(percentile([10, 20, 30, 40, 50], 50)).toBe(30);
-  });
-});
-
-describe('selectForProfile — anti-cheap guards', () => {
+describe('selectForProfile — capability band, then cost', () => {
   const opts = {
     weights: DEFAULT_CONFIG.weights.general,
-    qualityFloorPct: DEFAULT_CONFIG.qualityFloorPct.general,
+    qualityFloorFrac: DEFAULT_CONFIG.qualityFloorFrac.general,
     priceCeilingPerM: DEFAULT_CONFIG.priceCeilingPerM,
     minContext: DEFAULT_CONFIG.minContext,
     successBiasK: DEFAULT_CONFIG.successBiasK,
+    openWeightBonus: DEFAULT_CONFIG.openWeightBonus,
+    openWeightsOnly: DEFAULT_CONFIG.openWeightsOnly,
     successFor: noSuccess,
   };
 
-  it('quality floor: a dirt-cheap but weak model can never win', () => {
+  it('band floor: a dirt-cheap but weak model can never win', () => {
     const models = [
       cand({ id: 'cheap-weak', blendedPerM: 0.1, agenticIndex: 10 }),
       cand({ id: 'lowish', blendedPerM: 0.3, agenticIndex: 30 }),
@@ -46,11 +41,36 @@ describe('selectForProfile — anti-cheap guards', () => {
     ];
     const { winner, ranked } = selectForProfile(models, opts);
     expect(winner).not.toBeNull();
-    expect(winner!.id).not.toBe('cheap-weak');
-    // The weakest is below the 45th-pct agentic floor → excluded entirely,
-    // no matter how cheap it is.
+    // Floor = 0.6 × best (70) = 42, so both cheap-and-weak models are excluded
+    // outright however cheap they are.
     expect(ranked.find((r) => r.id === 'cheap-weak')).toBeUndefined();
+    expect(ranked.find((r) => r.id === 'lowish')).toBeUndefined();
     expect(['mid', 'good', 'strong']).toContain(winner!.id);
+  });
+
+  it('within the band, cost decides', () => {
+    const models = [
+      cand({ id: 'mid', blendedPerM: 5, agenticIndex: 55 }),
+      cand({ id: 'good', blendedPerM: 7, agenticIndex: 65 }),
+      cand({ id: 'strong', blendedPerM: 8, agenticIndex: 70 }),
+    ];
+    const { winner } = selectForProfile(models, opts);
+    expect(winner!.id).toBe('mid');
+  });
+
+  it('the band is anchored to the catalogue ceiling, not the surviving pool', () => {
+    const base = [
+      cand({ id: 'ok', agenticIndex: 40, blendedPerM: 1 }),
+      cand({ id: 'better', agenticIndex: 60, blendedPerM: 9 }),
+    ];
+    // 'ok' clears 0.6 × 60 = 36 and wins on price.
+    expect(selectForProfile(base, opts).winner!.id).toBe('ok');
+    // A new frontier model lands (index 100) → floor rises to 60 and 'ok' drops
+    // out of the band entirely, even though nothing about it changed.
+    const withFrontier = [...base, cand({ id: 'frontier', agenticIndex: 100, blendedPerM: 14 })];
+    const { ranked } = selectForProfile(withFrontier, opts);
+    expect(ranked.find((r) => r.id === 'ok')).toBeUndefined();
+    expect(ranked.map((r) => r.id).sort()).toEqual(['better', 'frontier']);
   });
 
   it('price ceiling excludes the most expensive models', () => {
@@ -72,22 +92,73 @@ describe('selectForProfile — anti-cheap guards', () => {
     expect(winner!.id).toBe('ok');
   });
 
-  it('price weight is capped: a tiny price edge does not flip a big quality gap', () => {
-    // Two models both clear the floor; one is far higher quality but a bit
-    // pricier. With price capped at 0.25, quality should still win for general.
+  it('price weight is clamped to PRICE_WEIGHT_CAP', () => {
     const models = [
-      cand({ id: 'cheaper-lower', blendedPerM: 2, agenticIndex: 52, throughput: 100 }),
-      cand({ id: 'pricier-higher', blendedPerM: 12, agenticIndex: 80, throughput: 100 }),
+      cand({ id: 'cheap', blendedPerM: 1, agenticIndex: 50 }),
+      cand({ id: 'dear', blendedPerM: 12, agenticIndex: 80 }),
     ];
-    const { winner } = selectForProfile(models, opts);
-    expect(winner!.id).toBe('pricier-higher');
+    const atCap = selectForProfile(models, {
+      ...opts,
+      weights: { quality: 0.5, price: PRICE_WEIGHT_CAP, speed: 0 },
+    });
+    const overCap = selectForProfile(models, {
+      ...opts,
+      weights: { quality: 0.5, price: 0.9, speed: 0 },
+    });
+    // Asking for a price weight above the cap changes nothing — the clamp holds.
+    expect(overCap.ranked.map((r) => [r.id, r.finalScore])).toEqual(
+      atCap.ranked.map((r) => [r.id, r.finalScore]),
+    );
+  });
+
+  it('open-weight bonus wins a near-tie', () => {
+    // Scores are min-max normalised across the pool, so "near-tie" only means
+    // anything relative to the pool's spread — hence the two dominated fillers
+    // that set the quality and price ranges.
+    const models = [
+      cand({ id: 'closed', blendedPerM: 5, agenticIndex: 60, openWeights: false }),
+      cand({ id: 'open', blendedPerM: 5.2, agenticIndex: 59, openWeights: true }),
+      cand({ id: 'filler-a', blendedPerM: 14, agenticIndex: 40 }),
+      cand({ id: 'filler-b', blendedPerM: 13, agenticIndex: 41 }),
+    ];
+    // The closed model is marginally cheaper AND marginally better, so it wins
+    // with the bonus off...
+    expect(selectForProfile(models, { ...opts, openWeightBonus: 0 }).winner!.id).toBe('closed');
+    // ...and loses once open weights are worth 15%.
+    expect(selectForProfile(models, opts).winner!.id).toBe('open');
+  });
+
+  it('a big quality gap still beats the open-weight bonus', () => {
+    const models = [
+      cand({ id: 'closed-strong', blendedPerM: 5, agenticIndex: 100, openWeights: false }),
+      cand({ id: 'open-weak', blendedPerM: 5, agenticIndex: 61, openWeights: true }),
+    ];
+    // Both clear 0.6 × 100 = 60, prices identical → quality decides, and a 15%
+    // bonus cannot bridge the gap. The bias is soft by design.
+    expect(selectForProfile(models, opts).winner!.id).toBe('closed-strong');
+  });
+
+  it('openWeightsOnly excludes closed models entirely', () => {
+    const models = [
+      cand({ id: 'closed-cheap', blendedPerM: 1, agenticIndex: 90, openWeights: false }),
+      cand({ id: 'open-dear', blendedPerM: 9, agenticIndex: 60, openWeights: true }),
+    ];
+    const { winner, ranked } = selectForProfile(models, { ...opts, openWeightsOnly: true });
+    expect(winner!.id).toBe('open-dear');
+    expect(ranked.find((r) => r.id === 'closed-cheap')).toBeUndefined();
+    // Narrowing the field must not lower the bar: the band is still 0.6 × 90 = 54,
+    // computed from the whole catalogue including the excluded closed model.
+    expect(selectForProfile(
+      [...models, cand({ id: 'open-tiny', blendedPerM: 0.1, agenticIndex: 20, openWeights: true })],
+      { ...opts, openWeightsOnly: true },
+    ).ranked.find((r) => r.id === 'open-tiny')).toBeUndefined();
   });
 
   it('rag profile weights speed heavily', () => {
     const ragOpts = {
       ...opts,
       weights: DEFAULT_CONFIG.weights.rag,
-      qualityFloorPct: DEFAULT_CONFIG.qualityFloorPct.rag,
+      qualityFloorFrac: DEFAULT_CONFIG.qualityFloorFrac.rag,
     };
     const models = [
       cand({ id: 'slow-smart', throughput: 30, agenticIndex: 70, blendedPerM: 5 }),
@@ -115,6 +186,29 @@ describe('selectForProfile — anti-cheap guards', () => {
       successFor: successForProfile(idx, 'general'),
     });
     expect(winner!.id).toBe('proven');
+  });
+});
+
+describe('enrichRow — open-weight detection', () => {
+  const row = (raw: unknown) => ({
+    id: 'v/m',
+    name: 'M',
+    contextLength: 128_000,
+    promptPrice: '0.000001',
+    completionPrice: '0.000002',
+    throughput: null,
+    raw,
+  });
+
+  it('reads OpenRouter hugging_face_id as the open-weight signal', () => {
+    expect(enrichRow(row({ hugging_face_id: 'deepseek-ai/DeepSeek-V4-Flash' })).openWeights).toBe(true);
+  });
+
+  it('treats missing, empty and blank ids as closed weights', () => {
+    expect(enrichRow(row({})).openWeights).toBe(false);
+    expect(enrichRow(row({ hugging_face_id: '' })).openWeights).toBe(false);
+    expect(enrichRow(row({ hugging_face_id: '   ' })).openWeights).toBe(false);
+    expect(enrichRow(row(null)).openWeights).toBe(false);
   });
 });
 

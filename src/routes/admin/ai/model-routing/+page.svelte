@@ -2,7 +2,13 @@
 <script lang="ts">
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import type { ModelProfile, ModelAssignment, RoutingRun, RoutingConfig } from '$lib/routing/types';
+  import type {
+    ModelProfile,
+    ModelAssignment,
+    RoutingRun,
+    RoutingConfig,
+    RoutingOverrides,
+  } from '$lib/routing/types';
   import type { ProfileModelStat } from '$lib/routing/success';
 
   let { data } = $props();
@@ -10,10 +16,13 @@
   const profiles = data.profiles as Array<{ id: ModelProfile; label: string; blurb: string }>;
   const schedule = data.schedule;
   const priceWeightCap = data.priceWeightCap as number;
+  const siteDefaultModelId = data.siteDefaultModelId as string;
 
   let enabled = $state<boolean>(data.enabled);
   let running = $state<boolean>(data.running);
   let assignments = $state<Partial<Record<ModelProfile, ModelAssignment>>>(data.assignments);
+  let overrides = $state<RoutingOverrides>(data.overrides as RoutingOverrides);
+  let clearing = $state<string | null>(null);
   let runs = $state<RoutingRun[]>(data.runs as RoutingRun[]);
   let stats = $state<ProfileModelStat[]>(data.stats as ProfileModelStat[]);
   let decidedCount = $state<number>(data.decidedCount);
@@ -92,6 +101,31 @@
     }
   }
 
+  /** Hand a pinned profile back to the nightly auto-selection. Pins are set from
+   *  the /jkai model picker; this is the only place to clear them from admin. */
+  async function clearOverride(profile: ModelProfile) {
+    clearing = profile;
+    try {
+      const res = await fetch('/api/jkai/routing/overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: profile, modelId: null }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const next: RoutingOverrides = {};
+        for (const p of body.profiles ?? []) {
+          if (p.overrideModelId) next[p.profile as ModelProfile] = { modelId: p.overrideModelId, pinnedAt: p.pinnedAt };
+        }
+        overrides = next;
+      }
+    } catch {
+      /* leave the pin in place on failure */
+    } finally {
+      clearing = null;
+    }
+  }
+
   function statsFor(profile: ModelProfile): ProfileModelStat[] {
     return stats.filter((s) => s.profile === profile);
   }
@@ -163,26 +197,45 @@
 
   <!-- Current picks -->
   <section class="nm-sec">
-    <div class="nm-sec-hd"><span class="sr-label-tight">Current picks</span></div>
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Current picks</span>
+      <span class="nm-sec-meta">site default · {shortId(siteDefaultModelId)}</span>
+    </div>
     <div class="picks">
       {#each profiles as p (p.id)}
         {@const a = assignments[p.id]}
-        <div class="pick-card">
+        {@const pin = overrides[p.id]}
+        <div class="pick-card" class:is-pinned={!!pin}>
           <div class="pick-hd">
             <span class="pick-label">{p.label}</span>
-            <span class="pick-tag">{p.id}</span>
+            {#if pin}
+              <span class="pick-pin" title={`Pinned ${when(pin.pinnedAt)} — overrides the nightly selection`}>pinned</span>
+            {:else}
+              <span class="pick-tag">{p.id}</span>
+            {/if}
           </div>
           <p class="pick-blurb">{p.blurb}</p>
-          {#if a}
-            <div class="pick-model" title={a.modelId}>{shortId(a.modelId)}</div>
+          {#if pin}
+            <div class="pick-model" title={pin.modelId}>{shortId(pin.modelId)}</div>
+            <div class="pick-why">
+              Auto would pick {a ? shortId(a.modelId) : 'the site default'}
+              <button
+                class="pick-unpin"
+                onclick={() => clearOverride(p.id)}
+                disabled={clearing === p.id}
+              >{clearing === p.id ? 'clearing…' : 'unpin'}</button>
+            </div>
+          {:else if a}
+            <div class="pick-model" title={a.modelId}>{shortId(a.modelId)}{#if a.openWeights}<span class="pick-open">open</span>{/if}</div>
             <div class="pick-why">{a.reason}</div>
           {:else}
             <div class="pick-model pick-model--fallback">site default</div>
-            <div class="pick-why">Not selected yet — falls back to the chat default until the first run.</div>
+            <div class="pick-why">Not selected yet — falls back to the site default until the first run.</div>
           {/if}
         </div>
       {/each}
     </div>
+    <p class="policy-note">Pin a profile from the model picker in /jkai — “apply to” → the profile, then tap a model. Pins survive the nightly re-selection.</p>
   </section>
 
   <!-- Accuracy -->
@@ -221,8 +274,10 @@
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Selection policy</span></div>
     <p class="policy-note">
-      Price weight is capped at {priceWeightCap} and each profile has a quality floor (an agentic-index
-      percentile a model must clear before price counts), so the algorithm never over-biases cost.
+      Cost leads <em>within a capability band</em>. The band is an absolute floor — a fraction of the
+      best agentic index in the catalogue — so cheap-but-weak models never enter the contest, and
+      price (capped at {priceWeightCap}) then decides among the models that qualify. Open-weight
+      models carry a score bonus on top.
     </p>
     <div class="table-scroll">
       <table class="mr-table policy-table">
@@ -232,7 +287,7 @@
             <th class="ta-r">Quality w</th>
             <th class="ta-r">Price w</th>
             <th class="ta-r">Speed w</th>
-            <th class="ta-r">Quality floor %ile</th>
+            <th class="ta-r">Band (× best)</th>
           </tr>
         </thead>
         <tbody>
@@ -242,7 +297,7 @@
               <td class="ta-r"><input class="mr-num" type="number" step="0.05" min="0" max="1" bind:value={cfg.weights[p.id].quality} /></td>
               <td class="ta-r"><input class="mr-num" type="number" step="0.05" min="0" max={priceWeightCap} bind:value={cfg.weights[p.id].price} /></td>
               <td class="ta-r"><input class="mr-num" type="number" step="0.05" min="0" max="1" bind:value={cfg.weights[p.id].speed} /></td>
-              <td class="ta-r"><input class="mr-num" type="number" step="1" min="0" max="100" bind:value={cfg.qualityFloorPct[p.id]} /></td>
+              <td class="ta-r"><input class="mr-num" type="number" step="0.05" min="0" max="0.95" bind:value={cfg.qualityFloorFrac[p.id]} /></td>
             </tr>
           {/each}
         </tbody>
@@ -252,6 +307,11 @@
       <label class="pg"><span>Price ceiling $/1M</span><input class="mr-num" type="number" step="1" min="1" bind:value={cfg.priceCeilingPerM} /></label>
       <label class="pg"><span>Min context</span><input class="mr-num wide" type="number" step="1000" min="0" bind:value={cfg.minContext} /></label>
       <label class="pg"><span>Success bias k</span><input class="mr-num" type="number" step="0.05" min="0" max="0.5" bind:value={cfg.successBiasK} /></label>
+      <label class="pg"><span>Open-weight bonus</span><input class="mr-num" type="number" step="0.05" min="0" max="1" bind:value={cfg.openWeightBonus} /></label>
+      <label class="pg pg-check">
+        <span>Open weights only</span>
+        <input type="checkbox" bind:checked={cfg.openWeightsOnly} />
+      </label>
       <button class="nm-save-btn" onclick={saveConfig} disabled={savingCfg}>{savingCfg ? 'Saving…' : 'Save policy'}</button>
       {#if cfgSaved}<span class="result-ok">Saved — applies to the next selection.</span>{/if}
     </div>
@@ -323,6 +383,27 @@
 
   .picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
   .pick-card { border: 1px solid var(--card-border); border-radius: var(--radius-4, 4px); padding: 12px 14px; background: var(--card-bg); }
+  .pick-card.is-pinned { border-color: color-mix(in srgb, var(--accent) 50%, var(--card-border)); }
+  .pick-pin {
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 6px; border-radius: var(--radius-pill); color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+  .pick-open {
+    margin-left: 6px; padding: 1px 5px; border-radius: var(--radius-pill);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+    vertical-align: 2px;
+  }
+  .pick-unpin {
+    margin-left: 8px; padding: 1px 6px; font-family: var(--font-mono); font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.06em; border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border); background: var(--surface-overlay); color: var(--text-ghost);
+    cursor: pointer;
+  }
+  .pick-unpin:hover:not(:disabled) { color: var(--error); border-color: var(--error); }
+  .pick-unpin:disabled { opacity: 0.5; cursor: not-allowed; }
+  .pg-check { flex-direction: row; align-items: center; gap: 8px; }
   .pick-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .pick-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
   .pick-tag { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }

@@ -1,9 +1,10 @@
 // Pure, DB-free selection math. Mirrors the hybrid score in
 // src/routes/api/admin/models/openrouter/+server.ts (blended 3:1 price, AA
 // agentic_index quality axis, log-scaled price + throughput, min-max norm) but
-// adds the per-profile policy: a quality FLOOR (percentile gate), a capped price
-// weight, and a success bias. Kept pure so select.test.ts can prove the
-// anti-cheap guards without a database.
+// adds the per-profile policy: a capability BAND (absolute agentic-index floor,
+// a fraction of the catalogue's best), a capped price weight, an open-weight
+// bonus, and a success bias. Kept pure so select.test.ts can prove the guards
+// without a database.
 import { PRICE_WEIGHT_CAP, type ProfileWeights } from './types';
 
 /** Success prior for a model with no rated turns yet — mildly optimistic so new
@@ -21,6 +22,10 @@ export interface Candidate {
   /** Tokens/sec (p50); null when unknown → scored neutral. */
   throughput: number | null;
   contextLength: number | null;
+  /** True when the model publishes its weights. Read from OpenRouter's
+   *  `hugging_face_id` field, which is populated for open-weight models only
+   *  (150 of 338 catalogue rows today) — no curated vendor list to maintain. */
+  openWeights: boolean;
 }
 
 export interface ScoredCandidate extends Candidate {
@@ -46,6 +51,7 @@ export function enrichRow(row: RawModelRow): Candidate {
   const raw = (row.raw ?? {}) as {
     supported_parameters?: unknown;
     benchmarks?: { artificial_analysis?: { agentic_index?: number } };
+    hugging_face_id?: unknown;
   };
   const supported = Array.isArray(raw.supported_parameters) ? raw.supported_parameters : [];
   const bench = raw.benchmarks?.artificial_analysis ?? {};
@@ -70,23 +76,21 @@ export function enrichRow(row: RawModelRow): Candidate {
     agenticIndex: typeof bench.agentic_index === 'number' ? bench.agentic_index : null,
     throughput: t != null && Number.isFinite(t) ? t : null,
     contextLength: row.contextLength,
+    openWeights: typeof raw.hugging_face_id === 'string' && raw.hugging_face_id.trim().length > 0,
   };
-}
-
-/** Nearest-rank percentile over an ascending-sorted copy of `values`. */
-export function percentile(values: number[], pct: number): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((pct / 100) * (sorted.length - 1))));
-  return sorted[idx];
 }
 
 export interface SelectOpts {
   weights: ProfileWeights;
-  qualityFloorPct: number;
+  /** Fraction of the catalogue's best agentic index a candidate must reach. */
+  qualityFloorFrac: number;
   priceCeilingPerM: number;
   minContext: number;
   successBiasK: number;
+  /** Multiplicative bonus for open-weight models (0.15 → ×1.15). */
+  openWeightBonus: number;
+  /** Exclude closed-weight models entirely. */
+  openWeightsOnly: boolean;
   /** Historical first-time-correct rate (Wilson lower bound) per model id. */
   successFor: (modelId: string) => { rate: number | null; samples: number };
 }
@@ -94,16 +98,27 @@ export interface SelectOpts {
 /**
  * Select the best model for one profile.
  *
- * Anti-cost-bias is enforced three ways: (1) a quality FLOOR — only candidates
- * at/above the agentic-index percentile survive, so a weak-but-cheap model can
- * never win; (2) the price weight is clamped to PRICE_WEIGHT_CAP; (3) price is
- * log-scaled, so extra cheapness has diminishing benefit.
+ * Cost leads *within a capability band*: only candidates at/above
+ * `qualityFloorFrac × the best agentic index in the catalogue` compete, and price
+ * decides among them. That ordering matters — with the previous percentile floor,
+ * raising the price weight made general/tool/rag all converge on the single
+ * cheapest survivor and routing stopped adapting to the query.
+ *
+ * Open weights are favoured by a multiplicative bonus (soft) or a hard filter.
+ * Price stays log-scaled and clamped to PRICE_WEIGHT_CAP so extra cheapness has
+ * diminishing returns.
  */
 export function selectForProfile(
   candidates: Candidate[],
   opts: SelectOpts,
 ): { ranked: ScoredCandidate[]; winner: ScoredCandidate | null; poolSize: number } {
-  // 1. Hard eligibility filter.
+  // 1. The band is anchored to the whole catalogue's ceiling, computed BEFORE any
+  //    filtering so that narrowing the field (open-only, price ceiling) can never
+  //    lower the quality bar.
+  const bestAgentic = candidates.reduce((max, c) => Math.max(max, c.agenticIndex ?? 0), 0);
+  const floor = opts.qualityFloorFrac * bestAgentic;
+
+  // 2. Hard eligibility filter.
   const eligible = candidates.filter(
     (c) =>
       c.toolsSupported &&
@@ -111,19 +126,16 @@ export function selectForProfile(
       c.blendedPerM != null &&
       c.blendedPerM > 0 &&
       c.blendedPerM <= opts.priceCeilingPerM &&
-      (c.contextLength ?? 0) >= opts.minContext,
+      (c.contextLength ?? 0) >= opts.minContext &&
+      (!opts.openWeightsOnly || c.openWeights),
   );
   if (!eligible.length) return { ranked: [], winner: null, poolSize: 0 };
 
-  // 2. Quality floor — percentile gate on the agentic index.
-  const floor = percentile(
-    eligible.map((c) => c.agenticIndex!),
-    opts.qualityFloorPct,
-  );
+  // 3. Capability band — absolute agentic-index gate.
   const pool = eligible.filter((c) => c.agenticIndex! >= floor);
   if (!pool.length) return { ranked: [], winner: null, poolSize: 0 };
 
-  // 3. Hybrid score over the quality-floored pool (min-max normalised).
+  // 4. Hybrid score over the banded pool (min-max normalised).
   const q = pool.map((c) => c.agenticIndex!);
   const p = pool.map((c) => Math.log(c.blendedPerM!));
   const tVals = pool.filter((c) => c.throughput != null).map((c) => Math.log(Math.max(0.1, c.throughput!)));
@@ -145,7 +157,8 @@ export function selectForProfile(
     const hybridScore = (wq * qn + wp * pn + wt * tn) / wSum;
     const { rate, samples } = opts.successFor(c.id);
     const effRate = rate ?? NEUTRAL_PRIOR;
-    const finalScore = hybridScore * (1 - k + 2 * k * effRate);
+    const openBonus = c.openWeights ? 1 + Math.max(0, opts.openWeightBonus) : 1;
+    const finalScore = hybridScore * (1 - k + 2 * k * effRate) * openBonus;
     return { ...c, hybridScore, successRate: rate, successSamples: samples, finalScore };
   });
   ranked.sort((a, b) => b.finalScore - a.finalScore || (b.agenticIndex ?? 0) - (a.agenticIndex ?? 0));

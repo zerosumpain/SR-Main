@@ -34,11 +34,9 @@
   let {
     defaultModelId = null,
     chatAltOpenRouterModelId = null,
-    builderModelId = null,
   }: {
     defaultModelId?: string | null;
     chatAltOpenRouterModelId?: string | null;
-    builderModelId?: string | null;
   } = $props();
 
   let q = $state('');
@@ -243,14 +241,6 @@
     }
   }
 
-  async function setAsBuilder(id: string) {
-    await postSettings(
-      { builder: { provider: 'openrouter', modelId: id } },
-      `Set ${id} as builder default`,
-      `builder:${id}`,
-    );
-  }
-
   async function clearChatAlt() {
     await postSettings({ chatAltOpenRouterModelId: null }, 'Cleared chat alternate', 'chat:clear');
   }
@@ -308,13 +298,6 @@
           aria-label="Clear the chat alternate"
         >×</button>
       {/if}
-    </span>
-    <span
-      class="px-2 py-0.5 rounded text-[11px]"
-      style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border); font-family: var(--font-mono);"
-      title="Tool-heavy agentic paths (autonomous builder, delegation) — keep this fast"
-    >
-      builder · {builderModelId ?? '—'}
     </span>
   </div>
 
@@ -547,8 +530,7 @@
         {#each rows as m (m.id)}
           {@const isDefault = defaultModelId === m.id}
           {@const isChatAlt = chatAltOpenRouterModelId === m.id}
-          {@const isBuilder = builderModelId === m.id}
-          {@const isCurrent = isDefault || isChatAlt || isBuilder}
+          {@const isCurrent = isDefault || isChatAlt}
           <tr
             class="model-row"
             style="border-bottom: 1px solid var(--divider); color: var(--text-primary); {isCurrent ? 'background: color-mix(in srgb, var(--accent) 8%, transparent);' : ''}"
@@ -568,13 +550,6 @@
                   style="background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-family: var(--font-mono);"
                   title="Currently set as chat alternate"
                 >chat alt</span>
-              {/if}
-              {#if isBuilder}
-                <span
-                  class="ml-1 px-1 py-0.5 rounded text-[9px] uppercase tracking-wider"
-                  style="background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-family: var(--font-mono);"
-                  title="Currently set as builder default"
-                >builder</span>
               {/if}
             </td>
             <td class="px-2 py-2">{m.name}</td>
@@ -610,15 +585,6 @@
                 title={isChatAlt ? 'Clear the chat alternate' : 'Use this model as the chat alternate'}
               >
                 {actionBusy === `chat:${m.id}` ? '…' : isChatAlt ? 'Clear alt' : 'Chat alt'}
-              </button>
-              <button
-                class="rounded px-2 py-1 text-[10px] border ml-1"
-                style="border-color: {isBuilder ? 'var(--accent)' : 'var(--card-border)'}; color: {isBuilder ? 'var(--accent)' : 'var(--text-secondary)'}; background: var(--surface-overlay); {actionBusy === `builder:${m.id}` ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
-                onclick={() => setAsBuilder(m.id)}
-                disabled={actionBusy === `builder:${m.id}` || isBuilder}
-                title="Set this model as the builder default"
-              >
-                {actionBusy === `builder:${m.id}` ? '…' : 'Builder'}
               </button>
             </td>
           </tr>

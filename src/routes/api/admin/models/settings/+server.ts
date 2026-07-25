@@ -1,15 +1,13 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSetting, setSetting, clearSettingsCache } from '$lib/server/models/settings';
-import type { ModelContext } from '$lib/server/models/types';
 import { loadKeys } from '$lib/deepdive/keys';
-import { DEFAULT_CHAT_MODEL_ID, DEFAULT_AGENTIC_MODEL_ID } from '$lib/constants/default-models';
+import { DEFAULT_CHAT_MODEL_ID } from '$lib/constants/default-models';
 
 export const GET: RequestHandler = async () => {
-  const [chatDefault, alt, builder, orKey] = await Promise.all([
+  const [chatDefault, alt, orKey] = await Promise.all([
     getSetting<{ modelId?: string }>('jkai.chat.default_model'),
     getSetting<{ modelId?: string } | null>('jkai.chat.alt_openrouter_model'),
-    getSetting<ModelContext>('jkai.builder.default_model'),
     getSetting<{ value?: string }>('openrouter.api_key'),
   ]);
   const keysJsonHasKey = !!loadKeys().openrouterApiKey;
@@ -20,7 +18,6 @@ export const GET: RequestHandler = async () => {
       defaultModelId: chatDefault?.modelId ?? DEFAULT_CHAT_MODEL_ID,
       altOpenRouterModelId: alt?.modelId ?? null,
     },
-    builder: builder ?? { provider: 'openrouter', modelId: DEFAULT_AGENTIC_MODEL_ID },
     openrouterKey: {
       configured: dbHasKey || keysJsonHasKey,
       source: dbHasKey ? 'db' : (keysJsonHasKey ? 'keys.json' : 'none'),
@@ -54,12 +51,6 @@ export const POST: RequestHandler = async ({ request }) => {
     changed = true;
   }
 
-  if (body.builder !== undefined) {
-    if (!isValidContext(body.builder)) throw error(400, 'invalid builder context');
-    await setSetting('jkai.builder.default_model', body.builder);
-    changed = true;
-  }
-
   if (body.openrouterApiKey !== undefined) {
     if (typeof body.openrouterApiKey !== 'string') throw error(400, 'invalid openrouterApiKey');
     await setSetting('openrouter.api_key', { value: body.openrouterApiKey });
@@ -74,12 +65,6 @@ export const POST: RequestHandler = async ({ request }) => {
  *  time, so reject it at save time. */
 function isValidOpenRouterId(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0 && v.includes('/');
-}
-
-function isValidContext(v: unknown): v is ModelContext {
-  return !!v && typeof v === 'object'
-    && (v as any).provider === 'openrouter'
-    && isValidOpenRouterId((v as any).modelId);
 }
 
 function maskKey(k: string): string {

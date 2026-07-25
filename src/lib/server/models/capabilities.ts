@@ -38,6 +38,16 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
   'google/gemini-3.1-flash-lite-preview': ALL,
   'google/gemini-3.1-flash-lite': ALL,
   'x-ai/grok-2-vision': IMAGE_ONLY,
+  // Open-weight cost leaders (the 2026-07-25 routing shift). Listed explicitly
+  // even though TEXT_ONLY is the fallback: these are the models the router now
+  // picks, so their limits should be stated rather than inferred. deepseek-v4-*
+  // and the minimax/tencent picks are all text→text — to send an image or PDF,
+  // switch the conversation to a multimodal model in the picker (the alt chip).
+  'deepseek/deepseek-v4-flash': TEXT_ONLY,
+  'deepseek/deepseek-v4-pro': TEXT_ONLY,
+  'minimax/minimax-m3': TEXT_ONLY,
+  'tencent/hy3-preview': TEXT_ONLY,
+  'openai/gpt-oss-120b': TEXT_ONLY,
 };
 
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {

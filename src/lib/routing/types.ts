@@ -25,6 +25,7 @@ export const PROFILE_BLURB: Record<ModelProfile, string> = {
 export const SETTINGS_ENABLED_KEY = 'jkai.routing.enabled'; // kill switch; unset/null = enabled
 export const SETTINGS_ASSIGNMENTS_KEY = 'jkai.routing.assignments'; // fast read path (getSetting-cached)
 export const SETTINGS_CONFIG_KEY = 'jkai.routing.config'; // weights / floors / ceiling
+export const SETTINGS_OVERRIDES_KEY = 'jkai.routing.overrides'; // manual per-profile pins
 
 // ── datastore collections ────────────────────────────────────────────────────
 export const RUNS_COLLECTION = 'model-routing-runs'; // one record per nightly/manual selection
@@ -43,8 +44,11 @@ export const ROUTING_PERMS = {
 };
 
 // ── selection policy (all dashboard-tunable via SETTINGS_CONFIG_KEY) ──────────
-/** Per-profile hybrid-score weights. Price weight is deliberately capped low so
- *  the algorithm never over-biases cost (John: "don't over bias cost"). */
+/** Per-profile hybrid-score weights. Cost is a first-class objective since
+ *  2026-07-25 (John: "selections are not prioritising cost… bias open weight
+ *  models"), so the price weight carries real force — but it stays capped,
+ *  because an uncapped price weight degenerates to cheapest-viable regardless of
+ *  the quality gate. */
 export interface ProfileWeights {
   quality: number; // AA agentic_index axis
   price: number; // blended $/1M (log-scaled, cheaper better)
@@ -53,9 +57,13 @@ export interface ProfileWeights {
 
 export interface RoutingConfig {
   weights: Record<ModelProfile, ProfileWeights>;
-  /** Minimum agentic-index PERCENTILE a candidate must reach, per profile, before
-   *  price is even considered. The primary anti-cheap guard. */
-  qualityFloorPct: Record<ModelProfile, number>;
+  /** The capability band: a candidate must reach this FRACTION of the best
+   *  agentic index in the whole catalogue before price is considered. Absolute
+   *  (not a percentile of the eligible pool) — a percentile gate always admits
+   *  the same slice of a catalogue full of cheap-but-weak models, which made
+   *  every profile collapse onto the single cheapest survivor. Scales with the
+   *  catalogue's ceiling as new frontier models land. */
+  qualityFloorFrac: Record<ModelProfile, number>;
   /** Hard ceiling on blended $/1M — keeps the absolute most expensive models out. */
   priceCeilingPerM: number;
   /** Minimum context window (tokens). */
@@ -63,21 +71,37 @@ export interface RoutingConfig {
   /** Success-bias strength: score is multiplied by (1 - k) + 2k·successRate,
    *  so k=0.2 → 0.8×–1.2×. */
   successBiasK: number;
+  /** Multiplicative bonus for open-weight models (0.15 → ×1.15). The soft form
+   *  of "bias open weights": strong enough to win any near-tie, but a closed
+   *  model that is genuinely better value can still take the slot. */
+  openWeightBonus: number;
+  /** Hard filter — exclude closed-weight models from selection entirely. Off by
+   *  default: it shrinks the agentic pool to a handful, leaving no fallback if an
+   *  open model regresses or is delisted. */
+  openWeightsOnly: boolean;
 }
 
-export const PRICE_WEIGHT_CAP = 0.25;
+/** Price weight is clamped here. Raised 0.25 → 0.5 on 2026-07-25 when cost
+ *  became a priority; the cap itself stays so cost can't fully crowd out
+ *  quality and speed. */
+export const PRICE_WEIGHT_CAP = 0.5;
 
 export const DEFAULT_CONFIG: RoutingConfig = {
   weights: {
-    general: { quality: 0.45, price: 0.25, speed: 0.3 },
-    tool: { quality: 0.55, price: 0.15, speed: 0.3 },
-    rag: { quality: 0.3, price: 0.2, speed: 0.5 },
-    agentic: { quality: 0.6, price: 0.15, speed: 0.25 },
+    general: { quality: 0.3, price: 0.45, speed: 0.25 },
+    tool: { quality: 0.35, price: 0.45, speed: 0.2 },
+    rag: { quality: 0.25, price: 0.4, speed: 0.35 },
+    agentic: { quality: 0.4, price: 0.45, speed: 0.15 },
   },
-  qualityFloorPct: { general: 45, tool: 60, rag: 40, agentic: 65 },
-  priceCeilingPerM: 30,
+  // Fractions of the catalogue's best agentic index (≈54 today → general ≈32,
+  // tool ≈35, rag ≈27, agentic ≈41). Agentic is highest because multi-step
+  // delegation with a weak model burns more tokens retrying than it saves.
+  qualityFloorFrac: { general: 0.6, tool: 0.65, rag: 0.5, agentic: 0.75 },
+  priceCeilingPerM: 15,
   minContext: 32_000,
   successBiasK: 0.2,
+  openWeightBonus: 0.15,
+  openWeightsOnly: false,
 };
 
 // ── persisted shapes ─────────────────────────────────────────────────────────
@@ -94,10 +118,25 @@ export interface ModelAssignment {
   throughput: number | null;
   successRate: number | null; // Wilson lower bound used for the bias, null when unrated
   successSamples: number;
+  /** True when the model publishes its weights (OpenRouter `hugging_face_id`). */
+  openWeights: boolean;
   reason: string;
 }
 
 export type RoutingAssignments = Partial<Record<ModelProfile, ModelAssignment>>;
+
+/** A manual per-profile pin, set from the /jkai model picker or the dashboard.
+ *  Beats the nightly assignment; the nightly run still records what it would
+ *  have chosen so the dashboard can show "auto: X · pinned: Y". */
+export interface ProfileOverride {
+  modelId: string;
+  pinnedAt: string;
+}
+
+export type RoutingOverrides = Partial<Record<ModelProfile, ProfileOverride>>;
+
+/** Where a resolved model came from — surfaced in the picker + dashboard. */
+export type ModelSource = 'override' | 'auto' | 'default';
 
 export interface RoutingRun {
   id: string;

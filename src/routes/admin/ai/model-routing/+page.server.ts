@@ -6,7 +6,9 @@ import {
   isRoutingEnabled,
   listRuns,
   listEvents,
+  loadOverrides,
 } from '$lib/routing/events';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 import { isSelectionRunning } from '$lib/routing/run';
 import { buildSuccessIndex, type ProfileModelStat } from '$lib/routing/success';
 import {
@@ -26,10 +28,12 @@ import {
 // /api/admin/models/routing/* + /api/jkai/routing/* JSON routes.
 
 export const load: PageServerLoad = async () => {
-  const [enabled, assignments, config] = await Promise.all([
+  const [enabled, assignments, config, overrides, siteDefault] = await Promise.all([
     isRoutingEnabled(),
     loadAssignments(),
     getRoutingConfig(),
+    loadOverrides(),
+    resolveDefaultModel(),
   ]);
 
   const runsExist = await getCollectionBySlug(RUNS_COLLECTION);
@@ -46,6 +50,8 @@ export const load: PageServerLoad = async () => {
   return {
     enabled,
     assignments,
+    overrides,
+    siteDefaultModelId: siteDefault.modelId,
     config,
     defaults: DEFAULT_CONFIG,
     priceWeightCap: PRICE_WEIGHT_CAP,

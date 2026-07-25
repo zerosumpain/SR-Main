@@ -14,13 +14,17 @@ import {
   SETTINGS_ASSIGNMENTS_KEY,
   SETTINGS_ENABLED_KEY,
   SETTINGS_CONFIG_KEY,
+  SETTINGS_OVERRIDES_KEY,
   DEFAULT_CONFIG,
+  PROFILES,
   asData,
   errMsg,
   toCtx,
   type ModelProfile,
+  type ModelSource,
   type RoutingAssignments,
   type RoutingEvent,
+  type RoutingOverrides,
   type RoutingRun,
   type RoutingConfig,
 } from './types';
@@ -47,13 +51,17 @@ export async function isRoutingEnabled(): Promise<boolean> {
 export async function getRoutingConfig(): Promise<RoutingConfig> {
   const stored = await getSetting<Partial<RoutingConfig>>(SETTINGS_CONFIG_KEY);
   if (!stored) return DEFAULT_CONFIG;
-  // Shallow-merge so a partial stored config never drops required fields.
+  // Shallow-merge so a partial stored config never drops required fields — and
+  // so a config saved before a new policy field existed picks up its default
+  // (e.g. qualityFloorFrac / openWeightBonus, added 2026-07-25).
   return {
     weights: { ...DEFAULT_CONFIG.weights, ...(stored.weights ?? {}) },
-    qualityFloorPct: { ...DEFAULT_CONFIG.qualityFloorPct, ...(stored.qualityFloorPct ?? {}) },
+    qualityFloorFrac: { ...DEFAULT_CONFIG.qualityFloorFrac, ...(stored.qualityFloorFrac ?? {}) },
     priceCeilingPerM: stored.priceCeilingPerM ?? DEFAULT_CONFIG.priceCeilingPerM,
     minContext: stored.minContext ?? DEFAULT_CONFIG.minContext,
     successBiasK: stored.successBiasK ?? DEFAULT_CONFIG.successBiasK,
+    openWeightBonus: stored.openWeightBonus ?? DEFAULT_CONFIG.openWeightBonus,
+    openWeightsOnly: stored.openWeightsOnly ?? DEFAULT_CONFIG.openWeightsOnly,
   };
 }
 
@@ -74,13 +82,73 @@ export async function saveAssignments(a: RoutingAssignments): Promise<void> {
   await setSetting(SETTINGS_ASSIGNMENTS_KEY, a);
 }
 
-/** Resolve the model for a profile: the assigned pick, else the site chat
- *  default. Cheap (getSetting is cached) — safe on the chat request path. */
-export async function resolveModelForProfile(profile: ModelProfile): Promise<ModelContext> {
-  const a = await loadAssignments();
-  const assigned = a[profile];
-  if (assigned?.modelId) return toCtx(assigned.modelId);
-  return resolveDefaultModel('chat');
+// ── manual per-profile overrides ─────────────────────────────────────────────
+export async function loadOverrides(): Promise<RoutingOverrides> {
+  return (await getSetting<RoutingOverrides>(SETTINGS_OVERRIDES_KEY)) ?? {};
+}
+
+/** Pin a profile to a model (modelId) or clear the pin (null). Pins survive the
+ *  nightly re-selection — the run still records what it would have chosen. */
+export async function setOverride(profile: ModelProfile, modelId: string | null): Promise<RoutingOverrides> {
+  const current = await loadOverrides();
+  const next: RoutingOverrides = { ...current };
+  if (modelId) {
+    next[profile] = { modelId, pinnedAt: new Date().toISOString() };
+  } else {
+    delete next[profile];
+  }
+  await setSetting(SETTINGS_OVERRIDES_KEY, next);
+  return next;
+}
+
+/** Resolve the model for a profile: a manual pin wins, then the nightly pick,
+ *  then the site default. Cheap (getSetting is cached) — safe on the chat
+ *  request path. */
+export async function resolveModelForProfile(
+  profile: ModelProfile,
+): Promise<ModelContext & { source: ModelSource }> {
+  const [overrides, assignments] = await Promise.all([loadOverrides(), loadAssignments()]);
+  const pinned = overrides[profile];
+  if (pinned?.modelId) return { ...toCtx(pinned.modelId), source: 'override' };
+  const assigned = assignments[profile];
+  if (assigned?.modelId) return { ...toCtx(assigned.modelId), source: 'auto' };
+  return { ...(await resolveDefaultModel('chat')), source: 'default' };
+}
+
+/** The full picture for one profile — what the nightly run chose, what (if
+ *  anything) is pinned over it, and what will actually answer. Drives the /jkai
+ *  picker chips and the dashboard. */
+export async function describeProfiles(): Promise<
+  Array<{
+    profile: ModelProfile;
+    autoModelId: string | null;
+    autoReason: string | null;
+    overrideModelId: string | null;
+    pinnedAt: string | null;
+    effectiveModelId: string;
+    source: ModelSource;
+  }>
+> {
+  const [overrides, assignments, siteDefault] = await Promise.all([
+    loadOverrides(),
+    loadAssignments(),
+    resolveDefaultModel('chat'),
+  ]);
+  return PROFILES.map((profile) => {
+    const auto = assignments[profile] ?? null;
+    const pinned = overrides[profile] ?? null;
+    const effectiveModelId = pinned?.modelId ?? auto?.modelId ?? siteDefault.modelId;
+    const source: ModelSource = pinned ? 'override' : auto ? 'auto' : 'default';
+    return {
+      profile,
+      autoModelId: auto?.modelId ?? null,
+      autoReason: auto?.reason ?? null,
+      overrideModelId: pinned?.modelId ?? null,
+      pinnedAt: pinned?.pinnedAt ?? null,
+      effectiveModelId,
+      source,
+    };
+  });
 }
 
 // ── events ───────────────────────────────────────────────────────────────────

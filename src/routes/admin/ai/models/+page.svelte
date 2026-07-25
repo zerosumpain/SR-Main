@@ -13,14 +13,13 @@
   <PageHeader
     kicker="AI Config"
     title="LLM Models"
-    sub="All models route through OpenRouter. Set the site default, chat alternate and builder model from the table — the best-combo score blends tool-use quality, price and token speed."
+    sub="All models route through OpenRouter. The site default is the one model every LLM task uses — chat, builder, research, workflow nodes, project pages. Set it and the chat alternate from the table; the best-combo score blends tool-use quality, price and token speed."
   />
 
   <div class="model-stack">
     <OpenRouterModelBrowser
       defaultModelId={data.chat.defaultModelId}
       chatAltOpenRouterModelId={data.chat.altOpenRouterModelId}
-      builderModelId={data.builder.modelId}
     />
     <OpenRouterConfigPanel
       configured={data.openrouterKey.configured}

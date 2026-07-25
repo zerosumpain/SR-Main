@@ -1039,6 +1039,7 @@
     collection={chatCollection}
     onClose={() => (chatCollection = null)}
     onChanged={onCollectionChanged}
+    defaultChatModelId={data.defaultChatModelId}
   />
 {/if}
 
