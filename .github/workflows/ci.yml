@@ -1,0 +1,133 @@
+name: CI
+
+# Gate on a GitHub-hosted runner; build + deploy on the self-hosted runner that
+# lives ON the VPS. Splitting them is deliberate:
+#
+#  - The gate runs untrusted-ish PR code, so it belongs in a disposable hosted
+#    VM, never on the production box. It needs no secrets (only one test file
+#    touches a DB, and it skips without one), so a hosted runner is enough.
+#  - The build does NOT fit a hosted runner: it peaks at ~5.3GB RSS (measured
+#    2026-07-25), and private-repo hosted runners are 2-core/7GB. It runs on the
+#    VPS instead, which builds where it deploys — no artifact transfer and no
+#    SSH deploy key in GitHub secrets. The runner unit is capped at MemoryMax=7G
+#    so a runaway build is cgroup-killed instead of the kernel OOM-killer
+#    picking the production node process.
+#
+# `needs: gate` is what actually enforces the gate: SR-Main is private on
+# GitHub Free, so required status checks are unavailable (the branch-protection
+# and rulesets APIs both 403). A red gate cannot reach the deploy job regardless.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Never let two deploys touch the VPS at once. Do not cancel in progress: a
+# half-finished deploy is worse than a queued one.
+concurrency:
+  group: sr-main-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Gate (check + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # Parts of the suite reach a real Postgres through the import chain (e.g.
+    # tests/lib/integrations/credentials.test.ts), so the gate needs a database.
+    # A throwaway service container keeps it hermetic — the gate never touches
+    # the production DB. pgvector, not plain postgres: the schema declares
+    # vector() columns and drizzle-kit push fails without the extension.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: strange_rambling
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
+      # stealth-scrape refuses to run anywhere but homeserv (a datacenter IP
+      # defeats the point of stealth scraping), so its tests only pass there.
+      # This is the documented escape hatch. Safe in the gate: the tests mock
+      # `runScrape`, so nothing is actually scraped — the flag only stops the
+      # host guard short-circuiting before the mock is reached.
+      SCRAPER_ALLOW_NON_HOMESERV: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Prepare test database
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
+
+      # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
+      # svelte-check OOMs under Node's default.
+      #
+      # PUBLIC_VAPID_PUBLIC_KEY must exist at `svelte-kit sync` time: SvelteKit
+      # generates `$env/static/public` from the environment, so without it the
+      # module has no members and jkai/+layout.svelte fails to type-check
+      # ("has no exported member"). It is the ONLY statically-imported env var.
+      # A placeholder is correct here — the gate only type-checks and runs unit
+      # tests, it never serves push notifications. The real value is inlined by
+      # the deploy job below.
+      - name: npm run gate
+        run: npm run gate
+        env:
+          PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+
+  deploy:
+    name: Build + deploy (VPS)
+    needs: gate
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on: [self-hosted, srmain]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no setup-node: use the VPS's system Node (22.x), so CI
+      # builds with the exact runtime that serves production.
+      - name: Runtime versions
+        run: node --version && npm --version
+
+      - run: npm ci
+
+      # `$env/static/public` values are INLINED INTO THE BUNDLE at build time,
+      # and the runner's checkout has no .env — so without this the production
+      # build ships an empty PUBLIC_VAPID_PUBLIC_KEY and web push silently
+      # breaks. Copy only the PUBLIC_ lines: everything private is read at
+      # runtime from the service's EnvironmentFile, so there is no reason to
+      # duplicate secrets into the runner workspace.
+      - name: Provide build-time public env
+        run: |
+          grep -E '^PUBLIC_' /opt/strange-rambling-svelte/.env > .env
+          echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Deploy
+        run: ./scripts/ci-deploy.sh
