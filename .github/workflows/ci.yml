@@ -131,3 +131,68 @@ jobs:
 
       - name: Deploy
         run: ./scripts/ci-deploy.sh
+
+  risk-tier:
+    name: Risk tier
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tier: ${{ steps.classify.outputs.tier }}
+    steps:
+      # Full history: the classifier diffs against the MERGE BASE, so it judges
+      # what this PR adds rather than everything that landed on master since.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        run: ./scripts/classify-pr-risk.sh origin/${{ github.base_ref }}
+
+      # Deliberately never fails. A high tier is a normal, expected outcome
+      # (any change to auth or schema is high) — it means "a human looks at
+      # this", not "this is broken". Failing here would block legitimate work.
+      - name: Summarise
+        run: |
+          {
+            echo "## Risk tier: \`${{ steps.classify.outputs.tier }}\`"
+            if [ "${{ steps.classify.outputs.tier }}" = "high" ]; then
+              echo "Touches protected paths — **will not auto-merge**, needs a human."
+              echo '```'
+              echo "${{ steps.classify.outputs.matched }}"
+              echo '```'
+            else
+              echo "No protected paths touched — eligible for auto-merge from an \`agent/\` branch."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  auto-merge:
+    name: Auto-merge (low tier, agent branches)
+    needs: [gate, risk-tier]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.risk-tier.outputs.tier == 'low' &&
+      startsWith(github.head_ref, 'agent/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge if a token is configured
+        env:
+          AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          PR: ${{ github.event.number }}
+        run: |
+          if [ -z "${AUTOMERGE_TOKEN:-}" ]; then
+            echo "AUTOMERGE_TOKEN is not set — leaving PR #$PR for manual merge."
+            echo
+            echo "Why a PAT rather than the built-in GITHUB_TOKEN: a push made with"
+            echo "GITHUB_TOKEN does NOT trigger further workflow runs, so merging with"
+            echo "it would land the change on master and never fire the deploy job."
+            echo "Set AUTOMERGE_TOKEN to a fine-grained PAT scoped to this repo with"
+            echo "contents:write + pull_requests:write to complete the loop."
+            exit 0
+          fi
+          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge "$PR" --squash --delete-branch
+          echo "Merged PR #$PR (tier=low, agent branch)."
