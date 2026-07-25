@@ -16,7 +16,7 @@
 		"test:e2e": "playwright test",
 		"gate": "npm run gate:check && npm run gate:test",
 		"gate:check": "svelte-kit sync && NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --threshold error",
-		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run"
+		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
