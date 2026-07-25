@@ -1,0 +1,47 @@
+# Canonical list of paths an agent must NOT change without human review.
+#
+# Read by scripts/classify-pr-risk.sh, which the `risk-tier` CI job runs on every
+# PR. A PR touching any of these is tier=high: it is never auto-merged, and the
+# job annotates the PR with exactly which rule matched.
+#
+# .github/CODEOWNERS mirrors this list to auto-request review. Keep the two in
+# step — CODEOWNERS cannot be generated from this file because required
+# code-owner review needs GitHub Pro on a private repo (see
+# scripts/enable-branch-protection.sh).
+#
+# Syntax: one path per line. A trailing /** matches the whole subtree.
+# Blank lines and # comments ignored.
+#
+# The test for inclusion is: "if an agent got this wrong, would it breach auth,
+# corrupt data, or break every future deploy?" Feature code fails that test and
+# is deliberately absent — the point is autonomy everywhere else.
+
+# ── Auth and access control ────────────────────────────────────────────
+# hooks.server.ts owns the request gate; auth.ts owns PUBLIC_PATHS. A wrong
+# edit here is how /admin ends up publicly readable.
+src/hooks.server.ts
+src/lib/auth.ts
+src/lib/server/**
+
+# ── Data model ─────────────────────────────────────────────────────────
+# deploy runs `drizzle-kit push --force` against production, so a bad schema
+# edit is applied to the live database automatically.
+src/lib/db/schema.ts
+drizzle.config.ts
+
+# ── Build, deploy and CI ───────────────────────────────────────────────
+# These decide what ships and how. An agent editing its own deploy path or its
+# own gate can disable the checks that constrain it.
+scripts/**
+.github/**
+.githooks/**
+package.json
+package-lock.json
+vite.config.ts
+svelte.config.js
+
+# ── Agent safety rails ─────────────────────────────────────────────────
+# The denylist and confirmation gate are what stop tool-calls doing damage.
+# Self-modification of these must always be a human decision.
+src/lib/workflows/nodes/site-tool-denylist.ts
+src/lib/workflows/chat/confirmation-gate.ts

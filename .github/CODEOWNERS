@@ -1,0 +1,31 @@
+# Auto-requests review from @zerosumpain when a PR touches a protected path.
+#
+# MIRROR OF .github/protected-paths.txt — keep the two in step. They are
+# separate because they do different jobs and cannot share a format:
+#   - protected-paths.txt drives scripts/classify-pr-risk.sh, which is the
+#     enforcement (a high-tier PR is never auto-merged).
+#   - this file is advisory. Required code-owner review needs GitHub Pro on a
+#     private repo, so on the current plan CODEOWNERS requests a review but
+#     cannot block a merge. See scripts/enable-branch-protection.sh.
+
+# Auth and access control
+/src/hooks.server.ts        @zerosumpain
+/src/lib/auth.ts            @zerosumpain
+/src/lib/server/            @zerosumpain
+
+# Data model — deploy runs `drizzle-kit push --force` against production
+/src/lib/db/schema.ts       @zerosumpain
+/drizzle.config.ts          @zerosumpain
+
+# Build, deploy and CI — what ships, and the checks that constrain the agent
+/scripts/                   @zerosumpain
+/.github/                   @zerosumpain
+/.githooks/                 @zerosumpain
+/package.json               @zerosumpain
+/package-lock.json          @zerosumpain
+/vite.config.ts             @zerosumpain
+/svelte.config.js           @zerosumpain
+
+# Agent safety rails — self-modification is always a human decision
+/src/lib/workflows/nodes/site-tool-denylist.ts   @zerosumpain
+/src/lib/workflows/chat/confirmation-gate.ts     @zerosumpain
