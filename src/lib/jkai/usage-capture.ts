@@ -2,6 +2,7 @@ import type OpenAI from 'openai';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 
 export interface CompletionUsage {
   prompt_tokens?: number;
@@ -110,9 +111,23 @@ function wrapStreamForUsage(
   }) as AsyncIterable<{ usage?: CompletionUsage }>;
 }
 
+/** Reasoning models spend max_tokens on thinking before emitting a single
+ *  visible character, so a caller that asked for 50 (classifiers, routers,
+ *  short summaries) gets an empty string. Lift the cap to the floor — this only
+ *  raises a ceiling, so a model that wants to answer in 10 tokens still does.
+ *  Callers that deliberately budget MORE than the floor keep their value. */
+function withReasoningHeadroom<T extends { model?: string; max_tokens?: number | null }>(params: T): T {
+  const model = params.model ?? '';
+  if (!model || !isReasoningModel(model)) return params;
+  const requested = params.max_tokens;
+  if (typeof requested !== 'number' || requested >= REASONING_TOKEN_FLOOR) return params;
+  return { ...params, max_tokens: REASONING_TOKEN_FLOOR };
+}
+
 /** Wrap a client's `chat.completions.create` so every call — streaming and
  *  non-streaming — captures usage into the workflow rollup AND the durable cost
- *  ledger. For streams we ensure the provider emits a final usage chunk
+ *  ledger, and every reasoning-model call gets enough headroom to actually
+ *  answer. For streams we ensure the provider emits a final usage chunk
  *  (stream_options.include_usage) and observe it transparently as the stream is
  *  consumed. Embeddings are not intercepted (only chat.completions). */
 export function installUsageCapture(client: OpenAI, provider: 'openrouter'): OpenAI {
@@ -125,11 +140,15 @@ export function installUsageCapture(client: OpenAI, provider: 'openrouter'): Ope
   // the overload set by hand.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   completions.create = (async function (this: unknown, ...args: unknown[]): Promise<unknown> {
-    const params = (args[0] ?? {}) as {
-      model?: string;
-      stream?: boolean;
-      stream_options?: Record<string, unknown> | null;
-    };
+    const params = withReasoningHeadroom(
+      (args[0] ?? {}) as {
+        model?: string;
+        max_tokens?: number | null;
+        stream?: boolean;
+        stream_options?: Record<string, unknown> | null;
+      },
+    );
+    args[0] = params;
     const model = params.model ?? '';
 
     if (params.stream) {

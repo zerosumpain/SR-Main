@@ -56,3 +56,30 @@ export function coerceModelContext(ctx: { provider?: string; modelId: string }):
 export function isGlmModel(modelId: string): boolean {
   return modelId.startsWith('z-ai/glm') || modelId.startsWith('glm-');
 }
+
+/** Minimum max_tokens for a reasoning model. Reasoning tokens are billed and
+ *  counted as completion tokens, so a tight budget (some call sites ask for 50)
+ *  is consumed entirely by thinking and the caller gets an EMPTY string back. */
+export const REASONING_TOKEN_FLOOR = 3000;
+
+/**
+ * True for models that emit reasoning tokens out of the max_tokens budget.
+ *
+ * Started as a GLM-only quirk (feedback_glm_reasoning_tokens); the same failure
+ * appeared with the DeepSeek V4 family when it became the site default on
+ * 2026-07-25, so the predicate is now shared. Prefix-matched because vendors
+ * ship point releases constantly. Over-matching is cheap — the floor only lifts
+ * a cap, it never makes a model generate more than it would.
+ */
+export function isReasoningModel(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return (
+    isGlmModel(id) ||
+    id.startsWith('deepseek/deepseek-v4') ||
+    id.startsWith('deepseek/deepseek-r') ||
+    id.startsWith('minimax/minimax-m') ||
+    id.startsWith('qwen/qwq') ||
+    id.startsWith('openai/o1') ||
+    id.startsWith('openai/o3')
+  );
+}
