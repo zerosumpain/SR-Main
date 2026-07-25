@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Refuse direct pushes to master — code reaches master via a pull request.
+#
+# Why a hook and not GitHub branch protection: SR-Main is a PRIVATE repo on
+# GitHub Free, where both branch protection and rulesets return 403
+# ("Upgrade to GitHub Pro or make this repository public"). This is the free
+# stand-in. It is NOT equivalent — it is client-side, applies only to clones
+# that set core.hooksPath, and `--no-verify` bypasses it. It exists because
+# the actual risk here is an autonomous agent on homeserv taking the shortest
+# path, not an adversary: a hard stop plus a clear message is enough to
+# redirect that. If you want real enforcement, upgrade to GitHub Pro and
+# re-run the branch-protection call in scripts/enable-branch-protection.sh.
+#
+# Enabled per-clone with:  git config core.hooksPath .githooks
+# Deliberate override:     ALLOW_MASTER_PUSH=1 git push origin master
+
+set -u
+
+PROTECTED_BRANCH="master"
+
+if [ "${ALLOW_MASTER_PUSH:-0}" = "1" ]; then
+  echo "pre-push: ALLOW_MASTER_PUSH=1 — allowing direct push to ${PROTECTED_BRANCH}." >&2
+  exit 0
+fi
+
+blocked=0
+# stdin lines: <local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ -z "${remote_ref:-}" ] && continue
+  case "$remote_ref" in
+    "refs/heads/${PROTECTED_BRANCH}") blocked=1 ;;
+  esac
+done
+
+if [ "$blocked" = "1" ]; then
+  cat >&2 <<MSG
+
+  ✗ Direct push to ${PROTECTED_BRANCH} refused.
+
+    Code reaches ${PROTECTED_BRANCH} through a pull request, so every change
+    carries a diff, a gate result, and a revert point.
+
+      git checkout -b <branch>
+      git push -u origin <branch>
+      gh pr create --fill
+      npm run gate          # must pass before merging
+      gh pr merge --squash
+
+    Deliberate override (rare — e.g. restoring a broken ${PROTECTED_BRANCH}):
+      ALLOW_MASTER_PUSH=1 git push origin ${PROTECTED_BRANCH}
+
+MSG
+  exit 1
+fi
+
+exit 0
