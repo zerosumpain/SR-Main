@@ -37,6 +37,30 @@ jobs:
     name: Gate (check + test)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+
+    # Parts of the suite reach a real Postgres through the import chain (e.g.
+    # tests/lib/integrations/credentials.test.ts), so the gate needs a database.
+    # A throwaway service container keeps it hermetic — the gate never touches
+    # the production DB. pgvector, not plain postgres: the schema declares
+    # vector() columns and drizzle-kit push fails without the extension.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: strange_rambling
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
+
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +70,11 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Prepare test database
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
       # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
       # svelte-check OOMs under Node's default.
