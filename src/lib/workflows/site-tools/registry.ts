@@ -23,6 +23,7 @@ import './tools/visualise';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
 import './tools/publish-page';
+import './tools/request-change';
 import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/scraper';
