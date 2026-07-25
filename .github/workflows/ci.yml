@@ -49,8 +49,18 @@ jobs:
 
       # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
       # svelte-check OOMs under Node's default.
+      #
+      # PUBLIC_VAPID_PUBLIC_KEY must exist at `svelte-kit sync` time: SvelteKit
+      # generates `$env/static/public` from the environment, so without it the
+      # module has no members and jkai/+layout.svelte fails to type-check
+      # ("has no exported member"). It is the ONLY statically-imported env var.
+      # A placeholder is correct here — the gate only type-checks and runs unit
+      # tests, it never serves push notifications. The real value is inlined by
+      # the deploy job below.
       - name: npm run gate
         run: npm run gate
+        env:
+          PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
 
   deploy:
     name: Build + deploy (VPS)
@@ -67,6 +77,17 @@ jobs:
         run: node --version && npm --version
 
       - run: npm ci
+
+      # `$env/static/public` values are INLINED INTO THE BUNDLE at build time,
+      # and the runner's checkout has no .env — so without this the production
+      # build ships an empty PUBLIC_VAPID_PUBLIC_KEY and web push silently
+      # breaks. Copy only the PUBLIC_ lines: everything private is read at
+      # runtime from the service's EnvironmentFile, so there is no reason to
+      # duplicate secrets into the runner workspace.
+      - name: Provide build-time public env
+        run: |
+          grep -E '^PUBLIC_' /opt/strange-rambling-svelte/.env > .env
+          echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
 
       - name: Build
         run: npm run build
