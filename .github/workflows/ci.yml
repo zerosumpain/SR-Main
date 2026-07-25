@@ -1,0 +1,77 @@
+name: CI
+
+# Gate on a GitHub-hosted runner; build + deploy on the self-hosted runner that
+# lives ON the VPS. Splitting them is deliberate:
+#
+#  - The gate runs untrusted-ish PR code, so it belongs in a disposable hosted
+#    VM, never on the production box. It needs no secrets (only one test file
+#    touches a DB, and it skips without one), so a hosted runner is enough.
+#  - The build does NOT fit a hosted runner: it peaks at ~5.3GB RSS (measured
+#    2026-07-25), and private-repo hosted runners are 2-core/7GB. It runs on the
+#    VPS instead, which builds where it deploys — no artifact transfer and no
+#    SSH deploy key in GitHub secrets. The runner unit is capped at MemoryMax=7G
+#    so a runaway build is cgroup-killed instead of the kernel OOM-killer
+#    picking the production node process.
+#
+# `needs: gate` is what actually enforces the gate: SR-Main is private on
+# GitHub Free, so required status checks are unavailable (the branch-protection
+# and rulesets APIs both 403). A red gate cannot reach the deploy job regardless.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Never let two deploys touch the VPS at once. Do not cancel in progress: a
+# half-finished deploy is worse than a queued one.
+concurrency:
+  group: sr-main-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Gate (check + test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
+      # svelte-check OOMs under Node's default.
+      - name: npm run gate
+        run: npm run gate
+
+  deploy:
+    name: Build + deploy (VPS)
+    needs: gate
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    runs-on: [self-hosted, srmain]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no setup-node: use the VPS's system Node (22.x), so CI
+      # builds with the exact runtime that serves production.
+      - name: Runtime versions
+        run: node --version && npm --version
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      - name: Deploy
+        run: ./scripts/ci-deploy.sh
