@@ -22,6 +22,12 @@
 src/hooks.server.ts
 src/lib/auth.ts
 src/lib/server/**
+# The MCP bridge is the OTHER auth surface: /api/mcp* deliberately bypasses the
+# Auth.js gate as service-to-service traffic, so bridge-token verification in
+# here is the only thing standing between an anonymous POST and the whole tool
+# catalogue (or tool execution). Added 2026-07-25 after a change to exactly this
+# file would otherwise have classified low and auto-merged.
+src/lib/mcp/**
 
 # ── Data model ─────────────────────────────────────────────────────────
 # deploy runs `drizzle-kit push --force` against production, so a bad schema

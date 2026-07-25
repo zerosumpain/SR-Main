@@ -45,7 +45,11 @@ export async function probeArchitecture(): Promise<Record<string, HealthStatus>>
     checkDb(),
     checkAzure(),
     pingUrl(homeservUrl),
-    pingUrl(hermesUrl ? `${hermesUrl.replace(/\/+$/, '')}/health` : undefined),
+    // `/platforms/jkai/health`, NOT `/health` — Hermes registers the liveness
+    // probe under the platform prefix (jkai_platform/http_server.py), so the
+    // bare path 404s and this tile read "down" while Hermes was perfectly
+    // healthy. Misleading precisely when you'd be looking at it.
+    pingUrl(hermesUrl ? `${hermesUrl.replace(/\/+$/, '')}/platforms/jkai/health` : undefined),
   ]);
 
   // If this handler is answering, the app + the Cloudflare tunnel in front are up.

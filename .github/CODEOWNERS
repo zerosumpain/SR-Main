@@ -12,6 +12,7 @@
 /src/hooks.server.ts        @zerosumpain
 /src/lib/auth.ts            @zerosumpain
 /src/lib/server/            @zerosumpain
+/src/lib/mcp/               @zerosumpain
 
 # Data model — deploy runs `drizzle-kit push --force` against production
 /src/lib/db/schema.ts       @zerosumpain

@@ -13,9 +13,12 @@
 // logic lives in $lib/mcp/jsonrpc; this file maps Request → dispatchJsonRpc.
 //
 // Auth model:
-//   - initialize, tools/list, ping, notifications/*   → unauthenticated
-//   - tools/call                                       → Authorization: Bearer
+//   - initialize, ping, notifications/*                → unauthenticated
+//   - tools/list, tools/call                           → Authorization: Bearer
 //                                                        <HERMES_BRIDGE_SECRET>
+// tools/list was opened up historically and closed again 2026-07-25: this route
+// bypasses the Auth.js gate as service-to-service traffic, so an open catalogue
+// meant anyone who could POST here could enumerate every tool and its schema.
 //
 // Stateless: no Mcp-Session-Id, no session tracking, no server-initiated SSE.
 

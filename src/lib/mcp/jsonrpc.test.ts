@@ -71,10 +71,22 @@ describe('mcp/jsonrpc', () => {
     expect(response).toMatchObject({ jsonrpc: '2.0', id: 'ping-1', result: {} });
   });
 
-  it('lists tools without auth (discovery is public)', async () => {
+  it('rejects tools/list without auth (the catalogue is not public)', async () => {
+    // Changed 2026-07-25. This route bypasses the Auth.js gate as
+    // service-to-service traffic, so an open tools/list let anyone who could
+    // POST to /api/mcp/local enumerate every tool, description and input
+    // schema — a map of every capability the assistant has.
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 2, method: 'tools/list' },
-      { authBearer: "" },
+      { authBearer: '' },
+    );
+    expect(response).toMatchObject({ error: { code: -32001 } });
+  });
+
+  it('lists tools when the bearer matches', async () => {
+    const { response } = await dispatchJsonRpc(
+      { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+      { authBearer: SECRET },
     );
     expect(response).not.toBeNull();
     const ok = response as { result: { tools: Array<{ name: string }> } };
@@ -192,7 +204,7 @@ describe('mcp/jsonrpc', () => {
     // server.ts listMcpTools() widening (getTools() vs getToolsByToolset('workflows')).
     const { response } = await dispatchJsonRpc(
       { jsonrpc: '2.0', id: 8, method: 'tools/list' },
-      { authBearer: '' }, // discovery is unauth'd
+      { authBearer: SECRET }, // tools/list is authenticated as of 2026-07-25
     );
     const ok = response as { result: { tools: Array<{ name: string }> } };
     expect(ok.result.tools.length).toBeGreaterThan(50); // 130ish; use a loose floor
