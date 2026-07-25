@@ -20,9 +20,11 @@
 //      (upserted by the plugin on inbound) and forwards the JSON-RPC to
 //      either `/api/mcp/local` here, or `<vps mcp_url>` on strangeramblings.com.
 //
-// For unauthenticated traffic (initialize, tools/list, ping, notifications/*)
-// or any request without a `_meta.chat_id`, the proxy short-circuits to
-// the local dispatcher — no forwarding overhead on the hot startup path.
+// For handshake traffic (initialize, ping, notifications/*) or any request
+// without a `_meta.chat_id`, the proxy short-circuits to the local dispatcher —
+// no forwarding overhead on the hot startup path. Note this is a ROUTING
+// decision, not an auth one: `forwardRaw` passes the Authorization header
+// through verbatim, and the dispatcher gates tools/list and tools/call on it.
 
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
@@ -126,7 +128,8 @@ export const POST: RequestHandler = async ({ request }) => {
   const raw = await request.text();
   const chatId = extractChatId(raw);
 
-  // No chat context (initialize, tools/list, ping, etc.) → straight to local.
+  // No chat context (initialize, ping, tools/list, etc.) → straight to local.
+  // The Authorization header rides along, so auth still applies downstream.
   if (!chatId) return forwardRaw(LOCAL_DISPATCH_URL, request.headers, raw);
 
   const mcpUrl = await lookupMcpUrl(chatId);

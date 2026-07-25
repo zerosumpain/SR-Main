@@ -73,9 +73,9 @@ export type JsonRpcResponse = JsonRpcResponseOk | JsonRpcResponseErr;
 export interface DispatchContext {
   /**
    * Authorization-bearer value (the part after `Bearer `), or empty if absent.
-   * Required for tools/call; verified by constant-time compare against
-   * `HERMES_BRIDGE_SECRET`. Discovery methods (initialize, tools/list, ping,
-   * notifications/*) are unauthenticated.
+   * Required for tools/list and tools/call; verified by constant-time compare
+   * against `HERMES_BRIDGE_SECRET`. Only the transport handshake and liveness
+   * probe (initialize, ping, notifications/*) are unauthenticated.
    */
   authBearer: string;
 }
@@ -137,8 +137,9 @@ async function verifyBearer(bearer: string): Promise<boolean> {
  * HTTP wrapper (status + Content-Type).
  *
  * Auth model:
- *   - initialize, tools/list, ping, notifications/*   → unauthenticated
- *   - tools/call                                       → Authorization: Bearer
+ *   - initialize, ping, notifications/*                → unauthenticated
+ *                                                        (handshake + liveness only)
+ *   - tools/list, tools/call                           → Authorization: Bearer
  *                                                        with constant-time match
  *                                                        against HERMES_BRIDGE_SECRET.
  *                                                        Scope binding happens at
@@ -189,6 +190,25 @@ export async function dispatchJsonRpc(
       }
 
       case 'tools/list': {
+        // Authenticated (changed 2026-07-25). This used to be open, which made
+        // the whole tool catalogue — names, descriptions and input schemas —
+        // readable by anyone who could POST to the endpoint, and `/api/mcp*`
+        // deliberately bypasses the Auth.js gate as service-to-service traffic.
+        // That is a map of every capability the assistant has, including which
+        // integrations exist and what arguments they take.
+        //
+        // `initialize` and `ping` stay open on purpose: they are the transport
+        // handshake and liveness probe and disclose nothing. Gating only the
+        // catalogue keeps MCP clients able to connect while making them prove
+        // who they are before they can enumerate. Hermes is unaffected — it
+        // sends a static Authorization header on every request to this server
+        // (mcp_servers.jkai.headers in ~/.hermes-jkai/config.yaml), and the
+        // routing proxy at /api/mcp forwards that header verbatim.
+        if (!(await verifyBearer(ctx.authBearer))) {
+          return {
+            response: errResponse(id, -32001, 'unauthorized: invalid or missing bearer token'),
+          };
+        }
         const tools = await listMcpTools();
         return { response: { jsonrpc: '2.0', id, result: { tools } } };
       }
