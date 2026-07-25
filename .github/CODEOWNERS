@@ -27,6 +27,42 @@
 /vite.config.ts             @zerosumpain
 /svelte.config.js           @zerosumpain
 
+# Self-gating helpers for PUBLIC_PATHS-prefixed trees. hooks.server.ts
+# delegates to these, so protecting the hook without them protects nothing.
+/src/lib/agent/auth.ts                           @zerosumpain
+/src/lib/webdav/auth.ts                          @zerosumpain
+/src/lib/workflows/scraper/service-auth.ts       @zerosumpain
+/src/lib/workflows/webhook-secret.ts             @zerosumpain
+/src/lib/projects/guard.ts                       @zerosumpain
+/src/lib/projects/visibility.ts                  @zerosumpain
+/src/lib/projects/shares.ts                      @zerosumpain
+/src/lib/decks/guard.ts                          @zerosumpain
+/src/lib/decks/shares.ts                         @zerosumpain
+/src/routes/jkai/shared/                         @zerosumpain
+/src/routes/api/jkai/cors/                       @zerosumpain
+
+# Crypto envelopes for stored credentials, and the second bridge-token surface
+/src/lib/integrations/crypto.ts                  @zerosumpain
+/src/lib/workflows/gmail/crypto.ts               @zerosumpain
+/src/lib/workflows/scraper/crypto.ts             @zerosumpain
+/src/lib/jkai/tool-bridge.ts                     @zerosumpain
+
+# Agent self-modification — code that reaches production.
+# node_builder_commit_and_deploy pushes to origin/master and runs deploy.sh
+# without ever opening a PR, so CI never sees it.
+/src/lib/workflows/site-tools/tools/node-builder-shared.ts  @zerosumpain
+/src/lib/workflows/site-tools/tools/node-builder.ts         @zerosumpain
+/src/lib/jkai/git-targets.ts                     @zerosumpain
+/src/lib/jkai/forge.ts                           @zerosumpain
+/src/lib/jkai/sandbox.ts                         @zerosumpain
+
 # Agent safety rails — self-modification is always a human decision
 /src/lib/workflows/nodes/site-tool-denylist.ts   @zerosumpain
 /src/lib/workflows/chat/confirmation-gate.ts     @zerosumpain
+/src/lib/workflows/nodes/site-tool.ts            @zerosumpain
+/src/lib/workflows/site-tools/tools/scheduled.ts @zerosumpain
+/src/lib/workflows/nodes/safe-eval.ts            @zerosumpain
+/src/lib/workflows/site-tools/tools/apis.ts      @zerosumpain
+# Tests pinned as invariants, so a dropped destructive flag fails CI
+/src/lib/workflows/site-tools/toolchain-fixes.test.ts       @zerosumpain
+/tests/lib/workflows/nodes/llm-agent-site-tools.test.ts     @zerosumpain

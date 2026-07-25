@@ -29,6 +29,47 @@ src/lib/server/**
 # file would otherwise have classified low and auto-merged.
 src/lib/mcp/**
 
+# PUBLIC_PATHS is PREFIX-matched, so whole trees (/api/agent, /api/scraper,
+# /projects, /decks, /jkai/shared, /dav) are ALREADY past the Auth.js gate. For
+# those the only thing between an anonymous request and the data is a small
+# self-gating helper — and hooks.server.ts DELEGATES to these, so protecting the
+# hook without them protects nothing. Each is 1-2 commits in 2,294, and between
+# them they are the entire control for the private DfE/Keystone work, private
+# decks, shared conversations and the WebDAV mount.
+src/lib/agent/auth.ts
+src/lib/webdav/auth.ts
+src/lib/workflows/scraper/service-auth.ts
+src/lib/workflows/webhook-secret.ts
+src/lib/projects/guard.ts
+src/lib/projects/visibility.ts
+src/lib/projects/shares.ts
+src/lib/decks/guard.ts
+src/lib/decks/shares.ts
+src/routes/jkai/shared/[token]/+page.server.ts
+# Anonymous fetch relay that returns upstream bodies with `Access-Control-Allow-Origin: *`.
+# Its domain allowlist is the only control, and it is precisely where a generated
+# canvas build would be tempted to add a domain.
+src/routes/api/jkai/cors/[...url]/+server.ts
+# NOTE (deliberate gap): because PUBLIC_PATHS is prefix-matched, a NEW route file
+# under an existing public prefix is anonymously reachable the moment it is
+# created — no allowlist edit, so no rule here can catch it. That wants a CI
+# assertion over route files, not a path rule.
+
+# ── Secret handling and crypto envelopes ───────────────────────────────
+# Each is the SOLE encryption boundary for a credential store whose ciphertext
+# the agent can already reach through the datastore/DB tools. Weakening one — or
+# adding a debug log of the plaintext — turns readable ciphertext into readable
+# secrets: Gmail refresh tokens, integration OAuth credentials, and the scraper
+# vault's logins for third-party sites. One commit each; feature work for those
+# areas lives in their runners and route handlers, never here.
+src/lib/integrations/crypto.ts
+src/lib/workflows/gmail/crypto.ts
+src/lib/workflows/scraper/crypto.ts
+# The same HMAC bridge-token mechanism protected above as src/lib/mcp/**, on a
+# second route pair nobody had noticed: signs/verifies JKAI_BRIDGE_SECRET for the
+# builder sidecar.
+src/lib/jkai/tool-bridge.ts
+
 # ── Data model ─────────────────────────────────────────────────────────
 # deploy runs `drizzle-kit push --force` against production, so a bad schema
 # edit is applied to the live database automatically.
@@ -46,8 +87,49 @@ package-lock.json
 vite.config.ts
 svelte.config.js
 
+# ── Agent self-modification: code that reaches production ──────────────
+# `node_builder_commit_and_deploy` pushes straight to origin/master and runs
+# scripts/deploy.sh — it never opens a PR, so the risk-tier job NEVER SEES IT.
+# NODE_BUILDER_PATH_ALLOWLIST is the only bound on what it may write, so adding
+# 'src/' or '.github/' to it converts the agent's own codegen into an
+# arbitrary-file, direct-to-production channel that routes around this entire
+# mechanism — including protected-paths.txt itself. This is the one escalation
+# that defeats the gate rather than merely widening tool reach.
+src/lib/workflows/site-tools/tools/node-builder-shared.ts
+src/lib/workflows/site-tools/tools/node-builder.ts
+# The allowlist of repos an autonomous build may clone, branch and push to, and
+# the second independent repo pin used by the Forge.
+src/lib/jkai/git-targets.ts
+src/lib/jkai/forge.ts
+# The only `git push` and the only PR-open path in the entire app, plus the
+# container flags for the build sandbox. Higher churn than the rest of this
+# section, but it is the chokepoint for everything an agent ships.
+src/lib/jkai/sandbox.ts
+
 # ── Agent safety rails ─────────────────────────────────────────────────
 # The denylist and confirmation gate are what stop tool-calls doing damage.
 # Self-modification of these must always be a human decision.
 src/lib/workflows/nodes/site-tool-denylist.ts
 src/lib/workflows/chat/confirmation-gate.ts
+# site-tool.ts is the ONLY runtime enforcement of that denylist and of the
+# destructive/upstream-approval rule. Protecting the denylist DATA but not its
+# enforcement was the gap — the data file is inert without this.
+src/lib/workflows/nodes/site-tool.ts
+# schedule_tool_at refuses destructive tools; deferred calls fire with no LLM
+# round, no confirmation UI and no user present, and no test covers this guard.
+src/lib/workflows/site-tools/tools/scheduled.ts
+# The only in-process sandbox boundary for LLM/user-authored workflow
+# expressions (`new Function`, same process as the server). Both its commits
+# were security hardening.
+src/lib/workflows/nodes/safe-eval.ts
+# Outbound-network boundary for the /jkai chat agent, holding SSRF enforcement
+# that src/lib/server/ssrf-guard.ts does not.
+src/lib/workflows/site-tools/tools/apis.ts
+# TESTS AS INVARIANTS. site-tools/tools/** is 96 commits in six months — it IS
+# ordinary feature work and protecting it would end the autonomy. But that is
+# where every `destructive: true` literal lives. These two tests pin the flags
+# and the llm-agent exclusion, so dropping a flag fails CI instead of
+# auto-merging. Protecting the assertions costs a fraction of protecting the
+# subtree, and without them one PR could delete a flag AND its assertion.
+src/lib/workflows/site-tools/toolchain-fixes.test.ts
+tests/lib/workflows/nodes/llm-agent-site-tools.test.ts
