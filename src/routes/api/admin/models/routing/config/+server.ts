@@ -27,14 +27,19 @@ export const POST: RequestHandler = async ({ request }) => {
     const current = await getRoutingConfig();
     const merged: RoutingConfig = {
       weights: { ...current.weights, ...(c.weights ?? {}) },
-      qualityFloorPct: { ...current.qualityFloorPct, ...(c.qualityFloorPct ?? {}) },
+      qualityFloorFrac: { ...current.qualityFloorFrac, ...(c.qualityFloorFrac ?? {}) },
       priceCeilingPerM: clampNum(c.priceCeilingPerM, current.priceCeilingPerM, 0.5, 500),
       minContext: clampNum(c.minContext, current.minContext, 0, 2_000_000),
       successBiasK: clampNum(c.successBiasK, current.successBiasK, 0, 0.5),
+      openWeightBonus: clampNum(c.openWeightBonus, current.openWeightBonus, 0, 1),
+      openWeightsOnly:
+        typeof c.openWeightsOnly === 'boolean' ? c.openWeightsOnly : current.openWeightsOnly,
     };
-    for (const p of Object.keys(merged.qualityFloorPct)) {
-      const v = merged.qualityFloorPct[p as keyof typeof merged.qualityFloorPct];
-      if (!(v >= 0 && v <= 100)) throw error(400, `qualityFloorPct.${p} must be 0-100`);
+    for (const p of Object.keys(merged.qualityFloorFrac)) {
+      const v = merged.qualityFloorFrac[p as keyof typeof merged.qualityFloorFrac];
+      // A fraction of the catalogue's best agentic index. Above ~0.95 nothing
+      // but the single best model survives, so cap it there.
+      if (!(v >= 0 && v <= 0.95)) throw error(400, `qualityFloorFrac.${p} must be 0-0.95`);
     }
     await setRoutingConfig(merged);
     return json({ ok: true, enabled: await isRoutingEnabled(), config: merged });

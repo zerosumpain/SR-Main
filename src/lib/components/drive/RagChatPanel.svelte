@@ -3,17 +3,20 @@
   import { Marked } from 'marked';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import ModelPicker from '$lib/components/jkai/ModelPicker.svelte';
-  import { DEFAULT_CHAT_MODEL_ID, LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
+  import { LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
   import type { ModelContext } from '$lib/server/models/types';
   import type { RagCollection } from '$lib/db/schema';
 
   type Citation = { n: number; source: string; ord: number };
   type ChatMsg = { role: 'user' | 'assistant'; content: string; citations?: Citation[]; streaming?: boolean };
 
-  let { collection: initial, onClose, onChanged }: {
+  let { collection: initial, onClose, onChanged, defaultChatModelId }: {
     collection: RagCollection;
     onClose: () => void;
     onChanged?: (c: RagCollection) => void;
+    /** The site-wide default (from the page load), so this panel starts on the
+     *  same model as every other LLM surface. */
+    defaultChatModelId: string;
   } = $props();
 
   const marked = new Marked({ gfm: true, breaks: true });
@@ -26,7 +29,7 @@
 
   // Generation model for the chat (separate from the collection's embedding
   // model). Defaults to the site chat model (OpenRouter); the choice persists locally.
-  let chatModel = $state<ModelContext>({ provider: 'openrouter', modelId: DEFAULT_CHAT_MODEL_ID });
+  let chatModel = $state<ModelContext>({ provider: 'openrouter', modelId: defaultChatModelId });
   const MODEL_KEY = 'drive:rag:chatModel';
   let modelLoaded = false;
 

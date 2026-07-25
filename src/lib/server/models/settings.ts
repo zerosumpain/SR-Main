@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
 import {
   DEFAULT_CHAT_MODEL_ID,
-  DEFAULT_AGENTIC_MODEL_ID,
   coerceModelContext,
 } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
@@ -43,16 +42,19 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   cache.delete(key);
 }
 
-export async function resolveDefaultModel(kind: 'chat' | 'builder'): Promise<ModelContext> {
-  if (kind === 'chat') {
-    // Site-wide default — set from /admin/ai/models. Stored values (and any
-    // legacy bare GLM ids) are coerced to OpenRouter contexts.
-    const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.chat.default_model');
-    return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_CHAT_MODEL_ID });
-  }
-  // Builder is the tool-heavy agentic path — keep it on the fast model, not the slow flagship.
-  const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.builder.default_model');
-  return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_AGENTIC_MODEL_ID });
+/**
+ * The site-wide default model. ONE value drives every LLM task — chat, the
+ * autonomous builder, deep research, workflow LLM nodes, project-page chats,
+ * briefings, self-improve (John, 2026-07-25). The `kind` parameter is kept so
+ * call sites still read as intent, but both resolve to the same setting; the
+ * separate `jkai.builder.default_model` key is no longer consulted.
+ *
+ * Set from the /jkai model picker or /admin/ai/models. Stored values (and any
+ * legacy bare GLM ids) are coerced to OpenRouter contexts.
+ */
+export async function resolveDefaultModel(_kind: 'chat' | 'builder' = 'chat'): Promise<ModelContext> {
+  const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.chat.default_model');
+  return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_CHAT_MODEL_ID });
 }
 
 /**

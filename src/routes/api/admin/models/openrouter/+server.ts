@@ -15,6 +15,10 @@ type Row = typeof openrouterModels.$inferSelect;
 
 interface EnrichedRow extends Row {
   toolsSupported: boolean;
+  /** True when the model publishes its weights (OpenRouter `hugging_face_id`).
+   *  Drives the OPEN badge + "open only" filter in the /jkai picker and the
+   *  open-weight bias in $lib/routing/scoring. */
+  openWeights: boolean;
   /** Blended USD per 1M tokens at a 3:1 input:output ratio. */
   blendedPerM: number | null;
   /** Artificial Analysis indices, re-served by OpenRouter inside the raw model
@@ -31,6 +35,7 @@ function enrich(row: Row): EnrichedRow {
   const raw = (row.raw ?? {}) as {
     supported_parameters?: unknown;
     benchmarks?: { artificial_analysis?: RawBenchmarks };
+    hugging_face_id?: unknown;
   };
   const supported = Array.isArray(raw.supported_parameters) ? raw.supported_parameters : [];
   const bench = raw.benchmarks?.artificial_analysis ?? {};
@@ -47,6 +52,7 @@ function enrich(row: Row): EnrichedRow {
   return {
     ...row,
     toolsSupported: supported.includes('tools'),
+    openWeights: typeof raw.hugging_face_id === 'string' && raw.hugging_face_id.trim().length > 0,
     blendedPerM,
     agenticIndex: typeof bench.agentic_index === 'number' ? bench.agentic_index : null,
     codingIndex: typeof bench.coding_index === 'number' ? bench.coding_index : null,
@@ -96,6 +102,7 @@ const SORT_VALUE: Record<string, (r: EnrichedRow) => string | number | null> = {
   agenticIndex: (r) => r.agenticIndex,
   score: (r) => r.score,
   toolsSupported: (r) => (r.toolsSupported ? 1 : 0),
+  openWeights: (r) => (r.openWeights ? 1 : 0),
 };
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -114,6 +121,9 @@ export const GET: RequestHandler = async ({ url }) => {
   // (e.g. morph/relace "apply" models) 404 with "No endpoints found that
   // support tool use". The chat model picker sets this.
   const toolsOnly = url.searchParams.get('toolsOnly') === '1';
+  // openOnly: restrict to open-weight models (OpenRouter populates
+  // hugging_face_id for those only). The /jkai picker's "open only" chip.
+  const openOnly = url.searchParams.get('openOnly') === '1';
   // Hybrid-score weights (quality / price / throughput). Scores are computed on
   // every request so the Score column is populated in any sort mode.
   const wq = num(url.searchParams.get('wq')) ?? 0.5;
@@ -134,6 +144,9 @@ export const GET: RequestHandler = async ({ url }) => {
   }
   if (toolsOnly) {
     conditions.push(sql`(${openrouterModels.raw} -> 'supported_parameters') @> '["tools"]'::jsonb`);
+  }
+  if (openOnly) {
+    conditions.push(sql`COALESCE(${openrouterModels.raw} ->> 'hugging_face_id', '') <> ''`);
   }
 
   const where = conditions.length ? and(...conditions) : undefined;

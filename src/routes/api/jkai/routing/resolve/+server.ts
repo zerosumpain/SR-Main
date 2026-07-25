@@ -19,6 +19,15 @@ export const POST: RequestHandler = async ({ request }) => {
     });
     return json(result);
   } catch {
-    return json({ enabled: false, profile: 'general', profileLabel: 'General chat', provider: 'openrouter', modelId: null, reason: 'error' });
+    return json({
+      enabled: false,
+      profile: 'general',
+      profileLabel: 'General chat',
+      provider: 'openrouter',
+      modelId: null,
+      source: null,
+      caps: null,
+      reason: 'error',
+    });
   }
 };

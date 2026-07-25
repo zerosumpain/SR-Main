@@ -1303,9 +1303,17 @@
   // 409, and a mid-chat switch churns the prefix cache), so after that we just
   // show a static label.
   let modelPickerOpen = $state(false);
+  // The site default can be changed from inside the picker, so it is local state
+  // seeded from the prop rather than read straight through — otherwise the pill's
+  // "default" tag would lie until the next page load.
+  let siteDefaultModelId = $state(defaultChatModelId);
+  // True once the user picks a model for THIS conversation by hand. Query-adaptive
+  // routing then leaves it alone: a deliberate choice must not be silently
+  // overwritten on send.
+  let modelPickedByUser = $state(false);
   const currentModel = $derived({
     provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'openrouter',
-    modelId: conversation?.modelId ?? defaultChatModelId,
+    modelId: conversation?.modelId ?? siteDefaultModelId,
   });
   function shortModelLabel(id: string): string {
     return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
@@ -1313,7 +1321,7 @@
   // Always show the model that will actually answer (the conversation's pin,
   // falling back to the site default) — "Click to select" hid the effective
   // model and made the pill look broken.
-  const modelIsDefault = $derived(currentModel.modelId === defaultChatModelId);
+  const modelIsDefault = $derived(currentModel.modelId === siteDefaultModelId);
   const modelTriggerLabel = $derived(shortModelLabel(currentModel.modelId));
 
   // ── Query-adaptive routing ────────────────────────────────────────────────
@@ -1333,6 +1341,10 @@
     // Only route the FIRST message of a conversation (model locks after it) and
     // only on the Hermes engine (the switchModel /model path needs it).
     if (!hermesEnabled || !conversationId || messages.length > 0) return;
+    // A hand-picked model wins over the router — overriding it would make the
+    // picker feel broken.
+    if (modelPickedByUser) return;
+    const staged = pendingAttachments.filter((a) => !a.uploading && !a.error && !a.incompatible);
     try {
       const res = await fetch('/api/jkai/routing/resolve', {
         method: 'POST',
@@ -1340,12 +1352,18 @@
         body: JSON.stringify({
           message: text,
           conversationId,
-          hasAttachments: pendingAttachments.some((a) => !a.uploading && !a.error && !a.incompatible),
+          hasAttachments: staged.length > 0,
         }),
       });
       if (!res.ok) return;
       const r = await res.json();
       if (r?.enabled && r.modelId) {
+        // Cost-optimal picks are often text-only. Never route a conversation that
+        // already has attachments staged onto a model that cannot read them —
+        // the files would be silently dropped or rejected downstream.
+        if (staged.length > 0 && r.caps && staged.some((a) => !kindAllowedByRoutedCaps(a.kind, r.caps))) {
+          return;
+        }
         routedInfo = { profileLabel: r.profileLabel, modelId: r.modelId, reason: r.reason };
         if (r.modelId !== currentModel.modelId) {
           await switchModel('openrouter', r.modelId);
@@ -1353,6 +1371,19 @@
       }
     } catch {
       /* routing is best-effort — never block the send */
+    }
+  }
+
+  type Caps = { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean };
+  function kindAllowedByRoutedCaps(kind: string, caps: Caps): boolean {
+    switch (kind) {
+      case 'image': return caps.image;
+      case 'audio': return caps.audio;
+      case 'video': return caps.video;
+      case 'pdf': return caps.pdf;
+      case 'document':
+      case 'text': return caps.documentText;
+      default: return false;
     }
   }
 
@@ -1741,9 +1772,10 @@
           {#if modelPickerOpen}
             <OpenRouterModelPicker
               current={currentModel}
-              defaultModelId={defaultChatModelId}
+              defaultModelId={siteDefaultModelId}
               altModel={altOpenRouterModel}
-              onselect={(ctx) => switchModel(ctx.provider, ctx.modelId)}
+              onselect={(ctx) => { modelPickedByUser = true; switchModel(ctx.provider, ctx.modelId); }}
+              onsitedefaultchange={(modelId) => (siteDefaultModelId = modelId)}
               onclose={() => (modelPickerOpen = false)}
             />
           {/if}

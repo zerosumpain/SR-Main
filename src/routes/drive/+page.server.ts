@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
+import { resolveDefaultModel } from '$lib/server/models/settings';
 
 // Endpoint's own per-file cap (see /api/files/upload). The effective client-side
 // limit is the smaller of this and the adapter's BODY_SIZE_LIMIT — exceeding
@@ -21,9 +22,14 @@ function parseBytes(raw: string | undefined, fallback: number): number {
 }
 
 export const load: PageServerLoad = async () => {
-  const files = await db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt));
+  const [files, siteDefault] = await Promise.all([
+    db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt)),
+    // The RAG chat panel starts on the site default like every other LLM
+    // surface, rather than on the hard-coded code fallback.
+    resolveDefaultModel(),
+  ]);
   // adapter-node default is '512K' when BODY_SIZE_LIMIT is unset.
   const bodyLimit = parseBytes(env.BODY_SIZE_LIMIT, 512 * 1024);
   const maxUploadBytes = Math.min(bodyLimit, MAX_BYTES);
-  return { files, maxUploadBytes };
+  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId };
 };

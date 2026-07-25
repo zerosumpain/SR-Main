@@ -4,12 +4,20 @@
 // OpenRouter). The live defaults are admin-configurable via app_settings
 // ('jkai.chat.default_model' etc.); these constants are the code fallbacks.
 
-export const DEFAULT_CHAT_MODEL_ID = 'z-ai/glm-5.2';
+// Open-weight, 1M context, ~$0.12/1M blended. Chosen 2026-07-25 under John's
+// rule: the best model at or below deepseek-v4-flash's price — nothing cheaper
+// scores higher on the Artificial Analysis agentic index, so it is the model
+// itself. Set from the /jkai picker or /admin/ai/models; this is only the code
+// fallback when the DB setting is unset.
+export const DEFAULT_CHAT_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
-// Agentic paths (autonomous builder, plan-debate, Hermes delegation children)
-// stay on the fast model: glm-5.2 is ~4x slower and times out on tool-heavy
-// delegation (see reference_glm52_agentic_slowness).
-export const DEFAULT_AGENTIC_MODEL_ID = 'z-ai/glm-5-turbo';
+// One default for every LLM task on the site, including the autonomous builder
+// and Hermes delegation children (John, 2026-07-25: "the default model should be
+// the one any llm task uses across the whole site"). This deliberately retires
+// the separate fast-model carve-out that existed because glm-5.2 timed out on
+// tool-heavy delegation — see reference_glm52_agentic_slowness for the history,
+// and re-split these two constants if agentic timeouts reappear.
+export const DEFAULT_AGENTIC_MODEL_ID = DEFAULT_CHAT_MODEL_ID;
 
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client

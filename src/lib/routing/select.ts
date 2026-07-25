@@ -21,6 +21,7 @@ export interface SelectionResult {
 
 function buildReason(profile: ModelProfile, a: ModelAssignment): string {
   const bits: string[] = [];
+  if (a.openWeights) bits.push('open weights');
   if (a.agenticIndex != null) bits.push(`agentic ${a.agenticIndex.toFixed(0)}`);
   if (a.blendedPerM != null) bits.push(`$${a.blendedPerM.toFixed(2)}/1M`);
   if (a.throughput != null) bits.push(`${a.throughput.toFixed(0)} t/s`);
@@ -43,10 +44,12 @@ export async function selectModels(config: RoutingConfig): Promise<SelectionResu
   for (const profile of PROFILES) {
     const { winner, poolSize } = selectForProfile(candidates, {
       weights: config.weights[profile],
-      qualityFloorPct: config.qualityFloorPct[profile],
+      qualityFloorFrac: config.qualityFloorFrac[profile],
       priceCeilingPerM: config.priceCeilingPerM,
       minContext: config.minContext,
       successBiasK: config.successBiasK,
+      openWeightBonus: config.openWeightBonus,
+      openWeightsOnly: config.openWeightsOnly,
       successFor: successForProfile(successIndex, profile),
     });
     candidateCounts[profile] = poolSize;
@@ -62,6 +65,7 @@ export async function selectModels(config: RoutingConfig): Promise<SelectionResu
       throughput: winner.throughput,
       successRate: winner.successRate,
       successSamples: winner.successSamples,
+      openWeights: winner.openWeights,
       reason: '',
     };
     assignment.reason = buildReason(profile, assignment);
