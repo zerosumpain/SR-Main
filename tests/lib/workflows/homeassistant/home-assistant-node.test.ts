@@ -46,7 +46,11 @@ describe('homeAssistantExecutor', () => {
     );
     expect(mockQueryState).toHaveBeenCalledWith('light.living_room');
     expect(result.output.success).toBe(true);
-    expect(result.output.data).toMatchObject({ state: 'on' });
+    expect(result.output.count).toBe(1);
+    expect((result.output.entities as unknown[])[0]).toMatchObject({
+      entity_id: 'light.living_room',
+      state: 'on',
+    });
   });
 
   it('calls a service with interpolated entity ID', async () => {

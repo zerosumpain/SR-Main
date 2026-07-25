@@ -43,6 +43,13 @@ export default defineConfig({
 	},
 	test: {
 		include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+		// Many tests pull heavy module graphs in via dynamic `await import()`.
+		// Across the whole suite that is ~150s of module loading, so the 5s
+		// default makes any import-bound test a load-dependent flake (it passes
+		// in isolation, times out under a full parallel run). A real failure
+		// still fails — just later. Raised so the merge gate is deterministic.
+		testTimeout: 20000,
+		hookTimeout: 20000,
 		alias: {
 			'$lib': fileURLToPath(new URL('./src/lib', import.meta.url)),
 		},

@@ -13,6 +13,9 @@ function frame(partial: Partial<SseFrame> & Pick<SseFrame, 'kind'>): SseFrame {
   } as SseFrame;
 }
 
+// When Hermes supplies no `summary`, the adapter falls back to the worded
+// summarizer in `$lib/workflows/chat/tool-summary` (outcome-first phrasing,
+// not a raw JSON preview) — hence the expected summary strings below.
 describe('adaptToolFrameToJobEvents', () => {
   it('maps a started tool frame to tool_start (top-level tool payload)', () => {
     const events = adaptToolFrameToJobEvents(
@@ -34,7 +37,7 @@ describe('adaptToolFrameToJobEvents', () => {
       }),
     );
     expect(events).toEqual([
-      { type: 'tool_start', tool: 'save_memory', args: { note: 'hi' }, toolCallId: 'x9', summary: undefined },
+      { type: 'tool_start', tool: 'save_memory', args: { note: 'hi' }, toolCallId: 'x9', summary: 'saving a memory' },
     ]);
   });
 
@@ -43,7 +46,7 @@ describe('adaptToolFrameToJobEvents', () => {
       frame({ kind: 'tool', metadata: { tool: { phase: 'started', tool: 'ha_query_state' } } }),
     );
     expect(events).toEqual([
-      { type: 'tool_start', tool: 'ha_query_state', args: {}, toolCallId: undefined, summary: undefined },
+      { type: 'tool_start', tool: 'ha_query_state', args: {}, toolCallId: undefined, summary: 'querying a device' },
     ]);
   });
 
@@ -52,7 +55,7 @@ describe('adaptToolFrameToJobEvents', () => {
       frame({ kind: 'tool', tool: { phase: 'completed', tool: 'workflow_add_node', tool_call_id: 'tc1', result: { ok: true } } }),
     );
     expect(events).toEqual([
-      { type: 'tool_result', tool: 'workflow_add_node', result: { ok: true }, status: 'done', toolCallId: 'tc1', summary: '{"ok":true}' },
+      { type: 'tool_result', tool: 'workflow_add_node', result: { ok: true }, status: 'done', toolCallId: 'tc1', summary: 'Done — workflow add node' },
     ]);
   });
 
@@ -61,7 +64,7 @@ describe('adaptToolFrameToJobEvents', () => {
       frame({ kind: 'tool', tool: { phase: 'failed', tool: 'workflow_add_node', tool_call_id: 'tc1', error: 'boom' } }),
     );
     expect(events).toEqual([
-      { type: 'tool_result', tool: 'workflow_add_node', result: { error: 'boom' }, status: 'error', toolCallId: 'tc1', summary: 'boom' },
+      { type: 'tool_result', tool: 'workflow_add_node', result: { error: 'boom' }, status: 'error', toolCallId: 'tc1', summary: 'workflow_add_node failed: boom' },
     ]);
   });
 

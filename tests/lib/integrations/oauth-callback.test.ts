@@ -57,7 +57,7 @@ describe('oauth callback', () => {
     }
     expect(redirected).toBeDefined();
     expect(redirected!.status).toBe(303);
-    expect(redirected!.location).toMatch(/\/admin\/integrations\?credential=/);
+    expect(redirected!.location).toMatch(/\/admin\/connections\/credentials\?credential=/);
     global.fetch = originalFetch;
   });
 
