@@ -250,6 +250,13 @@ export interface GitTargetConfig {
   gateCommand: string;
   openPr: boolean;
   prTitlePrefix?: string;
+  /**
+   * GitHub issue this build implements, when it came from `request_change`.
+   * Appended to the PR body as `Closes #n` so the issue closes on merge even
+   * if the agent's own summary forgets to mention it — that link is what makes
+   * the history self-documenting (what changed, and why it was asked for).
+   */
+  issueNumber?: number;
 }
 
 // Git identity used for the autonomous commit. The host already has the
@@ -430,7 +437,12 @@ export async function publishViaGit(
   // Open a PR. The repo slug is derived from the configured repoUrl so the
   // API's hard scope (brass-and-rails only) is the single source of truth.
   const repoSlug = repoSlugFromUrl(cfg.repoUrl);
-  const bodyText = opts.body ?? `Autonomous change proposed by the Forge.\n\n${summary}`;
+  let bodyText = opts.body ?? `Autonomous change proposed by the Forge.\n\n${summary}`;
+  // Close the originating change-request issue on merge. Added here rather than
+  // relying on the agent's summary so the link cannot be lost to phrasing.
+  if (cfg.issueNumber) {
+    bodyText += `\n\nCloses #${cfg.issueNumber}`;
+  }
 
   // Preferred path: REST API via Node `fetch` with the token. This keeps the
   // token out of the shell/logs entirely and works without `gh`.
