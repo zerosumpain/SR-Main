@@ -179,10 +179,16 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # `gh pr merge --delete-branch` shells out to git to drop the local
+      # branch, so without a checkout it dies on "not a git repository" before
+      # merging anything. Cheap to add and keeps --delete-branch working.
+      - uses: actions/checkout@v4
+
       - name: Merge if a token is configured
         env:
           AUTOMERGE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
         run: |
           if [ -z "${AUTOMERGE_TOKEN:-}" ]; then
             echo "AUTOMERGE_TOKEN is not set — leaving PR #$PR for manual merge."
@@ -194,5 +200,5 @@ jobs:
             echo "contents:write + pull_requests:write to complete the loop."
             exit 0
           fi
-          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge "$PR" --squash --delete-branch
+          GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
           echo "Merged PR #$PR (tier=low, agent branch)."
