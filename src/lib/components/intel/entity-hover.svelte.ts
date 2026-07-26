@@ -38,9 +38,15 @@ class EntityHoverState {
 
   /** Pointer rested on a mention. */
   hover(entityId: string, el: HTMLElement) {
+    // A PINNED card was opened deliberately and carries the commission
+    // actions; merely moving the pointer over another mention must not replace
+    // it. Dismiss with Escape, the close button, or by clicking another
+    // mention (which pins the new one).
+    if (this.current?.pinned) return;
+
     this.clearTimers();
     // Already showing this one — nothing to schedule.
-    if (this.current?.entityId === entityId && !this.current.pinned) return;
+    if (this.current?.entityId === entityId) return;
     this.openTimer = setTimeout(() => {
       const r = el.getBoundingClientRect();
       this.current = {

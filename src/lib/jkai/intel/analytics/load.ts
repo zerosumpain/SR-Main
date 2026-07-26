@@ -32,10 +32,18 @@ const TTL_MS = 60_000;
 
 let cached: GraphAnalysis | null = null;
 let inflight: Promise<GraphAnalysis> | null = null;
+/**
+ * Bumped on every invalidation. A computation that started before the bump is
+ * reading pre-write data, so it must not install itself as the cache when it
+ * finishes — otherwise a merge landing mid-computation would be papered over by
+ * a stale snapshot for the whole TTL.
+ */
+let generation = 0;
 
 /** Drop the cache — call after any write that changes the graph. */
 export function invalidateGraphAnalysis(): void {
   cached = null;
+  generation++;
 }
 
 function parseVector(raw: unknown): number[] | null {
@@ -146,6 +154,7 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
   if (!force && cached && now - cached.computedAt < TTL_MS) return cached;
   if (inflight) return inflight;
 
+  const startedAt = generation;
   inflight = (async () => {
     const { snapshot, embeddings } = await loadSnapshot();
     const index = buildIndex(snapshot);
@@ -157,7 +166,10 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
       embeddings,
       computedAt: Date.now(),
     };
-    cached = analysis;
+    // Only cache if nothing invalidated while we were reading. The caller still
+    // gets this result — it is the best available right now — but the next
+    // caller recomputes rather than being served data known to be stale.
+    if (generation === startedAt) cached = analysis;
     return analysis;
   })();
 
