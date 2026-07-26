@@ -10,7 +10,7 @@
   //      row from the array — a resolved item is marked in place — so the
   //      position you were at is still the position you are at.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
@@ -321,7 +321,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<PageHeader title="INTEL / TRIAGE" titleHref="/jkai/intel" />
+<JkaiPageTitle title="INTEL / TRIAGE" titleHref="/jkai/intel" />
 
 <div class="wrap">
   <div class="tabs">

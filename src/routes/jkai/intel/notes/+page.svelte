@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
   let { data } = $props();
 
@@ -25,7 +25,7 @@
   {/if}
 {/snippet}
 
-<PageHeader title="NOTES" titleHref="/jkai/intel" />
+<JkaiPageTitle title="NOTES" titleHref="/jkai/intel" />
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <div class="flex items-center justify-between mb-6">

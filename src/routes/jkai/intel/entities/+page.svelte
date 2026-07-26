@@ -8,7 +8,7 @@
   // browser would mean shipping the whole table to the browser, and a view you
   // cannot link to is a view you cannot return to after a bulk action.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import { untrack } from 'svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import {
@@ -150,7 +150,7 @@
   const nameOf = (id: string) => data.entities.find((e) => e.id === id)?.name ?? id;
 </script>
 
-<PageHeader title="INTEL / ENTITIES" titleHref="/jkai/intel" />
+<JkaiPageTitle title="INTEL / ENTITIES" titleHref="/jkai/intel" />
 
 <div class="wrap">
   <div class="toolbar">

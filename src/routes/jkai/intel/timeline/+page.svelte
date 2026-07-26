@@ -14,7 +14,7 @@
   // The network payload is fetched after first paint — the page is useful
   // without it, and the analysis behind it costs a Louvain run.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import LensPicker from '$lib/components/intel/LensPicker.svelte';
   import TimelineBrush from '$lib/components/intel/TimelineBrush.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
@@ -112,7 +112,7 @@
   });
 </script>
 
-<PageHeader title="TIMELINE" titleHref="/jkai/intel" />
+<JkaiPageTitle title="TIMELINE" titleHref="/jkai/intel" />
 
 <div class="wrap">
   <div class="toolbar">

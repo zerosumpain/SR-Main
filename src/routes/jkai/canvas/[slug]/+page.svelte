@@ -9,7 +9,7 @@
   import { useIsMobile } from '$lib/canvas/use-mobile.svelte';
   import { portal } from '$lib/canvas/portal';
   import type { Execution as InspectorExecution } from '$lib/canvas/InspectorHistory.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import TimeFilter from '$lib/canvas/stats/TimeFilter.svelte';
   import SummaryNode from '$lib/canvas/stats/SummaryNode.svelte';
   import TrendsNode from '$lib/canvas/stats/TrendsNode.svelte';
@@ -3981,7 +3981,7 @@
 </svelte:head>
 
 <div class="page-shell" class:canvas--mobile={isMobile}>
-  <PageHeader title={canvas.title} titleHref="/jkai/canvas">
+  <JkaiPageTitle title={canvas.title} titleHref="/jkai/canvas">
     {#snippet meta()}
       <span class="canvas-head-meta">
         <span class="canvas-head-slug">/{canvas.slug}</span>
@@ -3995,7 +3995,7 @@
         {/if}
       </span>
     {/snippet}
-  </PageHeader>
+  </JkaiPageTitle>
 
   <div class="canvas-root">
     <!-- Top toolbar -->

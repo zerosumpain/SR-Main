@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import type { PromptStack, PromptVersion, StackId } from '$lib/jkai/prompts/workbench';
 
   type LoadedStack = PromptStack & { approxTokens: number };
@@ -120,7 +120,7 @@
 
 <svelte:head><title>Prompts · JKAI</title></svelte:head>
 
-<PageHeader title="PROMPTS" />
+<JkaiPageTitle title="PROMPTS" />
 
 <div class="pw">
   <p class="pw-intro">

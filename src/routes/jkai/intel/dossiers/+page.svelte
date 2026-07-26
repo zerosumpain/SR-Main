@@ -7,7 +7,7 @@
   // has actually accumulated, and keeps parked and closed work out of the way
   // without deleting it.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import { goto, invalidateAll } from '$app/navigation';
   import type { PageData } from './$types';
 
@@ -78,7 +78,7 @@
   const when = (iso: string) => new Date(iso).toLocaleDateString();
 </script>
 
-<PageHeader title="INTEL / DOSSIERS" titleHref="/jkai/intel" />
+<JkaiPageTitle title="INTEL / DOSSIERS" titleHref="/jkai/intel" />
 
 <div class="wrap">
   <form class="new" onsubmit={create}>

@@ -3,18 +3,21 @@
   import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import BriefingCard from '$lib/components/jkai/BriefingCard.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import KnowledgeGraphRail from '$lib/components/jkai/KnowledgeGraphRail.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
+  import { hub, setLiveRuns, closeGraphSheet } from '$lib/jkai/hub-bus.svelte';
 
   let { data } = $props();
 
   let conversationList = $state(data.conversations);
-  let metrics = $state(data.metrics);
   let whatsappThread = $state(data.whatsappThread);
   let activeConversationId = $state<string | null>(null);
   let activeMessages = $state<any[]>([]);
   let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
+  let activeContextLength = $state<number | null>(null);
+  // The knowledge-graph rail collapses behind a header toggle below 1280px.
+  let graphRailOpen = $state(true);
   let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
   let activeBuild = $state<{ id: string; status: string } | null>(null);
   let sidebarOpen = $state(false);
@@ -81,6 +84,8 @@
         if (!res.ok) return;
         const data = await res.json() as { jobs: Array<{ conversationId: string; jobId: string }> };
         liveConversationIds = data.jobs.map((j) => j.conversationId);
+        // Keep the header's `● N RUNS` chunk honest between navigations.
+        setLiveRuns(liveConversationIds.length);
       } catch {
         // ignore — next tick will retry
       }
@@ -134,12 +139,14 @@
         activeMessages = data.messages || [];
         activeConversation = data.conversation || null;
         activeModelCaps = data.modelCapabilities || null;
+        activeContextLength = data.modelContextLength ?? null;
         activeBuild = data.activeBuild || null;
       }
     } catch {
       activeMessages = [];
       activeConversation = null;
       activeModelCaps = null;
+      activeContextLength = null;
       activeBuild = null;
     }
   }
@@ -248,120 +255,78 @@
   <title>JKAI — Chat</title>
 </svelte:head>
 
-<div class="flex flex-col" style="background: var(--bg); height: 100dvh; min-height: 100vh;">
-  <PageHeader title="JKAI">
-    {#snippet before()}
-      <button
-        onclick={() => { sidebarOpen = !sidebarOpen; }}
-        class="sm:hidden px-1.5 py-1 rounded transition-colors"
-        style="color: var(--text-secondary);"
-        title="Conversations"
-        aria-label="Toggle conversations"
-      >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M3 5h14M3 10h14M3 15h14" />
-        </svg>
-      </button>
-    {/snippet}
-    {#snippet meta()}
-      <a
-        href="https://hermes.strangeramblings.com/"
-        target="_blank"
-        rel="noopener"
-        class="hermes-admin-link"
-        title="Hermes app — sessions, skills, providers, MCP, chat"
-      >
-        Hermes ↗
-      </a>
-    {/snippet}
-  </PageHeader>
+<div class="thread-shell">
+  <!-- Thread rail (236px). Below 1100px it becomes a slide-over. -->
+  <div class="rail-slot" class:open={sidebarOpen}>
+    <ConversationSidebar
+      conversations={conversationList}
+      {whatsappThread}
+      {activeConversationId}
+      onSelect={selectConversation}
+      onNew={createConversation}
+      onWhatsAppSelect={selectWhatsApp}
+      onDelete={deleteConversation}
+      onRename={renameConversation}
+      onTogglePin={togglePinConversation}
+      onShare={openShare}
+      collapsed={sidebarCollapsed}
+      onToggleCollapse={toggleSidebarCollapsed}
+      {liveConversationIds}
+    />
+  </div>
+  {#if sidebarOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="rail-scrim" onclick={() => (sidebarOpen = false)}></div>
+  {/if}
 
-  <!-- Main area -->
-  <div class="flex flex-1 min-h-0 relative">
-    <!-- Desktop sidebar -->
-    <div class="hidden sm:flex">
-      <ConversationSidebar
-        conversations={conversationList}
-        {whatsappThread}
-        {activeConversationId}
-        onSelect={selectConversation}
-        onNew={createConversation}
-        onWhatsAppSelect={selectWhatsApp}
-        onDelete={deleteConversation}
-        onRename={renameConversation}
-        onTogglePin={togglePinConversation}
-        onShare={openShare}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapsed}
-        {liveConversationIds}
-        {metrics}
-        spendByPeriod={data.spendByPeriod}
-      />
-    </div>
-
-    <!-- Mobile sidebar overlay -->
-    {#if sidebarOpen}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="sm:hidden fixed inset-0 z-40"
-        onclick={() => { sidebarOpen = false; }}
-      >
-        <div class="absolute inset-0" style="background: rgba(0,0,0,0.4);"></div>
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="absolute left-0 top-0 bottom-0 flex"
-          style="background: var(--bg); width: min(85vw, 18rem);"
-          onclick={(e) => e.stopPropagation()}
-        >
-          <ConversationSidebar
-            conversations={conversationList}
-            {whatsappThread}
-            {activeConversationId}
-            onSelect={selectConversation}
-            onNew={createConversation}
-            onWhatsAppSelect={selectWhatsApp}
-            onDelete={deleteConversation}
-            onRename={renameConversation}
-            onTogglePin={togglePinConversation}
-        onShare={openShare}
-            collapsed={false}
-            onToggleCollapse={() => { sidebarOpen = false; }}
-            {liveConversationIds}
-            {metrics}
-            spendByPeriod={data.spendByPeriod}
-          />
-        </div>
+  <!-- Conversation column -->
+  <div class="chat-slot">
+    {#if data.freshBriefing}
+      <div class="briefing-slot">
+        <BriefingCard briefing={data.freshBriefing} />
       </div>
     {/if}
-
-    <!-- Chat area -->
-    <div class="flex-1 min-w-0">
-      {#if data.freshBriefing}
-        <div class="px-4 pt-3 sm:px-6">
-          <BriefingCard briefing={data.freshBriefing} />
-        </div>
-      {/if}
-      <ChatArea
-        conversationId={activeConversationId}
-        initialMessages={activeMessages}
-        conversation={activeConversation}
-        modelCapabilities={activeModelCaps}
-        defaultChatModelId={data.defaultChatModel.modelId}
-        altOpenRouterModel={data.chatAltOpenRouterModel}
-        messageCount={activeMessages.length}
-        approvalUi={data.approvalUi}
-        hermesEnabled={data.hermesEnabled}
-        {activeBuild}
-        onmodelchange={(ctx: ModelContext) => {
-          activeConversation = {
-            ...(activeConversation ?? {}),
-            modelProvider: ctx.provider,
-            modelId: ctx.modelId,
-          };
-        }}
-      />
-    </div>
+    <ChatArea
+      conversationId={activeConversationId}
+      initialMessages={activeMessages}
+      conversation={activeConversation}
+      modelContextLength={activeContextLength}
+      modelCapabilities={activeModelCaps}
+      defaultChatModelId={data.defaultChatModel.modelId}
+      altOpenRouterModel={data.chatAltOpenRouterModel}
+      messageCount={activeMessages.length}
+      approvalUi={data.approvalUi}
+      hermesEnabled={data.hermesEnabled}
+      {activeBuild}
+      onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
+      onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
+      {graphRailOpen}
+      onmodelchange={(ctx: ModelContext) => {
+        activeConversation = {
+          ...(activeConversation ?? {}),
+          modelProvider: ctx.provider,
+          modelId: ctx.modelId,
+        };
+      }}
+    />
   </div>
+
+  <!-- Knowledge-graph rail (324px) / phone bottom sheet (2b) -->
+  <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
+    <KnowledgeGraphRail
+      conversationId={activeConversationId}
+      threadCostUsd={hub.threadCostUsd}
+      contextFraction={hub.contextFraction}
+      sheetDetent={hub.graphSheet}
+      onCloseSheet={closeGraphSheet}
+    />
+  </div>
+  {#if hub.graphSheet !== 'closed'}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="sheet-scrim" onclick={closeGraphSheet}></div>
+  {/if}
 </div>
 
 {#if shareModalConv}
@@ -373,20 +338,97 @@
 {/if}
 
 <style>
-  .hermes-admin-link {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-secondary);
-    padding: 4px 8px;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-sharp);
-    transition: color 0.15s, border-color 0.15s;
-    white-space: nowrap;
+  /* Three columns: 236px rail · conversation · 324px graph. Only the message
+     list and the two rails' inner lists scroll. */
+  .thread-shell {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    background: var(--bg);
   }
-  .hermes-admin-link:hover {
-    color: var(--accent);
-    border-color: var(--accent);
+  .rail-slot {
+    flex: none;
+    display: flex;
+    min-height: 0;
+  }
+  .chat-slot {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .briefing-slot {
+    flex: none;
+    padding: 12px 20px 0;
+  }
+  .graph-slot {
+    flex: none;
+    display: flex;
+    min-height: 0;
+  }
+  .graph-slot.collapsed {
+    display: none;
+  }
+  .rail-scrim,
+  .sheet-scrim {
+    display: none;
+  }
+
+  /* ≥1280: both rails. 1100–1280: graph rail collapses behind the header
+     toggle unless explicitly reopened. */
+  @media (max-width: 1279px) {
+    .graph-slot:not(.sheet-open) {
+      display: none;
+    }
+  }
+
+  /* 800–1100: the thread rail becomes a slide-over. */
+  @media (max-width: 1099px) {
+    .rail-slot {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 30;
+      transform: translateX(-100%);
+      transition: transform 0.2s ease-out;
+      background: var(--bg);
+    }
+    .rail-slot.open {
+      transform: none;
+    }
+    .rail-scrim {
+      display: block;
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      background: rgba(26, 16, 8, 0.35);
+    }
+  }
+
+  /* <800: the graph rail is a bottom sheet over the thread (2b). */
+  @media (max-width: 799px) {
+    .graph-slot.sheet-open {
+      display: flex;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: 0;
+      z-index: 40;
+      pointer-events: none;
+    }
+    .sheet-scrim {
+      display: block;
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      background: rgba(26, 16, 8, 0.2);
+    }
+    .briefing-slot {
+      padding: 10px 16px 0;
+    }
   }
 </style>

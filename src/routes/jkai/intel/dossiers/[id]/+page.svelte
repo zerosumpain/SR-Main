@@ -10,7 +10,7 @@
   // Mutations return the freshly hydrated item list, so the page never has to
   // guess what the server did.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
   import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
@@ -285,7 +285,7 @@
   }
 </script>
 
-<PageHeader title="INTEL / DOSSIER" titleHref="/jkai/intel/dossiers" />
+<JkaiPageTitle title="INTEL / DOSSIER" titleHref="/jkai/intel/dossiers" />
 
 <div class="wrap">
   <header class="top">

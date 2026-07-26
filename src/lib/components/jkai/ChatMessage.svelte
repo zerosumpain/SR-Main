@@ -2,7 +2,6 @@
   import { Marked } from 'marked';
   import ThinkingTimeline from './ThinkingTimeline.svelte';
   import SlashCommandButtonBar from './SlashCommandButtonBar.svelte';
-  import QueuedMessageBadge from './QueuedMessageBadge.svelte';
   import FileReferenceChips from './FileReferenceChips.svelte';
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
@@ -12,6 +11,9 @@
   import { entityMentionHandlers } from '$lib/components/intel/entity-hover.svelte';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
+  import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
+  import { shortModelLabel } from '$lib/jkai/model-label';
+  import { formatGbp } from '$lib/canvas/stats/costFormat';
 
   // @files / @research references cited by this reply. Their in-prose mentions
   // are linkified into clickable citations (see citation-linkify); any source the
@@ -47,6 +49,7 @@
     content: string;
     metadata?: {
       workflowGenerated?: boolean;
+      usage?: TurnStamp;
       heartbeat?: {
         activity: string;
         kind: 'note' | 'reply' | 'user-trigger';
@@ -192,11 +195,44 @@
   let thinkingOpen = $state(true);
   let hasThinking = $derived(thinking && thinking.steps && thinking.steps.length > 0);
   let heartbeat = $derived(metadata?.heartbeat ?? null);
-  // User messages and heartbeat-sourced messages keep their distinct card
-  // treatment; ordinary assistant replies render bubbleless as open prose so
-  // long markdown can breathe at full reading width.
-  let bubbled = $derived(isUser || !!heartbeat);
   let isHeartbeatTrigger = $derived(heartbeat?.kind === 'user-trigger');
+
+  // Per-turn ledger: MODEL / N TOK / LATENCY / £PRICE, stamped under every
+  // assistant reply. This is the point of the redesign — every turn is priced
+  // where it sits, rather than only rolling up into a conversation total.
+  const stamp = $derived<TurnStamp | null>(metadata?.usage ?? readTurnStamp(metadata));
+
+  function compactTokens(v: number): string {
+    if (v < 1000) return String(Math.round(v));
+    if (v < 1_000_000) return `${(v / 1000).toFixed(1)}K`;
+    return `${(v / 1_000_000).toFixed(1)}M`;
+  }
+  function formatLatency(ms: number): string {
+    if (ms <= 0) return '';
+    if (ms < 1000) return `${Math.round(ms)}MS`;
+    return `${(ms / 1000).toFixed(1)}S`;
+  }
+  const stampChunks = $derived.by(() => {
+    if (!stamp) return [];
+    const chunks: Array<{ text: string; accent?: boolean }> = [];
+    const model = shortModelLabel(stamp.model);
+    if (model) chunks.push({ text: model });
+    const total = stamp.inputTokens + stamp.outputTokens;
+    if (total > 0) chunks.push({ text: `${compactTokens(total)} tok` });
+    const latency = formatLatency(stamp.latencyMs);
+    if (latency) chunks.push({ text: latency });
+    chunks.push({ text: formatGbp(stamp.costUsd), accent: true });
+    return chunks;
+  });
+
+  const roleLabel = $derived(isUser ? 'you' : role === 'system' ? 'system' : 'jkai');
+
+  // An attachment-only turn (the model returned a file and no prose) would
+  // otherwise draw an empty bubble above the attachment block. Skip the bubble
+  // and let the attachment be the message.
+  const hasBody = $derived(
+    content.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
+  );
   let heartbeatLabel = $derived.by(() => {
     if (!heartbeat) return '';
     if (heartbeat.kind === 'note') return 'heartbeat note';
@@ -206,15 +242,20 @@
   });
 </script>
 
-<div class="msg-row flex flex-col {isUser ? 'items-end' : bubbled ? 'items-start' : 'items-stretch'} mb-3">
+<div class="msg-row" class:user={isUser}>
+  <!-- ROLE / TIMESTAMP [/ …] — the uniform every turn wears. -->
+  <div class="msg-meta">
+    <span class="meta-role">{roleLabel}</span>
+    {#if clockTime}
+      <span class="meta-time"><span class="meta-sep" aria-hidden="true">/</span> {clockTime}</span>
+    {/if}
+  </div>
+
+  {#if hasBody}
   <div
-    class="text-sm {bubbled ? 'max-w-[85%] px-3 py-2' : 'msg-plain w-full'}"
-    class:msg-bubble={bubbled}
+    class="msg-bubble"
     class:hb-msg={!!heartbeat}
     class:hb-msg-trigger={isHeartbeatTrigger}
-    style={bubbled
-      ? `background: ${isUser ? 'var(--accent)' : 'var(--card-bg)'}; color: ${isUser ? 'white' : 'var(--text-primary)'}; border: ${isUser ? 'none' : '1px solid var(--card-border)'};`
-      : 'color: var(--text-primary);'}
   >
     {#if heartbeat}
       <div class="hb-badge">
@@ -223,7 +264,7 @@
       </div>
     {/if}
     {#if isUser}
-      <p class="whitespace-pre-wrap">{content}</p>
+      <p class="user-text">{content}</p>
     {:else}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -251,12 +292,8 @@
     {/if}
 
     {#if hasThinking}
-      <button
-        onclick={() => { thinkingOpen = !thinkingOpen; }}
-        class="mt-2 text-[10px] uppercase tracking-wider flex items-center gap-1"
-        style="color: var(--text-ghost);"
-      >
-        <span>{thinkingOpen ? '\u25BC' : '\u25B6'}</span>
+      <button class="thinking-toggle" onclick={() => { thinkingOpen = !thinkingOpen; }}>
+        <span aria-hidden="true">{thinkingOpen ? '\u25BE' : '\u25B8'}</span>
         <span>Thinking ({thinking!.steps.length} steps)</span>
       </button>
 
@@ -266,55 +303,157 @@
     {/if}
 
     {#if metadata?.workflowGenerated}
-      <div
-        class="mt-2 pt-2 border-t text-[11px] flex items-center gap-1"
-        style="border-color: var(--card-border); color: var(--text-ghost);"
-      >
-        <span>Workflow generated</span>
-      </div>
+      <div class="wf-generated">Workflow generated</div>
     {/if}
   </div>
-  {#if clockTime || queued}
-    <div class="msg-timestamp">
-      {#if clockTime}<span class="ts-clock">{clockTime}</span>{/if}
-      {#if queued}
-        <QueuedMessageBadge />
-      {/if}
+  {/if}
+
+  {#if queued}
+    <!-- Offline outbox: the bubble stays put and says what will happen to it.
+         Same stamp geometry as the cost line, so a queued turn and a priced
+         turn read as the same kind of annotation. -->
+    <div class="cost-stamp queued-stamp">
+      <span class="accent">queued · offline</span>
+      <span class="stamp-sep" aria-hidden="true">/</span>
+      <span>sends on reconnect</span>
+    </div>
+  {/if}
+
+  {#if stampChunks.length > 0}
+    <div class="cost-stamp" title="Model / tokens / latency / price for this turn">
+      {#each stampChunks as chunk, i (i)}
+        {#if i > 0}<span class="stamp-sep" aria-hidden="true">/</span>{/if}
+        <span class:accent={chunk.accent}>{chunk.text}</span>
+      {/each}
     </div>
   {/if}
 </div>
 
 <style>
-  .msg-bubble {
-    border-radius: var(--radius-round);
-  }
-  .msg-timestamp {
-    margin-top: 3px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-ghost);
+  /* Bubble geometry — square, 2px, no shadow. Depth is border + tint only.
+     Both roles cap at 600px; wide content (tables, pre) scrolls inside. */
+  .msg-row {
     display: flex;
-    gap: 8px;
-    align-items: center;
-    line-height: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    max-width: 600px;
+    align-self: flex-start;
   }
-  /* Wall-clock mark is quiet by default and fades in when the row is hovered,
-     so it stays available for reference without cluttering the thread. */
-  .ts-clock {
-    letter-spacing: 0.04em;
+  .msg-row.user {
+    align-items: flex-end;
+    align-self: flex-end;
+  }
+
+  .msg-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 5px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(26, 16, 8, 0.5);
+  }
+  .msg-row.user .msg-meta {
+    justify-content: flex-end;
+  }
+  .meta-role {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .meta-sep {
+    opacity: 0.4;
+  }
+  /* The wall-clock mark stays quiet until the row is hovered — available for
+     reference without every turn shouting its timestamp. */
+  .meta-time {
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.2s ease-out;
   }
-  .msg-row:hover .ts-clock,
-  .msg-row:focus-within .ts-clock {
-    opacity: 0.55;
+  .msg-row:hover .meta-time,
+  .msg-row:focus-within .meta-time {
+    opacity: 1;
   }
-  /* Bubbleless assistant prose: no fill/border, just open text at full
-     reading width with a hair of horizontal padding to align its optical
-     left edge with the user bubble above it. */
-  .msg-plain {
-    padding: 2px 2px 0;
-    line-height: 1.5;
+
+  .msg-bubble {
+    width: 100%;
+    padding: 11px 13px;
+    border: 2px solid var(--card-border);
+    border-radius: 0;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .msg-row.user .msg-bubble {
+    border-color: var(--accent-tint-20);
+    background: var(--accent-tint-08);
+  }
+  .user-text {
+    white-space: pre-wrap;
+    margin: 0;
+  }
+
+  /* MODEL / N TOK / LATENCY / £PRICE — the single most important detail of the
+     redesign: every assistant turn is priced where it sits. */
+  .cost-stamp {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+  }
+  .stamp-sep {
+    opacity: 0.4;
+  }
+  .cost-stamp .accent {
+    color: var(--accent);
+  }
+
+  .thinking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    cursor: pointer;
+    transition: color 0.2s ease-out;
+  }
+  .thinking-toggle:hover {
+    color: var(--accent);
+  }
+  .wf-generated {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--divider);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+
+  @media (max-width: 799px) {
+    .msg-bubble {
+      font-size: 13.5px;
+    }
+    .msg-meta,
+    .cost-stamp {
+      font-size: 9.5px;
+    }
   }
   .chat-markdown :global(p) {
     margin: 0 0 0.5em;

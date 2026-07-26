@@ -21,6 +21,7 @@ import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJ
 import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 
@@ -211,6 +212,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
+  // Wall-clock for the turn, stamped onto the assistant message so every reply
+  // carries its own latency alongside its token count and price.
+  const turnStartedAt = Date.now();
+
   // Persist the user message before kicking off Hermes so canvas reload
   // mid-conversation restores the just-sent bubble. Mirrors legacy
   // handleWithLoop persistence (issue #1 from the cross-cutting review).
@@ -290,6 +295,65 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     model?: string | null;
     provider?: string | null;
   } | null = null;
+
+  // The priced form of the above, stamped onto the assistant message and handed
+  // to the client on `done` so the per-turn cost line appears the moment the
+  // reply lands rather than only after a reload.
+  type TurnStamp = {
+    model: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number | null;
+    costUsd: number;
+    latencyMs: number;
+  };
+  let turnStamp: TurnStamp | null = null;
+
+  /** Price the captured turn against the conversation's own model. Hermes
+   *  reports token counts but its cost estimate is unreliable for models its
+   *  pricing tables don't cover (it returns 0), so our table wins and Hermes's
+   *  number is only the fallback. */
+  async function priceTurn(): Promise<TurnStamp | null> {
+    if (!turnUsage) return null;
+    const inputTokens = Math.max(0, Math.round(turnUsage.input_tokens ?? 0));
+    const outputTokens = Math.max(0, Math.round(turnUsage.output_tokens ?? 0));
+    if (inputTokens === 0 && outputTokens === 0) return null;
+
+    let provider = 'openrouter';
+    let model = 'z-ai/glm-5.2';
+    let costUsd = 0;
+    try {
+      if (conversationId) {
+        const [conv] = await db
+          .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId))
+          .limit(1);
+        if (conv) {
+          provider = conv.provider;
+          model = conv.modelId;
+        }
+      }
+      const pricing = priceFor(provider, model);
+      costUsd = pricing
+        ? computeCost(pricing, inputTokens, outputTokens)
+        : Math.max(0, turnUsage.cost_usd ?? 0);
+    } catch (err) {
+      console.error('[hermes-chat] failed to price turn:', err instanceof Error ? err.message : err);
+      costUsd = Math.max(0, turnUsage.cost_usd ?? 0);
+    }
+
+    return {
+      model: turnUsage.model ?? model,
+      provider: turnUsage.provider ?? provider,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens: turnUsage.cache_read_tokens ?? null,
+      costUsd,
+      latencyMs: Date.now() - turnStartedAt,
+    };
+  }
 
   // Subscribe to tool-step events for this chat. The MCP dispatcher publishes
   // a started/completed/failed event for every tools/call carrying a
@@ -620,6 +684,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             };
           }
 
+          turnStamp = await priceTurn();
+
           // Use the accumulated partialResponse as the final message
           // because the adapter's finalize content is intentionally empty
           // (delivery already happened via prior `send` frames).
@@ -635,8 +701,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
             // Hand the client the provider's own completion-token count (which
             // includes reasoning and tool-call tokens) so the /jkai tok/s meter
-            // can settle its streamed chars/4 estimate against a real number.
-            usage: turnUsage?.output_tokens != null ? { outputTokens: turnUsage.output_tokens } : undefined,
+            // can settle its streamed chars/4 estimate against a real number —
+            // plus the priced stamp the reply renders beneath itself.
+            usage: turnStamp
+              ? { outputTokens: turnStamp.outputTokens, stamp: turnStamp }
+              : turnUsage?.output_tokens != null
+                ? { outputTokens: turnUsage.output_tokens }
+                : undefined,
           };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
@@ -670,9 +741,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       const shouldPersist =
         (finalText || turnAttachments.length > 0 || turnFileRefs.length > 0 || turnResearchRefs.length > 0 || turnWorkflowRefs.length > 0) && (conversationId || workflowId);
       if (shouldPersist) {
+        // A turn that finished without a finalize frame (timeout, hang-up) never
+        // reached priceTurn() — price it here so even a truncated reply carries
+        // its stamp.
+        if (!turnStamp) turnStamp = await priceTurn();
+
         try {
           const assistantMeta: Record<string, unknown> = {};
           if (chatNodeId) assistantMeta.chatNodeId = chatNodeId;
+          // The per-turn ledger the redesign renders beneath every reply. A turn
+          // whose cost only exists as a delta on the conversation total can't be
+          // shown where it sits.
+          if (turnStamp) assistantMeta.usage = turnStamp;
           if (turnAttachments.length > 0) {
             assistantMeta.attachments = turnAttachments.map((a) => a.id);
           }
@@ -708,35 +788,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         // best-effort atomic increment — a failure here must not surface to
         // the user or break message persistence, hence its own try/catch.
         try {
-          const capturedUsage = turnUsage;
-          if (conversationId && capturedUsage) {
-            const dIn = Math.max(0, Math.round(capturedUsage.input_tokens ?? 0));
-            const dOut = Math.max(0, Math.round(capturedUsage.output_tokens ?? 0));
-            // Hermes reports token counts but its own cost estimate can be
-            // unreliable for some models (its pricing tables don't always cover
-            // the OpenRouter slug — it returns 0). Compute cost from the
-            // conversation's own model via our price table; fall back to
-            // Hermes's number only if we can't price the model.
-            let dCost = 0;
-            let convProvider = 'openrouter';
-            let convModel = 'z-ai/glm-5.2';
-            if (dIn > 0 || dOut > 0) {
-              const [conv] = await db
-                .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
-                .from(conversations)
-                .where(eq(conversations.id, conversationId))
-                .limit(1);
-              if (conv) {
-                convProvider = conv.provider;
-                convModel = conv.modelId;
-              }
-              const pricing = conv ? priceFor(conv.provider, conv.modelId) : null;
-              if (pricing) {
-                dCost = computeCost(pricing, dIn, dOut);
-              } else {
-                dCost = Math.max(0, capturedUsage.cost_usd ?? 0);
-              }
-            }
+          if (conversationId && turnStamp) {
+            const dIn = turnStamp.inputTokens;
+            const dOut = turnStamp.outputTokens;
+            const dCost = turnStamp.costUsd;
             if (dIn > 0 || dOut > 0 || dCost > 0) {
               await db
                 .update(conversations)
@@ -750,8 +805,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               // /admin/ops/costs reflects /jkai chat spend. Hermes runs outside
               // the SvelteKit gateway, so installUsageCapture never sees it.
               recordDurableLLMCall({
-                provider: convProvider,
-                model: convModel,
+                provider: turnStamp.provider,
+                model: turnStamp.model,
                 tokensInput: dIn,
                 tokensOutput: dOut,
                 costUsd: dCost,
@@ -762,6 +817,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
         } catch (usageErr) {
           console.error('[hermes-chat] failed to accrue usage onto conversation:', usageErr instanceof Error ? usageErr.message : usageErr);
+        }
+
+        // Grow the thread's knowledge graph. Cadenced and fire-and-forget — the
+        // reply has already been delivered by this point.
+        if (conversationId) {
+          void maybeExtractThreadConcepts(conversationId, null).catch(() => {});
         }
       }
     } catch (err: unknown) {

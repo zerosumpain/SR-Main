@@ -1,14 +1,8 @@
 <script lang="ts">
   import DraftsPanel from './DraftsPanel.svelte';
-  import MetricsStrip from './MetricsStrip.svelte';
   import ThroughputMeter from './ThroughputMeter.svelte';
-
-  interface SpendByPeriod {
-    day: number;
-    week: number;
-    month: number;
-    lifetime: number;
-  }
+  import { shortModelLabel } from '$lib/jkai/model-label';
+  import { formatGbp } from '$lib/canvas/stats/costFormat';
 
   interface ConversationItem {
     id: string;
@@ -18,6 +12,7 @@
     lastMessage: string | null;
     messageCount: number;
     costUsd?: string | number | null;
+    modelId?: string | null;
     pinned?: boolean;
     shareToken?: string | null;
     shareVisibility?: string | null;
@@ -43,8 +38,6 @@
     collapsed = false,
     onToggleCollapse,
     liveConversationIds = [],
-    metrics,
-    spendByPeriod,
   }: {
     conversations: ConversationItem[];
     whatsappThread: WhatsAppThread | null;
@@ -59,8 +52,6 @@
     collapsed?: boolean;
     onToggleCollapse: () => void;
     liveConversationIds?: string[];
-    metrics: { scheduled: number; running: number; completed: number; failed: number };
-    spendByPeriod: SpendByPeriod;
   } = $props();
 
   const liveSet = $derived(new Set(liveConversationIds));
@@ -73,8 +64,7 @@
   function matches(c: ConversationItem): boolean {
     if (!q) return true;
     return (
-      (c.title ?? '').toLowerCase().includes(q) ||
-      (c.lastMessage ?? '').toLowerCase().includes(q)
+      (c.title ?? '').toLowerCase().includes(q) || (c.lastMessage ?? '').toLowerCase().includes(q)
     );
   }
 
@@ -89,7 +79,10 @@
   // --- Recency buckets (non-search view) ---
   type Bucket = 'today' | 'yesterday' | 'last_week' | 'older';
   const BUCKET_LABELS: Record<Bucket, string> = {
-    today: 'Today', yesterday: 'Yesterday', last_week: 'Last 7 days', older: 'Older',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    last_week: 'Last 7 days',
+    older: 'Older',
   };
   const BUCKET_ORDER: Bucket[] = ['today', 'yesterday', 'last_week', 'older'];
 
@@ -106,13 +99,33 @@
   }
 
   const grouped = $derived.by(() => {
-    const g: Record<Bucket, ConversationItem[]> = { today: [], yesterday: [], last_week: [], older: [] };
+    const g: Record<Bucket, ConversationItem[]> = {
+      today: [],
+      yesterday: [],
+      last_week: [],
+      older: [],
+    };
     for (const c of unpinned) g[getBucket(c.updatedAt)].push(c);
     return g;
   });
 
+  // Rail rows are numbered `01`, `02`, … continuously down the visible list,
+  // across bucket headings — the index is a position in the rail, not in a
+  // group, so it stays meaningful as sections collapse.
+  const rowIndex = $derived.by(() => {
+    const order = searching
+      ? [...pinned, ...unpinned]
+      : [...pinned, ...BUCKET_ORDER.flatMap((b) => grouped[b])];
+    const m = new Map<string, string>();
+    order.forEach((c, i) => m.set(c.id, String(i + 1).padStart(2, '0')));
+    return m;
+  });
+
   let expanded = $state<Record<Bucket, boolean>>({
-    today: true, yesterday: false, last_week: false, older: false,
+    today: true,
+    yesterday: false,
+    last_week: false,
+    older: false,
   });
   let pinnedExpanded = $state(true);
 
@@ -176,16 +189,18 @@
     onSelect(id);
   }
 
-  function relativeTime(iso: string | Date): string {
-    const ms = Date.now() - new Date(iso).getTime();
-    if (ms < 60000) return 'now';
-    if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
-    if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
-    return `${Math.floor(ms / 86400000)}d`;
-  }
   function truncate(text: string | null, len: number): string {
     if (!text) return '';
     return text.length > len ? text.slice(0, len) + '…' : text;
+  }
+
+  /** `model / cost / source` — the three things that distinguish one thread
+   *  from another at a glance, in the rail's mono uniform. */
+  function metaChunks(c: ConversationItem): string[] {
+    const model = shortModelLabel(c.modelId) || 'unset';
+    const cost = formatGbp(c.costUsd === null || c.costUsd === undefined ? 0 : Number(c.costUsd));
+    const source = c.messageCount === 0 ? 'draft' : c.source || 'web';
+    return [model, cost, source];
   }
 
   // Recent conversations for the collapsed rail dots (cap for tidiness).
@@ -193,12 +208,10 @@
 </script>
 
 {#if collapsed}
-  <div class="rail" style="border-color: var(--card-border);">
-    <button class="rbtn primary" onclick={onNew} title="New chat" aria-label="New chat">
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
-    </button>
-    <button class="rbtn" onclick={onToggleCollapse} title="Search / expand" aria-label="Expand sidebar">
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
+  <div class="rail">
+    <button class="rbtn primary" onclick={onNew} title="New thread" aria-label="New thread">+</button>
+    <button class="rbtn" onclick={onToggleCollapse} title="Expand rail" aria-label="Expand rail">
+      ▸
     </button>
     <div class="rail-sep"></div>
     <div class="rail-dots">
@@ -215,66 +228,43 @@
     </div>
     <div class="rail-spacer"></div>
     <ThroughputMeter compact />
-    <button class="rbtn" onclick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar">
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 5l5 5-5 5"/></svg>
-    </button>
   </div>
 {:else}
-  <div class="sb" style="border-color: var(--card-border);">
+  <div class="sb">
     <!-- Header -->
     <div class="sb-hd">
-      <span class="sb-eyebrow">Conversations</span>
-      <button class="icon-btn" onclick={onToggleCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">
-        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5l-5 5 5 5"/></svg>
-      </button>
+      <span class="rail-label">Threads</span>
+      <div class="sb-hd-btns">
+        <button class="collapse-btn" onclick={onToggleCollapse} title="Collapse rail" aria-label="Collapse rail">
+          ◂
+        </button>
+        <button class="new-btn" onclick={onNew} title="New thread" aria-label="New thread">+</button>
+      </div>
     </div>
-
-    <!-- New chat (primary) -->
-    <button class="newchat" onclick={onNew}>
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4v12M4 10h12"/></svg>
-      New chat
-    </button>
 
     <!-- Search -->
     <div class="search">
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
       <input
         type="text"
-        placeholder="Search conversations…"
+        placeholder="search threads"
         bind:value={search}
-        onkeydown={(e) => { if (e.key === 'Escape') search = ''; }}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') search = '';
+        }}
         aria-label="Search conversations"
       />
       {#if search}
-        <button class="search-clear" onclick={() => (search = '')} title="Clear" aria-label="Clear search">
-          <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5l10 10M15 5L5 15"/></svg>
-        </button>
+        <button class="search-clear" onclick={() => (search = '')} title="Clear" aria-label="Clear search">✕</button>
       {/if}
     </div>
 
     <!-- List -->
     <div class="list">
-      <!-- WhatsApp thread -->
-      {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0 && !searching}
-        <button
-          class="wa"
-          class:active={activeConversationId === whatsappThread.id}
-          onclick={onWhatsAppSelect}
-        >
-          <span class="wa-tag">WA</span>
-          <span class="wa-body">
-            <span class="wa-title">WhatsApp thread</span>
-            <span class="wa-prev">{truncate(whatsappThread.messages[whatsappThread.messages.length - 1]?.content, 38)}</span>
-          </span>
-        </button>
-      {/if}
-
       {#if searching}
         {#if visible.length === 0}
           <div class="empty">
-            <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" style="opacity:.5"><circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/></svg>
-            <div class="empty-big">No conversations match “{search.trim()}”.</div>
-            <div class="empty-sm">Try a different term, or start a new chat.</div>
+            <div class="empty-big">No threads match “{search.trim()}”.</div>
+            <div class="empty-sm">Try a different term, or start a new one.</div>
           </div>
         {:else}
           {#each [...pinned, ...unpinned] as c (c.id)}
@@ -283,21 +273,14 @@
         {/if}
       {:else if conversations.length === 0}
         <div class="empty">
-          <svg width="26" height="26" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" style="opacity:.5"><path d="M4 5h12v8H8l-4 3z"/></svg>
-          <div class="empty-big">No conversations yet.</div>
-          <div class="empty-sm">Start a new chat to begin.</div>
+          <div class="empty-big">No threads yet.</div>
+          <div class="empty-sm">Start one to begin.</div>
         </div>
       {:else}
-        <!-- Pinned -->
         {#if pinned.length > 0}
-          <button class="sec-hd pin" onclick={() => (pinnedExpanded = !pinnedExpanded)}>
-            <span class="sec-l">
-              <span class="chev" class:open={pinnedExpanded}>
-                <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l5 4-5 4z"/></svg>
-              </span>
-              <span class="sec-lbl">Pinned</span>
-            </span>
-            <span class="sec-cnt">{pinned.length}</span>
+          <button class="sec-hd" onclick={() => (pinnedExpanded = !pinnedExpanded)}>
+            <span class="rail-label">Pinned</span>
+            <span class="sec-cnt">{pinnedExpanded ? '▾' : '▸'} {pinned.length}</span>
           </button>
           {#if pinnedExpanded}
             {#each pinned as c (c.id)}
@@ -306,17 +289,11 @@
           {/if}
         {/if}
 
-        <!-- Recency buckets -->
         {#each BUCKET_ORDER as bucket}
           {#if grouped[bucket].length > 0}
             <button class="sec-hd" onclick={() => toggleBucket(bucket)}>
-              <span class="sec-l">
-                <span class="chev" class:open={expanded[bucket]}>
-                  <svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2l5 4-5 4z"/></svg>
-                </span>
-                <span class="sec-lbl">{BUCKET_LABELS[bucket]}</span>
-              </span>
-              <span class="sec-cnt">{grouped[bucket].length}</span>
+              <span class="rail-label">{BUCKET_LABELS[bucket]}</span>
+              <span class="sec-cnt">{expanded[bucket] ? '▾' : '▸'} {grouped[bucket].length}</span>
             </button>
             {#if expanded[bucket]}
               {#each grouped[bucket] as c (c.id)}
@@ -331,23 +308,42 @@
     <!-- Drafts (offline-first, IndexedDB) -->
     <DraftsPanel />
 
-    <!-- Footer -->
-    <div class="foot">
+    <!-- Channels -->
+    <div class="channels">
+      <div class="rail-label">Channels</div>
+      {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0}
+        <button
+          class="channel-row"
+          class:active={activeConversationId === whatsappThread.id}
+          onclick={onWhatsAppSelect}
+          title={truncate(whatsappThread.messages[whatsappThread.messages.length - 1]?.content, 60)}
+        >
+          <span class="channel-name">whatsapp</span>
+          <span class="channel-state"><span class="channel-dot"></span>linked</span>
+        </button>
+      {:else}
+        <div class="channel-row static">
+          <span class="channel-name">whatsapp</span>
+          <span class="channel-state idle">idle</span>
+        </div>
+      {/if}
       <ThroughputMeter />
-      <MetricsStrip {metrics} {spendByPeriod} />
     </div>
   </div>
 {/if}
 
 {#snippet row(c: ConversationItem)}
   {#if renamingId === c.id}
-    <div class="row rename-row">
+    <div class="thread-row rename-row">
       <!-- svelte-ignore a11y_autofocus -->
       <input
         class="rename-input"
         bind:value={renameDraft}
         use:focusSelect
-        onkeydown={(e) => { if (e.key === 'Enter') commitRename(); else if (e.key === 'Escape') cancelRename(); }}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') commitRename();
+          else if (e.key === 'Escape') cancelRename();
+        }}
         onblur={commitRename}
         aria-label="Rename conversation"
       />
@@ -355,53 +351,47 @@
   {:else}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="row"
+      class="thread-row"
       class:active={activeConversationId === c.id}
       onclick={() => selectConv(c.id)}
-      onkeydown={(e) => { if (e.key === 'Enter') selectConv(c.id); }}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') selectConv(c.id);
+      }}
       role="button"
       tabindex="0"
     >
-      <div class="row-top">
+      <div class="tr-top">
+        <span class="tr-idx">{rowIndex.get(c.id) ?? '··'}</span>
         {#if liveSet.has(c.id)}
-          <span class="live" title="JKAI is working on this" aria-label="Live job"></span>
-        {:else if c.pinned}
-          <svg class="pin-badge" width="11" height="11" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 2l1.9 4.9L17 7.5l-3.8 3 1.3 5-4.5-2.9L5.5 15.5l1.3-5L3 7.5l5.1-.6z"/></svg>
+          <span class="tr-live" title="JKAI is working on this" aria-label="Live job"></span>
         {/if}
-        <span class="row-title">{c.title || 'New conversation'}</span>
+        <span class="tr-title">{c.title || 'New thread'}</span>
+        {#if c.pinned}<span class="tr-flag" title="Pinned" aria-hidden="true">◆</span>{/if}
         {#if c.shareVisibility && c.shareVisibility !== 'private'}
-          <span class="shared-badge" title={`Shared · ${c.shareVisibility === 'public' ? 'anyone with the link' : 'signed-in users'}`} aria-label="Shared">
-            <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="15" cy="5" r="2"/><circle cx="5" cy="10" r="2"/><circle cx="15" cy="15" r="2"/><path d="M13.1 6.1 6.9 8.9M6.9 11.1l6.2 2.8"/></svg>
-          </span>
+          <span
+            class="tr-flag"
+            title={`Shared · ${c.shareVisibility === 'public' ? 'anyone with the link' : 'signed-in users'}`}
+            aria-hidden="true">↗</span
+          >
         {/if}
-        <span class="row-time">{relativeTime(c.updatedAt)}</span>
       </div>
-      {#if c.lastMessage}
-        <p class="row-prev">{truncate(c.lastMessage, 42)}</p>
-      {/if}
+      <div class="tr-meta">
+        {#each metaChunks(c) as chunk, i (i)}
+          {#if i > 0}<span class="tr-sep" aria-hidden="true">/</span>{/if}
+          <span>{chunk}</span>
+        {/each}
+      </div>
 
       <!-- Hover actions (each button stops propagation so the row isn't selected) -->
       <div class="actions">
         {#if confirmingDeleteId === c.id}
-          <button class="act danger" onclick={(e) => confirmDelete(e, c)} title="Confirm delete" aria-label="Confirm delete">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 10l4 4 8-9"/></svg>
-          </button>
-          <button class="act" onclick={cancelDelete} title="Cancel" aria-label="Cancel delete">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 5l10 10M15 5L5 15"/></svg>
-          </button>
+          <button class="act danger" onclick={(e) => confirmDelete(e, c)} title="Confirm delete" aria-label="Confirm delete">✓</button>
+          <button class="act" onclick={cancelDelete} title="Cancel" aria-label="Cancel delete">✕</button>
         {:else}
-          <button class="act" onclick={(e) => togglePin(e, c)} title={c.pinned ? 'Unpin' : 'Pin'} aria-label={c.pinned ? 'Unpin' : 'Pin'}>
-            <svg width="13" height="13" viewBox="0 0 20 20" fill={c.pinned ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.4"><path d="M10 2l1.9 4.9L17 7.5l-3.8 3 1.3 5-4.5-2.9L5.5 15.5l1.3-5L3 7.5l5.1-.6z"/></svg>
-          </button>
-          <button class="act" onclick={(e) => startRename(e, c)} title="Rename" aria-label="Rename">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 13.5V16h2.5L14 8.5 11.5 6z"/><path d="M11.5 6L14 8.5"/></svg>
-          </button>
-          <button class="act" onclick={(e) => share(e, c)} title="Share" aria-label="Share">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="15" cy="5" r="2.2"/><circle cx="5" cy="10" r="2.2"/><circle cx="15" cy="15" r="2.2"/><path d="M12.9 6.2 7.1 8.8M7.1 11.2l5.8 2.6"/></svg>
-          </button>
-          <button class="act danger" onclick={(e) => askDelete(e, c)} title="Delete" aria-label="Delete">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6h10M8 6V4h4v2M6 6l1 10h6l1-10"/></svg>
-          </button>
+          <button class="act" onclick={(e) => togglePin(e, c)} title={c.pinned ? 'Unpin' : 'Pin'} aria-label={c.pinned ? 'Unpin' : 'Pin'}>◆</button>
+          <button class="act" onclick={(e) => startRename(e, c)} title="Rename" aria-label="Rename">/</button>
+          <button class="act" onclick={(e) => share(e, c)} title="Share" aria-label="Share">↗</button>
+          <button class="act danger" onclick={(e) => askDelete(e, c)} title="Delete" aria-label="Delete">✕</button>
         {/if}
       </div>
     </div>
@@ -409,202 +399,446 @@
 {/snippet}
 
 <style>
-  /* ---- expanded shell ---- */
+  /* ---- 236px thread rail ---- */
   .sb {
-    width: 100%;
+    width: 236px;
+    flex: none;
     display: flex;
     flex-direction: column;
     height: 100%;
-    border-right: 1px solid var(--card-border);
-    background: var(--bg);
+    min-height: 0;
+    border-right: 1px solid var(--divider);
+    background: var(--bg-section);
   }
-  @media (min-width: 640px) { .sb { width: 16rem; flex-shrink: 0; } }
+
+  .rail-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-ghost);
+  }
 
   .sb-hd {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 12px 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--divider);
+    flex: none;
   }
-  .sb-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: var(--text-secondary);
+  .sb-hd-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
-  .icon-btn {
+  .collapse-btn {
+    width: 20px;
+    height: 20px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-round);
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
     color: var(--text-ghost);
-    background: none;
     cursor: pointer;
-    transition: background 0.12s, color 0.12s;
+    transition: color 0.2s ease-out;
   }
-  .icon-btn:hover { color: var(--text-primary); background: var(--card-bg); }
-
-  .newchat {
-    margin: 0 12px 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: center;
-    padding: 9px 12px;
-    border: 1.5px solid var(--accent);
-    border-radius: var(--radius-round);
+  .collapse-btn:hover {
     color: var(--accent);
-    background: none;
-    font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.12s, color 0.12s;
   }
-  .newchat:hover { background: var(--accent); color: #fff; }
+  .new-btn {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s ease-out;
+  }
+  .new-btn:hover {
+    background: var(--accent-hover);
+  }
 
-  .search { position: relative; margin: 0 12px 6px; }
-  .search > svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-ghost); pointer-events: none; }
+  .search {
+    position: relative;
+    padding: 6px 6px 0;
+    flex: none;
+  }
   .search input {
     width: 100%;
-    padding: 7px 28px 7px 30px;
+    padding: 6px 22px 6px 8px;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
-    background: var(--surface-elevated);
-    font-family: var(--font-sans);
-    font-size: 12.5px;
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-primary);
   }
-  .search input::placeholder { color: var(--text-ghost); }
-  .search input:focus { outline: none; border-color: var(--accent); }
+  .search input::placeholder {
+    color: var(--text-ghost);
+  }
+  .search input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
   .search-clear {
-    position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 18px; height: 18px; border: none; background: none; color: var(--text-ghost);
-    cursor: pointer; border-radius: var(--radius-round);
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-25%);
+    border: none;
+    background: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
+    cursor: pointer;
   }
-  .search-clear:hover { color: var(--text-primary); background: var(--card-bg); }
+  .search-clear:hover {
+    color: var(--accent);
+  }
 
-  .list { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px;
+  }
 
-  /* section header */
   .sec-hd {
-    display: flex; align-items: center; justify-content: space-between;
-    width: 100%; padding: 9px 12px 4px; background: none; border: none; cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 4px 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
   }
-  .sec-l { display: flex; align-items: center; gap: 6px; }
-  .chev { color: var(--text-ghost); display: inline-flex; transition: transform 0.15s; }
-  .chev.open { transform: rotate(90deg); }
-  .sec-lbl { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em; color: var(--text-secondary); }
-  .sec-cnt { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
-  .sec-hd.pin .sec-lbl { color: var(--accent-ink); }
+  .sec-cnt {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+  }
 
   /* row */
-  .row {
-    position: relative; display: block; width: 100%; text-align: left;
-    padding: 8px 12px 8px 13px; border-left: 2px solid transparent;
-    cursor: pointer; transition: background 0.1s;
+  .thread-row {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 10px;
+    margin-bottom: 2px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease-out, border-color 0.2s ease-out;
   }
-  .row:hover { background: var(--bg-section); }
-  .row.active { background: color-mix(in srgb, var(--accent) 9%, transparent); border-left-color: var(--accent); }
-  .row:focus-visible { outline: none; background: var(--bg-section); border-left-color: var(--accent-ink); }
-  .row-top { display: flex; align-items: center; gap: 6px; }
-  .row-title {
-    flex: 1; font-size: 13px; font-weight: 500; color: var(--text-primary);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;
+  .thread-row:hover {
+    background: var(--accent-tint-04);
   }
-  .row.active .row-title { color: var(--accent); }
-  .row-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex-shrink: 0; }
-  .row-prev { font-size: 11.5px; color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; line-height: 1.3; }
-  .pin-badge { color: var(--accent-ink); flex-shrink: 0; }
-  .shared-badge { color: var(--accent-ink); flex-shrink: 0; display: inline-flex; opacity: 0.75; }
-  .live {
-    width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--wa-green); flex-shrink: 0;
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 60%, transparent);
-    animation: live-pulse 1.6s ease-out infinite;
+  .thread-row.active {
+    border-color: var(--accent-tint-25);
+    background: rgba(196, 87, 10, 0.1);
   }
-  @keyframes live-pulse {
-    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--wa-green) 55%, transparent); }
-    70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--wa-green) 0%, transparent); }
-    100% { box-shadow: 0 0 0 0 transparent; }
+  .thread-row:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .tr-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .tr-idx {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 500;
+    color: var(--text-ghost);
+    flex: none;
+  }
+  .tr-title {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tr-flag {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--accent);
+    opacity: 0.8;
+  }
+  .tr-live {
+    width: 5px;
+    height: 5px;
+    flex: none;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    animation: rail-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes rail-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tr-live {
+      animation: none;
+    }
+  }
+
+  .tr-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .tr-sep {
+    opacity: 0.4;
   }
 
   /* hover action cluster */
   .actions {
-    position: absolute; right: 8px; top: 6px; display: flex; gap: 1px;
-    background: var(--surface-elevated); border: 1px solid var(--card-border);
-    border-radius: var(--radius-round); padding: 1px;
-    opacity: 0; transform: translateX(4px); transition: opacity 0.12s, transform 0.12s;
+    position: absolute;
+    right: 6px;
+    top: 5px;
+    display: flex;
+    gap: 1px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    padding: 1px;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
   }
-  .row:hover .actions, .row:focus-within .actions { opacity: 1; transform: none; }
+  .thread-row:hover .actions,
+  .thread-row:focus-within .actions {
+    opacity: 1;
+  }
   .act {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 24px; height: 22px; border: none; background: none; color: var(--text-muted);
-    cursor: pointer; border-radius: 3px; transition: background 0.1s, color 0.1s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    border: none;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease-out, background 0.2s ease-out;
   }
-  .act:hover { background: var(--card-bg); color: var(--text-primary); }
-  .act.danger:hover { background: color-mix(in srgb, var(--error) 16%, transparent); color: #a3352f; }
+  .act:hover {
+    background: var(--accent-tint-08);
+    color: var(--accent);
+  }
+  .act.danger:hover {
+    background: var(--error-bg);
+    color: var(--error);
+  }
 
   /* rename */
-  .rename-row { padding: 6px 12px 6px 13px; }
+  .rename-row {
+    padding: 6px 10px;
+  }
   .rename-input {
-    width: 100%; padding: 5px 7px; border: 1px solid var(--accent); border-radius: 3px;
-    background: var(--bg); font-family: var(--font-sans); font-size: 13px; color: var(--text-primary);
+    width: 100%;
+    padding: 5px 7px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sharp);
+    background: var(--bg);
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    color: var(--text-primary);
   }
-  .rename-input:focus { outline: none; }
-
-  /* whatsapp */
-  .wa {
-    display: flex; align-items: center; gap: 8px; width: calc(100% - 16px);
-    padding: 9px 10px; margin: 2px 8px 6px; border: 1px solid var(--card-border);
-    border-radius: var(--radius-round); background: none; cursor: pointer; text-align: left;
-    transition: background 0.1s;
+  .rename-input:focus {
+    outline: none;
   }
-  .wa:hover { background: var(--bg-section); }
-  .wa.active { background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, var(--card-border)); }
-  .wa-tag {
-    font-family: var(--font-mono); font-size: 9px; font-weight: 500; padding: 2px 5px;
-    border-radius: 3px; background: color-mix(in srgb, var(--wa-green) 16%, transparent);
-    color: #128c3e; letter-spacing: 0.05em; flex-shrink: 0;
-  }
-  .wa-body { display: flex; flex-direction: column; min-width: 0; }
-  .wa-title { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-  .wa-prev { font-size: 11px; color: var(--text-ghost); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* empty state */
-  .empty { padding: 30px 16px; text-align: center; color: var(--text-ghost); }
-  .empty-big { font-size: 12.5px; color: var(--text-muted); margin-top: 10px; }
-  .empty-sm { font-size: 11px; margin-top: 3px; }
+  .empty {
+    padding: 26px 12px;
+    text-align: center;
+  }
+  .empty-big {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .empty-sm {
+    font-family: var(--font-body);
+    font-size: 11px;
+    color: var(--text-ghost);
+    margin-top: 3px;
+  }
 
-  /* footer */
-  .foot {
-    border-top: 1px solid var(--card-border); padding: 9px 12px;
-    display: flex; flex-direction: column; gap: 5px;
+  /* channels footer */
+  .channels {
+    flex: none;
+    border-top: 1px solid var(--divider);
+    padding: 10px 12px;
+    background: var(--bg-section);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .channel-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    transition: color 0.2s ease-out;
+  }
+  .channel-row.static {
+    cursor: default;
+  }
+  .channel-row:not(.static):hover .channel-name {
+    color: var(--text-primary);
+  }
+  .channel-row.active .channel-name {
+    color: var(--accent);
+  }
+  .channel-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--accent);
+  }
+  .channel-state.idle {
+    color: var(--text-ghost);
+  }
+  .channel-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
   }
 
   /* ---- collapsed rail ---- */
   .rail {
-    width: 56px; height: 100%; border-right: 1px solid var(--card-border); background: var(--bg);
-    display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 8px;
+    width: 44px;
+    flex: none;
+    height: 100%;
+    border-right: 1px solid var(--divider);
+    background: var(--bg-section);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+    gap: 8px;
   }
   .rbtn {
-    width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
-    border: 1px solid var(--card-border); border-radius: var(--radius-round);
-    color: var(--text-secondary); background: none; cursor: pointer;
-    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: none;
+    cursor: pointer;
+    transition: background 0.2s ease-out, color 0.2s ease-out, border-color 0.2s ease-out;
   }
-  .rbtn:hover { background: var(--card-bg); color: var(--text-primary); }
-  .rbtn.primary { border-color: var(--accent); color: var(--accent); }
-  .rbtn.primary:hover { background: var(--accent); color: #fff; }
-  .rail-sep { width: 24px; height: 1px; background: var(--card-border); margin: 2px 0; }
-  .rail-dots { display: flex; flex-direction: column; align-items: center; gap: 8px; overflow: hidden; }
-  .cdot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--card-border); border: none; padding: 0; cursor: pointer; transition: transform 0.1s; }
-  .cdot:hover { transform: scale(1.35); }
-  .cdot.active { background: var(--accent); }
-  .cdot.live { background: var(--wa-green); }
-  .rail-spacer { flex: 1; }
+  .rbtn:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+  .rbtn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-size: 13px;
+  }
+  .rbtn.primary:hover {
+    background: var(--accent-hover);
+    color: #fff;
+  }
+  .rail-sep {
+    width: 20px;
+    height: 1px;
+    background: var(--divider);
+    margin: 2px 0;
+  }
+  .rail-dots {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .cdot {
+    width: 7px;
+    height: 7px;
+    border-radius: var(--radius-pill);
+    background: var(--card-border);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.2s ease-out;
+  }
+  .cdot:hover {
+    background: var(--text-muted);
+  }
+  .cdot.active {
+    background: var(--accent);
+  }
+  .cdot.live {
+    background: var(--accent);
+    animation: rail-pulse 1.5s ease-in-out infinite;
+  }
+  .rail-spacer {
+    flex: 1;
+  }
 </style>

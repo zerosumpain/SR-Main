@@ -10,7 +10,7 @@
   // Heavy work (analytics, insights, duplicate detection) is fetched after
   // first paint, so the page renders immediately off the server-loaded counts.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
@@ -223,7 +223,7 @@
   );
 </script>
 
-<PageHeader title="INTEL" />
+<JkaiPageTitle title="INTEL" />
 
 <div class="wrap">
   <div class="topbar">
