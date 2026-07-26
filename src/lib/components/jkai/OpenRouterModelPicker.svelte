@@ -19,30 +19,55 @@
     promptPrice: string | null;
     completionPrice: string | null;
     throughput: string | null;
-    agenticIndex: number | null;
+    /** The value of whichever Artificial Analysis index is selected. */
+    qualityIndex: number | null;
     openWeights: boolean;
     /** Hugging Face repo behind an open-weight model — shown on the badge so a
-     *  resolved override can be checked without reading the code. */
+     *  resolved override can be checked without reading the code. Null is also
+     *  valid for an OPEN model whose repo isn't published. */
     huggingFaceId: string | null;
+    /** Which detection layer flagged it, for the badge tooltip. */
+    openWeightSource: 'openrouter' | 'override' | 'inherited' | 'description' | null;
     /** Blended USD/1M at 3:1 in:out — the compare tab's cost axis. */
     blendedPerM: number | null;
     /** Hybrid quality/price/speed score in [0,1]; null when unrated. */
     score: number | null;
   }
 
-  type SortKey = 'name' | 'agenticIndex' | 'promptPrice' | 'completionPrice' | 'throughput';
+  type SortKey = 'name' | 'qualityIndex' | 'promptPrice' | 'completionPrice' | 'throughput';
 
   /** list = the sortable table; compare = the quality-vs-cost exhibits. */
   type Tab = 'list' | 'compare';
 
-  /** Hybrid-score weight presets for the compare tab, passed to the API as
-   *  wq/wp/wt. They mirror the axes the nightly routing selection balances. */
+  /** Which Artificial Analysis index feeds the quality axis. "Quality" is not
+   *  one number — a model can drive tools well and code badly — so the metric
+   *  is the user's to choose. Must match QUALITY_METRICS in the API route. */
+  const QUALITY_METRICS = [
+    {
+      id: 'agentic',
+      label: 'agentic',
+      blurb: 'Tool-driving and multi-step task completion. What the /jkai orchestrator actually does, so it is the default.',
+    },
+    {
+      id: 'coding',
+      label: 'coding',
+      blurb: 'Code generation and editing benchmarks. Pick this when the model will mostly write code.',
+    },
+    {
+      id: 'intelligence',
+      label: 'intelligence',
+      blurb: "Artificial Analysis's general reasoning composite. Broadest, least specific to how this site uses models.",
+    },
+  ] as const;
+  type MetricId = (typeof QUALITY_METRICS)[number]['id'];
+
+  /** Starting points for the weight sliders, not a fixed menu — the sliders
+   *  below are the real control. Sent to the API as wq/wp/wt. */
   const WEIGHT_PRESETS = [
     { id: 'balanced', label: 'balanced', wq: 0.5, wp: 0.3, wt: 0.2 },
     { id: 'quality', label: 'quality-led', wq: 0.75, wp: 0.15, wt: 0.1 },
     { id: 'cost', label: 'cost-led', wq: 0.35, wp: 0.55, wt: 0.1 },
   ] as const;
-  type PresetId = (typeof WEIGHT_PRESETS)[number]['id'];
 
   /** What a row-tap applies to. 'chat' is this conversation only (the original
    *  behaviour); 'site' is the site-wide default every LLM task uses; the rest
@@ -87,7 +112,7 @@
   } = $props();
 
   let q = $state('');
-  let sortBy = $state<SortKey>('agenticIndex');
+  let sortBy = $state<SortKey>('qualityIndex');
   let sortDir = $state<'asc' | 'desc'>('desc');
   let page = $state(1);
   let openOnly = $state(false);
@@ -98,13 +123,62 @@
   let loading = $state(false);
 
   let tab = $state<Tab>('list');
-  let preset = $state<PresetId>('balanced');
   // Owned here, not in the chart, so Escape collapses the expanded chart before
   // it closes the whole picker.
   let chartExpanded = $state(false);
   // The chart needs the whole filtered set, not the current page of 25.
   let chartRows = $state<ModelRow[]>([]);
   let chartLoading = $state(false);
+
+  // ── the scoring calculation, user-tunable ───────────────────────────────
+  let qualityMetric = $state<MetricId>('agentic');
+  let wq = $state(0.5);
+  let wp = $state(0.3);
+  let wt = $state(0.2);
+  let explainerOpen = $state(false);
+  /** Row counts behind the score in the current filter, from the API. */
+  let coverage = $state<{
+    total: number;
+    quality: number;
+    price: number;
+    throughput: number;
+    scored: number;
+  } | null>(null);
+
+  const metricInfo = $derived(
+    QUALITY_METRICS.find((m) => m.id === qualityMetric) ?? QUALITY_METRICS[0],
+  );
+  /** Weights are normalised for display so the three always read as % of 100 —
+   *  the API normalises by their sum too, so the sliders need no clamping. */
+  const weightPct = $derived.by(() => {
+    const sum = wq + wp + wt || 1;
+    return {
+      quality: Math.round((wq / sum) * 100),
+      price: Math.round((wp / sum) * 100),
+      speed: Math.round((wt / sum) * 100),
+    };
+  });
+
+  function applyPreset(p: (typeof WEIGHT_PRESETS)[number]) {
+    wq = p.wq;
+    wp = p.wp;
+    wt = p.wt;
+  }
+
+  /** Says WHY a model is badged open, so a resolved override or an inherited
+   *  variant can be audited from the UI. `description` means OpenRouter says so
+   *  in prose but published no repo. */
+  function openBadgeTitle(m: ModelRow): string {
+    const why =
+      m.openWeightSource === 'override'
+        ? 'mapped by our override list'
+        : m.openWeightSource === 'inherited'
+          ? 'inherited from the base model'
+          : m.openWeightSource === 'description'
+            ? "OpenRouter's description says open-weight; no repo published"
+            : 'from OpenRouter';
+    return m.huggingFaceId ? `Open weights — ${m.huggingFaceId} (${why})` : `Open weights — ${why}`;
+  }
 
   let target = $state<Target>('chat');
   let picture = $state<Picture | null>(null);
@@ -127,6 +201,12 @@
     if (q) params.set('q', q);
     params.set('toolsOnly', '1');
     if (openOnly) params.set('openOnly', '1');
+    // Both views read the same quality metric, so the Quality column and the
+    // chart's y axis can never disagree about what "quality" means.
+    params.set('qualityMetric', qualityMetric);
+    params.set('wq', String(wq));
+    params.set('wp', String(wp));
+    params.set('wt', String(wt));
     return params;
   }
 
@@ -149,32 +229,34 @@
     }
   }
 
-  /** The compare tab plots every match, so it asks for the full page size and
-   *  re-scores server-side under the active weight preset. */
+  /** The compare tab plots every match, so it asks for the full page size. The
+   *  server re-scores under the active metric + weights. */
   async function loadChart() {
     chartLoading = true;
     try {
-      const w = WEIGHT_PRESETS.find((p) => p.id === preset) ?? WEIGHT_PRESETS[0];
       const params = baseParams();
       params.set('sortBy', 'score');
       params.set('pageSize', '500');
-      params.set('wq', String(w.wq));
-      params.set('wp', String(w.wp));
-      params.set('wt', String(w.wt));
       const res = await fetch(`/api/admin/models/openrouter?${params}`);
-      if (res.ok) chartRows = (await res.json()).rows;
+      if (res.ok) {
+        const data = await res.json();
+        chartRows = data.rows;
+        coverage = data.coverage ?? null;
+      }
     } finally {
       chartLoading = false;
     }
   }
 
   // Mounted only while open; (re)load on any query/sort/page/filter change.
+  // qualityMetric matters here too — the Quality column follows it.
   $effect(() => {
     q;
     sortBy;
     sortDir;
     page;
     openOnly;
+    qualityMetric;
     untrack(() => load());
   });
 
@@ -184,7 +266,10 @@
     const active = tab === 'compare';
     q;
     openOnly;
-    preset;
+    qualityMetric;
+    wq;
+    wp;
+    wt;
     if (!active) return;
     untrack(() => loadChart());
   });
@@ -341,7 +426,7 @@
   });
 
   const SORT_CHIPS: Array<{ key: SortKey; label: string }> = [
-    { key: 'agenticIndex', label: 'quality' },
+    { key: 'qualityIndex', label: 'quality' },
     { key: 'promptPrice', label: 'in $' },
     { key: 'completionPrice', label: 'out $' },
     { key: 'throughput', label: 't/s' },
@@ -449,7 +534,7 @@
         onclick={() => { openOnly = !openOnly; page = 1; }}
       >open only</button>
     </div>
-    <p class="picker-hint">Only models that support tool use are shown — required for the chat agent. Quality = Artificial Analysis agentic index.</p>
+    <p class="picker-hint">Only models that support tool use are shown — required for the chat agent. Quality = Artificial Analysis {metricInfo.label} index; change it under Compare.</p>
 
     <div class="picker-tabs" role="tablist" aria-label="Model views">
       <button
@@ -471,26 +556,107 @@
     </div>
 
     {#if tab === 'compare'}
-      <div class="preset-row" role="radiogroup" aria-label="Score weighting">
-        <span class="quick-label">weighting</span>
-        {#each WEIGHT_PRESETS as p (p.id)}
+      <div class="calc-bar">
+        <div class="metric-row" role="radiogroup" aria-label="Quality metric">
+          <span class="quick-label">quality =</span>
+          {#each QUALITY_METRICS as m (m.id)}
+            <button
+              type="button"
+              class="preset-chip"
+              class:active={qualityMetric === m.id}
+              role="radio"
+              aria-checked={qualityMetric === m.id}
+              title={m.blurb}
+              onclick={() => (qualityMetric = m.id)}>{m.label}</button
+            >
+          {/each}
           <button
             type="button"
-            class="preset-chip"
-            class:active={preset === p.id}
-            role="radio"
-            aria-checked={preset === p.id}
-            title={`quality ${p.wq} · price ${p.wp} · speed ${p.wt}`}
-            onclick={() => (preset = p.id)}>{p.label}</button
+            class="explain-btn"
+            aria-expanded={explainerOpen}
+            onclick={() => (explainerOpen = !explainerOpen)}
+            >{explainerOpen ? '✕' : '?'} how this is worked out</button
           >
-        {/each}
+        </div>
+        <p class="metric-blurb">{metricInfo.blurb}</p>
+
+        <div class="preset-row" role="group" aria-label="Weighting presets">
+          <span class="quick-label">weighting</span>
+          {#each WEIGHT_PRESETS as p (p.id)}
+            <button
+              type="button"
+              class="preset-chip"
+              class:active={wq === p.wq && wp === p.wp && wt === p.wt}
+              title={`quality ${p.wq} · price ${p.wp} · speed ${p.wt}`}
+              onclick={() => applyPreset(p)}>{p.label}</button
+            >
+          {/each}
+        </div>
+
+        <div class="sliders">
+          <label class="slider">
+            <span class="slider-lab">quality<b>{weightPct.quality}%</b></span>
+            <input type="range" min="0" max="1" step="0.05" bind:value={wq} />
+          </label>
+          <label class="slider">
+            <span class="slider-lab">cheapness<b>{weightPct.price}%</b></span>
+            <input type="range" min="0" max="1" step="0.05" bind:value={wp} />
+          </label>
+          <label class="slider">
+            <span class="slider-lab">speed<b>{weightPct.speed}%</b></span>
+            <input type="range" min="0" max="1" step="0.05" bind:value={wt} />
+          </label>
+        </div>
+
+        {#if explainerOpen}
+          <div class="explainer">
+            <p>
+              <b>Quality</b> is not measured here — it is the
+              <b>{metricInfo.label} index</b> published by
+              <a href="https://artificialanalysis.ai" target="_blank" rel="noreferrer noopener"
+                >Artificial Analysis</a
+              >, which OpenRouter re-serves inside each model record. A model has no quality
+              number until AA has benchmarked it, and the three indices disagree — a model can
+              drive tools well and code badly.
+            </p>
+            <p>
+              <b>Score</b> combines three axes, each min-max normalised across the models
+              currently on screen, then weighted by the sliders above:
+            </p>
+            <ul>
+              <li><b>quality</b> — the selected AA index, higher is better.</li>
+              <li>
+                <b>cheapness</b> — blended $/1M at a 3:1 input:output ratio, log-scaled and
+                inverted so cheaper scores higher.
+              </li>
+              <li>
+                <b>speed</b> — median tokens/sec, log-scaled. Missing values score a neutral
+                0.5 rather than being punished.
+              </li>
+            </ul>
+            <p class="explainer-warn">
+              Because normalisation is over the models on screen, <b
+                >a score is a rank within the current filter, not an absolute rating</b
+              > — the same model scores differently once you search or toggle "open only". Models
+              with no quality index or no price stay unscored rather than being guessed at.
+            </p>
+            {#if coverage}
+              <p class="explainer-cov">
+                In this filter: {coverage.scored}/{coverage.total} scored · {metricInfo.label} index
+                for {coverage.quality} · price for {coverage.price} · throughput for {coverage.throughput}.
+              </p>
+            {/if}
+          </div>
+        {/if}
       </div>
+
       <div class="chart-scroll">
         <ModelValueChart
           rows={chartRows}
           activeModelId={activeModelId}
           loading={chartLoading}
           expanded={chartExpanded}
+          qualityLabel={metricInfo.label}
           onpick={pick}
           onexpandchange={(v) => (chartExpanded = v)}
         />
@@ -523,8 +689,8 @@
             <th class="ta-left" aria-sort={ariaDir('name')}>
               <button class="sort-btn" onclick={() => sortByColumn('name')}>Model{indicator('name')}</button>
             </th>
-            <th class="ta-right" aria-sort={ariaDir('agenticIndex')}>
-              <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('agenticIndex')}>Quality{indicator('agenticIndex')}</button>
+            <th class="ta-right" aria-sort={ariaDir('qualityIndex')}>
+              <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('qualityIndex')}>{metricInfo.label}{indicator('qualityIndex')}</button>
             </th>
             <th class="ta-right" aria-sort={ariaDir('promptPrice')}>
               <button class="sort-btn sort-btn--right" onclick={() => sortByColumn('promptPrice')}>In $/1M{indicator('promptPrice')}</button>
@@ -552,15 +718,12 @@
               <td class="cell-name" title={m.id}>
                 <span class="name-main">
                   {shortName(m.id)}
-                  {#if m.openWeights}<span
-                      class="open-badge"
-                      title={m.huggingFaceId ? `Open weights — ${m.huggingFaceId}` : 'Open weights'}
-                    >open</span
+                  {#if m.openWeights}<span class="open-badge" title={openBadgeTitle(m)}>open</span
                     >{/if}
                 </span>
                 <span class="name-id">{m.id}</span>
               </td>
-              <td class="ta-right cell-muted cell-q">{ai(m.agenticIndex)}</td>
+              <td class="ta-right cell-muted cell-q">{ai(m.qualityIndex)}</td>
               <td class="ta-right cell-muted cell-in-price">{perMillion(m.promptPrice)}</td>
               <td class="ta-right cell-muted cell-out-price">{perMillion(m.completionPrice)}</td>
               <td class="ta-right cell-muted cell-tps">{tps(m.throughput)}</td>
@@ -844,12 +1007,87 @@
     border-bottom-color: var(--accent);
   }
 
+  .calc-bar {
+    margin: 10px 16px 2px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+  }
+  .metric-row,
   .preset-row {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-    margin: 10px 16px 2px;
+  }
+  .preset-row { margin-top: 8px; }
+  .metric-blurb {
+    margin: 5px 0 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-ghost);
+  }
+  .explain-btn {
+    margin-left: auto;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: none;
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .explain-btn:hover { color: var(--text-primary); border-color: var(--text-ghost); }
+
+  .sliders {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .slider { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .slider-lab {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+  }
+  .slider-lab b { color: var(--accent); font-weight: 500; }
+  .slider input[type='range'] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .explainer {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+    background: var(--surface-overlay);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .explainer p { margin: 0 0 7px; }
+  .explainer p:last-child { margin-bottom: 0; }
+  .explainer ul { margin: 0 0 7px; padding-left: 16px; }
+  .explainer li { margin-bottom: 2px; }
+  .explainer b { color: var(--text-primary); font-weight: 500; }
+  .explainer a { color: var(--accent); }
+  .explainer-warn b { color: var(--accent); }
+  .explainer-cov {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-ghost);
   }
   .preset-chip {
     padding: 4px 10px;
@@ -1043,6 +1281,10 @@
     /* 16px stops iOS Safari auto-zooming the input on focus. */
     .picker-search { font-size: 16px; padding: 10px 12px; }
     .picker-hint { display: none; }
+    /* Three sliders side by side are unusable at 390px — stack them. */
+    .sliders { grid-template-columns: 1fr; gap: 4px; }
+    .explain-btn { margin-left: 0; }
+    .calc-bar { margin-left: 12px; margin-right: 12px; }
     .sort-chips {
       display: flex;
       align-items: center;
