@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { listTimelineEvents } from '$lib/jkai/intel/queries';
-import { getLens, lensEntityIds, listLenses } from '$lib/jkai/intel/lenses';
+import { getLens, lensEntityIds, listLenses } from '$lib/jkai/intel/lenses.server';
 
 /**
  * 200 was a list's page size. An axis wants the whole history — a timeline that

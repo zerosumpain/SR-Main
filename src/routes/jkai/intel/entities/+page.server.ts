@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { listEntityTypes } from '$lib/jkai/intel/queries';
-import { parseEntityQuery, queryEntityPage } from '$lib/jkai/intel/entity-query';
+import { parseEntityQuery } from '$lib/jkai/intel/entity-query';
+import { queryEntityPage } from '$lib/jkai/intel/entity-query.server';
 
 export const load: PageServerLoad = async ({ url }) => {
   const query = parseEntityQuery(url.searchParams);

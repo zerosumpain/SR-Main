@@ -10,7 +10,7 @@
 // that checks the wall clock, prod-gated by hostname, with a kill switch. Not
 // a cron dependency, so it survives a host with no crontab.
 import { runWatchlistCheck } from './watchlist';
-import { runDueLensChecks } from './lenses';
+import { runDueLensChecks } from './lenses.server';
 import { backfillConfidence } from './trust-refresh';
 import { invalidateGraphAnalysis } from './analytics/load';
 

@@ -7,7 +7,8 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { listEntityTypes } from '$lib/jkai/intel/queries';
-import { parseEntityQuery, queryEntityPage } from '$lib/jkai/intel/entity-query';
+import { parseEntityQuery } from '$lib/jkai/intel/entity-query';
+import { queryEntityPage } from '$lib/jkai/intel/entity-query.server';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
 import { eq, inArray } from 'drizzle-orm';
