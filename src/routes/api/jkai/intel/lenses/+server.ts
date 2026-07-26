@@ -12,15 +12,7 @@
 // second run can say anything changed.
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import {
-  createLens,
-  deleteLens,
-  getLens,
-  lensEntityIds,
-  listLenses,
-  runLensCheck,
-  updateLens,
-} from '$lib/jkai/intel/lenses';
+import { createLens, deleteLens, getLens, lensEntityIds, listLenses, runLensCheck, updateLens } from '$lib/jkai/intel/lenses.server';
 
 /** Validation errors from the lens module are user errors, not 500s. */
 function asHttpError(err: unknown): never {

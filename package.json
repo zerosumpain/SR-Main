@@ -14,10 +14,11 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
-		"gate": "npm run gate:public-routes && npm run gate:check && npm run gate:test",
+		"gate": "npm run gate:public-routes && npm run gate:check && npm run gate:test && npm run gate:build",
 		"gate:public-routes": "node scripts/check-public-routes.mjs",
 		"gate:check": "svelte-kit sync && NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --threshold error",
-		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'"
+		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'",
+		"gate:build": "NODE_OPTIONS=--max-old-space-size=6144 vite build"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
