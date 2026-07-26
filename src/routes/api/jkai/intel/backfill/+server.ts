@@ -44,7 +44,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     return json({ error: 'Intel auto-extraction is disabled (INTEL_AUTO_EXTRACT=0).' }, { status: 409 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { kinds?: string[]; limit?: number };
+  const body = (await request.json().catch(() => ({}))) as {
+    kinds?: string[];
+    limit?: number;
+    summaries?: boolean;
+  };
+
+  // Summary-only pass: fills entities left without one. Separate from the
+  // corpus sweep because re-extracting an unchanged item is a no-op by design,
+  // so a summary gap can't be closed by simply re-running the sweep.
+  if (body.summaries) {
+    const { backfillEntitySummaries } = await import('$lib/jkai/intel/graph');
+    return json(await backfillEntitySummaries(typeof body.limit === 'number' ? body.limit : undefined));
+  }
+
   const kinds = Array.isArray(body.kinds)
     ? body.kinds.filter((k): k is AutoKind => VALID_KINDS.includes(k as AutoKind))
     : undefined;
