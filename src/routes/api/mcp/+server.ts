@@ -32,15 +32,26 @@ import { db } from '$lib/db';
 import { hermesChatOrigin } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-// Where to dispatch host-local traffic. The env var wins; otherwise resolve
-// against the INCOMING request's own origin rather than a hardcoded port. The
-// previous default (`http://127.0.0.1:5173/api/mcp/local`) is homeserv's dev
-// port, so on the VPS — which serves :4173 and does not set the env var — every
-// request through this proxy failed with `TypeError: fetch failed` surfacing as
-// `{"message":"Internal Error"}`. Verified on prod 2026-07-26.
-function localDispatchUrl(requestUrl: URL): string {
-  return env.JKAI_HERMES_MCP_LOCAL_URL ?? new URL('/api/mcp/local', requestUrl.origin).href;
-}
+/**
+ * Where to dispatch host-local traffic.
+ *
+ * The old default was a hardcoded `http://127.0.0.1:5173/api/mcp/local` —
+ * homeserv's port. On the VPS, which serves :4173 and sets no override, every
+ * request through this proxy therefore failed with `TypeError: fetch failed`,
+ * surfacing as `{"message":"Internal Error"}` (verified on prod 2026-07-26).
+ *
+ * Resolving against the incoming request's ORIGIN is not the fix: on the VPS
+ * that yields `https://strangeramblings.com`, so the call hairpins out through
+ * cloudflared and back — measured as unreachable from the box itself.
+ *
+ * So: mirror exactly how each host decides its own port. homeserv's unit sets
+ * PORT=5173; the VPS runs scripts/server-with-ws.mjs, which defaults to 4173 and
+ * gets no PORT; the dev server serves 5173. Correct on all three with no env
+ * change and no network round-trip.
+ */
+const LOCAL_DISPATCH_PORT = env.PORT ?? (import.meta.env.DEV ? '5173' : '4173');
+const LOCAL_DISPATCH_URL =
+  env.JKAI_HERMES_MCP_LOCAL_URL ?? `http://127.0.0.1:${LOCAL_DISPATCH_PORT}/api/mcp/local`;
 
 // Per-process LRU cache for chat_id → origin lookups. The proxy lookup is
 // keyed by primary key and runs once per tool call; cache because a chat
@@ -203,10 +214,9 @@ export const DELETE: RequestHandler = () => {
   return new Response('Method Not Allowed', { status: 405 });
 };
 
-export const POST: RequestHandler = async ({ request, url }) => {
+export const POST: RequestHandler = async ({ request }) => {
   const raw = await request.text();
   const chatId = extractChatId(raw);
-  const LOCAL_DISPATCH_URL = localDispatchUrl(url);
 
   // No chat context (initialize, ping, tools/list, etc.) → straight to local.
   // The Authorization header rides along, so auth still applies downstream.
