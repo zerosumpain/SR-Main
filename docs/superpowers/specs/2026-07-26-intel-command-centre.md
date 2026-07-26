@@ -88,8 +88,30 @@ every explicitly-requested item.
 
 ## Verification
 
-- 139 new unit tests across `analytics/`, `resolve/`, `entity-linkify`, `intel-bridge`
-- Full suite: 3031 passed, 0 failed
-- `svelte-check`: 0 errors
+- 154 new unit tests across `analytics/`, `resolve/`, `entity-linkify`, `intel-bridge`, `intel-graph`
+- Full gate green: **3046 tests passing, 0 type errors, 0 public-route drift**
 - Every algorithm run against a live copy of the production graph, not fixtures
-- Embedding backfill executed for real: 342 embedded, 0 failed, 0 remaining
+- Embedding backfill executed for real on that copy: **342 embedded, 0 failed, 0 remaining**
+- Dashboard exercised in a real browser: 332 nodes rendered, entity card opens on
+  click, 55 duplicates listed, **zero console errors**
+
+### Merge invariants, checked against real data
+
+`mergeEntities` contains the only hand-written multi-table SQL in the change and
+is the one place that could lose data, so it was run against a copy of the live
+graph merging the real `Infected Blood Compensation Authority (IBCA)` →`IBCA`
+duplicate, with invariants asserted before and after:
+
+| Invariant | Result |
+|---|---|
+| No connection partner lost | PASS |
+| No self-loops created | PASS |
+| Merged entity left with zero edges | PASS (12 → 0) |
+| Survivor gained exactly the moved edges | PASS (157 → 166, 9 moved) |
+| Edges removed == edges reported dropped | PASS (3 == 3) |
+| Unrelated edges untouched | PASS (289 unchanged) |
+| Note links preserved | PASS (756 → 756) |
+| `unmergeEntity` restores the entity | PASS |
+
+The three dropped edges were the direct survivor↔duplicate edge and two
+same-type duplicates the survivor already had — exactly the intended behaviour.
