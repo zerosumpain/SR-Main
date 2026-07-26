@@ -81,13 +81,35 @@ export const GET: RequestHandler = async ({ params }) => {
 	// turn's prompt size against it as `N CTX %`. Null when the catalogue has no
 	// row for the model (self-hosted / just-added ids), and the chunk is dropped.
 	const [catalogue] = await db
-		.select({ contextLength: openrouterModels.contextLength })
+		.select({
+			contextLength: openrouterModels.contextLength,
+			promptPrice: openrouterModels.promptPrice,
+			completionPrice: openrouterModels.completionPrice,
+		})
 		.from(openrouterModels)
 		.where(eq(openrouterModels.id, pinnedModel.modelId))
 		.limit(1);
 
+	// Live prices for the composer's `est. £/turn` chip. `conversations.price_snapshot`
+	// is only written when the model is switched before the first message, so most
+	// threads have none — fall back to the catalogue's current rate rather than
+	// hiding the estimate.
+	const priceSnapshot =
+		(conv.priceSnapshot as { promptPrice: number; completionPrice: number } | null) ??
+		(catalogue?.promptPrice != null && catalogue?.completionPrice != null
+			? {
+					promptPrice: Number(catalogue.promptPrice),
+					completionPrice: Number(catalogue.completionPrice),
+				}
+			: null);
+
 	return json({
-		conversation: { ...conv, modelProvider: pinnedModel.provider, modelId: pinnedModel.modelId },
+		conversation: {
+			...conv,
+			modelProvider: pinnedModel.provider,
+			modelId: pinnedModel.modelId,
+			priceSnapshot,
+		},
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
 		modelContextLength: catalogue?.contextLength ?? null,
