@@ -62,6 +62,7 @@ const HOOK_BYPASSES = [
   '/api/health/workflow-engine', // watchdog probe
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
+  '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
 ];
 
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection

@@ -168,7 +168,12 @@ export interface BackfillProgress {
 export interface BackfillOptions {
   /** Which corpora to sweep. Default: both. */
   kinds?: AutoKind[];
-  /** Hard cap on items processed in one run, so a sweep can't run away. */
+  /**
+   * Cap on items that do REAL work (an LLM call) in one run. Items already
+   * extracted at the current content hash are cheap and don't count, so
+   * repeated calls with a small limit walk forward through the corpus instead
+   * of re-examining the same head every time. `extracted === 0` means done.
+   */
   limit?: number;
 }
 
@@ -182,7 +187,8 @@ export interface BackfillOptions {
  */
 export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promise<BackfillProgress> {
   const kinds = opts.kinds ?? (['file', 'research'] as AutoKind[]);
-  const limit = Math.max(1, Math.min(opts.limit ?? 500, 2000));
+  const workLimit = Math.max(1, Math.min(opts.limit ?? 500, 2000));
+  const SCAN_CEILING = 5000;
   const progress: BackfillProgress = {
     scanned: 0,
     extracted: 0,
@@ -195,14 +201,22 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
 
   if (!isAutoExtractEnabled()) return progress;
 
+  // Only 'extracted' and 'failed' spend an LLM call, so only those count
+  // against the limit — otherwise a small batch size would re-examine the same
+  // already-done head of the corpus on every call and never advance.
+  let worked = 0;
   const record = (outcome: AutoExtractOutcome) => {
     if (outcome.status === 'extracted') {
       progress.extracted++;
       progress.entities += outcome.entityCount;
+      worked++;
     } else if (outcome.status === 'unchanged') progress.unchanged++;
-    else if (outcome.status === 'failed') progress.failed++;
-    else progress.skipped++;
+    else if (outcome.status === 'failed') {
+      progress.failed++;
+      worked++;
+    } else progress.skipped++;
   };
+  const exhausted = () => worked >= workLimit || progress.scanned >= SCAN_CEILING;
 
   if (kinds.includes('file')) {
     // Only files that actually have indexed text — anything else has nothing to
@@ -214,11 +228,11 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
       WHERE f.content_hash IS NOT NULL
       GROUP BY f.id, f.name, f.content_hash
       ORDER BY f.id
-      LIMIT ${limit}
+      LIMIT ${SCAN_CEILING}
     `);
 
     for (const row of rows as Array<Record<string, unknown>>) {
-      if (progress.scanned >= limit) {
+      if (exhausted()) {
         progress.truncated = true;
         break;
       }
@@ -236,7 +250,7 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
     }
   }
 
-  if (kinds.includes('research')) {
+  if (kinds.includes('research') && !exhausted()) {
     const sessions = await db
       .select({ id: researchSessions.id })
       .from(researchSessions)
@@ -245,7 +259,7 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
 
     const { extractResearchIntoIntel } = await import('$lib/deepdive/intel-bridge');
     for (const s of sessions) {
-      if (progress.scanned >= limit) {
+      if (exhausted()) {
         progress.truncated = true;
         break;
       }
@@ -254,6 +268,7 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
         record(await extractResearchIntoIntel(s.id));
       } catch {
         progress.failed++;
+        worked++;
       }
     }
   }

@@ -40,6 +40,7 @@
 /api/health/apple/ingest
 /api/health/workflow-engine
 /api/jkai/cors/[...url]
+/api/jkai/intel/backfill
 /api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/landing/ecg-telemetry
