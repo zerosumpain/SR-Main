@@ -194,13 +194,28 @@
     return text.length > len ? text.slice(0, len) + '…' : text;
   }
 
-  /** `model / cost / source` — the three things that distinguish one thread
-   *  from another at a glance, in the rail's mono uniform. */
+  /** A thread with no title is not "New thread" 27 times over — it is whatever
+   *  was said in it. Fall back to the opening line so the rail is scannable
+   *  before the titler has run. */
+  function rowTitle(c: ConversationItem): string {
+    if (c.title?.trim()) return c.title.trim();
+    const first = c.lastMessage?.trim().split('\n')[0];
+    if (first) return truncate(first, 44);
+    return 'New thread';
+  }
+
+  /** `model / cost / source`, minus whatever carries no information. Every row
+   *  showing the same default model, £0.00 and WEB is three-quarters noise; a
+   *  chunk earns its place by differing from the default. */
   function metaChunks(c: ConversationItem): string[] {
-    const model = shortModelLabel(c.modelId) || 'unset';
-    const cost = formatGbp(c.costUsd === null || c.costUsd === undefined ? 0 : Number(c.costUsd));
-    const source = c.messageCount === 0 ? 'draft' : c.source || 'web';
-    return [model, cost, source];
+    const chunks: string[] = [];
+    const model = shortModelLabel(c.modelId);
+    if (model) chunks.push(model);
+    const cost = c.costUsd === null || c.costUsd === undefined ? 0 : Number(c.costUsd);
+    if (cost > 0) chunks.push(formatGbp(cost));
+    if (c.messageCount === 0) chunks.push('draft');
+    else if (c.source && c.source !== 'web') chunks.push(c.source);
+    return chunks;
   }
 
   // Recent conversations for the collapsed rail dots (cap for tidiness).
@@ -306,10 +321,11 @@
     </div>
 
     <!-- Drafts (offline-first, IndexedDB) -->
-    <DraftsPanel />
-
-    <!-- Channels -->
-    <div class="channels">
+    <!-- One footer, not three stacked widgets. Drafts, the channel state and
+         the throughput meter are all "what is going on outside this thread",
+         so they share a block, a rhythm and a single top border. -->
+    <div class="rail-foot">
+      <DraftsPanel />
       <div class="rail-label">Channels</div>
       {#if whatsappThread?.phoneNumber && whatsappThread.messages.length > 0}
         <button
@@ -365,7 +381,7 @@
         {#if liveSet.has(c.id)}
           <span class="tr-live" title="JKAI is working on this" aria-label="Live job"></span>
         {/if}
-        <span class="tr-title">{c.title || 'New thread'}</span>
+        <span class="tr-title" class:untitled={!c.title?.trim()}>{rowTitle(c)}</span>
         {#if c.pinned}<span class="tr-flag" title="Pinned" aria-hidden="true">◆</span>{/if}
         {#if c.shareVisibility && c.shareVisibility !== 'private'}
           <span
@@ -375,12 +391,14 @@
           >
         {/if}
       </div>
-      <div class="tr-meta">
-        {#each metaChunks(c) as chunk, i (i)}
-          {#if i > 0}<span class="tr-sep" aria-hidden="true">/</span>{/if}
-          <span>{chunk}</span>
-        {/each}
-      </div>
+      {#if metaChunks(c).length > 0}
+        <div class="tr-meta">
+          {#each metaChunks(c) as chunk, i (i)}
+            {#if i > 0}<span class="tr-sep" aria-hidden="true">/</span>{/if}
+            <span>{chunk}</span>
+          {/each}
+        </div>
+      {/if}
 
       <!-- Hover actions (each button stops propagation so the row isn't selected) -->
       <div class="actions">
@@ -588,6 +606,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* A borrowed first line is standing in for a title, so it reads a shade
+     quieter than one the titler actually chose. */
+  .tr-title.untitled {
+    font-weight: 400;
+    color: var(--text-muted);
+  }
   .tr-flag {
     flex: none;
     font-family: var(--font-mono);
@@ -711,15 +735,21 @@
     margin-top: 3px;
   }
 
-  /* channels footer */
-  .channels {
+  /* One footer block: drafts, channel state, throughput. */
+  .rail-foot {
     flex: none;
     border-top: 1px solid var(--divider);
     padding: 10px 12px;
     background: var(--bg-section);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+  }
+  /* DraftsPanel brings its own padding and rule; inside the footer it is one
+     line among several, so strip them. */
+  .rail-foot :global(.drafts-panel) {
+    padding: 0;
+    border-top: none;
   }
   .channel-row {
     display: flex;
