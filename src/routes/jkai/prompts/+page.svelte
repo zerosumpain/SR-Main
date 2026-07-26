@@ -1,235 +1,305 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import type { PromptStack, PromptVersion, StackId } from '$lib/jkai/prompts/workbench';
 
-  interface PromptFile {
-    name: string;
-    content: string;
-    size: number;
-    lastModified: string;
-  }
+  type LoadedStack = PromptStack & { approxTokens: number };
 
-  let files: PromptFile[] = $state([]);
-  let selectedFile: string | null = $state(null);
-  let editContent: string = $state('');
-  let savedContent: string = $state('');
+  let { data }: { data: { stacks: LoadedStack[] } } = $props();
+
+  // Open on the first file of the chat stack — the one that actually shapes
+  // replies — falling back to whatever stack has files.
+  const initialStack = data.stacks.find((s) => s.files.length) ?? data.stacks[0];
+  const initialFile = initialStack?.files[0] ?? null;
+
+  let stacks = $state<LoadedStack[]>(data.stacks);
+  let selectedStack = $state<StackId>(initialStack?.id ?? 'chat');
+  let selectedFile = $state<string | null>(initialFile?.name ?? null);
+
+  let editContent = $state(initialFile?.content ?? '');
+  let savedContent = $state(initialFile?.content ?? '');
   let saving = $state(false);
-  let syncing = $state(false);
-  let saveStatus: { kind: 'idle' | 'ok' | 'error'; text: string } = $state({ kind: 'idle', text: '' });
-  let loading = $state(true);
+  let status = $state<{ kind: 'idle' | 'ok' | 'error'; text: string }>({ kind: 'idle', text: '' });
+  let tab = $state<'edit' | 'resolved' | 'history'>('edit');
 
-  let dirty = $derived(editContent !== savedContent);
-  let selectedFileData = $derived(files.find((f) => f.name === selectedFile));
+  let resolved = $state<{ text: string; approxTokens: number; caveat: string } | null>(null);
+  let versions = $state<PromptVersion[]>([]);
+  let loadingPanel = $state(false);
 
-  async function loadFiles() {
-    loading = true;
-    try {
-      const res = await fetch('/api/workflows/prompts');
-      if (!res.ok) {
-        saveStatus = { kind: 'error', text: `Couldn't load files (${res.status})` };
-        return;
-      }
-      const data = await res.json();
-      files = data.files || [];
-      if (files.length > 0 && !selectedFile) {
-        selectFile(files[0].name);
-      }
-    } catch (e) {
-      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error loading files' };
-    } finally {
-      loading = false;
-    }
+  const stack = $derived(stacks.find((s) => s.id === selectedStack) ?? stacks[0]);
+  const file = $derived(stack?.files.find((f) => f.name === selectedFile) ?? null);
+  const dirty = $derived(editContent !== savedContent);
+  const editTokens = $derived(Math.ceil(editContent.length / 4));
+
+  function approx(text: string): number {
+    return Math.ceil((text ?? '').length / 4);
   }
 
-  function selectFile(name: string) {
-    if (dirty && !confirm('You have unsaved changes. Discard and switch files?')) return;
-    selectedFile = name;
-    const file = files.find((f) => f.name === name);
-    editContent = file?.content ?? '';
-    savedContent = file?.content ?? '';
-    saveStatus = { kind: 'idle', text: '' };
+  function pick(stackId: StackId, fileName: string) {
+    if (dirty && !confirm('You have unsaved changes. Discard and switch?')) return;
+    selectedStack = stackId;
+    selectedFile = fileName;
+    const f = stacks.find((s) => s.id === stackId)?.files.find((x) => x.name === fileName);
+    editContent = f?.content ?? '';
+    savedContent = f?.content ?? '';
+    status = { kind: 'idle', text: '' };
+    if (tab !== 'edit') void loadPanel();
   }
 
-  async function saveFile() {
-    if (!selectedFile || saving || !dirty) return;
+  async function save() {
+    if (!stack || !selectedFile || saving || !dirty) return;
     const fileBeingSaved = selectedFile;
     const contentBeingSaved = editContent;
     saving = true;
-    saveStatus = { kind: 'idle', text: 'Saving…' };
+    status = { kind: 'idle', text: 'Saving…' };
     try {
-      const res = await fetch(`/api/workflows/prompts/${fileBeingSaved}`, {
+      const res = await fetch('/api/jkai/prompts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: contentBeingSaved }),
+        body: JSON.stringify({ stack: selectedStack, file: fileBeingSaved, content: contentBeingSaved }),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        let detail = `${res.status}`;
-        try {
-          const body = await res.json();
-          if (body?.error) detail = `${res.status}: ${body.error}`;
-        } catch {}
-        saveStatus = { kind: 'error', text: `Save failed (${detail})` };
+        status = { kind: 'error', text: body?.message || body?.error || `Save failed (${res.status})` };
         return;
       }
-      // Mark this exact content as the persisted baseline. Do NOT touch
-      // editContent — the user may have typed more characters while the
-      // request was in flight; clobbering would lose those keystrokes.
-      if (selectedFile === fileBeingSaved) {
-        savedContent = contentBeingSaved;
-      }
-      saveStatus = { kind: 'ok', text: `Saved at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` };
-      // Refresh metadata (size + lastModified) but don't disturb the editor.
-      try {
-        const res2 = await fetch('/api/workflows/prompts');
-        if (res2.ok) {
-          const data = await res2.json();
-          files = data.files || files;
-        }
-      } catch { /* metadata refresh is best-effort */ }
+      // Don't clobber the textarea — the user may have kept typing.
+      if (selectedFile === fileBeingSaved) savedContent = contentBeingSaved;
+      if (body.stacks) stacks = body.stacks;
+      status = {
+        kind: 'ok',
+        text: `Saved at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`,
+      };
+      resolved = null;
     } catch (e) {
-      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error' };
+      status = { kind: 'error', text: e instanceof Error ? e.message : 'Network error' };
     } finally {
       saving = false;
     }
   }
 
-  async function forceSync() {
-    syncing = true;
-    saveStatus = { kind: 'idle', text: 'Syncing…' };
+  async function loadPanel() {
+    if (!stack) return;
+    loadingPanel = true;
     try {
-      const res = await fetch('/api/workflows/prompts', { method: 'POST' });
-      if (!res.ok) {
-        saveStatus = { kind: 'error', text: `Sync failed (${res.status})` };
-        return;
+      if (tab === 'resolved') {
+        const res = await fetch(`/api/jkai/prompts?resolve=${selectedStack}`);
+        resolved = res.ok ? await res.json() : null;
+      } else if (tab === 'history' && selectedFile) {
+        const res = await fetch(`/api/jkai/prompts?versions=${selectedStack}&file=${encodeURIComponent(selectedFile)}`);
+        versions = res.ok ? (await res.json()).versions ?? [] : [];
       }
-      const data = await res.json();
-      files = data.files || [];
-      if (selectedFile) {
-        const updated = files.find((f) => f.name === selectedFile);
-        if (updated && !dirty) {
-          editContent = updated.content;
-          savedContent = updated.content;
-        }
-      }
-      saveStatus = { kind: 'ok', text: 'Re-synced from disk' };
-    } catch (e) {
-      saveStatus = { kind: 'error', text: e instanceof Error ? e.message : 'Network error' };
     } finally {
-      syncing = false;
+      loadingPanel = false;
     }
+  }
+
+  function switchTab(next: 'edit' | 'resolved' | 'history') {
+    tab = next;
+    if (next !== 'edit') void loadPanel();
+  }
+
+  function restore(v: PromptVersion) {
+    if (!confirm(`Load the version saved ${fmt(v.savedAt)} into the editor? Nothing is written until you press Save.`)) return;
+    editContent = v.content;
+    tab = 'edit';
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      saveFile();
+      void save();
     }
   }
 
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleString('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  function fmt(iso: string): string {
+    if (!iso || iso.startsWith('1970')) return 'never';
+    return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
-  onMount(loadFiles);
 </script>
 
-<svelte:head>
-  <title>System Prompts</title>
-</svelte:head>
+<svelte:head><title>Prompts · JKAI</title></svelte:head>
 
-<PageHeader title="SYSTEM PROMPTS" />
+<PageHeader title="PROMPTS" />
 
-<div class="p-6 sm:p-10 max-w-6xl mx-auto">
-  <div class="flex justify-between items-center mb-6">
-    <div>
-      <p class="text-sm" style="color: var(--text-secondary);">
-        Prompt files that shape the AI's personality and behaviour across WhatsApp and the website.
-      </p>
-    </div>
-    <button
-      onclick={forceSync}
-      disabled={syncing}
-      class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium transition-colors border"
-      style="border-color: var(--card-border); color: var(--text-secondary); opacity: {syncing ? 0.7 : 1};"
-    >
-      {syncing ? 'Syncing...' : 'Sync from Disk'}
-    </button>
-  </div>
+<div class="pw">
+  <p class="pw-intro">
+    Every prompt that actually runs, grouped by what executes it. Chat replies and workflow generation
+    are driven by <strong>different</strong> stacks — editing one does not change the other.
+  </p>
 
-  {#if loading}
-    <div class="text-center py-16">
-      <p class="text-sm animate-pulse" style="color: var(--text-ghost);">Loading prompt files...</p>
-    </div>
-  {:else}
-    <div class="flex gap-6" style="min-height: 70vh;">
-      <!-- File List -->
-      <div class="w-56 flex-shrink-0 space-y-1">
-        {#each files as file}
+  <div class="pw-body">
+    <!-- Stack + file rail -->
+    <aside class="pw-rail">
+      {#each stacks as s (s.id)}
+        <div class="pw-stack">
+          <div class="pw-stack-hd">
+            <span class="pw-stack-label">{s.label}</span>
+            <span class="pw-chip" class:on={s.live}>{s.live ? 'live' : 'inactive'}</span>
+          </div>
+          <div class="pw-stack-runtime">{s.runtime}</div>
+          <div class="pw-surfaces">
+            {#each s.surfaces as surface (surface)}<span class="pw-surface">{surface}</span>{/each}
+          </div>
+          {#if s.error}
+            <p class="pw-stack-err">⚠ {s.error}</p>
+          {/if}
+          <div class="pw-files">
+            {#each s.files as f (f.name)}
+              <button
+                class="pw-file"
+                class:sel={selectedStack === s.id && selectedFile === f.name}
+                onclick={() => pick(s.id, f.name)}
+              >
+                <span class="pw-file-name">{f.name}</span>
+                <span class="pw-file-meta">≈{approx(f.content).toLocaleString()} tok · {fmt(f.lastModified)}</span>
+              </button>
+            {/each}
+            {#if s.files.length === 0 && !s.error}
+              <p class="pw-stack-err">No prompt files found.</p>
+            {/if}
+          </div>
+          <div class="pw-stack-total">≈{s.approxTokens.toLocaleString()} tokens total</div>
+        </div>
+      {/each}
+    </aside>
+
+    <!-- Editor / analysis -->
+    <section class="pw-main">
+      {#if stack}
+        <p class="pw-note" class:pw-note-live={stack.live}>{stack.note}</p>
+      {/if}
+
+      <div class="pw-tabs">
+        <button class="pw-tab" class:on={tab === 'edit'} onclick={() => switchTab('edit')}>Edit</button>
+        <button class="pw-tab" class:on={tab === 'resolved'} onclick={() => switchTab('resolved')}>Assembled prompt</button>
+        <button class="pw-tab" class:on={tab === 'history'} onclick={() => switchTab('history')}>History</button>
+        <div class="pw-tab-spacer"></div>
+        {#if status.text}
+          <span class="pw-status pw-status-{status.kind}">{status.text}</span>
+        {/if}
+        {#if tab === 'edit' && file}
+          <span class="pw-tokens">≈{editTokens.toLocaleString()} tok</span>
           <button
-            onclick={() => selectFile(file.name)}
-            class="w-full text-left px-3 py-2.5 rounded-[var(--radius-round)] transition-colors border"
-            style="background: {selectedFile === file.name ? 'var(--accent)' : 'var(--card-bg)'}; border-color: {selectedFile === file.name ? 'var(--accent)' : 'var(--card-border)'}; color: {selectedFile === file.name ? 'white' : 'var(--text-primary)'};"
+            class="pw-save"
+            onclick={save}
+            disabled={saving || !dirty || !stack?.editable}
+            title={stack?.editable ? 'Save (Ctrl/Cmd+S)' : (stack?.error ?? 'Not editable from this host')}
           >
-            <div class="text-xs font-medium" style="font-family: var(--font-mono);">
-              {file.name}
-            </div>
-            <div class="text-[10px] mt-0.5" style="color: {selectedFile === file.name ? 'rgba(255,255,255,0.7)' : 'var(--text-ghost)'};">
-              {file.size} bytes · {formatDate(file.lastModified)}
-            </div>
+            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
           </button>
-        {/each}
+        {/if}
       </div>
 
-      <!-- Editor -->
-      <div class="flex-1 flex flex-col">
-        {#if selectedFile}
-          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
-            <h2 class="text-sm font-medium flex items-center gap-2" style="color: var(--text-primary); font-family: var(--font-mono);">
-              {selectedFile}
-              {#if dirty}
-                <span class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded" style="background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);">
-                  unsaved
-                </span>
-              {/if}
-            </h2>
-            <div class="flex items-center gap-3">
-              {#if saveStatus.text}
-                <span
-                  class="text-xs"
-                  style="color: {saveStatus.kind === 'error' ? 'var(--error)' : saveStatus.kind === 'ok' ? 'var(--success)' : 'var(--text-ghost)'};"
-                >
-                  {saveStatus.text}
-                </span>
-              {/if}
-              <button
-                onclick={saveFile}
-                disabled={saving || !dirty}
-                title={dirty ? 'Save changes (Ctrl/Cmd+S)' : 'Nothing to save'}
-                class="px-4 py-1.5 rounded text-sm font-medium transition-colors"
-                style="background: var(--accent); color: white; opacity: {saving || !dirty ? 0.5 : 1}; cursor: {saving || !dirty ? 'not-allowed' : 'pointer'};"
-              >
-                {saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
+      {#if tab === 'edit'}
+        {#if file}
           <textarea
             bind:value={editContent}
             onkeydown={handleKeydown}
-            class="flex-1 w-full px-4 py-3 rounded-[var(--radius-round)] border resize-none text-sm leading-relaxed"
-            style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary); font-family: var(--font-mono); min-height: 500px;"
+            class="pw-editor"
             spellcheck="false"
+            readonly={!stack?.editable}
           ></textarea>
         {:else}
-          <div class="flex-1 flex items-center justify-center">
-            <p class="text-sm" style="color: var(--text-ghost);">Select a prompt file to edit</p>
-          </div>
+          <p class="pw-empty">Select a prompt file.</p>
         {/if}
-      </div>
-    </div>
-  {/if}
+      {:else if tab === 'resolved'}
+        {#if loadingPanel}
+          <p class="pw-empty">Assembling…</p>
+        {:else if resolved}
+          <p class="pw-caveat">{resolved.caveat}</p>
+          <p class="pw-resolved-meta">≈{resolved.approxTokens.toLocaleString()} tokens · {resolved.text.length.toLocaleString()} chars</p>
+          <pre class="pw-resolved">{resolved.text}</pre>
+        {:else}
+          <p class="pw-empty">Could not assemble this stack.</p>
+        {/if}
+      {:else if loadingPanel}
+        <p class="pw-empty">Loading history…</p>
+      {:else if versions.length === 0}
+        <p class="pw-empty">No previous versions recorded for this file. History starts at your next save.</p>
+      {:else}
+        <ul class="pw-versions">
+          {#each versions as v (v.savedAt)}
+            <li class="pw-version">
+              <div class="pw-version-hd">
+                <span class="pw-version-when">{fmt(v.savedAt)}</span>
+                <span class="pw-version-delta">
+                  ≈{v.approxTokens.toLocaleString()} tok
+                  {#if file}
+                    <span class="pw-version-diff">
+                      ({v.approxTokens > editTokens ? '−' : '+'}{Math.abs(editTokens - v.approxTokens).toLocaleString()} vs now)
+                    </span>
+                  {/if}
+                </span>
+                <button class="pw-restore" onclick={() => restore(v)}>Load into editor</button>
+              </div>
+              <pre class="pw-version-body">{v.content.slice(0, 600)}{v.content.length > 600 ? '…' : ''}</pre>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  </div>
 </div>
+
+<style>
+  .pw { max-width: 1200px; margin: 0 auto; padding: 20px 20px 60px; color: var(--text-primary); }
+  .pw-intro { margin: 0 0 18px; font-size: 13px; color: var(--text-muted); max-width: 70ch; }
+  .pw-intro strong { color: var(--text-primary); }
+
+  .pw-body { display: flex; gap: 20px; align-items: flex-start; }
+  @media (max-width: 860px) { .pw-body { flex-direction: column; } }
+
+  .pw-rail { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 860px) { .pw-rail { width: 100%; } }
+  .pw-stack { border: 1px solid var(--card-border); padding: 10px; }
+  .pw-stack-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pw-stack-label { font-size: 13px; color: var(--text-primary); }
+  .pw-chip { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; padding: 1px 5px; border: 1px solid var(--card-border); color: var(--text-ghost); }
+  .pw-chip.on { color: var(--success, #2d7a3a); border-color: currentColor; }
+  .pw-stack-runtime { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); margin-top: 3px; }
+  .pw-surfaces { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .pw-surface { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); border: 1px solid var(--divider, var(--card-border)); padding: 1px 4px; }
+  .pw-stack-err { font-size: 11px; color: var(--warn, #b0892a); margin: 8px 0 0; }
+  .pw-files { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+  .pw-file { display: flex; flex-direction: column; gap: 2px; text-align: left; background: transparent; border: 1px solid transparent; padding: 5px 6px; cursor: pointer; }
+  .pw-file:hover { border-color: var(--card-border); }
+  .pw-file.sel { border-color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent-ink, var(--accent)) 10%, transparent); }
+  .pw-file-name { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .pw-file-meta { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
+  .pw-stack-total { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--card-border); font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+  .pw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pw-note { margin: 0 0 12px; font-size: 12px; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--card-border); padding-left: 10px; }
+  .pw-note-live { border-left-color: var(--success, #2d7a3a); }
+
+  .pw-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .pw-tab-spacer { flex: 1; }
+  .pw-tab { font-family: var(--font-mono); font-size: 11px; padding: 5px 10px; background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; }
+  .pw-tab.on { color: var(--text-primary); border-color: var(--text-muted); background: color-mix(in srgb, var(--card-border) 18%, transparent); }
+  .pw-tokens { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .pw-status { font-size: 11px; }
+  .pw-status-ok { color: var(--success, #2d7a3a); }
+  .pw-status-error { color: var(--status-error, #c0392b); }
+  .pw-save { font-family: var(--font-mono); font-size: 11px; padding: 5px 14px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
+  .pw-save:disabled { opacity: 0.45; cursor: default; }
+
+  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
+  .pw-editor:focus { border-color: var(--text-muted); }
+  .pw-editor[readonly] { opacity: 0.75; }
+
+  .pw-caveat { margin: 0 0 6px; font-size: 12px; color: var(--text-muted); }
+  .pw-resolved-meta { margin: 0 0 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .pw-resolved { margin: 0; padding: 12px; max-height: 62vh; overflow: auto; background: var(--card-bg); border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: 11px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+
+  .pw-empty { font-size: 13px; color: var(--text-ghost); }
+  .pw-versions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .pw-version { border: 1px solid var(--card-border); padding: 10px; }
+  .pw-version-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pw-version-when { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .pw-version-delta { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex: 1; }
+  .pw-version-diff { color: var(--text-muted); }
+  .pw-restore { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; }
+  .pw-restore:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .pw-version-body { margin: 8px 0 0; font-family: var(--font-mono); font-size: 10px; line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: hidden; }
+</style>

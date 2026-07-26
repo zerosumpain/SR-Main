@@ -2,6 +2,7 @@
   import type { BriefingData } from '$lib/briefing/types';
   import { invalidateAll } from '$app/navigation';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
 
   let { data }: {
     data: { briefings: BriefingData[]; enabled: boolean; topics: string[]; running: boolean; schedule: { display: string } };
@@ -51,6 +52,11 @@
 
   // 👍/👎 feedback → engagement weighting in future briefings. Voting on the
   // whole briefing sends what=''; naming a topic scopes the vote to it.
+  // Config is collapsed by default — the digest is the reason to be here, and
+  // topics get edited once a quarter. Opens automatically when nothing has run
+  // yet, since then setup IS the task.
+  let showConfig = $state(false);
+
   let voted = $state<'up' | 'down' | null>(null);
   let voteWhat = $state('');
   async function vote(v: 'up' | 'down') {
@@ -70,32 +76,41 @@
 
 <svelte:head><title>Briefing · JKAI</title></svelte:head>
 
-<main class="br">
-  <header class="br-hdr">
-    <div class="br-kicker">JKAI · Daily</div>
-    <h1>Briefing</h1>
-    <p class="br-sub">A daily digest of what you care about — learned from your questions, research, and signals. Delivered {data.schedule.display} + WhatsApp.</p>
-    <a class="br-back" href="/jkai">← back to jkai</a>
-  </header>
+<PageHeader title="BRIEFING" />
 
-  <section class="br-sec br-config">
-    <div class="br-config-row">
+<main class="br">
+  <div class="br-bar">
+    <p class="br-sub">
+      Learned from your questions, research and signals · delivered {data.schedule.display} + WhatsApp
+      {#if !enabled}<span class="br-off">paused</span>{/if}
+    </p>
+    <div class="br-bar-actions">
+      <button class="br-run" onclick={runNow} disabled={running}>{running ? 'Generating…' : 'Run now'}</button>
+      <button class="br-cfg-toggle" onclick={() => (showConfig = !showConfig)} aria-expanded={showConfig}>
+        {showConfig ? 'Hide settings' : 'Settings'}
+      </button>
+    </div>
+  </div>
+
+  {#if msg || err}
+    <p class="br-flash">{#if msg}<span class="br-ok">{msg}</span>{/if}{#if err}<span class="br-err">⚠ {err}</span>{/if}</p>
+  {/if}
+
+  {#if showConfig || !latest}
+    <section class="br-sec br-config">
       <label class="br-toggle">
         <input type="checkbox" bind:checked={enabled} />
-        <span>{enabled ? 'Enabled' : 'Disabled'}</span>
+        <span>{enabled ? 'Enabled — runs daily' : 'Disabled — no scheduled runs'}</span>
       </label>
-      <button class="br-run" onclick={runNow} disabled={running}>{running ? 'Generating…' : 'Run now'}</button>
-    </div>
-    <label class="br-field">
-      <span class="sr-label-tight">Topics you care about (comma-separated)</span>
-      <input class="br-in" bind:value={topicsText} placeholder="DfE data policy, brass & rails, home security, LLM costs" />
-    </label>
-    <div class="br-config-foot">
-      <button class="br-save" onclick={saveConfig}>Save config</button>
-      {#if msg}<span class="br-ok">{msg}</span>{/if}
-      {#if err}<span class="br-err">⚠ {err}</span>{/if}
-    </div>
-  </section>
+      <label class="br-field">
+        <span class="sr-label-tight">Topics you care about (comma-separated)</span>
+        <input class="br-in" bind:value={topicsText} placeholder="DfE data policy, brass & rails, home security, LLM costs" />
+      </label>
+      <div class="br-config-foot">
+        <button class="br-save" onclick={saveConfig}>Save config</button>
+      </div>
+    </section>
+  {/if}
 
   {#if latest}
     <section class="br-sec">
@@ -139,13 +154,14 @@
 </main>
 
 <style>
-  .br { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; color: var(--text-primary); }
-  .br-hdr { border-bottom: 2px solid var(--card-border); padding-bottom: 16px; margin-bottom: 20px; }
-  .br-kicker { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
-  .br-hdr h1 { font-family: var(--font-display, var(--font-sans)); font-size: 34px; margin: 4px 0 2px; }
+  .br { max-width: 820px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
+  .br-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .br-bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .br-sub { margin: 0; color: var(--text-muted); font-size: 13px; }
-  .br-back { display: inline-block; margin-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-decoration: none; }
-  .br-back:hover { color: var(--text-primary); }
+  .br-off { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--warn, #b0892a); border: 1px solid currentColor; padding: 1px 5px; margin-left: 8px; }
+  .br-cfg-toggle { font-family: var(--font-mono); font-size: 11px; padding: 7px 12px; background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; }
+  .br-cfg-toggle:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .br-flash { margin: 0 0 12px; }
 
   .br-sec { margin-bottom: 24px; }
   .br-sec-hd { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px dashed var(--card-border); padding-bottom: 6px; margin-bottom: 12px; }
@@ -153,7 +169,6 @@
   .br-when { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
 
   .br-config { border: 1px solid var(--card-border); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-  .br-config-row { display: flex; align-items: center; justify-content: space-between; }
   .br-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
   .br-toggle input { width: auto; }
   .br-run, .br-save { font-family: var(--font-mono); font-size: 12px; padding: 7px 16px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }

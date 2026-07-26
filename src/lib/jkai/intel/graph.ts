@@ -77,6 +77,11 @@ async function upsertEntity(
       typeId,
       properties: entity.properties,
       confidence: entity.confidence,
+      // Confidence gate: high-confidence extractions join the graph directly;
+      // medium/low wait in /jkai/intel/review. Without this every entity
+      // needed manual confirmation, which does not scale now that /drive
+      // uploads and finished research auto-extract too.
+      confirmed: entity.confidence === 'high',
       firstSeenIn: noteId,
     })
     .returning({ id: intelEntities.id });

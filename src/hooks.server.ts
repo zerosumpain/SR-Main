@@ -296,6 +296,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     }
   }
 
+  // /api/jkai/prompts/hermes is service-to-service: the VPS prompt workbench
+  // proxies here so it can read/write ~/.hermes-jkai/*.md, which only exist on
+  // homeserv. Same shape as /api/scraper/script above — whitelist on homeserv
+  // only; the handler still enforces the service token itself.
+  if (pathname === '/api/jkai/prompts/hermes') {
+    const { hostname } = await import('os');
+    if (hostname() === 'homeserv' || process.env.HERMES_PROMPTS_LOCAL === '1') {
+      return resolve(event);
+    }
+  }
+
   // Public API routes — read-only, used by public pages (plus the write-only
   // heartbeat-renderer telemetry beacon, which stores nothing).
   const PUBLIC_API_PATHS = [

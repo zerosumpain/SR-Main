@@ -14,6 +14,13 @@ export type IntelItem = {
     entityType?: string;
     tags?: string[];
     sourceTag?: string;
+    /**
+     * Set on notes minted by intel auto-extraction ('file' | 'research'),
+     * absent on notes a human wrote. Unified recall uses this to drop the
+     * derived note, whose text is already covered by the files/research
+     * branches — the entities it produced are the part worth surfacing.
+     */
+    autoKind?: string;
   };
 };
 
@@ -70,6 +77,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
            n.created_at AS "createdAt",
            n.metadata->>'sourceTag' AS source_tag,
            n.metadata->>'sourceUrl' AS source_url,
+           n.metadata->>'autoKind' AS auto_kind,
            ${vectorStr != null
              ? sql`(n.embedding <=> ${vectorStr}::vector)`
              : sql`0.5::float8`} AS distance
@@ -114,6 +122,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
     score: Math.max(0, 1 - Number(r.distance ?? 0.5)),
     metadata: {
       sourceTag: (r.source_tag as string | undefined) ?? undefined,
+      autoKind: (r.auto_kind as string | undefined) ?? undefined,
     },
   }));
 

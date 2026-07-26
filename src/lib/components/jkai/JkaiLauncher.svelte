@@ -32,7 +32,7 @@
     { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
     { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/monitors') },
-    { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/knowledge') },
+    { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel/search') },
   ];
 
   const NAV: { section: string; items: NavItem[] }[] = [
@@ -48,10 +48,10 @@
     {
       section: 'Recall & agents',
       items: [
-        { code: 'KN', label: 'Knowledge', href: '/jkai/knowledge', desc: 'Search files, research, memory & datastore', keywords: 'recall search @knowledge unified' },
+        { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Knowledge graph, notes & alerts', keywords: 'graph entities relationships' },
+        { code: 'KN', label: 'Recall', href: '/jkai/intel/search', desc: 'Search notes, entities, files, research, memory & datastore', keywords: 'recall search @knowledge unified knowledge' },
         { code: 'AG', label: 'Agents', href: '/jkai/agents', desc: 'Your specialist agent team', keywords: 'delegate specialist team persona' },
-        { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Knowledge graph', keywords: 'graph entities relationships' },
-        { code: 'PR', label: 'Prompts', href: '/jkai/prompts', desc: 'Prompt library', keywords: 'prompt library saved' },
+        { code: 'PR', label: 'Prompts', href: '/jkai/prompts', desc: 'The prompts that actually run', keywords: 'prompt workbench system soul' },
       ],
     },
     {
@@ -65,7 +65,6 @@
       section: 'Ops',
       items: [
         { code: 'IMP', label: 'Improvement', href: '/jkai/improvement', desc: 'Self-improvement ledger', keywords: 'ledger self improve nightly' },
-        { code: 'CH', label: 'Channels', href: '/jkai/channels', desc: 'Comms channels', keywords: 'whatsapp gmail channels' },
       ],
     },
   ];

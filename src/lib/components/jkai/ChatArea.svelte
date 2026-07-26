@@ -29,6 +29,7 @@
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
+  import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { onMount, tick } from 'svelte';
 
   let {
@@ -470,6 +471,10 @@
 
   onMount(() => {
     textareaEl?.focus();
+    // Dock the command-palette trigger in the composer row. This retires the
+    // layout's floating bottom-left button, which sat on top of the sidebar's
+    // run-stats footer.
+    return dockTrigger();
   });
 
   $effect(() => {
@@ -2285,6 +2290,18 @@
           <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
           <button
             type="button"
+            onclick={openLauncher}
+            class="composer-launch self-end"
+            title="JKAI launcher (⌘K)"
+            aria-label="Open JKAI launcher"
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <rect x="2" y="2" width="6" height="6" rx="1" /><rect x="12" y="2" width="6" height="6" rx="1" />
+              <rect x="2" y="12" width="6" height="6" rx="1" /><rect x="12" y="12" width="6" height="6" rx="1" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onclick={send}
             disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
             class="nm-save-btn composer-send self-end"
@@ -3049,10 +3066,32 @@
     font-size: 11px;
     letter-spacing: 0.14em;
   }
+  /* Command-palette trigger, docked beside Send. Was a floating bottom-left
+     button in the /jkai layout, where it covered the sidebar run-stats. */
+  .composer-launch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.12s, color 0.12s;
+  }
+  .composer-launch:hover {
+    opacity: 1;
+    color: var(--accent-ink, var(--accent, #c4570a));
+  }
   @media (max-width: 480px) {
     /* Mobile: prevent iOS zoom on focus + tighten chrome around the textarea */
     .composer-textarea { font-size: 16px; padding: 8px 10px; }
     .composer-send { padding: 9px 12px; letter-spacing: 0.08em; }
+    .composer-launch { width: 34px; height: 34px; }
   }
 
 </style>

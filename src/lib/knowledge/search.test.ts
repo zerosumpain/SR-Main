@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/file-index/search', () => ({ searchFiles: vi.fn() }));
 vi.mock('$lib/deepdive/research-search', () => ({ searchResearch: vi.fn() }));
+vi.mock('$lib/jkai/intel/search', () => ({ searchIntel: vi.fn(async () => ({ items: [], total: 0 })) }));
 vi.mock('drizzle-orm', () => ({ and: () => ({}), desc: () => ({}), ilike: () => ({}), isNull: () => ({}) }));
 vi.mock('$lib/db/schema', () => ({ jkaiMemories: { content: 'c', supersededBy: 's', updatedAt: 'u' } }));
 
@@ -26,6 +27,7 @@ vi.mock('$lib/datastore', () => ({
 
 import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
+import { searchIntel } from '$lib/jkai/intel/search';
 import { searchKnowledge } from './search';
 
 beforeEach(() => {
@@ -33,6 +35,7 @@ beforeEach(() => {
   memRows.length = 0;
   dsCollections.length = 0;
   for (const k of Object.keys(dsRecords)) delete dsRecords[k];
+  vi.mocked(searchIntel).mockResolvedValue({ items: [], total: 0 });
 });
 
 describe('searchKnowledge', () => {
@@ -72,6 +75,26 @@ describe('searchKnowledge', () => {
     expect(searchResearch).not.toHaveBeenCalled();
     expect(r.hits).toHaveLength(1);
     expect(r.hits[0].source).toBe('memory');
+  });
+
+  it('splits one searchIntel call into notes + entities, dropping auto-extracted notes', async () => {
+    vi.mocked(searchIntel).mockResolvedValue({
+      items: [
+        { id: 'n1', kind: 'note', title: 'Handwritten note', snippet: 'human wrote this', createdAt: new Date().toISOString(), score: 0.8 },
+        { id: 'n2', kind: 'note', title: 'report.pdf', snippet: 'derived from a file', createdAt: new Date().toISOString(), score: 0.7, metadata: { autoKind: 'file' } },
+        { id: 'e1', kind: 'entity', title: 'DfE', snippet: 'department', createdAt: new Date().toISOString(), score: 0.75, metadata: { entityType: 'organisation' } },
+      ],
+      total: 3,
+    });
+
+    const r = await searchKnowledge('dfe', { sources: ['notes', 'entities'] });
+    // One embedding, not two: both branches share the same searchIntel call.
+    expect(searchIntel).toHaveBeenCalledTimes(1);
+    expect(r.counts).toMatchObject({ notes: 1, entities: 1 });
+    expect(r.hits.find((h) => h.source === 'notes')?.ref).toMatchObject({ intelId: 'n1', url: '/jkai/intel/notes/n1' });
+    expect(r.hits.find((h) => h.source === 'entities')?.ref).toMatchObject({ intelId: 'e1', url: '/jkai/intel/entities/e1' });
+    // The file-derived note is suppressed — the files branch already covers its text.
+    expect(r.hits.some((h) => h.ref.intelId === 'n2')).toBe(false);
   });
 
   it('datastore branch keyword-matches record JSON and skips system collections', async () => {

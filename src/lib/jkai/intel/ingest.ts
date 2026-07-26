@@ -17,7 +17,9 @@ import type { JkaiAttachment } from '$lib/db/schema';
 export interface IngestInput {
   title?: string;
   rawContent: string;
-  source: 'web' | 'whatsapp' | 'pwa' | 'email' | 'workflow';
+  // 'file' | 'research' are minted by auto-extraction (see ./auto-extract.ts),
+  // not by a human writing a note.
+  source: 'web' | 'whatsapp' | 'pwa' | 'email' | 'workflow' | 'file' | 'research';
   format: 'text' | 'handwriting_scan' | 'audio_transcript' | 'email' | 'meeting_transcript' | 'summary';
   metadata?: Record<string, unknown>;
   attachment?: JkaiAttachment;

@@ -22,6 +22,10 @@
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="1"/><line x1="9" y1="14.5" x2="11" y2="14.5"/></svg>
   {:else if source === 'email'}
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="14" height="10" rx="1"/><path d="M3 6l7 5 7-5"/></svg>
+  {:else if source === 'research'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5"/><line x1="12.8" y1="12.8" x2="17" y2="17"/></svg>
+  {:else if source === 'file'}
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 011-1h4l1.5 2H16a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1z"/></svg>
   {:else}
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h7l3 3v11H5z"/><path d="M12 3v3h3"/><line x1="7.5" y1="10" x2="12.5" y2="10"/><line x1="7.5" y1="13" x2="12.5" y2="13"/></svg>
   {/if}
@@ -32,8 +36,8 @@
 <div class="p-6 sm:p-10 max-w-7xl mx-auto">
   <div class="flex items-center justify-between mb-6">
     <div class="flex items-center gap-3">
-      <a href="/jkai/intel/search" class="px-4 py-2 rounded-[var(--radius-round)] text-sm border" style="background: var(--card-bg); border-color: var(--card-border);">
-        Search
+      <a href="/jkai/intel/search" class="px-4 py-2 rounded-[var(--radius-round)] text-sm border" style="background: var(--card-bg); border-color: var(--card-border);" title="Search notes, entities, files, research, memory and datastore">
+        Recall
       </a>
       <a href="/jkai/intel/notes/new" class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium" style="background: var(--accent); color: white;">
         + New Note
