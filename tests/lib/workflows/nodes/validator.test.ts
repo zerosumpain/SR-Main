@@ -1,17 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { validatorExecutor, validatorDef } from '$lib/workflows/nodes/validator';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
+const mockContext: ExecutionContext = makeExecutionContext({
   runId: 'test',
   workflowId: 'test',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: vi.fn(),
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),
-  abortSignal: new AbortController().signal,
-} as any;
+});
 
 describe('validatorExecutor — schema mode', () => {
   const schema = JSON.stringify({ type: 'object', required: ['name', 'score'], properties: { name: { type: 'string' }, score: { type: 'number' } } });

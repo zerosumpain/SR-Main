@@ -1,7 +1,7 @@
 // Integration test for the RAG pipeline — hits the REAL local DB + REAL
 // OpenRouter embeddings + REAL LLM. Not part of the default suite (it costs a
 // few cents and needs DATABASE_URL + keys.json). Run explicitly:
-//   DATABASE_URL=... npx vitest run tests/lib/rag/pipeline.integration.test.ts
+//   set -a; source .env; set +a; npm run test:external
 import { describe, it, expect, afterAll } from 'vitest';
 import { db } from '$lib/db';
 import { workflowFiles, ragCollections, ragMessages } from '$lib/db/schema';
@@ -10,7 +10,12 @@ import { saveBuffer, deleteFile, newDiskPath } from '$lib/file-store/storage';
 import { buildCollection, answer } from '$lib/rag/pipeline';
 import { readIndex, deleteIndex } from '$lib/rag/index-store';
 
-const RUN = !!process.env.DATABASE_URL;
+// Two conditions, deliberately. DATABASE_URL alone is NOT enough to opt in:
+// CI sets it (a throwaway pgvector container), and so does homeserv's .env — so
+// a DATABASE_URL-only gate means every `npm run gate` silently bills OpenRouter
+// for embeddings + an LLM round. RUN_EXTERNAL_TESTS makes spending money an
+// explicit act. Run via `npm run test:external`.
+const RUN = !!process.env.DATABASE_URL && process.env.RUN_EXTERNAL_TESTS === '1';
 const d = RUN ? describe : describe.skip;
 
 // Distinctive, invented facts the model cannot know except from the document.

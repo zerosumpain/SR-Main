@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { codeExecuteExecutor, codeExecuteDef } from '$lib/workflows/nodes/code-execute';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 // Mock the sandbox module
 vi.mock('$lib/jkai/sandbox', () => ({
@@ -11,19 +12,7 @@ vi.mock('$lib/jkai/sandbox', () => ({
 
 import { execInSandbox, ensureSandboxRunning, writeFileInSandbox } from '$lib/jkai/sandbox';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('codeExecuteExecutor', () => {
   it('executes javascript code in sandbox', async () => {

@@ -1,20 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { accumulatorExecutor, accumulatorDef } from '$lib/workflows/nodes/accumulator';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('accumulatorExecutor', () => {
   it('collects a named array field from input', async () => {

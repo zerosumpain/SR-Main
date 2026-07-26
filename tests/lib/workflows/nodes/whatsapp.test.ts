@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 // Mock the WhatsApp service boundary.
 const mockSendMessage = vi.fn();
@@ -20,20 +21,12 @@ vi.mock('$lib/workflows/nodes/data-store', () => ({
 const { whatsappExecutor } = await import('$lib/workflows/nodes/whatsapp');
 
 function ctx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  return {
+  return makeExecutionContext({
     runId: 'run-1',
     workflowId: 'wf-1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: () => {},
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     ...overrides,
-  } as ExecutionContext;
+  });
 }
 
 beforeEach(() => {

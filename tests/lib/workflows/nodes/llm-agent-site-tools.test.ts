@@ -31,23 +31,18 @@ vi.mock('$lib/workflows/site-tools/registry', () => ({
 import { llmAgentExecutor, runAgentSubCall } from '$lib/workflows/nodes/llm-agent';
 import { executionContext, recordLLMCall } from '$lib/workflows/execution-context';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 function makeCtx(): ExecutionContext {
-  return {
+  return makeExecutionContext({
     runId: 'r1',
     workflowId: 'w1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     _currentNodeId: 'agent-1',
-    _registry: {},
-  } as unknown as ExecutionContext;
+    // The agent under test only checks that a registry is present, so an empty
+    // stand-in is enough; cast narrowly rather than casting the whole context.
+    _registry: {} as ExecutionContext['_registry'],
+  });
 }
 
 function toolCall(name: string, args = '{}') {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 // Mock $lib/db before importing the executor.
 const mockWhere = vi.fn();
@@ -57,19 +58,7 @@ function lastExecuteSql(): string {
   return dialect.sqlToQuery(call[0]).sql;
 }
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: 'wf-123',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: 'wf-123' });
 
 beforeEach(() => {
   vi.clearAllMocks();

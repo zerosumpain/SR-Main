@@ -1,20 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { delayExecutor, delayDef } from '$lib/workflows/nodes/delay';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('delayExecutor', () => {
   it('passes input through unchanged', async () => {

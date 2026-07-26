@@ -1,20 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { manualTriggerExecutor, manualTriggerDef } from '$lib/workflows/nodes/manual-trigger';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('manualTriggerExecutor', () => {
   it('passes through input as output', async () => {

@@ -16,23 +16,16 @@ vi.mock('$lib/workflows/site-tools/registry', () => ({
 
 import { siteToolExecutor } from '$lib/workflows/nodes/site-tool';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-function makeCtx(overrides: Record<string, any> = {}): ExecutionContext {
-  return {
+function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
+  return makeExecutionContext({
     runId: 'r1',
     workflowId: 'w1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     _currentNodeId: 'st-1',
     ...overrides,
-  } as unknown as ExecutionContext;
+  });
 }
 
 beforeEach(() => {

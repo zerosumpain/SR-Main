@@ -1,16 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { conditionalExecutor, conditionalDef } from '$lib/workflows/nodes/conditional';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-} as any;
+const mockContext: ExecutionContext = makeExecutionContext();
 
 describe('conditionalExecutor', () => {
   it('sets _selectedHandle to "true" when expression is truthy', async () => {

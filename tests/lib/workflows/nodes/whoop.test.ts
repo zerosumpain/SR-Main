@@ -13,8 +13,9 @@ vi.mock('$lib/health/whoop', () => ({
 
 import { whoopExecutor } from '$lib/workflows/nodes/whoop';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext = {} as ExecutionContext;
+const mockContext: ExecutionContext = makeExecutionContext();
 
 describe('whoopExecutor', () => {
   it('get_cycles returns cycles array', async () => {

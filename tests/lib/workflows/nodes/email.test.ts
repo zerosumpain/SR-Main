@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { emailExecutor, emailDef } from '$lib/workflows/nodes/email';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 vi.mock('nodemailer', () => ({
   default: {
@@ -10,16 +11,7 @@ vi.mock('nodemailer', () => ({
   },
 }));
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-} as any;
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('emailExecutor', () => {
   it('sends an email and returns sent + messageId', async () => {

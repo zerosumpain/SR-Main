@@ -1,17 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { llmRouterExecutor, llmRouterDef } from '$lib/workflows/nodes/llm-router';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-} as any;
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 // Shared mock create function so individual tests can control its return value
 const mockCreate = vi.fn().mockResolvedValue({

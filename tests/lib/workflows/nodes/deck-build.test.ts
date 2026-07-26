@@ -17,23 +17,16 @@ vi.mock('$lib/workflows/site-tools/registry', () => ({
 
 import { deckBuildExecutor } from '$lib/workflows/nodes/deck-build';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-function makeCtx(overrides: Record<string, unknown> = {}): ExecutionContext {
-  return {
+function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
+  return makeExecutionContext({
     runId: 'r1',
     workflowId: 'w1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     _currentNodeId: 'deck-1',
     ...overrides,
-  } as unknown as ExecutionContext;
+  });
 }
 
 const SPEC = [{ title: 'One', layout: 'default', blocks: [{ type: 'heading', text: 'Hi' }] }];

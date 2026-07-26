@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 // Mock the data-store boundary. dedupe now decides "which ids are new" via the
 // ATOMIC claim (addToSetReturningNew) in immediate mode, defers via an embedded
@@ -24,20 +25,12 @@ const {
 } = await import('$lib/workflows/nodes/dedupe');
 
 function ctx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  return {
+  return makeExecutionContext({
     runId: 'run-1',
     workflowId: 'wf-1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: () => {},
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     ...overrides,
-  };
+  });
 }
 
 beforeEach(() => {

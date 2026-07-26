@@ -24,19 +24,16 @@ vi.mock('$lib/workflows', () => ({
 import { subWorkflowExecutor } from '$lib/workflows/nodes/sub-workflow';
 import { db } from '$lib/db';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const stubContext: ExecutionContext = {
+const stubContext: ExecutionContext = makeExecutionContext({
   runId: 'parent-run',
   workflowId: 'parent-wf',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: vi.fn(),
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),
-  abortSignal: new AbortController().signal,
   getOutgoingEdges: vi.fn().mockReturnValue([]),
   getNodeConfig: vi.fn(),
-} as unknown as ExecutionContext;
+});
 
 describe('sub-workflow executor', () => {
   beforeEach(() => {

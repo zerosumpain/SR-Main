@@ -13,20 +13,18 @@ vi.mock('$lib/workflows/whatsapp/service', () => ({
 
 import { whatsappExecutor, whatsappDef } from '$lib/workflows/nodes/whatsapp';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-const mockContext: ExecutionContext = {
+const mockContext: ExecutionContext = makeExecutionContext({
   runId: 'run-1',
   workflowId: 'wf-1',
   workspaceDir: '/tmp',
-  dryRun: false,
-  emit: vi.fn(),
   getNodeOutput: vi.fn(),
   checkBreakpoint: vi.fn(),
-  abortSignal: new AbortController().signal,
   getOutgoingEdges: vi.fn().mockReturnValue([]),
   getIncomingEdges: vi.fn().mockReturnValue([]),
   getNodeConfig: vi.fn(),
-};
+});
 
 describe('whatsappExecutor', () => {
   beforeEach(() => {

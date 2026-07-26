@@ -33,6 +33,7 @@ vi.mock('$lib/jkai/llm-client', () => ({
 
 import { llmAgentExecutor, llmAgentDef, discoverTools } from '$lib/workflows/nodes/llm-agent';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 function makeMockContext(overrides?: Partial<ExecutionContext> & Record<string, any>): ExecutionContext {
   const mockExecutor = {
@@ -61,22 +62,16 @@ function makeMockContext(overrides?: Partial<ExecutionContext> & Record<string, 
     getDefinition: vi.fn().mockReturnValue(mockDefinition),
   };
 
-  const ctx: any = {
+  return makeExecutionContext({
     runId: 'test-run',
     workflowId: 'wf-1',
-    workspaceDir: '/tmp/test',
-    dryRun: false,
     emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
     getOutgoingEdges: vi.fn().mockReturnValue([]),
     getNodeConfig: vi.fn().mockReturnValue(undefined),
     _currentNodeId: 'agent-1',
-    _registry: mockRegistry,
+    _registry: mockRegistry as unknown as ExecutionContext['_registry'],
     ...overrides,
-  };
-  return ctx;
+  });
 }
 
 function makeToolContext() {

@@ -6,23 +6,16 @@ vi.mock('$lib/file-index/search', () => ({ searchFiles: searchFilesMock }));
 
 import { fileSearchExecutor } from '$lib/workflows/nodes/file-search';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-function makeCtx(overrides: Record<string, unknown> = {}): ExecutionContext {
-  return {
+function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
+  return makeExecutionContext({
     runId: 'r1',
     workflowId: 'w1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     _currentNodeId: 'fs-1',
     ...overrides,
-  } as unknown as ExecutionContext;
+  });
 }
 
 const hit = (over: Partial<Record<string, unknown>> = {}) => ({

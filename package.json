@@ -17,7 +17,8 @@
 		"gate": "npm run gate:public-routes && npm run gate:check && npm run gate:test",
 		"gate:public-routes": "node scripts/check-public-routes.mjs",
 		"gate:check": "svelte-kit sync && NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --threshold error",
-		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'"
+		"gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**'",
+		"test:external": "RUN_EXTERNAL_TESTS=1 vitest run tests/lib/rag/pipeline.integration.test.ts tests/lib/apis/registry.integration.test.ts"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",

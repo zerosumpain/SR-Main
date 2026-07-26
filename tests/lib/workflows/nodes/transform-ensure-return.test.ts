@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { transformExecutor } from '$lib/workflows/nodes/transform';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 /**
  * Exercises transform's `ensureReturn` helper (not exported — tested through
@@ -11,19 +12,7 @@ import type { ExecutionContext } from '$lib/workflows/types';
  * builds, per the source comment).
  */
 
-const mockContext: ExecutionContext = {
-  runId: 'test-run',
-  workflowId: '',
-  workspaceDir: '/tmp/test',
-  dryRun: false,
-  emit: () => {},
-  getNodeOutput: () => undefined,
-  checkBreakpoint: async () => {},
-  abortSignal: new AbortController().signal,
-  getOutgoingEdges: () => [],
-  getIncomingEdges: () => [],
-  getNodeConfig: () => undefined,
-};
+const mockContext: ExecutionContext = makeExecutionContext({ workflowId: '' });
 
 describe('transform ensureReturn — implicit return handling', () => {
   it('wraps a bare object-literal expression with no return', async () => {

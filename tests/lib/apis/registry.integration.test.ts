@@ -1,7 +1,7 @@
 // Integration test for the API secret registry + integration register — hits
 // the REAL local DB and the REAL OpenRouter account API. Not part of the default
 // suite (it needs DATABASE_URL and a configured OpenRouter key). Run explicitly:
-//   set -a; source .env; set +a; npx vitest run tests/lib/apis/registry.integration.test.ts
+//   set -a; source .env; set +a; npm run test:external
 //
 // What it proves, in order:
 //   1. a credential can be registered and its VALUE never comes back out;
@@ -29,7 +29,11 @@ import { saveIntegration, callIntegration, deleteIntegration } from '$lib/apis/i
 import { runSeeds } from '$lib/selfimprove/seed-apis';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
-const RUN = !!process.env.DATABASE_URL;
+// Two conditions, deliberately — see the note in tests/lib/rag/pipeline.integration.test.ts.
+// This suite calls the REAL OpenRouter account API and deliberately LEAVES the
+// `openrouter` credential registered in the DB, so it must never fire as a
+// side effect of the merge gate. Run via `npm run test:external`.
+const RUN = !!process.env.DATABASE_URL && process.env.RUN_EXTERNAL_TESTS === '1';
 const d = RUN ? describe : describe.skip;
 
 const DEMO_KEY = 'test-openrouter-credit';

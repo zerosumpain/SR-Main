@@ -5,23 +5,16 @@ vi.mock('$lib/deepdive/research-search', () => ({ searchResearch: searchResearch
 
 import { researchSearchExecutor } from '$lib/workflows/nodes/research-search';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
-function makeCtx(overrides: Record<string, unknown> = {}): ExecutionContext {
-  return {
+function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
+  return makeExecutionContext({
     runId: 'r1',
     workflowId: 'w1',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: vi.fn(),
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     _currentNodeId: 'rs-1',
     ...overrides,
-  } as unknown as ExecutionContext;
+  });
 }
 
 const hit = () => ({

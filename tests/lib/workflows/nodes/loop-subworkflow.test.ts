@@ -14,24 +14,17 @@ vi.mock('$lib/workflows/nodes/sub-workflow', () => ({
 
 import { loopExecutor } from '$lib/workflows/nodes/loop';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 const fakeDef = { id: 'sub-wf', name: 'Sub', nodes: [], edges: [] };
 
 function makeContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  return {
+  return makeExecutionContext({
     runId: 'test-run',
     workflowId: 'parent-wf',
     workspaceDir: '/tmp',
-    dryRun: false,
-    emit: () => {},
-    getNodeOutput: () => undefined,
-    checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [],
-    getIncomingEdges: () => [],
-    getNodeConfig: () => undefined,
     ...overrides,
-  } as ExecutionContext;
+  });
 }
 
 type ItemResult = { index: number; status: 'succeeded' | 'failed'; output?: unknown; error?: string };

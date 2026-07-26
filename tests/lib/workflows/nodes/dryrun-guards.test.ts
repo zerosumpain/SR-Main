@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ExecutionContext } from '$lib/workflows/types';
+import { makeExecutionContext } from '../../../support/execution-context';
 
 // blog-ops routes through the site-tool executor; mock it so a dry run that
 // leaks past the guard would be caught (the mock throws if invoked).
@@ -38,12 +39,7 @@ const { fileWriteExecutor, fileDeleteExecutor } = await import('$lib/workflows/n
 const { jkaiExecutor } = await import('$lib/workflows/nodes/jkai');
 
 function ctx(dryRun: boolean): ExecutionContext {
-  return {
-    runId: 'r', workflowId: 'wf', workspaceDir: '/tmp', dryRun,
-    emit: () => {}, getNodeOutput: () => undefined, checkBreakpoint: async () => {},
-    abortSignal: new AbortController().signal,
-    getOutgoingEdges: () => [], getIncomingEdges: () => [], getNodeConfig: () => undefined,
-  } as ExecutionContext;
+  return makeExecutionContext({ runId: 'r', workflowId: 'wf', workspaceDir: '/tmp', dryRun });
 }
 
 beforeEach(() => vi.clearAllMocks());
