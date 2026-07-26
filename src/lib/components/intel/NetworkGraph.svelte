@@ -81,6 +81,15 @@
     return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
   }
 
+  /**
+   * An edge endpoint's id. d3's forceLink mutates `source`/`target` from the id
+   * string into the node object once the simulation is built, so anything
+   * reading them afterwards has to handle both forms.
+   */
+  function endpointId(v: unknown): string {
+    return typeof v === 'string' ? v : ((v as { id?: string })?.id ?? '');
+  }
+
   function destroy() {
     simulation?.stop();
     simulation = null;
@@ -155,8 +164,12 @@
       .selectAll('line')
       .data(simEdges)
       .join('line')
+      // `d3.forceLink().id()` has already replaced source/target with the node
+      // OBJECTS by this point, so they must be read through endpointId — casting
+      // them to string produced "[object Object]" keys and the highlighted path
+      // was never actually drawn in accent.
       .attr('stroke', (d) =>
-        pathEdgeKeys.has([d.source as unknown as string, d.target as unknown as string].sort().join('|'))
+        pathEdgeKeys.has([endpointId(d.source), endpointId(d.target)].sort().join('|'))
           ? 'var(--accent)'
           : d.crossCommunity
             ? 'rgba(196, 87, 10, 0.42)'
@@ -323,24 +336,55 @@
       .call(zoomBehaviour.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
 
-  // Re-render when the data changes. The reads that should re-trigger are
-  // hoisted and tracked; everything the render does is untracked, so mutating
-  // `hovered`/`tooltip` from d3 handlers can never feed back into this effect.
+  // Full rebuild ONLY when the data or the highlighted path changes. The reads
+  // that should re-trigger are hoisted and tracked; everything render() does is
+  // untracked, so mutating `hovered`/`tooltip` from d3 handlers can never feed
+  // back into this effect.
+  //
+  // `selectedId` is deliberately NOT a dependency here. It used to be, which
+  // meant every click on a node tore down the SVG and restarted the force
+  // simulation from scratch — hundreds of elements rebuilt and the layout
+  // visibly jumping, just to move one highlight ring. Selection is a paint
+  // change, so it repaints in place below.
   $effect(() => {
     nodes;
     edges;
     highlightPath;
-    selectedId;
     container;
     untrack(() => render());
+  });
+
+  // Selection repaint: restyle the existing circles rather than rebuilding.
+  $effect(() => {
+    const id = selectedId;
+    if (!rootGroup) return;
+    untrack(() => {
+      rootGroup!
+        .selectAll<SVGCircleElement, SimNode>('g.node > circle:first-of-type')
+        .attr('stroke', (d) =>
+          d.id === id || pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',
+        )
+        .attr('stroke-width', (d) => (d.id === id || pathSet.has(d.id) ? 3 : 1.5));
+    });
   });
 
   $effect(() => {
     const el = container;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    resizeObserver = new ResizeObserver(() => untrack(() => render()));
+
+    // Debounced: a resize fires continuously while a pane is dragged, and
+    // render() is a full teardown-and-rebuild of every element.
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    resizeObserver = new ResizeObserver(() => {
+      if (pending) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        untrack(() => render());
+      }, 220);
+    });
     resizeObserver.observe(el);
     return () => {
+      if (pending) clearTimeout(pending);
       resizeObserver?.disconnect();
       resizeObserver = null;
     };

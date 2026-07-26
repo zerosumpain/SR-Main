@@ -111,6 +111,14 @@ export const GET: RequestHandler = async ({ url }) => {
     .orderBy(desc(intelTimelineEvents.date))
     .limit(8);
 
+  // Counted separately: the `notes` query above is capped at 10 for display, so
+  // using its length would report a hard ceiling of 10 sources for an entity
+  // that might appear in fifty.
+  const [{ total: noteTotal } = { total: 0 }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(intelNoteEntities)
+    .where(eq(intelNoteEntities.entityId, id));
+
   const maxPagerank = Math.max(1e-9, ...[...centrality.pagerank.values()]);
 
   return json({
@@ -136,7 +144,7 @@ export const GET: RequestHandler = async ({ url }) => {
       betweenness: centrality.betweenness.get(id) ?? 0,
       brokerage: brokerageScore(id, centrality, index),
       community: community.membership.get(id) ?? null,
-      noteCount: notes.length,
+      noteCount: noteTotal,
     },
     neighbours,
     notes: notes.map((n) => ({

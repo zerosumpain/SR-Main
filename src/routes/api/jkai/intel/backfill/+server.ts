@@ -49,6 +49,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     limit?: number;
     summaries?: boolean;
     embeddings?: boolean;
+    dedupeLinks?: boolean;
   };
 
   // Summary-only pass: fills entities left without one. Separate from the
@@ -57,6 +58,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   if (body.summaries) {
     const { backfillEntitySummaries } = await import('$lib/jkai/intel/graph');
     return json(await backfillEntitySummaries(typeof body.limit === 'number' ? body.limit : undefined));
+  }
+
+  // Repair pass: drop duplicate (note, entity) links accumulated by
+  // re-extraction before the insert was guarded. Cheap, idempotent, no LLM.
+  if (body.dedupeLinks) {
+    const { dedupeNoteLinks } = await import('$lib/jkai/intel/resolve/merge');
+    return json(await dedupeNoteLinks());
   }
 
   // Embedding-only pass. The most important of the three: entity resolution

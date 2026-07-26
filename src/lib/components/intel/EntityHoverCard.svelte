@@ -5,7 +5,7 @@
   // sideways when it would fall off-screen. Portalled to <body> so it is never
   // clipped by the chat column's overflow.
 
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import EntityCard from './EntityCard.svelte';
   import { entityHover } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
@@ -21,12 +21,20 @@
 
   const anchor = $derived(entityHover.current);
 
-  // Measure after render so the flip decision uses the real height. Reads a DOM
-  // node and writes a plain number — no reactive read-own-write cycle.
+  // Measure after render so the flip decision uses the real height.
+  //
+  // The comparison READS `height` and the branch WRITES it, which is exactly the
+  // cycle shape rule 1 of the svelte5-pitfalls skill warns about. The tracked
+  // dependencies are hoisted (anchor, host) and the read+write pair is wrapped
+  // in untrack, so the effect cannot re-trigger itself.
   $effect(() => {
-    if (!anchor || !host) return;
-    const h = host.offsetHeight;
-    if (h && Math.abs(h - height) > 4) height = h;
+    const a = anchor;
+    const el = host;
+    if (!a || !el) return;
+    untrack(() => {
+      const h = el.offsetHeight;
+      if (h && Math.abs(h - height) > 4) height = h;
+    });
   });
 
   const position = $derived.by(() => {

@@ -70,14 +70,27 @@ export function findPaths(
 
   const found: GraphPath[] = [];
   const penalised = new Set<string>(opts.exclude ?? []);
+  const seen = new Set<string>();
 
   for (let attempt = 0; attempt < limit; attempt++) {
     const route = bfsRoute(index, from, to, maxHops, penalised);
     if (!route) break;
+
+    // Guard against returning the same route twice. A DIRECT edge has no
+    // intermediates to penalise, so without this the loop re-found it on every
+    // iteration and callers got `limit` identical copies of a one-hop path.
+    const signature = route.join('>');
+    if (seen.has(signature)) break;
+    seen.add(signature);
+
     found.push(toPath(index, route));
+
     // Penalise the intermediates (never the endpoints) so the next search is
-    // pushed onto different ground.
-    for (const n of route.slice(1, -1)) penalised.add(n);
+    // pushed onto different ground. Nothing to penalise means nothing can
+    // change, so stop rather than search again.
+    const middle = route.slice(1, -1);
+    if (!middle.length) break;
+    for (const n of middle) penalised.add(n);
   }
 
   return found;

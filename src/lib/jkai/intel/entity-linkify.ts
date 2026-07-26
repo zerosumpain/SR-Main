@@ -93,8 +93,19 @@ export function anchorsFor(target: EntityMentionTarget): string[] {
  */
 export function findAnchor(haystack: string, needle: string): number {
   const exact = isAcronymAnchor(needle) || needle.length < SHORT_NAME_LEN;
-  const hay = exact ? haystack : haystack.toLowerCase();
-  const nee = exact ? needle : needle.toLowerCase();
+  let hay = haystack;
+  let nee = needle;
+  if (!exact) {
+    const lowered = haystack.toLowerCase();
+    // toLowerCase can CHANGE LENGTH for a few characters (Turkish dotted I,
+    // for one), and the match index is applied back to the ORIGINAL string —
+    // so a length change would slice the wrong span. Fall back to an
+    // exact-case search rather than risk mangling the text.
+    if (lowered.length === haystack.length) {
+      hay = lowered;
+      nee = needle.toLowerCase();
+    }
+  }
 
   let from = 0;
   for (;;) {

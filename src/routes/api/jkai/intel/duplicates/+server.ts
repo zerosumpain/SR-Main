@@ -64,7 +64,13 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   if (action === 'auto') {
-    const threshold = Number(body.threshold ?? AUTO_MERGE_THRESHOLD);
+    // Clamped, and never below AUTO_MERGE_THRESHOLD. Taken raw, a body of
+    // `{"action":"auto","threshold":0}` — or a NaN from any non-numeric value —
+    // would merge every candidate pair in the graph in one unrecoverable sweep.
+    const raw = Number(body.threshold);
+    const threshold = Number.isFinite(raw)
+      ? Math.min(1, Math.max(AUTO_MERGE_THRESHOLD, raw))
+      : AUTO_MERGE_THRESHOLD;
     const dryRun = Boolean(body.dryRun);
     return json({ ok: true, result: await autoMergeDuplicates(threshold, { dryRun }) });
   }

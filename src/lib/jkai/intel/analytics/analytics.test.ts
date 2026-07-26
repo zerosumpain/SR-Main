@@ -251,6 +251,23 @@ describe('paths', () => {
     expect(shortestPath(index, 'a', 'd', 3)).not.toBeNull();
   });
 
+  it('returns a directly-connected pair exactly once', () => {
+    // Regression: a direct edge has no intermediates to penalise, so the
+    // alternative-route loop re-found it every iteration and callers got
+    // `limit` identical copies of the same one-hop path.
+    const index = buildIndex({ nodes: [node('a'), node('b')], edges: [edge('a', 'b')] });
+    const paths = findPaths(index, 'a', 'b', { limit: 3 });
+    expect(paths).toHaveLength(1);
+    expect(paths[0].nodes).toEqual(['a', 'b']);
+  });
+
+  it('never returns the same route twice', () => {
+    const index = buildIndex(barbell());
+    const paths = findPaths(index, 'a', 'd', { limit: 4, maxHops: 5 });
+    const signatures = paths.map((p) => p.nodes.join('>'));
+    expect(new Set(signatures).size).toBe(signatures.length);
+  });
+
   it('finds genuinely different alternative routes', () => {
     // Two parallel routes from s to t: via m1 and via m2.
     const index = buildIndex({
@@ -360,6 +377,39 @@ describe('surprise scoring', () => {
 
     const hubLink = links.find((l) => l.a === 'hub' || l.b === 'hub')!;
     expect(hubLink.reasons).not.toContain('neither is a hub');
+  });
+
+  it('does not gate out a pair that is also joined through a non-hub', () => {
+    // p and q are joined BOTH through a hub and through an obscure node. The
+    // hub gate must not fire, because a genuinely specific route exists — this
+    // used to depend on whichever route BFS reached first.
+    const leaves = Array.from({ length: 20 }, (_, i) => `leaf${i}`);
+    const index = buildIndex({
+      nodes: ['hub', 'niche', 'p', 'q', ...leaves].map((n) => node(n)),
+      edges: [
+        ...leaves.map((l) => edge('hub', l)),
+        edge('p', 'hub'), edge('q', 'hub'),
+        edge('p', 'niche'), edge('q', 'niche'),
+      ],
+    });
+    const membership = detectCommunities(index).membership;
+    // High limit: this graph produces many low-scoring pairs and the point here
+    // is presence, not rank.
+    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
+    const pq = links.find((l) => pairKey(l.a, l.b) === pairKey('p', 'q'));
+    expect(pq).toBeDefined();
+    expect(pq!.reasons.join(' ').toLowerCase()).toContain('niche');
+  });
+
+  it('still gates out a pair joined ONLY through hubs', () => {
+    const leaves = Array.from({ length: 20 }, (_, i) => `leaf${i}`);
+    const index = buildIndex({
+      nodes: ['hub', 'p', 'q', ...leaves].map((n) => node(n)),
+      edges: [...leaves.map((l) => edge('hub', l)), edge('p', 'hub'), edge('q', 'hub')],
+    });
+    const membership = detectCommunities(index).membership;
+    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
+    expect(links.some((l) => pairKey(l.a, l.b) === pairKey('p', 'q'))).toBe(false);
   });
 
   it('honours the result limit', () => {

@@ -162,6 +162,11 @@ async function upsertEntity(
   // disagreement about its type is a typing question, not grounds for a second
   // node. The existing type is kept, since it was chosen with the evidence that
   // first created the entity.
+  // When several live entities share the name, the SAME-TYPE one wins. Without
+  // that tie-break, name-only matching could fuse a person and an organisation
+  // that happen to share a name (a real risk with surnames like "Morgan").
+  // Falling back to name alone only happens when no same-type candidate exists,
+  // which is the case this relaxation is for.
   const [sameName] = await db
     .select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId })
     .from(intelEntities)
@@ -171,7 +176,11 @@ async function upsertEntity(
         isNull(intelEntities.mergedIntoId),
       ),
     )
-    .orderBy(desc(intelEntities.confirmed), intelEntities.createdAt)
+    .orderBy(
+      sql`(${intelEntities.typeId} = ${typeId}) DESC`,
+      desc(intelEntities.confirmed),
+      intelEntities.createdAt,
+    )
     .limit(1);
 
   if (sameName) {
@@ -371,14 +380,26 @@ export async function persistExtraction(
   for (const entity of result.entities) {
     const entityId = entityIdMap.get(entity.name);
     if (!entityId) continue;
-    await db
-      .insert(intelNoteEntities)
-      .values({
-        noteId,
-        entityId,
-        relevance: entity.confidence === 'high' ? 'primary' : 'mentioned',
-      })
-      .onConflictDoNothing();
+
+    // Checked explicitly rather than relying on `.onConflictDoNothing()`, which
+    // silently did nothing here: intel_note_entities carries two foreign keys
+    // and NO primary key or unique index, so there was never a constraint for
+    // the conflict clause to act on. Every re-extraction of a note therefore
+    // added another (note, entity) row, inflating every evidence count derived
+    // from this table. A unique index is the obvious fix but cannot be added
+    // to a populated table without breaking non-interactive `drizzle-kit push`.
+    const [existingLink] = await db
+      .select({ noteId: intelNoteEntities.noteId })
+      .from(intelNoteEntities)
+      .where(and(eq(intelNoteEntities.noteId, noteId), eq(intelNoteEntities.entityId, entityId)))
+      .limit(1);
+    if (existingLink) continue;
+
+    await db.insert(intelNoteEntities).values({
+      noteId,
+      entityId,
+      relevance: entity.confidence === 'high' ? 'primary' : 'mentioned',
+    });
   }
 
   // Relationships and timeline events are UPSERTED, not blindly inserted.

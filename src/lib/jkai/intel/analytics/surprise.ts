@@ -197,9 +197,20 @@ export function scoreSurprisingLinks(
       const dist = semanticDistance(ctx, a, b);
       const expected = expectedness(index, a, b, edgeCount);
 
-      // The route actually taken, so its intermediates can be judged.
-      const route = hops > 1 ? routeBetween(index, a, b, hops) : [a, b];
-      const mids = route ? route.slice(1, -1) : [];
+      // The intermediates the pair is actually connected through.
+      //
+      // At two hops these are EXACTLY the common neighbours, which are already
+      // computed above — so use them rather than one arbitrary BFS route. That
+      // matters: a pair joined both through a hub and through an obscure entity
+      // is a genuine find, and picking whichever route BFS happened to reach
+      // first could have discarded it. Beyond two hops there is no such
+      // shortcut, so one shortest route stands in.
+      const mids =
+        hops === 1
+          ? []
+          : hops === 2
+            ? sharedIds
+            : (routeBetween(index, a, b, hops) ?? []).slice(1, -1);
 
       // HARD GATE. A route whose every intermediate is a hub is the single
       // biggest source of false positives: with one degree-119 entity in a

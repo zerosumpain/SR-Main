@@ -7,7 +7,12 @@
 // `merged_into_id IS NULL`, so a tombstone disappears from every view while
 // still resolving any stale link that names it.
 //
-// Nothing is destroyed, so a bad merge is recoverable with `unmergeEntity`.
+// The ENTITY is never destroyed, so a bad merge is reversible with
+// `unmergeEntity`. Relationship rows are the exception: an edge that would
+// become a self-loop, or that exactly duplicates one the survivor already has
+// in the same direction, is deleted rather than moved — keeping them would
+// corrupt every degree and centrality figure. Those specific rows do not come
+// back on unmerge, and `unmergeEntity` says so.
 import { db } from '$lib/db';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
@@ -55,82 +60,111 @@ export async function mergeEntities(keepId: string, mergeId: string): Promise<Me
   if (!keep) throw new Error(`survivor ${keepId} not found`);
   if (!merge) throw new Error(`entity ${mergeId} not found`);
   if (merge.mergedIntoId) throw new Error(`${mergeId} is already merged`);
+  // Merging INTO a tombstone would build a chain the graph loader cannot
+  // follow — it resolves merged_into_id one level only, so anything pointing at
+  // an already-merged entity would silently vanish from every view.
+  if (keep.mergedIntoId) {
+    throw new Error(`survivor ${keepId} is itself merged into ${keep.mergedIntoId}`);
+  }
 
-  // Repoint relationships. Anything that would become a self-loop, or that
-  // duplicates an edge the survivor already has, is deleted rather than moved.
-  const dropped = await db.execute(sql`
-    DELETE FROM intel_relationships r
-    WHERE (r.source_entity_id = ${mergeId} AND r.target_entity_id = ${keepId})
-       OR (r.source_entity_id = ${keepId} AND r.target_entity_id = ${mergeId})
-       OR (r.source_entity_id = ${mergeId} AND r.target_entity_id = ${mergeId})
-       OR EXISTS (
-         SELECT 1 FROM intel_relationships e
-         WHERE e.id <> r.id
-           AND e.type = r.type
-           AND (
-             (e.source_entity_id = ${keepId} AND e.target_entity_id = CASE WHEN r.source_entity_id = ${mergeId} THEN r.target_entity_id ELSE r.source_entity_id END)
-             OR
-             (e.target_entity_id = ${keepId} AND e.source_entity_id = CASE WHEN r.source_entity_id = ${mergeId} THEN r.target_entity_id ELSE r.source_entity_id END)
+  // Everything below runs in ONE transaction. The first statement is a DELETE,
+  // so without it a failure part-way through would leave edges destroyed and no
+  // merge recorded — the one way this operation could lose data irrecoverably.
+  const outcome = await db.transaction(async (tx) => {
+    // Repoint relationships. Anything that would become a self-loop, or that
+    // duplicates an edge the survivor already has, is deleted rather than moved.
+    //
+    // Duplicate detection is DIRECTION-AWARE. Relationship types here are
+    // directed — `reports_to`, `owns`, `blocks` — so "A reports_to B" and
+    // "B reports_to A" are different claims, and collapsing them would silently
+    // invert or destroy one. Only an edge with the same type AND the same
+    // orientation relative to the survivor counts as a duplicate.
+    const dropped = await tx.execute(sql`
+      DELETE FROM intel_relationships r
+      WHERE (r.source_entity_id = ${mergeId} AND r.target_entity_id = ${keepId})
+         OR (r.source_entity_id = ${keepId} AND r.target_entity_id = ${mergeId})
+         OR (r.source_entity_id = ${mergeId} AND r.target_entity_id = ${mergeId})
+         OR (
+           (r.source_entity_id = ${mergeId} OR r.target_entity_id = ${mergeId})
+           AND EXISTS (
+             SELECT 1 FROM intel_relationships e
+             WHERE e.id <> r.id
+               AND e.type = r.type
+               AND (
+                 -- r points AWAY from the merged entity → survivor must also
+                 -- point away, to the same other end.
+                 (r.source_entity_id = ${mergeId}
+                    AND e.source_entity_id = ${keepId}
+                    AND e.target_entity_id = r.target_entity_id)
+                 OR
+                 -- r points TOWARD the merged entity → survivor must also be
+                 -- the target of the same other end.
+                 (r.target_entity_id = ${mergeId}
+                    AND e.target_entity_id = ${keepId}
+                    AND e.source_entity_id = r.source_entity_id)
+               )
            )
-       ) AND (r.source_entity_id = ${mergeId} OR r.target_entity_id = ${mergeId})
-  `);
+         )
+    `);
 
-  const movedSource = await db
-    .update(intelRelationships)
-    .set({ sourceEntityId: keepId })
-    .where(eq(intelRelationships.sourceEntityId, mergeId));
-  const movedTarget = await db
-    .update(intelRelationships)
-    .set({ targetEntityId: keepId })
-    .where(eq(intelRelationships.targetEntityId, mergeId));
+    const movedSource = await tx
+      .update(intelRelationships)
+      .set({ sourceEntityId: keepId })
+      .where(eq(intelRelationships.sourceEntityId, mergeId));
+    const movedTarget = await tx
+      .update(intelRelationships)
+      .set({ targetEntityId: keepId })
+      .where(eq(intelRelationships.targetEntityId, mergeId));
 
-  // Note links: move the ones the survivor doesn't already have, delete the rest.
-  await db.execute(sql`
-    DELETE FROM intel_note_entities ne
-    WHERE ne.entity_id = ${mergeId}
-      AND EXISTS (SELECT 1 FROM intel_note_entities k WHERE k.entity_id = ${keepId} AND k.note_id = ne.note_id)
-  `);
-  const notesMoved = await db
-    .update(intelNoteEntities)
-    .set({ entityId: keepId })
-    .where(eq(intelNoteEntities.entityId, mergeId));
+    // Note links: move the ones the survivor doesn't already have, delete the rest.
+    await tx.execute(sql`
+      DELETE FROM intel_note_entities ne
+      WHERE ne.entity_id = ${mergeId}
+        AND EXISTS (SELECT 1 FROM intel_note_entities k WHERE k.entity_id = ${keepId} AND k.note_id = ne.note_id)
+    `);
+    const notesMoved = await tx
+      .update(intelNoteEntities)
+      .set({ entityId: keepId })
+      .where(eq(intelNoteEntities.entityId, mergeId));
 
-  const timelineMoved = await db
-    .update(intelTimelineEvents)
-    .set({ entityId: keepId })
-    .where(eq(intelTimelineEvents.entityId, mergeId));
+    const timelineMoved = await tx
+      .update(intelTimelineEvents)
+      .set({ entityId: keepId })
+      .where(eq(intelTimelineEvents.entityId, mergeId));
 
-  // Fold in properties the survivor lacks; never overwrite what it already knows.
-  const mergedProps = {
-    ...((merge.properties as Record<string, unknown>) ?? {}),
-    ...((keep.properties as Record<string, unknown>) ?? {}),
-  };
+    // Fold in properties the survivor lacks; never overwrite what it already knows.
+    const mergedProps = {
+      ...((merge.properties as Record<string, unknown>) ?? {}),
+      ...((keep.properties as Record<string, unknown>) ?? {}),
+    };
 
-  await db
-    .update(intelEntities)
-    .set({
-      properties: mergedProps,
-      summary: keep.summary ?? merge.summary,
-      updatedAt: new Date(),
-    })
-    .where(eq(intelEntities.id, keepId));
+    await tx
+      .update(intelEntities)
+      .set({
+        properties: mergedProps,
+        summary: keep.summary ?? merge.summary,
+        updatedAt: new Date(),
+      })
+      .where(eq(intelEntities.id, keepId));
 
-  // Tombstone last.
-  await db
-    .update(intelEntities)
-    .set({ mergedIntoId: keepId, updatedAt: new Date() })
-    .where(eq(intelEntities.id, mergeId));
+    // Tombstone last.
+    await tx
+      .update(intelEntities)
+      .set({ mergedIntoId: keepId, updatedAt: new Date() })
+      .where(eq(intelEntities.id, mergeId));
+
+    return {
+      keptId: keepId,
+      mergedId: mergeId,
+      relationshipsMoved: rowCount(movedSource) + rowCount(movedTarget),
+      relationshipsDropped: rowCount(dropped),
+      notesMoved: rowCount(notesMoved),
+      timelineMoved: rowCount(timelineMoved),
+    };
+  });
 
   invalidateGraphAnalysis();
-
-  return {
-    keptId: keepId,
-    mergedId: mergeId,
-    relationshipsMoved: rowCount(movedSource) + rowCount(movedTarget),
-    relationshipsDropped: rowCount(dropped),
-    notesMoved: rowCount(notesMoved),
-    timelineMoved: rowCount(timelineMoved),
-  };
+  return outcome;
 }
 
 function rowCount(result: unknown): number {
@@ -140,9 +174,15 @@ function rowCount(result: unknown): number {
 
 /**
  * Undo a merge — the tombstone is cleared and the entity becomes live again.
- * Relationships that were repointed stay with the survivor: which of them
- * originally belonged to the merged entity is not recorded, and guessing would
- * be worse than leaving them. Reversible enough to make merging safe to try.
+ *
+ * Two things do NOT come back, deliberately:
+ *   - Relationships that were repointed stay with the survivor. Which of them
+ *     originally belonged to the merged entity is not recorded, and guessing
+ *     would be worse than leaving them.
+ *   - Edges deleted as exact duplicates or self-loops are gone. They carried no
+ *     information the survivor does not already hold.
+ * The entity, its properties and its identity return, which is what makes
+ * merging safe to try.
  */
 export async function unmergeEntity(entityId: string): Promise<void> {
   await db
@@ -277,6 +317,36 @@ export async function findUntypedEntities(limit = 100) {
     .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
     .where(and(eq(intelEntityTypes.name, 'concept'), isNull(intelEntities.mergedIntoId)))
     .limit(limit);
+}
+
+/**
+ * Remove duplicate (note, entity) links left by re-extraction.
+ *
+ * `intel_note_entities` has two foreign keys and no primary key, so the
+ * `.onConflictDoNothing()` that was meant to guard these inserts had no
+ * constraint to act on and every re-extraction added another row. Evidence
+ * counts derived from this table — the entity card's source count, the
+ * thin-evidence detector — were inflated as a result. Keeps the row with the
+ * strongest relevance, then the one carrying an excerpt.
+ */
+export async function dedupeNoteLinks(): Promise<{ removed: number }> {
+  const result = await db.execute(sql`
+    DELETE FROM intel_note_entities ne
+    WHERE ne.ctid NOT IN (
+      SELECT ctid FROM (
+        SELECT DISTINCT ON (note_id, entity_id) ctid
+        FROM intel_note_entities
+        ORDER BY note_id, entity_id,
+                 (relevance = 'primary') DESC,
+                 (excerpt IS NOT NULL) DESC,
+                 ctid
+      ) keep
+    )
+  `);
+  const removed = rowCount(result);
+  if (removed) invalidateGraphAnalysis();
+  console.log(`[intel:resolve] removed ${removed} duplicate note-entity links`);
+  return { removed };
 }
 
 /** Move every entity of one type onto another, then retire the empty type. */
