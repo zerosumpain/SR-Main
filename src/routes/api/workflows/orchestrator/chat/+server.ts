@@ -607,6 +607,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             fileRefs: turnFileRefs.length > 0 ? turnFileRefs : undefined,
             researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
             workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
+            // Hand the client the provider's own completion-token count (which
+            // includes reasoning and tool-call tokens) so the /jkai tok/s meter
+            // can settle its streamed chars/4 estimate against a real number.
+            usage: turnUsage?.output_tokens != null ? { outputTokens: turnUsage.output_tokens } : undefined,
           };
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;

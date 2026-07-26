@@ -28,6 +28,7 @@
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
+  import { beginTurn, noteOutput, noteToolCall, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
   import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { onMount, tick } from 'svelte';
@@ -351,6 +352,7 @@
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
+    beginTurn();
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -388,6 +390,12 @@
           m.onFirstToken();
           pendingTtft.delete(progressId);
         }
+        // Same tok/s accounting as makeProgressHandler. Tool frames aren't
+        // rendered on the silent path, but the meter still needs the pause —
+        // otherwise a silent turn's tool time would count as generation time.
+        if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
+        else if (data.type === 'tool_start') noteToolCall(data.args);
+
         if (data.type === 'token') {
           accumulatedContent += data.delta;
           messages = messages.map((m) =>
@@ -428,6 +436,7 @@
         if (data.type === 'done') {
           pendingTtft.delete(progressId);
           const result = data.result ?? {};
+          settleTurn((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
           const finalMessage = (result.message as string) ?? accumulatedContent;
           messages = messages.map((m) =>
             m.id === progressId
@@ -439,6 +448,7 @@
         }
         if (data.type === 'error') {
           pendingTtft.delete(progressId);
+          settleTurn();
           messages = messages.map((m) =>
             m.id === progressId
               ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown'}` }
@@ -458,6 +468,9 @@
         chatStream = null;
         loading = false;
         currentJobId = null;
+        // Backstop: a stream that ends without done/error must not leave the
+        // meter stuck on "live". No-op once the handler has settled.
+        settleTurn();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -824,6 +837,12 @@
         lastModelEventAt = Date.now();
       }
 
+      // Feed the bottom-left tok/s meter. Reply text and reasoning both count
+      // as generated output; a tool call bills its argument JSON and then
+      // pauses the clock for however long the tool runs.
+      if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
+      else if (data.type === 'tool_start') noteToolCall(data.args);
+
       if (data.type === 'token') {
         heartbeat = null;
         accRef.value += data.delta;
@@ -1060,7 +1079,12 @@
           fileRefs?: FileSearchRef[];
           researchRefs?: ResearchSearchRef[];
           workflowRefs?: WorkflowChipRef[];
+          usage?: { outputTokens?: number | null };
         };
+        // Settle the tok/s meter against the provider's own output-token count
+        // (reasoning + tool-call tokens included) when the server reported one;
+        // otherwise it keeps the streamed chars/4 estimate.
+        settleTurn(result.usage?.outputTokens ?? null);
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
         const finalMsg: Message = {
@@ -1090,6 +1114,7 @@
         pendingConfirm = null;
         pendingClarify = null;
         pendingApproval = null;
+        settleTurn();
         messages = messages.map((m) =>
           m.id === progressId
             ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -1118,6 +1143,9 @@
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
+    // Re-attaching: the bus replays its buffered events in one burst, so this
+    // turn's throughput isn't measurable — account for it but publish nothing.
+    beginTurn({ replay: true });
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -1146,6 +1174,7 @@
       pendingConfirm = null;
       pendingClarify = null;
       pendingApproval = null;
+      settleTurn();
       scrollToBottom();
     }
   }
@@ -1515,6 +1544,7 @@
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
+    beginTurn();
     // Start with a subtle typing indicator — no progress box yet
     messages = [...messages, {
       id: progressId,
@@ -1608,6 +1638,9 @@
     pendingConfirm = null;
     pendingClarify = null;
     pendingApproval = null;
+    // Backstop: a stream that ends without done/error (cancel, hang-up, network
+    // fallback) must not leave the meter stuck on "live". No-op once settled.
+    settleTurn();
     scrollToBottom();
   }
 
