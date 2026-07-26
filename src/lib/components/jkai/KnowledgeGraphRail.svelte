@@ -1,6 +1,8 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import type { ThreadGraph, ThreadGraphNode, ThreadNodeKind } from '$lib/jkai/thread-graph';
+  import KnowledgeGraphModal from './KnowledgeGraphModal.svelte';
+  import { RAIL_LAYOUT, placeNodes, drawEdges } from '$lib/jkai/graph-layout';
 
   let {
     conversationId,
@@ -79,42 +81,13 @@
     return base.length > 14 ? `${base.slice(0, 13)}…` : base;
   }
 
-  // Three hand-placed columns, exactly as the prototype lays them out: it keeps
-  // every chip inside the rail without a force simulation that could push one
-  // off the edge. Nodes fill column-major so edges tend to run left-to-right.
-  const COLUMNS = [16, 106, 202];
-  const ROW_TOP = 28;
-  const ROW_GAP = 56;
-  const CHIP_CENTRE = { x: 44, y: 11 };
+  // Layout is shared with the expanded modal — see $lib/jkai/graph-layout.
+  const placed = $derived(placeNodes(graph.nodes, RAIL_LAYOUT));
+  const drawnEdges = $derived(drawEdges(graph.edges, placed, RAIL_LAYOUT, selected?.id ?? null));
 
-  type Placed = ThreadGraphNode & { x: number; y: number };
-  const placed = $derived.by<Placed[]>(() => {
-    const perColumn = Math.max(1, Math.ceil(graph.nodes.length / COLUMNS.length));
-    return graph.nodes.map((n, i) => {
-      const col = Math.min(COLUMNS.length - 1, Math.floor(i / perColumn));
-      const row = i % perColumn;
-      return { ...n, x: COLUMNS[col], y: ROW_TOP + row * ROW_GAP };
-    });
-  });
-  const positions = $derived(new Map(placed.map((p) => [p.id, p])));
-
-  const drawnEdges = $derived(
-    graph.edges
-      .map((e) => {
-        const a = positions.get(e.source);
-        const b = positions.get(e.target);
-        if (!a || !b) return null;
-        return {
-          ...e,
-          x1: a.x + CHIP_CENTRE.x,
-          y1: a.y + CHIP_CENTRE.y,
-          x2: b.x + CHIP_CENTRE.x,
-          y2: b.y + CHIP_CENTRE.y,
-          active: e.source === selected?.id || e.target === selected?.id,
-        };
-      })
-      .filter((e): e is NonNullable<typeof e> => e !== null),
-  );
+  // The rail is a summary; the modal is where the graph is legible and where
+  // you cross over into /jkai/intel.
+  let expanded = $state(false);
 
   /** The ER reading of the graph: every edge touching the selected node, as
    *  `VERB → target → TYPE`. */
@@ -157,7 +130,13 @@
   ><span></span></button>
 
   <div class="gr-hd">
-    <span class="rail-label">Knowledge graph</span>
+    <button
+      type="button"
+      class="rail-label gr-expand-label"
+      onclick={() => (expanded = true)}
+      disabled={graph.nodes.length === 0}
+      title="Expand the graph"
+    >Knowledge graph ⤢</button>
     <span class="gr-count">
       {graph.nodes.length}
       {graph.nodes.length === 1 ? 'node' : 'nodes'} / {graph.edges.length}
@@ -192,8 +171,8 @@
           class="gr-node"
           class:selected={node.id === selected?.id}
           style="left: {node.x}px; top: {node.y}px;"
-          onclick={() => (selectedId = node.id)}
-          title={node.name}
+          onclick={() => { selectedId = node.id; expanded = true; }}
+          title="{node.name} — click to expand"
         >
           <span class="gr-glyph" aria-hidden="true">{GLYPH[node.kind]}</span>
           <span class="gr-label">{chipLabel(node)}</span>
@@ -245,6 +224,15 @@
   </div>
 </aside>
 
+{#if expanded}
+  <KnowledgeGraphModal
+    {graph}
+    {selectedId}
+    onSelect={(id) => (selectedId = id)}
+    onClose={() => (expanded = false)}
+  />
+{/if}
+
 <style>
   .graph-rail {
     width: 324px;
@@ -264,6 +252,21 @@
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--text-ghost);
+  }
+
+  .gr-expand-label {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    transition: color 0.2s ease-out;
+  }
+  .gr-expand-label:hover:not(:disabled) {
+    color: var(--accent);
+  }
+  .gr-expand-label:disabled {
+    cursor: default;
   }
 
   .sheet-handle {

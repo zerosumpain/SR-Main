@@ -51,7 +51,7 @@
   }
 </script>
 
-<section class="nm-sec drafts-panel">
+<section class="drafts-panel">
   <header>
     <button class="title" type="button" onclick={() => (expanded = !expanded)}>
       Drafts ({drafts.length}) {expanded ? '▾' : '▸'}

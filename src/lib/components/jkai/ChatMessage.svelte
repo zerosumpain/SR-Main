@@ -332,16 +332,22 @@
 <style>
   /* Bubble geometry — square, 2px, no shadow. Depth is border + tint only.
      Both roles cap at 600px; wide content (tables, pre) scrolls inside. */
+  /* Replies fill the column — the same width as the reasoning bar and the
+     tool-step cards they sit between, so a long answer isn't squeezed into a
+     narrow ribbon while the machinery around it spans the page. User turns stay
+     capped and right-aligned, which is what keeps the thread reading as a
+     dialogue rather than one undifferentiated wall. */
   .msg-row {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    max-width: 600px;
-    align-self: flex-start;
+    width: 100%;
+    align-self: stretch;
   }
   .msg-row.user {
     align-items: flex-end;
     align-self: flex-end;
+    max-width: 600px;
   }
 
   .msg-meta {
@@ -390,6 +396,9 @@
   .msg-row.user .msg-bubble {
     border-color: var(--accent-tint-20);
     background: var(--accent-tint-08);
+    /* Shrink to the question asked — a two-word prompt in a 600px box reads as
+       an empty form field. */
+    width: auto;
   }
   .user-text {
     white-space: pre-wrap;
