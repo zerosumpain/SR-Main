@@ -13,9 +13,26 @@ name: CI
 #    so a runaway build is cgroup-killed instead of the kernel OOM-killer
 #    picking the production node process.
 #
-# `needs: gate` is what actually enforces the gate: SR-Main is private on
+# `needs: gate-*` is what actually enforces the gate: SR-Main is private on
 # GitHub Free, so required status checks are unavailable (the branch-protection
 # and rulesets APIs both 403). A red gate cannot reach the deploy job regardless.
+#
+# ── Shape of the pipeline, and why ────────────────────────────────────────────
+#
+# Measured 2026-07-26, a master push took 11m30s to reach production. The gate
+# ran its three phases in series (check 93s → test 191s → build 176s) even
+# though they share nothing, `vite build` ran three times per change (PR gate,
+# push gate, deploy), and one workflow-level concurrency group made PR gates
+# queue behind deploys and vice versa. Three changes address that:
+#
+#  1. The gate is three PARALLEL jobs. Wall clock is now the longest phase, not
+#     the sum. Nothing is checked less than before.
+#  2. A master push REUSES the PR's verdict when the tree is byte-identical
+#     (see the `plan` job). Every PR is still gated in full; what is skipped is
+#     re-gating a tree that already went green minutes earlier.
+#  3. Concurrency is scoped per-PR for pull_request runs, so only DEPLOYS
+#     serialise against each other. Superseded PR pushes now cancel instead of
+#     holding the deploy lock.
 
 on:
   pull_request:
@@ -23,18 +40,140 @@ on:
     branches: [master]
   workflow_dispatch:
 
-# Never let two deploys touch the VPS at once. Do not cancel in progress: a
-# half-finished deploy is worse than a queued one.
+# Deploys must never overlap — a half-finished deploy is worse than a queued
+# one, so the master/dispatch group keeps cancel-in-progress off. PR runs get
+# their own per-branch group: they never touch the VPS, so making them share
+# the deploy lock only ever delayed production (measured: two deploys sat
+# queued 3.7m and 4.9m behind PR gates on 2026-07-26 before being superseded).
+# Within a PR, a new push SHOULD cancel the old run — the old commit is dead.
 concurrency:
-  group: sr-main-deploy
-  cancel-in-progress: false
+  group: >-
+    ${{ github.event_name == 'pull_request'
+        && format('sr-main-pr-{0}', github.head_ref)
+        || 'sr-main-deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
+  # Needed by `plan` to ask whether this tree already passed the gate.
+  actions: read
 
 jobs:
-  gate:
-    name: Gate (check + test)
+  # ───────────────────────────────────────────────────────────────────────────
+  # Decide whether the gate has to run at all.
+  #
+  # When a green PR is squash-merged and master has not moved in between, the
+  # commit that lands on master has the SAME TREE the PR gate just tested. The
+  # gate would re-run ~7 minutes of identical work on identical bytes. This job
+  # looks for the marker a passing gate leaves behind (`gate-pass-<tree-sha>`,
+  # written by `gate-verdict` below) and skips the gate if it finds one.
+  #
+  # Why the tree SHA and not the commit SHA: squash-merge always mints a new
+  # commit, so commit SHAs never match. The TREE is the actual content, and it
+  # matches exactly when nothing changed. If master HAS moved, GitHub recomputes
+  # the merge and the tree differs — no marker, full gate. That is the correct
+  # failure direction: the check is conservative by construction.
+  #
+  # PRs deliberately never reuse. Every pull_request run gates in full, so the
+  # marker can only ever be produced by a complete, honest gate.
+  #
+  # Residual risk, stated plainly: two PRs that are each green in isolation and
+  # merged back-to-back are not tested TOGETHER by this arrangement. The deploy
+  # job's own `npm run build` still fails the deploy on any build-level breakage
+  # (which is what caught the server-only-import leak in 23ff84bc), but a purely
+  # semantic conflict between two PRs would reach production. Re-running the
+  # workflow after such a merge re-gates from scratch if the tree has changed.
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      reuse: ${{ steps.verdict.outputs.reuse }}
+      tree: ${{ steps.verdict.outputs.tree }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          TREE="$(git rev-parse HEAD^{tree})"
+          echo "tree=$TREE" >> "$GITHUB_OUTPUT"
+          echo "Tree under test: $TREE"
+
+          # PRs always gate in full — see the note above.
+          if [ "$EVENT" = "pull_request" ]; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "pull_request event — full gate."
+            exit 0
+          fi
+
+          # An exact-name lookup, so this is one API call regardless of how many
+          # artifacts the repo has. `expired` matters: artifacts age out (7 days,
+          # set below) and an expired marker must not count as a pass.
+          FRESH="$(gh api "repos/$REPO/actions/artifacts?name=gate-pass-$TREE" \
+                     --jq '[.artifacts[] | select(.expired == false)] | length')"
+
+          if [ "$FRESH" -gt 0 ]; then
+            echo "reuse=true" >> "$GITHUB_OUTPUT"
+            echo "This exact tree already passed the gate ($FRESH marker(s)) — reusing that verdict."
+          else
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "No gate marker for this tree — running the full gate."
+          fi
+
+      - name: Summarise
+        run: |
+          {
+            if [ "${{ steps.verdict.outputs.reuse }}" = "true" ]; then
+              echo "## Gate reused"
+              echo "Tree \`${{ steps.verdict.outputs.tree }}\` already passed a full gate — going straight to build + deploy."
+            else
+              echo "## Full gate"
+              echo "Tree \`${{ steps.verdict.outputs.tree }}\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The gate, as three independent jobs. They were one serial script purely
+  # because npm scripts are serial — nothing about the work is ordered.
+  #
+  # Only `gate-test` needs Postgres, so the other two no longer pay the ~27s
+  # "Initialize containers" step or the service's startup.
+
+  gate-check:
+    name: Gate — svelte-check
+    needs: plan
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - run: npm run gate:public-routes
+
+      # PUBLIC_VAPID_PUBLIC_KEY must exist at `svelte-kit sync` time: SvelteKit
+      # generates `$env/static/public` from the environment, so without it the
+      # module has no members and jkai/+layout.svelte fails to type-check
+      # ("has no exported member"). It is the ONLY statically-imported env var.
+      # A placeholder is correct here — this job only type-checks. The real
+      # value is inlined by the deploy job below.
+      - run: npm run gate:check
+        env:
+          PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+
+  gate-test:
+    name: Gate — vitest
+    needs: plan
+    if: needs.plan.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -69,12 +208,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - run: npm ci
 
       - name: Prepare test database
@@ -82,25 +219,77 @@ jobs:
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
-      # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
-      # svelte-check OOMs under Node's default.
-      #
-      # PUBLIC_VAPID_PUBLIC_KEY must exist at `svelte-kit sync` time: SvelteKit
-      # generates `$env/static/public` from the environment, so without it the
-      # module has no members and jkai/+layout.svelte fails to type-check
-      # ("has no exported member"). It is the ONLY statically-imported env var.
-      # A placeholder is correct here — the gate only type-checks and runs unit
-      # tests, it never serves push notifications. The real value is inlined by
-      # the deploy job below.
-      - name: npm run gate
-        run: npm run gate
+      - run: npm run gate:test
         env:
           PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
 
+  gate-build:
+    name: Gate — build
+    needs: plan
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # A full production build is the ONLY thing that catches server-only code
+      # reaching the browser bundle — svelte-check stays green on it (that is
+      # what 23ff84bc fixed). It runs on a PR so the breakage is caught BEFORE
+      # merge; the deploy job builds again on the VPS because that is the
+      # artifact that actually ships.
+      - run: npm run gate:build
+        env:
+          PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+
+  # Records "this exact tree passed a complete gate" for the `plan` job of a
+  # later run to find. The artifact's NAME carries the whole signal, so nothing
+  # ever needs downloading — `plan` does a single name-filtered API call.
+  #
+  # Retention is short on purpose: a marker is only useful between a PR going
+  # green and its merge landing, which is minutes. Seven days is generous and
+  # keeps the artifact list small.
+  gate-verdict:
+    name: Gate — record verdict
+    needs: [plan, gate-check, gate-test, gate-build]
+    if: needs.plan.outputs.reuse != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Describe the pass
+        run: |
+          {
+            echo "tree=${{ needs.plan.outputs.tree }}"
+            echo "commit=${{ github.sha }}"
+            echo "run=${{ github.run_id }}"
+            echo "event=${{ github.event_name }}"
+          } > gate-pass.txt
+          cat gate-pass.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gate-pass-${{ needs.plan.outputs.tree }}
+          path: gate-pass.txt
+          retention-days: 7
+
   deploy:
     name: Build + deploy (VPS)
-    needs: gate
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    needs: [plan, gate-check, gate-test, gate-build]
+    # `always()` is required so a SKIPPED gate (verdict reused) does not skip
+    # the deploy with it — but it also means failures must be excluded by hand,
+    # hence the explicit result checks. A failed or cancelled gate job can still
+    # never reach production.
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/master')) &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
@@ -162,17 +351,28 @@ jobs:
               echo "${{ steps.classify.outputs.matched }}"
               echo '```'
             else
-              echo "No protected paths touched — eligible for auto-merge from an \`agent/\` branch."
+              echo "No protected paths touched — eligible for auto-merge."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   auto-merge:
-    name: Auto-merge (low tier, agent branches)
-    needs: [gate, risk-tier]
+    name: Auto-merge (low tier)
+    needs: [risk-tier, gate-check, gate-test, gate-build]
+    # Any green, low-tier, non-draft PR merges itself — this is no longer
+    # limited to `agent/` branches. The branch PREFIX was never the control
+    # here; .github/protected-paths.txt is, and it already covers auth, the
+    # data model, secrets, the deploy path and the agent's own rails. A PR
+    # touching none of those is one a human was going to rubber-stamp, and the
+    # wait for that stamp was the largest single component of pace-to-live
+    # (every PR merged on 2026-07-26 was `fix/` or `feat/`, so none of them
+    # qualified under the old rule).
+    #
+    # Draft PRs are excluded: "draft" is the explicit signal that the author is
+    # not finished, and it doubles as the brake when you want one.
     if: >-
       github.event_name == 'pull_request' &&
-      needs.risk-tier.outputs.tier == 'low' &&
-      startsWith(github.head_ref, 'agent/')
+      github.event.pull_request.draft == false &&
+      needs.risk-tier.outputs.tier == 'low'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -201,4 +401,4 @@ jobs:
             exit 0
           fi
           GH_TOKEN="$AUTOMERGE_TOKEN" gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
-          echo "Merged PR #$PR (tier=low, agent branch)."
+          echo "Merged PR #$PR (tier=low)."
