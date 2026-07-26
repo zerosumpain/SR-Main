@@ -58,7 +58,19 @@ export async function processNote(noteId: string, attachment?: JkaiAttachment): 
     if (note.format === 'handwriting_scan' && attachment) {
       processedContent = await ocrHandwriting(attachment);
     } else if (note.format === 'audio_transcript' && attachment) {
-      processedContent = await transcribeAudio(attachment);
+      const transcript = await transcribeAudio(attachment);
+      if (!transcript) {
+        // Mark the note failed rather than extracting entities from a
+        // placeholder. Previously a failed transcription became the note body
+        // and was fed to the extractor as if it were content.
+        await db
+          .update(intelNotes)
+          .set({ status: 'failed', updatedAt: new Date() })
+          .where(eq(intelNotes.id, noteId));
+        console.error(`[intel] note ${noteId}: audio transcription failed, not extracting`);
+        return;
+      }
+      processedContent = transcript;
     } else if (note.format === 'email') {
       const parsed = parseEmail(note.rawContent);
       processedContent = parsed.subject

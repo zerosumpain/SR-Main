@@ -68,12 +68,16 @@ export function categorizeTool(tool: string): ToolCategory {
   if (/memor(y|ies)/.test(t)) return 'MEM';
   if (t === 'delegate_task' || startsAny('subagent', 'delegate')) return 'AGENT';
   if (startsAny('file_', 'drive_', 'write_document', 'read_document', 'file_search')) return 'FILE';
+  // Knowledge-base lookups are DATA, not WEB — they read the user's own stores.
+  // `intel_search` used to be listed under WEB below; it never existed as a
+  // tool, and the real intel_* tools query the local entity graph.
+  if (startsAny('intel_', 'knowledge_search')) return 'DATA';
   if (startsAny('render_', 'blog_', 'policy_engine', 'live_walk', 'family_presence', 'chart', 'table', 'map_'))
     return 'DATA';
   if (startsAny('terminal', 'exec', 'bash', 'shell', 'run_command', 'python')) return 'RUN';
   if (
     startsAny(
-      'web_search', 'intel_search', 'fetch_url', 'webpage_fetch', 'stealth_scrape',
+      'web_search', 'fetch_url', 'webpage_fetch', 'stealth_scrape',
       'scraper_', 'reverse_geocode', 'geocode', 'browse',
     )
   )
@@ -131,6 +135,10 @@ function host(u: unknown): string | undefined {
 }
 
 const trim = (s: string, n = 60) => (s.length > n ? s.slice(0, n) + '…' : s);
+
+/** A finite number from an unknown result field, or undefined. */
+const num = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 
 /**
  * What a `delegate_task` call is trying to achieve, from its args. Hermes takes
@@ -209,9 +217,20 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       return 'looking up target knowledge';
     }
     case 'web_search':
-    case 'intel_search':
     case 'gmail_search':
+    case 'knowledge_search':
+    case 'intel_find':
       return str('query') ? `“${trim(str('query')!, 40)}”` : 'searching';
+    case 'intel_neighbourhood':
+      return str('entity') ? `around ${trim(str('entity')!, 40)}` : 'walking the graph';
+    case 'intel_path':
+      return str('from') && str('to')
+        ? `${trim(str('from')!, 24)} → ${trim(str('to')!, 24)}`
+        : 'tracing a connection';
+    case 'intel_insights':
+      return str('kind') ? `${str('kind')} findings` : 'reading the graph';
+    case 'intel_unlikely_relations':
+      return 'looking for surprising links';
     case 'fetch_url':
     case 'webpage_fetch': return str('url') ? `fetching ${host(str('url')) ?? trim(str('url')!, 50)}` : 'fetching a page';
     case 'stealth_scrape':
@@ -309,9 +328,30 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       return 'Deleted canvas';
     case 'workflow_run':
       return 'Ran the canvas';
-    case 'intel_search': {
+    case 'intel_find': {
       const n = count ?? 0;
-      return query ? `Found ${n} intel result${n === 1 ? '' : 's'} for "${query}"` : `Found ${n} intel results`;
+      return query
+        ? `Found ${n} entit${n === 1 ? 'y' : 'ies'} matching "${query}"`
+        : `Found ${n} entit${n === 1 ? 'y' : 'ies'}`;
+    }
+    case 'intel_neighbourhood': {
+      const total = num(d.totalWithin) ?? 0;
+      const direct = num(d.directConnections) ?? 0;
+      return `${direct} direct connection${direct === 1 ? '' : 's'}, ${total} within range`;
+    }
+    case 'intel_path': {
+      const paths = Array.isArray(d.paths) ? d.paths : [];
+      if (!d.connected || !paths.length) return 'No route between them';
+      const hops = num((paths[0] as Record<string, unknown>)?.hops);
+      return `Connected in ${hops ?? '?'} hop${hops === 1 ? '' : 's'}`;
+    }
+    case 'intel_insights': {
+      const n = count ?? 0;
+      return `${n} finding${n === 1 ? '' : 's'} from the graph`;
+    }
+    case 'intel_unlikely_relations': {
+      const n = count ?? 0;
+      return n ? `${n} surprising connection${n === 1 ? '' : 's'}` : 'Nothing surprising found';
     }
     case 'intel_note_create':
       return 'Created intel note';
