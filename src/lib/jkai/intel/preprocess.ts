@@ -34,25 +34,34 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
   return response.choices[0]?.message?.content ?? '';
 }
 
-export async function transcribeAudio(attachment: JkaiAttachment): Promise<string> {
+/**
+ * Transcribe a voice note. Returns null when it cannot be done.
+ *
+ * This used to POST to the `whisper-1` transcriptions endpoint through the
+ * OpenRouter gateway. OpenRouter does not serve that endpoint, so the call
+ * ALWAYS threw, and the catch stored `"[Audio note — transcription failed: …]"`
+ * as the note body — which was then handed to the entity extractor, so every
+ * voice note quietly contributed a placeholder string to the knowledge graph
+ * instead of its contents.
+ *
+ * The codebase already had a working path: /drive's file indexer transcribes
+ * audio with OpenRouter's multimodal `input_audio` content part on a chat
+ * completion. Reusing it means one transcription implementation, one model
+ * choice, and one place to fix.
+ *
+ * Returning null rather than a placeholder is the important half — the caller
+ * must be able to tell "no transcript" from "a transcript that happens to read
+ * like an error", and must not extract entities from either.
+ */
+export async function transcribeAudio(attachment: JkaiAttachment): Promise<string | null> {
   const buffer = await readBuffer(attachment.diskPath);
-
-  const modelCtx = await resolveDefaultModel('builder');
-  const { client } = await getLLMClient(modelCtx);
-
-  try {
-    const file = new File([new Uint8Array(buffer)], attachment.originalName ?? 'audio.webm', {
-      type: attachment.mimeType,
-    });
-    const transcription = await client.audio.transcriptions.create({
-      model: 'whisper-1',
-      file,
-    });
-    return transcription.text;
-  } catch (err) {
-    console.error('[intel] Audio transcription failed:', err);
-    return `[Audio note — transcription failed: ${attachment.originalName ?? 'unknown'}]`;
+  const { transcribeAudioBestEffort } = await import('$lib/file-index/describe');
+  const text = await transcribeAudioBestEffort(buffer, attachment.mimeType ?? 'audio/webm');
+  if (!text) {
+    console.error('[intel] Audio transcription produced nothing for', attachment.originalName);
+    return null;
   }
+  return text;
 }
 
 export function parseEmail(rawText: string): { subject: string; from: string; body: string } {

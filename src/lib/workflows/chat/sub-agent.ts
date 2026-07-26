@@ -36,8 +36,23 @@ export const AGENT_SPAWN_SCHEMA = {
   },
 };
 
-/** Fallback whitelist when the caller does not specify tools. */
-export const DEFAULT_SUBAGENT_TOOLS = ['web_search', 'webpage_fetch', 'intel_search', 'gmail_search'];
+/**
+ * Fallback whitelist when the caller does not specify tools.
+ *
+ * `intel_search` used to be listed here and has never existed — a sub-agent
+ * dispatched with the defaults silently had one of its four tools resolve to
+ * nothing, so it could not reach the knowledge base at all. Replaced with the
+ * tools that do exist: unified recall for "what do I know about X", and the
+ * graph tools for "how do these relate".
+ */
+export const DEFAULT_SUBAGENT_TOOLS = [
+  'web_search',
+  'webpage_fetch',
+  'knowledge_search',
+  'intel_find',
+  'intel_neighbourhood',
+  'gmail_search',
+];
 
 /**
  * Run a sub-agent. Creates a child job, forwards its events to the parent

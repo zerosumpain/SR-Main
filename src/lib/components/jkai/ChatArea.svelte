@@ -20,6 +20,8 @@
   import MessageAttachments from './MessageAttachments.svelte';
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import ResearchSourceModal from './ResearchSourceModal.svelte';
+  import EntityHoverCard from '$lib/components/intel/EntityHoverCard.svelte';
+  import { fetchMentionIndex, type MentionTarget } from '$lib/jkai/intel/entity-card-store';
   import ComposerAttachmentTray from './ComposerAttachmentTray.svelte';
   import BuildPill from './BuildPill.svelte';
   import JsonBlock from '$lib/components/jkai/JsonBlock.svelte';
@@ -483,8 +485,28 @@
     }
   }
 
+  // Intel entity names, fetched once per page and shared by every message so a
+  // reply can turn the names it uses into hoverable references. A failure here
+  // resolves to an empty list — chat must work with no intel graph at all.
+  let entityMentions = $state<MentionTarget[]>([]);
+
   onMount(() => {
+    // `/jkai?ask=…` prefills the composer. This is how the Intel dashboard
+    // commissions a question: it hands over a prompt already loaded with what
+    // the graph knows, and the user presses send (or edits first).
+    const ask = new URLSearchParams(window.location.search).get('ask');
+    if (ask && !input) {
+      input = ask;
+      // Clear the param so a refresh doesn't re-prefill over the user's edits.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ask');
+      history.replaceState(history.state, '', url);
+    }
+
     textareaEl?.focus();
+    void fetchMentionIndex().then((list) => {
+      entityMentions = list;
+    });
     // Dock the command-palette trigger in the composer row. This retires the
     // layout's floating bottom-left button, which sat on top of the sidebar's
     // run-stats footer.
@@ -2193,6 +2215,7 @@
                 researchRefs={msg.role === 'assistant' ? (msg.researchRefs ?? []) : []}
                 onOpenFileRef={openFileRef}
                 onOpenResearchRef={openResearchRef}
+                {entityMentions}
               />
               {#if msg.role === 'assistant' && msg.workflowRefs && msg.workflowRefs.length > 0}
                 <div class="wf-chips">
@@ -2362,6 +2385,10 @@
   {#if researchModal}
     <ResearchSourceModal ref={researchModal} onClose={() => (researchModal = null)} />
   {/if}
+
+  <!-- One hover card for the whole thread; it renders only when a mention is
+       hovered or clicked, and positions itself against that mention. -->
+  <EntityHoverCard />
 </div>
 
 <style>

@@ -91,6 +91,7 @@
 /jkai/intel/notes
 /jkai/intel/notes/[id]
 /jkai/intel/notes/new
+/jkai/intel/quality
 /jkai/intel/review
 /jkai/intel/search
 /jkai/intel/timeline
