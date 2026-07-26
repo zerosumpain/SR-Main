@@ -6,6 +6,21 @@
   // caches per entity id, so hovering the same name repeatedly is free.
 
   import { fetchEntityCard, type EntityCardData } from '$lib/jkai/intel/entity-card-store';
+  import EvidenceList from './EvidenceList.svelte';
+  import {
+    ageInDays,
+    bestGrade,
+    computeConfidence,
+    credibilityFromCorroboration,
+    orderedComponents,
+    CREDIBILITY_LABEL,
+    CREDIBILITY_RATINGS,
+    SOURCE_GRADES,
+    SOURCE_GRADE_LABEL,
+    type CredibilityRating,
+    type SourceGrade,
+    type TrustPayload,
+  } from '$lib/jkai/intel/trust';
 
   let {
     entityId,
@@ -49,6 +64,92 @@
     };
   });
 
+  // ── Trust ────────────────────────────────────────────────────────────────
+  // Two sources, deliberately. The card payload already carries everything the
+  // score needs (sources, dates, note count, confirmed), so the bar renders on
+  // the first paint with no second request — which matters for hover cards,
+  // where a burst of extra fetches would be paid for on every mouse-over.
+  // The server copy is fetched only for the full panel, because only it knows
+  // about manual grade overrides.
+
+  let serverTrust = $state<TrustPayload | null>(null);
+  let saving = $state(false);
+  let showBreakdown = $state(false);
+  /** Null means "unchanged" — avoids a prop→state sync effect for the selects. */
+  let draftGrade = $state<SourceGrade | null>(null);
+  let draftCredibility = $state<CredibilityRating | null>(null);
+
+  $effect(() => {
+    const id = entityId;
+    const wantsServerCopy = !compact;
+    serverTrust = null;
+    draftGrade = null;
+    draftCredibility = null;
+    if (!wantsServerCopy) return;
+
+    let cancelled = false;
+    fetch(`/api/jkai/intel/trust?id=${encodeURIComponent(id)}`)
+      .then((res) => (res.ok ? (res.json() as Promise<TrustPayload>) : null))
+      .then((payload) => {
+        if (!cancelled) serverTrust = payload;
+      })
+      .catch(() => {
+        // The card is still useful without the graded copy — the locally
+        // computed score below stands in.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  const localTrust = $derived.by(() => {
+    if (!data) return null;
+    const corroboration = data.metrics.noteCount;
+    return computeConfidence({
+      corroboration,
+      sourceGrade: bestGrade(data.notes.map((n) => n.source)),
+      credibility: credibilityFromCorroboration(corroboration),
+      // Notes come back newest-first, so [0] is the last time anything said this.
+      ageDays: ageInDays(data.notes[0]?.createdAt ?? data.entity.updatedAt),
+      confirmed: data.entity.confirmed,
+    });
+  });
+
+  const trust = $derived(serverTrust?.trust ?? localTrust);
+  const breakdown = $derived(trust ? orderedComponents(trust.components) : []);
+  const selectedGrade = $derived(draftGrade ?? trust?.resolved.sourceGrade ?? 'F');
+  const selectedCredibility = $derived(draftCredibility ?? trust?.resolved.credibility ?? 6);
+  const dirty = $derived(
+    (draftGrade != null && draftGrade !== trust?.resolved.sourceGrade) ||
+      (draftCredibility != null && draftCredibility !== trust?.resolved.credibility),
+  );
+
+  async function saveGrades() {
+    if (saving) return;
+    saving = true;
+    try {
+      const res = await fetch('/api/jkai/intel/trust', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          entityId,
+          sourceGrade: selectedGrade,
+          credibility: selectedCredibility,
+        }),
+      });
+      if (res.ok) {
+        serverTrust = (await res.json()) as TrustPayload;
+        draftGrade = null;
+        draftCredibility = null;
+      }
+    } catch {
+      // Leave the draft in place so the edit is not silently lost.
+    } finally {
+      saving = false;
+    }
+  }
+
   // Not named `props` — that shadows the `$props` rune.
   const entityProps = $derived(
     data ? Object.entries(data.entity.properties ?? {}).filter(([, v]) => v != null && v !== '') : [],
@@ -56,6 +157,12 @@
 
   function pct(n: number): string {
     return `${Math.round(n * 100)}%`;
+  }
+
+  /** Components are shown as points out of 100, signed — never a bare total. */
+  function points(n: number): string {
+    const r = Math.round(n * 100);
+    return `${r < 0 ? '−' : '+'}${Math.abs(r)}`;
   }
 </script>
 
@@ -88,6 +195,95 @@
         <span class="broker" title="Connects otherwise separate clusters">broker</span>
       {/if}
     </div>
+
+    {#if trust}
+      <div class="trust">
+        <div class="t-head">
+          <span class="t-name">confidence</span>
+          <span class="chip grade {trust.label}">{trust.label}</span>
+          <span class="t-score">{pct(trust.score)}</span>
+          <button
+            type="button"
+            class="why"
+            aria-expanded={showBreakdown}
+            onclick={() => (showBreakdown = !showBreakdown)}>why</button
+          >
+        </div>
+
+        <div
+          class="t-bar"
+          role="img"
+          aria-label="Confidence {pct(trust.score)} — {trust.label}"
+        >
+          <span class="t-fill {trust.label}" style="width: {pct(trust.score)}"></span>
+        </div>
+
+        <div class="t-meta">
+          <span title="Distinct notes independently asserting this">
+            <b>{trust.resolved.corroboration}</b> corroborating
+          </span>
+          <span
+            class="admiralty"
+            class:manual={serverTrust?.origin.sourceGrade === 'manual' ||
+              serverTrust?.origin.credibility === 'manual'}
+            title="{SOURCE_GRADE_LABEL[trust.resolved.sourceGrade]} / {CREDIBILITY_LABEL[
+              trust.resolved.credibility
+            ]}"
+          >
+            {trust.resolved.sourceGrade}{trust.resolved.credibility}
+          </span>
+          {#if trust.decay < 0.99}
+            <span title="Evidence weakened by age">{pct(trust.decay)} recency</span>
+          {/if}
+        </div>
+
+        {#if showBreakdown}
+          <ul class="bd">
+            {#each breakdown as c (c.key)}
+              <li>
+                <span class="bd-label">{c.label}</span>
+                <span class="bd-value" class:neg={c.value < 0}>{points(c.value)}</span>
+              </li>
+            {/each}
+            <li class="bd-total">
+              <span class="bd-label">total</span>
+              <span class="bd-value">{Math.round(trust.score * 100)}</span>
+            </li>
+          </ul>
+
+          {#if !compact && serverTrust}
+            <div class="grader">
+              <label>
+                <span>source</span>
+                <select
+                  value={selectedGrade}
+                  onchange={(e) => (draftGrade = e.currentTarget.value as SourceGrade)}
+                >
+                  {#each SOURCE_GRADES as g}
+                    <option value={g}>{g} — {SOURCE_GRADE_LABEL[g]}</option>
+                  {/each}
+                </select>
+              </label>
+              <label>
+                <span>info</span>
+                <select
+                  value={String(selectedCredibility)}
+                  onchange={(e) =>
+                    (draftCredibility = Number(e.currentTarget.value) as CredibilityRating)}
+                >
+                  {#each CREDIBILITY_RATINGS as c}
+                    <option value={String(c)}>{c} — {CREDIBILITY_LABEL[c]}</option>
+                  {/each}
+                </select>
+              </label>
+              <button type="button" onclick={saveGrades} disabled={!dirty || saving}>
+                {saving ? 'Saving…' : 'Save grade'}
+              </button>
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
 
     {#if entityProps.length && !compact}
       <dl class="props">
@@ -133,14 +329,24 @@
     {/if}
 
     {#if data.notes.length}
-      <section>
-        <h4>Sources</h4>
-        <ul class="notes">
-          {#each data.notes.slice(0, compact ? 3 : 8) as n}
-            <li><a href={n.href}>{n.title}</a> <span class="src">{n.source}</span></li>
-          {/each}
-        </ul>
-      </section>
+      {#if compact}
+        <section>
+          <h4>Sources</h4>
+          <ul class="notes">
+            {#each data.notes.slice(0, 3) as n}
+              <li><a href={n.href}>{n.title}</a> <span class="src">{n.source}</span></li>
+            {/each}
+          </ul>
+        </section>
+      {:else}
+        <!-- Replaces the bare source list: same notes, but quoting the sentence
+             each claim came from, so the card can be argued with. -->
+        <EvidenceList
+          evidence={data.notes}
+          term={data.entity.name}
+          total={data.metrics.noteCount}
+        />
+      {/if}
     {/if}
 
     {#if onCommission}
@@ -255,6 +461,209 @@
     color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+  }
+
+  /* ── Trust ─────────────────────────────────────────────────────────── */
+  .trust {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--divider);
+    margin-bottom: 10px;
+  }
+
+  .t-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+  }
+  .t-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    flex: 1;
+  }
+  .t-score {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+  }
+
+  .grade {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border: 1px solid transparent;
+  }
+  .grade.high {
+    background: var(--success-bg);
+    color: var(--success);
+    border-color: var(--success-border);
+  }
+  .grade.moderate {
+    background: var(--accent-tint-08);
+    color: var(--accent-ink);
+    border-color: var(--accent-tint-35);
+  }
+  .grade.low {
+    background: var(--warn-bg);
+    color: var(--warn);
+    border-color: var(--warn-border);
+  }
+  .grade.unverified {
+    background: transparent;
+    color: var(--text-ghost);
+    border-color: var(--card-border);
+  }
+
+  .why {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    color: var(--text-ghost);
+    cursor: pointer;
+    transition: color var(--t-fast) var(--ease-out);
+  }
+  .why:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+
+  .t-bar {
+    height: 4px;
+    background: var(--divider);
+    border-radius: var(--radius-sharp);
+    overflow: hidden;
+  }
+  .t-fill {
+    display: block;
+    height: 100%;
+    background: var(--text-ghost);
+    transition: width var(--t-fast) var(--ease-out);
+  }
+  .t-fill.high {
+    background: var(--success);
+  }
+  .t-fill.moderate {
+    background: var(--accent-ink);
+  }
+  .t-fill.low {
+    background: var(--warn);
+  }
+
+  .t-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .t-meta b {
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .admiralty {
+    padding: 0 4px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    color: var(--text-secondary);
+    cursor: help;
+  }
+  .admiralty.manual {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+
+  .bd {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .bd li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .bd-label {
+    color: var(--text-ghost);
+  }
+  .bd-value {
+    color: var(--text-secondary);
+  }
+  .bd-value.neg {
+    color: var(--warn);
+  }
+  .bd-total {
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid var(--divider);
+  }
+  .bd-total .bd-value {
+    color: var(--accent-ink);
+  }
+
+  .grader {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .grader label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .grader label span {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+  }
+  .grader select {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 3px 4px;
+    max-width: 100%;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+  }
+  .grader button {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 9px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease-out);
+  }
+  .grader button:hover:not(:disabled) {
+    background: var(--accent-tint-08);
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+  .grader button:disabled {
+    opacity: 0.45;
+    cursor: default;
   }
 
   section {

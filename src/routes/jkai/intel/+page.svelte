@@ -52,7 +52,18 @@
   let pathResult = $state<any>(null);
   let pathBusy = $state(false);
 
-  let tab = $state<'insights' | 'unlikely' | 'links' | 'quality'>('insights');
+  let tab = $state<'insights' | 'unlikely' | 'links' | 'quality' | 'commissioned'>('insights');
+
+  type Commission = {
+    id: string;
+    kind: string;
+    payload: string;
+    url: string | null;
+    status: string;
+    createdAt: string;
+  };
+  let commissions = $state<Commission[]>([]);
+  let watchedCount = $state(0);
 
   const query = $derived.by(() => {
     const p = new URLSearchParams();
@@ -89,9 +100,11 @@
 
   onMount(async () => {
     try {
-      const [insRes, dupRes] = await Promise.all([
+      const [insRes, dupRes, comRes, watchRes] = await Promise.all([
         fetch('/api/jkai/intel/insights?limit=40'),
         fetch('/api/jkai/intel/duplicates?min=0.5'),
+        fetch('/api/jkai/intel/commission?limit=25'),
+        fetch('/api/jkai/intel/watchlist'),
       ]);
       if (insRes.ok) {
         const body = await insRes.json();
@@ -102,6 +115,12 @@
       if (dupRes.ok) {
         const body = await dupRes.json();
         duplicates = { total: body.total ?? 0, autoMergeable: body.autoMergeable ?? 0 };
+      }
+      // Both are additive panels — a failure in either must not blank the page.
+      if (comRes.ok) commissions = (await comRes.json()).commissions ?? [];
+      if (watchRes.ok) {
+        const body = await watchRes.json();
+        watchedCount = (body.watched ?? body.entities ?? []).length ?? 0;
       }
     } finally {
       loadingInsights = false;
@@ -223,6 +242,10 @@
     <a class="tile" href="/jkai/intel/notes">
       <span class="n">{data.stats.noteCount}</span>
       <span class="l">Notes</span>
+    </a>
+    <a class="tile" href="/jkai/intel/entities?watched=1">
+      <span class="n">{watchedCount || '—'}</span>
+      <span class="l">Watched</span>
     </a>
     <a class="tile" href="/jkai/intel/alerts">
       <span class="n">{data.recentAlerts.length}</span>
@@ -351,6 +374,9 @@
       <button class:on={tab === 'links'} onclick={() => (tab = 'links')}>
         Missing links <span class="c">{predicted.length}</span>
       </button>
+      <button class:on={tab === 'commissioned'} onclick={() => (tab = 'commissioned')}>
+        Commissioned <span class="c">{commissions.length}</span>
+      </button>
       <button class:on={tab === 'quality'} onclick={() => (tab = 'quality')}>
         Data quality <span class="c">{qualityInsights.length + (duplicates?.total ?? 0)}</span>
       </button>
@@ -424,6 +450,23 @@
           </article>
         {:else}
           <p class="none">No missing links predicted.</p>
+        {/each}
+      </div>
+    {:else if tab === 'commissioned'}
+      <div class="grid">
+        {#each commissions as c (c.id)}
+          <article class="rel">
+            <div class="rel-pair">
+              <span class="kindchip">{c.kind}</span>
+              <span class="status" class:running={c.status === 'running'} class:done={c.status === 'complete'}>
+                {c.status}
+              </span>
+            </div>
+            <p class="rel-why">{c.payload}</p>
+            {#if c.url}<a class="action" href={c.url}>Open</a>{/if}
+          </article>
+        {:else}
+          <p class="none">Nothing commissioned yet. Start work from a finding, or from the bar above.</p>
         {/each}
       </div>
     {:else}
@@ -804,6 +847,26 @@
   .action:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+
+  .kindchip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-ink);
+  }
+  .status {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    text-transform: uppercase;
+  }
+  .status.running {
+    color: var(--warn);
+  }
+  .status.done {
+    color: var(--success);
   }
 
   .quality-head {

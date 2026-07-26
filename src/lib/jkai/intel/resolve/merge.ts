@@ -14,13 +14,14 @@
 // corrupt every degree and centrality figure. Those specific rows do not come
 // back on unmerge, and `unmergeEntity` says so.
 import { db } from '$lib/db';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
   intelEntities,
   intelEntityTypes,
   intelRelationships,
   intelNoteEntities,
   intelTimelineEvents,
+  intelEntityMerges,
 } from '$lib/db/schema';
 import {
   findDuplicateCandidates,
@@ -47,7 +48,11 @@ export interface MergeOutcome {
  * failure part-way leaves both entities live and re-runnable rather than
  * orphaning rows behind a tombstone.
  */
-export async function mergeEntities(keepId: string, mergeId: string): Promise<MergeOutcome> {
+export async function mergeEntities(
+  keepId: string,
+  mergeId: string,
+  opts: { method?: 'auto' | 'manual'; score?: number; reason?: string } = {},
+): Promise<MergeOutcome> {
   if (keepId === mergeId) throw new Error('cannot merge an entity into itself');
 
   const rows = await db
@@ -107,6 +112,33 @@ export async function mergeEntities(keepId: string, mergeId: string): Promise<Me
          )
     `);
 
+    // Captured BEFORE repointing, with WHICH endpoint pointed at the merged
+    // entity: afterwards the row is indistinguishable from one the survivor
+    // always had, and an edge can legitimately have the survivor at its other
+    // end. Without the role, an unmerge cannot know which end to give back.
+    const movedRelRows = await tx
+      .select({
+        id: intelRelationships.id,
+        source: intelRelationships.sourceEntityId,
+        target: intelRelationships.targetEntityId,
+      })
+      .from(intelRelationships)
+      .where(
+        sql`${intelRelationships.sourceEntityId} = ${mergeId} OR ${intelRelationships.targetEntityId} = ${mergeId}`,
+      );
+    const movedRelIds = movedRelRows.map((r) => ({
+      id: r.id,
+      role: r.source === mergeId ? ('source' as const) : ('target' as const),
+    }));
+    const movedNoteIds = await tx
+      .select({ noteId: intelNoteEntities.noteId })
+      .from(intelNoteEntities)
+      .where(eq(intelNoteEntities.entityId, mergeId));
+    const movedTimelineIds = await tx
+      .select({ id: intelTimelineEvents.id })
+      .from(intelTimelineEvents)
+      .where(eq(intelTimelineEvents.entityId, mergeId));
+
     const movedSource = await tx
       .update(intelRelationships)
       .set({ sourceEntityId: keepId })
@@ -153,6 +185,26 @@ export async function mergeEntities(keepId: string, mergeId: string): Promise<Me
       .set({ mergedIntoId: keepId, updatedAt: new Date() })
       .where(eq(intelEntities.id, mergeId));
 
+    // Ledger entry, written inside the same transaction so it can never
+    // disagree with what actually happened. `unmergeEntity` replays it, which
+    // is what makes a resolution decision genuinely reversible months later
+    // rather than merely "the tombstone is cleared".
+    await tx.insert(intelEntityMerges).values({
+      survivorId: keepId,
+      mergedId: mergeId,
+      method: opts.method ?? 'manual',
+      score: opts.score ?? null,
+      reason: opts.reason ?? null,
+      snapshot: {
+        merged: { id: mergeId, properties: merge.properties ?? null, summary: merge.summary ?? null },
+        // The edges and note links repointed by THIS merge, so an unmerge can
+        // hand back exactly what it took and nothing else.
+        movedRelationships: movedRelIds,
+        movedNoteIds: movedNoteIds.map((r) => r.noteId),
+        movedTimelineIds: movedTimelineIds.map((r) => r.id),
+      },
+    });
+
     // Flatten: re-point anything already tombstoned INTO mergeId at the new
     // survivor, so no chain is ever deeper than one hop.
     //
@@ -189,23 +241,97 @@ function rowCount(result: unknown): number {
 }
 
 /**
- * Undo a merge — the tombstone is cleared and the entity becomes live again.
+ * Undo a merge by REPLAYING its ledger entry.
  *
- * Two things do NOT come back, deliberately:
- *   - Relationships that were repointed stay with the survivor. Which of them
- *     originally belonged to the merged entity is not recorded, and guessing
- *     would be worse than leaving them.
- *   - Edges deleted as exact duplicates or self-loops are gone. They carried no
- *     information the survivor does not already hold.
- * The entity, its properties and its identity return, which is what makes
- * merging safe to try.
+ * Clearing the tombstone alone handed back an entity stripped of every
+ * connection — reversible on paper, useless in practice. The ledger records
+ * exactly which relationships (and which endpoint of each), note links and
+ * timeline events this merge took, so an unmerge returns precisely those and
+ * leaves everything the survivor already had alone.
+ *
+ * One thing still does not come back: edges deleted as exact same-direction
+ * duplicates or self-loops. They carried no information the survivor does not
+ * already hold.
+ *
+ * Merges predating the ledger unmerge as before — tombstone cleared, edges
+ * stay with the survivor.
  */
-export async function unmergeEntity(entityId: string): Promise<void> {
-  await db
-    .update(intelEntities)
-    .set({ mergedIntoId: null, updatedAt: new Date() })
-    .where(eq(intelEntities.id, entityId));
+export async function unmergeEntity(entityId: string): Promise<{ restored: number }> {
+  // Replay the ledger entry rather than just clearing the tombstone. Without
+  // this, an unmerge handed back an entity with none of its connections —
+  // technically reversible, practically useless.
+  const [ledger] = await db
+    .select({ id: intelEntityMerges.id, snapshot: intelEntityMerges.snapshot })
+    .from(intelEntityMerges)
+    .where(and(eq(intelEntityMerges.mergedId, entityId), isNull(intelEntityMerges.undoneAt)))
+    .orderBy(desc(intelEntityMerges.createdAt))
+    .limit(1);
+
+  let restored = 0;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(intelEntities)
+      .set({ mergedIntoId: null, updatedAt: new Date() })
+      .where(eq(intelEntities.id, entityId));
+
+    if (!ledger) return;
+    const snap = (ledger.snapshot ?? {}) as {
+      merged?: { properties?: unknown; summary?: string | null };
+      movedRelationships?: Array<{ id: string; role: 'source' | 'target' }>;
+      movedNoteIds?: string[];
+      movedTimelineIds?: string[];
+    };
+
+    // Give back exactly the rows this merge took, identified by the ids
+    // captured before they were repointed. Rows the survivor already had are
+    // untouched, because they were never in the snapshot.
+    // Restore only the endpoint that originally pointed at the merged entity.
+    for (const rel of snap.movedRelationships ?? []) {
+      const res =
+        rel.role === 'source'
+          ? await tx.execute(sql`
+              UPDATE intel_relationships SET source_entity_id = ${entityId}
+              WHERE id = ${rel.id} AND source_entity_id <> ${entityId}
+            `)
+          : await tx.execute(sql`
+              UPDATE intel_relationships SET target_entity_id = ${entityId}
+              WHERE id = ${rel.id} AND target_entity_id <> ${entityId}
+            `);
+      restored += rowCount(res);
+    }
+
+    const noteIds = snap.movedNoteIds ?? [];
+    if (noteIds.length) {
+      const res = await tx.execute(sql`
+        UPDATE intel_note_entities SET entity_id = ${entityId}
+        WHERE note_id = ANY(${sql`ARRAY[${sql.join(noteIds.map((n) => sql`${n}`), sql`, `)}]::text[]`})
+          AND entity_id <> ${entityId}
+          AND NOT EXISTS (
+            SELECT 1 FROM intel_note_entities k
+            WHERE k.entity_id = ${entityId} AND k.note_id = intel_note_entities.note_id
+          )
+      `);
+      restored += rowCount(res);
+    }
+
+    const timelineIds = snap.movedTimelineIds ?? [];
+    if (timelineIds.length) {
+      const res = await tx.execute(sql`
+        UPDATE intel_timeline_events SET entity_id = ${entityId}
+        WHERE id = ANY(${sql`ARRAY[${sql.join(timelineIds.map((t) => sql`${t}`), sql`, `)}]::text[]`})
+      `);
+      restored += rowCount(res);
+    }
+
+    await tx
+      .update(intelEntityMerges)
+      .set({ undoneAt: new Date() })
+      .where(eq(intelEntityMerges.id, ledger.id));
+  });
+
   invalidateGraphAnalysis();
+  return { restored };
 }
 
 /** Every live entity, in the shape the matcher wants. */
@@ -364,6 +490,66 @@ export async function dedupeNoteLinks(): Promise<{ removed: number }> {
   if (removed) invalidateGraphAnalysis();
   console.log(`[intel:resolve] removed ${removed} duplicate note-entity links`);
   return { removed };
+}
+
+/**
+ * Admit a proposed type into the taxonomy. Until this runs, extraction can
+ * neither offer it to the model nor assign it, so nothing accumulates under a
+ * type nobody has looked at.
+ */
+export async function admitProposedType(typeId: string): Promise<{ name: string }> {
+  const [row] = await db
+    .update(intelEntityTypes)
+    .set({ status: 'active' })
+    .where(eq(intelEntityTypes.id, typeId))
+    .returning({ name: intelEntityTypes.name });
+  invalidateGraphAnalysis();
+  return { name: row?.name ?? '' };
+}
+
+/**
+ * Reject a proposed type. With `intoTypeId` its entities are re-typed onto the
+ * type it should have been; without one it is simply retired. Retired rather
+ * than deleted so the same name cannot be re-proposed on the next ingest and
+ * quietly reappear.
+ */
+export async function rejectProposedType(
+  typeId: string,
+  intoTypeId?: string,
+): Promise<{ moved: number }> {
+  let moved = 0;
+  if (intoTypeId && intoTypeId !== typeId) {
+    const res = await db
+      .update(intelEntities)
+      .set({ typeId: intoTypeId, updatedAt: new Date() })
+      .where(eq(intelEntities.typeId, typeId));
+    moved = rowCount(res);
+  }
+  await db
+    .update(intelEntityTypes)
+    .set({ status: 'retired', mergedIntoTypeId: intoTypeId ?? null })
+    .where(eq(intelEntityTypes.id, typeId));
+  invalidateGraphAnalysis();
+  return { moved };
+}
+
+/** Types awaiting a decision, with how many entities are already waiting on them. */
+export async function listProposedTypes() {
+  const res = await db.execute(sql`
+    SELECT t.id, t.name, t.icon, t.description, t.proposed_rationale AS rationale,
+           (SELECT count(*)::int FROM intel_entities e WHERE e.type_id = t.id) AS entity_count
+    FROM intel_entity_types t
+    WHERE t.status = 'proposed'
+    ORDER BY t.created_at DESC
+  `);
+  return (res.rows as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    icon: String(r.icon ?? '🔷'),
+    description: String(r.description ?? ''),
+    rationale: r.rationale == null ? null : String(r.rationale),
+    entityCount: Number(r.entity_count ?? 0),
+  }));
 }
 
 /** Move every entity of one type onto another, then retire the empty type. */

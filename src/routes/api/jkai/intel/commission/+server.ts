@@ -12,7 +12,8 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { researchSessions } from '$lib/db/schema';
+import { researchSessions, intelCommissions } from '$lib/db/schema';
+import { desc, inArray } from 'drizzle-orm';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 
 export type CommissionKind = 'research' | 'ask' | 'monitor' | 'workflow' | 'canvas' | 'briefing' | 'review';
@@ -59,6 +60,32 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
   if (!payload && kind !== 'review') throw error(400, 'payload is required');
 
   const context = await entityContext(entityIds);
+  const insightId = typeof body.insightId === 'string' ? body.insightId : null;
+
+  /**
+   * Record what was commissioned. Without this a deep dive started from a
+   * finding was orphaned the moment the user navigated away — no way to see
+   * what is running, what it came from, or where its output landed. `review`
+   * is excluded: it is a navigation link, not work.
+   */
+  const record = async (result: CommissionResult) => {
+    if (kind === 'review') return result;
+    try {
+      await db.insert(intelCommissions).values({
+        insightId,
+        entityId: entityIds[0] ?? null,
+        kind,
+        payload: payload.slice(0, 4000),
+        externalId: result.id ?? null,
+        externalUrl: result.url,
+        status: result.started ? 'running' : 'queued',
+      });
+    } catch (err) {
+      // Bookkeeping must never cost the user the work they asked for.
+      console.warn('[intel] could not record commission:', err instanceof Error ? err.message : err);
+    }
+    return result;
+  };
 
   switch (kind) {
     case 'research': {
@@ -83,13 +110,15 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         console.error('[intel:commission] could not start research:', err);
       }
 
-      return json({
-        kind,
-        id: session.id,
-        url: `/deepdive/${session.id}`,
-        label: 'Deep dive started',
-        started: true,
-      } satisfies CommissionResult);
+      return json(
+        await record({
+          kind,
+          id: session.id,
+          url: `/deepdive/${session.id}`,
+          label: 'Deep dive started',
+          started: true,
+        }),
+      );
     }
 
     case 'monitor': {
@@ -100,35 +129,41 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       });
       if (!res.ok) throw error(502, 'monitor creation failed');
       const created = (await res.json()) as { monitor?: { workflowId?: string } };
-      return json({
-        kind,
-        id: created.monitor?.workflowId,
-        url: '/jkai/monitors',
-        label: 'Monitor created',
-        started: true,
-      } satisfies CommissionResult);
+      return json(
+        await record({
+          kind,
+          id: created.monitor?.workflowId,
+          url: '/jkai/monitors',
+          label: 'Monitor created',
+          started: true,
+        }),
+      );
     }
 
     case 'ask':
     case 'briefing': {
       // Interactive by nature — hand the user a prefilled composer.
       const prompt = context ? `${payload}\n\n${context}` : payload;
-      return json({
-        kind,
-        url: `/jkai?ask=${encodeURIComponent(prompt)}`,
-        label: kind === 'briefing' ? 'Briefing prompt ready' : 'Ask jkai',
-        started: false,
-      } satisfies CommissionResult);
+      return json(
+        await record({
+          kind,
+          url: `/jkai?ask=${encodeURIComponent(prompt)}`,
+          label: kind === 'briefing' ? 'Briefing prompt ready' : 'Ask jkai',
+          started: false,
+        }),
+      );
     }
 
     case 'workflow':
     case 'canvas': {
-      return json({
-        kind,
-        url: `/jkai/canvas?prompt=${encodeURIComponent(payload)}`,
-        label: 'Open canvas',
-        started: false,
-      } satisfies CommissionResult);
+      return json(
+        await record({
+          kind,
+          url: `/jkai/canvas?prompt=${encodeURIComponent(payload)}`,
+          label: 'Open canvas',
+          started: false,
+        }),
+      );
     }
 
     case 'review': {
@@ -144,4 +179,47 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     default:
       throw error(400, `unknown commission kind "${kind}"`);
   }
+};
+
+/**
+ * What has been commissioned, newest first — the "what did I set running"
+ * view. Research sessions are joined so a completed dive shows as complete
+ * without a separate poller.
+ */
+export const GET: RequestHandler = async ({ url }) => {
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 25), 1), 100);
+  const rows = await db
+    .select()
+    .from(intelCommissions)
+    .orderBy(desc(intelCommissions.createdAt))
+    .limit(limit);
+
+  // A research commission's real status lives on the research session; reading
+  // it here keeps the list honest without a background job.
+  const researchIds = rows
+    .filter((r) => r.kind === 'research' && r.externalId)
+    .map((r) => r.externalId as string);
+  const sessions = researchIds.length
+    ? await db
+        .select({ id: researchSessions.id, status: researchSessions.status })
+        .from(researchSessions)
+        .where(inArray(researchSessions.id, researchIds))
+    : [];
+  const statusById = new Map(sessions.map((s) => [s.id, s.status]));
+
+  return json({
+    commissions: rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      payload: r.payload,
+      url: r.externalUrl,
+      entityId: r.entityId,
+      insightId: r.insightId,
+      status:
+        r.kind === 'research' && r.externalId
+          ? (statusById.get(r.externalId) ?? r.status)
+          : r.status,
+      createdAt: r.createdAt,
+    })),
+  });
 };
