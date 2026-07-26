@@ -12,7 +12,14 @@
   };
 
   async function dismiss(id: string) {
-    const res = await fetch(`/api/jkai/intel/alerts/${id}`, { method: 'PUT' });
+    // Ask why. A dismissal with no reason teaches nothing about which alerts
+    // are unwanted; cancelling the prompt still dismisses, so it never blocks.
+    const reason = typeof window !== 'undefined' ? window.prompt('Why dismiss this? (optional)') : null;
+    const res = await fetch(`/api/jkai/intel/alerts/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(reason ? { reason } : {}),
+    });
     if (res.ok) {
       alerts = alerts.filter((a) => a.id !== id);
     }

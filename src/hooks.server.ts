@@ -99,11 +99,16 @@ import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
+// Nightly intel maintenance: confidence scores, watchlist diffs, live-query
+// lenses. Each of those had a batch half nothing was calling — a watchlist that
+// only diffs when you open its endpoint is not a watchlist.
+import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
   startBriefingEngine();
   startModelRouting();
+  startIntelEngine();
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
@@ -137,6 +142,7 @@ async function gracefulShutdown() {
   stopSelfImprovement();
   stopBriefingEngine();
   stopModelRouting();
+  stopIntelEngine();
   process.exit(0);
 }
 

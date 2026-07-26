@@ -27,7 +27,7 @@
 // `$lib/db` is imported dynamically on purpose: it pulls in
 // `$env/dynamic/private`, which does not resolve under vitest, and the pure
 // half of this file is unit-tested. Same reason as entity-query.ts.
-import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { intelEntities, intelLenses, type IntelLens } from '$lib/db/schema';
 import { escapeLike } from './entity-query';
 
@@ -696,4 +696,36 @@ export async function runLensCheck(lensId: string): Promise<LensCheck | null> {
     .where(eq(intelLenses.id, lens.id));
 
   return { ...growth, lensId: lens.id, slug: lens.slug, name: lens.name, newest, checkedAt };
+}
+
+/**
+ * Run every lens that has a cron set — the batch half of a live query.
+ *
+ * `runLensCheck` only ever fired when someone hit the endpoint, so a "live"
+ * query was live only while being watched. The cron string is deliberately
+ * treated as a flag rather than parsed: the nightly engine is the only caller
+ * and runs once a day, so honouring an arbitrary schedule would need a real
+ * cron runner for no benefit at this scale. A lens wanting finer granularity
+ * should be a monitor.
+ *
+ * Returns only lenses whose result set actually GREW — no growth is not news.
+ */
+export async function runDueLensChecks(): Promise<LensCheck[]> {
+  const { db } = await import('$lib/db');
+  const due = await db
+    .select({ id: intelLenses.id })
+    .from(intelLenses)
+    .where(isNotNull(intelLenses.cron));
+
+  const changes: LensCheck[] = [];
+  for (const row of due) {
+    try {
+      const check = await runLensCheck(row.id);
+      if (check?.grew) changes.push(check);
+    } catch (err) {
+      // One broken lens filter must not stop the rest.
+      console.error('[intel:lenses] check failed for', row.id, err instanceof Error ? err.message : err);
+    }
+  }
+  return changes;
 }

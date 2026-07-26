@@ -150,6 +150,29 @@
     }
   }
 
+  /**
+   * Dismiss or snooze a finding. Removed optimistically — the persistence
+   * layer excludes dismissed/snoozed from the default listing, so leaving the
+   * card on screen would contradict what the next reload shows.
+   */
+  async function triageInsight(i: InsightData, action: 'dismiss' | 'snooze') {
+    insights = insights.filter((x) => x.id !== i.id);
+    try {
+      await fetch('/api/jkai/intel/insights', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: i.id, action, ...(action === 'snooze' ? { days: 7 } : {}) }),
+      });
+      toast = action === 'snooze' ? 'Snoozed for a week' : 'Dismissed';
+      setTimeout(() => (toast = null), 2500);
+    } catch {
+      // Put it back rather than silently losing it.
+      insights = [...insights, i].sort((a, b) => b.score - a.score);
+      toast = 'Could not update that finding';
+      setTimeout(() => (toast = null), 4000);
+    }
+  }
+
   function commissionInsight(i: InsightData) {
     void runCommission(i.action, i.actionPayload, i.entities.map((e) => e.id), i.id);
   }
@@ -210,6 +233,8 @@
       <a href="/jkai/intel/search">Recall</a>
       <a href="/jkai/intel/quality">Quality</a>
       <a href="/jkai/intel/timeline">Timeline</a>
+      <a href="/jkai/intel/dossiers">Dossiers</a>
+      <a href="/jkai/intel/review">Triage</a>
     </div>
   </div>
 
@@ -243,7 +268,7 @@
       <span class="n">{data.stats.noteCount}</span>
       <span class="l">Notes</span>
     </a>
-    <a class="tile" href="/jkai/intel/entities?watched=1">
+    <a class="tile" href="/jkai/intel/entities?watched=watched">
       <span class="n">{watchedCount || '—'}</span>
       <span class="l">Watched</span>
     </a>
@@ -387,7 +412,7 @@
     {:else if tab === 'insights'}
       <div class="grid">
         {#each worldInsights as i (i.id)}
-          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} />
+          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} />
         {:else}
           <p class="none">Nothing stands out yet. Add more notes or run a deep dive.</p>
         {/each}
@@ -479,7 +504,7 @@
       {/if}
       <div class="grid">
         {#each qualityInsights as i (i.id)}
-          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} />
+          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} />
         {:else}
           <p class="none">No data-quality problems detected.</p>
         {/each}

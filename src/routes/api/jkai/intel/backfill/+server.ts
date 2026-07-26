@@ -50,6 +50,7 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     summaries?: boolean;
     embeddings?: boolean;
     dedupeLinks?: boolean;
+    confidence?: boolean;
   };
 
   // Summary-only pass: fills entities left without one. Separate from the
@@ -58,6 +59,13 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   if (body.summaries) {
     const { backfillEntitySummaries } = await import('$lib/jkai/intel/graph');
     return json(await backfillEntitySummaries(typeof body.limit === 'number' ? body.limit : undefined));
+  }
+
+  // Trust scores. Cheap, no LLM, and required before any confidence filter
+  // means anything — an unscored entity is invisible to one.
+  if (body.confidence) {
+    const { backfillConfidence } = await import('$lib/jkai/intel/trust-refresh');
+    return json(await backfillConfidence());
   }
 
   // Repair pass: drop duplicate (note, entity) links accumulated by

@@ -499,6 +499,18 @@ export async function persistExtraction(
     `);
   }
 
+  // Score immediately. Left to be computed lazily by the trust API, the column
+  // stayed NULL for anything nobody had opened — and a lens filtering on
+  // `confidence_score >= n` then returned ZERO entities, because NULL fails
+  // every comparison. A filter that silently answers "nothing" is worse than
+  // one that errors.
+  try {
+    const { refreshConfidence } = await import('./trust-refresh');
+    await refreshConfidence([...entityIdMap.values()]);
+  } catch (err) {
+    console.warn('[intel] confidence refresh failed:', err instanceof Error ? err.message : err);
+  }
+
   // Relationships and timeline events are UPSERTED, not blindly inserted.
   //
   // These were plain inserts, which meant every re-extraction of a note (a file
