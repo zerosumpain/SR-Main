@@ -2,6 +2,7 @@
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
   import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
+  import BriefingCard from '$lib/components/jkai/BriefingCard.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
@@ -335,6 +336,11 @@
 
     <!-- Chat area -->
     <div class="flex-1 min-w-0">
+      {#if data.freshBriefing}
+        <div class="px-4 pt-3 sm:px-6">
+          <BriefingCard briefing={data.freshBriefing} />
+        </div>
+      {/if}
       <ChatArea
         conversationId={activeConversationId}
         initialMessages={activeMessages}

@@ -39,9 +39,10 @@
     { href: '/jkai/intel', label: 'Intel' },
     { href: '/jkai/research', label: 'Research' },
     { href: '/jkai/builds', label: 'Builds' },
-    { href: '/jkai/prompts', label: 'Prompts' },
     { href: '/jkai/canvas', label: 'Canvases' },
-    { href: '/jkai/channels', label: 'Channels' },
+    { href: '/jkai/briefing', label: 'Briefing' },
+    { href: '/jkai/improvement', label: 'Improvement' },
+    { href: '/jkai/prompts', label: 'Prompts' },
   ];
 
   let resolvedItems = $derived.by(() => {

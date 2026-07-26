@@ -6,13 +6,15 @@
   import PushOptInCard from '$lib/components/jkai/PushOptInCard.svelte';
   import JkaiLauncher from '$lib/components/jkai/JkaiLauncher.svelte';
   import ActivityStrip from '$lib/components/jkai/ActivityStrip.svelte';
+  import { launcher, closeLauncher, openLauncher, toggleLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { PUBLIC_VAPID_PUBLIC_KEY } from '$env/static/public';
 
   let { children } = $props();
 
   // Global JKAI hub navigation — a command-palette launcher reachable from every
-  // /jkai page via the ⌘/Ctrl-K shortcut or the corner button.
-  let launcherOpen = $state(false);
+  // /jkai page via the ⌘/Ctrl-K shortcut or a trigger button. Pages that dock
+  // their own trigger (the chat composer) suppress the floating fallback below.
+  const showFallbackTrigger = $derived(launcher.dockedTriggers === 0);
 
   onMount(() => {
     void registerJkaiSW();
@@ -20,7 +22,7 @@
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
-        launcherOpen = !launcherOpen;
+        toggleLauncher();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -46,19 +48,21 @@
   <ActivityStrip />
   {@render children()}
 
-  <button
-    class="jkai-launch-btn"
-    onclick={() => (launcherOpen = true)}
-    title="JKAI launcher (⌘K)"
-    aria-label="Open JKAI launcher"
-  >
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <rect x="2" y="2" width="6" height="6" rx="1" /><rect x="12" y="2" width="6" height="6" rx="1" />
-      <rect x="2" y="12" width="6" height="6" rx="1" /><rect x="12" y="12" width="6" height="6" rx="1" />
-    </svg>
-  </button>
+  {#if showFallbackTrigger}
+    <button
+      class="jkai-launch-btn"
+      onclick={openLauncher}
+      title="JKAI launcher (⌘K)"
+      aria-label="Open JKAI launcher"
+    >
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <rect x="2" y="2" width="6" height="6" rx="1" /><rect x="12" y="2" width="6" height="6" rx="1" />
+        <rect x="2" y="12" width="6" height="6" rx="1" /><rect x="12" y="12" width="6" height="6" rx="1" />
+      </svg>
+    </button>
+  {/if}
 
-  <JkaiLauncher open={launcherOpen} onClose={() => (launcherOpen = false)} />
+  <JkaiLauncher open={launcher.open} onClose={closeLauncher} />
 </div>
 
 <style>

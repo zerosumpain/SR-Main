@@ -1,18 +1,19 @@
 // Unified Knowledge Recall — one search that fans out across every place JKai
-// remembers things: /drive file embeddings, deep-dive research facts, personal
-// memory, and datastore records. Each branch reuses the store's OWN search
-// primitive; this module only normalises + merges + ranks. Best-effort: a
-// failing branch degrades to empty (recorded in `errors`) rather than failing
-// the whole recall.
+// remembers things: intel notes + the entity graph, /drive file embeddings,
+// deep-dive research facts, personal memory, and datastore records. Each branch
+// reuses the store's OWN search primitive; this module only normalises + merges
+// + ranks. Best-effort: a failing branch degrades to empty (recorded in
+// `errors`) rather than failing the whole recall.
 import { db } from '$lib/db';
 import { and, desc, ilike, isNull } from 'drizzle-orm';
 import { jkaiMemories } from '$lib/db/schema';
 import { searchFiles } from '$lib/file-index/search';
 import { searchResearch } from '$lib/deepdive/research-search';
+import { searchIntel, type IntelItem } from '$lib/jkai/intel/search';
 import { listCollections, queryRecords } from '$lib/datastore';
 
-export type KnowledgeSource = 'files' | 'research' | 'memory' | 'datastore';
-export const ALL_SOURCES: KnowledgeSource[] = ['files', 'research', 'memory', 'datastore'];
+export type KnowledgeSource = 'notes' | 'entities' | 'files' | 'research' | 'memory' | 'datastore';
+export const ALL_SOURCES: KnowledgeSource[] = ['notes', 'entities', 'files', 'research', 'memory', 'datastore'];
 
 export interface KnowledgeHit {
   source: KnowledgeSource;
@@ -50,6 +51,55 @@ const MAX_PASSAGE = 600;
 function clip(s: string): string {
   const t = (s ?? '').toString();
   return t.length > MAX_PASSAGE ? t.slice(0, MAX_PASSAGE) + '…' : t;
+}
+
+/**
+ * Intel notes + entities share one `searchIntel` call — it embeds the query
+ * once and queries both tables. Splitting them into two independent branches
+ * would pay for the embedding twice for identical results.
+ */
+function intelSplit(query: string, limit: number): {
+  notes: () => Promise<KnowledgeHit[]>;
+  entities: () => Promise<KnowledgeHit[]>;
+} {
+  let shared: Promise<IntelItem[]> | null = null;
+  const items = (): Promise<IntelItem[]> => {
+    // Over-fetch: `limit` applies per kind after the split, and searchIntel
+    // caps the merged list.
+    shared ??= searchIntel(query, { limit: Math.min(limit * 2, 50), ordering: 'relevant' }).then((r) => r.items);
+    return shared;
+  };
+
+  const toHit = (source: 'notes' | 'entities', i: IntelItem): KnowledgeHit => ({
+    source,
+    title: i.title,
+    passage: clip(i.snippet),
+    score: i.score,
+    matchKind: 'semantic',
+    ref: {
+      intelId: i.id,
+      kind: i.kind,
+      url: i.kind === 'note' ? `/jkai/intel/notes/${i.id}` : `/jkai/intel/entities/${i.id}`,
+      entityType: i.metadata?.entityType,
+      sourceUrl: i.url,
+    },
+  });
+
+  return {
+    // Auto-extracted notes are dropped: their text is the file/research text,
+    // already returned by those branches. Their value is the entities they
+    // minted, which the entities branch surfaces.
+    notes: async () =>
+      (await items())
+        .filter((i) => i.kind === 'note' && !i.metadata?.autoKind)
+        .slice(0, limit)
+        .map((i) => toHit('notes', i)),
+    entities: async () =>
+      (await items())
+        .filter((i) => i.kind === 'entity')
+        .slice(0, limit)
+        .map((i) => toHit('entities', i)),
+  };
 }
 
 async function branchFiles(query: string, limit: number): Promise<KnowledgeHit[]> {
@@ -176,6 +226,9 @@ export async function searchKnowledge(
     });
 
   const branches: Array<[KnowledgeSource, Promise<KnowledgeHit[]>]> = [];
+  const intel = intelSplit(query, perSource);
+  if (sources.includes('notes')) branches.push(['notes', withTimeout(intel.notes(), 'notes')]);
+  if (sources.includes('entities')) branches.push(['entities', withTimeout(intel.entities(), 'entities')]);
   if (sources.includes('files')) branches.push(['files', withTimeout(branchFiles(query, perSource), 'files')]);
   if (sources.includes('research')) branches.push(['research', withTimeout(branchResearch(query, perSource), 'research')]);
   if (sources.includes('memory')) branches.push(['memory', withTimeout(branchMemory(query, perSource), 'memory')]);
@@ -185,7 +238,7 @@ export async function searchKnowledge(
   const settled = await Promise.allSettled(branches.map(([, p]) => p));
 
   const hits: KnowledgeHit[] = [];
-  const counts = { files: 0, research: 0, memory: 0, datastore: 0 } as Record<KnowledgeSource, number>;
+  const counts = { notes: 0, entities: 0, files: 0, research: 0, memory: 0, datastore: 0 } as Record<KnowledgeSource, number>;
   const errors: Partial<Record<KnowledgeSource, string>> = {};
 
   settled.forEach((res, i) => {

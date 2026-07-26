@@ -5,7 +5,34 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
 import { getConversationList } from '$lib/jkai/queries';
 import { resolveDefaultModel, resolveChatAltOpenRouterModel, getApprovalUiSettings } from '$lib/server/models/settings';
+import { getCollectionBySlug, queryRecords } from '$lib/datastore';
+import { BRIEFINGS_COLLECTION, type BriefingData } from '$lib/briefing/types';
 import { env } from '$env/dynamic/private';
+
+/** How long a briefing counts as "today's" and is worth surfacing on the chat page. */
+const BRIEFING_FRESH_MS = 20 * 60 * 60 * 1000;
+
+/**
+ * Latest complete briefing, if it is fresh. The digest used to be reachable
+ * only from the command palette, so it went unread; the chat page is where the
+ * day actually starts.
+ */
+async function loadFreshBriefing(): Promise<{ id: string; title: string; markdown: string; startedAt: string } | null> {
+  try {
+    if (!(await getCollectionBySlug(BRIEFINGS_COLLECTION))) return null;
+    const { records } = await queryRecords(
+      BRIEFINGS_COLLECTION,
+      { sort: { field: 'createdAt', dir: 'desc' }, limit: 1 },
+      'owner',
+    );
+    const b = records[0]?.data as unknown as BriefingData | undefined;
+    if (!b || b.status !== 'complete' || !b.markdown) return null;
+    if (Date.now() - new Date(b.startedAt).getTime() > BRIEFING_FRESH_MS) return null;
+    return { id: b.id, title: b.title, markdown: b.markdown, startedAt: b.startedAt };
+  } catch {
+    return null;
+  }
+}
 
 export const load: PageServerLoad = async () => {
   // Load conversations with preview
@@ -85,10 +112,11 @@ export const load: PageServerLoad = async () => {
     lifetime: Number(convSpend?.lifetime ?? 0) + Number(buildSpend?.lifetime ?? 0),
   };
 
-  const [defaultChatModel, chatAltOpenRouterModel, approvalUi] = await Promise.all([
+  const [defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing] = await Promise.all([
     resolveDefaultModel('chat'),
     resolveChatAltOpenRouterModel(),
     getApprovalUiSettings(),
+    loadFreshBriefing(),
   ]);
 
   return {
@@ -99,6 +127,7 @@ export const load: PageServerLoad = async () => {
     chatAltOpenRouterModel,
     spendByPeriod,
     approvalUi,
+    freshBriefing,
     // Gates the in-composer command palette + model switcher (they only work
     // when Hermes handles the chat; the legacy loop would pass slashes as prose).
     hermesEnabled: env.JKAI_HERMES_CANVAS_CHAT === '1',

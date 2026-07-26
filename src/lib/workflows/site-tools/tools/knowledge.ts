@@ -1,7 +1,8 @@
-// `knowledge` toolset — one recall across everything JKai knows: /drive files,
-// deep-dive research facts, personal memory, and datastore records. Wraps
-// $lib/knowledge/search.searchKnowledge. Use for "what do I know about X" —
-// broader than @files (files only) or @research (research only).
+// `knowledge` toolset — one recall across everything JKai knows: intel notes,
+// the intel entity graph, /drive files, deep-dive research facts, personal
+// memory, and datastore records. Wraps $lib/knowledge/search.searchKnowledge.
+// Use for "what do I know about X" — broader than @files (files only) or
+// @research (research only).
 import { register } from '../registry-internal';
 import { searchKnowledge, ALL_SOURCES, type KnowledgeSource } from '$lib/knowledge/search';
 
@@ -14,9 +15,9 @@ function coerceSources(raw: unknown): KnowledgeSource[] | undefined {
 register({
   name: 'knowledge_search',
   description:
-    'Unified recall across EVERYTHING JKai knows: /drive file contents, deep-dive research facts, saved personal memory, and datastore records — in one call. ' +
+    'Unified recall across EVERYTHING JKai knows: intel notes, the intel entity graph, /drive file contents, deep-dive research facts, saved personal memory, and datastore records — in one call. ' +
     'Use this whenever the user asks "what do I know / have I got anything about X", or when a question could be answered from any of your own stores and you are not sure which. ' +
-    'Broader than file_search (files only) or research_search (research only). Returns ranked hits, each tagged with its source (files/research/memory/datastore), a passage, a relevance score, and a citation ref. ' +
+    'Broader than file_search (files only) or research_search (research only). Returns ranked hits, each tagged with its source (notes/entities/files/research/memory/datastore), a passage, a relevance score, and a citation ref. ' +
     'When the user writes "@knowledge", use this tool.',
   parameters: {
     type: 'object',
@@ -25,7 +26,7 @@ register({
       sources: {
         type: 'array',
         items: { type: 'string', enum: ALL_SOURCES },
-        description: 'Optional subset of stores to search: files, research, memory, datastore. Omit to search all.',
+        description: 'Optional subset of stores to search: notes, entities, files, research, memory, datastore. Omit to search all.',
       },
       limitPerSource: { type: 'number', description: 'Max hits per store before merging (default 5, max 20).' },
       collections: {

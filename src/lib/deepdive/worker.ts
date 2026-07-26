@@ -8,6 +8,7 @@ import { runPhase2 } from './phase2';
 import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
 import { linkSessionEntitiesToGlobal } from './cross-session';
+import { extractResearchIntoIntel } from './intel-bridge';
 import { disposeArtefacts } from './desk-events';
 
 // In-memory map of active session emitters
@@ -211,6 +212,17 @@ async function runResearch(sessionId: string): Promise<void> {
     } catch (err: any) {
       console.error('[deepdive] Cross-session linking error:', err);
       emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
+    }
+
+    // Feed the finished research into the intel graph. Deep dive keeps its own
+    // cross-session entity index (for dedup within research); this is the
+    // separate step that puts the findings in front of the intel graph the rest
+    // of jkai reasons over. One LLM call per completed session, on the report
+    // digest rather than every fact.
+    try {
+      await extractResearchIntoIntel(sessionId);
+    } catch (err: any) {
+      console.error('[deepdive] Intel extraction error:', err);
     }
 
     // Complete

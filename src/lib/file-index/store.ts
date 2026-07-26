@@ -21,6 +21,7 @@ import { chunkText } from '$lib/rag/chunk';
 import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
 import { embedChunks, FILE_INDEX_EMBEDDING_MODEL } from './embed';
+import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
 
 // Cap the bytes we ever read into RAM to embed. The WebDAV write site allows
 // multi-GB files; loading one whole into a single Buffer on the memory-constrained
@@ -127,9 +128,21 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
     applied = true;
   });
 
-  return applied
-    ? { status: 'indexed', chunkCount: rows.length, modality: content.modality }
-    : { status: 'skipped', reason: 'superseded' };
+  if (!applied) return { status: 'skipped', reason: 'superseded' };
+
+  // The file's text is now the current indexed text — feed it to the intel
+  // graph so uploads become entities, not just vectors. Hash-deduped and
+  // fire-and-forget: extraction never blocks or fails indexing.
+  queueIntelExtraction({
+    kind: 'file',
+    refId: fileId,
+    title: row.name,
+    text: content.text,
+    contentHash: hash,
+    metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
+  });
+
+  return { status: 'indexed', chunkCount: rows.length, modality: content.modality };
 }
 
 /**
