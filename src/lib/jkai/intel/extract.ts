@@ -2,7 +2,7 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { isNull, sql } from 'drizzle-orm';
+import { eq, isNull, sql } from 'drizzle-orm';
 import { generateEmbedding } from './embed';
 
 export interface ExtractedEntity {
@@ -65,7 +65,13 @@ const CANDIDATE_K = 40;
  * does: embed the note once and take the nearest entities from pgvector.
  */
 async function buildExtractionContext(noteText: string): Promise<string> {
-  const types = await db.select({ name: intelEntityTypes.name }).from(intelEntityTypes);
+  // ACTIVE only. Offering a proposed type here would defeat the review gate —
+  // the model would use it, entities would accumulate under it, and admitting
+  // it later would be a formality rather than a decision.
+  const types = await db
+    .select({ name: intelEntityTypes.name })
+    .from(intelEntityTypes)
+    .where(eq(intelEntityTypes.status, 'active'));
   const typeNames = types.map((t) => t.name).join(', ');
 
   const [{ count: total } = { count: 0 }] = await db

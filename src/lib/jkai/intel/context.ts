@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { intelEntities, intelEntityTypes, intelRelationships } from '$lib/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { intelEntities, intelEntityTypes, intelRelationships, intelNotes, intelNoteEntities } from '$lib/db/schema';
+import { desc, eq, sql } from 'drizzle-orm';
 import { generateEmbedding } from './embed';
 
 interface KnowledgeContext {
@@ -157,4 +157,73 @@ function formatContext(context: KnowledgeContext): string {
   }
 
   return parts.join('\n');
+}
+
+/**
+ * Grounding block for entities the user named with `@entity` in the composer.
+ *
+ * Naming an entity should mean the turn starts from what the graph actually
+ * holds about it, rather than from whatever the model happens to recall. Gives
+ * each entity its summary, its strongest connections with the relationship
+ * describing each, its recent timeline, and the sources — so the reply can
+ * cite rather than assert.
+ *
+ * Returns '' when nothing resolves, so the caller can skip the block entirely.
+ */
+export async function buildEntityGrounding(entityIds: string[]): Promise<string> {
+  if (!entityIds.length) return '';
+
+  const { getGraphAnalysis } = await import('./analytics/load');
+  const { index } = await getGraphAnalysis();
+
+  const blocks: string[] = [];
+
+  for (const id of entityIds) {
+    const node = index.byId.get(id);
+    if (!node) continue;
+
+    const lines: string[] = [`### ${node.name} (${node.typeName})`];
+    if (node.summary) lines.push(node.summary);
+
+    const neighbours = [...(index.neighbours.get(id) ?? [])]
+      .map((nb) => index.byId.get(nb))
+      .filter((n): n is NonNullable<typeof n> => Boolean(n))
+      .sort((a, b) => (index.degree.get(b.id) ?? 0) - (index.degree.get(a.id) ?? 0))
+      .slice(0, 10);
+    if (neighbours.length) {
+      lines.push(`Connected to: ${neighbours.map((n) => `${n.name} (${n.typeName})`).join(', ')}`);
+    }
+
+    // Evidence, so the model can cite rather than assert. The excerpt is the
+    // sentence the claim was actually made in.
+    const notes = await db
+      .select({
+        title: intelNotes.title,
+        source: intelNotes.source,
+        excerpt: intelNoteEntities.excerpt,
+      })
+      .from(intelNoteEntities)
+      .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
+      .where(eq(intelNoteEntities.entityId, id))
+      .orderBy(desc(intelNotes.createdAt))
+      .limit(4);
+
+    const cited = notes.filter((n) => n.excerpt);
+    if (cited.length) {
+      lines.push('Evidence:');
+      for (const n of cited) lines.push(`- ${n.title ?? n.source}: "${n.excerpt}"`);
+    } else if (notes.length) {
+      lines.push(`Sources: ${notes.map((n) => n.title ?? n.source).join('; ')}`);
+    }
+
+    blocks.push(lines.join('\n'));
+  }
+
+  if (!blocks.length) return '';
+  return [
+    'INTEL GRAPH CONTEXT — the user named these entities explicitly.',
+    'Use this as the factual basis for your answer, and say so when you rely on it.',
+    '',
+    ...blocks,
+  ].join('\n');
 }

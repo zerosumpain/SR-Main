@@ -33,12 +33,11 @@
   import { shortModelLabel } from '$lib/jkai/model-label';
   import { setThreadLedger, clearThreadLedger, setLiveRuns } from '$lib/jkai/hub-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
-  import { untrack } from 'svelte';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
   import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
 
   let {
     conversationId,
@@ -1300,6 +1299,7 @@
     { token: '@files', hint: 'Search your /drive files by content — text, images, audio' },
     { token: '@research', hint: 'Search your deep-dive research materials by meaning' },
     { token: '@knowledge', hint: 'Recall across everything — files, research, memory, and datastore' },
+    { token: '@entity', hint: 'Ground this turn in what the intel graph knows about a named entity' },
   ];
   const MENTION_RE = /(^|\s)@(\w*)$/;
   let mentionIndex = $state(0);
@@ -1362,6 +1362,47 @@
     const ctx = contextTokens ?? 0;
     return ctx * promptPrice + ASSUMED_REPLY_TOKENS * completionPrice;
   });
+
+
+  // ── @entity — name completion from the intel graph ──────────────────────────
+  // Once "@entity " is typed, the following words complete against real entity
+  // names. Picking one pins it so the turn is sent with a 2-hop subgraph as
+  // grounding, rather than hoping the model recalls the right thing.
+  const ENTITY_RE = /@entity\s+([^@]*)$/i;
+  let entityIndex = $state(0);
+  let entityDismissed = $state(false);
+  let pinnedEntityIds = $state<string[]>([]);
+
+  const entityMatches = $derived.by(() => {
+    const m = input.match(ENTITY_RE);
+    if (!m || !entityMentions.length) return [];
+    const q = m[1].trim().toLowerCase();
+    if (!q) return entityMentions.slice(0, 8);
+    return entityMentions
+      .filter((e) => e.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  });
+  const entityPickerOpen = $derived(entityMatches.length > 0 && !entityDismissed);
+
+  // Re-open the picker when the user carries on typing after dismissing it, the
+  // same way the token picker behaves. Reads `input` only; the write is a plain
+  // boolean that nothing in this effect reads back.
+  $effect(() => {
+    input;
+    untrack(() => {
+      entityDismissed = false;
+      entityIndex = 0;
+    });
+  });
+
+  function selectEntity(e: MentionTarget) {
+    entityDismissed = true;
+    // Replace the partial name with the canonical one, so the grounding the
+    // server attaches and the text the user sees agree.
+    input = input.replace(ENTITY_RE, () => `@entity ${e.name} `);
+    if (!pinnedEntityIds.includes(e.id)) pinnedEntityIds = [...pinnedEntityIds, e.id];
+    tick().then(() => textareaEl?.focus());
+  }
 
   // ── @files references ───────────────────────────────────────────────────────
   // file_search hits render as clickable "sources" chips → open the file viewer at
@@ -1701,6 +1742,10 @@
     // one skill).
     const mentionsFiles = /(^|\s)@files\b/i.test(text);
     const mentionsResearch = /(^|\s)@research\b/i.test(text);
+    // Entities named with @entity are sent as ids so the server can attach the
+    // subgraph; clear them once the turn is away.
+    const entityIds = pinnedEntityIds.slice();
+    pinnedEntityIds = [];
     const effectivePinnedSkill =
       pinnedSkill ?? (mentionsFiles ? 'jkai-files' : mentionsResearch ? 'jkai-research' : undefined);
 
@@ -1714,6 +1759,7 @@
           attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
           useIntelContext,
           pinnedSkill: effectivePinnedSkill,
+          intelEntityIds: entityIds.length ? entityIds : undefined,
         }),
       });
 
@@ -1822,6 +1868,30 @@
       if (e.key === 'Escape') {
         e.preventDefault();
         paletteDismissed = true;
+        return;
+      }
+    }
+    // The entity picker takes keys first — it only opens after "@entity ", so it
+    // can never be live at the same time as the token picker.
+    if (entityPickerOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        entityIndex = (entityIndex + 1) % entityMatches.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        entityIndex = (entityIndex - 1 + entityMatches.length) % entityMatches.length;
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        selectEntity(entityMatches[entityIndex] ?? entityMatches[0]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        entityDismissed = true;
         return;
       }
     }
@@ -2366,6 +2436,24 @@
               >
                 <span class="cmd-name">{cmd.command}</span>
                 <span class="cmd-hint">{cmd.hint}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if entityPickerOpen}
+          <div class="cmd-palette" role="listbox" aria-label="Entities">
+            {#each entityMatches as e, i (e.id)}
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === entityIndex}
+                class="cmd-row"
+                class:active={i === entityIndex}
+                onmousedown={(ev) => { ev.preventDefault(); selectEntity(e); }}
+                onmouseenter={() => (entityIndex = i)}
+              >
+                <span class="cmd-name">{e.name}</span>
+                <span class="cmd-hint">{e.typeName}</span>
               </button>
             {/each}
           </div>

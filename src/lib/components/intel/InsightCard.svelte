@@ -11,11 +11,14 @@
     busy = false,
     onCommission,
     onFocus,
+    onTriage,
   }: {
     insight: InsightData;
     busy?: boolean;
     onCommission?: (insight: InsightData) => void;
     onFocus?: (id: string) => void;
+    /** Dismiss or snooze this finding so it stops coming back. */
+    onTriage?: (insight: InsightData, action: 'dismiss' | 'snooze') => void;
   } = $props();
 
   /** Readable label per detector, so the chip explains what kind of finding this is. */
@@ -63,11 +66,23 @@
     </div>
   {/if}
 
-  {#if onCommission}
-    <button class="action" type="button" disabled={busy} onclick={() => onCommission(insight)}>
-      {busy ? 'Working…' : insight.actionLabel}
-    </button>
-  {/if}
+  <footer class="acts">
+    {#if onCommission}
+      <button class="action" type="button" disabled={busy} onclick={() => onCommission(insight)}>
+        {busy ? 'Working…' : insight.actionLabel}
+      </button>
+    {/if}
+    {#if onTriage}
+      <!-- Without these the finding returns every run. Persistence existed but
+           nothing called it, so a dismissed insight was unreachable. -->
+      <button class="ghost" type="button" disabled={busy} onclick={() => onTriage(insight, 'snooze')}>
+        Snooze
+      </button>
+      <button class="ghost" type="button" disabled={busy} onclick={() => onTriage(insight, 'dismiss')}>
+        Dismiss
+      </button>
+    {/if}
+  </footer>
 </article>
 
 <style>
@@ -166,6 +181,33 @@
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     align-self: center;
+  }
+
+  .acts {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .ghost {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 9px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sharp);
+    background: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+  }
+  .ghost:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--card-border);
+  }
+  .ghost:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .action {

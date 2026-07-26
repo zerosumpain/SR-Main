@@ -85,6 +85,8 @@
 /jkai/improvement
 /jkai/intel
 /jkai/intel/alerts
+/jkai/intel/dossiers
+/jkai/intel/dossiers/[id]
 /jkai/intel/entities
 /jkai/intel/entities/[id]
 /jkai/intel/graph

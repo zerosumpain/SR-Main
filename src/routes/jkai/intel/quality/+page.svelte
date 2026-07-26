@@ -25,6 +25,11 @@
   let done = $state<Set<string>>(new Set());
 
   let types = $state<Array<{ id: string; name: string; icon: string; count: number }>>([]);
+  let proposedTypes = $state<
+    Array<{ id: string; name: string; icon: string; description: string; rationale: string | null; entityCount: number }>
+  >([]);
+  /** Which existing type a rejected proposal should be folded into, per proposal. */
+  let foldInto = $state<Record<string, string>>({});
   let mergeFrom = $state('');
   let mergeInto = $state('');
 
@@ -41,6 +46,7 @@
       if (dupRes.ok) {
         const body = await dupRes.json();
         duplicates = body.duplicates ?? [];
+        proposedTypes = body.proposedTypes ?? [];
         total = body.total ?? 0;
         autoMergeable = body.autoMergeable ?? 0;
         threshold = body.threshold ?? 0.85;
@@ -114,6 +120,29 @@
       notify('Sweep failed');
     } finally {
       sweeping = false;
+    }
+  }
+
+  async function decideType(typeId: string, admit: boolean) {
+    if (busy) return;
+    busy = typeId;
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: admit ? 'admit-type' : 'reject-type',
+          typeId,
+          ...(admit ? {} : { intoTypeId: foldInto[typeId] || undefined }),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      notify(admit ? 'Type admitted' : 'Type rejected');
+      await load();
+    } catch {
+      notify('Could not update that type');
+    } finally {
+      busy = null;
     }
   }
 
@@ -215,6 +244,43 @@
       </ul>
     {/if}
   </section>
+
+  {#if proposedTypes.length}
+    <section class="panel">
+      <header><h2>Proposed types — awaiting a decision</h2></header>
+      <p class="muted">
+        The extractor coined these but cannot use them yet. Holding them is deliberate: an auto-admitted
+        type re-enters the next prompt as a legitimate option, so one bad coinage becomes self-reinforcing —
+        which is how a <code>font</code> type ended up collecting newspapers.
+      </p>
+      <ul class="dups">
+        {#each proposedTypes as t (t.id)}
+          <li class="dup">
+            <div class="pair">
+              <div class="side">
+                <span class="tag">proposed</span>
+                <strong>{t.icon} {t.name}</strong>
+                <span class="meta">{t.entityCount} entities waiting</span>
+              </div>
+            </div>
+            {#if t.rationale}<p class="why">{t.rationale}</p>{/if}
+            <div class="acts">
+              <button type="button" class="primary" disabled={busy === t.id} onclick={() => decideType(t.id, true)}>
+                Admit
+              </button>
+              <select bind:value={foldInto[t.id]} aria-label="Fold into">
+                <option value="">Reject (retire it)</option>
+                {#each types as e (e.id)}<option value={e.id}>Reject, re-type as {e.name}</option>{/each}
+              </select>
+              <button type="button" disabled={busy === t.id} onclick={() => decideType(t.id, false)}>
+                Reject
+              </button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 
   <section class="panel">
     <header><h2>Entity types</h2></header>

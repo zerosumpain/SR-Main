@@ -7,15 +7,20 @@ import {
   unmergeEntity,
   autoMergeDuplicates,
   mergeEntityTypes,
+  listProposedTypes,
 } from '$lib/jkai/intel/resolve/merge';
 import { AUTO_MERGE_THRESHOLD } from '$lib/jkai/intel/resolve/match';
 
 export const GET: RequestHandler = async ({ url }) => {
   const minConfidence = Math.min(Math.max(Number(url.searchParams.get('min') ?? 0.35), 0), 1);
-  const reports = await findDuplicates(minConfidence);
+  const [reports, proposedTypes] = await Promise.all([
+    findDuplicates(minConfidence),
+    listProposedTypes(),
+  ]);
 
   return json({
     threshold: AUTO_MERGE_THRESHOLD,
+    proposedTypes,
     total: reports.length,
     autoMergeable: reports.filter((r) => r.autoMergeable).length,
     duplicates: reports.slice(0, 200).map((r) => ({
@@ -73,6 +78,21 @@ export const POST: RequestHandler = async ({ request }) => {
       : AUTO_MERGE_THRESHOLD;
     const dryRun = Boolean(body.dryRun);
     return json({ ok: true, result: await autoMergeDuplicates(threshold, { dryRun }) });
+  }
+
+  // Proposed-type governance. Extraction now HOLDS a model-coined type rather
+  // than admitting it, so these are how a proposal becomes real or goes away.
+  if (action === 'admit-type' || action === 'reject-type') {
+    const typeId = String(body.typeId ?? '');
+    if (!typeId) throw error(400, 'typeId is required');
+    const { admitProposedType, rejectProposedType } = await import('$lib/jkai/intel/resolve/merge');
+    return json({
+      ok: true,
+      result:
+        action === 'admit-type'
+          ? await admitProposedType(typeId)
+          : await rejectProposedType(typeId, typeof body.intoTypeId === 'string' ? body.intoTypeId : undefined),
+    });
   }
 
   if (action === 'merge-types') {
