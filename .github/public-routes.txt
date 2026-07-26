@@ -29,6 +29,7 @@
 /api/blog/images/[postId]/[filename]
 /api/broads-pilot/guide
 /api/broads-pilot/ratings
+/api/broads/current
 /api/claude-changelog/ingest
 /api/claude-changelog/session/[id]
 /api/data-standard-designer/ingest
@@ -63,6 +64,7 @@
 /blog/[slug]
 /blog/preview/[token]
 /blog/tag/[tag]
+/broads/speed
 /dav/[...path]
 /decks
 /decks/[slug]
