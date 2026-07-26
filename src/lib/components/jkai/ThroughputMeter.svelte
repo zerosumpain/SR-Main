@@ -54,10 +54,11 @@
 
   const TITLE =
     'Measured output throughput: reply tokens + reasoning tokens + tool-call tokens, ' +
-    'over generation time only — time spent running tools (and waiting for the ' +
-    'provider afterwards) is excluded. The live figure is a chars/4 estimate; ' +
-    'it settles to the provider\'s reported output-token count when the turn ends ' +
-    '(a leading ≈ means no provider count was available). Click to switch window.';
+    'over the whole turn from the moment it was sent — so the wait before the first ' +
+    'token counts against it. Only time spent actually running a tool is excluded. ' +
+    'The live figure is a chars/4 estimate; it settles to the provider\'s reported ' +
+    'output-token count when the turn ends (a leading ≈ means no provider count was ' +
+    'available). Click to switch window.';
 </script>
 
 {#if compact}

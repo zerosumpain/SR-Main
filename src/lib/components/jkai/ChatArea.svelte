@@ -28,7 +28,7 @@
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
-  import { beginTurn, noteOutput, noteToolCall, settleTurn } from '$lib/jkai/throughput-bus.svelte';
+  import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
   import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { onMount, tick } from 'svelte';
@@ -392,9 +392,10 @@
         }
         // Same tok/s accounting as makeProgressHandler. Tool frames aren't
         // rendered on the silent path, but the meter still needs the pause —
-        // otherwise a silent turn's tool time would count as generation time.
+        // otherwise a silent turn's tool time would count as turn time.
         if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-        else if (data.type === 'tool_start') noteToolCall(data.args);
+        else if (data.type === 'tool_start') noteToolStart(data.args);
+        else if (data.type === 'tool_result') noteToolEnd();
 
         if (data.type === 'token') {
           accumulatedContent += data.delta;
@@ -839,9 +840,11 @@
 
       // Feed the bottom-left tok/s meter. Reply text and reasoning both count
       // as generated output; a tool call bills its argument JSON and then
-      // pauses the clock for however long the tool runs.
+      // pauses the clock for however long the tool runs, resuming on its
+      // result (so the provider's prefill wait afterwards still counts).
       if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-      else if (data.type === 'tool_start') noteToolCall(data.args);
+      else if (data.type === 'tool_start') noteToolStart(data.args);
+      else if (data.type === 'tool_result') noteToolEnd();
 
       if (data.type === 'token') {
         heartbeat = null;
