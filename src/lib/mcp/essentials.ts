@@ -40,6 +40,14 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // stay visible so the model reaches for them without a meta-tool round-trip.
   'api_search',
   'api_call',
+  // The secret registry + integration register. `api_secrets_list` is how the
+  // model discovers a credential it is allowed to use without ever seeing one,
+  // and `api_integration_list`/`_call` are the cheap path for a question a
+  // recorded integration already answers — both must stay visible or the model
+  // re-derives (or gives up on) an API call it already owns.
+  'api_secrets_list',
+  'api_integration_list',
+  'api_integration_call',
   'datastore_query',
   // Unified recall across files + research + memory + datastore — the @knowledge
   // entry point. Kept visible so "what do I know about X" reaches it directly.

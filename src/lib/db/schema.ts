@@ -1944,6 +1944,61 @@ export const integrationOauthConfigs = pgTable('integration_oauth_configs', {
 export type IntegrationCredentialRow = typeof integrationCredentials.$inferSelect;
 export type IntegrationOauthConfigRow = typeof integrationOauthConfigs.$inferSelect;
 
+// ── API secret registry ──────────────────────────────────────────────────
+//
+// Credentials jkai can USE but never READ. An `api_catalog` entry references a
+// secret by `handle`; the value is resolved server-side at call time and the
+// plaintext is scrubbed from every response/error before it reaches the model.
+//
+// `allowedHosts` is the load-bearing security field and is OWNER-SET ONLY: a
+// secret only ever authenticates a request whose URL host is on its own list.
+// That is what makes the documented exfiltration path (a prompt-injected model
+// registering `{baseUrl: attacker.example, auth: {handle: 'openrouter'}}`)
+// structurally impossible rather than merely discouraged — see
+// src/lib/secrets/registry.ts.
+export const apiSecrets = pgTable('api_secrets', {
+  id: text('id').primaryKey(), // uuid (caller-provided via crypto.randomUUID())
+  /** Stable reference used by catalogue entries, e.g. 'openrouter'. */
+  handle: text('handle').notNull(),
+  label: text('label').notNull(),
+  /**
+   * 'vault' — value encrypted in `payload_enc` (this host's
+   *   INTEGRATION_CREDENTIALS_KEY; NOTE the key differs per host, so vault
+   *   secrets are per-environment and must be entered on each host).
+   * 'ref'   — no copy stored; resolved from an existing server key source at
+   *   call time (see REF_SOURCES in src/lib/secrets/registry.ts). Preferred for
+   *   keys the site already owns, so there is no second copy to rotate.
+   */
+  source: text('source').notNull(), // 'vault' | 'ref'
+  payloadEnc: text('payload_enc'), // vault only — `${iv}:${tag}:${ciphertext}`
+  refKey: text('ref_key'), // ref only — a REF_SOURCES key
+  /** How the value is attached: {kind:'bearer'} | {kind:'header',name} | {kind:'query',name}. */
+  injection: jsonb('injection').$type<Record<string, unknown>>().notNull(),
+  /** Owner-set host allow-list. Exact host or a `*.example.com` wildcard. */
+  allowedHosts: jsonb('allowed_hosts').$type<string[]>().notNull().default([]),
+  /** Optional owner-set least-privilege narrowing, e.g. ['/api/v1/credits']. Empty = any path. */
+  allowedPathPrefixes: jsonb('allowed_path_prefixes').$type<string[]>().notNull().default([]),
+  /**
+   * Owner-set HTTP methods this credential may authenticate. Path narrowing
+   * limits WHERE a key goes, never WHAT it does — without this, a credential
+   * scoped to a read-only endpoint could still be sent with DELETE. Empty is
+   * treated as ['GET','HEAD'], so a credential is read-only until the owner
+   * says otherwise.
+   */
+  allowedMethods: jsonb('allowed_methods').$type<string[]>().notNull().default(['GET', 'HEAD']),
+  /** Last 4 chars only, for UI identification. Never the value. */
+  hint: text('hint'),
+  notes: text('notes'),
+  lastUsedAt: timestamp('last_used_at'),
+  useCount: integer('use_count').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byHandle: uniqueIndex('api_secrets_handle_idx').on(t.handle),
+}));
+
+export type ApiSecretRow = typeof apiSecrets.$inferSelect;
+
 // ── Hermes sessions ──────────────────────────────────────────────────────
 
 export const hermesSessions = pgTable('hermes_sessions', {

@@ -782,6 +782,19 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'api-integration',
+    label: 'API integration',
+    kind: 'output',
+    group: 'Integrations',
+    description:
+      'Pick a registered API integration by name — parameters become labelled fields and the response arrives as named values (output.values.*), so nothing downstream needs the API\'s JSON shape.',
+    defaultConfig: { integration: '', params: {}, confirmWrite: false },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['text', 'json', 'any'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
+  {
     type: 'home-assistant',
     label: 'Home Assistant',
     kind: 'output',

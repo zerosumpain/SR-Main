@@ -58,6 +58,7 @@ import OpenRouterPanel from './OpenRouterPanel.svelte';
 import JkaiPanel from './JkaiPanel.svelte';
 import SiteToolPanel from './SiteToolPanel.svelte';
 import ApiCallPanel from './ApiCallPanel.svelte';
+import ApiIntegrationPanel from './ApiIntegrationPanel.svelte';
 import BuilderChatPanel from './BuilderChatPanel.svelte';
 import BuilderPiPanel from './BuilderPiPanel.svelte';
 import BuildViewPanel from './BuildViewPanel.svelte';
@@ -151,6 +152,7 @@ const specialized: Record<string, Component<PanelProps>> = {
   'jkai': JkaiPanel as unknown as Component<PanelProps>,
   'site-tool': SiteToolPanel as unknown as Component<PanelProps>,
   'api-call': ApiCallPanel as unknown as Component<PanelProps>,
+  'api-integration': ApiIntegrationPanel as unknown as Component<PanelProps>,
   'builder-chat': BuilderChatPanel as unknown as Component<PanelProps>,
   'builder-pi': BuilderPiPanel as unknown as Component<PanelProps>,
   'build-view': BuildViewPanel as unknown as Component<PanelProps>,
