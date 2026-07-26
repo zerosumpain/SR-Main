@@ -40,6 +40,7 @@
 /api/health/apple/ingest
 /api/health/workflow-engine
 /api/jkai/cors/[...url]
+/api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/landing/ecg-telemetry
 /api/landing/vitals
@@ -78,9 +79,6 @@
 /jkai/builds/new
 /jkai/canvas
 /jkai/canvas/[slug]
-/jkai/channels
-/jkai/channels/email/[id]
-/jkai/channels/whatsapp/[id]
 /jkai/improvement
 /jkai/intel
 /jkai/intel/alerts
@@ -93,7 +91,6 @@
 /jkai/intel/review
 /jkai/intel/search
 /jkai/intel/timeline
-/jkai/knowledge
 /jkai/monitors
 /jkai/prompts
 /jkai/research

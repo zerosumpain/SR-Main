@@ -52,6 +52,7 @@ function publicPathsFromAuth() {
 const HOOK_BYPASSES = [
   '/dav', // Basic-Auth against webdav_credentials
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
+  '/api/jkai/prompts/hermes', // homeserv-only + SCRAPER_SERVICE_TOKEN (prompt workbench proxy)
   '/api/mcp', // bridge token (tools/list + tools/call)
   '/api/policy-engine', // POLICY_INGEST_SECRET
   '/api/claude-changelog', // POST only, ingest secret
