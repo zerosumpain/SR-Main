@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { and, or, sql, ilike, gte, lte, inArray, isNotNull, type SQL } from 'drizzle-orm';
+import { buildOpenWeightResolver, type OpenWeightResolver } from '$lib/models/open-weights';
 import { getSetting } from '$lib/server/models/settings';
 
 interface RawBenchmarks {
@@ -15,10 +16,13 @@ type Row = typeof openrouterModels.$inferSelect;
 
 interface EnrichedRow extends Row {
   toolsSupported: boolean;
-  /** True when the model publishes its weights (OpenRouter `hugging_face_id`).
+  /** True when the model publishes its weights — see $lib/models/open-weights
+   *  (OpenRouter `hugging_face_id` + sibling inheritance + override map).
    *  Drives the OPEN badge + "open only" filter in the /jkai picker and the
    *  open-weight bias in $lib/routing/scoring. */
   openWeights: boolean;
+  /** The Hugging Face repo backing an open-weight model; null when closed. */
+  huggingFaceId: string | null;
   /** Blended USD per 1M tokens at a 3:1 input:output ratio. */
   blendedPerM: number | null;
   /** Artificial Analysis indices, re-served by OpenRouter inside the raw model
@@ -31,11 +35,10 @@ interface EnrichedRow extends Row {
   score: number | null;
 }
 
-function enrich(row: Row): EnrichedRow {
+function enrich(row: Row, openWeights: OpenWeightResolver): EnrichedRow {
   const raw = (row.raw ?? {}) as {
     supported_parameters?: unknown;
     benchmarks?: { artificial_analysis?: RawBenchmarks };
-    hugging_face_id?: unknown;
   };
   const supported = Array.isArray(raw.supported_parameters) ? raw.supported_parameters : [];
   const bench = raw.benchmarks?.artificial_analysis ?? {};
@@ -52,7 +55,8 @@ function enrich(row: Row): EnrichedRow {
   return {
     ...row,
     toolsSupported: supported.includes('tools'),
-    openWeights: typeof raw.hugging_face_id === 'string' && raw.hugging_face_id.trim().length > 0,
+    openWeights: openWeights.isOpen(row.id),
+    huggingFaceId: openWeights.huggingFaceId(row.id),
     blendedPerM,
     agenticIndex: typeof bench.agentic_index === 'number' ? bench.agentic_index : null,
     codingIndex: typeof bench.coding_index === 'number' ? bench.coding_index : null,
@@ -121,8 +125,9 @@ export const GET: RequestHandler = async ({ url }) => {
   // (e.g. morph/relace "apply" models) 404 with "No endpoints found that
   // support tool use". The chat model picker sets this.
   const toolsOnly = url.searchParams.get('toolsOnly') === '1';
-  // openOnly: restrict to open-weight models (OpenRouter populates
-  // hugging_face_id for those only). The /jkai picker's "open only" chip.
+  // openOnly: restrict to open-weight models. Applied in JS after enrichment
+  // (not as SQL on hugging_face_id) so the chip and the OPEN badge are driven by
+  // exactly the same resolver — including the models OpenRouter leaves blank.
   const openOnly = url.searchParams.get('openOnly') === '1';
   // Hybrid-score weights (quality / price / throughput). Scores are computed on
   // every request so the Score column is populated in any sort mode.
@@ -145,9 +150,6 @@ export const GET: RequestHandler = async ({ url }) => {
   if (toolsOnly) {
     conditions.push(sql`(${openrouterModels.raw} -> 'supported_parameters') @> '["tools"]'::jsonb`);
   }
-  if (openOnly) {
-    conditions.push(sql`COALESCE(${openrouterModels.raw} ->> 'hugging_face_id', '') <> ''`);
-  }
 
   const where = conditions.length ? and(...conditions) : undefined;
 
@@ -157,7 +159,7 @@ export const GET: RequestHandler = async ({ url }) => {
   // tools) — sort without SQL expressions.
   // Facets stay distinct across the entire catalogue so users always see the
   // full option list.
-  const [providerRows, modalityRows, all] = await Promise.all([
+  const [providerRows, modalityRows, all, catalogueIds] = await Promise.all([
     db
       .selectDistinct({ value: openrouterModels.provider })
       .from(openrouterModels)
@@ -169,9 +171,15 @@ export const GET: RequestHandler = async ({ url }) => {
       .where(isNotNull(openrouterModels.modality))
       .orderBy(openrouterModels.modality),
     db.select().from(openrouterModels).where(where),
+    // Unfiltered — sibling inheritance has to see the base model even when the
+    // active filter excludes it (searching "turbo" must still resolve glm-5).
+    db.select({ id: openrouterModels.id, raw: openrouterModels.raw }).from(openrouterModels),
   ]);
 
-  const rows = all.map(enrich);
+  const openWeights = buildOpenWeightResolver(catalogueIds);
+  // openOnly narrows BEFORE scoring so the hybrid score stays min-max normalised
+  // within the set actually on screen (what the SQL filter used to do).
+  const rows = all.map((row) => enrich(row, openWeights)).filter((r) => !openOnly || r.openWeights);
   applyHybridScores(rows, wq, wp, wt);
 
   const dir = sortDir === 'desc' ? -1 : 1;

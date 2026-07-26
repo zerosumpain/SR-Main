@@ -2,6 +2,7 @@
 // history, and pick the best model per profile under the cost-aware policy.
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
+import { buildOpenWeightResolver } from '$lib/models/open-weights';
 import { enrichRow, selectForProfile, type Candidate } from './scoring';
 import { buildSuccessIndex, successForProfile } from './success';
 import { listEvents } from './events';
@@ -33,7 +34,10 @@ function buildReason(profile: ModelProfile, a: ModelAssignment): string {
  *  Pure of side effects (no persistence) — callers persist the result. */
 export async function selectModels(config: RoutingConfig): Promise<SelectionResult> {
   const rows = await db.select().from(openrouterModels);
-  const candidates: Candidate[] = rows.map(enrichRow);
+  // Built over the whole catalogue — a hosted variant inherits its base model's
+  // open-weight status, so glm-5-turbo & co. keep the open-weight bonus.
+  const openWeights = buildOpenWeightResolver(rows);
+  const candidates: Candidate[] = rows.map((row) => enrichRow(row, openWeights));
 
   const events = await listEvents();
   const successIndex = buildSuccessIndex(events);

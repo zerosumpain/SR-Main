@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import type { ModelContext } from '$lib/server/models/types';
+  import ModelValueChart from '$lib/components/jkai/ModelValueChart.svelte';
 
   // Local body-portal. NOT the shared $lib/canvas/portal — that one restores the
   // node to its original parent on destroy, which *resurrects* the overlay back
@@ -20,9 +21,28 @@
     throughput: string | null;
     agenticIndex: number | null;
     openWeights: boolean;
+    /** Hugging Face repo behind an open-weight model — shown on the badge so a
+     *  resolved override can be checked without reading the code. */
+    huggingFaceId: string | null;
+    /** Blended USD/1M at 3:1 in:out — the compare tab's cost axis. */
+    blendedPerM: number | null;
+    /** Hybrid quality/price/speed score in [0,1]; null when unrated. */
+    score: number | null;
   }
 
   type SortKey = 'name' | 'agenticIndex' | 'promptPrice' | 'completionPrice' | 'throughput';
+
+  /** list = the sortable table; compare = the quality-vs-cost exhibits. */
+  type Tab = 'list' | 'compare';
+
+  /** Hybrid-score weight presets for the compare tab, passed to the API as
+   *  wq/wp/wt. They mirror the axes the nightly routing selection balances. */
+  const WEIGHT_PRESETS = [
+    { id: 'balanced', label: 'balanced', wq: 0.5, wp: 0.3, wt: 0.2 },
+    { id: 'quality', label: 'quality-led', wq: 0.75, wp: 0.15, wt: 0.1 },
+    { id: 'cost', label: 'cost-led', wq: 0.35, wp: 0.55, wt: 0.1 },
+  ] as const;
+  type PresetId = (typeof WEIGHT_PRESETS)[number]['id'];
 
   /** What a row-tap applies to. 'chat' is this conversation only (the original
    *  behaviour); 'site' is the site-wide default every LLM task uses; the rest
@@ -77,6 +97,12 @@
   let total = $state(0);
   let loading = $state(false);
 
+  let tab = $state<Tab>('list');
+  let preset = $state<PresetId>('balanced');
+  // The chart needs the whole filtered set, not the current page of 25.
+  let chartRows = $state<ModelRow[]>([]);
+  let chartLoading = $state(false);
+
   let target = $state<Target>('chat');
   let picture = $state<Picture | null>(null);
   let applying = $state<string | null>(null);
@@ -91,19 +117,24 @@
     noticeTimer = setTimeout(() => { notice = null; }, 3200);
   }
 
+  /** Filters both views share. The orchestrator is an agent — only models that
+   *  support tool use can run the chat (apply/edit models like morph 404). */
+  function baseParams(): URLSearchParams {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    params.set('toolsOnly', '1');
+    if (openOnly) params.set('openOnly', '1');
+    return params;
+  }
+
   async function load() {
     loading = true;
     try {
-      const params = new URLSearchParams();
-      if (q) params.set('q', q);
+      const params = baseParams();
       params.set('sortBy', sortBy);
       params.set('sortDir', sortDir);
       params.set('page', String(page));
       params.set('pageSize', String(pageSize));
-      // The orchestrator is an agent — only models that support tool use can run
-      // the chat. (Apply/edit models like morph 404 otherwise.)
-      params.set('toolsOnly', '1');
-      if (openOnly) params.set('openOnly', '1');
       const res = await fetch(`/api/admin/models/openrouter?${params}`);
       if (res.ok) {
         const data = await res.json();
@@ -115,6 +146,25 @@
     }
   }
 
+  /** The compare tab plots every match, so it asks for the full page size and
+   *  re-scores server-side under the active weight preset. */
+  async function loadChart() {
+    chartLoading = true;
+    try {
+      const w = WEIGHT_PRESETS.find((p) => p.id === preset) ?? WEIGHT_PRESETS[0];
+      const params = baseParams();
+      params.set('sortBy', 'score');
+      params.set('pageSize', '500');
+      params.set('wq', String(w.wq));
+      params.set('wp', String(w.wp));
+      params.set('wt', String(w.wt));
+      const res = await fetch(`/api/admin/models/openrouter?${params}`);
+      if (res.ok) chartRows = (await res.json()).rows;
+    } finally {
+      chartLoading = false;
+    }
+  }
+
   // Mounted only while open; (re)load on any query/sort/page/filter change.
   $effect(() => {
     q;
@@ -123,6 +173,17 @@
     page;
     openOnly;
     untrack(() => load());
+  });
+
+  // Chart data is fetched only while the compare tab is showing — the list tab
+  // is the common case and shouldn't pay for a 500-row request.
+  $effect(() => {
+    const active = tab === 'compare';
+    q;
+    openOnly;
+    preset;
+    if (!active) return;
+    untrack(() => loadChart());
   });
 
   // Reads nothing reactive → runs once on mount. Fetches what is currently
@@ -381,6 +442,49 @@
     </div>
     <p class="picker-hint">Only models that support tool use are shown — required for the chat agent. Quality = Artificial Analysis agentic index.</p>
 
+    <div class="picker-tabs" role="tablist" aria-label="Model views">
+      <button
+        type="button"
+        class="picker-tab"
+        class:active={tab === 'list'}
+        role="tab"
+        aria-selected={tab === 'list'}
+        onclick={() => (tab = 'list')}>List</button
+      >
+      <button
+        type="button"
+        class="picker-tab"
+        class:active={tab === 'compare'}
+        role="tab"
+        aria-selected={tab === 'compare'}
+        onclick={() => (tab = 'compare')}>Compare</button
+      >
+    </div>
+
+    {#if tab === 'compare'}
+      <div class="preset-row" role="radiogroup" aria-label="Score weighting">
+        <span class="quick-label">weighting</span>
+        {#each WEIGHT_PRESETS as p (p.id)}
+          <button
+            type="button"
+            class="preset-chip"
+            class:active={preset === p.id}
+            role="radio"
+            aria-checked={preset === p.id}
+            title={`quality ${p.wq} · price ${p.wp} · speed ${p.wt}`}
+            onclick={() => (preset = p.id)}>{p.label}</button
+          >
+        {/each}
+      </div>
+      <div class="chart-scroll">
+        <ModelValueChart
+          rows={chartRows}
+          activeModelId={activeModelId}
+          loading={chartLoading}
+          onpick={pick}
+        />
+      </div>
+    {:else}
     <!-- Mobile-only sort control (the sortable column headers are hidden there). -->
     <div class="sort-chips" role="group" aria-label="Sort models">
       <span class="quick-label">sort</span>
@@ -437,7 +541,11 @@
               <td class="cell-name" title={m.id}>
                 <span class="name-main">
                   {shortName(m.id)}
-                  {#if m.openWeights}<span class="open-badge" title="Open weights">open</span>{/if}
+                  {#if m.openWeights}<span
+                      class="open-badge"
+                      title={m.huggingFaceId ? `Open weights — ${m.huggingFaceId}` : 'Open weights'}
+                    >open</span
+                    >{/if}
                 </span>
                 <span class="name-id">{m.id}</span>
               </td>
@@ -453,19 +561,26 @@
         </tbody>
       </table>
     </div>
+    {/if}
 
     <footer class="picker-foot">
       {#if notice}
         <span class="foot-notice" class:bad={notice.bad}>{notice.text}</span>
+      {:else if tab === 'compare'}
+        <span class="foot-info">
+          {chartRows.length} models · tap a point to apply{#if chartLoading} · loading…{/if}
+        </span>
       {:else}
         <span class="foot-info">
           {total} models · page {page}/{totalPages}{#if loading} · loading…{/if}
         </span>
       {/if}
-      <span class="foot-pager">
-        <button type="button" class="pager-btn" disabled={page <= 1} onclick={() => page--}>Prev</button>
-        <button type="button" class="pager-btn" disabled={page >= totalPages} onclick={() => page++}>Next</button>
-      </span>
+      {#if tab === 'list'}
+        <span class="foot-pager">
+          <button type="button" class="pager-btn" disabled={page <= 1} onclick={() => page--}>Prev</button>
+          <button type="button" class="pager-btn" disabled={page >= totalPages} onclick={() => page++}>Next</button>
+        </span>
+      {/if}
     </footer>
   </div>
 </div>
@@ -687,6 +802,69 @@
     font-size: 11px;
     color: var(--text-ghost);
     font-family: var(--font-mono);
+  }
+
+  /* Tabs — same shape as the admin .nm-tabs rule, restated locally because
+     admin.css isn't loaded under /jkai. */
+  .picker-tabs {
+    display: flex;
+    gap: 0;
+    margin: 0 16px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .picker-tab {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    padding: 8px 14px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease;
+  }
+  .picker-tab:hover { color: var(--text-primary); }
+  .picker-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .preset-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 10px 16px 2px;
+  }
+  .preset-chip {
+    padding: 4px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .preset-chip:hover { color: var(--text-primary); }
+  .preset-chip.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .chart-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-top: 6px;
   }
 
   /* Mobile-only sort chips (column headers do this job on desktop). */
