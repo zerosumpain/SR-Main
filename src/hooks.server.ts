@@ -400,7 +400,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // secret + loopback through here; the endpoint re-checks the secret
   // (defence-in-depth). An owner browser (no secret) falls through to the normal
   // owner-gate and still works.
-  if (pathname === '/api/deepdive/index-sources' || pathname === '/api/deepdive/reindex-facts') {
+  if (
+    pathname === '/api/deepdive/index-sources' ||
+    pathname === '/api/deepdive/reindex-facts' ||
+    pathname === '/api/jkai/intel/backfill'
+  ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
     const isLoopback = clientAddr === '127.0.0.1' || clientAddr === '::1';
