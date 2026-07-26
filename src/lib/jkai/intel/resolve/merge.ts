@@ -153,6 +153,22 @@ export async function mergeEntities(keepId: string, mergeId: string): Promise<Me
       .set({ mergedIntoId: keepId, updatedAt: new Date() })
       .where(eq(intelEntities.id, mergeId));
 
+    // Flatten: re-point anything already tombstoned INTO mergeId at the new
+    // survivor, so no chain is ever deeper than one hop.
+    //
+    // The guard above stops us merging INTO a tombstone, but nothing stopped a
+    // SURVIVOR from later becoming a loser — autoMergeDuplicates' skip-set only
+    // records losers, so `A → B` followed by `B → C` built a two-level chain.
+    // loadSnapshot resolves merged_into_id exactly one hop, so a stale
+    // reference to A landed on tombstone B, which is absent from the node set,
+    // and buildIndex dropped the edge — defeating the very guarantee the
+    // remapping exists to provide. mergeId's own merged_into_id is null
+    // (guaranteed above), so this cannot self-match.
+    await tx
+      .update(intelEntities)
+      .set({ mergedIntoId: keepId, updatedAt: new Date() })
+      .where(eq(intelEntities.mergedIntoId, mergeId));
+
     return {
       keptId: keepId,
       mergedId: mergeId,
@@ -271,9 +287,10 @@ export interface SweepResult {
 /**
  * Merge every candidate at or above `threshold`.
  *
- * Chains are handled by re-checking the tombstone state as we go: if A was
- * merged into B earlier in the sweep, a later A↔C candidate is skipped rather
- * than resurrecting A.
+ * Chains cannot form: `mergeEntities` flattens any existing tombstone that
+ * pointed at the loser onto the new survivor. The skip-set below only avoids
+ * redundant work — it is NOT what keeps chains one hop deep, because a survivor
+ * carries no marker and can legitimately become a loser later in the sweep.
  */
 export async function autoMergeDuplicates(
   threshold = AUTO_MERGE_THRESHOLD,

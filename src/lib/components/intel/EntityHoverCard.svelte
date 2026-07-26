@@ -31,10 +31,21 @@
     const a = anchor;
     const el = host;
     if (!a || !el) return;
-    untrack(() => {
-      const h = el.offsetHeight;
-      if (h && Math.abs(h - height) > 4) height = h;
-    });
+
+    // EntityCard fetches its content asynchronously, so measuring once on mount
+    // captures the height of the "Loading…" state and the above/below flip is
+    // then decided on a number that is about to change. A ResizeObserver keeps
+    // the measurement honest as the real content arrives.
+    const measure = () =>
+      untrack(() => {
+        const h = el.offsetHeight;
+        if (h && Math.abs(h - height) > 4) height = h;
+      });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   });
 
   const position = $derived.by(() => {

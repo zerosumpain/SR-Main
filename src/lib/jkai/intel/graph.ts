@@ -116,10 +116,14 @@ async function upsertEntity(
   noteId: string,
 ): Promise<string> {
   if (entity.possibleMatchId) {
+    // Filtered on mergedIntoId like every other entity lookup in this file.
+    // Without it, an id the extractor picked up before a merge sweep ran could
+    // write relationships and note links against a TOMBSTONE — rows the graph
+    // loader can only rescue one hop, so they silently vanish from every view.
     const [existing] = await db
       .select()
       .from(intelEntities)
-      .where(eq(intelEntities.id, entity.possibleMatchId))
+      .where(and(eq(intelEntities.id, entity.possibleMatchId), isNull(intelEntities.mergedIntoId)))
       .limit(1);
 
     if (existing) {
