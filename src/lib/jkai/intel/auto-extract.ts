@@ -18,8 +18,8 @@
 // suppress them (the file/research branches already return that text — the
 // entities are the new part). Kill switch: INTEL_AUTO_EXTRACT=0.
 import { db } from '$lib/db';
-import { and, eq, sql } from 'drizzle-orm';
-import { intelNotes } from '$lib/db/schema';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { intelNotes, researchSessions } from '$lib/db/schema';
 import { extractFromNote } from './extract';
 import { persistExtraction } from './graph';
 import { embedNote } from './embed';
@@ -40,7 +40,7 @@ export interface AutoExtractInput {
 
 export type AutoExtractOutcome =
   | { status: 'extracted'; noteId: string; entityCount: number }
-  | { status: 'unchanged' | 'disabled' | 'too-short' | 'failed'; noteId?: string };
+  | { status: 'unchanged' | 'disabled' | 'too-short' | 'skipped' | 'failed'; noteId?: string };
 
 /** Cap the text sent to the model. Enough for a report; not a whole book. */
 const MAX_EXTRACT_CHARS = 24_000;
@@ -153,4 +153,113 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
 export function queueIntelExtraction(input: AutoExtractInput): void {
   if (!isAutoExtractEnabled()) return;
   void extractIntoIntel(input).catch(() => {});
+}
+
+export interface BackfillProgress {
+  scanned: number;
+  extracted: number;
+  unchanged: number;
+  skipped: number;
+  failed: number;
+  entities: number;
+  truncated: boolean;
+}
+
+export interface BackfillOptions {
+  /** Which corpora to sweep. Default: both. */
+  kinds?: AutoKind[];
+  /** Hard cap on items processed in one run, so a sweep can't run away. */
+  limit?: number;
+}
+
+/**
+ * Sweep the existing corpus into the intel graph. Auto-extraction only fires on
+ * NEW ingest, so everything indexed before it existed needs this once.
+ *
+ * Sequential on purpose: each item is an LLM call, and running them
+ * concurrently against the gateway buys little while risking rate limits mid-
+ * sweep. Idempotent — re-running only touches items whose content changed.
+ */
+export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promise<BackfillProgress> {
+  const kinds = opts.kinds ?? (['file', 'research'] as AutoKind[]);
+  const limit = Math.max(1, Math.min(opts.limit ?? 500, 2000));
+  const progress: BackfillProgress = {
+    scanned: 0,
+    extracted: 0,
+    unchanged: 0,
+    skipped: 0,
+    failed: 0,
+    entities: 0,
+    truncated: false,
+  };
+
+  if (!isAutoExtractEnabled()) return progress;
+
+  const record = (outcome: AutoExtractOutcome) => {
+    if (outcome.status === 'extracted') {
+      progress.extracted++;
+      progress.entities += outcome.entityCount;
+    } else if (outcome.status === 'unchanged') progress.unchanged++;
+    else if (outcome.status === 'failed') progress.failed++;
+    else progress.skipped++;
+  };
+
+  if (kinds.includes('file')) {
+    // Only files that actually have indexed text — anything else has nothing to
+    // extract from, and re-reading bytes here would duplicate indexFile's work.
+    const { rows } = await db.execute(sql`
+      SELECT f.id, f.name, f.content_hash AS hash, string_agg(e.text, E'\n\n' ORDER BY e.chunk_ord) AS text
+      FROM workflow_files f
+      JOIN file_embeddings e ON e.file_id = f.id
+      WHERE f.content_hash IS NOT NULL
+      GROUP BY f.id, f.name, f.content_hash
+      ORDER BY f.id
+      LIMIT ${limit}
+    `);
+
+    for (const row of rows as Array<Record<string, unknown>>) {
+      if (progress.scanned >= limit) {
+        progress.truncated = true;
+        break;
+      }
+      progress.scanned++;
+      record(
+        await extractIntoIntel({
+          kind: 'file',
+          refId: String(row.id),
+          title: String(row.name ?? 'file'),
+          text: String(row.text ?? ''),
+          contentHash: String(row.hash ?? ''),
+          metadata: { sourceUrl: '/drive', backfilled: true },
+        }),
+      );
+    }
+  }
+
+  if (kinds.includes('research')) {
+    const sessions = await db
+      .select({ id: researchSessions.id })
+      .from(researchSessions)
+      .where(isNotNull(researchSessions.report))
+      .orderBy(researchSessions.id);
+
+    const { extractResearchIntoIntel } = await import('$lib/deepdive/intel-bridge');
+    for (const s of sessions) {
+      if (progress.scanned >= limit) {
+        progress.truncated = true;
+        break;
+      }
+      progress.scanned++;
+      try {
+        record(await extractResearchIntoIntel(s.id));
+      } catch {
+        progress.failed++;
+      }
+    }
+  }
+
+  console.log(
+    `[intel:auto] backfill done — scanned ${progress.scanned}, extracted ${progress.extracted} (${progress.entities} entities), unchanged ${progress.unchanged}, skipped ${progress.skipped}, failed ${progress.failed}`,
+  );
+  return progress;
 }

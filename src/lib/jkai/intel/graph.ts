@@ -7,7 +7,7 @@ import {
   intelTimelineEvents,
   intelNotes,
 } from '$lib/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type {
@@ -70,6 +70,34 @@ async function upsertEntity(
     return '';
   }
 
+  // Deterministic fallback before inserting. Resolution otherwise depends
+  // entirely on the model returning possibleMatchId, so a missed match created a
+  // duplicate — and now that candidates are retrieved by similarity rather than
+  // listed exhaustively, an exact name the model didn't see must still resolve.
+  const [sameName] = await db
+    .select({ id: intelEntities.id, properties: intelEntities.properties })
+    .from(intelEntities)
+    .where(
+      and(
+        sql`lower(${intelEntities.name}) = ${entity.name.trim().toLowerCase()}`,
+        eq(intelEntities.typeId, typeId),
+        isNull(intelEntities.mergedIntoId),
+      ),
+    )
+    .limit(1);
+
+  if (sameName) {
+    await db
+      .update(intelEntities)
+      .set({
+        properties: { ...(sameName.properties as Record<string, unknown> ?? {}), ...entity.properties },
+        updatedAt: new Date(),
+        ...(entity.confidence === 'high' ? { confidence: 'high', confirmed: true } : {}),
+      })
+      .where(eq(intelEntities.id, sameName.id));
+    return sameName.id;
+  }
+
   const [created] = await db
     .insert(intelEntities)
     .values({
@@ -89,77 +117,106 @@ async function upsertEntity(
   return created.id;
 }
 
+/** Most entities summarised in a single batched call. */
+const SUMMARY_BATCH = 25;
+
+/**
+ * Write summaries for entities that don't have one yet.
+ *
+ * This used to be one LLM call PER entity, sequentially, on every extraction —
+ * so a note yielding 20 entities cost 21 calls, and every later note that
+ * merely mentioned those entities paid to re-summarise them. Now it is one
+ * batched call covering up to SUMMARY_BATCH entities, and only entities still
+ * lacking a summary are considered.
+ *
+ * Re-summarising on new evidence is a separate, deliberate job (see
+ * `refreshEntitySummary`) rather than a side effect of every ingest.
+ */
 async function updateEntitySummaries(entityIds: string[]): Promise<void> {
   if (entityIds.length === 0) return;
 
-  const modelCtx = await resolveDefaultModel('builder');
-  const { client, model } = await getLLMClient(modelCtx);
+  const pending = await db
+    .select({
+      id: intelEntities.id,
+      name: intelEntities.name,
+      typeName: intelEntityTypes.name,
+      properties: intelEntities.properties,
+    })
+    .from(intelEntities)
+    .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
+    .where(and(inArray(intelEntities.id, entityIds), isNull(intelEntities.summary)));
 
-  for (const entityId of entityIds) {
-    try {
-      const [entity] = await db
-        .select({
-          id: intelEntities.id,
-          name: intelEntities.name,
-          typeName: intelEntityTypes.name,
-          properties: intelEntities.properties,
-        })
-        .from(intelEntities)
-        .innerJoin(intelEntityTypes, eq(intelEntities.typeId, intelEntityTypes.id))
-        .where(eq(intelEntities.id, entityId))
-        .limit(1);
+  if (pending.length === 0) return;
 
-      if (!entity) continue;
+  const batch = pending.slice(0, SUMMARY_BATCH);
 
-      const noteExcerpts = await db
-        .select({
-          content: sql<string>`substring(${intelNotes.processedContent} from 1 for 500)`,
-          date: intelNotes.createdAt,
-        })
-        .from(intelNoteEntities)
-        .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
-        .where(eq(intelNoteEntities.entityId, entityId))
-        .orderBy(desc(intelNotes.createdAt))
-        .limit(5);
+  // Context: the notes these entities appear in, fetched once for the batch
+  // rather than once per entity.
+  const excerpts = await db
+    .select({
+      entityId: intelNoteEntities.entityId,
+      content: sql<string>`substring(${intelNotes.processedContent} from 1 for 400)`,
+      date: intelNotes.createdAt,
+    })
+    .from(intelNoteEntities)
+    .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
+    .where(inArray(intelNoteEntities.entityId, batch.map((e) => e.id)))
+    .orderBy(desc(intelNotes.createdAt))
+    .limit(batch.length * 3);
 
-      if (noteExcerpts.length === 0) continue;
+  const byEntity = new Map<string, string[]>();
+  for (const row of excerpts) {
+    const list = byEntity.get(row.entityId) ?? [];
+    if (list.length < 3) list.push(row.content ?? '');
+    byEntity.set(row.entityId, list);
+  }
 
-      const excerptText = noteExcerpts
-        .map((n, i) => `Note ${i + 1} (${new Date(n.date).toLocaleDateString()}):\n${n.content}`)
-        .join('\n\n');
+  const payload = batch.map((e) => ({
+    id: e.id,
+    name: e.name,
+    type: e.typeName,
+    properties: e.properties ?? {},
+    evidence: (byEntity.get(e.id) ?? []).filter(Boolean),
+  }));
 
-      const response = await client.chat.completions.create({
-        model,
-        temperature: 0.3,
-        max_tokens: 300,
-        messages: [
-          {
-            role: 'system',
-            content: 'Write a concise 2-3 sentence summary of this entity based on what is known from the notes. Focus on role, key relationships, and current concerns. Return only the summary text.',
-          },
-          {
-            role: 'user',
-            content: `Entity: ${entity.name} (${entity.typeName})\nProperties: ${JSON.stringify(entity.properties)}\n\nRelevant notes:\n${excerptText}`,
-          },
-        ],
-      });
+  try {
+    const modelCtx = await resolveDefaultModel('builder');
+    const { client, model } = await getLLMClient(modelCtx);
 
-      const summary = response.choices[0]?.message?.content?.trim();
-      if (summary) {
-        await db
-          .update(intelEntities)
-          .set({ summary, updatedAt: new Date() })
-          .where(eq(intelEntities.id, entityId));
-      }
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0.3,
+      max_tokens: Math.min(600 + payload.length * 90, 8000),
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'For each entity, write a concise 2-3 sentence summary from the evidence given. Focus on role, key relationships, and current concerns. ' +
+            'Return ONLY a JSON object of the form {"summaries":[{"id":"<entity id>","summary":"..."}]} covering every entity you were given. ' +
+            'If the evidence says nothing useful about an entity, omit it rather than inventing detail.',
+        },
+        { role: 'user', content: JSON.stringify({ entities: payload }) },
+      ],
+    });
 
-      // Also update the entity's embedding with the new summary
-      if (summary) {
-        const { embedEntity } = await import('./embed');
-        await embedEntity(entityId);
-      }
-    } catch (err) {
-      console.error(`[intel] Failed to update summary for entity ${entityId}:`, err);
+    const raw = response.choices[0]?.message?.content ?? '{}';
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+    const parsed = JSON.parse(cleaned) as { summaries?: Array<{ id?: string; summary?: string }> };
+    const valid = new Set(batch.map((e) => e.id));
+
+    const { embedEntity } = await import('./embed');
+    for (const item of parsed.summaries ?? []) {
+      const summary = item.summary?.trim();
+      if (!item.id || !summary || !valid.has(item.id)) continue;
+      await db
+        .update(intelEntities)
+        .set({ summary, updatedAt: new Date() })
+        .where(eq(intelEntities.id, item.id));
+      await embedEntity(item.id);
     }
+  } catch (err) {
+    console.error('[intel] Batched summary update failed:', err instanceof Error ? err.message : err);
   }
 }
 
