@@ -17,7 +17,13 @@
 // the owner action this whole feature is designed around.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { upsertSecret, listSecrets, getSecretMeta, resolveSecretForUrl } from '$lib/secrets/registry';
+import {
+  upsertSecret,
+  listSecrets,
+  getSecretMeta,
+  resolveSecretForUrl,
+  assertSecretAllowedForUrl,
+} from '$lib/secrets/registry';
 import { handleApiRegister, handleApiCall, findApiEntry } from '$lib/workflows/site-tools/tools/apis';
 import { saveIntegration, callIntegration, deleteIntegration } from '$lib/apis/integrations';
 import { runSeeds } from '$lib/selfimprove/seed-apis';
@@ -88,6 +94,20 @@ d('API secret registry + integration register (integration)', () => {
     const resolved = await resolveSecretForUrl('openrouter', 'https://openrouter.ai/api/v1/credits');
     expect(resolved.headers.Authorization).toBe(`Bearer ${realKey}`);
     expect(resolved.plaintexts).toContain(realKey);
+  });
+
+  it('re-checks the binding per redirect hop, so path scoping is not a one-hop guarantee', async () => {
+    // guardedFetch calls this for every hop that still carries the credential.
+    // A same-origin 302 from an in-scope path to an out-of-scope one must fail.
+    await expect(
+      assertSecretAllowedForUrl('openrouter', 'https://openrouter.ai/api/v1/credits'),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertSecretAllowedForUrl('openrouter', 'https://openrouter.ai/api/v1/chat/completions'),
+    ).rejects.toThrow(/scoped to/);
+    await expect(
+      assertSecretAllowedForUrl('openrouter', 'https://evil.example/api/v1/credits'),
+    ).rejects.toThrow(/bound to/);
   });
 
   it('refuses a catalogue entry that points a real handle at a foreign host', async () => {

@@ -484,27 +484,9 @@ async function resolveValue(row: ApiSecretRow): Promise<string> {
   }
 }
 
-/**
- * Resolve a secret for a specific request URL, enforcing the owner-set host and
- * path binding. Throws (never returns a partial result) if the binding fails.
- *
- * The URL passed here MUST be the final request URL. Callers that follow
- * redirects must re-check every hop — see `guardedFetch` in
- * site-tools/tools/apis.ts, which refuses to carry a registry secret across an
- * origin change at all.
- */
-export async function resolveSecretForUrl(handle: string, url: string): Promise<ResolvedSecret> {
-  const h = normaliseHandle(handle);
-  const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
-  if (!row) {
-    throw new SecretError(
-      `no secret registered under the handle "${handle}". The owner adds credentials at /admin/ai/apis; ` +
-        `use api_secrets_list to see which handles exist and which hosts they are bound to.`,
-    );
-  }
-
+/** The host/path binding check, shared by resolution and per-redirect-hop re-checks. */
+function assertBindingAllows(row: ApiSecretRow, url: string): void {
   const u = parseTarget(url);
-
   if (!hostAllowed(u.hostname, row.allowedHosts ?? [])) {
     throw new SecretError(
       `secret "${row.handle}" is bound to ${(row.allowedHosts ?? []).join(', ') || '(none)'} and will not be ` +
@@ -517,6 +499,43 @@ export async function resolveSecretForUrl(handle: string, url: string): Promise<
         `and will not be sent to ${u.pathname}.`,
     );
   }
+}
+
+/**
+ * Re-check a secret's binding against a NEW url without resolving the value or
+ * touching usage counters. Called for every redirect hop that still carries the
+ * credential: path scoping would otherwise be a one-hop guarantee, and a
+ * same-origin 302 from an in-scope path to an out-of-scope one (say
+ * /api/v1/credits -> /api/v1/chat/completions) would carry the key somewhere the
+ * owner deliberately excluded.
+ */
+export async function assertSecretAllowedForUrl(handle: string, url: string): Promise<void> {
+  const h = normaliseHandle(handle);
+  const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
+  if (!row) throw new SecretError(`no secret registered under the handle "${handle}"`);
+  assertBindingAllows(row, url);
+}
+
+/**
+ * Resolve a secret for a specific request URL, enforcing the owner-set host and
+ * path binding. Throws (never returns a partial result) if the binding fails.
+ *
+ * The URL passed here MUST be the final request URL. Callers that follow
+ * redirects must re-check every hop with `assertSecretAllowedForUrl` — see
+ * `guardedFetch` in site-tools/tools/apis.ts, which additionally refuses to
+ * carry a registry secret across an origin change at all.
+ */
+export async function resolveSecretForUrl(handle: string, url: string): Promise<ResolvedSecret> {
+  const h = normaliseHandle(handle);
+  const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
+  if (!row) {
+    throw new SecretError(
+      `no secret registered under the handle "${handle}". The owner adds credentials at /admin/ai/apis; ` +
+        `use api_secrets_list to see which handles exist and which hosts they are bound to.`,
+    );
+  }
+
+  assertBindingAllows(row, url);
 
   const value = await resolveValue(row);
   const injection = injectionOf(row);

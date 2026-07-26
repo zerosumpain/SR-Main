@@ -259,6 +259,7 @@ async function executeApiCall(
       body: opts.body,
       sensitiveHeaders: new Set(Object.keys(auth.headers).map((h) => h.toLowerCase())),
       secretPlaintexts: auth.plaintexts,
+      secretHandle: auth.handle,
     });
   } catch (err) {
     // Network / timeout / SSRF -> a hard failure; mark the entry broken.
@@ -431,6 +432,8 @@ export interface ResolvedApiAuth {
   headers: Record<string, string>;
   query: Record<string, string>;
   plaintexts: string[];
+  /** Registry handle in flight, so redirect hops can be re-checked against its binding. */
+  handle?: string;
 }
 
 async function resolveApiAuth(entry: ApiEntry, url: string): Promise<ResolvedApiAuth> {
@@ -444,7 +447,12 @@ async function resolveApiAuth(entry: ApiEntry, url: string): Promise<ResolvedApi
     const { resolveSecretForUrl } = await import('$lib/secrets/registry');
     // Throws unless the owner bound this secret to this host (and path).
     const resolved = await resolveSecretForUrl(handle, url);
-    return { headers: resolved.headers, query: resolved.query, plaintexts: resolved.plaintexts };
+    return {
+      headers: resolved.headers,
+      query: resolved.query,
+      plaintexts: resolved.plaintexts,
+      handle: resolved.handle,
+    };
   }
 
   if (auth.kind === 'bearer-env' || auth.kind === 'header-env') {
@@ -497,6 +505,12 @@ async function guardedFetch(
      * different origin is not a call we should be silently completing.
      */
     secretPlaintexts?: string[];
+    /**
+     * Registry handle in flight. Every redirect hop that still carries the
+     * credential is re-checked against its owner-set binding, so path scoping
+     * holds for the whole chain rather than only the first request.
+     */
+    secretHandle?: string;
   } = {},
 ): Promise<{ status: number; ok: boolean; contentType: string; text: string; truncated: boolean }> {
   const baseHeaders: Record<string, string> = {
@@ -566,11 +580,18 @@ async function guardedFetch(
         if (!loc) break; // nothing to follow; treat as the final response
         if (hop >= MAX_REDIRECTS) throw new Error('too many redirects');
         const next = new URL(loc, current);
-        if ((opts.secretPlaintexts?.length ?? 0) > 0 && next.origin !== originalOrigin) {
-          throw new Error(
-            `refusing to follow a cross-origin redirect (${originalOrigin} -> ${next.origin}) while carrying a ` +
-              `registry credential. If this API legitimately redirects, catalogue the final host instead.`,
-          );
+        if ((opts.secretPlaintexts?.length ?? 0) > 0) {
+          if (next.origin !== originalOrigin) {
+            throw new Error(
+              `refusing to follow a cross-origin redirect (${originalOrigin} -> ${next.origin}) while carrying a ` +
+                `registry credential. If this API legitimately redirects, catalogue the final host instead.`,
+            );
+          }
+          // Same-origin, but the new path may be outside the credential's scope.
+          if (opts.secretHandle) {
+            const { assertSecretAllowedForUrl } = await import('$lib/secrets/registry');
+            await assertSecretAllowedForUrl(opts.secretHandle, next.toString());
+          }
         }
         try { await res.body?.cancel(); } catch { /* ignore */ }
         await dispatcher.close();
