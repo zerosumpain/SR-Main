@@ -6,9 +6,12 @@ import {
   UNRESOLVED,
 } from './open-weights';
 
-const row = (id: string, hf?: string | null) => ({
+const row = (id: string, hf?: string | null, description?: string) => ({
   id,
-  raw: hf === undefined ? {} : { hugging_face_id: hf },
+  raw: {
+    ...(hf === undefined ? {} : { hugging_face_id: hf }),
+    ...(description === undefined ? {} : { description }),
+  },
 });
 
 describe('rawHuggingFaceId', () => {
@@ -100,5 +103,59 @@ describe('buildOpenWeightResolver — explicit overrides', () => {
     for (const id of UNRESOLVED) {
       expect(OPEN_WEIGHT_OVERRIDES[id]).toBeUndefined();
     }
+  });
+});
+
+describe('buildOpenWeightResolver — OpenRouter prose', () => {
+  const KIMI =
+    'Kimi K3 is a 2.8T parameter open-weight multimodal reasoning model from Moonshot AI.';
+
+  it('flags a model OpenRouter calls open-weight but gave no repo (kimi-k3)', () => {
+    const r = buildOpenWeightResolver([row('moonshotai/kimi-k3', undefined, KIMI)]);
+    expect(r.isOpen('moonshotai/kimi-k3')).toBe(true);
+  });
+
+  it('reports open with a NULL repo — open must not be inferred from the id', () => {
+    const r = buildOpenWeightResolver([row('moonshotai/kimi-k3', undefined, KIMI)]);
+    const v = r.verdict('moonshotai/kimi-k3');
+    expect(v.open).toBe(true);
+    expect(v.huggingFaceId).toBeNull();
+    expect(v.source).toBe('description');
+  });
+
+  it('matches "open weights" and is case-insensitive', () => {
+    const r = buildOpenWeightResolver([
+      row('a/spaced', undefined, 'Ships with Open Weights on release day.'),
+      row('a/hyphen', undefined, 'An OPEN-WEIGHT reasoning model.'),
+    ]);
+    expect(r.isOpen('a/spaced')).toBe(true);
+    expect(r.isOpen('a/hyphen')).toBe(true);
+  });
+
+  it('does NOT match the looser marketing phrasings', () => {
+    const r = buildOpenWeightResolver([
+      row('a/oss', undefined, 'An open-source licensed API model.'),
+      row('a/openmodel', undefined, 'An open model available via API.'),
+      row('a/none', undefined, 'A frontier proprietary model.'),
+    ]);
+    expect(r.isOpen('a/oss')).toBe(false);
+    expect(r.isOpen('a/openmodel')).toBe(false);
+    expect(r.isOpen('a/none')).toBe(false);
+  });
+
+  it('ranks the structured field above prose for the repo id', () => {
+    const r = buildOpenWeightResolver([
+      row('z-ai/glm-5', 'zai-org/GLM-5', 'An open-weight model.'),
+    ]);
+    expect(r.verdict('z-ai/glm-5').source).toBe('openrouter');
+    expect(r.verdict('z-ai/glm-5').huggingFaceId).toBe('zai-org/GLM-5');
+  });
+
+  it('lets a :free row read its base row description', () => {
+    const r = buildOpenWeightResolver([
+      row('a/model', undefined, 'An open-weight model.'),
+      row('a/model:free', undefined),
+    ]);
+    expect(r.isOpen('a/model:free')).toBe(true);
   });
 });

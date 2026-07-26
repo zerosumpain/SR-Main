@@ -21,7 +21,7 @@
     id: string;
     name: string;
     blendedPerM: number | null;
-    agenticIndex: number | null;
+    qualityIndex: number | null;
     throughput: string | null;
     openWeights: boolean;
     score: number | null;
@@ -32,6 +32,7 @@
     activeModelId = null,
     loading = false,
     expanded = false,
+    qualityLabel = 'quality',
     onpick,
     onexpandchange,
   }: {
@@ -40,6 +41,8 @@
     loading?: boolean;
     /** Owned by the picker so its Escape handler can collapse before closing. */
     expanded?: boolean;
+    /** Names the metric currently on the y axis (the picker lets it change). */
+    qualityLabel?: string;
     onpick: (id: string) => void;
     onexpandchange?: (v: boolean) => void;
   } = $props();
@@ -60,8 +63,8 @@
   // the count is surfaced under the chart instead.
   const plottable = $derived(
     rows.filter(
-      (r) => r.agenticIndex != null && r.blendedPerM != null && r.blendedPerM > 0,
-    ) as Array<ChartRow & { agenticIndex: number; blendedPerM: number }>,
+      (r) => r.qualityIndex != null && r.blendedPerM != null && r.blendedPerM > 0,
+    ) as Array<ChartRow & { qualityIndex: number; blendedPerM: number }>,
   );
   const omitted = $derived(rows.length - plottable.length);
 
@@ -72,8 +75,8 @@
     const out: typeof byPrice = [];
     let best = -Infinity;
     for (const m of byPrice) {
-      if (m.agenticIndex > best) {
-        best = m.agenticIndex;
+      if (m.qualityIndex > best) {
+        best = m.qualityIndex;
         out.push(m);
       }
     }
@@ -127,7 +130,7 @@
   });
   const qualityDomain = $derived.by(() => {
     if (!plottable.length) return [0, 100] as [number, number];
-    const qs = plottable.map((m) => m.agenticIndex);
+    const qs = plottable.map((m) => m.qualityIndex);
     const lo = Math.min(...qs);
     const hi = Math.max(...qs);
     const pad = Math.max(1, (hi - lo) * 0.08);
@@ -157,7 +160,7 @@
     for (let i = 0; i < frontier.length; i++) {
       const m = frontier[i];
       const x = xs(Math.log10(m.blendedPerM));
-      const y = ys(m.agenticIndex);
+      const y = ys(m.qualityIndex);
       if (i === 0) d += `M ${x} ${y}`;
       else d += ` H ${x} V ${y}`;
     }
@@ -170,9 +173,9 @@
 
   const hoveredRow = $derived(plottable.find((m) => m.id === hovered) ?? null);
 
-  function enter(m: ChartRow & { agenticIndex: number; blendedPerM: number }) {
+  function enter(m: ChartRow & { qualityIndex: number; blendedPerM: number }) {
     hovered = m.id;
-    hoverAt = { x: xs(Math.log10(m.blendedPerM)), y: ys(m.agenticIndex) };
+    hoverAt = { x: xs(Math.log10(m.blendedPerM)), y: ys(m.qualityIndex) };
   }
   function leave() {
     hovered = null;
@@ -199,8 +202,8 @@
   }
 
   /** Built as one string so the separators don't depend on template whitespace. */
-  function statLine(m: ChartRow & { agenticIndex: number; blendedPerM: number }): string {
-    const bits = [`q ${m.agenticIndex.toFixed(0)}`, `${money(m.blendedPerM)}/1M`, tps(m.throughput)];
+  function statLine(m: ChartRow & { qualityIndex: number; blendedPerM: number }): string {
+    const bits = [`q ${m.qualityIndex.toFixed(0)}`, `${money(m.blendedPerM)}/1M`, tps(m.throughput)];
     if (m.score != null) bits.push(`score ${m.score.toFixed(2)}`);
     return bits.join(' · ');
   }
@@ -214,18 +217,40 @@
 
   /** Frontier labels only, and only where they don't collide — a label on every
    *  point is unreadable at 340 models, and the top of the frontier bunches up.
-   *  Walk from the best quality down, keeping a label only when it clears the
-   *  ones already placed. */
+   *  Walk from the best quality down, keeping a label only when its box clears
+   *  the ones already placed.
+   *
+   *  The box has to be computed for real, not approximated by anchor distance:
+   *  a label near the right edge is end-anchored and extends LEFT, so two
+   *  anchors 117px apart still overlapped (nex-n2-pro / hy3-preview). Width is
+   *  estimated at ~5.4px/char, which is right for 9px JetBrains Mono. The
+   *  template renders from these same numbers so the two can't drift. */
+  const CHAR_W = 5.4;
   const labelled = $derived.by(() => {
-    const kept: Array<{ id: string; x: number; y: number; label: string }> = [];
-    const candidates = [...frontier].sort((a, b) => b.agenticIndex - a.agenticIndex);
+    const kept: Array<{
+      id: string;
+      label: string;
+      y: number;
+      anchorX: number;
+      anchorEnd: boolean;
+      left: number;
+      right: number;
+    }> = [];
+    const candidates = [...frontier].sort((a, b) => b.qualityIndex - a.qualityIndex);
     for (const m of candidates) {
       if (kept.length >= 5) break;
+      const label = shortName(m.id);
+      const w = label.length * CHAR_W;
       const x = xs(Math.log10(m.blendedPerM));
-      const y = ys(m.agenticIndex);
-      const clashes = kept.some((k) => Math.abs(k.y - y) < 13 && Math.abs(k.x - x) < 78);
+      const y = ys(m.qualityIndex);
+      const anchorEnd = x > padL + innerW * 0.72;
+      const left = anchorEnd ? x - 8 - w : x + 8;
+      const right = left + w;
+      const clashes = kept.some(
+        (k) => Math.abs(k.y - y) < 13 && left < k.right + 6 && k.left < right + 6,
+      );
       if (clashes) continue;
-      kept.push({ id: m.id, x, y, label: shortName(m.id) });
+      kept.push({ id: m.id, label, y, anchorX: anchorEnd ? x - 8 : x + 8, anchorEnd, left, right });
     }
     return kept;
   });
@@ -233,7 +258,7 @@
 
 {#snippet chart()}
   <div class="chart-head">
-    <span class="chart-title">Quality vs cost</span>
+    <span class="chart-title">{qualityLabel} vs cost</span>
     <span class="chart-legend">
       <span class="key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" class="dot-open" /></svg>open weights</span>
       <span class="key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" class="dot-closed" /></svg>closed</span>
@@ -255,7 +280,7 @@
       width="100%"
       {height}
       role="img"
-      aria-label="Scatter plot of model quality against blended cost per million tokens. The full data is in the list tab."
+      aria-label="Scatter plot of model {qualityLabel} against blended cost per million tokens. The full data is in the list tab."
     >
       {#each qualityTicks as t (t)}
         <line x1={padL} x2={padL + innerW} y1={ys(t)} y2={ys(t)} class="grid" />
@@ -274,7 +299,7 @@
         text-anchor="middle"
         transform="rotate(-90 11 {padT + innerH / 2})"
         x="11"
-        y={padT + innerH / 2}>quality →</text
+        y={padT + innerH / 2}>{qualityLabel} →</text
       >
 
       {#if frontierPath}
@@ -283,7 +308,7 @@
 
       {#each plottable as m (m.id)}
         {@const cx = xs(Math.log10(m.blendedPerM))}
-        {@const cy = ys(m.agenticIndex)}
+        {@const cy = ys(m.qualityIndex)}
         {@const isActive = m.id === activeModelId}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -300,16 +325,16 @@
           onmouseleave={leave}
           onclick={() => onpick(m.id)}
         >
-          <title>{m.id} — quality {m.agenticIndex.toFixed(0)}, {money(m.blendedPerM)}/1M</title>
+          <title>{m.id} — quality {m.qualityIndex.toFixed(0)}, {money(m.blendedPerM)}/1M</title>
         </circle>
       {/each}
 
       {#each labelled as m (m.id)}
         <text
-          x={m.x + (m.x > padL + innerW * 0.72 ? -8 : 8)}
+          x={m.anchorX}
           y={m.y - 7}
           class="point-lab"
-          text-anchor={m.x > padL + innerW * 0.72 ? 'end' : 'start'}>{m.label}</text
+          text-anchor={m.anchorEnd ? 'end' : 'start'}>{m.label}</text
         >
       {/each}
     </svg>
