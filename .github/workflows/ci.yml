@@ -39,6 +39,11 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      force_gate:
+        description: 'Re-run the full gate even if this tree already has a passing verdict'
+        type: boolean
+        default: false
 
 # Deploys must never overlap — a half-finished deploy is worse than a queued
 # one, so the master/dispatch group keeps cancel-in-progress off. PR runs get
@@ -98,6 +103,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
+          FORCE: ${{ inputs.force_gate }}
         run: |
           set -euo pipefail
           TREE="$(git rev-parse HEAD^{tree})"
@@ -108,6 +114,18 @@ jobs:
           if [ "$EVENT" = "pull_request" ]; then
             echo "reuse=false" >> "$GITHUB_OUTPUT"
             echo "pull_request event — full gate."
+            exit 0
+          fi
+
+          # The manual override. Without it there is no way to re-verify a tree
+          # that already has a marker: reuse is keyed on content, so re-running
+          # an unchanged tree would keep hitting the same verdict. Run the
+          # workflow from the Actions tab with this ticked to force a full gate
+          # — e.g. after a dependency or runner change that the tree does not
+          # capture, or simply to re-confirm before a risky deploy.
+          if [ "${FORCE:-false}" = "true" ]; then
+            echo "reuse=false" >> "$GITHUB_OUTPUT"
+            echo "force_gate requested — running the full gate regardless of any marker."
             exit 0
           fi
 
