@@ -39,6 +39,7 @@ import { fileSearchDef } from './nodes/file-search.def';
 import { researchSearchDef } from './nodes/research-search.def';
 import { deckBuildDef } from './nodes/deck-build.def';
 import { apiCallDef } from './nodes/api-call.def';
+import { apiIntegrationDef } from './nodes/api-integration.def';
 import { delegateAgentDef } from './nodes/delegate-agent.def';
 import { deepDiveDef } from './nodes/deep-dive.def';
 import { webScrapeDef } from './nodes/web-scrape.def';
@@ -873,6 +874,7 @@ const builtInDefinitions: NodeDefinition[] = [
   researchSearchDef,
   deckBuildDef,
   apiCallDef,
+  apiIntegrationDef,
   delegateAgentDef,
   deepDiveDef,
   webScrapeDef,

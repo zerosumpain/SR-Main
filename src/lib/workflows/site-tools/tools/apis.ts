@@ -32,7 +32,16 @@ const MAX_RESPONSE_BYTES = 100 * 1024; // 100 KB
 type ApiAuth =
   | { kind: 'none' }
   | { kind: 'bearer-env'; envVar: string }
-  | { kind: 'header-env'; envVar: string; header: string };
+  | { kind: 'header-env'; envVar: string; header: string }
+  /**
+   * Preferred: a handle in the owner-managed secret registry
+   * (src/lib/secrets/registry.ts). The value is resolved at call time, only if
+   * the request's host+path are on that secret's owner-set allow-list, and is
+   * scrubbed from the response before anything reaches the model. Unlike the
+   * `*-env` kinds this needs no code change per credential — the owner adds it
+   * at /admin/ai/apis and jkai references it by name, never by value.
+   */
+  | { kind: 'secret'; handle: string };
 
 interface ApiEntry {
   name: string;
@@ -222,25 +231,39 @@ async function executeApiCall(
     };
   }
 
-  let authHeaders: Record<string, string>;
+  let auth: ResolvedApiAuth;
   try {
-    authHeaders = resolveAuthHeaders(entry);
+    auth = await resolveApiAuth(entry, url);
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
 
+  const { redactSecrets } = await import('$lib/secrets/registry');
+  const scrub = <T>(v: T): T => redactSecrets(v, auth.plaintexts);
+
+  // A query-injected credential becomes part of the URL, so compose it here and
+  // keep a separate redacted copy for anything the model/logs ever see.
+  let requestUrl = url;
+  if (Object.keys(auth.query).length > 0) {
+    const u = new URL(url);
+    for (const [k, v] of Object.entries(auth.query)) u.searchParams.set(k, v);
+    requestUrl = u.toString();
+  }
+  const safeUrl = scrub(requestUrl);
+
   let result;
   try {
-    result = await guardedFetch(url, {
+    result = await guardedFetch(requestUrl, {
       method: opts.method,
-      headers: { ...authHeaders, ...(opts.headers ?? {}) },
+      headers: { ...auth.headers, ...(opts.headers ?? {}) },
       body: opts.body,
-      sensitiveHeaders: new Set(Object.keys(authHeaders).map((h) => h.toLowerCase())),
+      sensitiveHeaders: new Set(Object.keys(auth.headers).map((h) => h.toLowerCase())),
+      secretPlaintexts: auth.plaintexts,
     });
   } catch (err) {
     // Network / timeout / SSRF -> a hard failure; mark the entry broken.
     void markStatus(key, 'broken');
-    return { success: false, error: (err as Error).message };
+    return { success: false, error: scrub((err as Error).message) };
   }
 
   // 2xx -> verified; 5xx -> broken (server-side); 4xx leaves status untouched
@@ -257,19 +280,50 @@ async function executeApiCall(
     }
   }
 
+  let error = result.ok ? undefined : `HTTP ${result.status}`;
+  if (!result.ok && (result.status === 401 || result.status === 403)) {
+    error += await authHint(entry, url);
+  }
+
   return {
     success: result.ok,
-    error: result.ok ? undefined : `HTTP ${result.status}`,
+    error,
     data: {
       api: entry.name,
-      url,
+      url: safeUrl,
       status: result.status,
       contentType: result.contentType,
       truncated: result.truncated,
-      json: parsed,
-      text: parsed === undefined ? result.text : undefined,
+      json: scrub(parsed),
+      text: parsed === undefined ? scrub(result.text) : undefined,
     },
   };
+}
+
+/**
+ * On a 401/403, tell the caller (usually the model) how to authenticate — by
+ * NAMING a registry handle that is already bound to this host. This is how jkai
+ * discovers a credential it is allowed to use without ever being shown one.
+ */
+async function authHint(entry: ApiEntry, url: string): Promise<string> {
+  try {
+    if ((entry.auth?.kind ?? 'none') !== 'none') {
+      return ' — the configured credential was rejected by the API. Check the auth style (bearer vs custom header) or ask the owner to re-enter the key at /admin/ai/apis.';
+    }
+    const { secretsForUrl } = await import('$lib/secrets/registry');
+    const candidates = await secretsForUrl(url);
+    if (candidates.length === 0) {
+      return ' — this API needs authentication and no credential in the secret registry is bound to this host. Ask the owner to add one at /admin/ai/apis (you cannot read key values, only reference them by handle).';
+    }
+    const names = candidates.map((c) => `"${c.handle}"`).join(', ');
+    return (
+      ` — the secret registry already holds a credential bound to this host: ${names}. ` +
+      `Attach it with api_register: {"entry":{"name":"${entry.name}","baseUrl":"${entry.baseUrl}","auth":{"kind":"secret","handle":${JSON.stringify(candidates[0].handle)}}}} ` +
+      `then retry. You never see the value — it is injected server-side.`
+    );
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -324,6 +378,8 @@ export async function listCatalogApis(): Promise<
     capabilities: string[];
     tags: string[];
     auth: string;
+    /** Registry handle when auth is {kind:'secret'} — a NAME, never a value. */
+    secretHandle?: string;
     status: string;
     exampleRequests: Array<{ label?: string; method?: string; url: string; body?: unknown }>;
   }>
@@ -338,6 +394,7 @@ export async function listCatalogApis(): Promise<
       capabilities: entry.capabilities ?? [],
       tags: entry.tags ?? [],
       auth: entry.auth?.kind ?? 'none',
+      secretHandle: entry.auth?.kind === 'secret' ? entry.auth.handle : undefined,
       status: entry.status ?? 'seeded',
       exampleRequests: entry.exampleRequests ?? [],
     }))
@@ -363,22 +420,48 @@ function allowedAuthEnvVars(): Set<string> {
   return new Set(['COMPANIES_HOUSE_API_KEY', ...extra]);
 }
 
-/** Resolve the auth header for an entry. Throws a clear error if the env is missing. */
-function resolveAuthHeaders(entry: ApiEntry): Record<string, string> {
+/**
+ * Resolve an entry's auth for a SPECIFIC request URL.
+ *
+ * `plaintexts` comes back so the caller can scrub the value out of the response,
+ * the composed URL and any error text — see `redactSecrets`. It must never be
+ * logged or persisted.
+ */
+export interface ResolvedApiAuth {
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  plaintexts: string[];
+}
+
+async function resolveApiAuth(entry: ApiEntry, url: string): Promise<ResolvedApiAuth> {
+  const empty: ResolvedApiAuth = { headers: {}, query: {}, plaintexts: [] };
   const auth = entry.auth ?? { kind: 'none' };
-  if (auth.kind === 'none') return {};
+  if (auth.kind === 'none') return empty;
+
+  if (auth.kind === 'secret') {
+    const handle = String(auth.handle ?? '').trim();
+    if (!handle) throw new Error(`API "${entry.name}" has auth {kind:"secret"} with no handle.`);
+    const { resolveSecretForUrl } = await import('$lib/secrets/registry');
+    // Throws unless the owner bound this secret to this host (and path).
+    const resolved = await resolveSecretForUrl(handle, url);
+    return { headers: resolved.headers, query: resolved.query, plaintexts: resolved.plaintexts };
+  }
+
   if (auth.kind === 'bearer-env' || auth.kind === 'header-env') {
     if (!allowedAuthEnvVars().has(auth.envVar)) {
       throw new Error(
         `API "${entry.name}" references env var ${auth.envVar}, which is not on the API-auth allowlist. ` +
-          `Add it to API_CATALOG_ALLOWED_ENV on the server (owner action) before this API can authenticate.`,
+          `Add it to API_CATALOG_ALLOWED_ENV on the server (owner action), or better: register the credential ` +
+          `in the secret registry at /admin/ai/apis and use auth {kind:"secret",handle:"…"}, which is host-bound.`,
       );
     }
     const v = process.env[auth.envVar];
     if (!v) throw new Error(`API "${entry.name}" needs env var ${auth.envVar}, which is not set on this host.`);
-    return auth.kind === 'bearer-env' ? { Authorization: `Bearer ${v}` } : { [auth.header]: v };
+    const headers = auth.kind === 'bearer-env' ? { Authorization: `Bearer ${v}` } : { [auth.header]: v };
+    return { headers, query: {}, plaintexts: [v] };
   }
-  return {};
+
+  return empty;
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -405,6 +488,15 @@ async function guardedFetch(
     /** Lower-cased names of caller-injected auth headers (e.g. a header-env
      *  custom header) that must ALSO be dropped on a cross-origin redirect. */
     sensitiveHeaders?: Set<string>;
+    /**
+     * Set when a registry secret is in flight. A cross-origin redirect then
+     * ABORTS instead of merely dropping headers: the request URL itself can
+     * carry a query-injected credential, and a redirect that replays the
+     * original query string on another origin would leak it. Refusing is also
+     * the honest answer — an API that redirects an authenticated call to a
+     * different origin is not a call we should be silently completing.
+     */
+    secretPlaintexts?: string[];
   } = {},
 ): Promise<{ status: number; ok: boolean; contentType: string; text: string; truncated: boolean }> {
   const baseHeaders: Record<string, string> = {
@@ -473,10 +565,17 @@ async function guardedFetch(
         const loc = res.headers.get('location');
         if (!loc) break; // nothing to follow; treat as the final response
         if (hop >= MAX_REDIRECTS) throw new Error('too many redirects');
+        const next = new URL(loc, current);
+        if ((opts.secretPlaintexts?.length ?? 0) > 0 && next.origin !== originalOrigin) {
+          throw new Error(
+            `refusing to follow a cross-origin redirect (${originalOrigin} -> ${next.origin}) while carrying a ` +
+              `registry credential. If this API legitimately redirects, catalogue the final host instead.`,
+          );
+        }
         try { await res.body?.cancel(); } catch { /* ignore */ }
         await dispatcher.close();
         dispatcher = undefined;
-        current = new URL(loc, current).toString();
+        current = next.toString();
         // 307/308 preserve method+body; others degrade to a bodyless GET.
         if (res.status !== 307 && res.status !== 308) {
           method = 'GET';
@@ -579,6 +678,32 @@ export async function handleApiRegister(args: Record<string, unknown>): Promise<
       return { success: false, error: `baseUrl rejected: ${(err as Error).message}` };
     }
 
+    // Fail fast (with a useful message) when a secret handle is referenced that
+    // does not exist or is not bound to this baseUrl's host. NOT the security
+    // boundary — resolveSecretForUrl re-checks on every call, however the entry
+    // reached the catalogue — but it turns a confusing runtime 401 into a clear
+    // "that credential is not for this host" at registration time.
+    const auth = entryIn.auth;
+    if (auth && auth.kind === 'secret') {
+      const { getSecretMeta, hostAllowed } = await import('$lib/secrets/registry');
+      const meta = await getSecretMeta(auth.handle);
+      if (!meta) {
+        return {
+          success: false,
+          error: `no secret registered under the handle "${auth.handle}". Use api_secrets_list to see the handles the owner has added at /admin/ai/apis.`,
+        };
+      }
+      const host = new URL(entryIn.baseUrl).hostname;
+      if (!hostAllowed(host, meta.allowedHosts)) {
+        return {
+          success: false,
+          error:
+            `secret "${meta.handle}" is bound to ${meta.allowedHosts.join(', ')} and cannot be used for ${host}. ` +
+            `Host bindings are owner-set at /admin/ai/apis — pick a credential bound to this host, or leave auth as {kind:"none"}.`,
+        };
+      }
+    }
+
     const verified = await probeEntry(entryIn);
     const key = slugifyName(entryIn.name);
     const data: ApiEntry = {
@@ -596,6 +721,40 @@ export async function handleApiRegister(args: Record<string, unknown>): Promise<
     };
     const rec = await upsertRecord(API_CATALOG, { key, data: data as unknown as Record<string, unknown> }, ACTOR);
     return { success: true, data: { key, status: data.status, id: rec.id } };
+  } catch (err) {
+    return toToolError(err, 'api error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// api_secrets_list — the registry jkai can call but never read
+// ---------------------------------------------------------------------------
+
+export async function handleApiSecretsList(): Promise<ToolResult> {
+  try {
+    const { listSecrets } = await import('$lib/secrets/registry');
+    const secrets = await listSecrets();
+    return {
+      success: true,
+      data: {
+        count: secrets.length,
+        // Metadata only, by construction — SecretMeta has no value field.
+        secrets: secrets.map((s) => ({
+          handle: s.handle,
+          label: s.label,
+          allowedHosts: s.allowedHosts,
+          allowedPathPrefixes: s.allowedPathPrefixes,
+          injection: s.injection.kind === 'bearer' ? 'bearer' : `${s.injection.kind}:${s.injection.name}`,
+          available: s.available,
+          unavailableReason: s.unavailableReason,
+          lastUsedAt: s.lastUsedAt,
+        })),
+        note:
+          'You can never read these values. To use one, catalogue the API with api_register and set ' +
+          'auth {"kind":"secret","handle":"<handle>"} — the value is injected server-side at call time and ' +
+          'only for the hosts/paths listed here. Ask the owner to add or re-scope a credential at /admin/ai/apis.',
+      },
+    };
   } catch (err) {
     return toToolError(err, 'api error');
   }
@@ -642,9 +801,18 @@ export const apiTools: ToolDefinition[] = [
     handler: (args) => handleApiCall(args),
   },
   {
+    name: 'api_secrets_list',
+    description:
+      'List the credentials the owner has put in the secret registry — handles, the hosts/paths each one is allowed to authenticate, and whether it is currently available. Values are NEVER returned and you cannot read them. Call this when an API needs authentication: if a handle is bound to that host, catalogue the API with api_register auth {"kind":"secret","handle":"<handle>"} and the key is injected server-side.',
+    parameters: { type: 'object', properties: {} },
+    category: 'APIs',
+    toolset: 'apis',
+    handler: () => handleApiSecretsList(),
+  },
+  {
     name: 'api_register',
     description:
-      'Add or update an API in the catalogue so it can be searched and called later. Store an env-var NAME for auth (never a raw secret). Use this when you discover a genuinely useful public API that is not already catalogued.',
+      'Add or update an API in the catalogue so it can be searched and called later. For auth, prefer a secret-registry handle — auth {"kind":"secret","handle":"openrouter"} (see api_secrets_list); the value is injected server-side and only for the hosts the owner bound it to. Never put a raw secret in an entry. Use this when you discover a genuinely useful API that is not already catalogued, or to attach a credential to one that is.',
     parameters: {
       type: 'object',
       properties: {
@@ -660,7 +828,8 @@ export const apiTools: ToolDefinition[] = [
             tags: { type: 'array', items: { type: 'string' } },
             auth: {
               type: 'object',
-              description: 'Auth spec: {kind:"none"} | {kind:"bearer-env",envVar} | {kind:"header-env",envVar,header}. Only the env-var name is stored.',
+              description:
+                'Auth spec. Preferred: {kind:"secret",handle:"<registry handle>"} — see api_secrets_list; host-bound and injected server-side. Legacy: {kind:"none"} | {kind:"bearer-env",envVar} | {kind:"header-env",envVar,header}. Only a NAME/handle is ever stored, never a key value.',
             },
             exampleRequests: { type: 'array', items: { type: 'object' } },
           },

@@ -36,6 +36,7 @@ import { fileSearchDef, fileSearchExecutor } from './nodes/file-search';
 import { researchSearchDef, researchSearchExecutor } from './nodes/research-search';
 import { deckBuildDef, deckBuildExecutor } from './nodes/deck-build';
 import { apiCallDef, apiCallExecutor } from './nodes/api-call';
+import { apiIntegrationDef, apiIntegrationExecutor } from './nodes/api-integration';
 import { delegateAgentDef, delegateAgentExecutor } from './nodes/delegate-agent';
 import {
   builderChatDef, builderChatExecutor,
@@ -147,6 +148,7 @@ registry.register(fileSearchDef, fileSearchExecutor);
 registry.register(researchSearchDef, researchSearchExecutor);
 registry.register(deckBuildDef, deckBuildExecutor);
 registry.register(apiCallDef, apiCallExecutor);
+registry.register(apiIntegrationDef, apiIntegrationExecutor);
 registry.register(delegateAgentDef, delegateAgentExecutor);
 registry.register(builderChatDef, builderChatExecutor);
 registry.register(builderPiDef, builderPiExecutor);
