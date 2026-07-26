@@ -133,13 +133,22 @@ function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null
 
 async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promise<Response> {
   const { request } = reqEvent;
-  let body: { message?: string; workflowId?: string; conversationId?: string; chatNodeId?: string; silent?: boolean; pinnedSkill?: string };
+  let body: {
+    message?: string;
+    workflowId?: string;
+    conversationId?: string;
+    chatNodeId?: string;
+    silent?: boolean;
+    pinnedSkill?: string;
+    /** Entity ids named with @entity in the composer. */
+    intelEntityIds?: string[];
+  };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill } = body;
+  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill, intelEntityIds } = body;
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
   }
@@ -182,7 +191,24 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       : ('manual' as const);
   const kindId = pinnedSkillName ?? chatId;
 
-  const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
+  // @entity grounding. The composer sends the ids it resolved, and the subgraph
+  // is attached HERE rather than left to the model's recall — naming an entity
+  // should mean the turn actually starts from what the graph holds about it.
+  // Prepended to the outbound message only; the persisted user bubble stays
+  // exactly what was typed.
+  let outbound = message;
+  if (Array.isArray(intelEntityIds) && intelEntityIds.length) {
+    try {
+      const { buildEntityGrounding } = await import('$lib/jkai/intel/context');
+      const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5));
+      if (grounding) outbound = `${grounding}\n\n---\n\n${message}`;
+    } catch (err) {
+      // Grounding is an enhancement; a failure must not cost the user their turn.
+      console.warn('[intel] entity grounding failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
   // Persist the user message before kicking off Hermes so canvas reload
@@ -762,7 +788,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
 
 async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promise<Response> {
   const body = await request.json();
-  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId } = body as {
+  const { message, workflowId, mode, currentNodes, currentEdges, conversationId: rawConversationId, attachmentIds, useIntelContext, chatNodeId, intelEntityIds } = body as {
     message: string;
     workflowId?: string;
     mode?: string;
@@ -772,6 +798,8 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
     attachmentIds?: string[];
     useIntelContext?: boolean;
     chatNodeId?: string;
+    /** Entity ids named with @entity in the composer. */
+    intelEntityIds?: string[];
   };
 
   // Canvas chat: when a chat node is the source, ensure it has a pinned
@@ -850,7 +878,24 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
   }
   cleanOldJobs();
 
-  const { jobId, job } = createJob(message, { workflowId, conversationId, chatNodeId });
+  // @entity grounding. The composer sends the ids it resolved, and the subgraph
+  // is attached HERE rather than left to the model's recall — naming an entity
+  // should mean the turn actually starts from what the graph holds about it.
+  // Prepended to the outbound message only; the persisted user bubble stays
+  // exactly what was typed.
+  let outbound = message;
+  if (Array.isArray(intelEntityIds) && intelEntityIds.length) {
+    try {
+      const { buildEntityGrounding } = await import('$lib/jkai/intel/context');
+      const grounding = await buildEntityGrounding(intelEntityIds.slice(0, 5));
+      if (grounding) outbound = `${grounding}\n\n---\n\n${message}`;
+    } catch (err) {
+      // Grounding is an enhancement; a failure must not cost the user their turn.
+      console.warn('[intel] entity grounding failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
   // Run the orchestrator in the background

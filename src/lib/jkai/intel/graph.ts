@@ -40,10 +40,16 @@ export function normaliseTypeName(name: string): string {
  */
 const MAX_NEW_TYPES_PER_EXTRACTION = 2;
 
-async function loadTypeIndex(): Promise<Map<string, string>> {
+/**
+ * Type names by lookup key. Includes PROPOSED types by default, because a new
+ * proposal must not duplicate one already pending; pass `activeOnly` when the
+ * result will be used to assign a type to an entity.
+ */
+async function loadTypeIndex(opts: { activeOnly?: boolean } = {}): Promise<Map<string, string>> {
   const rows = await db
     .select({ id: intelEntityTypes.id, name: intelEntityTypes.name })
-    .from(intelEntityTypes);
+    .from(intelEntityTypes)
+    .where(opts.activeOnly ? eq(intelEntityTypes.status, 'active') : undefined);
   const index = new Map<string, string>();
   for (const r of rows) {
     index.set(r.name.toLowerCase(), r.id);
@@ -53,18 +59,70 @@ async function loadTypeIndex(): Promise<Map<string, string>> {
 }
 
 async function resolveTypeId(typeName: string): Promise<string | null> {
+  // Only ACTIVE types can be assigned. A proposed type is visible for review
+  // but must not be usable until admitted, or the gate would achieve nothing.
   const [row] = await db
     .select({ id: intelEntityTypes.id })
     .from(intelEntityTypes)
-    .where(eq(intelEntityTypes.name, typeName.toLowerCase()))
+    .where(and(eq(intelEntityTypes.name, typeName.toLowerCase()), eq(intelEntityTypes.status, 'active')))
     .limit(1);
   if (row) return row.id;
 
   // Fall back to the normalised form so a plural or a hyphen doesn't strand an
   // entity. Previously an unresolvable type meant the entity was dropped
   // entirely — silent data loss on every near-miss the model made.
-  const index = await loadTypeIndex();
+  //
+  // ACTIVE-only, deliberately: loadTypeIndex() also carries proposed types (it
+  // has to, so a proposal cannot duplicate a pending one), and resolving
+  // through it would hand out a type the gate has not admitted yet.
+  const index = await loadTypeIndex({ activeOnly: true });
   return index.get(normaliseTypeName(typeName)) ?? null;
+}
+
+/**
+ * Continuous edge weight from how often the edge was observed and how sure the
+ * extractor was.
+ *
+ * The TEXT `strength` column was declared and never written — every edge in
+ * production sat at the 'moderate' default, which made the graph's
+ * stroke-width encoding purely decorative. Weight saturates rather than growing
+ * without bound: the difference between one and three independent observations
+ * matters; between twenty and thirty it does not.
+ */
+export function weightFor(observations: number, confidence: string): number {
+  const base = confidence === 'high' ? 0.55 : confidence === 'low' ? 0.25 : 0.4;
+  const corroboration = 1 - Math.exp(-Math.max(0, observations - 1) / 2);
+  return Math.min(1, base + 0.45 * corroboration);
+}
+
+/** Display bucket derived from `weight`, kept for the existing UI encoding. */
+export function strengthBucket(weight: number): string {
+  if (weight >= 0.75) return 'strong';
+  if (weight <= 0.35) return 'weak';
+  return 'moderate';
+}
+
+/**
+ * The sentence an entity was asserted in, for citation.
+ *
+ * Deliberately simple and deterministic — an LLM call per entity per note would
+ * cost more than the extraction itself. Finds the first sentence containing the
+ * name; falls back to a window around the first occurrence.
+ */
+export function findExcerpt(text: string, name: string, maxLen = 300): string | null {
+  if (!text || !name) return null;
+  const at = text.toLowerCase().indexOf(name.toLowerCase());
+  if (at < 0) return null;
+
+  // Expand to sentence boundaries around the hit.
+  const before = text.lastIndexOf('.', at);
+  const after = text.indexOf('.', at + name.length);
+  const start = before >= 0 && at - before < maxLen ? before + 1 : Math.max(0, at - 120);
+  const end = after >= 0 && after - at < maxLen ? after + 1 : Math.min(text.length, at + name.length + 180);
+
+  const slice = text.slice(start, end).trim().replace(/\s+/g, ' ');
+  if (!slice) return null;
+  return slice.length > maxLen ? `${slice.slice(0, maxLen - 1)}…` : slice;
 }
 
 /** The type every entity falls back to rather than being discarded. */
@@ -97,9 +155,20 @@ async function createProposedTypes(proposed: ProposedNewType[]): Promise<void> {
     const key = normaliseTypeName(name);
     if (index.has(name) || index.has(key)) continue; // a synonym already exists
 
+    // HELD, not admitted. An auto-admitted type re-enters the next extraction
+    // prompt as a legitimate option, so one bad coinage becomes self-
+    // reinforcing — which is exactly how a `font` type ended up collecting
+    // newspapers. Proposed types are reviewable on /jkai/intel/quality.
     const [row] = await db
       .insert(intelEntityTypes)
-      .values({ name, icon: t.icon, description: t.description, isSeeded: false })
+      .values({
+        name,
+        icon: t.icon,
+        description: t.description,
+        isSeeded: false,
+        status: 'proposed',
+        proposedRationale: t.description,
+      })
       .onConflictDoNothing({ target: intelEntityTypes.name })
       .returning({ id: intelEntityTypes.id });
 
@@ -373,6 +442,14 @@ export async function persistExtraction(
 ): Promise<{ entityCount: number; relationshipCount: number; timelineEventCount: number }> {
   await createProposedTypes(result.proposedNewTypes);
 
+  // Loaded once for excerpt capture — the evidence sentence behind each entity.
+  const [noteRow] = await db
+    .select({ processed: intelNotes.processedContent, raw: intelNotes.rawContent })
+    .from(intelNotes)
+    .where(eq(intelNotes.id, noteId))
+    .limit(1);
+  const noteText = noteRow?.processed || noteRow?.raw || '';
+
   const entityIdMap = new Map<string, string>();
   for (const entity of result.entities) {
     const id = await upsertEntity(entity, noteId);
@@ -403,7 +480,35 @@ export async function persistExtraction(
       noteId,
       entityId,
       relevance: entity.confidence === 'high' ? 'primary' : 'mentioned',
+      // The sentence this entity was actually asserted in. The column existed
+      // and was never written, so nothing in the graph could show WHY it
+      // believed anything — every claim was unfalsifiable. Captured here so
+      // entity cards, dossiers and briefs can cite their evidence.
+      excerpt: findExcerpt(noteText, entity.name),
     });
+  }
+
+  // Corroboration: how many distinct notes independently assert each entity.
+  // Drives the trust score and the thin-evidence detector.
+  for (const entityId of entityIdMap.values()) {
+    await db.execute(sql`
+      UPDATE intel_entities SET
+        corroboration = (SELECT count(DISTINCT note_id)::int FROM intel_note_entities WHERE entity_id = ${entityId}),
+        last_corroborated_at = now()
+      WHERE id = ${entityId}
+    `);
+  }
+
+  // Score immediately. Left to be computed lazily by the trust API, the column
+  // stayed NULL for anything nobody had opened — and a lens filtering on
+  // `confidence_score >= n` then returned ZERO entities, because NULL fails
+  // every comparison. A filter that silently answers "nothing" is worse than
+  // one that errors.
+  try {
+    const { refreshConfidence } = await import('./trust-refresh');
+    await refreshConfidence([...entityIdMap.values()]);
+  } catch (err) {
+    console.warn('[intel] confidence refresh failed:', err instanceof Error ? err.message : err);
   }
 
   // Relationships and timeline events are UPSERTED, not blindly inserted.
@@ -424,7 +529,13 @@ export async function persistExtraction(
     if (sourceId === targetId) continue;
 
     const [existing] = await db
-      .select({ id: intelRelationships.id, confidence: intelRelationships.confidence })
+      .select({
+        id: intelRelationships.id,
+        confidence: intelRelationships.confidence,
+        observationCount: intelRelationships.observationCount,
+        manual: intelRelationships.manual,
+        suppressed: intelRelationships.suppressed,
+      })
       .from(intelRelationships)
       .where(
         and(
@@ -436,13 +547,24 @@ export async function persistExtraction(
       .limit(1);
 
     if (existing) {
-      // Seeing the same edge again is corroboration: keep the best label we
-      // have and let confidence ratchet upward, never down.
+      // A SUPPRESSED edge was deleted deliberately with a reason. Re-creating
+      // it because the extractor saw it again would make correcting the graph
+      // pointless — the same wrong edge would come back on every re-ingest.
+      if (existing.suppressed) continue;
+
+      // Seeing the same edge again is corroboration: raise the observation
+      // count, recompute the weight from it, and let confidence ratchet upward,
+      // never down. A MANUAL label is the user's and is never overwritten.
+      const observations = (existing.observationCount ?? 1) + 1;
       const upgrade = rel.confidence === 'high' && existing.confidence !== 'high';
       await db
         .update(intelRelationships)
         .set({
-          ...(rel.label ? { label: rel.label } : {}),
+          observationCount: observations,
+          weight: weightFor(observations, upgrade ? 'high' : rel.confidence),
+          strength: strengthBucket(weightFor(observations, rel.confidence)),
+          lastSeenAt: new Date(),
+          ...(rel.label && !existing.manual ? { label: rel.label } : {}),
           ...(upgrade ? { confidence: 'high' } : {}),
         })
         .where(eq(intelRelationships.id, existing.id));
@@ -456,6 +578,10 @@ export async function persistExtraction(
       label: rel.label,
       confidence: rel.confidence,
       sourceNoteId: noteId,
+      observationCount: 1,
+      weight: weightFor(1, rel.confidence),
+      strength: strengthBucket(weightFor(1, rel.confidence)),
+      lastSeenAt: new Date(),
     });
     relationshipCount++;
   }

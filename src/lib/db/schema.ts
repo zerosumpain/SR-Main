@@ -1422,6 +1422,14 @@ export const openrouterModels = pgTable('openrouter_models', {
 export const intelEntityTypes = pgTable('intel_entity_types', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   name: text('name').notNull().unique(),
+  /** 'active' | 'proposed' | 'retired'. A model-proposed type is HELD rather
+   *  than admitted straight into the taxonomy: an auto-admitted type re-enters
+   *  the next extraction prompt as a legitimate option, which is how a stray
+   *  `font` type ended up collecting newspapers. */
+  status: text('status').notNull().default('active'),
+  proposedRationale: text('proposed_rationale'),
+  /** Set when this type has been folded into another. */
+  mergedIntoTypeId: text('merged_into_type_id'),
   icon: text('icon').notNull().default('🔷'),
   color: text('color').notNull().default('#7dd3fc'),
   isSeeded: boolean('is_seeded').notNull().default(false),
@@ -1449,36 +1457,97 @@ export const intelNotes = pgTable('intel_notes', {
 export type IntelNote = typeof intelNotes.$inferSelect;
 export type NewIntelNote = typeof intelNotes.$inferInsert;
 
-export const intelEntities = pgTable('intel_entities', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  name: text('name').notNull(),
-  typeId: text('type_id').notNull().references(() => intelEntityTypes.id),
-  summary: text('summary'),
-  properties: jsonb('properties').$type<Record<string, unknown>>(),
-  embedding: vector('embedding'),
-  confidence: text('confidence').notNull().default('medium'),
-  confirmed: boolean('confirmed').notNull().default(false),
-  mergedIntoId: text('merged_into_id'),
-  firstSeenIn: text('first_seen_in').references(() => intelNotes.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const intelEntities = pgTable(
+  'intel_entities',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    name: text('name').notNull(),
+    typeId: text('type_id').notNull().references(() => intelEntityTypes.id),
+    summary: text('summary'),
+    properties: jsonb('properties').$type<Record<string, unknown>>(),
+    embedding: vector('embedding'),
+    confidence: text('confidence').notNull().default('medium'),
+    confirmed: boolean('confirmed').notNull().default(false),
+    mergedIntoId: text('merged_into_id'),
+    firstSeenIn: text('first_seen_in').references(() => intelNotes.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+
+    // ── Resolution ───────────────────────────────────────────────────────
+    /** Every observed surface form. Later extractions bind onto these rather
+     *  than forking a second node — "IBCA" lives here on the expanded row. */
+    aliases: jsonb('aliases').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+
+    // ── Foreground ───────────────────────────────────────────────────────
+    /** On the watchlist: structural changes to this entity raise an insight. */
+    watched: boolean('watched').notNull().default(false),
+    /** Which lens this belongs to — 'professional' | 'personal' | null. */
+    lens: text('lens'),
+
+    // ── Trust (Admiralty-style dual grading) ─────────────────────────────
+    /** Source reliability A–F. Null until graded. */
+    sourceGrade: text('source_grade'),
+    /** Information credibility 1–6. Null until graded. */
+    credibility: integer('credibility'),
+    /** Distinct notes independently asserting this entity. */
+    corroboration: integer('corroboration').notNull().default(0),
+    /** Computed, explainable 0..1 — never shown without its components. */
+    confidenceScore: doublePrecision('confidence_score'),
+    lastCorroboratedAt: timestamp('last_corroborated_at', { withTimezone: true }),
+  },
+  // Plain indexes only. A unique index on a POPULATED table silently breaks
+  // non-interactive `drizzle-kit push` (see reference_drizzle_unique_push_gotcha);
+  // these are all non-unique and therefore safe to add in place.
+  (t) => ({
+    byType: index('intel_entities_type_idx').on(t.typeId),
+    byMerged: index('intel_entities_merged_idx').on(t.mergedIntoId),
+    byWatched: index('intel_entities_watched_idx').on(t.watched),
+    byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
+  }),
+);
 
 export type IntelEntity = typeof intelEntities.$inferSelect;
 export type NewIntelEntity = typeof intelEntities.$inferInsert;
 
-export const intelRelationships = pgTable('intel_relationships', {
-  id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
-  sourceEntityId: text('source_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
-  targetEntityId: text('target_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
-  type: text('type').notNull(),
-  label: text('label'),
-  strength: text('strength').notNull().default('moderate'),
-  properties: jsonb('properties').$type<Record<string, unknown>>(),
-  confidence: text('confidence').notNull().default('medium'),
-  sourceNoteId: text('source_note_id').references(() => intelNotes.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const intelRelationships = pgTable(
+  'intel_relationships',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sourceEntityId: text('source_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+    targetEntityId: text('target_entity_id').notNull().references(() => intelEntities.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    label: text('label'),
+    /** Display bucket. Derived from `weight` — see the note on it below. */
+    strength: text('strength').notNull().default('moderate'),
+    properties: jsonb('properties').$type<Record<string, unknown>>(),
+    confidence: text('confidence').notNull().default('medium'),
+    sourceNoteId: text('source_note_id').references(() => intelNotes.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+
+    /** Continuous edge weight 0..1. The TEXT `strength` column has never been
+     *  written by anything — every live edge sat at the 'moderate' default,
+     *  which made the graph's stroke-width encoding inert. This is the real
+     *  measure; `strength` is now derived from it for display. */
+    weight: doublePrecision('weight').notNull().default(0.5),
+    /** How many independent notes assert this edge. Drives weight and
+     *  corroboration; incremented on re-observation instead of duplicating. */
+    observationCount: integer('observation_count').notNull().default(1),
+    /** Carried from the deep-dive relationship extractor, previously discarded. */
+    sentiment: text('sentiment'),
+    /** User-authored or user-corrected — never overwritten by extraction. */
+    manual: boolean('manual').notNull().default(false),
+    /** Deleted-with-reason. Blocks re-creation by a later extraction, so
+     *  correcting the graph actually sticks. */
+    suppressed: boolean('suppressed').notNull().default(false),
+    suppressedReason: text('suppressed_reason'),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+  },
+  (t) => ({
+    bySource: index('intel_rel_source_idx').on(t.sourceEntityId),
+    byTarget: index('intel_rel_target_idx').on(t.targetEntityId),
+    byNote: index('intel_rel_note_idx').on(t.sourceNoteId),
+  }),
+);
 
 export type IntelRelationship = typeof intelRelationships.$inferSelect;
 
@@ -1567,6 +1636,10 @@ export const intelAlerts = pgTable('intel_alerts', {
   relatedEntityIds: jsonb('related_entity_ids').$type<string[]>().notNull().default([]),
   delivered: boolean('delivered').notNull().default(false),
   dismissed: boolean('dismissed').notNull().default(false),
+  /** Why it was dismissed — feeds back into scoring rather than vanishing. */
+  dismissedReason: text('dismissed_reason'),
+  /** Stable key so the same alert is not raised twice. */
+  dedupeKey: text('dedupe_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -1599,6 +1672,179 @@ export type ScraperCredential = typeof scraperCredentials.$inferSelect;
 export type ScraperRunLogRow = typeof scraperRunLog.$inferSelect;
 
 export type IntelAlert = typeof intelAlerts.$inferSelect;
+
+// ── Intel phase 2: insights, lenses, dossiers, commissions, merge ledger ────
+//
+// Every table below is NEW, so unique indexes are safe here — the drizzle-kit
+// push hazard only applies to adding a unique constraint to a table that
+// already holds rows.
+
+/**
+ * Generated insights, persisted rather than recomputed per request.
+ *
+ * The dashboard computed these on the fly, which meant they could not be
+ * dismissed, snoozed, or compared against yesterday — and "what changed" is
+ * the whole point of a watchlist. `dedupeKey` stops the same finding
+ * reappearing every night.
+ */
+export const intelInsights = pgTable(
+  'intel_insights',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    /** Deterministic, rule-generated. Always present. */
+    explanation: text('explanation').notNull(),
+    /** Optional LLM phrasing, applied to the top few only. Never required. */
+    narrative: text('narrative'),
+    score: doublePrecision('score').notNull().default(0),
+    /** Every component of `score`, so a card can show the breakdown.
+     *  Rule: never show an unexplained number. */
+    components: jsonb('components').$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    entityIds: jsonb('entity_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    path: jsonb('path').$type<string[]>(),
+    lens: text('lens'),
+    dedupeKey: text('dedupe_key').notNull(),
+    status: text('status').notNull().default('new'), // new|seen|dismissed|actioned|snoozed
+    dismissedReason: text('dismissed_reason'),
+    snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+    proposedActions: jsonb('proposed_actions')
+      .$type<Array<{ kind: string; label: string; payload: string }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    runId: text('run_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byStatus: index('intel_insights_status_idx').on(t.status),
+    byKind: index('intel_insights_kind_idx').on(t.kind),
+    uniqDedupe: uniqueIndex('intel_insights_dedupe_idx').on(t.dedupeKey),
+  }),
+);
+
+export type IntelInsight = typeof intelInsights.$inferSelect;
+export type NewIntelInsight = typeof intelInsights.$inferInsert;
+
+/** A named perspective, applied across graph, entities, timeline and chat. */
+export const intelLenses = pgTable(
+  'intel_lenses',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    /** { typeIds?, sources?, lens?, communityIds?, minConfidence?, query? } */
+    filters: jsonb('filters').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    /** Prepended to jkai's intel context while this lens is active. */
+    standingInstructions: text('standing_instructions'),
+    isDefault: boolean('is_default').notNull().default(false),
+    /** Non-null turns a saved view into a LIVE query: a scheduled run that
+     *  raises an insight when the result set grows. */
+    cron: text('cron'),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    lastCount: integer('last_count'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ uniqSlug: uniqueIndex('intel_lenses_slug_idx').on(t.slug) }),
+);
+
+export type IntelLens = typeof intelLenses.$inferSelect;
+
+/** A case file: the working set for one line of enquiry. */
+export const intelDossiers = pgTable(
+  'intel_dossiers',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    slug: text('slug').notNull(),
+    title: text('title').notNull(),
+    summary: text('summary'),
+    standingInstructions: text('standing_instructions'),
+    lensId: text('lens_id'),
+    status: text('status').notNull().default('open'), // open|parked|closed
+    openQuestions: jsonb('open_questions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ uniqSlug: uniqueIndex('intel_dossiers_slug_idx').on(t.slug) }),
+);
+
+export type IntelDossier = typeof intelDossiers.$inferSelect;
+
+export const intelDossierItems = pgTable(
+  'intel_dossier_items',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    dossierId: text('dossier_id')
+      .notNull()
+      .references(() => intelDossiers.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // entity|note|insight|commission|timeline|text
+    refId: text('ref_id'),
+    body: text('body'), // for kind='text' — the analyst's own note
+    position: integer('position').notNull().default(0),
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byDossier: index('intel_dossier_items_dossier_idx').on(t.dossierId) }),
+);
+
+export type IntelDossierItem = typeof intelDossierItems.$inferSelect;
+
+/**
+ * Work commissioned from a finding. Records what was started and, once it
+ * finishes, where the output landed — which is what closes the loop back into
+ * the graph rather than leaving a deep dive orphaned.
+ */
+export const intelCommissions = pgTable(
+  'intel_commissions',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    insightId: text('insight_id'),
+    entityId: text('entity_id'),
+    dossierId: text('dossier_id'),
+    kind: text('kind').notNull(), // research|ask|monitor|workflow|canvas|briefing|brief
+    payload: text('payload').notNull(),
+    /** The durable handle the target system returned (research sessionId,
+     *  monitor workflowId, …), so progress can be polled. */
+    externalId: text('external_id'),
+    externalUrl: text('external_url'),
+    status: text('status').notNull().default('queued'), // queued|running|complete|failed
+    resultNoteId: text('result_note_id'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byStatus: index('intel_commissions_status_idx').on(t.status),
+    byEntity: index('intel_commissions_entity_idx').on(t.entityId),
+  }),
+);
+
+export type IntelCommission = typeof intelCommissions.$inferSelect;
+
+/**
+ * Merge ledger. `unmergeEntity` could previously only clear the tombstone;
+ * with a pre-merge snapshot recorded here a bad resolution decision can be
+ * undone properly, months later.
+ */
+export const intelEntityMerges = pgTable(
+  'intel_entity_merges',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    survivorId: text('survivor_id').notNull(),
+    mergedId: text('merged_id').notNull(),
+    /** Pre-merge state of the merged row plus the ids that were repointed. */
+    snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+    score: doublePrecision('score'),
+    method: text('method').notNull().default('manual'), // auto|manual
+    reason: text('reason'),
+    undoneAt: timestamp('undone_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ bySurvivor: index('intel_merges_survivor_idx').on(t.survivorId) }),
+);
+
+export type IntelEntityMerge = typeof intelEntityMerges.$inferSelect;
 
 // ---- Gmail channel ----
 
