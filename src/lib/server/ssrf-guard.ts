@@ -34,8 +34,25 @@ export function isBlockedIP(ip: string): boolean {
     const lower = ip.toLowerCase().split('%')[0];
     if (lower === '::1' || lower === '::') return true; // loopback / unspecified
     if (lower.startsWith('::ffff:')) {
-      // IPv4-mapped — unwrap and re-check the embedded v4 address.
-      return isBlockedIP(lower.slice('::ffff:'.length));
+      // IPv4-mapped. NOTE the embedded address arrives in EITHER form:
+      // a literal typed as `::ffff:127.0.0.1` keeps its dotted quad, but
+      // `new URL()` normalises the hostname to hextets (`::ffff:7f00:1`) — and
+      // that is the form every caller actually passes, since they read
+      // `url.hostname`. Unwrapping only the dotted form left
+      // `http://[::ffff:127.0.0.1]/` reaching loopback through every
+      // SSRF-guarded path on the site (`isIP('7f00:1')` is 0, so the recursive
+      // call fell through to "not blocked").
+      const tail = lower.slice('::ffff:'.length);
+      if (isIP(tail) === 4) return isBlockedIP(tail);
+      const hextets = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
+      if (hextets) {
+        const hi = parseInt(hextets[1], 16);
+        const lo = parseInt(hextets[2], 16);
+        return isBlockedIP([hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.'));
+      }
+      // Some other mapped/translated shape we do not model — refuse rather
+      // than fall through to "public".
+      return true;
     }
     if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // fc00::/7 ULA
     // fe80::/10 link-local — first hextet fe80..febf.

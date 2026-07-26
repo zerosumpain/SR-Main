@@ -96,6 +96,31 @@ d('API secret registry + integration register (integration)', () => {
     expect(resolved.plaintexts).toContain(realKey);
   });
 
+  it('is read-only by default: path scoping limits WHERE, allowedMethods limits WHAT', async () => {
+    // Without this, api_call could send DELETE to an in-scope path with a
+    // credential the register describes as read-only.
+    const meta = await getSecretMeta('openrouter');
+    expect(meta!.allowedMethods).toEqual(['GET', 'HEAD']);
+    await expect(
+      resolveSecretForUrl('openrouter', 'https://openrouter.ai/api/v1/credits', 'DELETE'),
+    ).rejects.toThrow(/may only authenticate/);
+    await expect(
+      resolveSecretForUrl('openrouter', 'https://openrouter.ai/api/v1/credits', 'POST'),
+    ).rejects.toThrow(/may only authenticate/);
+  });
+
+  it('refuses to put a credential on a cleartext connection', async () => {
+    await expect(resolveSecretForUrl('openrouter', 'http://openrouter.ai/api/v1/credits')).rejects.toThrow(
+      /only sent over https/,
+    );
+  });
+
+  it('refuses an encoded path separator, which would defeat segment-boundary scoping', async () => {
+    await expect(
+      resolveSecretForUrl('openrouter', 'https://openrouter.ai/api/v1/credits%2f..%2fchat/completions'),
+    ).rejects.toThrow(/encoded separator/);
+  });
+
   it('re-checks the binding per redirect hop, so path scoping is not a one-hop guarantee', async () => {
     // guardedFetch calls this for every hop that still carries the credential.
     // A same-origin 302 from an in-scope path to an out-of-scope one must fail.

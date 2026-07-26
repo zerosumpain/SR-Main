@@ -50,6 +50,8 @@ export interface SecretMeta {
   injection: SecretInjection;
   allowedHosts: string[];
   allowedPathPrefixes: string[];
+  /** HTTP methods this credential may authenticate. Empty is treated as GET+HEAD. */
+  allowedMethods: string[];
   /** Last 4 chars of the value, for identification only. */
   hint?: string;
   notes?: string;
@@ -170,11 +172,24 @@ function parseTarget(url: string): URL {
   } catch {
     throw new SecretError('request URL is not a valid absolute URL');
   }
-  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
-    throw new SecretError(`refusing to attach a credential to a ${u.protocol} URL`);
+  // https ONLY. A bearer token on a cleartext connection is readable by anything
+  // on the path, and the binding model has no way to express "this host is fine
+  // over http" — so there is no legitimate case to allow here.
+  if (u.protocol !== 'https:') {
+    throw new SecretError(
+      `refusing to attach a credential over ${u.protocol.replace(':', '')} — credentials are only sent over https`,
+    );
   }
   if (u.username || u.password) {
     throw new SecretError('refusing to attach a credential to a URL containing userinfo (user:pass@host)');
+  }
+  // Encoded separators make the path we path-check differ from the path the
+  // origin routes on, which would turn segment-boundary narrowing into a
+  // suggestion. No catalogued call needs one.
+  if (/%2e|%2f|%5c|%25|;/i.test(u.pathname)) {
+    throw new SecretError(
+      'refusing to attach a credential to a URL whose path contains an encoded separator (%2E, %2F, %5C, %25 or ;)',
+    );
   }
   return u;
 }
@@ -272,6 +287,7 @@ async function toMeta(row: ApiSecretRow): Promise<SecretMeta> {
     injection: injectionOf(row),
     allowedHosts: row.allowedHosts ?? [],
     allowedPathPrefixes: row.allowedPathPrefixes ?? [],
+    allowedMethods: effectiveMethods(row.allowedMethods),
     hint: row.hint ?? undefined,
     notes: row.notes ?? undefined,
     available,
@@ -334,6 +350,8 @@ export interface UpsertSecretInput {
   injection: SecretInjection;
   allowedHosts: string[];
   allowedPathPrefixes?: string[];
+  /** Omitted/empty = read-only (GET+HEAD). */
+  allowedMethods?: string[];
   notes?: string;
 }
 
@@ -421,6 +439,7 @@ export async function upsertSecret(input: UpsertSecretInput): Promise<SecretMeta
     injection: injection as unknown as Record<string, unknown>,
     allowedHosts,
     allowedPathPrefixes,
+    allowedMethods: effectiveMethods(input.allowedMethods),
     hint,
     notes: input.notes ?? null,
     updatedAt: new Date(),
@@ -484,8 +503,14 @@ async function resolveValue(row: ApiSecretRow): Promise<string> {
   }
 }
 
-/** The host/path binding check, shared by resolution and per-redirect-hop re-checks. */
-function assertBindingAllows(row: ApiSecretRow, url: string): void {
+/** Empty/absent list means read-only: a credential does nothing but GET/HEAD until the owner widens it. */
+function effectiveMethods(methods: string[] | null | undefined): string[] {
+  const list = (methods ?? []).map((m) => String(m).toUpperCase()).filter(Boolean);
+  return list.length > 0 ? list : ['GET', 'HEAD'];
+}
+
+/** The host/path/method binding check, shared by resolution and per-redirect-hop re-checks. */
+function assertBindingAllows(row: ApiSecretRow, url: string, method?: string): void {
   const u = parseTarget(url);
   if (!hostAllowed(u.hostname, row.allowedHosts ?? [])) {
     throw new SecretError(
@@ -499,6 +524,14 @@ function assertBindingAllows(row: ApiSecretRow, url: string): void {
         `and will not be sent to ${u.pathname}.`,
     );
   }
+  const allowed = effectiveMethods(row.allowedMethods);
+  const m = String(method ?? 'GET').toUpperCase();
+  if (!allowed.includes(m)) {
+    throw new SecretError(
+      `secret "${row.handle}" may only authenticate ${allowed.join('/')} requests, not ${m}. ` +
+        `Path scoping limits where a key goes; this limits what it can do. Widen it at /admin/ai/apis if that is intended.`,
+    );
+  }
 }
 
 /**
@@ -509,11 +542,11 @@ function assertBindingAllows(row: ApiSecretRow, url: string): void {
  * /api/v1/credits -> /api/v1/chat/completions) would carry the key somewhere the
  * owner deliberately excluded.
  */
-export async function assertSecretAllowedForUrl(handle: string, url: string): Promise<void> {
+export async function assertSecretAllowedForUrl(handle: string, url: string, method?: string): Promise<void> {
   const h = normaliseHandle(handle);
   const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
   if (!row) throw new SecretError(`no secret registered under the handle "${handle}"`);
-  assertBindingAllows(row, url);
+  assertBindingAllows(row, url, method);
 }
 
 /**
@@ -525,7 +558,7 @@ export async function assertSecretAllowedForUrl(handle: string, url: string): Pr
  * `guardedFetch` in site-tools/tools/apis.ts, which additionally refuses to
  * carry a registry secret across an origin change at all.
  */
-export async function resolveSecretForUrl(handle: string, url: string): Promise<ResolvedSecret> {
+export async function resolveSecretForUrl(handle: string, url: string, method?: string): Promise<ResolvedSecret> {
   const h = normaliseHandle(handle);
   const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
   if (!row) {
@@ -535,7 +568,7 @@ export async function resolveSecretForUrl(handle: string, url: string): Promise<
     );
   }
 
-  assertBindingAllows(row, url);
+  assertBindingAllows(row, url, method);
 
   const value = await resolveValue(row);
   const injection = injectionOf(row);

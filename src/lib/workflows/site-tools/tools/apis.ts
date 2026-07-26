@@ -233,7 +233,7 @@ async function executeApiCall(
 
   let auth: ResolvedApiAuth;
   try {
-    auth = await resolveApiAuth(entry, url);
+    auth = await resolveApiAuth(entry, url, opts.method);
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }
@@ -436,7 +436,7 @@ export interface ResolvedApiAuth {
   handle?: string;
 }
 
-async function resolveApiAuth(entry: ApiEntry, url: string): Promise<ResolvedApiAuth> {
+async function resolveApiAuth(entry: ApiEntry, url: string, method?: string): Promise<ResolvedApiAuth> {
   const empty: ResolvedApiAuth = { headers: {}, query: {}, plaintexts: [] };
   const auth = entry.auth ?? { kind: 'none' };
   if (auth.kind === 'none') return empty;
@@ -446,7 +446,7 @@ async function resolveApiAuth(entry: ApiEntry, url: string): Promise<ResolvedApi
     if (!handle) throw new Error(`API "${entry.name}" has auth {kind:"secret"} with no handle.`);
     const { resolveSecretForUrl } = await import('$lib/secrets/registry');
     // Throws unless the owner bound this secret to this host (and path).
-    const resolved = await resolveSecretForUrl(handle, url);
+    const resolved = await resolveSecretForUrl(handle, url, method);
     return {
       headers: resolved.headers,
       query: resolved.query,
@@ -533,6 +533,12 @@ async function guardedFetch(
   let current = url;
   let res: Response;
   let dispatcher: Agent | undefined;
+  // Populated inside the try so the body read happens while the timer is armed.
+  let contentType = '';
+  let status = 0;
+  let ok = false;
+  let text = '';
+  let truncated = false;
   try {
     for (let hop = 0; ; hop++) {
       const pinned = await resolvePinnedUrl(current); // validates + gives the IP to pin
@@ -590,7 +596,10 @@ async function guardedFetch(
           // Same-origin, but the new path may be outside the credential's scope.
           if (opts.secretHandle) {
             const { assertSecretAllowedForUrl } = await import('$lib/secrets/registry');
-            await assertSecretAllowedForUrl(opts.secretHandle, next.toString());
+            // `method` is the method the NEXT hop will use (301/302/303 degrade
+            // to GET below), so the method binding is checked per hop too.
+            const nextMethod = res.status === 307 || res.status === 308 ? method : 'GET';
+            await assertSecretAllowedForUrl(opts.secretHandle, next.toString(), nextMethod);
           }
         }
         try { await res.body?.cancel(); } catch { /* ignore */ }
@@ -606,32 +615,47 @@ async function guardedFetch(
       }
       break;
     }
+
+    // Read the body INSIDE the try, while the abort timer is still armed.
+    // Reading it after the `finally` (which clears the timeout and closes the
+    // dispatcher) meant a server that sent headers then trickled bytes hung this
+    // await forever with nothing left to cancel it — and this is the single call
+    // path every catalogued API request and every credentialed integration goes
+    // through, so one slow origin could park workflow runs and chat turns.
+    contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+    status = res.status;
+    ok = res.ok;
+    const reader = res.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        total += value.byteLength;
+        if (total > MAX_RESPONSE_BYTES) {
+          truncated = true;
+          try { await reader.cancel(); } catch { /* ignore */ }
+          break;
+        }
+        chunks.push(value);
+      }
+    }
+    text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8').slice(0, MAX_RESPONSE_BYTES);
+  } catch (err: unknown) {
+    // The per-hop fetch already maps its own AbortError; this catches an abort
+    // that fires while the BODY is streaming.
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw new Error(`response body did not complete within ${CALL_TIMEOUT_MS}ms`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
     if (dispatcher) { try { await dispatcher.close(); } catch { /* ignore */ } }
   }
 
-  const contentType = (res!.headers.get('content-type') ?? '').toLowerCase();
-  const reader = res!.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  let truncated = false;
-  if (reader) {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      total += value.byteLength;
-      if (total > MAX_RESPONSE_BYTES) {
-        truncated = true;
-        try { await reader.cancel(); } catch { /* ignore */ }
-        break;
-      }
-      chunks.push(value);
-    }
-  }
-  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8').slice(0, MAX_RESPONSE_BYTES);
-  return { status: res!.status, ok: res!.ok, contentType, text, truncated };
+  return { status, ok, contentType, text, truncated };
 }
 
 /** Best-effort catalogue status update after a call (never throws). */

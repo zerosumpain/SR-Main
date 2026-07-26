@@ -30,11 +30,32 @@ describe('isBlockedIP', () => {
     'fd12::1',
     'fe80::1',
     'febf::1',
-    '::ffff:127.0.0.1', // IPv4-mapped loopback
+    '::ffff:127.0.0.1', // IPv4-mapped loopback (dotted form)
+    // IPv4-mapped in HEXTET form — the shape `new URL()` normalises to, and so
+    // the shape every caller actually passes (they read `url.hostname`).
+    // Unwrapping only the dotted form meant `http://[::ffff:127.0.0.1]/` reached
+    // loopback through every SSRF-guarded path on the site: the slice left
+    // '7f00:1', isIP() called that "not an IP", and it fell through to allowed.
+    '::ffff:7f00:1', // 127.0.0.1
+    '::ffff:a00:1', // 10.0.0.1
+    '::ffff:c0a8:1', // 192.168.0.1
+    '::ffff:a9fe:a9fe', // 169.254.169.254 (cloud metadata)
+    '::ffff:6440:1', // 100.64.0.1 CGNAT / Tailscale range
   ];
   for (const ip of blocked) {
     it(`blocks ${ip}`, () => expect(isBlockedIP(ip)).toBe(true));
   }
+
+  it('blocks the mapped-loopback literal as a URL hostname (the real attack shape)', () => {
+    // Callers do `isBlockedIP(new URL(u).hostname.replace(/^\[|\]$/g, ''))`.
+    const inner = new URL('http://[::ffff:127.0.0.1]/').hostname.replace(/^\[|\]$/g, '');
+    expect(inner).toBe('::ffff:7f00:1'); // normalised by WHATWG URL
+    expect(isBlockedIP(inner)).toBe(true);
+  });
+
+  it('still allows a genuinely public IPv4-mapped address', () => {
+    expect(isBlockedIP('::ffff:808:808')).toBe(false); // 8.8.8.8
+  });
 
   const allowed = ['8.8.8.8', '93.184.216.34', '1.1.1.1', '100.63.255.255', '100.128.0.1', '2606:4700::1111'];
   for (const ip of allowed) {

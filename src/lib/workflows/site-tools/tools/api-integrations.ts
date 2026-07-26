@@ -177,7 +177,7 @@ export async function handleIntegrationDelete(args: Record<string, unknown>): Pr
     if (!key) return { success: false, error: '"key" is required' };
     const existing = await getIntegration(key);
     if (!existing) return { success: false, error: `no integration named "${key}"` };
-    const deleted = await deleteIntegration(existing.key, 'owner');
+    const deleted = await deleteIntegration(existing.key, 'jkai');
     return { success: deleted, data: { key: existing.key, deleted } };
   } catch (err) {
     return toToolError(err, 'integration error');

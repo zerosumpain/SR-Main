@@ -236,6 +236,21 @@ export async function saveIntegration(
     }
     const expr = String(o?.expr ?? '').trim();
     if (!expr) throw new IntegrationError(`output "${oname}" needs an expr`);
+    // `safeFunction`'s AST gate stops sandbox escapes but says nothing about
+    // COST: these expressions are LLM-authored, stored, and re-evaluated
+    // synchronously on every call of the integration, so `while(true){}` in an
+    // expr would park the event loop of the whole single-threaded site.
+    // An output is a projection of the response — it never needs a loop, a
+    // function, or a statement — so reject those shapes outright rather than
+    // trying to bound execution.
+    if (/\b(while|for|do|function)\b|=>/.test(expr)) {
+      throw new IntegrationError(
+        `output "${oname}" must be a single expression over \`json\` — no loops, functions or arrow functions.`,
+      );
+    }
+    if (expr.length > 500) {
+      throw new IntegrationError(`output "${oname}" expression is too long (max 500 chars)`);
+    }
     try {
       safeFunction(['json'], `return (${expr})`);
     } catch (err) {
@@ -275,7 +290,13 @@ export async function saveIntegration(
   return data;
 }
 
-export async function deleteIntegration(key: string, actor: 'owner' | 'system' = 'owner'): Promise<boolean> {
+/**
+ * `actor` is REQUIRED and has no default: a default of 'owner' let
+ * `api_integration_delete` (a tool the model invokes) pass the literal string
+ * 'owner', and `canDo` short-circuits on that — silently bypassing the
+ * collection's declared `delete: ['owner','system']` permission.
+ */
+export async function deleteIntegration(key: string, actor: 'owner' | 'system' | 'jkai'): Promise<boolean> {
   await ensureIntegrationsCollection();
   const slug = slugifyName(key);
   try {
@@ -392,7 +413,15 @@ export async function callIntegration(opts: {
   const data = (result.data ?? {}) as { status?: number; url?: string; json?: unknown; text?: string };
 
   if (!result.success) {
-    void noteTest(integration.key, 'failed', result.error ?? 'call failed');
+    // Only demote on evidence the OPERATION is broken. A 4xx from bad params, a
+    // 429, or a SecretError (a host/binding configuration fact) is not — and
+    // demoting on those let anyone who could force one failed call destroy the
+    // "verified" evidence the owner reads in the register.
+    const status = data.status ?? 0;
+    const operationLooksBroken = status >= 500 || status === 404 || status === 0;
+    if (operationLooksBroken && !/secret|bound to|scoped to|may only authenticate/i.test(result.error ?? '')) {
+      void noteTest(integration.key, 'failed', result.error ?? 'call failed');
+    }
     return {
       success: false,
       error: result.error,

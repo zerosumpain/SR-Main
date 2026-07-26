@@ -36,6 +36,7 @@
     injection: { kind: string; name?: string };
     allowedHosts: string[];
     allowedPathPrefixes: string[];
+    allowedMethods: string[];
     hint?: string;
     notes?: string;
     available: boolean;
@@ -133,6 +134,7 @@
   let sInjName = $state('');
   let sHosts = $state('');
   let sPaths = $state('');
+  let sMethods = $state('GET, HEAD');
   let sNotes = $state('');
   let editing = $state(false);
 
@@ -146,6 +148,7 @@
     sInjName = s.injection.name ?? '';
     sHosts = s.allowedHosts.join(', ');
     sPaths = s.allowedPathPrefixes.join(', ');
+    sMethods = (s.allowedMethods ?? ['GET', 'HEAD']).join(', ');
     sNotes = s.notes ?? '';
     editing = true;
   }
@@ -160,6 +163,7 @@
     sInjName = '';
     sHosts = '';
     sPaths = '';
+    sMethods = 'GET, HEAD';
     sNotes = '';
     editing = false;
   }
@@ -179,6 +183,7 @@
           injection: sInjKind === 'bearer' ? { kind: 'bearer' } : { kind: sInjKind, name: sInjName },
           allowedHosts: sHosts.split(',').map((h) => h.trim()).filter(Boolean),
           allowedPathPrefixes: sPaths.split(',').map((p) => p.trim()).filter(Boolean),
+          allowedMethods: sMethods.split(',').map((m) => m.trim().toUpperCase()).filter(Boolean),
           notes: sNotes,
         }),
       });
@@ -336,7 +341,7 @@
             <span class="s-handle"><code>{s.handle}</code></span>
             <span class="s-label">{s.label}</span>
             <span class="s-hosts">{s.allowedHosts.join(', ')}{#if s.allowedPathPrefixes.length}<span class="dim"> · {s.allowedPathPrefixes.join(', ')}</span>{/if}</span>
-            <span class="s-inj">{s.injection.kind}{s.injection.name ? `:${s.injection.name}` : ''}</span>
+            <span class="s-inj">{s.injection.kind}{s.injection.name ? `:${s.injection.name}` : ''} · {(s.allowedMethods ?? ['GET','HEAD']).join('/')}</span>
             <span class="s-hint">{s.source === 'ref' ? `ref:${s.refKey}` : s.hint ? `…${s.hint}` : 'stored'}</span>
             <span class="nm-pill" data-state={s.available ? 'ok' : 'error'} title={s.unavailableReason ?? ''}>
               {s.available ? 'available' : 'unavailable'}
@@ -413,6 +418,10 @@
       <label class="nm-field">
         <span class="sr-label-tight">Allowed path prefixes <em>(optional — least privilege)</em></span>
         <input class="nm-text-input" type="text" bind:value={sPaths} placeholder="/api/v1/credits, /api/v1/key" />
+      </label>
+      <label class="nm-field">
+        <span class="sr-label-tight">Allowed methods <em>(blank = read-only GET, HEAD)</em></span>
+        <input class="nm-text-input" type="text" bind:value={sMethods} placeholder="GET, HEAD" />
       </label>
       <label class="nm-field">
         <span class="sr-label-tight">Notes <em>(optional)</em></span>

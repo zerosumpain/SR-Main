@@ -1978,6 +1978,14 @@ export const apiSecrets = pgTable('api_secrets', {
   allowedHosts: jsonb('allowed_hosts').$type<string[]>().notNull().default([]),
   /** Optional owner-set least-privilege narrowing, e.g. ['/api/v1/credits']. Empty = any path. */
   allowedPathPrefixes: jsonb('allowed_path_prefixes').$type<string[]>().notNull().default([]),
+  /**
+   * Owner-set HTTP methods this credential may authenticate. Path narrowing
+   * limits WHERE a key goes, never WHAT it does — without this, a credential
+   * scoped to a read-only endpoint could still be sent with DELETE. Empty is
+   * treated as ['GET','HEAD'], so a credential is read-only until the owner
+   * says otherwise.
+   */
+  allowedMethods: jsonb('allowed_methods').$type<string[]>().notNull().default(['GET', 'HEAD']),
   /** Last 4 chars only, for UI identification. Never the value. */
   hint: text('hint'),
   notes: text('notes'),
