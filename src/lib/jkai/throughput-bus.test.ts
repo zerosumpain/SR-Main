@@ -20,45 +20,83 @@ afterEach(() => {
 });
 
 describe('throughput accounting', () => {
-  it('rates a plain stream as tokens over elapsed generation time', () => {
-    bus.beginTurn();
-    clock = 1_000;
-    bus.noteOutput('a'.repeat(400)); // 100 estimated tokens, clock starts here
-    clock = 2_000;
+  it('counts the wait before the first token against the rate', () => {
+    bus.beginTurn(); // clock starts here, at 0
+    clock = 1_000; // one second of time-to-first-token
+    bus.noteOutput('a'.repeat(400)); // 100 estimated tokens
+    clock = 2_000; // one second of generation
     bus.settleTurn();
 
-    expect(bus.throughput.activeMs).toBe(1_000);
-    expect(bus.throughput.lastTps).toBeCloseTo(100, 5);
+    // 100 tokens over the full 2s, not over the 1s of generation alone.
+    expect(bus.throughput.activeMs).toBe(2_000);
+    expect(bus.throughput.lastTps).toBeCloseTo(50, 5);
     expect(bus.throughput.lastActual).toBe(false);
     expect(bus.throughput.live).toBe(false);
   });
 
-  it('excludes tool execution time from the denominator', () => {
+  it('excludes tool execution time', () => {
     bus.beginTurn();
-    bus.noteOutput('x'.repeat(200)); // 50 tokens, clock starts at 0
+    bus.noteOutput('x'.repeat(200)); // 50 tokens
     clock = 500;
-    bus.noteToolCall({}); // empty args bill nothing; pauses the clock
+    bus.noteToolStart({}); // empty args bill nothing; pauses the clock
     clock = 5_500; // the tool ran for 5s of dead time
-    bus.noteOutput('y'.repeat(200)); // 50 tokens, clock restarts at 5,500
+    bus.noteToolEnd();
+    bus.noteOutput('y'.repeat(200)); // 50 tokens
     clock = 6_000;
     bus.settleTurn();
 
-    // 6s of wall clock, but only 1s of generation.
+    // 6s of wall clock minus the tool's 5s.
     expect(bus.throughput.activeMs).toBe(1_000);
     expect(bus.throughput.lastTps).toBeCloseTo(100, 5);
   });
 
-  it('excludes the provider wait between a tool finishing and the next delta', () => {
+  it("counts the provider's prefill wait after a tool returns", () => {
     bus.beginTurn();
-    bus.noteOutput('x'.repeat(400));
+    bus.noteOutput('x'.repeat(400)); // 100 tokens
     clock = 1_000;
-    bus.noteToolCall({});
-    clock = 1_100; // tool itself was quick...
-    clock = 9_100; // ...but the provider took 8s to start emitting again
-    bus.noteOutput('y'.repeat(400));
+    bus.noteToolStart({});
+    clock = 1_100; // the tool itself was quick (100ms, excluded)
+    bus.noteToolEnd();
+    clock = 9_100; // the provider then took 8s to start emitting again
+    bus.noteOutput('y'.repeat(400)); // 100 tokens
     clock = 10_100;
     bus.settleTurn();
 
+    // Everything except the tool's own 100ms.
+    expect(bus.throughput.activeMs).toBe(10_000);
+    expect(bus.throughput.lastTps).toBeCloseTo(20, 5);
+  });
+
+  it('resumes only once every parallel tool has reported back', () => {
+    bus.beginTurn();
+    bus.noteOutput('a'.repeat(400)); // 100 tokens
+    clock = 1_000;
+    bus.noteToolStart({}); // two tools fan out
+    bus.noteToolStart({});
+    clock = 3_000;
+    bus.noteToolEnd(); // first returns — one still running, stay paused
+    clock = 5_000;
+    bus.noteToolEnd(); // last returns — clock resumes here
+    clock = 6_000;
+    bus.settleTurn();
+
+    // 1s before the fan-out + 1s after the last return; the 4s window is out.
+    expect(bus.throughput.activeMs).toBe(2_000);
+    expect(bus.throughput.lastTps).toBeCloseTo(50, 5);
+  });
+
+  it('recovers when a tool never reports back', () => {
+    bus.beginTurn();
+    bus.noteOutput('a'.repeat(400));
+    clock = 1_000;
+    bus.noteToolStart({}); // no matching noteToolEnd ever arrives
+    clock = 3_000;
+    bus.noteOutput('b'.repeat(400)); // tokens flowing again heals the clock
+    clock = 4_000;
+    bus.settleTurn();
+
+    // The stranded 2s window stays excluded, but the final 1s is counted —
+    // the clock is not stuck paused for the rest of the turn.
     expect(bus.throughput.activeMs).toBe(2_000);
     expect(bus.throughput.lastTps).toBeCloseTo(100, 5);
   });
@@ -70,7 +108,7 @@ describe('throughput accounting', () => {
     bus.beginTurn();
     bus.noteOutput('a'.repeat(40));
     clock = 1_000;
-    bus.noteToolCall(args);
+    bus.noteToolStart(args);
     bus.settleTurn();
 
     const expectedTokens = Math.round((40 + argChars) / 4);
@@ -81,7 +119,7 @@ describe('throughput accounting', () => {
   it('counts reasoning deltas alongside reply text', () => {
     bus.beginTurn();
     bus.noteOutput('t'.repeat(200)); // reply
-    bus.noteOutput('r'.repeat(200)); // thinking — same call, both are output
+    bus.noteOutput('r'.repeat(200)); // thinking — both are output
     clock = 1_000;
     bus.settleTurn();
 
@@ -104,6 +142,7 @@ describe('throughput accounting', () => {
     bus.settleTurn(1_000);
 
     expect(bus.throughput.live).toBe(false);
+    expect(bus.throughput.startedAt).toBeNull();
     expect(bus.throughput.lastTps).toBeNull();
     expect(bus.throughput.sessionTokens).toBe(0);
   });
@@ -145,12 +184,12 @@ describe('throughput accounting', () => {
   it('ignores notes outside a turn and empty deltas', () => {
     bus.noteOutput('a'.repeat(400)); // no beginTurn yet
     expect(bus.throughput.chars).toBe(0);
+    expect(bus.throughput.startedAt).toBeNull();
 
     bus.beginTurn();
     bus.noteOutput('');
     bus.noteOutput(undefined);
     expect(bus.throughput.chars).toBe(0);
-    expect(bus.throughput.startedAt).toBeNull();
   });
 
   it('marks a turn live from begin until settle', () => {

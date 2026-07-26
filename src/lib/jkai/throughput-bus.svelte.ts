@@ -14,13 +14,21 @@
 // frames are excluded too — a delegate runs *inside* the parent's tool window,
 // which is paused time here, so folding its tokens in would inflate the rate.
 //
-// DENOMINATOR — only stretches where output was actually arriving. The clock
-// starts on the first output delta and stops the moment a tool starts running;
-// it restarts on the next delta. So both tool execution AND the provider's
-// post-tool prefill wait fall out — that's the "minus dead time" part. Basing
-// the restart on deltas rather than on `tool_result` also makes it
-// self-healing: a tool_start whose result never arrives can't strand the
-// clock.
+// DENOMINATOR — the whole turn, minus the stretches where a tool was running.
+// The clock starts at `beginTurn()` (send time, matching `startTtftMark`), so
+// time-to-first-token is INSIDE the measurement: the wait for the provider to
+// start emitting counts against the rate, as does every subsequent prefill
+// wait after a tool returns. Only a tool's own execution is subtracted —
+// that's the "minus dead time when a tool is executing" part, and it's the
+// only thing the model genuinely isn't working on.
+//
+// Two robustness rules, because unbalanced tool frames would otherwise strand
+// the clock and inflate the rate:
+//   - `noteToolStart` pauses unconditionally (not just on the first open
+//     tool), so a nested/parallel start can't leak its window into the count.
+//   - any output delta resumes the clock, so a `tool_start` whose
+//     `tool_result` never arrives is healed the moment tokens flow again.
+// Parallel tools resume only once the last one reports back.
 //
 // While a turn streams, the token count is a chars/4 estimate (there's no
 // tokeniser client-side). On the terminal `done` event the server hands us the
@@ -36,9 +44,9 @@ const MIN_TOKENS = 8;
 export const throughput = $state({
   /** A measured turn is streaming right now. */
   live: false,
-  /** Generation time banked so far this turn, in ms (paused stretches excluded). */
+  /** Turn time banked so far, in ms (tool-execution stretches excluded). */
   activeMs: 0,
-  /** `performance.now()` at which the current active stretch began; null = paused. */
+  /** `performance.now()` at which the current counted stretch began; null = paused. */
   startedAt: null as number | null,
   /** Output chars seen this turn — divide by CHARS_PER_TOKEN for the live estimate. */
   chars: 0,
@@ -54,6 +62,9 @@ export const throughput = $state({
 // Not a rune: nothing renders it, and it must not be reactive — it gates the
 // note* calls so a replayed event burst can't be mistaken for live generation.
 let measuring = false;
+// Tools currently running. The clock only resumes once this hits zero, so a
+// turn firing several tools in parallel doesn't restart on the first return.
+let openTools = 0;
 
 /**
  * Start accounting for a new turn.
@@ -64,16 +75,19 @@ let measuring = false;
  */
 export function beginTurn(opts: { replay?: boolean } = {}): void {
   measuring = !opts.replay;
+  openTools = 0;
   throughput.live = measuring;
   throughput.activeMs = 0;
-  throughput.startedAt = null;
+  // The clock starts NOW, not on the first delta — that is what puts
+  // time-to-first-token inside the measurement.
+  throughput.startedAt = measuring ? performance.now() : null;
   throughput.chars = 0;
 }
 
-/** Bill a token / thinking delta, starting the clock if it was paused. */
+/** Bill a token / thinking delta. Also resumes the clock if it was paused. */
 export function noteOutput(text: string | undefined): void {
   if (!measuring || !text) return;
-  if (throughput.startedAt === null) throughput.startedAt = performance.now();
+  resumeClock();
   throughput.chars += text.length;
 }
 
@@ -82,7 +96,7 @@ export function noteOutput(text: string | undefined): void {
  * execution. Order matters: the model generated those arg tokens during the
  * stretch that is ending, so they belong to it.
  */
-export function noteToolCall(args: unknown): void {
+export function noteToolStart(args: unknown): void {
   if (!measuring) return;
   try {
     const json = JSON.stringify(args ?? {});
@@ -90,13 +104,25 @@ export function noteToolCall(args: unknown): void {
   } catch {
     // Unserialisable args (cycles) — skip the char count, still pause.
   }
+  openTools += 1;
   pauseClock();
+}
+
+/** A tool reported back. Resume once nothing is still running. */
+export function noteToolEnd(): void {
+  if (!measuring) return;
+  openTools = Math.max(0, openTools - 1);
+  if (openTools === 0) resumeClock();
 }
 
 function pauseClock(): void {
   if (throughput.startedAt === null) return;
   throughput.activeMs += performance.now() - throughput.startedAt;
   throughput.startedAt = null;
+}
+
+function resumeClock(): void {
+  if (throughput.startedAt === null) throughput.startedAt = performance.now();
 }
 
 /** Estimated tokens from a streamed char count. */
@@ -125,6 +151,7 @@ export function settleTurn(actualOutputTokens?: number | null): void {
     return;
   }
   measuring = false;
+  openTools = 0;
   pauseClock();
 
   const hasActual = typeof actualOutputTokens === 'number' && actualOutputTokens > 0;
