@@ -96,12 +96,25 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
 
     // One derived note per source item, reused across re-indexes so the graph
     // does not accumulate a new note every time a file is touched.
+    //
+    // processedContent is written UP FRONT, not after extraction: the entity
+    // summariser reads it as evidence, and persistExtraction kicks that off. Set
+    // afterwards, the summariser found an empty note, correctly declined to
+    // invent detail, and every entity was left summary-less — which also left
+    // entity embeddings weaker, since they embed name + summary + properties.
     let noteId: string;
     if (existing) {
       noteId = existing.id;
       await db
         .update(intelNotes)
-        .set({ title: input.title, rawContent: clipped, status: 'processing', metadata, updatedAt: new Date() })
+        .set({
+          title: input.title,
+          rawContent: clipped,
+          processedContent: clipped,
+          status: 'processing',
+          metadata,
+          updatedAt: new Date(),
+        })
         .where(eq(intelNotes.id, noteId));
     } else {
       const [created] = await db
@@ -109,6 +122,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
         .values({
           title: input.title,
           rawContent: clipped,
+          processedContent: clipped,
           source: input.kind,
           format: 'summary',
           status: 'processing',
@@ -124,7 +138,6 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
     await db
       .update(intelNotes)
       .set({
-        processedContent: clipped,
         title: input.title || extraction.summary.slice(0, 100) || input.kind,
         status: 'processed',
         updatedAt: new Date(),

@@ -66,13 +66,20 @@ export async function processNote(noteId: string, attachment?: JkaiAttachment): 
         : parsed.body;
     }
 
+    // Persist the processed text BEFORE extracting. The entity summariser that
+    // persistExtraction kicks off reads this column as its evidence; written
+    // afterwards, it found an empty note and left every entity summary-less.
+    await db
+      .update(intelNotes)
+      .set({ processedContent, updatedAt: new Date() })
+      .where(eq(intelNotes.id, noteId));
+
     const extraction = await extractFromNote(processedContent, note.format);
     const stats = await persistExtraction(noteId, extraction);
 
     await db
       .update(intelNotes)
       .set({
-        processedContent,
         title: note.title || extraction.summary.slice(0, 100) || 'Untitled note',
         status: 'processed',
         updatedAt: new Date(),

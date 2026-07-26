@@ -220,6 +220,36 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
   }
 }
 
+/**
+ * Fill in summaries for entities that don't have one, in batches.
+ *
+ * Needed because entities created before the summariser had evidence to read
+ * (see the processedContent ordering note in ./auto-extract.ts) were left
+ * summary-less, which also leaves their embeddings weaker — and those
+ * embeddings are what candidate-based entity resolution now retrieves on.
+ */
+export async function backfillEntitySummaries(limit = 100): Promise<{ processed: number; remaining: number }> {
+  const capped = Math.max(1, Math.min(limit, 500));
+
+  const rows = await db
+    .select({ id: intelEntities.id })
+    .from(intelEntities)
+    .where(and(isNull(intelEntities.summary), isNull(intelEntities.mergedIntoId)))
+    .limit(capped);
+
+  for (let i = 0; i < rows.length; i += SUMMARY_BATCH) {
+    await updateEntitySummaries(rows.slice(i, i + SUMMARY_BATCH).map((r) => r.id));
+  }
+
+  const [{ count: remaining } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(intelEntities)
+    .where(and(isNull(intelEntities.summary), isNull(intelEntities.mergedIntoId)));
+
+  console.log(`[intel] summary backfill — attempted ${rows.length}, ${remaining} still without a summary`);
+  return { processed: rows.length, remaining };
+}
+
 export async function persistExtraction(
   noteId: string,
   result: ExtractionResult,
