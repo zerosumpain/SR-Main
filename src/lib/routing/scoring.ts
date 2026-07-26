@@ -5,6 +5,7 @@
 // a fraction of the catalogue's best), a capped price weight, an open-weight
 // bonus, and a success bias. Kept pure so select.test.ts can prove the guards
 // without a database.
+import { buildOpenWeightResolver, type OpenWeightResolver } from '$lib/models/open-weights';
 import { PRICE_WEIGHT_CAP, type ProfileWeights } from './types';
 
 /** Success prior for a model with no rated turns yet — mildly optimistic so new
@@ -22,9 +23,10 @@ export interface Candidate {
   /** Tokens/sec (p50); null when unknown → scored neutral. */
   throughput: number | null;
   contextLength: number | null;
-  /** True when the model publishes its weights. Read from OpenRouter's
-   *  `hugging_face_id` field, which is populated for open-weight models only
-   *  (150 of 338 catalogue rows today) — no curated vendor list to maintain. */
+  /** True when the model publishes its weights. Resolved by
+   *  `$lib/models/open-weights` — OpenRouter's `hugging_face_id` field, plus
+   *  sibling inheritance and a small verified override map for the entries it
+   *  leaves blank (160 of 345 catalogue rows today). */
   openWeights: boolean;
 }
 
@@ -47,11 +49,16 @@ export interface RawModelRow {
   raw: unknown;
 }
 
-export function enrichRow(row: RawModelRow): Candidate {
+/**
+ * @param openWeights Resolver built over the WHOLE catalogue — sibling
+ *   inheritance needs to see the other rows. Defaults to a single-row resolver
+ *   (raw field + override map only), which is what the unit tests use.
+ */
+export function enrichRow(row: RawModelRow, openWeights?: OpenWeightResolver): Candidate {
+  const resolver = openWeights ?? buildOpenWeightResolver([row]);
   const raw = (row.raw ?? {}) as {
     supported_parameters?: unknown;
     benchmarks?: { artificial_analysis?: { agentic_index?: number } };
-    hugging_face_id?: unknown;
   };
   const supported = Array.isArray(raw.supported_parameters) ? raw.supported_parameters : [];
   const bench = raw.benchmarks?.artificial_analysis ?? {};
@@ -76,7 +83,7 @@ export function enrichRow(row: RawModelRow): Candidate {
     agenticIndex: typeof bench.agentic_index === 'number' ? bench.agentic_index : null,
     throughput: t != null && Number.isFinite(t) ? t : null,
     contextLength: row.contextLength,
-    openWeights: typeof raw.hugging_face_id === 'string' && raw.hugging_face_id.trim().length > 0,
+    openWeights: resolver.isOpen(row.id),
   };
 }
 
