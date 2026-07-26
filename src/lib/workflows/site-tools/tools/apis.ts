@@ -260,6 +260,7 @@ async function executeApiCall(
       sensitiveHeaders: new Set(Object.keys(auth.headers).map((h) => h.toLowerCase())),
       secretPlaintexts: auth.plaintexts,
       secretHandle: auth.handle,
+      baseUrl: entry.baseUrl,
     });
   } catch (err) {
     // Network / timeout / SSRF -> a hard failure; mark the entry broken.
@@ -511,6 +512,13 @@ async function guardedFetch(
      * holds for the whole chain rather than only the first request.
      */
     secretHandle?: string;
+    /**
+     * The catalogue entry's baseUrl. Containment was a hop-0 check only, so a
+     * catalogued host that 302s turned this into an arbitrary-URL fetcher —
+     * exactly the property `urlIsWithinBase` exists to prevent. Re-asserted per
+     * hop when supplied.
+     */
+    baseUrl?: string;
   } = {},
 ): Promise<{ status: number; ok: boolean; contentType: string; text: string; truncated: boolean }> {
   const baseHeaders: Record<string, string> = {
@@ -586,6 +594,11 @@ async function guardedFetch(
         if (!loc) break; // nothing to follow; treat as the final response
         if (hop >= MAX_REDIRECTS) throw new Error('too many redirects');
         const next = new URL(loc, current);
+        if (opts.baseUrl && !urlIsWithinBase(next.toString(), opts.baseUrl)) {
+          throw new Error(
+            `refusing to follow a redirect outside the catalogued API's base URL (${opts.baseUrl} -> ${next.origin}${next.pathname}).`,
+          );
+        }
         if ((opts.secretPlaintexts?.length ?? 0) > 0) {
           if (next.origin !== originalOrigin) {
             throw new Error(

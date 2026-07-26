@@ -50,7 +50,10 @@ d('API secret registry + integration register (integration)', () => {
       injection: { kind: 'bearer' },
       allowedHosts: ['openrouter.ai'],
       // Least privilege: this credential can READ the account, not spend it.
-      allowedPathPrefixes: ['/api/v1/credits', '/api/v1/key'],
+      // /api/v1/auth/key is the legacy account endpoint the existing `openrouter`
+      // node uses; including it keeps a researching model off a confusing refusal
+      // while staying entirely read-only.
+      allowedPathPrefixes: ['/api/v1/credits', '/api/v1/key', '/api/v1/auth/key'],
       notes: 'Read-only account endpoints, so jkai can report credit without being able to spend it.',
     });
   }, 60_000);
