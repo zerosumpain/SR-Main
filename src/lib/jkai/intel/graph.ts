@@ -16,26 +16,98 @@ import type {
   ProposedNewType,
 } from './extract';
 
+/**
+ * Canonical form of a type name, for comparing proposals against what exists.
+ * Collapses the ways a model spells the same idea: "Data Source", "data-source",
+ * "data_sources" all normalise to "datasource".
+ */
+export function normaliseTypeName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_-]+/g, '')
+    .replace(/(ies)$/, 'y')
+    .replace(/(?<=[a-z]{3})s$/, '');
+}
+
+/**
+ * A new type is only worth creating if nothing existing means the same thing.
+ * Without this the taxonomy fragments: production reached 25 types, several
+ * holding one or two entities, and a stray `font` type then acted as a magnet
+ * for anything the model was unsure about (three newspapers were filed as
+ * fonts). Fewer, better-populated types make the graph legible and make
+ * type-filtered views useful.
+ */
+const MAX_NEW_TYPES_PER_EXTRACTION = 2;
+
+async function loadTypeIndex(): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: intelEntityTypes.id, name: intelEntityTypes.name })
+    .from(intelEntityTypes);
+  const index = new Map<string, string>();
+  for (const r of rows) {
+    index.set(r.name.toLowerCase(), r.id);
+    index.set(normaliseTypeName(r.name), r.id);
+  }
+  return index;
+}
+
 async function resolveTypeId(typeName: string): Promise<string | null> {
   const [row] = await db
     .select({ id: intelEntityTypes.id })
     .from(intelEntityTypes)
     .where(eq(intelEntityTypes.name, typeName.toLowerCase()))
     .limit(1);
-  return row?.id ?? null;
+  if (row) return row.id;
+
+  // Fall back to the normalised form so a plural or a hyphen doesn't strand an
+  // entity. Previously an unresolvable type meant the entity was dropped
+  // entirely — silent data loss on every near-miss the model made.
+  const index = await loadTypeIndex();
+  return index.get(normaliseTypeName(typeName)) ?? null;
+}
+
+/** The type every entity falls back to rather than being discarded. */
+const FALLBACK_TYPE = { name: 'concept', icon: '🔷', description: 'An idea, term, or thing that does not fit a more specific type' };
+
+async function ensureFallbackType(): Promise<string> {
+  const existing = await resolveTypeId(FALLBACK_TYPE.name);
+  if (existing) return existing;
+  const [created] = await db
+    .insert(intelEntityTypes)
+    .values({ ...FALLBACK_TYPE, isSeeded: true })
+    .onConflictDoNothing({ target: intelEntityTypes.name })
+    .returning({ id: intelEntityTypes.id });
+  return created?.id ?? (await resolveTypeId(FALLBACK_TYPE.name)) ?? '';
 }
 
 async function createProposedTypes(proposed: ProposedNewType[]): Promise<void> {
+  if (!proposed.length) return;
+  const index = await loadTypeIndex();
+  let created = 0;
+
   for (const t of proposed) {
-    await db
+    if (created >= MAX_NEW_TYPES_PER_EXTRACTION) {
+      console.log(`[intel] type proposal cap reached, ignoring "${t.name}"`);
+      break;
+    }
+    const name = t.name.toLowerCase().trim();
+    if (!name) continue;
+
+    const key = normaliseTypeName(name);
+    if (index.has(name) || index.has(key)) continue; // a synonym already exists
+
+    const [row] = await db
       .insert(intelEntityTypes)
-      .values({
-        name: t.name.toLowerCase(),
-        icon: t.icon,
-        description: t.description,
-        isSeeded: false,
-      })
-      .onConflictDoNothing({ target: intelEntityTypes.name });
+      .values({ name, icon: t.icon, description: t.description, isSeeded: false })
+      .onConflictDoNothing({ target: intelEntityTypes.name })
+      .returning({ id: intelEntityTypes.id });
+
+    if (row) {
+      index.set(name, row.id);
+      index.set(key, row.id);
+      created++;
+    }
   }
 }
 
@@ -64,40 +136,66 @@ async function upsertEntity(
     }
   }
 
-  const typeId = await resolveTypeId(entity.type);
+  // An unrecognised type used to discard the entity outright, which lost real
+  // intelligence whenever the model coined a type it hadn't also proposed.
+  // Park it under `concept` instead — visible, reviewable, and retypeable.
+  let typeId = await resolveTypeId(entity.type);
   if (!typeId) {
-    console.warn(`[intel] Unknown entity type "${entity.type}" for "${entity.name}", skipping`);
-    return '';
+    typeId = await ensureFallbackType();
+    if (!typeId) {
+      console.warn(`[intel] no type available for "${entity.name}", skipping`);
+      return '';
+    }
+    console.warn(`[intel] unknown type "${entity.type}" for "${entity.name}" → concept`);
   }
 
   // Deterministic fallback before inserting. Resolution otherwise depends
   // entirely on the model returning possibleMatchId, so a missed match created a
   // duplicate — and now that candidates are retrieved by similarity rather than
   // listed exhaustively, an exact name the model didn't see must still resolve.
+  //
+  // Matched on NAME ALONE, deliberately. This used to require the type to match
+  // too, which meant the model calling something a `policy` in one note and a
+  // `system` in the next produced two entities with the same name — over twenty
+  // such pairs in production, including "Responsible AI Strategy" split into a
+  // project (16 links) and a policy (1 link). One name is one thing; a
+  // disagreement about its type is a typing question, not grounds for a second
+  // node. The existing type is kept, since it was chosen with the evidence that
+  // first created the entity.
   const [sameName] = await db
-    .select({ id: intelEntities.id, properties: intelEntities.properties })
+    .select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId })
     .from(intelEntities)
     .where(
       and(
         sql`lower(${intelEntities.name}) = ${entity.name.trim().toLowerCase()}`,
-        eq(intelEntities.typeId, typeId),
         isNull(intelEntities.mergedIntoId),
       ),
     )
+    .orderBy(desc(intelEntities.confirmed), intelEntities.createdAt)
     .limit(1);
 
   if (sameName) {
+    // The one exception: an entity parked under the `concept` fallback should
+    // adopt a real type as soon as one is offered.
+    const fallbackId = await ensureFallbackType();
+    const retype = sameName.typeId === fallbackId && typeId !== fallbackId;
+
     await db
       .update(intelEntities)
       .set({
         properties: { ...(sameName.properties as Record<string, unknown> ?? {}), ...entity.properties },
         updatedAt: new Date(),
+        ...(retype ? { typeId } : {}),
         ...(entity.confidence === 'high' ? { confidence: 'high', confirmed: true } : {}),
       })
       .where(eq(intelEntities.id, sameName.id));
     return sameName.id;
   }
 
+  // A brand-new entity is embedded immediately, not merely when a summary
+  // eventually lands. Candidate retrieval in extract.ts filters on
+  // `embedding IS NOT NULL`, so an unembedded entity cannot be matched against
+  // and the next note mentioning it creates a second copy.
   const [created] = await db
     .insert(intelEntities)
     .values({
@@ -113,6 +211,12 @@ async function upsertEntity(
       firstSeenIn: noteId,
     })
     .returning({ id: intelEntities.id });
+
+  // Fire-and-forget: extraction must not wait on, or fail because of, the
+  // embedding service. The backfill sweep catches anything that misses.
+  void import('./embed')
+    .then(({ embedEntity }) => embedEntity(created.id))
+    .catch(() => {});
 
   return created.id;
 }
@@ -277,11 +381,48 @@ export async function persistExtraction(
       .onConflictDoNothing();
   }
 
+  // Relationships and timeline events are UPSERTED, not blindly inserted.
+  //
+  // These were plain inserts, which meant every re-extraction of a note (a file
+  // re-indexed, a research report rewritten, the digest changed) laid down a
+  // fresh copy of every edge it had already recorded. The graph accumulated
+  // parallel duplicate edges that inflated every degree/centrality count and
+  // drew as overlapping lines. Dedup is done in the application rather than with
+  // a unique constraint: adding `.unique()` to a populated table silently breaks
+  // non-interactive `drizzle-kit push` (see reference_drizzle_unique_push_gotcha).
   let relationshipCount = 0;
   for (const rel of result.relationships) {
     const sourceId = entityIdMap.get(rel.source);
     const targetId = entityIdMap.get(rel.target);
     if (!sourceId || !targetId) continue;
+    // A self-loop carries no information and breaks force layouts.
+    if (sourceId === targetId) continue;
+
+    const [existing] = await db
+      .select({ id: intelRelationships.id, confidence: intelRelationships.confidence })
+      .from(intelRelationships)
+      .where(
+        and(
+          eq(intelRelationships.sourceEntityId, sourceId),
+          eq(intelRelationships.targetEntityId, targetId),
+          eq(intelRelationships.type, rel.type),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      // Seeing the same edge again is corroboration: keep the best label we
+      // have and let confidence ratchet upward, never down.
+      const upgrade = rel.confidence === 'high' && existing.confidence !== 'high';
+      await db
+        .update(intelRelationships)
+        .set({
+          ...(rel.label ? { label: rel.label } : {}),
+          ...(upgrade ? { confidence: 'high' } : {}),
+        })
+        .where(eq(intelRelationships.id, existing.id));
+      continue;
+    }
 
     await db.insert(intelRelationships).values({
       sourceEntityId: sourceId,
@@ -297,6 +438,19 @@ export async function persistExtraction(
   let timelineEventCount = 0;
   for (const event of result.timelineEvents) {
     const entityId = event.linkedEntity ? entityIdMap.get(event.linkedEntity) ?? null : null;
+
+    const [duplicate] = await db
+      .select({ id: intelTimelineEvents.id })
+      .from(intelTimelineEvents)
+      .where(
+        and(
+          eq(intelTimelineEvents.noteId, noteId),
+          eq(intelTimelineEvents.date, event.date),
+          eq(intelTimelineEvents.title, event.title),
+        ),
+      )
+      .limit(1);
+    if (duplicate) continue;
 
     await db.insert(intelTimelineEvents).values({
       entityId,

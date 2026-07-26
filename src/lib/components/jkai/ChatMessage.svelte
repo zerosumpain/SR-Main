@@ -7,6 +7,9 @@
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
   import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
+  import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
+  import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
+  import { entityMentionHandlers } from '$lib/components/intel/entity-hover.svelte';
   import type { OrchestratorThinking } from '$lib/workflows/orchestrator/types';
   import type { ApprovalUiSettings } from '$lib/server/models/settings';
 
@@ -38,6 +41,7 @@
     researchRefs = [],
     onOpenFileRef,
     onOpenResearchRef,
+    entityMentions = [],
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -64,6 +68,9 @@
     onOpenFileRef?: (ref: FileRef) => void;
     /** Open the research source reader for a cited @research passage. */
     onOpenResearchRef?: (ref: ResearchRef) => void;
+    /** Intel entities whose first mention in this reply becomes a hoverable
+     *  reference. Supplied once by the page from the cached mention index. */
+    entityMentions?: MentionTarget[];
     /** ISO timestamp the bubble was created. Drives the "10:42:13" wall-clock
      *  mark that fades in under each bubble on hover. */
     createdAt?: string;
@@ -141,6 +148,17 @@
   let unmatchedFileRefs = $derived(fileRefs.filter((_, idx) => !linkified.matched.has(`file:${idx}`)));
   let unmatchedResearchRefs = $derived(researchRefs.filter((_, idx) => !linkified.matched.has(`research:${idx}`)));
 
+  // Intel entities named in the reply become hoverable references. Runs AFTER
+  // citation linkification and skips anything already inside an <a>, so a real
+  // source citation always wins over an entity mention at the same words.
+  let displayHtml = $derived(
+    role === 'assistant' && entityMentions.length
+      ? linkifyEntities(linkified.html, entityMentions).html
+      : linkified.html,
+  );
+
+  const mentionEvents = entityMentionHandlers();
+
   function citeFromEvent(target: EventTarget | null): HTMLElement | null {
     const el = target as HTMLElement | null;
     return el?.closest?.('a.cite-link') ?? null;
@@ -153,16 +171,21 @@
   }
   function onCiteClick(e: MouseEvent) {
     const a = citeFromEvent(e.target);
-    if (!a) return;
-    e.preventDefault();
-    openCite(a);
+    if (a) {
+      e.preventDefault();
+      openCite(a);
+      return;
+    }
+    mentionEvents.handleClick(e);
   }
   function onCiteKey(e: KeyboardEvent) {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
     const a = citeFromEvent(e.target);
-    if (!a) return;
-    e.preventDefault();
-    openCite(a);
+    if (a && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      openCite(a);
+      return;
+    }
+    mentionEvents.handleKey(e);
   }
 
   let isUser = $derived(role === 'user');
@@ -203,7 +226,14 @@
       <p class="whitespace-pre-wrap">{content}</p>
     {:else}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="chat-markdown" onclick={onCiteClick} onkeydown={onCiteKey}>{@html linkified.html}</div>
+      <div
+        class="chat-markdown"
+        onclick={onCiteClick}
+        onkeydown={onCiteKey}
+        onmouseover={mentionEvents.onmouseover}
+        onmouseout={mentionEvents.onmouseout}
+        onfocusin={mentionEvents.onfocusin}
+      >{@html displayHtml}</div>
       {#if unmatchedFileRefs.length > 0 && onOpenFileRef}
         <FileReferenceChips refs={unmatchedFileRefs} onOpen={onOpenFileRef} />
       {/if}
@@ -362,6 +392,29 @@
     vertical-align: super;
     margin-left: 1px;
     opacity: 0.6;
+  }
+  /* Inline intel entity — a name the knowledge graph knows about. Quieter still
+     than a citation: a faint underline that only lights up on hover, because a
+     reply may name a dozen entities and a dozen loud links would be unreadable.
+     Uses accent-ink (teal) so it is visibly a different KIND of reference from
+     an orange source citation. */
+  .chat-markdown :global(a.entity-mention) {
+    color: inherit;
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: var(--accent-ink-tint-35);
+    text-underline-offset: 3px;
+    cursor: help;
+    transition: color var(--t-fast) var(--ease-out),
+      background var(--t-fast) var(--ease-out);
+    border-radius: var(--radius-sharp);
+  }
+  .chat-markdown :global(a.entity-mention:hover),
+  .chat-markdown :global(a.entity-mention:focus-visible) {
+    color: var(--accent-ink);
+    background: var(--accent-ink-tint-06);
+    text-decoration-color: var(--accent-ink);
+    outline: none;
   }
   .chat-markdown :global(a.cite-link:hover) {
     text-decoration-style: solid;
