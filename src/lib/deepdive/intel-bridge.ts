@@ -11,7 +11,7 @@ import { db } from '$lib/db';
 import { eq } from 'drizzle-orm';
 import { researchSessions } from '$lib/db/schema';
 import type { ResearchReport } from './types';
-import { extractIntoIntel } from '$lib/jkai/intel/auto-extract';
+import { extractIntoIntel, type AutoExtractOutcome } from '$lib/jkai/intel/auto-extract';
 
 const MAX_RANKED_FACTS = 40;
 
@@ -50,19 +50,19 @@ export function buildResearchDigest(topic: string, report: ResearchReport): stri
  * session has no report yet. Safe to call more than once — the digest hash
  * gates re-extraction.
  */
-export async function extractResearchIntoIntel(sessionId: string): Promise<void> {
+export async function extractResearchIntoIntel(sessionId: string): Promise<AutoExtractOutcome> {
   const [session] = await db
     .select({ id: researchSessions.id, topic: researchSessions.topic, report: researchSessions.report })
     .from(researchSessions)
     .where(eq(researchSessions.id, sessionId))
     .limit(1);
 
-  if (!session?.report) return;
+  if (!session?.report) return { status: 'skipped' };
 
   const digest = buildResearchDigest(session.topic, session.report as ResearchReport);
-  if (!digest.trim()) return;
+  if (!digest.trim()) return { status: 'skipped' };
 
-  await extractIntoIntel({
+  return extractIntoIntel({
     kind: 'research',
     refId: session.id,
     title: session.topic,

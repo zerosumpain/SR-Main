@@ -2,7 +2,8 @@ import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
-import { isNull } from 'drizzle-orm';
+import { isNull, sql } from 'drizzle-orm';
+import { generateEmbedding } from './embed';
 
 export interface ExtractedEntity {
   name: string;
@@ -43,26 +44,75 @@ export interface ExtractionResult {
   proposedNewTypes: ProposedNewType[];
 }
 
-async function buildExtractionContext(): Promise<string> {
-  const types = await db.select({ name: intelEntityTypes.name }).from(intelEntityTypes);
+/**
+ * Above this many entities, stop dumping the whole graph into every extraction
+ * prompt and retrieve candidates by vector similarity instead. Below it the
+ * full list is both cheap and strictly better for resolution.
+ */
+const FULL_LIST_CEILING = 60;
+/** How many nearest entities to offer as match candidates once past the ceiling. */
+const CANDIDATE_K = 40;
 
-  const entities = await db
-    .select({
-      id: intelEntities.id,
-      name: intelEntities.name,
-      typeId: intelEntities.typeId,
-    })
+/**
+ * The resolution candidates the extractor is asked to match against.
+ *
+ * Originally this dumped every non-merged entity into every call, which is fine
+ * at tens of entities and untenable at thousands: the prompt grows without
+ * bound, and — because the list changes whenever anything is added — the prompt
+ * prefix churns on every call and defeats caching entirely.
+ *
+ * Past FULL_LIST_CEILING we do what deepdive's cross-session linker already
+ * does: embed the note once and take the nearest entities from pgvector.
+ */
+async function buildExtractionContext(noteText: string): Promise<string> {
+  const types = await db.select({ name: intelEntityTypes.name }).from(intelEntityTypes);
+  const typeNames = types.map((t) => t.name).join(', ');
+
+  const [{ count: total } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)::int` })
     .from(intelEntities)
     .where(isNull(intelEntities.mergedIntoId));
 
-  const typeNames = types.map((t) => t.name).join(', ');
-  const entityList = entities
-    .map((e) => `- ${e.name} (id: ${e.id})`)
-    .join('\n');
+  let rows: Array<{ id: string; name: string }> = [];
+  let scoped = false;
+
+  if (total > FULL_LIST_CEILING) {
+    try {
+      const embedding = await generateEmbedding(noteText.slice(0, 8000));
+      const vec = `[${embedding.join(',')}]`;
+      const res = await db.execute(sql`
+        SELECT id, name
+        FROM intel_entities
+        WHERE merged_into_id IS NULL AND embedding IS NOT NULL
+        ORDER BY embedding <=> ${vec}::vector
+        LIMIT ${CANDIDATE_K}
+      `);
+      rows = (res.rows as Array<Record<string, unknown>>).map((r) => ({
+        id: String(r.id),
+        name: String(r.name),
+      }));
+      scoped = true;
+    } catch (err) {
+      // Vector recall is an optimisation; a failure must not stop extraction.
+      console.warn('[intel] candidate recall failed, falling back to full list:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  if (!scoped) {
+    rows = await db
+      .select({ id: intelEntities.id, name: intelEntities.name })
+      .from(intelEntities)
+      .where(isNull(intelEntities.mergedIntoId));
+  }
+
+  const entityList = rows.map((e) => `- ${e.name} (id: ${e.id})`).join('\n');
+  const heading = scoped
+    ? `Existing entities most similar to this note (${rows.length} of ${total} — match against these; if none fit, it is a new entity):`
+    : 'Known entities:';
 
   return `Known entity types: ${typeNames}
 
-Known entities:
+${heading}
 ${entityList || '(none yet)'}`;
 }
 
@@ -121,7 +171,7 @@ export async function extractFromNote(
   noteText: string,
   noteFormat: string,
 ): Promise<ExtractionResult> {
-  const context = await buildExtractionContext();
+  const context = await buildExtractionContext(noteText);
   const modelCtx = await resolveDefaultModel('builder');
   const { client, model } = await getLLMClient(modelCtx);
 
