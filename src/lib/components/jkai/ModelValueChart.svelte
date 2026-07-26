@@ -5,6 +5,10 @@
   //   1. Scatter — quality (Artificial Analysis agentic index) against blended
   //      $/1M on a log price axis, plus the value frontier: the models no other
   //      model beats on BOTH axes. Answers "what am I giving up to go cheaper".
+  //      The price axis runs DESCENDING left→right (dear on the left, cheap on
+  //      the right) so "better" is consistently up-and-to-the-right and the
+  //      frontier reads as the top-right envelope. Tick labels therefore count
+  //      down; the axis is labelled "cheaper →" at the right edge to say so.
   //   2. Ranked bars — the top models by the hybrid score the site actually
   //      selects on (quality/price/speed, weights from the API). Answers "what
   //      would the nightly routing pick".
@@ -27,13 +31,29 @@
     rows,
     activeModelId = null,
     loading = false,
+    expanded = false,
     onpick,
+    onexpandchange,
   }: {
     rows: ChartRow[];
     activeModelId?: string | null;
     loading?: boolean;
+    /** Owned by the picker so its Escape handler can collapse before closing. */
+    expanded?: boolean;
     onpick: (id: string) => void;
+    onexpandchange?: (v: boolean) => void;
   } = $props();
+
+  // Same local body-portal as OpenRouterModelPicker — NOT $lib/canvas/portal,
+  // which re-appends the node on destroy and would strand the overlay open.
+  function bodyPortal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      },
+    };
+  }
 
   // Only rows with both axes plot. A log price axis cannot represent $0, so
   // free models are excluded rather than clamped onto a misleading position —
@@ -73,10 +93,11 @@
     padR = 14,
     padT = 12,
     padB = 26;
-  const height = 250;
-
   let host = $state<HTMLDivElement | null>(null);
   let w = $state(560);
+  // Expanded gets the extra vertical room; on a narrow screen a 520px plot would
+  // push the ranked bars entirely off-screen, so scale it back.
+  const height = $derived(expanded ? (w < 560 ? 380 : 520) : 250);
   // Plain let — a debounce handle read+written by the observer must never be
   // $state (see svelte5-pitfalls §1).
   $effect(() => {
@@ -97,7 +118,7 @@
   });
 
   const innerW = $derived(w - padL - padR);
-  const innerH = height - padT - padB;
+  const innerH = $derived(height - padT - padB);
 
   const priceDomain = $derived.by(() => {
     if (!plottable.length) return [-2, 2] as [number, number];
@@ -113,7 +134,9 @@
     return [lo - pad, hi + pad] as [number, number];
   });
 
-  const xs = $derived(linScale(priceDomain, [padL, padL + innerW]));
+  // Range reversed: the domain's LOW end (cheapest) maps to the RIGHT edge, so
+  // both axes improve towards the top-right corner.
+  const xs = $derived(linScale(priceDomain, [padL + innerW, padL]));
   const ys = $derived(linScale(qualityDomain, [padT + innerH, padT]));
 
   /** Whole-decade price ticks ($0.01, $0.10, $1, $10, …) — the readable grid on
@@ -208,13 +231,21 @@
   });
 </script>
 
-<div class="chart-host" bind:this={host}>
+{#snippet chart()}
   <div class="chart-head">
     <span class="chart-title">Quality vs cost</span>
     <span class="chart-legend">
       <span class="key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" class="dot-open" /></svg>open weights</span>
       <span class="key"><svg width="10" height="10" aria-hidden="true"><circle cx="5" cy="5" r="4" class="dot-closed" /></svg>closed</span>
       <span class="key"><svg width="14" height="10" aria-hidden="true"><line x1="0" y1="5" x2="14" y2="5" class="key-frontier" /></svg>value frontier</span>
+      <button
+        type="button"
+        class="expand-btn"
+        aria-pressed={expanded}
+        title={expanded ? 'Exit full screen (Esc)' : 'Expand to full screen'}
+        onclick={() => onexpandchange?.(!expanded)}
+        >{expanded ? '✕ close' : '⤢ expand'}</button
+      >
     </span>
   </div>
 
@@ -234,7 +265,8 @@
         <line x1={xs(t)} x2={xs(t)} y1={padT} y2={padT + innerH} class="grid grid-v" />
         <text x={xs(t)} y={height - 14} class="axis-lab" text-anchor="middle">{decadeLabel(t)}</text>
       {/each}
-      <text x={padL} y={height - 2} class="axis-title" text-anchor="start">cheaper →</text>
+      <text x={padL} y={height - 2} class="axis-title" text-anchor="start">blended $/1M</text>
+      <text x={padL + innerW} y={height - 2} class="axis-title" text-anchor="end">cheaper →</text>
       <!-- Rotated so it can't overrun the left edge the way an end-anchored
            label at x = padL − 6 does. -->
       <text
@@ -333,12 +365,60 @@
   {:else}
     <p class="chart-note">No scored models in this filter — a score needs both a quality index and a price.</p>
   {/if}
-</div>
+{/snippet}
+
+<!-- Expanded renders into a body-portaled overlay rather than growing in place:
+     the picker modal is overflow:hidden and its entry animation makes it a
+     containing block, so a position:fixed child would be clipped inside it. Only
+     one branch is mounted at a time, so bind:this / the ResizeObserver follow. -->
+{#if expanded}
+  <div class="chart-overlay" use:bodyPortal>
+    <div class="chart-host is-expanded" bind:this={host}>
+      {@render chart()}
+    </div>
+  </div>
+{:else}
+  <div class="chart-host" bind:this={host}>
+    {@render chart()}
+  </div>
+{/if}
 
 <style>
   .chart-host {
     padding: 0 16px 4px;
     min-width: 0;
+  }
+  /* Above the picker modal's 9001. Opaque surface — a tint token would let the
+     chat show through (see the modal note in sr-design). */
+  .chart-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    background: var(--bg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .chart-host.is-expanded {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px 24px calc(24px + env(safe-area-inset-bottom));
+  }
+  .expand-btn {
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .expand-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-ghost);
   }
   .chart-head {
     display: flex;

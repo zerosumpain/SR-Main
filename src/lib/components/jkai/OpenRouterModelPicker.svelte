@@ -99,6 +99,9 @@
 
   let tab = $state<Tab>('list');
   let preset = $state<PresetId>('balanced');
+  // Owned here, not in the chart, so Escape collapses the expanded chart before
+  // it closes the whole picker.
+  let chartExpanded = $state(false);
   // The chart needs the whole filtered set, not the current page of 25.
   let chartRows = $state<ModelRow[]>([]);
   let chartLoading = $state(false);
@@ -346,7 +349,13 @@
   ];
 </script>
 
-<svelte:window onkeydown={(e) => { if (e.key === 'Escape') close(); }} />
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key !== 'Escape') return;
+    if (chartExpanded) chartExpanded = false;
+    else close();
+  }}
+/>
 
 <!-- Portaled to <body> so position:fixed anchors to the viewport and the overlay
      escapes any transformed / stacking-context ancestor in the chat. The PARENT
@@ -449,7 +458,7 @@
         class:active={tab === 'list'}
         role="tab"
         aria-selected={tab === 'list'}
-        onclick={() => (tab = 'list')}>List</button
+        onclick={() => { tab = 'list'; chartExpanded = false; }}>List</button
       >
       <button
         type="button"
@@ -481,7 +490,9 @@
           rows={chartRows}
           activeModelId={activeModelId}
           loading={chartLoading}
+          expanded={chartExpanded}
           onpick={pick}
+          onexpandchange={(v) => (chartExpanded = v)}
         />
       </div>
     {:else}
