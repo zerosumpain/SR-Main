@@ -65,6 +65,10 @@ const PUBLIC_PATHS = [
   // is the VPS reaching homeserv over Tailscale. Dropping the cookie gate here
   // does NOT make the data public; the bearer is the real gate.
   '/api/admin/hermes',
+  // Broads Speed Tracker — live map + stats, needs to be accessible from
+  // a WhatsApp link without signing in. API serves the dashboard data.
+  '/broads',
+  '/api/broads',
 ];
 
 export function isPublicPath(pathname: string): boolean {
