@@ -1,6 +1,7 @@
 <script lang="ts">
   import DraftsPanel from './DraftsPanel.svelte';
   import MetricsStrip from './MetricsStrip.svelte';
+  import ThroughputMeter from './ThroughputMeter.svelte';
 
   interface SpendByPeriod {
     day: number;
@@ -213,6 +214,7 @@
       {/each}
     </div>
     <div class="rail-spacer"></div>
+    <ThroughputMeter compact />
     <button class="rbtn" onclick={onToggleCollapse} title="Expand sidebar" aria-label="Expand sidebar">
       <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 5l5 5-5 5"/></svg>
     </button>
@@ -331,6 +333,7 @@
 
     <!-- Footer -->
     <div class="foot">
+      <ThroughputMeter />
       <MetricsStrip {metrics} {spendByPeriod} />
     </div>
   </div>
@@ -580,6 +583,7 @@
   /* footer */
   .foot {
     border-top: 1px solid var(--card-border); padding: 9px 12px;
+    display: flex; flex-direction: column; gap: 5px;
   }
 
   /* ---- collapsed rail ---- */
