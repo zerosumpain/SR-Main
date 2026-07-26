@@ -99,15 +99,26 @@
 
 <style>
   .drafts-panel {
-    padding: 0.5rem;
+    padding: 8px 12px;
     border-top: 1px solid var(--divider);
   }
+  /* Wears the thread rail's mono label uniform — it sits directly above the
+     Channels block and the two must read as one footer, not two widgets. */
   .title {
     background: none;
     border: none;
-    font: inherit;
     cursor: pointer;
-    padding: 0.25rem 0;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-ghost);
+    transition: color 0.2s ease-out;
+  }
+  .title:hover {
+    color: var(--accent);
   }
   .row {
     display: flex;

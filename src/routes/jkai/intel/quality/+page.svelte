@@ -8,7 +8,7 @@
   //      useless and act as magnets for anything the extractor was unsure about.
   //   3. Structural health — how much of the graph actually joins up.
 
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import type { DuplicateRow } from '$lib/components/intel/types';
   import { onMount } from 'svelte';
 
@@ -141,7 +141,7 @@
   const tinyTypes = $derived(types.filter((t) => t.count <= 2));
 </script>
 
-<PageHeader title="INTEL / QUALITY" />
+<JkaiPageTitle title="INTEL / QUALITY" />
 
 <div class="wrap">
   <p class="lede">

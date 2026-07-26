@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
   let { data } = $props();
 
@@ -8,7 +8,7 @@
   const propEntries = Object.entries(properties).filter(([, v]) => v != null && v !== '');
 </script>
 
-<PageHeader title="ENTITY" titleHref="/jkai/intel/entities" />
+<JkaiPageTitle title="ENTITY" titleHref="/jkai/intel/entities" />
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <!-- Header -->

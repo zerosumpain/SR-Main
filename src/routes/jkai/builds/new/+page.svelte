@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import ModelPicker from '$lib/components/jkai/ModelPicker.svelte';
   import type { ModelContext } from '$lib/server/models/types';
 
@@ -71,7 +71,7 @@
   <title>New Build — JKAI</title>
 </svelte:head>
 
-<PageHeader title="NEW BUILD" titleHref="/jkai/builds" />
+<JkaiPageTitle title="NEW BUILD" titleHref="/jkai/builds" />
 
 <div class="p-6 sm:p-10 max-w-2xl mx-auto">
   <form onsubmit={(e) => { e.preventDefault(); submit(); }}>

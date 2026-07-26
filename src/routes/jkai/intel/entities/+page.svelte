@@ -1,10 +1,10 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
   let { data } = $props();
 </script>
 
-<PageHeader title="ENTITIES" titleHref="/jkai/intel" />
+<JkaiPageTitle title="ENTITIES" titleHref="/jkai/intel" />
 
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <!-- Type Filter -->

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import type { KnowledgeHit, KnowledgeSource } from '$lib/knowledge/search';
 
   // Unified recall. Formerly two pages: /jkai/knowledge (files/research/memory/
@@ -71,7 +71,7 @@
 
 <svelte:head><title>Recall · Intel</title></svelte:head>
 
-<PageHeader title="RECALL" titleHref="/jkai/intel" />
+<JkaiPageTitle title="RECALL" titleHref="/jkai/intel" />
 
 <main class="kn">
   <p class="kn-sub">

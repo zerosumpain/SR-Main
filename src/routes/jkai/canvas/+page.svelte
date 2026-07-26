@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
   import { slugify } from '$lib/canvas/slug';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import type { CanvasSummary } from '$lib/canvas/adapter';
 
   let { data } = $props();
@@ -193,13 +193,13 @@
   <title>Canvases — JKAI</title>
 </svelte:head>
 
-<PageHeader title="Canvases">
+<JkaiPageTitle title="Canvases">
   {#snippet meta()}
     <span class="idx-head-meta">
       <span>{canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}</span>
     </span>
   {/snippet}
-</PageHeader>
+</JkaiPageTitle>
 
 <div class="wrap">
   <header class="page-hdr">

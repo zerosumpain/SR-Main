@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
-import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds } from '$lib/db/schema';
+import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
@@ -77,10 +77,20 @@ export const GET: RequestHandler = async ({ params }) => {
 		.orderBy(desc(jkaiBuilds.createdAt))
 		.limit(1);
 
+	// Context window of the pinned model — the header strip renders the last
+	// turn's prompt size against it as `N CTX %`. Null when the catalogue has no
+	// row for the model (self-hosted / just-added ids), and the chunk is dropped.
+	const [catalogue] = await db
+		.select({ contextLength: openrouterModels.contextLength })
+		.from(openrouterModels)
+		.where(eq(openrouterModels.id, pinnedModel.modelId))
+		.limit(1);
+
 	return json({
 		conversation: { ...conv, modelProvider: pinnedModel.provider, modelId: pinnedModel.modelId },
 		messages: messagesWithAttachments,
 		modelCapabilities: modelCaps,
+		modelContextLength: catalogue?.contextLength ?? null,
 		activeBuild: activeBuild ?? null,
 	});
 };

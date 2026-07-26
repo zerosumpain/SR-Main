@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
 
@@ -187,7 +187,7 @@
   });
 </script>
 
-<PageHeader title="GRAPH" titleHref="/jkai/intel" />
+<JkaiPageTitle title="GRAPH" titleHref="/jkai/intel" />
 
 <div class="p-6 sm:p-10 max-w-full mx-auto" style="height: calc(100vh - 60px); display: flex; flex-direction: column;">
   <div class="flex flex-wrap gap-2 mb-4 flex-shrink-0">

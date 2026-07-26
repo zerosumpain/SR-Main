@@ -9,6 +9,11 @@
 //
 // Deliberately quieter than the note path:
 //   - no recall/alert pass and no WhatsApp push (an upload is not an event)
+//
+// `chat` is the third source: a /jkai thread, re-extracted as it grows, so the
+// knowledge-graph rail beside the conversation can show the concepts and
+// failure modes the thread is actually about — and so those land in the same
+// graph everything else feeds.
 //   - content-hash deduped, so re-indexing an unchanged file costs nothing
 //   - text is capped, so one huge PDF can't turn into one huge LLM bill
 //   - every failure is swallowed and logged; ingest must never fail because
@@ -24,7 +29,7 @@ import { extractFromNote } from './extract';
 import { persistExtraction } from './graph';
 import { embedNote } from './embed';
 
-export type AutoKind = 'file' | 'research';
+export type AutoKind = 'file' | 'research' | 'chat';
 
 export interface AutoExtractInput {
   kind: AutoKind;

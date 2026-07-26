@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import { goto } from '$app/navigation';
 
   let title = $state('');
@@ -64,7 +64,7 @@
   }
 </script>
 
-<PageHeader title="NEW NOTE" titleHref="/jkai/intel/notes" />
+<JkaiPageTitle title="NEW NOTE" titleHref="/jkai/intel/notes" />
 
 <div class="p-6 sm:p-10 max-w-3xl mx-auto">
   <div class="space-y-4">

@@ -2,7 +2,7 @@
   import type { BriefingData } from '$lib/briefing/types';
   import { invalidateAll } from '$app/navigation';
   import ChatMarkdown from '$lib/canvas/ChatMarkdown.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
   let { data }: {
     data: { briefings: BriefingData[]; enabled: boolean; topics: string[]; running: boolean; schedule: { display: string } };
@@ -76,7 +76,7 @@
 
 <svelte:head><title>Briefing · JKAI</title></svelte:head>
 
-<PageHeader title="BRIEFING" />
+<JkaiPageTitle title="BRIEFING" />
 
 <main class="br">
   <div class="br-bar">

@@ -29,6 +29,11 @@
   import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
+  import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
+  import { shortModelLabel } from '$lib/jkai/model-label';
+  import { setThreadLedger, clearThreadLedger, setLiveRuns } from '$lib/jkai/hub-bus.svelte';
+  import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { untrack } from 'svelte';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
@@ -39,6 +44,7 @@
     conversationId,
     initialMessages = [],
     conversation = null,
+    modelContextLength = null,
     defaultChatModelId,
     altOpenRouterModel = null,
     messageCount = 0,
@@ -48,6 +54,9 @@
     activeBuild = null,
     approvalUi,
     hermesEnabled = false,
+    onToggleThreadRail,
+    onToggleGraphRail,
+    graphRailOpen = true,
   }: {
     conversationId: string | null;
     initialMessages?: Array<{
@@ -58,7 +67,16 @@
       source?: string;
       createdAt?: string;
     }>;
-    conversation?: { modelProvider?: string; modelId?: string } | null;
+    conversation?: {
+      modelProvider?: string;
+      modelId?: string;
+      title?: string | null;
+      costUsd?: string | number | null;
+      priceSnapshot?: { promptPrice: number; completionPrice: number } | null;
+    } | null;
+    /** Context window of the pinned model, for the header's `N CTX %` chunk.
+     *  Null when the OpenRouter catalogue has no row for it. */
+    modelContextLength?: number | null;
     defaultChatModelId: string;
     altOpenRouterModel?: ModelContext | null;
     messageCount?: number;
@@ -68,6 +86,11 @@
     activeBuild?: { id: string; status: string } | null;
     approvalUi?: import('$lib/server/models/settings').ApprovalUiSettings;
     hermesEnabled?: boolean;
+    /** Raise the thread rail's slide-over (below 1100px it is off-canvas). */
+    onToggleThreadRail?: () => void;
+    /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
+    onToggleGraphRail?: () => void;
+    graphRailOpen?: boolean;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -121,7 +144,7 @@
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
-    metadata?: { workflowGenerated?: boolean };
+    metadata?: { workflowGenerated?: boolean; usage?: TurnStamp };
     thinking?: OrchestratorThinking;
     isProgress?: boolean;
     progressSteps?: string[];
@@ -1104,7 +1127,7 @@
           fileRefs?: FileSearchRef[];
           researchRefs?: ResearchSearchRef[];
           workflowRefs?: WorkflowChipRef[];
-          usage?: { outputTokens?: number | null };
+          usage?: { outputTokens?: number | null; stamp?: TurnStamp };
         };
         // Settle the tok/s meter against the provider's own output-token count
         // (reasoning + tool-call tokens included) when the server reported one;
@@ -1116,7 +1139,9 @@
           id: progressId,
           role: 'assistant',
           content: finalContent,
-          metadata: { workflowGenerated: !!result.workflow },
+          // The priced per-turn stamp travels on `done` so the cost line appears
+          // under the reply immediately, not only after a reload.
+          metadata: { workflowGenerated: !!result.workflow, usage: result.usage?.stamp },
           thinking: result.thinking || undefined,
           isProgress: false,
           source: 'web',
@@ -1293,6 +1318,51 @@
     tick().then(() => textareaEl?.focus());
   }
 
+  // ── Composer chips ────────────────────────────────────────────────────────
+  // The `/ prompt` and `⌥ workflow` chips are affordances for the typeahead
+  // that already exists: they seed the trigger character and focus the input,
+  // so the same palette opens whether you click or type.
+  // The full prompt hint needs two lines at the phone's 16px input font (16px
+  // is required — anything smaller makes iOS zoom the viewport on focus), and a
+  // 48px field clips the second. Phones get the short form.
+  let isPhone = $state(false);
+  onMount(() => {
+    const mq = window.matchMedia('(max-width: 799px)');
+    const sync = () => { isPhone = mq.matches; };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  });
+  const composerPlaceholder = $derived(
+    isPhone ? 'Ask…' : 'Ask, or type / for prompts, ⌥ to fire a workflow…',
+  );
+
+  function insertSlash() {
+    paletteDismissed = false;
+    input = '/';
+    tick().then(() => textareaEl?.focus());
+  }
+  function insertWorkflowMention() {
+    mentionDismissed = false;
+    input = input.length === 0 || input.endsWith(' ') ? `${input}@` : `${input} @`;
+    tick().then(() => textareaEl?.focus());
+  }
+
+  /** Live cost estimate for the next turn: the context we would re-send priced
+   *  at the model's prompt rate, plus a nominal reply at its completion rate.
+   *  Uses the conversation's own price snapshot (USD per token), so it moves
+   *  when the model chip changes. Null when we have no snapshot to price with. */
+  const ASSUMED_REPLY_TOKENS = 600;
+  const estPerTurnUsd = $derived.by(() => {
+    const snap = conversation?.priceSnapshot;
+    if (!snap) return null;
+    const promptPrice = Number(snap.promptPrice);
+    const completionPrice = Number(snap.completionPrice);
+    if (!Number.isFinite(promptPrice) || !Number.isFinite(completionPrice)) return null;
+    const ctx = contextTokens ?? 0;
+    return ctx * promptPrice + ASSUMED_REPLY_TOKENS * completionPrice;
+  });
+
   // ── @files references ───────────────────────────────────────────────────────
   // file_search hits render as clickable "sources" chips → open the file viewer at
   // the cited passage. Refs are attached to the assistant message server-side
@@ -1374,9 +1444,50 @@
     provider: (conversation?.modelProvider as ModelContext['provider']) ?? 'openrouter',
     modelId: conversation?.modelId ?? siteDefaultModelId,
   });
-  function shortModelLabel(id: string): string {
-    return id.includes('/') ? id.slice(id.lastIndexOf('/') + 1) : id;
-  }
+  // ── Thread ledger ─────────────────────────────────────────────────────────
+  // The thread header's `MODEL / N TURNS / N TOK / £COST` line, and the same
+  // numbers published to the hub header's token strip. Tokens and cost are
+  // summed from the per-turn stamps in the loaded history, so they agree with
+  // the per-reply cost lines rather than drifting from a separate total.
+  const turnStamps = $derived(
+    messages
+      .map((m) => m.metadata?.usage ?? readTurnStamp(m.metadata))
+      .filter((s): s is TurnStamp => s !== null),
+  );
+  const threadTurns = $derived(messages.filter((m) => m.role === 'assistant' && !m.isProgress).length);
+  const threadTokens = $derived(
+    turnStamps.reduce((sum, s) => sum + s.inputTokens + s.outputTokens, 0),
+  );
+  const threadCostUsd = $derived(
+    turnStamps.length > 0
+      ? turnStamps.reduce((sum, s) => sum + s.costUsd, 0)
+      : Number(conversation?.costUsd ?? 0),
+  );
+  // Context occupancy = the prompt size of the most recent turn. That IS what
+  // the model is currently carrying; summing every turn would double-count the
+  // history each turn re-sends.
+  const contextTokens = $derived(
+    turnStamps.length > 0 ? turnStamps[turnStamps.length - 1].inputTokens : null,
+  );
+  const threadTitle = $derived(conversation?.title?.trim() || 'new thread');
+
+  $effect(() => {
+    // Tracked reads only — the ledger numbers. The write is untracked so the
+    // shared store's proxy can't re-trigger this effect.
+    const next = {
+      contextTokens,
+      contextFraction:
+        contextTokens !== null && modelContextLength && modelContextLength > 0
+          ? contextTokens / modelContextLength
+          : null,
+      threadCostUsd,
+      turns: threadTurns,
+      modelId: currentModel.modelId,
+    };
+    untrack(() => setThreadLedger(next));
+  });
+
+  onMount(() => () => clearThreadLedger());
   // Always show the model that will actually answer (the conversation's pin,
   // falling back to the site default) — "Click to select" hid the effective
   // model and made the pill look broken.
@@ -1772,88 +1883,51 @@
   {/if}
 {/snippet}
 
-<div class="flex flex-col h-full relative">
-  <!-- Chat header -->
-  <div class="px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-2 flex-wrap" style="border-color: var(--card-border);">
-    <div class="flex items-center gap-2 min-w-0 flex-1">
-      <p class="text-[11px] hidden sm:block" style="color: var(--text-ghost);">
-        {#if !conversationId}
-          Select or start a conversation
-        {:else}
-          Chat with the orchestrator — ask anything, build workflows, control your home
+<div class="chat-col">
+  <!-- Thread header: title, then the thread's own ledger line. -->
+  <div class="thread-hdr">
+    <div class="th-left">
+      <div class="th-title">
+        {#if onToggleThreadRail}
+          <button type="button" class="th-rail-btn" onclick={onToggleThreadRail} aria-label="Threads">≡</button>
         {/if}
-      </p>
-    </div>
-    {#if hermesEnabled && conversationId}
-      <div class="model-switcher skill-switcher">
-        <button
-          type="button"
-          class="model-btn"
-          onclick={() => (skillMenuOpen = !skillMenuOpen)}
-          disabled={loading}
-          title="Pin a domain skill for this chat (or Auto-route)"
-        >
-          <span class="skill-glyph" aria-hidden="true">◈</span>
-          <span class="model-name">{pinnedSkillLabel}</span>
-          <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
-        </button>
-        {#if skillMenuOpen}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
-          <div class="model-menu" role="listbox" aria-label="Pin a skill">
-            {#each SKILL_OPTIONS as opt (opt.label)}
-              <button
-                type="button"
-                role="option"
-                aria-selected={opt.value === pinnedSkill}
-                class="model-opt"
-                class:active={opt.value === pinnedSkill}
-                onclick={() => { pinnedSkill = opt.value; skillMenuOpen = false; }}
-              >
-                <span class="model-opt-name">{opt.label}</span>
-                {#if opt.value === null}<span class="model-opt-provider">auto-route</span>{/if}
-              </button>
-            {/each}
-          </div>
-        {/if}
+        <span class="th-mark" aria-hidden="true">&gt;</span>{conversationId ? threadTitle : 'no thread'}
       </div>
-      <div class="model-switcher">
-        {#if messages.length === 0}
+      {#if conversationId}
+        <div class="th-meta">
+          <span>{shortModelLabel(currentModel.modelId)}</span>
+          <span class="th-sep" aria-hidden="true">/</span>
+          <span>{threadTurns} {threadTurns === 1 ? 'turn' : 'turns'}</span>
+          {#if threadTokens > 0}
+            <span class="th-sep" aria-hidden="true">/</span>
+            <span>{threadTokens >= 1000 ? `${(threadTokens / 1000).toFixed(1)}K` : threadTokens} tok</span>
+          {/if}
+          <span class="th-sep" aria-hidden="true">/</span>
+          <span class="th-cost">{formatGbp(threadCostUsd)}</span>
+        </div>
+      {/if}
+    </div>
+    <div class="th-actions">
+      {#if conversationId}
+        {#if onToggleGraphRail}
           <button
             type="button"
-            class="model-btn"
-            onclick={() => (modelPickerOpen = true)}
-            disabled={loading}
-            title="Model for this conversation — locks after the first message"
+            class="th-chip th-graph-btn"
+            class:on={graphRailOpen}
+            onclick={onToggleGraphRail}
+            title="Knowledge graph for this thread"
           >
-            <span class="model-dot"></span>
-            <span class="model-name">{modelTriggerLabel}</span>
-            {#if modelIsDefault}<span class="model-tag">default</span>{/if}
-            <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+            ◆ graph
           </button>
-          {#if modelPickerOpen}
-            <OpenRouterModelPicker
-              current={currentModel}
-              defaultModelId={siteDefaultModelId}
-              altModel={altOpenRouterModel}
-              onselect={(ctx) => { modelPickedByUser = true; switchModel(ctx.provider, ctx.modelId); }}
-              onsitedefaultchange={(modelId) => (siteDefaultModelId = modelId)}
-              onclose={() => (modelPickerOpen = false)}
-            />
-          {/if}
-        {:else}
-          <span class="model-label" title="Model — locked after the first message">
-            <span class="model-dot"></span>
-            <span class="model-name">{shortModelLabel(currentModel.modelId)}</span>
-          </span>
         {/if}
-      </div>
-    {/if}
+        <a class="th-chip" href="/jkai/canvas" title="Open the workflow canvas">→ canvas</a>
+      {/if}
+    </div>
   </div>
 
+
   <!-- Messages -->
-  <div bind:this={chatContainer} class="flex-1 overflow-y-auto p-2 sm:p-4">
+  <div bind:this={chatContainer} class="msg-list">
     {#if !conversationId}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm" style="color: var(--text-ghost);">
@@ -1888,7 +1962,7 @@
         </div>
       </div>
     {:else}
-      <div class="max-w-3xl mx-auto">
+      <div class="msg-stack">
         {#each messages as msg, msgIndex (msg.id)}
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
@@ -2265,8 +2339,7 @@
   {#if conversationId}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="p-2 sm:p-4 border-t relative"
-      style="border-color: var(--card-border); padding-bottom: max(1.25rem, env(safe-area-inset-bottom));"
+      class="composer"
       ondragenter={(e) => { e.preventDefault(); dragOver = true; }}
       ondragover={(e) => e.preventDefault()}
       ondragleave={() => { dragOver = false; }}
@@ -2277,7 +2350,7 @@
           Drop files to attach
         </div>
       {/if}
-      <div class="max-w-3xl mx-auto relative">
+      <div class="composer-inner">
         {#if paletteOpen}
           <div class="cmd-palette" role="listbox" aria-label="Slash commands">
             {#each paletteMatches as cmd, i (cmd.command)}
@@ -2322,18 +2395,99 @@
           </div>
         {/if}
         <ComposerAttachmentTray items={pendingAttachments} onRemove={removeAttachment} />
-        <div class="flex gap-2 items-end">
+
+        <!-- Chip row: model, prompt, workflow, attach, voice — then a live
+             per-turn cost estimate pushed to the right. -->
+        <div class="chip-row">
+          {#if hermesEnabled && conversationId}
+            <div class="model-switcher skill-switcher">
+              <button
+                type="button"
+                class="model-btn"
+                onclick={() => (skillMenuOpen = !skillMenuOpen)}
+                disabled={loading}
+                title="Pin a domain skill for this chat (or Auto-route)"
+              >
+                <span class="skill-glyph" aria-hidden="true">◈</span>
+                <span class="model-name">{pinnedSkillLabel}</span>
+                <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {#if skillMenuOpen}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div class="model-backdrop" onclick={() => (skillMenuOpen = false)}></div>
+                <div class="model-menu" role="listbox" aria-label="Pin a skill">
+                  {#each SKILL_OPTIONS as opt (opt.label)}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={opt.value === pinnedSkill}
+                      class="model-opt"
+                      class:active={opt.value === pinnedSkill}
+                      onclick={() => { pinnedSkill = opt.value; skillMenuOpen = false; }}
+                    >
+                      <span class="model-opt-name">{opt.label}</span>
+                      {#if opt.value === null}<span class="model-opt-provider">auto-route</span>{/if}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            <div class="model-switcher">
+              {#if messages.length === 0}
+                <button
+                  type="button"
+                  class="model-btn"
+                  onclick={() => (modelPickerOpen = true)}
+                  disabled={loading}
+                  title="Model for this conversation — locks after the first message"
+                >
+                  <span class="model-dot"></span>
+                  <span class="model-name">{modelTriggerLabel}</span>
+                  {#if modelIsDefault}<span class="model-tag">default</span>{/if}
+                  <svg class="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                </button>
+                {#if modelPickerOpen}
+                  <OpenRouterModelPicker
+                    current={currentModel}
+                    defaultModelId={siteDefaultModelId}
+                    altModel={altOpenRouterModel}
+                    onselect={(ctx) => { modelPickedByUser = true; switchModel(ctx.provider, ctx.modelId); }}
+                    onsitedefaultchange={(modelId) => (siteDefaultModelId = modelId)}
+                    onclose={() => (modelPickerOpen = false)}
+                  />
+                {/if}
+              {:else}
+                <span class="model-label" title="Model — locked after the first message">
+                  <span class="model-dot"></span>
+                  <span class="model-name">{shortModelLabel(currentModel.modelId)}</span>
+                </span>
+              {/if}
+            </div>
+          {/if}
+          <button type="button" class="composer-chip" onclick={insertSlash} title="Insert a saved prompt">
+            <span class="chip-glyph" aria-hidden="true">/</span><span class="chip-word">prompt</span>
+          </button>
+          <button type="button" class="composer-chip" onclick={insertWorkflowMention} title="Fire a workflow">
+            <span class="chip-glyph" aria-hidden="true">⌥</span><span class="chip-word">workflow</span>
+          </button>
           <button
             type="button"
+            class="composer-chip"
             onclick={() => fileInputEl?.click()}
-            aria-label="Attach file"
-            class="p-2 opacity-60 hover:opacity-100 shrink-0 self-end"
-            title="Attach file"
+            title="Attach an image or document"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-            </svg>
+            <span class="chip-glyph" aria-hidden="true">+</span><span class="chip-word">file</span>
           </button>
+          <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
+          {#if estPerTurnUsd !== null}
+            <span class="chip-est" title="Estimated cost of the next turn at this model and context size">
+              est. {formatGbp(estPerTurnUsd)} / turn
+            </span>
+          {/if}
+        </div>
+
+        <div class="composer-input-row">
           <input bind:this={fileInputEl} type="file" class="hidden" multiple accept={acceptAttrForCaps()} onchange={onFilePick} />
           <textarea
             bind:this={textareaEl}
@@ -2341,31 +2495,28 @@
             onkeydown={handleKeydown}
             oninput={onComposerInput}
             onpaste={onPaste}
-            placeholder="Ask anything..."
+            placeholder={composerPlaceholder}
             disabled={loading}
-            class="nm-text-input composer-textarea flex-1"
+            class="composer-textarea"
             rows="1"
           ></textarea>
-          <VoiceRecorder onRecorded={handleVoiceBlob} disabled={modelCapabilities != null && !modelCapabilities.audio} />
           <button
             type="button"
             onclick={openLauncher}
-            class="composer-launch self-end"
+            class="composer-launch"
             title="JKAI launcher (⌘K)"
             aria-label="Open JKAI launcher"
           >
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <rect x="2" y="2" width="6" height="6" rx="1" /><rect x="12" y="2" width="6" height="6" rx="1" />
-              <rect x="2" y="12" width="6" height="6" rx="1" /><rect x="12" y="12" width="6" height="6" rx="1" />
-            </svg>
+            ⌘K
           </button>
           <button
             type="button"
             onclick={send}
             disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
-            class="nm-save-btn composer-send self-end"
+            class="composer-send"
+            aria-label="Send"
           >
-            Send
+            ▸
           </button>
         </div>
       </div>
@@ -2392,6 +2543,221 @@
 </div>
 
 <style>
+  /* ── Conversation column ─────────────────────────────────────────────── */
+  .chat-col {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+  }
+
+  /* Thread header — title, ledger line, actions. */
+  .thread-hdr {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .th-left {
+    min-width: 0;
+  }
+  .th-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45ch;
+    font-family: var(--font-brand);
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .th-mark {
+    color: var(--accent);
+    opacity: 0.7;
+  }
+  .th-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .th-sep {
+    opacity: 0.4;
+  }
+  .th-cost {
+    color: var(--accent);
+  }
+  .th-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+  }
+  .th-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease-out, border-color 0.2s ease-out;
+  }
+  .th-chip:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+  .th-graph-btn {
+    background: transparent;
+    cursor: pointer;
+  }
+  .th-graph-btn.on {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-08);
+  }
+  /* The graph toggle only means anything once the rail is collapsible. */
+  @media (min-width: 1280px) {
+    .th-graph-btn {
+      display: none;
+    }
+  }
+  /* Thread-rail raise button appears only when the rail is off-canvas. */
+  .th-rail-btn {
+    display: none;
+    background: none;
+    border: none;
+    padding: 0 8px 0 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .th-rail-btn:hover {
+    color: var(--accent);
+  }
+  @media (max-width: 1099px) {
+    .th-rail-btn {
+      display: inline;
+    }
+  }
+
+  /* Message list — the only scrolling region in the column. */
+  .msg-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 20px;
+  }
+  .msg-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ── Composer ─────────────────────────────────────────────────────────── */
+  .composer {
+    position: relative;
+    flex: none;
+    border-top: 1px solid var(--divider);
+    background: var(--bg);
+    padding: 10px 20px 14px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .composer-inner {
+    position: relative;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .chip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+    flex-wrap: wrap;
+  }
+  .composer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease-out, border-color 0.2s ease-out;
+  }
+  .composer-chip:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+  .chip-glyph {
+    color: var(--accent);
+  }
+  .chip-est {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    white-space: nowrap;
+  }
+
+  .composer-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .composer-textarea {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    padding: 11px 13px;
+    border: 2px solid var(--card-border);
+    border-radius: 0;
+    background: var(--card-bg);
+    font-family: var(--font-body);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    resize: none;
+  }
+  .composer-textarea::placeholder {
+    color: var(--text-ghost);
+  }
+  .composer-textarea:focus {
+    outline: none;
+    border-color: var(--accent-tint-35);
+  }
+
   /* Wrap div for the second heartbeat-line render site — kept as a hook
    * for potential future spacing/positioning tweaks; the line itself
    * styles its own margins. */
@@ -3115,46 +3481,98 @@
     margin-bottom: 1px;
   }
 
-  /* Composer textarea + send — scoped sizing on top of .nm-text-input / .nm-save-btn */
+  /* Composer send + palette trigger. Send is the one solid-accent control on
+     the surface, so it reads as the primary action without a shadow or a
+     radius doing the work. */
   .composer-textarea {
-    font-family: var(--font-body);
-    font-size: 13px;
-    min-height: 44px;
     max-height: 160px;
-    padding: 9px 12px;
-    resize: none;
   }
   .composer-send {
-    padding: 10px 16px;
-    font-size: 11px;
-    letter-spacing: 0.14em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.2s ease-out;
   }
-  /* Command-palette trigger, docked beside Send. Was a floating bottom-left
-     button in the /jkai layout, where it covered the sidebar run-stats. */
+  .composer-send:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .composer-send:disabled {
+    background: var(--card-border);
+    color: var(--text-ghost);
+    cursor: not-allowed;
+  }
   .composer-launch {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
-    flex-shrink: 0;
+    height: 44px;
+    padding: 0 9px;
+    flex: none;
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--card-border);
-    border-radius: 4px;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.12s, color 0.12s;
+    transition: color 0.2s ease-out, border-color 0.2s ease-out;
   }
   .composer-launch:hover {
-    opacity: 1;
-    color: var(--accent-ink, var(--accent, #c4570a));
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
   }
-  @media (max-width: 480px) {
-    /* Mobile: prevent iOS zoom on focus + tighten chrome around the textarea */
-    .composer-textarea { font-size: 16px; padding: 8px 10px; }
-    .composer-send { padding: 9px 12px; letter-spacing: 0.08em; }
-    .composer-launch { width: 34px; height: 34px; }
+
+  /* ── Phone (2a) ───────────────────────────────────────────────────────── */
+  @media (max-width: 799px) {
+    .thread-hdr {
+      padding: 10px 16px;
+    }
+    .msg-list {
+      padding: 12px 16px;
+    }
+    .th-chip {
+      display: none;
+    }
+    /* Chips reduce to glyphs and the row scrolls rather than wrapping. */
+    .chip-row {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .chip-row::-webkit-scrollbar {
+      display: none;
+    }
+    .composer-chip {
+      height: 32px;
+      flex: none;
+    }
+    .chip-word {
+      display: none;
+    }
+    .composer-launch {
+      display: none;
+    }
+    .composer-textarea {
+      min-height: 48px;
+      /* 16px keeps iOS from zooming the viewport on focus. */
+      font-size: 16px;
+    }
+    .composer-send {
+      width: 48px;
+      height: 48px;
+    }
   }
 
 </style>

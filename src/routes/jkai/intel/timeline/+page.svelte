@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
+  import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
 
   let { data } = $props();
 
@@ -25,7 +25,7 @@
   const grouped = $derived(groupByMonth(data.events));
 </script>
 
-<PageHeader title="TIMELINE" titleHref="/jkai/intel" />
+<JkaiPageTitle title="TIMELINE" titleHref="/jkai/intel" />
 
 <div class="p-6 sm:p-10 max-w-4xl mx-auto">
   <div class="flex flex-wrap gap-2 mb-6">
