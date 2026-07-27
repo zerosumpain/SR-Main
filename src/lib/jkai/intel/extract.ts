@@ -1,5 +1,6 @@
+import type OpenAI from 'openai';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveExtractionModel } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
 import { eq, isNull, sql } from 'drizzle-orm';
@@ -173,12 +174,19 @@ Rules:
 - Dates should be ISO format. If only a relative date is given (e.g. "next Thursday"), calculate from today's date provided in the prompt
 - Return ONLY the JSON object, no markdown fences or commentary`;
 
+/** A chat body plus OpenRouter's non-standard `provider` routing preference.
+ *  Pinned to the NON-streaming params so the overload still resolves to a
+ *  ChatCompletion rather than the streaming union. */
+type OpenRouterChatBody = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+  provider?: { sort?: 'throughput' | 'price' | 'latency' };
+};
+
 export async function extractFromNote(
   noteText: string,
   noteFormat: string,
 ): Promise<ExtractionResult> {
   const context = await buildExtractionContext(noteText);
-  const modelCtx = await resolveDefaultModel('builder');
+  const modelCtx = await resolveExtractionModel();
   const { client, model } = await getLLMClient(modelCtx);
 
   const today = new Date().toISOString().split('T')[0];
@@ -204,7 +212,17 @@ ${noteText}
 Extract all entities, relationships, timeline events, and any proposed new types from this note.`,
       },
     ],
-  });
+    // OpenRouter routes to the cheapest endpoint by default; this asks for the
+    // fastest one instead. Measured over 4 trials on the same note: default
+    // routing 0.4–0.9s (CoreWeave/Google), throughput-sorted 0.2–0.4s
+    // (consistently Cerebras), same extraction quality. Applied ONLY here — ER
+    // is the one call a user waits on without seeing any output.
+    //
+    // `provider` is an OpenRouter extension the OpenAI SDK does not type, so the
+    // body is widened rather than the whole argument cast to `any` — a blanket
+    // cast would also stop the compiler checking `messages` and `model`.
+    provider: { sort: 'throughput' },
+  } as OpenRouterChatBody);
 
   const raw = response.choices[0]?.message?.content ?? '{}';
   const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();

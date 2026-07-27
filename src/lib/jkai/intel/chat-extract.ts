@@ -14,7 +14,8 @@ import { db } from '$lib/db';
 import { orchestratorChats } from '$lib/db/schema';
 import { asc, eq } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
-import { queueIntelExtraction } from './auto-extract';
+import { extractIntoIntel } from './auto-extract';
+import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
 
 /** Assistant-turn counts at which we re-extract: the 2nd turn, then every 4th.
  *  A one-turn thread rarely has a graph worth drawing; by the second there is
@@ -40,6 +41,7 @@ export async function maybeExtractThreadConcepts(
   conversationId: string,
   title: string | null,
 ): Promise<void> {
+  let entityCount = 0;
   try {
     const rows = await db
       .select({
@@ -62,17 +64,32 @@ export async function maybeExtractThreadConcepts(
       transcript = transcript.slice(-MAX_TRANSCRIPT_CHARS);
     }
 
-    queueIntelExtraction({
-      kind: 'chat',
-      refId: conversationId,
-      title: title?.trim() || 'jkai thread',
-      text: transcript,
-      contentHash: createHash('sha256').update(transcript).digest('hex'),
-      metadata: { conversationId, assistantTurns },
-    });
+    // Signalled rather than fire-and-forgotten. Extraction is an LLM call that
+    // takes tens of seconds, and until it lands the reply the user is already
+    // reading has no entity links and the graph rail is stale. Telling the open
+    // thread when it starts and finishes is what lets the UI fill itself in
+    // instead of waiting for a page reload — see ChatArea's `intel` handler.
+    publishConversationSignal(conversationId, { type: 'intel', phase: 'running' });
+
+    // `done` fires in a finally: a thread that opened the indicator and never
+    // closed it would sit saying "linking…" for the rest of the session, which
+    // is a worse failure than no indicator at all.
+    try {
+      const outcome = await extractIntoIntel({
+        kind: 'chat',
+        refId: conversationId,
+        title: title?.trim() || 'jkai thread',
+        text: transcript,
+        contentHash: createHash('sha256').update(transcript).digest('hex'),
+        metadata: { conversationId, assistantTurns },
+      });
+      entityCount = outcome.status === 'extracted' ? outcome.entityCount : 0;
+    } finally {
+      publishConversationSignal(conversationId, { type: 'intel', phase: 'done', entityCount });
+    }
   } catch (err) {
     console.error(
-      '[intel:chat] failed to queue thread extraction:',
+      '[intel:chat] thread extraction failed:',
       err instanceof Error ? err.message : err,
     );
   }

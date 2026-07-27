@@ -34,7 +34,29 @@ export interface FollowUp {
 }
 
 // --- SSE subscriber registry ---
-type SSECallback = (conversationId: string, message: { role: string; content: string; source: string }) => void;
+//
+// The channel carries two shapes. A MESSAGE frame becomes a chat bubble on the
+// client, which is what follow-ups and heartbeat replies push. A SIGNAL frame
+// carries a `type` and is not a message at all — the client branches on it and
+// updates existing UI in place. The `connected` ack the endpoint sends on open
+// was already a signal in all but name; this gives the pattern a type.
+export interface ConversationMessageFrame {
+  role: string;
+  content: string;
+  source: string;
+}
+
+/** Intel extraction changed state for this thread. `done` carries how many
+ *  entities the pass produced so the client can skip a pointless refetch. */
+export interface IntelSignalFrame {
+  type: 'intel';
+  phase: 'running' | 'done';
+  entityCount?: number;
+}
+
+export type ConversationFrame = ConversationMessageFrame | IntelSignalFrame;
+
+type SSECallback = (conversationId: string, frame: ConversationFrame) => void;
 const sseSubscribers = new Map<string, Set<SSECallback>>();
 
 export function subscribeToConversation(conversationId: string, cb: SSECallback): () => void {
@@ -50,13 +72,23 @@ export function subscribeToConversation(conversationId: string, cb: SSECallback)
   };
 }
 
-export function notifySubscribers(conversationId: string, message: { role: string; content: string; source: string }) {
+function publish(conversationId: string, frame: ConversationFrame) {
   const subs = sseSubscribers.get(conversationId);
   if (subs) {
     for (const cb of subs) {
-      try { cb(conversationId, message); } catch {}
+      try { cb(conversationId, frame); } catch {}
     }
   }
+}
+
+export function notifySubscribers(conversationId: string, message: ConversationMessageFrame) {
+  publish(conversationId, message);
+}
+
+/** Push a non-message signal (see IntelSignalFrame). Safe to call from a
+ *  fire-and-forget path: no subscriber simply means nobody has the thread open. */
+export function publishConversationSignal(conversationId: string, frame: IntelSignalFrame) {
+  publish(conversationId, frame);
 }
 
 // --- Follow-up queue ---

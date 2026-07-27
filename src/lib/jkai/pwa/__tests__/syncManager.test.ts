@@ -8,6 +8,25 @@ import { putConversation, listConversations, listBuilds } from '../db';
 
 beforeEach(() => indexedDB.deleteDatabase(JKAI_DB_NAME));
 
+describe('outbox ordering', () => {
+	it('flushes in enqueue order even when queued within one millisecond', async () => {
+		// Regression: createdAt was Date.now() at millisecond resolution, so a
+		// burst of messages shared an index key and IndexedDB fell back to
+		// primary-key (random uuid) order. This failed on CI, where the enqueues
+		// are fast enough to collide, while passing on a slower machine.
+		const sent = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+		for (const body of sent) await enqueueMessage('c1', body);
+
+		const queued = (await listOutbox()).map((r) => (r.payload as { body: string }).body);
+		expect(queued).toEqual(sent);
+
+		const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: 'm' }) });
+		await flushOutbox({ fetchImpl: fetchMock });
+		const flushed = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body).message);
+		expect(flushed).toEqual(sent);
+	});
+});
+
 describe('flushOutbox', () => {
 	it('sends each entry and deletes on success', async () => {
 		await enqueueMessage('c1', 'one');

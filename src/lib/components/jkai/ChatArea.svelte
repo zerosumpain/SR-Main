@@ -514,6 +514,12 @@
   // resolves to an empty list — chat must work with no intel graph at all.
   let entityMentions = $state<MentionTarget[]>([]);
 
+  /** Intel extraction is in flight for this thread (SSE `intel` signal). Drives
+   *  the quiet footer line — ER takes tens of seconds and silently produces the
+   *  entity links and the graph rail, so without this it reads as nothing
+   *  happening followed by the page mysteriously changing. */
+  let intelRunning = $state(false);
+
   onMount(() => {
     // `/jkai?ask=…` prefills the composer. This is how the Intel dashboard
     // commissions a question: it hands over a prompt already loaded with what
@@ -815,6 +821,23 @@
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'connected') return; // ignore connection ack
+
+        // Intel extraction changed state. Not a message — it updates UI that is
+        // already on screen. On `done` the mention index is refetched so replies
+        // the user is ALREADY reading gain their entity links (the index was
+        // previously fetched once per page load, so they never did until a
+        // reload), and the graph rail is told to redraw immediately rather than
+        // waiting out its own backoff.
+        if (data.type === 'intel') {
+          intelRunning = data.phase === 'running';
+          if (data.phase === 'done') {
+            void fetchMentionIndex({ refresh: true }).then((list) => {
+              entityMentions = list;
+            });
+            bumpGraphRevision();
+          }
+          return;
+        }
 
         const newMsg: Message = {
           id: crypto.randomUUID(),
@@ -2440,6 +2463,12 @@
             </div>
           {/if}
         {/each}
+        {#if intelRunning}
+          <div class="intel-working" role="status" aria-live="polite">
+            <span class="iw-dot" aria-hidden="true"></span>
+            <span>linking entities…</span>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -2832,6 +2861,35 @@
   .msg-stack > .msg-slot.user-turn {
     grid-column: 2 / -1;
     justify-self: end;
+  }
+
+  /* Extraction-in-flight footer. Deliberately the quietest thing in the stack:
+     it is background work the user did not ask for and cannot hurry. */
+  .intel-working {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+  }
+  .iw-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: var(--radius-round);
+    background: var(--accent-ink);
+    animation: iw-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes iw-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .iw-dot { animation: none; }
   }
 
   /* ── Composer ─────────────────────────────────────────────────────────── */

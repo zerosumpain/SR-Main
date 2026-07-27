@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
 import {
   DEFAULT_CHAT_MODEL_ID,
+  DEFAULT_EXTRACTION_MODEL_ID,
   coerceModelContext,
 } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
@@ -55,6 +56,25 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 export async function resolveDefaultModel(_kind: 'chat' | 'builder' = 'chat'): Promise<ModelContext> {
   const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.chat.default_model');
   return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_CHAT_MODEL_ID });
+}
+
+/**
+ * The model for intel entity extraction and resolution — the single deliberate
+ * exception to the one-default rule above (John, 2026-07-27).
+ *
+ * Used by exactly two call sites, both on the post-reply ER path:
+ * `intel/extract.ts` (extract entities from a note) and `intel/graph.ts`
+ * (resolve/dedupe them). Everything else, including the vision OCR in
+ * `intel/preprocess.ts`, still resolves the site default — gpt-oss-120b is
+ * text-only, so switching OCR to it would break handwriting transcription.
+ *
+ * Exists because ER is latency-visible in a way no other background call is:
+ * until it lands, a delivered reply is missing its entity links. See
+ * DEFAULT_EXTRACTION_MODEL_ID for why this model.
+ */
+export async function resolveExtractionModel(): Promise<ModelContext> {
+  const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.intel.extract_model');
+  return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_EXTRACTION_MODEL_ID });
 }
 
 /**
