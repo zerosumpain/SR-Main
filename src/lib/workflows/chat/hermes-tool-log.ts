@@ -5,13 +5,22 @@
 //
 //   ⚙️ mcp_jkai_recall_memories: "david foley"
 //   ⚙️ mcp_jkai_jkai_extended: "workflow_inspect" (×2)
-//   ⚙️ mcp_jkai_ha_get_history...
+//   🔍 web_search: "House of Lords members salary allowan..."
+//   📄 web_extract: "https://www.parliament.uk/business/lo..."
 //
 // That is machinery leaking into the answer: a namespaced MCP identifier, a raw
 // argument, and a repeat count. The thread already has a proper home for tool
 // activity — the CATEGORY-chipped step cards fed by `tool-summary.ts` — so this
 // module's job is only to make the *prose* copy readable: same line, same rough
 // length, said in English.
+//
+// **The leading glyph is per-tool, not always ⚙️.** Hermes resolves it with
+// `get_tool_emoji(tool, default="⚙️")` (gateway/run.py), which reads the tool
+// registry's own `emoji` field first. Only tools with no registered emoji — every
+// `mcp_jkai_*` tool, because they arrive over MCP — fall back to ⚙️. Hermes' own
+// native tools each carry their own: 🔍 web_search, 📄 web_extract, 🐍
+// execute_code, 💻 terminal, 🔀 delegate_task, 📚 skill_view, … So matching on
+// ⚙️ alone covers the MCP half of the log and silently misses the native half.
 //
 // It is a pure string transform over the raw message text, applied before the
 // markdown parse, so it fixes live streaming and stored history alike with no
@@ -34,13 +43,68 @@ export interface HermesToolLogEntry {
 }
 
 /**
+ * The glyphs Hermes puts in front of a *tool* entry — an explicit allowlist of
+ * the `emoji=` values registered across its tool modules, plus ⚙️/⚡, the two
+ * hardcoded fallbacks for tools that register none (which is every MCP tool).
+ *
+ * An allowlist rather than "any emoji" because the assistant's own prose is full
+ * of glyph-then-word-then-colon shapes that must survive untouched. Real examples
+ * from production replies: `✅ Corrected:`, `🥇 WINNER:`, `→ recommendation:`,
+ * `— kicker:`. Matching any leading glyph would rewrite those into "Ran
+ * Corrected". The same reasoning keeps Hermes' status glyphs out: `⏳ Working —
+ * 12 min` and `⏱️ Agent inactive…` are already plain English and are deliberately
+ * left alone.
+ */
+const TOOL_GLYPHS = [
+  '⚙', '⚡',                                             // fallbacks (all MCP tools, unregistered tools)
+  '🔍', '📄', '🔎', '🐦',                                 // search + extract
+  '🐍', '💻', '🔧', '📖', '✍', '📚', '📝',                 // code, shell, files, skills
+  '🌐', '📸', '🖥', '👆', '📜', '🖼', '◀', '⌨', '👁', '🧪', // browser
+  '🔀', '🧠', '🏠', '⏰', '📨', '💬', '📋', '❓',            // delegation, memory, HA, cron, messaging
+  '🔊', '🎬', '🎨', '🔗', '➕', '💓',                       // media + kanban
+];
+
+/** `(?:🔍|📄|…)` plus an optional variation selector, e.g. the ️ in `⚙️`. */
+const GLYPH_ALT = `(?:${TOOL_GLYPHS.map((g) => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\uFE0F?`;
+
+/**
  * Match one log entry. Deliberately strict about the separator: the tool name
  * must be followed by an ellipsis or a colon before we claim a match, so a
  * half-streamed `⚙️ mcp_jkai_recall_mem` is left alone until it completes
  * rather than being rewritten and then rewritten again.
+ *
+ * The quoted-argument branch closes on the **last** quote of the line, not the
+ * first. Search queries routinely contain their own quotes — Hermes logs
+ * `🔍 web_search: ""House of Lords" benefits pension fre..."` — and stopping at
+ * the first inner quote captured an empty argument and spilled the remainder of
+ * the query into the reply as loose prose. Greedy-to-end-of-line then backtrack
+ * is what makes the phrase quoting survive.
  */
-const ENTRY_RE =
-  /⚙️?[ \t]*([A-Za-z0-9_-]+)(?:(?:\.{3}|…)|[ \t]*:[ \t]*(?:["“”']([^"“”'\n]*)["“”']|([^\n(]+?)))[ \t]*(?:\(×(\d+)\))?/g;
+const ENTRY_RE = new RegExp(
+  `${GLYPH_ALT}[ \\t]*([A-Za-z0-9_]+)` +
+    `(?:(?:\\.{3}|…)|[ \\t]*:[ \\t]*(?:["“”'](.*)["“”']|([^\\n(]+?)))` +
+    `[ \\t]*(?:\\(×(\\d+)\\))?`,
+  'g',
+);
+
+/**
+ * Hermes tools whose names carry no underscore. Needed because the second half
+ * of the false-positive guard is "the token looks like a tool name", and
+ * `snake_case` is the only structural tell most of them have.
+ */
+const BARE_TOOLS = new Set([
+  'terminal', 'patch', 'memory', 'process', 'clarify', 'cronjob', 'todo', 'skill', 'workflow',
+]);
+
+/**
+ * Second guard, applied after the glyph matches: a captured token is only
+ * treated as a tool if it is `snake_case` or a known single-word tool. Stops an
+ * allowlisted glyph that also shows up in prose (`📋 Summary:`, `💬 Note:`) from
+ * being rewritten as a tool call.
+ */
+function looksLikeToolToken(name: string): boolean {
+  return name.includes('_') || BARE_TOOLS.has(name.toLowerCase());
+}
 
 /** Strip Hermes' `mcp_<server>_` namespace. Server names carry no underscore. */
 function stripMcpNamespace(tool: string): string {
@@ -54,9 +118,31 @@ function looksLikeToolName(value: string): boolean {
 }
 
 function quote(value: string, max = 48): string {
-  const clean = value.trim().replace(/\s+/g, ' ');
+  // Hermes has usually already clipped the preview with a literal `...`; fold
+  // that into a real ellipsis so it matches the one our own clipping adds
+  // rather than showing two spellings in the same sentence.
+  const clean = value.trim().replace(/\s+/g, ' ').replace(/\.{3,}$/, '…');
   const clipped = clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
   return `“${clipped}”`;
+}
+
+/**
+ * Name a URL argument the way a person would — `parliament.uk`, not a quoted
+ * 90-character path truncated mid-slug. Several of the native tools (web_extract,
+ * browser_navigate, fetch_url) take a URL as their whole preview, and Hermes has
+ * usually already clipped it, so the raw string is both long and broken.
+ */
+function prettyUrl(value: string): string {
+  const raw = value.trim();
+  try {
+    const h = new URL(raw).hostname.replace(/^www\./, '');
+    if (h) return h;
+  } catch {
+    // Hermes truncates the preview, so a clipped URL often will not parse.
+    const m = raw.match(/^https?:\/\/(?:www\.)?([^/\s]+)/i);
+    if (m) return m[1];
+  }
+  return quote(raw, 40);
 }
 
 /** `workflow_build_from_spec` → `workflow build from spec`. */
@@ -94,10 +180,54 @@ const PHRASES: Record<string, (arg: string | null) => string> = {
   // Research / web
   research_web_search: (a) => (a ? `Searched the web for ${quote(a)}` : 'Searched the web'),
   web_search: (a) => (a ? `Searched the web for ${quote(a)}` : 'Searched the web'),
+  web_extract: (a) => (a ? `Read ${prettyUrl(a)}` : 'Read a web page'),
   research_search: (a) => (a ? `Searched past research for ${quote(a)}` : 'Searched past research'),
   research_list: () => 'Listed past research sessions',
-  fetch_url: (a) => (a ? `Fetched ${quote(a)}` : 'Fetched a web page'),
-  webpage_fetch: (a) => (a ? `Fetched ${quote(a)}` : 'Fetched a web page'),
+  fetch_url: (a) => (a ? `Fetched ${prettyUrl(a)}` : 'Fetched a web page'),
+  webpage_fetch: (a) => (a ? `Fetched ${prettyUrl(a)}` : 'Fetched a web page'),
+  x_search: (a) => (a ? `Searched X for ${quote(a)}` : 'Searched X'),
+
+  // Hermes' own session / skill machinery
+  session_search: (a) => (a ? `Searched past conversations for ${quote(a)}` : 'Searched past conversations'),
+  skill_view: (a) => (a ? `Read its ${a.replace(/[-_]/g, ' ')} playbook` : 'Read one of its playbooks'),
+  skills_list: () => 'Checked which playbooks it has',
+  skill_manage: () => 'Updated one of its playbooks',
+  memory: (a) => (a ? `Checked its memory for ${quote(a)}` : 'Checked its memory'),
+  mixture_of_agents: () => 'Asked several models and merged the answers',
+  clarify: () => 'Paused to ask a clarifying question',
+  todo: () => 'Updated its task list',
+  cronjob: () => 'Worked with a scheduled job',
+  process: () => 'Managed a background process',
+  send_message: () => 'Sent a message',
+
+  // Code / shell / local files (build runner contexts)
+  execute_code: () => 'Ran some code',
+  terminal: (a) => (a ? `Ran the command ${quote(a, 40)}` : 'Ran a terminal command'),
+  read_file: (a) => (a ? `Read ${quote(a)}` : 'Read a file'),
+  write_file: (a) => (a ? `Wrote ${quote(a)}` : 'Wrote a file'),
+  patch: (a) => (a ? `Edited ${quote(a)}` : 'Edited a file'),
+  search_files: (a) => (a ? `Searched the files for ${quote(a)}` : 'Searched the files'),
+
+  // Browser automation
+  browser_navigate: (a) => (a ? `Opened ${prettyUrl(a)} in a browser` : 'Opened a page in a browser'),
+  browser_snapshot: () => 'Looked at the page',
+  browser_vision: () => 'Looked at the page',
+  browser_click: (a) => (a ? `Clicked ${quote(a, 32)}` : 'Clicked something on the page'),
+  browser_type: (a) => (a ? `Typed ${quote(a, 32)} into the page` : 'Typed into the page'),
+  browser_press: (a) => (a ? `Pressed ${quote(a, 20)}` : 'Pressed a key'),
+  browser_scroll: () => 'Scrolled the page',
+  browser_back: () => 'Went back a page',
+  browser_console: () => 'Read the browser console',
+  browser_get_images: () => 'Collected the images on the page',
+  browser_dialog: () => 'Handled a browser dialog',
+  browser_cdp: () => 'Drove the browser directly',
+
+  // Media
+  image_generate: (a) => (a ? `Generated an image of ${quote(a)}` : 'Generated an image'),
+  video_generate: () => 'Generated a video',
+  video_analyze: () => 'Analysed a video',
+  vision_analyze: () => 'Looked at an image',
+  text_to_speech: () => 'Turned text into speech',
 
   // Canvas / workflows
   workflow: () => 'Worked on the canvas',
@@ -143,7 +273,7 @@ const PHRASES: Record<string, (arg: string | null) => string> = {
   // Meta
   activate_toolset: (a) => (a ? `Loaded the ${a} toolset` : 'Loaded a toolset'),
   jkai_help: () => 'Checked what it can do',
-  delegate_task: () => 'Handed work to a sub-agent',
+  delegate_task: (a) => (a ? `Handed a sub-agent the job of ${quote(a)}` : 'Handed work to a sub-agent'),
 };
 
 /**
@@ -199,11 +329,15 @@ function escapeHtml(value: string): string {
  * so the markup survives to the bubble.
  */
 export function rewriteHermesToolLog(text: string): string {
-  if (!text || text.indexOf('⚙') === -1) return text;
+  if (!text || !TOOL_GLYPHS.some((g) => text.includes(g))) return text;
 
   const rewritten = text.replace(
     ENTRY_RE,
-    (_match, tool: string, quoted: string | undefined, bare: string | undefined, count: string | undefined) => {
+    (match, tool: string, quoted: string | undefined, bare: string | undefined, count: string | undefined) => {
+      // The glyph alone is not proof: it is also ordinary punctuation in a
+      // reply. Require the token to look like a tool name too, and hand back
+      // the untouched match when it does not.
+      if (!looksLikeToolToken(tool)) return match;
       const arg = quoted ?? bare ?? null;
       const sentence = describeHermesToolCall({
         tool,
