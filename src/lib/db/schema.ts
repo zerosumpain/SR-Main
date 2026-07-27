@@ -2577,6 +2577,93 @@ export type ClaudeSessionStage = typeof claudeSessionStages.$inferSelect;
 export type NewClaudeSessionStage = typeof claudeSessionStages.$inferInsert;
 
 // ==========================================
+// Release log — what actually went live
+// ==========================================
+//
+// One row per production deploy, plus LLM-derived feature entries. Deliberately
+// INDEPENDENT of claude_sessions: this answers "what shipped and when", not
+// "who or what built it". A release is written by scripts/ci-deploy.sh AFTER the
+// public-URL check passes, so a build that never reached production never
+// appears here.
+//
+// Two provenances, distinguished by `via`:
+//   'github-actions' — a real deploy. sha/prevSha are exactly what was swapped.
+//   'backfill'       — reconstructed from git history for the era before this
+//                      table existed. Boundaries are inferred (PR-squash commits
+//                      are their own release; other commits cluster by time gap),
+//                      so treat the timestamps as approximate.
+
+export const releases = pgTable(
+  'releases',
+  {
+    id: serial('id').primaryKey(),
+    sha: text('sha').notNull(), // the commit that went live
+    shortSha: text('short_sha').notNull(),
+    prevSha: text('prev_sha'), // the commit it replaced; null = first release / repo root
+    version: text('version').notNull(), // human label, YYYY.MM.DD.N
+    branch: text('branch').notNull().default('master'),
+    via: text('via').notNull().default('github-actions'), // 'github-actions' | 'manual' | 'backfill'
+    deployedAt: timestamp('deployed_at', { withTimezone: true }).notNull(),
+    builtAt: timestamp('built_at', { withTimezone: true }),
+    // ── raw git facts (the evidence every summary must be grounded in) ──
+    commits: jsonb('commits').notNull().default(sql`'[]'::jsonb`), // [{sha,short,author,date,subject,body,pr}]
+    files: jsonb('files').notNull().default(sql`'[]'::jsonb`), // [{path,status,insertions,deletions}]
+    stats: jsonb('stats').notNull().default(sql`'{}'::jsonb`), // {commits,files,insertions,deletions,prs:[]}
+    // ── LLM-derived narrative ──
+    title: text('title'),
+    summary: text('summary'),
+    kinds: jsonb('kinds').notNull().default(sql`'[]'::jsonb`), // distinct item kinds, denormalised for chips + filtering
+    summaryStatus: text('summary_status').notNull().default('pending'), // 'pending' | 'ok' | 'failed'
+    summaryError: text('summary_error'),
+    summaryModel: text('summary_model'),
+    summarisedAt: timestamp('summarised_at', { withTimezone: true }),
+    contentHash: text('content_hash'), // sha256 of the git facts — re-ingest is a no-op when unchanged
+    schemaVersion: integer('schema_version').notNull().default(1),
+    ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('releases_sha_idx').on(t.sha),
+    index('releases_deployed_idx').on(t.deployedAt),
+    index('releases_summary_status_idx').on(t.summaryStatus),
+  ],
+);
+export type Release = typeof releases.$inferSelect;
+export type NewRelease = typeof releases.$inferInsert;
+
+/**
+ * One shipped thing inside a release. The point of the table is `includes` /
+ * `excludes`: what the change actually covers versus what a reader would
+ * reasonably assume it covers but which was deferred or explicitly left out.
+ * Both are grounded in the parent release's commits/files — never invented.
+ */
+export const releaseItems = pgTable(
+  'release_items',
+  {
+    id: serial('id').primaryKey(),
+    releaseId: integer('release_id')
+      .notNull()
+      .references(() => releases.id, { onDelete: 'cascade' }),
+    ordinal: integer('ordinal').notNull(),
+    kind: text('kind').notNull(), // 'feature' | 'fix' | 'improvement' | 'infra' | 'content' | 'chore'
+    impact: text('impact').notNull().default('internal'), // 'user-facing' | 'internal'
+    title: text('title').notNull(),
+    summary: text('summary').notNull(),
+    includes: jsonb('includes').notNull().default(sql`'[]'::jsonb`), // string[] — what IS in it
+    excludes: jsonb('excludes').notNull().default(sql`'[]'::jsonb`), // string[] — what is NOT in it
+    surfaces: jsonb('surfaces').notNull().default(sql`'[]'::jsonb`), // routes/services touched
+    files: jsonb('files').notNull().default(sql`'[]'::jsonb`), // evidence: file paths
+    commits: jsonb('commits').notNull().default(sql`'[]'::jsonb`), // evidence: short shas
+    confidence: text('confidence').notNull().default('medium'), // 'low' | 'medium' | 'high'
+  },
+  (t) => [
+    uniqueIndex('release_items_release_ordinal_idx').on(t.releaseId, t.ordinal),
+    index('release_items_kind_idx').on(t.kind),
+  ],
+);
+export type ReleaseItem = typeof releaseItems.$inferSelect;
+export type NewReleaseItem = typeof releaseItems.$inferInsert;
+
+// ==========================================
 // Datastore — permanent, flexible, sitewide store
 // ==========================================
 //

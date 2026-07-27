@@ -51,6 +51,8 @@
 /api/mcp/local
 /api/policy-engine/ingest
 /api/policy-engine/seed-workflows
+/api/releases/ingest
+/api/releases/summarise
 /api/scraper/interactive
 /api/scraper/interactive/[id]
 /api/scraper/node
