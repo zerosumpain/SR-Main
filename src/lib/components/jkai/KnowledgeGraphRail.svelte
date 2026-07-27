@@ -3,6 +3,7 @@
   import type { ThreadGraph, ThreadGraphNode, ThreadNodeKind } from '$lib/jkai/thread-graph';
   import KnowledgeGraphModal from './KnowledgeGraphModal.svelte';
   import { RAIL_LAYOUT, placeNodes, drawEdges } from '$lib/jkai/graph-layout';
+  import { hub } from '$lib/jkai/hub-bus.svelte';
 
   let {
     conversationId,
@@ -24,13 +25,35 @@
   let loading = $state(false);
   let selectedId = $state<string | null>(null);
 
-  // Reload whenever the thread changes. `loadedFor` is a plain let, not $state:
-  // it is written by the loader the effect calls, and making it reactive would
-  // subscribe the effect to its own write.
-  let loadedFor: string | null = null;
+  // Reload on a thread switch AND on every completed turn. `loadedKey` is a
+  // plain let, not $state: it is written by the loader the effect calls, and
+  // making it reactive would subscribe the effect to its own write.
+  let loadedKey: string | null = null;
   let loadSeq = 0;
 
-  async function load(id: string) {
+  // Poll handle + attempt counter. Plain lets for the same reason — nothing
+  // reactive reads them, and as $state the scheduling helpers would re-trigger
+  // the effect that calls them.
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollAttempt = 0;
+
+  /**
+   * Concept nodes are not ready when a turn is. Extraction runs on a cadence
+   * (assistant turn 2, then every 4th) and is *queued* behind an LLM call, so
+   * the graph the turn will produce lands seconds later. Fetching once on `done`
+   * would therefore keep showing the pre-turn graph — the original bug, just
+   * moved. So while `conceptsReady` is false we chase it a few times and stop.
+   */
+  const CONCEPT_POLL_DELAYS_MS = [4_000, 10_000, 25_000];
+
+  function cancelPoll(): void {
+    if (pollTimer) {
+      clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  async function load(id: string): Promise<void> {
     const seq = ++loadSeq;
     loading = true;
     try {
@@ -39,7 +62,20 @@
       const next = (await res.json()) as ThreadGraph;
       if (seq !== loadSeq) return;
       graph = next;
-      selectedId = next.nodes[0]?.id ?? null;
+      // Keep whatever the user was looking at if the refetch still has it —
+      // a background refresh must not yank the detail panel out from under them.
+      if (!next.nodes.some((n) => n.id === selectedId)) {
+        selectedId = next.nodes[0]?.id ?? null;
+      }
+      if (!next.conceptsReady && pollAttempt < CONCEPT_POLL_DELAYS_MS.length) {
+        const delay = CONCEPT_POLL_DELAYS_MS[pollAttempt];
+        pollAttempt += 1;
+        cancelPoll();
+        pollTimer = setTimeout(() => {
+          pollTimer = null;
+          void load(id);
+        }, delay);
+      }
     } catch {
       if (seq === loadSeq) graph = { nodes: [], edges: [], conceptsReady: false };
     } finally {
@@ -49,16 +85,24 @@
 
   $effect(() => {
     const id = conversationId;
+    // Tracked: the chat page bumps this on every completed turn.
+    const revision = hub.graphRevision;
     if (!id) {
       graph = { nodes: [], edges: [], conceptsReady: false };
       selectedId = null;
-      loadedFor = null;
+      loadedKey = null;
+      cancelPoll();
       return;
     }
-    if (id === loadedFor) return;
-    loadedFor = id;
+    const key = `${id}:${revision}`;
+    if (key === loadedKey) return;
+    loadedKey = key;
+    pollAttempt = 0;
+    cancelPoll();
     void load(id);
   });
+
+  $effect(() => () => cancelPoll());
 
   const selected = $derived<ThreadGraphNode | null>(
     graph.nodes.find((n) => n.id === selectedId) ?? graph.nodes[0] ?? null,
