@@ -209,6 +209,65 @@ Rules:
  * Strategy: try the raw string, then a fence-stripped form, then the widest
  * brace-delimited slice. Returns null only if none of those is valid JSON.
  */
+/**
+ * Rebuild a parseable object from output that was cut off mid-flight.
+ *
+ * Providers do not honour `max_tokens` uniformly: production saw Cerebras stop
+ * at exactly 8192 tokens with `finish_reason: length` while OpenRouter's own
+ * endpoint metadata advertises 40960 for it. Since the advertised cap cannot be
+ * trusted, truncation has to be survivable rather than merely avoided —
+ * recovering 40 of 45 entities beats discarding all 45.
+ *
+ * Walks the text tracking string state and bracket depth, remembers the last
+ * position at which an element was cleanly complete, cuts there and closes the
+ * containers that were open AT THAT POINT (not at the end — the depth differs).
+ * Returns null when the text was not actually truncated, or when nothing
+ * complete was found.
+ */
+export function salvageTruncatedJson(raw: string): string | null {
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  const s = raw.slice(start);
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let cut = -1;
+  let cutStack: string[] = [];
+
+  const mark = (idx: number) => {
+    // Only inside a container — the outermost object closing is not a cut point.
+    if (stack.length >= 1) {
+      cut = idx;
+      cutStack = stack.slice();
+    }
+  };
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+    else if (c === '}' || c === ']') {
+      stack.pop();
+      mark(i + 1); // just after a completed nested value
+    } else if (c === ',') {
+      // Cut BEFORE the comma so the container ends on a complete element.
+      mark(i);
+    }
+  }
+
+  if (stack.length === 0) return null; // well-formed already — not our problem
+  if (cut <= 0) return null;
+
+  return s.slice(0, cut) + cutStack.reverse().join('');
+}
+
 export function parseExtractionJson(raw: string): ExtractionResult | null {
   const candidates: string[] = [];
   const trimmed = raw.trim();
@@ -222,6 +281,10 @@ export function parseExtractionJson(raw: string): ExtractionResult | null {
   const first = trimmed.indexOf('{');
   const last = trimmed.lastIndexOf('}');
   if (first >= 0 && last > first) candidates.push(trimmed.slice(first, last + 1));
+
+  // Last resort: output cut off mid-value by a provider ignoring max_tokens.
+  const salvaged = salvageTruncatedJson(trimmed);
+  if (salvaged) candidates.push(salvaged);
 
   for (const candidate of candidates) {
     try {
@@ -274,10 +337,16 @@ export async function extractFromNote(
   // reparsing cannot.
   let lastRaw = '';
   let lastDiag = '';
+  let truncated = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await createExtraction();
+    // A first attempt cut short by the provider's own output ceiling must not
+    // simply be resampled against the SAME ceiling. Dropping the throughput pin
+    // lets OpenRouter route to an endpoint with room — observed recovering on
+    // Groq at 8535 tokens after Cerebras stopped at 8192.
+    const response = await createExtraction({ fastest: !truncated });
     const choice = response.choices[0];
     lastRaw = choice?.message?.content ?? '';
+    truncated = choice?.finish_reason === 'length';
     lastDiag = `attempt=${attempt} finish=${choice?.finish_reason} provider=${
       (response as { provider?: string }).provider ?? '?'
     } completion_tokens=${response.usage?.completion_tokens ?? '?'} chars=${lastRaw.length}`;
@@ -285,6 +354,7 @@ export async function extractFromNote(
     const parsed = parseExtractionJson(lastRaw);
     if (parsed) {
       if (attempt > 1) console.warn(`[intel] extraction parsed on retry — ${lastDiag}`);
+      else if (truncated) console.warn(`[intel] extraction truncated but salvaged — ${lastDiag}`);
       return parsed;
     }
     console.warn(`[intel] extraction output unparseable, ${attempt === 1 ? 'retrying' : 'giving up'} — ${lastDiag}`);
@@ -296,7 +366,7 @@ export async function extractFromNote(
   console.error(`[intel] extraction failed to parse — ${lastDiag}\n--- RAW ---\n${lastRaw}\n--- END RAW ---`);
   throw new Error(`Intel extraction returned unparseable output (${lastDiag})`);
 
-  async function createExtraction() {
+  async function createExtraction(opts: { fastest: boolean }) {
     return client.chat.completions.create({
       model,
       temperature: 0.3,
@@ -324,10 +394,13 @@ Extract all entities, relationships, timeline events, and any proposed new types
       // (consistently Cerebras), same extraction quality. Applied ONLY here — ER
       // is the one call a user waits on without seeing any output.
       //
+      // Dropped on a truncation retry: the fastest endpoint is also the one that
+      // just refused to emit the whole answer, so re-asking it buys nothing.
+      //
       // `provider` is an OpenRouter extension the OpenAI SDK does not type, so
       // the body is widened rather than the whole argument cast to `any` — a
       // blanket cast would also stop the compiler checking `messages`/`model`.
-      provider: { sort: 'throughput' },
+      ...(opts.fastest ? { provider: { sort: 'throughput' as const } } : {}),
     } as OpenRouterChatBody);
   }
 }

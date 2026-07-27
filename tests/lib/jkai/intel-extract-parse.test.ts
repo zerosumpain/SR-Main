@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseExtractionJson } from '$lib/jkai/intel/extract';
+import { parseExtractionJson, salvageTruncatedJson } from '$lib/jkai/intel/extract';
 
 // The extractor's output parse used to be
 //   raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
@@ -67,5 +67,41 @@ describe('parseExtractionJson', () => {
   it('recovers the object when the model wraps it in both prose and a fence with trailing text', () => {
     const raw = `Certainly.\n\n\`\`\`json\n${JSON.stringify(body)}\n\`\`\`\n\nThat covers the note.`;
     expect(parseExtractionJson(raw)?.entities[0].name).toBe('OpenSAFELY');
+  });
+});
+
+// Providers do not honour max_tokens uniformly: production saw Cerebras stop at
+// exactly 8192 tokens with finish_reason=length while OpenRouter's endpoint
+// metadata advertises 40960 for it. The advertised cap cannot be trusted, so
+// truncation has to be survivable — recovering most entities beats losing all.
+describe('salvageTruncatedJson', () => {
+  it('recovers entities from output cut mid-object', () => {
+    const truncated =
+      '{"summary":"S","entities":[' +
+      '{"name":"OpenSAFELY","type":"system"},' +
+      '{"name":"X-Road","type":"standard"},' +
+      '{"name":"Est';
+    const parsed = parseExtractionJson(truncated);
+    expect(parsed?.entities.map((e) => e.name)).toEqual(['OpenSAFELY', 'X-Road']);
+  });
+
+  it('recovers when cut immediately after a complete element', () => {
+    const truncated = '{"summary":"S","entities":[{"name":"A","type":"system"}';
+    expect(parseExtractionJson(truncated)?.entities).toHaveLength(1);
+  });
+
+  it('is not applied to well-formed JSON', () => {
+    expect(salvageTruncatedJson('{"a":[1,2]}')).toBeNull();
+  });
+
+  it('ignores brackets and quotes inside string values', () => {
+    const truncated = '{"summary":"a } ] \\" tricky [ {","entities":[{"name":"A","type":"x"},{"name":"B';
+    const parsed = parseExtractionJson(truncated);
+    expect(parsed?.summary).toBe('a } ] " tricky [ {');
+    expect(parsed?.entities.map((e) => e.name)).toEqual(['A']);
+  });
+
+  it('returns null when nothing complete was produced', () => {
+    expect(salvageTruncatedJson('{"summary":"half a sen')).toBeNull();
   });
 });
