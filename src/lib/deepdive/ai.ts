@@ -123,17 +123,34 @@ export async function chatCompletion(
   }
 }
 
+/**
+ * Strip a ```json … ``` wrapper. Models ignore "no code blocks" often enough
+ * that a fenced reply is a routine outcome, not an anomaly — and every fenced
+ * reply used to die in JSON.parse before repairJson (which only balances
+ * brackets) ever had a chance.
+ */
+export function stripCodeFences(text: string): string {
+  const t = text.trim();
+  if (!t.startsWith('```')) return text;
+  return t.replace(/^```[a-zA-Z]*\s*\n?/, '').replace(/\n?```\s*$/, '');
+}
+
 function parseJsonText<T>(text: string): T {
   try {
     return JSON.parse(text) as T;
   } catch {
-    // Attempt to repair truncated JSON (e.g. from max_tokens cutoff)
+    const unfenced = stripCodeFences(text);
     try {
-      const repaired = repairJson(text);
-      return JSON.parse(repaired) as T;
-    } catch (err) {
-      console.error('[deepdive] jsonCompletion: repair failed. Raw text was:', text.slice(0, 500));
-      throw err;
+      return JSON.parse(unfenced) as T;
+    } catch {
+      // Attempt to repair truncated JSON (e.g. from max_tokens cutoff)
+      try {
+        const repaired = repairJson(unfenced);
+        return JSON.parse(repaired) as T;
+      } catch (err) {
+        console.error('[deepdive] jsonCompletion: repair failed. Raw text was:', text.slice(0, 500));
+        throw err;
+      }
     }
   }
 }

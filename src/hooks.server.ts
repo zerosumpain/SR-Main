@@ -353,6 +353,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/releases/* POST is service-to-service: scripts/ci-deploy.sh records the
+  // deploy from the GitHub Actions runner and scripts/release-log/ingest.mjs
+  // drives the backfill from homeserv — neither has a user session. Both
+  // handlers self-authenticate via `Authorization: Bearer RELEASE_LOG_SECRET`
+  // (mirrors /api/claude-changelog above); /summarise additionally accepts an
+  // owner session and refuses to run unauthenticated. GET is deliberately NOT
+  // bypassed — it falls through to the owner gate below.
+  if (pathname.startsWith('/api/releases/') && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
   // /api/data-standard-designer/* (ingest + seed-workflows) are service-to-service:
   // the daily discovery cron's http-request node has no user session. The handlers
   // self-authenticate via `Authorization: Bearer DSD_INGEST_SECRET` (open in dev if

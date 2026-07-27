@@ -13,6 +13,13 @@ VPS_DIR="${VPS_DIR:-/opt/strange-rambling-svelte}"
 SERVICE="${SERVICE:-strange-rambling-svelte}"
 PUBLIC_URL="${PUBLIC_URL:-https://strangeramblings.com}"
 
+# Read the sha currently serving production BEFORE the rsync replaces build/.
+# This is the release log's "what did this deploy replace" boundary; without it
+# a release can only be attributed to a single commit. Empty on the first deploy
+# after this script was introduced.
+PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head -1 || true)"
+echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
+
 echo "==> Stamping deploy provenance into build/.deploy-sha..."
 {
   echo "sha=$(git rev-parse HEAD)"
@@ -99,6 +106,23 @@ echo "    the static cache come up on different timelines than the node process)
 if timeout 90 bash -c "until curl -fsS -o /dev/null '$PUBLIC_URL'; do sleep 3; done"; then
   echo "==> Deployed successfully to $PUBLIC_URL"
   echo "    $(curl -fsS -o /dev/null -w 'HTTP %{http_code} in %{time_total}s' "$PUBLIC_URL")"
+
+  # Record what just went live (/admin/ops/releases). Deliberately AFTER the
+  # public-URL check, so a build that never reached production is never logged
+  # as a release — and deliberately non-fatal: the release log is a record of
+  # the deploy, never a gate on it.
+  echo "==> Recording the release..."
+  RELEASE_LOG_TOKEN="$(sed -n 's/^RELEASE_LOG_SECRET=//p' "$VPS_DIR/.env" 2>/dev/null | tr -d '"' | head -1 || true)"
+  if [ -z "$RELEASE_LOG_TOKEN" ]; then
+    echo "    skipped: RELEASE_LOG_SECRET is not set in $VPS_DIR/.env"
+  else
+    RELEASE_LOG_TOKEN="$RELEASE_LOG_TOKEN" RELEASE_LOG_URL="$PUBLIC_URL" \
+      node scripts/release-log/ingest.mjs --head \
+        --prev "${PREV_SHA:-}" \
+        --via github-actions \
+        --built-at "$(sed -n 's/^built_at=//p' build/.deploy-sha | head -1)" \
+      || echo "    warn: release-log ingest failed (deploy is fine)"
+  fi
 else
   echo "==> ERROR: $PUBLIC_URL did not return 200 within 90s. Service state:" >&2
   systemctl is-active "$SERVICE" >&2 || true

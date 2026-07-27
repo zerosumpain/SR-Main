@@ -104,7 +104,13 @@ jobs:
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
+      # Full history: scripts/ci-deploy.sh records the release log by diffing the
+      # previously-deployed sha against HEAD, and the default depth-1 checkout
+      # has no such commit to diff against. The self-hosted runner reuses its
+      # workspace, so this is a one-off cost rather than a full clone per run.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Deliberately no setup-node: use the VPS's system Node (22.x), so CI
       # builds with the exact runtime that serves production.

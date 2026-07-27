@@ -56,6 +56,7 @@ const HOOK_BYPASSES = [
   '/api/mcp', // bridge token (tools/list + tools/call)
   '/api/policy-engine', // POLICY_INGEST_SECRET
   '/api/claude-changelog', // POST only, ingest secret
+  '/api/releases', // POST only, RELEASE_LOG_SECRET (summarise also accepts an owner session)
   '/api/data-standard-designer',
   '/api/dfe-data-strategy',
   '/api/whatsapp/inbound', // POST only, WHATSAPP_INBOUND_SECRET

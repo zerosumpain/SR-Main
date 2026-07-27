@@ -14,6 +14,13 @@ NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=8192}" npm run build
 # Stamp deploy provenance so prod can be mapped back to git without guesswork.
 # Lands at $VPS_DIR/build/.deploy-sha (build/ is rsync'd below). Read live with:
 #   ssh ... cat /opt/strange-rambling-svelte/build/.deploy-sha
+# What is serving production right now — the release log's "replaced by" boundary.
+# Read before the rsync below overwrites build/ on the VPS. Best-effort: an
+# unreachable VPS here just means the release is recorded as a single commit.
+PREV_SHA="$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+  "sed -n 's/^sha=//p' $VPS_DIR/build/.deploy-sha 2>/dev/null | head -1" 2>/dev/null || true)"
+echo "==> Previously deployed sha: ${PREV_SHA:-<none>}"
+
 echo "==> Stamping deploy provenance into build/.deploy-sha..."
 {
   echo "sha=$(git rev-parse HEAD)"
@@ -207,6 +214,24 @@ STATUS=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
 
 if [ "$STATUS" = "active" ]; then
   echo "==> Deployed successfully to https://strangeramblings.com"
+
+  # Record what just went live (/admin/ops/releases) — the same step
+  # scripts/ci-deploy.sh runs, so the two paths stay in step. Non-fatal: the
+  # release log records the deploy, it never gates it. `via=manual` marks these
+  # apart from CI deploys in the UI.
+  echo "==> Recording the release..."
+  RELEASE_LOG_TOKEN="$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
+    "sed -n 's/^RELEASE_LOG_SECRET=//p' $VPS_DIR/.env 2>/dev/null | tr -d '\"' | head -1" 2>/dev/null || true)"
+  if [ -z "$RELEASE_LOG_TOKEN" ]; then
+    echo "    skipped: RELEASE_LOG_SECRET is not set in $VPS_DIR/.env"
+  else
+    RELEASE_LOG_TOKEN="$RELEASE_LOG_TOKEN" RELEASE_LOG_URL="https://strangeramblings.com" \
+      node scripts/release-log/ingest.mjs --head \
+        --prev "${PREV_SHA:-}" \
+        --via manual \
+        --built-at "$(sed -n 's/^built_at=//p' build/.deploy-sha | head -1)" \
+      || echo "    warn: release-log ingest failed (deploy is fine)"
+  fi
 else
   echo "==> ERROR: Service is $STATUS"
   ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
