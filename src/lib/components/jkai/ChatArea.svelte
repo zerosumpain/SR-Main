@@ -805,6 +805,13 @@
       eventSource = null;
     }
 
+    // Per-conversation state: the `intel` signal only ever arrives for the
+    // thread whose stream is open, so switching threads while extraction is
+    // running must clear it. Left set, the incoming thread's newest reply would
+    // wear an ER-processing border for work being done on a different one.
+    // (Safe to write here — this effect's only tracked read is conversationId.)
+    intelRunning = false;
+
     if (!conversationId) return;
 
     const es = new EventSource(`/api/jkai/events?conversationId=${conversationId}`);
