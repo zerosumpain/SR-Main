@@ -17,7 +17,7 @@
  *               caller; per-frame JobEvent is not emitted.
  */
 import type { SseFrame, SseFrameToolCall, SseFrameSubagent } from '$lib/jkai/hermes-client';
-import type { JobEvent, DelegateChild } from '$lib/workflows/chat/job-store';
+import type { JobEvent, DelegateChild, ClarifyQuestion } from '$lib/workflows/chat/job-store';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 
 /**
@@ -238,6 +238,37 @@ export function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
         description: typeof o.description === 'string' ? o.description : '',
         sessionKey: typeof o.session_key === 'string' ? o.session_key : '',
       }];
+    }
+    case 'clarify': {
+      // Structured clarifying question from the plugin's `send_clarify`.
+      // Payload rides in `metadata.clarify` (same convention as approval).
+      // Read every field defensively: a malformed frame is skipped rather than
+      // crashing the stream, and the adapter also emits the question as a plain
+      // `send` frame, so skipping here still leaves the question visible and
+      // answerable by typing — the gateway resolves it via text-intercept.
+      const raw = (frame.metadata as Record<string, unknown> | undefined)?.['clarify'];
+      if (!raw || typeof raw !== 'object') return [];
+      const o = raw as Record<string, unknown>;
+      const clarifyId = typeof o.clarify_id === 'string' ? o.clarify_id : '';
+      if (!clarifyId) return [];
+      const rawQs = Array.isArray(o.questions) ? o.questions : [];
+      const questions = rawQs.flatMap((q): ClarifyQuestion[] => {
+        if (!q || typeof q !== 'object') return [];
+        const qq = q as Record<string, unknown>;
+        const text = typeof qq.text === 'string' ? qq.text.trim() : '';
+        if (!text) return [];
+        const choices = Array.isArray(qq.choices)
+          ? qq.choices.filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+          : [];
+        return [{
+          id: typeof qq.id === 'string' && qq.id ? qq.id : clarifyId,
+          text,
+          kind: choices.length > 0 ? 'choice' : 'freeform',
+          ...(choices.length > 0 ? { choices } : {}),
+        }];
+      });
+      if (questions.length === 0) return [];
+      return [{ type: 'clarify', clarifyId, questions }];
     }
     case 'finalize':
       // The jkai adapter emits a synthetic `finalize` with empty content

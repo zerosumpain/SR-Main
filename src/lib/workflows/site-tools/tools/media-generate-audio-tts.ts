@@ -1,6 +1,12 @@
 // src/lib/workflows/site-tools/tools/media-generate-audio-tts.ts
-// Generation tool: synthesise spoken audio (MP3) from text using ElevenLabs TTS,
-// saving each result as a conversation attachment.
+// Generation tool: synthesise spoken audio (MP3) from text, saving each result
+// as a conversation attachment.
+//
+// Two engines, in order: ElevenLabs (better voices, needs a key) then edge-tts
+// (free, key-free, on-device orchestration). Before 2026-07-27 this was
+// ElevenLabs-only and returned a hard error when the key was missing — and that
+// key lives in keys.json, which is gitignored and outside the gpg escrow, so a
+// lost key silently killed the feature.
 
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
@@ -8,6 +14,7 @@ import { jkaiAttachments } from '$lib/db/schema';
 import { saveBuffer } from '$lib/jkai/media/storage';
 import { loadKeys } from '$lib/deepdive/keys';
 import { checkTtsQuota } from '$lib/jkai/media/rate-limits';
+import { isLocalTtsAvailable, synthesizeLocally } from '$lib/jkai/media/tts-local';
 import type { JkaiAttachment } from '$lib/db/schema';
 
 const DEFAULT_MODEL = process.env.JKAI_TTS_MODEL ?? 'eleven_turbo_v2_5';
@@ -37,7 +44,6 @@ export async function handleGenerateAudioTts(
 ): Promise<GenerateAudioTtsResult> {
   const keys = loadKeys();
   const apiKey = keys.elevenlabsApiKey || process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) return { success: false, error: 'ElevenLabs API key not configured' };
   if (!args.text || args.text.length < 1) return { success: false, error: 'text required' };
   if (args.text.length > MAX_CHARS) return { success: false, error: `text exceeds ${MAX_CHARS} chars` };
 
@@ -49,24 +55,58 @@ export async function handleGenerateAudioTts(
   const voice = args.voice ?? DEFAULT_VOICE;
   const model = args.model ?? DEFAULT_MODEL;
 
-  const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': apiKey,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify({
-      text: args.text,
-      model_id: model,
-      voice_settings: { stability: 0.5, similarity_boost: 0.7 },
-    }),
-  });
-  if (!resp.ok) {
-    const errText = await resp.text();
-    return { success: false, error: `ElevenLabs ${resp.status}: ${errText}` };
+  // ElevenLabs stays primary for quality; edge-tts is the free fallback for the
+  // two cases that used to hard-fail — no key configured (it lives in the
+  // un-escrowed keys.json) and an ElevenLabs error/outage.
+  let buf: Buffer | null = null;
+  let engine: 'elevenlabs' | 'edge-tts' = 'elevenlabs';
+  let elevenError: string | null = null;
+
+  if (apiKey) {
+    try {
+      const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text: args.text,
+          model_id: model,
+          voice_settings: { stability: 0.5, similarity_boost: 0.7 },
+        }),
+      });
+      if (resp.ok) {
+        buf = Buffer.from(await resp.arrayBuffer());
+      } else {
+        elevenError = `ElevenLabs ${resp.status}: ${(await resp.text()).slice(0, 200)}`;
+      }
+    } catch (err) {
+      elevenError = `ElevenLabs request failed: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  } else {
+    elevenError = 'ElevenLabs API key not configured';
   }
-  const buf = Buffer.from(await resp.arrayBuffer());
+
+  if (!buf) {
+    if (!isLocalTtsAvailable()) {
+      return { success: false, error: elevenError ?? 'no TTS engine available' };
+    }
+    try {
+      // `args.voice` is an ElevenLabs voice ID and means nothing to edge-tts —
+      // let the edge default apply rather than passing a 20-char hash through.
+      buf = await synthesizeLocally(args.text);
+      engine = 'edge-tts';
+      console.warn(`[tts] fell back to edge-tts: ${elevenError}`);
+    } catch (err) {
+      return {
+        success: false,
+        error: `${elevenError}; edge-tts fallback also failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   const { diskPath, sizeBytes } = await saveBuffer(buf, 'mp3');
   const [row] = await db
     .insert(jkaiAttachments)
@@ -80,7 +120,13 @@ export async function handleGenerateAudioTts(
       sizeBytes,
       diskPath,
       duration: null,
-      metadata: { text: args.text.slice(0, 200), voice, model, characters: args.text.length },
+      metadata: {
+        text: args.text.slice(0, 200),
+        voice: engine === 'edge-tts' ? (process.env.LOCAL_TTS_VOICE || 'en-US-AriaNeural') : voice,
+        model: engine === 'edge-tts' ? 'edge-tts' : model,
+        engine,
+        characters: args.text.length,
+      },
     })
     .returning();
   return { success: true, attachments: [row] };
@@ -89,7 +135,7 @@ export async function handleGenerateAudioTts(
 register({
   name: 'generate_audio_tts',
   description:
-    'Synthesise spoken audio (MP3) from text using ElevenLabs. Saves as a conversation attachment. Use when the user asks you to speak, read aloud, or produce a voice note.',
+    'Synthesise spoken audio (MP3) from text. Uses ElevenLabs when configured and falls back to free local edge-tts otherwise. Saves as a conversation attachment. Use when the user asks you to speak, read aloud, or produce a voice note.',
   toolset: 'media',
   category: 'media',
   parameters: {

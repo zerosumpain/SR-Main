@@ -17,7 +17,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools } from './server';
 import { executeTool } from '$lib/workflows/site-tools/registry';
-import { publishToolStep } from '$lib/jkai/tool-step-bus';
+import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
+import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/confirmation-gate';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 
@@ -257,6 +258,67 @@ export async function dispatchJsonRpc(
         // meta-dispatcher or an `mcp_<server>_` prefix. Resolve it once for
         // every publish below (execution still uses the original name/args).
         const disp = resolveDisplayTool(name, args);
+
+        // Destructive-action gate. Until 2026-07-27 this ran ONLY inside
+        // general-chat.ts, which `JKAI_HERMES_CANVAS_CHAT=1` bypasses — so on
+        // the live path nothing stood between the agent and `publish_page` /
+        // `gmail_send` / `node_builder_commit_and_deploy` except Hermes' own
+        // approval behaviour, detected site-side by string-matching its output.
+        // Gate here, at the dispatcher, because this is the agent-driven
+        // surface: `executeTool`'s other callers (heartbeat, briefing,
+        // scheduled, selfimprove, workflow nodes) are headless by design and
+        // must keep running unattended.
+        //
+        // `disp.tool` is deliberate — the real tool, resolved out of the
+        // `jkai_extended` meta-dispatcher. Gating the outer name would wave
+        // every destructive call straight through.
+        if (isDestructive(disp.tool)) {
+          const decision = await requestToolConfirmation(busKey, {
+            tool: disp.tool,
+            prompt: describeDestructiveAction(disp.tool, disp.args),
+            args: disp.args,
+          });
+          if (!decision.approved) {
+            const reason = decision.reason ?? 'the user declined';
+            console.warn(
+              `[mcp] blocked destructive tool ${disp.tool} (busKey=${busKey || 'none'}): ${reason}`,
+            );
+            // Record the block in the tool panel so there is a visible audit
+            // trail rather than a silently missing step.
+            if (busKey) {
+              publishToolStep({
+                workflowId: busKey,
+                stepId,
+                phase: 'failed',
+                tool: disp.tool,
+                args: disp.args,
+                error: `blocked: ${reason}`,
+                summary: `Blocked — ${reason}`,
+                ts: Date.now(),
+              });
+            }
+            // A normal result, NOT a JSON-RPC error: an error envelope reads as
+            // a transport fault and invites a retry loop, whereas this reads as
+            // "the human said no" and the agent replies to them instead.
+            return {
+              response: {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text:
+                        `Not executed — ${disp.tool} needs confirmation and ${reason}. ` +
+                        `Do not retry automatically; tell the user what you wanted to do and ask them directly.`,
+                    },
+                  ],
+                },
+              },
+            };
+          }
+        }
+
         const startSummary = busKey ? summarizeRunningTool(disp.tool, disp.args) : '';
         if (busKey) {
           publishToolStep({
