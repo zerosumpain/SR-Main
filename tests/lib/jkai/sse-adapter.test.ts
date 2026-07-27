@@ -109,3 +109,84 @@ describe('adaptFrameToCanvasSse (tool frames)', () => {
     expect(adaptFrameToCanvasSse(frame({ kind: 'send', content: 'hello' }))).toEqual([{ type: 'token', delta: 'hello' }]);
   });
 });
+
+// Clarify cards. Before 2026-07-27 the adapter had no `clarify` branch at all,
+// so the agent's `clarify` tool degraded to a numbered text list and was never
+// used. Every field is read defensively because a malformed frame must be
+// skipped, not thrown — the question also arrives as a plain `send` frame, so a
+// skipped card still leaves an answerable question on screen.
+describe('adaptFrameToCanvasSse — clarify', () => {
+  it('maps a freeform clarify frame to a clarify JobEvent', () => {
+    const out = adaptFrameToCanvasSse(
+      frame({
+        kind: 'clarify',
+        metadata: {
+          clarify: {
+            clarify_id: 'abc123',
+            session_key: 'sess_x',
+            questions: [{ id: 'abc123', text: 'Which environment — staging or prod?' }],
+          },
+        },
+      }),
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      type: 'clarify',
+      clarifyId: 'abc123',
+      questions: [{ id: 'abc123', text: 'Which environment — staging or prod?', kind: 'freeform' }],
+    });
+  });
+
+  it('marks a question with choices as kind=choice and carries them through', () => {
+    const out = adaptFrameToCanvasSse(
+      frame({
+        kind: 'clarify',
+        metadata: {
+          clarify: {
+            clarify_id: 'q9',
+            questions: [{ id: 'q9', text: 'Pick a tier', choices: ['a', 'b', 'c'] }],
+          },
+        },
+      }),
+    );
+    const ev = out[0] as { questions: Array<{ kind: string; choices?: string[] }> };
+    expect(ev.questions[0].kind).toBe('choice');
+    expect(ev.questions[0].choices).toEqual(['a', 'b', 'c']);
+  });
+
+  it('drops blank choice entries rather than rendering empty options', () => {
+    const out = adaptFrameToCanvasSse(
+      frame({
+        kind: 'clarify',
+        metadata: {
+          clarify: { clarify_id: 'q1', questions: [{ text: 'Pick', choices: ['x', '', '  ', 'y'] }] },
+        },
+      }),
+    );
+    const ev = out[0] as { questions: Array<{ choices?: string[]; id: string }> };
+    expect(ev.questions[0].choices).toEqual(['x', 'y']);
+    // No per-question id supplied → falls back to the clarify id.
+    expect(ev.questions[0].id).toBe('q1');
+  });
+
+  it('skips a frame with no clarify payload', () => {
+    expect(adaptFrameToCanvasSse(frame({ kind: 'clarify' }))).toEqual([]);
+  });
+
+  it('skips a frame with no clarify_id (unresolvable)', () => {
+    const out = adaptFrameToCanvasSse(
+      frame({ kind: 'clarify', metadata: { clarify: { questions: [{ text: 'hi' }] } } }),
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('skips a frame whose questions are all unusable', () => {
+    const out = adaptFrameToCanvasSse(
+      frame({
+        kind: 'clarify',
+        metadata: { clarify: { clarify_id: 'q', questions: [{ text: '  ' }, null, 'nope'] } },
+      }),
+    );
+    expect(out).toEqual([]);
+  });
+});

@@ -113,6 +113,26 @@ export interface SseFrameApproval {
   session_key?: string;
 }
 
+/** Payload for a `kind: 'clarify'` frame — a blocking clarifying question from
+ *  the agent's `clarify` tool, emitted by the plugin's `send_clarify`. Rides in
+ *  `metadata.clarify`. The agent thread is blocked on the gateway's clarify
+ *  primitive for `agent.clarify_timeout` (600s) while this is outstanding.
+ *
+ *  There is no `_ack` correlation event: the gateway resolves the clarify by
+ *  intercepting the next non-slash text message in the session
+ *  (gateway/run.py:6938-6962), so the card submits the answer as an ordinary
+ *  silent chat message — the same trick the approval card uses for `/approve`. */
+export interface SseFrameClarify {
+  clarify_id: string;
+  session_key?: string;
+  questions: Array<{
+    id?: string;
+    text: string;
+    kind?: 'freeform' | 'choice';
+    choices?: string[];
+  }>;
+}
+
 /** Payload for a `kind: 'subagent'` frame — live activity relayed from a
  *  `delegate_task` child agent. Emitted by the plugin's `send_subagent` (wired
  *  from the gateway's child tool_progress relay). Rides in `metadata.subagent`.
@@ -147,7 +167,7 @@ export interface SseFrame {
    *  `📎 File: …` text placeholders the Hermes BasePlatformAdapter falls
    *  back to; `tool` carries per-tool-call telemetry (see `SseFrameToolCall`)
    *  surfaced onto the tool-step panel. */
-  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool' | 'approval' | 'subagent';
+  kind: 'send' | 'replace' | 'finalize' | 'thinking' | 'image' | 'audio' | 'video' | 'pdf' | 'document' | 'tool' | 'approval' | 'clarify' | 'subagent';
   chat_id: string;
   message_id: string;
   content: string;

@@ -18,7 +18,8 @@ import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabili
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
-import { subscribeToolSteps, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
+import { subscribeToolSteps, registerToolConfirmer, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
+import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
@@ -365,6 +366,21 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // write_document returns `{ attachments: [row] }`), we promote those into
   // `turnAttachments` so the chat UI renders a download link.
   const toolStepKey = chatId; // Hermes sends kindId (= chatId) as workflow_id
+
+  // Destructive-tool gate. The MCP dispatcher raises a confirmation request for
+  // any tool flagged `destructive` in the registry; it knows only `busKey`
+  // (= chatId), not `jobId`, so this is where the two are joined. Delegates to
+  // the existing `requireConfirmation` → `confirm` JobEvent → ConfirmBanner →
+  // `confirm_ack` waiter chain, unchanged. Unregistered in the same cleanup
+  // block as the tool-step subscription, or a stale confirmer would answer for
+  // a job that has already finished.
+  const unregisterConfirmer = registerToolConfirmer(toolStepKey, async (req) => {
+    if (abortController.signal.aborted) {
+      return { approved: false, reason: 'the turn was cancelled' };
+    }
+    const approved = await requireConfirmation(jobId, req.prompt, req.args, { destructive: true });
+    return { approved, reason: approved ? undefined : 'the user declined it' };
+  });
   const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
     if (abortController.signal.aborted) return;
     if (e.phase === 'started') {
@@ -835,8 +851,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     } finally {
       // Drop the bus subscription so the listener Set doesn't leak across
       // jobs — the bus would otherwise keep a reference to this closure for
-      // the lifetime of the process.
+      // the lifetime of the process. The confirmer must go with it: left
+      // attached, it would answer destructive prompts against a finished job
+      // whose waiters can never resolve, hanging the call until the 240s
+      // budget expires.
       unsubscribeToolSteps();
+      unregisterConfirmer();
     }
   })();
 
@@ -1320,6 +1340,67 @@ export const DELETE: RequestHandler = async ({ url }) => {
   return json({ error: job ? 'Job not running' : 'Job not found' }, { status: job ? 400 : 404 });
 };
 
+/**
+ * Deliver clarify answers to a Hermes turn that is blocked on the gateway's
+ * clarify primitive. Rebuilds the chat/session identity from the job scope with
+ * the same formula `handleWithHermes` used to create it, then posts the answer
+ * as a normal message — which the gateway's clarify text-intercept consumes
+ * instead of treating as a new turn.
+ */
+async function forwardClarifyToHermes(
+  jobId: string,
+  job: NonNullable<ReturnType<typeof getJob>>,
+  answers: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!HERMES_SECRET) return { ok: false, error: 'HERMES_BRIDGE_SECRET not configured' };
+
+  const workflowId = job.scope.workflowId ?? undefined;
+  const conversationId = job.scope.conversationId ?? undefined;
+  const chatNodeId = job.scope.chatNodeId ?? undefined;
+  // handleWithHermes falls back to Date.now() when it has no stable id; that is
+  // unreconstructable here, so bail rather than post into the wrong session.
+  if (!workflowId && !conversationId && !chatNodeId) {
+    return { ok: false, error: 'cannot resolve the Hermes session for this job' };
+  }
+  const chatId = workflowId ?? `chat_${conversationId ?? chatNodeId}`;
+  const userKey = conversationId ?? chatNodeId ?? 'anon';
+  const sessionId = `sess_${userKey}_${chatId}`;
+
+  // One answer per card today; join defensively if that ever changes.
+  let text = Object.values(answers)
+    .map((a) => String(a ?? '').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  if (!text) return { ok: false, error: 'no answer text to forward' };
+  // The gateway deliberately ignores replies beginning with `/` so a slash
+  // command still reaches the agent rather than answering the clarify. An
+  // answer that happens to start with `/` would silently do nothing, so shift
+  // it behind a zero-width space.
+  if (text.startsWith('/')) text = `​${text}`;
+
+  try {
+    const client = new HermesClient({
+      baseUrl: HERMES_URL,
+      bridgeSecret: HERMES_SECRET,
+      defaultOrigin: HERMES_ORIGIN,
+      defaultMcpUrl: HERMES_MCP_URL,
+    });
+    await client.sendMessage({
+      chatId,
+      kind: workflowId ? 'canvas_chat' : 'manual',
+      kindId: chatId,
+      sessionId,
+      text,
+    });
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    console.warn(`[hermes-chat] clarify forward failed for job ${jobId}: ${message}`);
+    return { ok: false, error: `failed to deliver the answer to Hermes: ${message}` };
+  }
+}
+
 // PATCH: resolve a pending user-input waiter (plan_ack / confirm_ack / clarify_ack).
 // The orchestrator coroutine registers waiters via createWaiter(jobId, key) and
 // suspends until the user sends their decision through this endpoint.
@@ -1358,7 +1439,21 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
     /* clarify_ack */               { answers: typed.answers };
 
   const ok = respondToWaiter(jobId, key, payload);
-  if (!ok) return json({ error: 'no waiter registered for that key' }, { status: 404 });
+  if (!ok) {
+    // On the Hermes branch a `clarify` blocks inside the Python gateway's
+    // clarify primitive, not in a job-store waiter — so there is nothing here
+    // to resolve. The gateway instead intercepts the next non-slash text
+    // message in the session (gateway/run.py:6938-6962), so forward the answers
+    // as an ordinary silent message. Mirrors the approval card, whose buttons
+    // send `/approve` back through the normal inbound path.
+    if (HERMES_ENABLED && typed.type === 'clarify_ack') {
+      const forwarded = await forwardClarifyToHermes(jobId, job, typed.answers);
+      if (!forwarded.ok) return json({ error: forwarded.error }, { status: 502 });
+      publishJobEvent(jobId, typed as JobEvent);
+      return json({ ok: true });
+    }
+    return json({ error: 'no waiter registered for that key' }, { status: 404 });
+  }
 
   // Echo the ack into the SSE stream so all subscribers see the user decision.
   publishJobEvent(jobId, typed as JobEvent);
