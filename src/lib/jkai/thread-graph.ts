@@ -108,6 +108,31 @@ function pushTurn(node: ThreadGraphNode, turn: number): void {
   if (!node.turns.includes(turn)) node.turns.push(turn);
 }
 
+/**
+ * Which turn concept nodes attach to for co-occurrence.
+ *
+ * Concepts are thread-scoped — the extractor reads the whole transcript, not one
+ * turn — but co-occurrence pairs nodes *within* a turn, so they still need one
+ * to sit on. Using the last message index looks right and is wrong: the last
+ * message is nearly always a user turn or a heartbeat note, and neither carries
+ * a structural node. The concepts therefore formed a clique among themselves
+ * while the model that produced them, and any file or canvas the thread cited,
+ * sat unconnected on an earlier turn.
+ *
+ * Anchoring to the last turn that actually HAS structure fixes that without
+ * inventing edges: the newest structural moment is the one "what is this thread
+ * about" is really describing. Falls back to the last message when a thread has
+ * no structural nodes at all, which preserves the old behaviour for the only
+ * case where it was harmless.
+ */
+export function conceptAnchorTurn(
+  structuralTurns: readonly number[],
+  messageCount: number,
+): number {
+  if (structuralTurns.length === 0) return Math.max(0, messageCount - 1);
+  return Math.max(...structuralTurns);
+}
+
 export async function buildThreadGraph(conversationId: string): Promise<ThreadGraph> {
   const [conv] = await db
     .select({ modelId: conversations.modelId, updatedAt: conversations.updatedAt })
@@ -304,10 +329,17 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
       for (const r of priorRows) priorlyKnown.add(r.entityId);
     }
 
+    // Every turn that already carries a structural node. Computed once, before
+    // the concept pass adds to the same map — see conceptAnchorTurn.
+    const conceptTurn = conceptAnchorTurn(
+      [...new Set([...byId.values()].flatMap((n) => n.turns))],
+      messages.length,
+    );
+
     for (const e of rows) {
       conceptIds.push(e.id);
       // Concepts belong to the thread as a whole — the extractor works over the
-      // full transcript, not per turn — so they attach to the last turn, which
+      // full transcript, not per turn — so they all share one anchor turn, which
       // is what "what is this conversation about" means in practice.
       add(
         {
@@ -320,7 +352,7 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
           lastSeen: e.updatedAt instanceof Date ? e.updatedAt.toISOString() : null,
           provenance: priorlyKnown.has(e.id) ? 'known' : 'new',
         },
-        Math.max(0, messages.length - 1),
+        conceptTurn,
       );
     }
   }
