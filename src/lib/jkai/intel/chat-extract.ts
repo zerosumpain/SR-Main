@@ -11,10 +11,10 @@
 // gets a graph, sparse enough that a long one doesn't bill for one per turn.
 
 import { db } from '$lib/db';
-import { orchestratorChats } from '$lib/db/schema';
-import { asc, eq } from 'drizzle-orm';
+import { conversations, orchestratorChats } from '$lib/db/schema';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
-import { extractIntoIntel } from './auto-extract';
+import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
 import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
 
 /**
@@ -81,11 +81,16 @@ const MAX_TRANSCRIPT_CHARS = 24_000;
 /**
  * Queue concept extraction for a thread if it has hit an extraction turn.
  * Fire-and-forget: never throws, never delays the reply.
+ *
+ * `force` bypasses the cadence for the backfill sweep below — a thread already
+ * past its extraction turns still needs one pass to pick up everything the old
+ * every-4th-turn cadence never showed the extractor.
  */
 export async function maybeExtractThreadConcepts(
   conversationId: string,
   title: string | null,
-): Promise<void> {
+  opts: { force?: boolean } = {},
+): Promise<AutoExtractOutcome | undefined> {
   let entityCount = 0;
   try {
     const rows = await db
@@ -119,7 +124,9 @@ export async function maybeExtractThreadConcepts(
     }
 
     const assistantTurns = turns.filter((r) => r.role === 'jkai').length;
-    if (!shouldExtractAtTurn(assistantTurns)) return;
+    // Forcing still requires a real reply to exist — an empty thread has
+    // nothing to extract, and calling the model on one is pure waste.
+    if (opts.force ? assistantTurns < 1 : !shouldExtractAtTurn(assistantTurns)) return;
 
     // Newest turns matter most for "what is this thread about", so the clip
     // takes the tail, not the head.
@@ -148,6 +155,7 @@ export async function maybeExtractThreadConcepts(
         metadata: { conversationId, assistantTurns },
       });
       entityCount = outcome.status === 'extracted' ? outcome.entityCount : 0;
+      return outcome;
     } finally {
       publishConversationSignal(conversationId, { type: 'intel', phase: 'done', entityCount });
     }
@@ -156,5 +164,86 @@ export async function maybeExtractThreadConcepts(
       '[intel:chat] thread extraction failed:',
       err instanceof Error ? err.message : err,
     );
+    return { status: 'failed' };
   }
+}
+
+export interface ThreadBackfillProgress {
+  scanned: number;
+  extracted: number;
+  unchanged: number;
+  skipped: number;
+  failed: number;
+  entities: number;
+  truncated: boolean;
+}
+
+/**
+ * Re-extract existing /jkai threads.
+ *
+ * Needed once because the old cadence (turn 2, then every 4th) was longer than
+ * the median thread, so every thread in production had been extracted exactly
+ * once — from its opening exchange only. Nothing said afterwards had ever been
+ * shown to the extractor, so the graph is missing most of what was discussed.
+ * Re-running is not a no-op the way a file backfill is: the transcript is longer
+ * AND cleaner now, so the content hash differs and real work happens.
+ *
+ * Newest threads first — those are the ones being looked at. Sequential, for the
+ * same reason the file/research sweep is: each item is an LLM call.
+ */
+export async function backfillThreadConcepts(
+  opts: { limit?: number } = {},
+): Promise<ThreadBackfillProgress> {
+  const workLimit = Math.max(1, Math.min(opts.limit ?? 50, 500));
+  const progress: ThreadBackfillProgress = {
+    scanned: 0,
+    extracted: 0,
+    unchanged: 0,
+    skipped: 0,
+    failed: 0,
+    entities: 0,
+    truncated: false,
+  };
+
+  // Only threads that actually contain an assistant reply. `conversations`
+  // rows are created on first open, so most of the table is empty shells.
+  const rows = await db
+    .select({ id: conversations.id, title: conversations.title })
+    .from(conversations)
+    .where(
+      sql`EXISTS (
+        SELECT 1 FROM orchestrator_chats c
+        WHERE c.conversation_id = ${conversations.id} AND c.role = 'assistant'
+      )`,
+    )
+    .orderBy(desc(conversations.updatedAt))
+    .limit(workLimit * 3);
+
+  let worked = 0;
+  for (const row of rows) {
+    if (worked >= workLimit) {
+      progress.truncated = true;
+      break;
+    }
+    progress.scanned++;
+    const outcome = await maybeExtractThreadConcepts(row.id, row.title, { force: true });
+    if (!outcome) {
+      progress.skipped++;
+      continue;
+    }
+    if (outcome.status === 'extracted') {
+      progress.extracted++;
+      progress.entities += outcome.entityCount;
+      worked++;
+    } else if (outcome.status === 'unchanged') progress.unchanged++;
+    else if (outcome.status === 'failed') {
+      progress.failed++;
+      worked++;
+    } else progress.skipped++;
+  }
+
+  console.log(
+    `[intel:chat] backfill done — scanned ${progress.scanned}, extracted ${progress.extracted} (${progress.entities} entities), unchanged ${progress.unchanged}, skipped ${progress.skipped}, failed ${progress.failed}`,
+  );
+  return progress;
 }

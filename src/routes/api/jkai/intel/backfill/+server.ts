@@ -7,8 +7,15 @@
 // MAINTENANCE_SECRET header for a one-off run from the box, where a long pass
 // has no user session to carry.
 //
-//   GET             → { enabled, files, research, alreadyExtracted }
+//   GET             → { enabled, files, research, chats, alreadyExtracted }
 //   POST { kinds?, limit? } → run a pass, returns progress counters
+//
+// `kinds: ['chat']` is the odd one out: re-extracting a thread is NOT a no-op
+// the way re-extracting an unchanged file is. The old cadence (turn 2, then
+// every 4th) was longer than the median thread, so every thread in production
+// had been extracted once, from its opening exchange only. The transcript is
+// now both longer and cleaner, so the content hash differs and real work
+// happens. Runs sequentially — each thread is an LLM call.
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
@@ -16,7 +23,11 @@ import { sql } from 'drizzle-orm';
 import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 import { backfillIntelExtraction, isAutoExtractEnabled, type AutoKind } from '$lib/jkai/intel/auto-extract';
 
-const VALID_KINDS: AutoKind[] = ['file', 'research'];
+const VALID_KINDS: AutoKind[] = ['file', 'research', 'chat'];
+/** The corpus sweep in auto-extract.ts only knows about these two; `chat` has
+ *  its own walker in chat-extract.ts (it re-extracts rather than skipping on an
+ *  unchanged hash, so it can't share the same loop). */
+const SWEEP_KINDS: AutoKind[] = ['file', 'research'];
 
 export const GET: RequestHandler = async ({ locals, request }) => {
   if (!(await isMaintenanceAuthorized(request, locals))) return json({ error: 'unauthorized' }, { status: 401 });
@@ -25,6 +36,7 @@ export const GET: RequestHandler = async ({ locals, request }) => {
     SELECT
       (SELECT count(DISTINCT file_id) FROM file_embeddings) AS files,
       (SELECT count(*) FROM research_session WHERE report IS NOT NULL) AS research,
+      (SELECT count(DISTINCT conversation_id) FROM orchestrator_chats WHERE role = 'assistant') AS chats,
       (SELECT count(*) FROM intel_notes WHERE metadata->>'autoKind' IS NOT NULL) AS already_extracted,
       (SELECT count(*) FROM intel_entities WHERE merged_into_id IS NULL) AS entities
   `);
@@ -33,6 +45,7 @@ export const GET: RequestHandler = async ({ locals, request }) => {
     enabled: isAutoExtractEnabled(),
     files: Number(r.files ?? 0),
     research: Number(r.research ?? 0),
+    chats: Number(r.chats ?? 0),
     alreadyExtracted: Number(r.already_extracted ?? 0),
     entities: Number(r.entities ?? 0),
   });
@@ -89,12 +102,23 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     ? body.kinds.filter((k): k is AutoKind => VALID_KINDS.includes(k as AutoKind))
     : undefined;
   if (kinds && kinds.length === 0) {
-    return json({ error: 'kinds must contain "file" and/or "research"' }, { status: 400 });
+    return json({ error: 'kinds must be some of "file", "research", "chat"' }, { status: 400 });
   }
 
-  const progress = await backfillIntelExtraction({
-    kinds,
-    limit: typeof body.limit === 'number' ? body.limit : undefined,
-  });
-  return json(progress);
+  const limit = typeof body.limit === 'number' ? body.limit : undefined;
+
+  // Chat threads have their own walker. Asked for on its own, that is the whole
+  // job; alongside file/research, both run and the counters are returned apart
+  // so a caller can see which corpus did what.
+  const chatProgress = kinds?.includes('chat')
+    ? await (await import('$lib/jkai/intel/chat-extract')).backfillThreadConcepts({ limit })
+    : null;
+
+  const sweepKinds = kinds?.filter((k) => SWEEP_KINDS.includes(k));
+  if (chatProgress && (!sweepKinds || sweepKinds.length === 0)) {
+    return json({ chat: chatProgress });
+  }
+
+  const progress = await backfillIntelExtraction({ kinds: sweepKinds, limit });
+  return json(chatProgress ? { ...progress, chat: chatProgress } : progress);
 };
