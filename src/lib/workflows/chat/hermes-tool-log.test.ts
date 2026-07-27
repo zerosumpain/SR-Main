@@ -86,3 +86,80 @@ describe('rewriteHermesToolLog', () => {
     expect(rewriteHermesToolLog(partial)).toBe(partial);
   });
 });
+
+// Hermes picks the leading glyph per tool (`get_tool_emoji`), falling back to
+// ⚙️ only for tools that register none — which is every `mcp_jkai_*` tool. Its
+// own native tools carry their own glyph, so a ⚙️-only match covered the MCP
+// half of the log and missed the native half entirely.
+describe('rewriteHermesToolLog — native tools with their own glyph', () => {
+  it('rewrites the web_search / web_extract log from the House of Lords reply', () => {
+    const out = rewriteHermesToolLog(
+      '🔍 web_search: "House of Lords members salary allowan..."\n' +
+        '📄 web_extract: "https://www.parliament.uk/business/lo..."\n' +
+        '🔍 web_search: "House of Lords daily allowance £371 £..."',
+    );
+    expect(out).toContain('Searched the web for “House of Lords members salary allowan…”');
+    expect(out).toContain('Read parliament.uk');
+    expect(out).not.toContain('web_search');
+    expect(out).not.toContain('🔍');
+  });
+
+  it.each([
+    ['🐍 execute_code...', 'Ran some code'],
+    ['💻 terminal: "npm run build"', 'Ran the command “npm run build”'],
+    ['🔎 search_files: "tool-summary"', 'Searched the files for “tool-summary”'],
+    ['📖 read_file: "src/app.css"', 'Read “src/app.css”'],
+    ['📚 skill_view: "jkai-research"', 'Read its jkai research playbook'],
+    ['🔍 session_search: "house of lords"', 'Searched past conversations for “house of lords”'],
+    ['🌐 browser_navigate: "https://www.parliament.uk/x"', 'Opened parliament.uk in a browser'],
+    ['🔀 delegate_task: "check the deploy"', 'Handed a sub-agent the job of “check the deploy”'],
+  ])('rewrites %s', (input, expected) => {
+    expect(rewriteHermesToolLog(input)).toBe(`<div class="tool-log-step">${expected}</div>`);
+  });
+
+  // Regression: search queries carry their own quotes far more often than not
+  // (9 of the 13 searches in the House of Lords reply did). Closing the argument
+  // on the first inner quote captured nothing and spilled the rest of the query
+  // into the reply as loose prose.
+  it('keeps a phrase-quoted query whole instead of spilling it into the prose', () => {
+    expect(rewriteHermesToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."')).toBe(
+      '<div class="tool-log-step">Searched the web for “"House of Lords" benefits pension fre…”</div>',
+    );
+    expect(rewriteHermesToolLog('🔍 web_search: "site:parliament.uk "members of the lo..."')).not.toContain(
+      'House of Lords" benefits',
+    );
+  });
+
+  it('counts repeats on a native-tool entry too', () => {
+    expect(rewriteHermesToolLog('🔍 web_search: "peers" (×4)')).toBe(
+      '<div class="tool-log-step">Searched the web for “peers” — 4 calls</div>',
+    );
+  });
+});
+
+// The guard that stops the wider glyph match from eating the answer itself.
+// Every fixture below is a real shape found in production assistant replies.
+describe('rewriteHermesToolLog — leaves prose alone', () => {
+  it.each([
+    '✅ Corrected: the figure is £371 a day.',
+    '🥇 WINNER: the second approach.',
+    '→ recommendation: ship it.',
+    '— kicker: nobody noticed.',
+    '📋 Summary: three things changed.',
+    '💬 Note: this is only an estimate.',
+  ])('does not rewrite %s', (text) => {
+    expect(rewriteHermesToolLog(text)).toBe(text);
+  });
+
+  it('leaves the ⏳ and ⏱️ status lines alone — they are already English', () => {
+    const status =
+      '⏳ Working — 12 min (iteration 5/90, receiving stream response)\n⏱️ Agent inactive for 30 min — no tool calls';
+    expect(rewriteHermesToolLog(status)).toBe(status);
+  });
+
+  it('still rewrites a real entry sitting next to prose that uses a tool glyph', () => {
+    const out = rewriteHermesToolLog('✅ Corrected: see below.\n🔍 web_search: "peers"');
+    expect(out).toContain('✅ Corrected: see below.');
+    expect(out).toContain('<div class="tool-log-step">Searched the web for “peers”</div>');
+  });
+});
