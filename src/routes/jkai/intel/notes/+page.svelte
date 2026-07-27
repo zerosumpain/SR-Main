@@ -27,7 +27,7 @@
 
 <JkaiPageTitle title="NOTES" titleHref="/jkai/intel" />
 
-<div class="p-6 sm:p-10 max-w-5xl mx-auto">
+<div class="p-6 sm:p-10 w-full">
   <div class="flex items-center justify-between mb-6">
     <div></div>
     <a href="/jkai/intel/notes/new" class="px-4 py-2 rounded-[var(--radius-round)] text-sm font-medium" style="background: var(--accent); color: white;">

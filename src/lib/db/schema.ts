@@ -1450,6 +1450,11 @@ export const intelNotes = pgTable('intel_notes', {
   embedding: vector('embedding'),
   status: text('status').notNull().default('pending'),
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  /** Resolved ER category slugs (see intel_categories). Denormalised from the
+   *  source's Drive folder at extraction time so the graph can filter on them
+   *  without walking file paths inside the cached analytics snapshot; re-synced
+   *  when folder settings change. */
+  categories: jsonb('categories').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -1845,6 +1850,56 @@ export const intelEntityMerges = pgTable(
 );
 
 export type IntelEntityMerge = typeof intelEntityMerges.$inferSelect;
+
+/**
+ * Analyst-defined labels for intel SOURCES — "work", "family", "policy" — as
+ * distinct from `intel_entity_types`, which classify what a node *is*. A
+ * category is attached to a Drive folder and inherited by everything under it;
+ * the resolved slugs land on `intel_notes.categories` at extraction time and
+ * become a first-class filter on the graph.
+ */
+export const intelCategories = pgTable(
+  'intel_categories',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    color: text('color').notNull().default('#7dd3fc'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ uniqSlug: uniqueIndex('intel_categories_slug_idx').on(t.slug) }),
+);
+
+export type IntelCategory = typeof intelCategories.$inferSelect;
+export type NewIntelCategory = typeof intelCategories.$inferInsert;
+
+/**
+ * Per-folder settings for /drive. Drive folders are VIRTUAL — they exist only
+ * as `/`-separated prefixes of `workflow_files.name` — so there is no row to
+ * hang a column on, and a per-file column would need rewriting on every move.
+ * Keyed on the folder path with no trailing slash ('' is the root).
+ *
+ * Resolution is inheritance-based (see `$lib/jkai/intel/source-policy`):
+ *   - `intelMode`: the NEAREST ancestor with a non-'inherit' mode decides.
+ *   - `categoryIds`: the UNION of every ancestor's categories.
+ */
+export const driveFolderSettings = pgTable(
+  'drive_folder_settings',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    path: text('path').notNull(),
+    /** 'inherit' | 'include' | 'exclude' — whether files here feed the intel graph. */
+    intelMode: text('intel_mode').notNull().default('inherit'),
+    categoryIds: jsonb('category_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ uniqPath: uniqueIndex('drive_folder_settings_path_idx').on(t.path) }),
+);
+
+export type DriveFolderSetting = typeof driveFolderSettings.$inferSelect;
+export type NewDriveFolderSetting = typeof driveFolderSettings.$inferInsert;
 
 // ---- Gmail channel ----
 

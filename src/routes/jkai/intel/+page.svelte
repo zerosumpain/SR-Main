@@ -24,6 +24,7 @@
   } from '$lib/components/intel/types';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { SURFACES, STAGES } from '$lib/components/intel/workbench';
 
   let { data } = $props();
 
@@ -45,6 +46,67 @@
   let focusId = $state<string | null>(null);
   let hops = $state(2);
   let selectedId = $state<string | null>(null);
+
+  // Dynamic filters. `keyword` is what the box shows; `keywordApplied` is what
+  // the query uses — debounced, so typing does not fire a network fetch and a
+  // Louvain-backed response per keystroke.
+  let keyword = $state('');
+  let keywordApplied = $state('');
+  let contextHops = $state(1);
+  let activeCategories = $state<string[]>([]);
+  /** Entity ids the view is pinned to. Empty = the whole graph. */
+  let pinnedIds = $state<string[]>([]);
+  let entityPick = $state('');
+  let showGuide = $state(false);
+
+  // Plain handle, never $state — a timer read and cleared by the same helper is
+  // the read-own-write cycle that locks the UI up (svelte5-pitfalls §1).
+  let keywordTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onKeywordInput() {
+    if (keywordTimer) clearTimeout(keywordTimer);
+    const next = keyword;
+    keywordTimer = setTimeout(() => {
+      keywordTimer = null;
+      keywordApplied = next.trim();
+    }, 280);
+  }
+
+  function toggleCategory(slug: string) {
+    activeCategories = activeCategories.includes(slug)
+      ? activeCategories.filter((c) => c !== slug)
+      : [...activeCategories, slug];
+  }
+
+  function pinEntity(id: string) {
+    if (!id || pinnedIds.includes(id)) return;
+    pinnedIds = [...pinnedIds, id];
+    entityPick = '';
+  }
+
+  function unpinEntity(id: string) {
+    pinnedIds = pinnedIds.filter((p) => p !== id);
+  }
+
+  function clearFilters() {
+    keyword = '';
+    keywordApplied = '';
+    activeCategories = [];
+    pinnedIds = [];
+    typeId = '';
+    communityId = '';
+    minDegree = 1;
+    focusId = null;
+  }
+
+  const filterCount = $derived(
+    (keywordApplied ? 1 : 0) +
+      activeCategories.length +
+      (pinnedIds.length ? 1 : 0) +
+      (typeId ? 1 : 0) +
+      (communityId ? 1 : 0) +
+      (focusId ? 1 : 0),
+  );
 
   // Path finder
   let pathFrom = $state('');
@@ -74,6 +136,12 @@
       p.set('focus', focusId);
       p.set('hops', String(hops));
     }
+    if (keywordApplied) {
+      p.set('q', keywordApplied);
+      p.set('qHops', String(contextHops));
+    }
+    if (activeCategories.length) p.set('categories', activeCategories.join(','));
+    if (pinnedIds.length) p.set('entities', pinnedIds.join(','));
     return p.toString();
   });
 
@@ -230,13 +298,33 @@
     <CommissionBar busy={!!busyId} onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')} />
     <div class="quick">
       <a href="/jkai/intel/notes/new">+ Note</a>
-      <a href="/jkai/intel/search">Recall</a>
-      <a href="/jkai/intel/quality">Quality</a>
-      <a href="/jkai/intel/timeline">Timeline</a>
-      <a href="/jkai/intel/dossiers">Dossiers</a>
-      <a href="/jkai/intel/review">Triage</a>
+      <button type="button" class="guide-toggle" class:on={showGuide} onclick={() => (showGuide = !showGuide)}>
+        {showGuide ? 'Hide guide' : 'How this fits together'}
+      </button>
     </div>
   </div>
+
+  {#if showGuide}
+    <!-- The loop, stated once. Which surface answers which question was the
+         thing nobody could work out from six equal links. -->
+    <section class="guide">
+      {#each STAGES as stage (stage)}
+        {@const inStage = SURFACES.filter((sf) => sf.stage === stage)}
+        {#if inStage.length}
+          <div class="guide-stage">
+            <h2>{stage}</h2>
+            {#each inStage as sf (sf.href)}
+              <article class="guide-item">
+                <a href={sf.href}>{sf.label}</a>
+                <p class="q">{sf.question}</p>
+                <p class="vs">{sf.ratherThan}</p>
+              </article>
+            {/each}
+          </div>
+        {/if}
+      {/each}
+    </section>
+  {/if}
 
   <!-- Vital signs -->
   <div class="tiles">
@@ -281,6 +369,73 @@
   <!-- Network explorer -->
   <section class="explorer">
     <aside class="controls">
+      <div class="ctl">
+        <label for="f-q">Keyword</label>
+        <input
+          id="f-q"
+          type="search"
+          placeholder="name, alias or summary…"
+          bind:value={keyword}
+          oninput={onKeywordInput}
+        />
+        {#if keywordApplied}
+          <label for="f-qhops">Context around hits: {contextHops} hop{contextHops === 1 ? '' : 's'}</label>
+          <input id="f-qhops" type="range" min="0" max="3" bind:value={contextHops} />
+          <p class="hint">
+            {network?.matched?.length ?? 0} match{(network?.matched?.length ?? 0) === 1 ? '' : 'es'}
+            shown solid; the rest is the surrounding neighbourhood.
+          </p>
+        {/if}
+      </div>
+
+      {#if (network?.categories ?? []).length}
+        <div class="ctl">
+          <span class="ctl-title">Category</span>
+          <div class="chips">
+            {#each network?.categories ?? [] as c (c.id)}
+              <button
+                type="button"
+                class="chip"
+                class:on={activeCategories.includes(c.slug)}
+                style="--chip: {c.color}"
+                onclick={() => toggleCategory(c.slug)}
+              >{c.name}</button>
+            {/each}
+          </div>
+          <p class="hint">Set on Drive folders — see /drive.</p>
+        </div>
+      {/if}
+
+      <div class="ctl">
+        <span class="ctl-title">Pin to entities</span>
+        <select
+          bind:value={entityPick}
+          onchange={() => pinEntity(entityPick)}
+          aria-label="Add an entity to the pinned set"
+        >
+          <option value="">Add an entity…</option>
+          {#each pathOptions as o (o.id)}<option value={o.id}>{o.name}</option>{/each}
+        </select>
+        {#if pinnedIds.length}
+          <div class="chips">
+            {#each pinnedIds as id (id)}
+              {@const node = network?.nodes.find((n) => n.id === id)}
+              <button type="button" class="chip on" onclick={() => unpinEntity(id)}>
+                {node?.name ?? id.slice(0, 8)} ×
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if filterCount > 0}
+        <div class="ctl filters-on">
+          <button type="button" class="link-btn" onclick={clearFilters}>
+            Clear {filterCount} filter{filterCount === 1 ? '' : 's'}
+          </button>
+        </div>
+      {/if}
+
       <div class="ctl">
         <label for="f-type">Type</label>
         <select id="f-type" bind:value={typeId}>
@@ -364,6 +519,7 @@
           nodes={network.nodes}
           edges={network.edges}
           {highlightPath}
+          matchedIds={network.matched ?? []}
           {selectedId}
           onSelect={(id) => (selectedId = id)}
           onOpen={(id) => focus(id)}
@@ -518,10 +674,12 @@
 {/if}
 
 <style>
+  /* Full-bleed: the explorer is a three-pane instrument and the findings grid
+     is auto-fill — both get strictly better with width, and a centred column
+     was wasting a third of a wide screen on margins. */
   .wrap {
     padding: 20px;
-    max-width: 1600px;
-    margin: 0 auto;
+    width: 100%;
   }
 
   .topbar {
@@ -551,9 +709,75 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .quick a:hover {
+  .quick a:hover,
+  .guide-toggle:hover {
     border-color: var(--accent-tint-35);
     color: var(--accent);
+  }
+  .guide-toggle {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 12px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .guide-toggle.on {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+
+  /* ── Guide ─────────────────────────────────────────────────────────────── */
+  .guide {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+    padding: 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+  }
+  .guide-stage h2 {
+    margin: 0 0 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+  .guide-item + .guide-item {
+    margin-top: 12px;
+  }
+  .guide-item a {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-tint-35);
+  }
+  .guide-item a:hover {
+    color: var(--accent);
+  }
+  .guide-item .q {
+    margin: 5px 0 0;
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    line-height: 1.45;
+  }
+  .guide-item .vs {
+    margin: 4px 0 0;
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    line-height: 1.45;
   }
 
   /* ── Tiles ─────────────────────────────────────────────────────────────── */
@@ -664,6 +888,54 @@
   .ctl input[type='range'] {
     width: 100%;
     accent-color: var(--accent);
+  }
+  .ctl input[type='search'] {
+    width: 100%;
+    padding: 5px 7px;
+    font: inherit;
+    font-size: var(--fs-label);
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+  }
+  .hint {
+    margin: 2px 0 0;
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    line-height: 1.4;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 3px 8px;
+    border: 1px solid var(--card-border);
+    border-left: 3px solid var(--chip, var(--accent-ink-tint-35));
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: left;
+  }
+  .chip:hover {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .chip.on {
+    background: var(--accent-tint-08);
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+  .filters-on {
+    background: var(--accent-tint-04);
+    border-radius: var(--radius-sharp);
+    padding: 8px;
   }
   .focus-box {
     background: var(--accent-tint-04);

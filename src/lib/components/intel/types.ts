@@ -41,6 +41,17 @@ export interface NetNode {
   brokerage: number;
   community: number;
   hops: number | null;
+  /** ER category slugs, unioned across the notes asserting this entity. */
+  categories: string[];
+  /** Observed surface forms — searched alongside the name. */
+  aliases: string[];
+}
+
+export interface NetCategory {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
 }
 
 export interface NetEdge {
@@ -58,6 +69,9 @@ export interface NetworkPayload {
   nodes: NetNode[];
   edges: NetEdge[];
   types: Array<{ id: string; name: string; icon: string; color: string }>;
+  categories: NetCategory[];
+  /** Ids that literally matched the keyword filter (the rest is context). */
+  matched: string[];
   trimmed: boolean;
   stats: {
     totalNodes: number;

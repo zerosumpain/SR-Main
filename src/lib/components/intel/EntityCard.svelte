@@ -118,6 +118,53 @@
   });
 
   const trust = $derived(serverTrust?.trust ?? localTrust);
+
+  // ── Pin to a dossier ─────────────────────────────────────────────────────
+  // The hand-off that was missing: the graph could find a thing and commission
+  // work about it, but there was no way to say "this belongs to the enquiry I
+  // am running" without leaving for the dossiers page and searching for it
+  // again. Dossiers load lazily on first open, not with the card — a hover card
+  // must not cost an extra request.
+  type DossierOption = { id: string; title: string; status: string };
+
+  let pinOpen = $state(false);
+  let dossiers = $state<DossierOption[]>([]);
+  let dossiersLoaded = $state(false);
+  let pinBusy = $state(false);
+  let pinResult = $state<string | null>(null);
+
+  async function openPin() {
+    pinOpen = !pinOpen;
+    if (!pinOpen || dossiersLoaded) return;
+    try {
+      const res = await fetch('/api/jkai/intel/dossiers?status=open');
+      if (res.ok) dossiers = (await res.json()).dossiers ?? [];
+    } catch {
+      // The rest of the card is unaffected; the list just stays empty.
+    } finally {
+      dossiersLoaded = true;
+    }
+  }
+
+  async function pinTo(dossier: DossierOption) {
+    if (pinBusy) return;
+    pinBusy = true;
+    try {
+      const res = await fetch(`/api/jkai/intel/dossiers/${dossier.id}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'add', kind: 'entity', refId: entityId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `failed (${res.status})`);
+      pinResult = body.duplicate ? `Already in ${dossier.title}` : `Pinned to ${dossier.title}`;
+      pinOpen = false;
+    } catch (err) {
+      pinResult = err instanceof Error ? err.message : 'Could not pin that';
+    } finally {
+      pinBusy = false;
+    }
+  }
   const breakdown = $derived(trust ? orderedComponents(trust.components) : []);
   const explanation = $derived(trust ? explainConfidence(trust) : []);
   const selectedGrade = $derived(draftGrade ?? trust?.resolved.sourceGrade ?? 'F');
@@ -373,13 +420,71 @@
           type="button"
           onclick={() => onCommission('monitor', `Watch for news and changes about ${data!.entity.name}`, [entityId])}
         >Monitor</button>
+        <button type="button" class:on={pinOpen} onclick={openPin}>Add to dossier</button>
         <a class="btn-link" href="/jkai/intel/entities/{entityId}">Open</a>
       </footer>
+
+      {#if pinOpen}
+        <div class="pin-list">
+          {#if !dossiersLoaded}
+            <p class="pin-note">Loading case files…</p>
+          {:else if dossiers.length === 0}
+            <p class="pin-note">No open dossiers. <a href="/jkai/intel/dossiers">Start one →</a></p>
+          {:else}
+            {#each dossiers as d (d.id)}
+              <button type="button" class="pin-item" disabled={pinBusy} onclick={() => pinTo(d)}>
+                {d.title}
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+      {#if pinResult}
+        <p class="pin-note done">{pinResult}</p>
+      {/if}
     {/if}
   {/if}
 </div>
 
 <style>
+  .pin-list {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    padding: 4px;
+  }
+  .pin-item {
+    text-align: left;
+    padding: 5px 7px;
+    font: inherit;
+    font-size: var(--fs-label);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sharp);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .pin-item:hover:not(:disabled) {
+    background: var(--accent-tint-08);
+    color: var(--accent);
+  }
+  .pin-note {
+    margin: 6px 0 0;
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+  .pin-note.done {
+    color: var(--success);
+  }
+  .pin-note a {
+    color: var(--accent);
+  }
+
   .entity-card {
     /* Opaque — this floats over content and must never show it through. */
     background: var(--surface-elevated);
@@ -838,6 +943,7 @@
     transition: background var(--t-fast) var(--ease-out);
   }
   footer button:hover,
+  footer button.on,
   .btn-link:hover {
     background: var(--accent-tint-08);
     color: var(--accent);

@@ -6,6 +6,8 @@
   import FileViewerModal from '$lib/components/drive/FileViewerModal.svelte';
   import InteractModelModal from '$lib/components/drive/InteractModelModal.svelte';
   import RagChatPanel from '$lib/components/drive/RagChatPanel.svelte';
+  import FolderIntelModal from '$lib/components/drive/FolderIntelModal.svelte';
+  import { resolveFolderPolicy, type FolderSetting } from '$lib/jkai/intel/source-policy';
   import type { RagCollection } from '$lib/db/schema';
 
   let { data } = $props();
@@ -23,6 +25,43 @@
   };
 
   let files = $state<FileRow[]>(data.files as FileRow[]);
+
+  // ——— Entity-resolution policy per folder ———
+  // Folders are virtual, so the settings hang off the path string and are
+  // resolved by walking ancestors (see $lib/jkai/intel/source-policy).
+  let folderSettings = $state<FolderSetting[]>((data.folderSettings ?? []) as FolderSetting[]);
+  let intelFolderPath = $state<string | null>(null);
+  /** Last cascade/sync result, shown inline rather than as another alert(). */
+  let intelNotice = $state<string | null>(null);
+  let intelNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function notifyIntel(message: string) {
+    intelNotice = message;
+    if (intelNoticeTimer) clearTimeout(intelNoticeTimer);
+    intelNoticeTimer = setTimeout(() => (intelNotice = null), 6000);
+  }
+
+  /** The effective ER policy for a folder path — drives the tile badges. */
+  function policyFor(path: string) {
+    return resolveFolderPolicy(path, folderSettings);
+  }
+
+  async function reloadFolderSettings() {
+    const res = await fetch('/api/drive/folders');
+    if (!res.ok) return;
+    const body = await res.json();
+    folderSettings = (body.folders ?? []).map((f: Record<string, unknown>) => ({
+      path: String(f.path ?? ''),
+      intelMode: String(f.intelMode ?? 'inherit'),
+      categoryIds: (f.categoryIds ?? []) as string[],
+    })) as FolderSetting[];
+  }
+
+  async function onFolderIntelSaved(message: string) {
+    intelFolderPath = null;
+    notifyIntel(message);
+    await reloadFolderSettings();
+  }
 
   // Effective upload cap = min(server BODY_SIZE_LIMIT, endpoint MAX_BYTES), from the load.
   const maxUploadBytes = (data.maxUploadBytes as number | undefined) ?? 20 * 1024 * 1024;
@@ -543,6 +582,13 @@
       alert(`Delete failed (${res.status})`);
       return;
     }
+    // The API cascades the derived intel note; report what left the graph with
+    // it, because that is not obvious from deleting a file.
+    const body = await res.json().catch(() => null);
+    const removed = body?.intel?.entitiesRemoved ?? 0;
+    if (removed > 0) {
+      notifyIntel(`${baseName(f.name)} deleted — ${removed} entit${removed === 1 ? 'y' : 'ies'} removed from the Intel graph.`);
+    }
     files = files.filter((x) => x.id !== f.id);
     delete selected[f.id];
   }
@@ -813,6 +859,12 @@
             {creatingFolder ? 'Adding…' : '+ Folder'}
           </button>
         </div>
+        <button
+          type="button"
+          class="row-link"
+          onclick={() => (intelFolderPath = currentPath)}
+          title="Whether files here feed the Intel knowledge graph, and under which categories"
+        >ER settings</button>
         <div class="view-toggle" role="group" aria-label="View mode">
           <button type="button" class="vt-btn" class:on={viewMode === 'list'} aria-pressed={viewMode === 'list'} title="List view" onclick={() => setView('list')}>
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M2 3h10M2 7h10M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
@@ -824,6 +876,10 @@
           </button>
         </div>
       </div>
+
+      {#if intelNotice}
+        <p class="intel-notice">{intelNotice}</p>
+      {/if}
 
       {#if subfolders.length === 0 && visibleFiles.length === 0}
         <div class="empty">This folder is empty — drop files above{currentPath ? '.' : ', or add a folder.'}</div>
@@ -839,11 +895,25 @@
               onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(joinPath(currentPath, fol.name)); } }}
             >
               <button type="button" class="folder-del" title="Delete folder" aria-label={`Delete folder ${fol.name}`} onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>×</button>
+              <button
+                type="button"
+                class="folder-er"
+                title={`Entity-resolution settings for ${fol.name}`}
+                aria-label={`Entity-resolution settings for ${fol.name}`}
+                onclick={(e) => { e.stopPropagation(); intelFolderPath = joinPath(currentPath, fol.name); }}
+              >ER</button>
               <svg class="folder-icon" width="46" height="38" viewBox="0 0 46 38" fill="none" aria-hidden="true">
                 <path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/>
               </svg>
               <div class="tile-name">{fol.name}</div>
-              <div class="tile-meta"><span>{fol.count} item{fol.count === 1 ? '' : 's'}</span></div>
+              <div class="tile-meta">
+                <span>{fol.count} item{fol.count === 1 ? '' : 's'}</span>
+                {#if !policyFor(joinPath(currentPath, fol.name)).included}
+                  <span class="er-chip out">no ER</span>
+                {:else if policyFor(joinPath(currentPath, fol.name)).categoryIds.length}
+                  <span class="er-chip">{policyFor(joinPath(currentPath, fol.name)).categoryIds.length} cat</span>
+                {/if}
+              </div>
             </div>
           {/each}
           {#each visibleFiles as f (f.id)}
@@ -895,6 +965,11 @@
             >
               <svg class="folder-icon-sm" width="22" height="18" viewBox="0 0 46 38" fill="none" aria-hidden="true"><path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/></svg>
               <span class="folder-row-name">{fol.name}</span>
+              {#if !policyFor(joinPath(currentPath, fol.name)).included}
+                <span class="er-chip out">no ER</span>
+              {:else if policyFor(joinPath(currentPath, fol.name)).categoryIds.length}
+                <span class="er-chip">{policyFor(joinPath(currentPath, fol.name)).categoryIds.length} cat</span>
+              {/if}
               <span class="folder-row-count">{fol.count} item{fol.count === 1 ? '' : 's'}</span>
               <button type="button" class="row-link danger" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
             </div>
@@ -1031,6 +1106,14 @@
     files={selectedFiles.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType }))}
     onClose={() => (interactOpen = false)}
     onCreated={onCollectionCreated}
+  />
+{/if}
+
+{#if intelFolderPath !== null}
+  <FolderIntelModal
+    path={intelFolderPath}
+    onClose={() => (intelFolderPath = null)}
+    onSaved={onFolderIntelSaved}
   />
 {/if}
 
@@ -1653,6 +1736,49 @@
     transition: opacity 100ms ease, color 100ms ease;
   }
   .folder-tile:hover .folder-del { opacity: 1; }
+  .folder-er {
+    position: absolute;
+    top: 4px;
+    left: 5px;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    background: transparent;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp, 2px);
+    color: var(--text-ghost);
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 0.15s ease-out;
+  }
+  .folder-tile:hover .folder-er { opacity: 1; }
+  .folder-er:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ER state on a folder, visible without opening the dialog. */
+  .er-chip {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border: 1px solid var(--accent-ink-tint-35, var(--card-border));
+    border-radius: var(--radius-sharp, 2px);
+    color: var(--accent-ink);
+  }
+  .er-chip.out {
+    border-color: var(--warn-border, var(--card-border));
+    color: var(--warn);
+  }
+  .intel-notice {
+    margin: 8px 0 0;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    background: var(--accent-tint-04);
+    border-left: 3px solid var(--accent);
+    color: var(--text-secondary);
+  }
   .folder-del:hover { color: var(--error); }
 
   .folder-row {

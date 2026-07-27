@@ -42,6 +42,12 @@ export interface AutoExtractInput {
   /** Extra provenance stored on the derived note. */
   metadata?: Record<string, unknown>;
   /**
+   * Resolved ER category slugs for this source (see ./source-policy). Stored on
+   * the note so the graph can filter by category without walking Drive paths
+   * inside the cached analytics snapshot.
+   */
+  categories?: string[];
+  /**
    * Re-extract even when the content hash matches.
    *
    * The hash gate assumes the only reason to redo an item is that its text
@@ -118,6 +124,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
     // afterwards, the summariser found an empty note, correctly declined to
     // invent detail, and every entity was left summary-less — which also left
     // entity embeddings weaker, since they embed name + summary + properties.
+    const categories = input.categories ?? [];
     let noteId: string;
     if (existing) {
       noteId = existing.id;
@@ -129,6 +136,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           processedContent: clipped,
           status: 'processing',
           metadata,
+          categories,
           updatedAt: new Date(),
         })
         .where(eq(intelNotes.id, noteId));
@@ -143,6 +151,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           format: 'summary',
           status: 'processing',
           metadata,
+          categories,
         })
         .returning({ id: intelNotes.id });
       noteId = created.id;
@@ -199,6 +208,79 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
 export function queueIntelExtraction(input: AutoExtractInput): void {
   if (!isAutoExtractEnabled()) return;
   void extractIntoIntel(input).catch(() => {});
+}
+
+export interface DerivedDeleteResult {
+  notesDeleted: number;
+  entitiesRemoved: number;
+  relationshipsRemoved: number;
+}
+
+/**
+ * Remove the intel derived from an upstream source that has gone away.
+ *
+ * A derived note holds no foreign key to its source — a Drive file lives in
+ * `workflow_files`, a deep dive in `research_session` — so deleting the source
+ * deleted its bytes and its embeddings and left the entities, relationships and
+ * timeline events behind, attributed to a document that no longer exists. Every
+ * delete path for those sources calls this.
+ *
+ * `deleteNoteCascade` decides what actually goes: an entity that another note
+ * also asserts is kept, because the source dying is not evidence that the thing
+ * it mentioned stopped existing.
+ */
+export async function deleteDerivedIntel(
+  kind: AutoKind,
+  refId: string,
+): Promise<DerivedDeleteResult> {
+  const result: DerivedDeleteResult = {
+    notesDeleted: 0,
+    entitiesRemoved: 0,
+    relationshipsRemoved: 0,
+  };
+  if (!refId) return result;
+
+  try {
+    const notes = await db
+      .select({ id: intelNotes.id })
+      .from(intelNotes)
+      .where(
+        and(
+          sql`${intelNotes.metadata}->>'autoKind' = ${kind}`,
+          sql`${intelNotes.metadata}->>'refId' = ${refId}`,
+        ),
+      );
+    if (notes.length === 0) return result;
+
+    const { deleteNoteCascade } = await import('./ingest');
+    for (const note of notes) {
+      const cascade = await deleteNoteCascade(note.id);
+      result.notesDeleted += 1;
+      result.entitiesRemoved += cascade.removedEntities;
+      result.relationshipsRemoved += cascade.removedRelationships;
+    }
+
+    // Every downstream reader works off the cached snapshot; without this the
+    // graph keeps drawing the deleted entities for up to a minute.
+    const { invalidateGraphAnalysis } = await import('./analytics/load');
+    invalidateGraphAnalysis();
+
+    console.log(
+      `[intel:auto] ${kind} ${refId} removed — ${result.notesDeleted} note(s), ${result.entitiesRemoved} entities`,
+    );
+  } catch (err) {
+    // Deleting a file must not fail because the graph was busy.
+    console.error(
+      `[intel:auto] cascade delete for ${kind} ${refId} failed:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+  return result;
+}
+
+/** Fire-and-forget form for delete handlers that must not wait on the graph. */
+export function queueDerivedIntelDelete(kind: AutoKind, refId: string): void {
+  void deleteDerivedIntel(kind, refId).catch(() => {});
 }
 
 export interface BackfillProgress {
@@ -277,19 +359,30 @@ export async function backfillIntelExtraction(opts: BackfillOptions = {}): Promi
       LIMIT ${SCAN_CEILING}
     `);
 
+    // Resolved once: the policy context is the same for every file in the sweep.
+    const { loadSourcePolicyContext, policyForFileName } = await import('./source-policy.server');
+    const policyCtx = await loadSourcePolicyContext();
+
     for (const row of rows as Array<Record<string, unknown>>) {
       if (exhausted()) {
         progress.truncated = true;
         break;
       }
       progress.scanned++;
+      const name = String(row.name ?? 'file');
+      const policy = await policyForFileName(name, policyCtx);
+      if (!policy.included) {
+        progress.skipped++;
+        continue;
+      }
       record(
         await extractIntoIntel({
           kind: 'file',
           refId: String(row.id),
-          title: String(row.name ?? 'file'),
+          title: name,
           text: String(row.text ?? ''),
           contentHash: String(row.hash ?? ''),
+          categories: policy.categorySlugs,
           metadata: { sourceUrl: '/drive', backfilled: true },
         }),
       );

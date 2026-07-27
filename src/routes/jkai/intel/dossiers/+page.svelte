@@ -156,8 +156,9 @@
 <style>
   .wrap {
     padding: 16px 20px 32px;
-    max-width: 1100px;
-    margin: 0 auto;
+    /* Full-bleed, like every Intel surface — a centred column beside a
+       full-width graph read as a bug. Prose keeps its own measure below. */
+    width: 100%;
   }
 
   .new {

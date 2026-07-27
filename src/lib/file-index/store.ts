@@ -22,6 +22,7 @@ import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
 import { embedChunks, FILE_INDEX_EMBEDDING_MODEL } from './embed';
 import { queueIntelExtraction } from '$lib/jkai/intel/auto-extract';
+import { policyForFileName } from '$lib/jkai/intel/source-policy.server';
 
 // Cap the bytes we ever read into RAM to embed. The WebDAV write site allows
 // multi-GB files; loading one whole into a single Buffer on the memory-constrained
@@ -133,14 +134,25 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
   // The file's text is now the current indexed text — feed it to the intel
   // graph so uploads become entities, not just vectors. Hash-deduped and
   // fire-and-forget: extraction never blocks or fails indexing.
-  queueIntelExtraction({
-    kind: 'file',
-    refId: fileId,
-    title: row.name,
-    text: content.text,
-    contentHash: hash,
-    metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
-  });
+  //
+  // Unless its Drive folder is excluded from ER: the semantic index (@files,
+  // RAG) is unaffected either way, but an excluded folder must not put entities
+  // in the graph. Categories inherited from the folder tree ride along so the
+  // Intel graph filter can select on them.
+  const policy = await policyForFileName(row.name).catch(() => null);
+  if (policy && !policy.included) {
+    console.log(`[file-index] ${row.name} is in an ER-excluded folder — skipping intel extraction`);
+  } else {
+    queueIntelExtraction({
+      kind: 'file',
+      refId: fileId,
+      title: row.name,
+      text: content.text,
+      contentHash: hash,
+      categories: policy?.categorySlugs ?? [],
+      metadata: { mimeType: row.mimeType, modality: content.modality, sourceUrl: '/drive' },
+    });
+  }
 
   return { status: 'indexed', chunkCount: rows.length, modality: content.modality };
 }

@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { workflowFiles, type WorkflowFilePermissions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { deleteFile } from '$lib/file-store/storage';
+import { deleteDerivedIntel } from '$lib/jkai/intel/auto-extract';
 
 function mergePerms(existing: unknown, patch: Partial<WorkflowFilePermissions>): WorkflowFilePermissions {
   const e = (existing ?? {}) as Partial<WorkflowFilePermissions>;
@@ -59,5 +60,9 @@ export const DELETE: RequestHandler = async ({ params }) => {
   if (!existing) throw error(404, 'file not found');
   await deleteFile(existing.diskPath);
   await db.delete(workflowFiles).where(eq(workflowFiles.id, params.id));
-  return json({ ok: true });
+  // The derived intel note has no FK to the file, so nothing else removes the
+  // entities this document put in the graph. Awaited (not queued) so /drive can
+  // tell you what went with it.
+  const intel = await deleteDerivedIntel('file', params.id);
+  return json({ ok: true, intel });
 };

@@ -26,6 +26,11 @@ export interface GraphNode {
   noteCount: number;
   /** Most recent note timestamp this entity was seen in, epoch ms. */
   lastSeenAt: number;
+  /** Observed surface forms. Searched alongside the name so "IBCA" finds the
+   *  node stored under its expanded title. */
+  aliases: string[];
+  /** ER category slugs, unioned across every note asserting this entity. */
+  categories: string[];
 }
 
 export interface GraphEdge {

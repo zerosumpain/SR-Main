@@ -5,9 +5,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { hopNeighbourhood, components } from '$lib/jkai/intel/analytics/model';
+import { applyGraphFilter, parseCsv } from '$lib/jkai/intel/analytics/filter';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { db } from '$lib/db';
-import { intelEntityTypes } from '$lib/db/schema';
+import { intelCategories, intelEntityTypes } from '$lib/db/schema';
 
 /**
  * Above this many nodes the payload is trimmed to the most central entities.
@@ -22,26 +23,27 @@ export const GET: RequestHandler = async ({ url }) => {
   const hops = Math.min(Math.max(Number(url.searchParams.get('hops') ?? 2), 1), 5);
   const minDegree = Math.max(Number(url.searchParams.get('minDegree') ?? 0), 0);
   const communityFilter = url.searchParams.get('community');
+  const q = url.searchParams.get('q');
+  const categoryFilter = parseCsv(url.searchParams.get('categories'));
+  const entityFilter = parseCsv(url.searchParams.get('entities'));
+  const qHopsParam = url.searchParams.get('qHops');
 
   const analysis = await getGraphAnalysis();
   const { index, centrality, community } = analysis;
 
-  // Which nodes survive the filters, in order of precedence.
-  let keep = new Set(index.ids);
+  const filtered = applyGraphFilter(index, community.membership, {
+    typeId,
+    communityId: communityFilter ? Number(communityFilter) : null,
+    minDegree,
+    focusId,
+    hops,
+    q,
+    qHops: qHopsParam === null ? 1 : Number(qHopsParam),
+    categories: categoryFilter,
+    entityIds: entityFilter,
+  });
 
-  if (focusId && index.byId.has(focusId)) {
-    keep = new Set(hopNeighbourhood(index, focusId, hops).keys());
-  }
-  if (typeId) {
-    keep = new Set([...keep].filter((id) => index.byId.get(id)?.typeId === typeId));
-  }
-  if (communityFilter !== null && communityFilter !== '') {
-    const c = Number(communityFilter);
-    keep = new Set([...keep].filter((id) => community.membership.get(id) === c));
-  }
-  if (minDegree > 0) {
-    keep = new Set([...keep].filter((id) => (index.degree.get(id) ?? 0) >= minDegree));
-  }
+  let keep = filtered.keep;
 
   let trimmed = false;
   if (keep.size > MAX_NODES) {
@@ -74,6 +76,8 @@ export const GET: RequestHandler = async ({ url }) => {
       brokerage: brokerageScore(id, centrality, index),
       community: community.membership.get(id) ?? 0,
       hops: focusId ? (hopNeighbourhood(index, focusId, hops).get(id) ?? null) : null,
+      categories: n.categories,
+      aliases: n.aliases,
     };
   });
 
@@ -91,14 +95,25 @@ export const GET: RequestHandler = async ({ url }) => {
       crossCommunity: community.membership.get(e.source) !== community.membership.get(e.target),
     }));
 
-  const types = await db
-    .select({
-      id: intelEntityTypes.id,
-      name: intelEntityTypes.name,
-      icon: intelEntityTypes.icon,
-      color: intelEntityTypes.color,
-    })
-    .from(intelEntityTypes);
+  const [types, categories] = await Promise.all([
+    db
+      .select({
+        id: intelEntityTypes.id,
+        name: intelEntityTypes.name,
+        icon: intelEntityTypes.icon,
+        color: intelEntityTypes.color,
+      })
+      .from(intelEntityTypes),
+    db
+      .select({
+        id: intelCategories.id,
+        slug: intelCategories.slug,
+        name: intelCategories.name,
+        color: intelCategories.color,
+      })
+      .from(intelCategories)
+      .orderBy(intelCategories.name),
+  ]);
 
   const comps = components(index);
 
@@ -106,6 +121,10 @@ export const GET: RequestHandler = async ({ url }) => {
     nodes,
     edges,
     types,
+    categories,
+    // The literal keyword hits, kept separate from `nodes` so the client can
+    // highlight them rather than pretending the expanded neighbourhood matched.
+    matched: filtered.matched.filter((id) => keep.has(id)),
     trimmed,
     stats: {
       totalNodes: index.ids.length,

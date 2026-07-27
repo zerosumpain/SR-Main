@@ -27,6 +27,7 @@
     nodes = [],
     edges = [],
     highlightPath = null,
+    matchedIds = [],
     selectedId = null,
     onSelect,
     onOpen,
@@ -35,6 +36,12 @@
     edges: NetEdge[];
     /** Ordered entity ids to draw as a highlighted route. */
     highlightPath?: string[] | null;
+    /**
+     * Literal hits from the keyword filter. The rest of what is drawn is the
+     * neighbourhood around them — context, not answer — so it is dimmed rather
+     * than removed: a keyword view with no edges says nothing about a network.
+     */
+    matchedIds?: string[];
     selectedId?: string | null;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
@@ -67,6 +74,9 @@
   const clusterColour = (c: number) => CLUSTER_COLOURS[c % CLUSTER_COLOURS.length];
 
   const pathSet = $derived(new Set(highlightPath ?? []));
+  const matchSet = $derived(new Set(matchedIds ?? []));
+  /** Only dim when there is something to dim AGAINST. */
+  const dimming = $derived(matchSet.size > 0);
   const pathEdgeKeys = $derived.by(() => {
     const set = new Set<string>();
     const p = highlightPath ?? [];
@@ -207,7 +217,9 @@
       .append('circle')
       .attr('r', (d) => radius(d))
       .attr('fill', (d) => clusterColour(d.community))
-      .attr('fill-opacity', (d) => (d.confirmed ? 0.85 : 0.4))
+      .attr('fill-opacity', (d) =>
+        dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4,
+      )
       .attr('stroke', (d) =>
         d.id === selectedId ? 'var(--accent)' : pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',
       )
@@ -225,9 +237,9 @@
       .attr('opacity', 0.75);
 
     // Labels only for entities big enough to earn one, plus anything on a
-    // highlighted path. Everything else labels on hover.
+    // highlighted path or matching the keyword. Everything else labels on hover.
     node
-      .filter((d) => radius(d) > 10 || pathSet.has(d.id))
+      .filter((d) => radius(d) > 10 || pathSet.has(d.id) || matchSet.has(d.id))
       .append('text')
       .text((d) => (d.name.length > 26 ? `${d.name.slice(0, 24)}…` : d.name))
       .attr('x', (d) => radius(d) + 5)
@@ -350,6 +362,7 @@
     nodes;
     edges;
     highlightPath;
+    matchedIds;
     container;
     untrack(() => render());
   });

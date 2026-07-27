@@ -4,6 +4,9 @@ import {
   intelEntities,
   intelRelationships,
   intelNoteEntities,
+  intelTimelineEvents,
+  intelDossierItems,
+  intelInsights,
 } from '$lib/db/schema';
 import { eq, ne, and, inArray } from 'drizzle-orm';
 import { extractFromNote } from './extract';
@@ -125,6 +128,10 @@ export interface CascadeDeleteResult {
   deleted: true;
   removedRelationships: number;
   removedEntities: number;
+  /** Derived artefacts that pointed at the deleted entities. */
+  removedTimelineEvents: number;
+  removedDossierItems: number;
+  removedInsights: number;
 }
 
 /**
@@ -134,6 +141,15 @@ export interface CascadeDeleteResult {
  * - Entities whose only intel_note_entities link was this note are deleted.
  * - Entities referenced by other notes survive; seed/manual entities with no
  *   note links are unaffected.
+ *
+ * Everything DOWNSTREAM of a deleted entity goes too. Without this the FK rules
+ * quietly leave debris that outlives its source: `intel_timeline_events.entity_id`
+ * is `set null`, so an event sourced from another note but *about* a deleted
+ * entity became an undated orphan on the timeline; dossier pins and insights hold
+ * bare id strings with no FK at all, so they survived as pins and cards
+ * referencing something the graph no longer contains; and a merge tombstone whose
+ * survivor was deleted made the merged-away row invisible for ever (every graph
+ * query excludes `merged_into_id IS NOT NULL`) while never being deleted itself.
  *
  * Runs inside a single transaction. Returns counts for logging / UI use.
  */
@@ -176,18 +192,88 @@ export async function deleteNoteCascade(noteId: string): Promise<CascadeDeleteRe
     //    - intel_alerts rows for this note
     await tx.delete(intelNotes).where(eq(intelNotes.id, noteId));
 
-    // E. Delete orphan entities. FK cascades on intel_relationships
-    // (source_entity_id / target_entity_id) remove any surviving
-    // relationships that those entities were part of.
-    if (orphanIds.length > 0) {
-      await tx.delete(intelEntities).where(inArray(intelEntities.id, orphanIds));
+    // E. Pull in merge tombstones. A row whose `merged_into_id` points at an
+    // entity we are about to delete is an alias of something that will no
+    // longer exist — and every graph query filters `merged_into_id IS NULL`, so
+    // leaving it behind hides it for ever rather than restoring it. Walked to a
+    // fixpoint because a survivor can itself have been merged into.
+    const doomed = new Set(orphanIds);
+    for (let depth = 0; depth < 8; depth += 1) {
+      const frontier = [...doomed];
+      if (frontier.length === 0) break;
+      const aliases = await tx
+        .select({ id: intelEntities.id })
+        .from(intelEntities)
+        .where(inArray(intelEntities.mergedIntoId, frontier));
+      const added = aliases.map((a) => a.id).filter((id) => !doomed.has(id));
+      if (added.length === 0) break;
+      for (const id of added) doomed.add(id);
+    }
+    const doomedIds = [...doomed];
+
+    // F. Downstream artefacts that hold entity ids WITHOUT a foreign key, plus
+    // timeline events whose `entity_id` would merely be nulled.
+    let removedTimelineEvents = 0;
+    let removedDossierItems = 0;
+    let removedInsights = 0;
+
+    if (doomedIds.length > 0) {
+      const timelineResult = await tx
+        .delete(intelTimelineEvents)
+        .where(inArray(intelTimelineEvents.entityId, doomedIds));
+      removedTimelineEvents = rowsAffected(timelineResult);
+
+      const dossierResult = await tx
+        .delete(intelDossierItems)
+        .where(
+          and(
+            eq(intelDossierItems.kind, 'entity'),
+            inArray(intelDossierItems.refId, doomedIds),
+          ),
+        );
+      removedDossierItems = rowsAffected(dossierResult);
+
+      // `entity_ids` is a jsonb array with no foreign key, so an insight about a
+      // deleted entity has nothing left to explain and would render a dead card.
+      //
+      // Matched in TWO steps rather than with a jsonb `?|` containment query:
+      // there are hundreds of insights, not millions, and a jsonb operator
+      // spliced through the query builder is exactly the kind of thing that
+      // silently matches nothing if the array parameter is bound as a list of
+      // scalars. A read-then-delete-by-id is unambiguously correct.
+      const doomedSet = new Set(doomedIds);
+      const candidateInsights = await tx
+        .select({ id: intelInsights.id, entityIds: intelInsights.entityIds })
+        .from(intelInsights);
+      const staleInsightIds = candidateInsights
+        .filter((row) => (row.entityIds ?? []).some((id) => doomedSet.has(id)))
+        .map((row) => row.id);
+      if (staleInsightIds.length > 0) {
+        await tx.delete(intelInsights).where(inArray(intelInsights.id, staleInsightIds));
+      }
+      removedInsights = staleInsightIds.length;
     }
 
-    const rowCount = (relResult as { rowCount?: number | null }).rowCount;
+    // G. Delete the entities themselves. FK cascades on intel_relationships
+    // (source_entity_id / target_entity_id) remove any surviving
+    // relationships that those entities were part of.
+    if (doomedIds.length > 0) {
+      await tx.delete(intelEntities).where(inArray(intelEntities.id, doomedIds));
+    }
+
     return {
       deleted: true,
-      removedRelationships: typeof rowCount === 'number' ? rowCount : 0,
-      removedEntities: orphanIds.length,
+      removedRelationships: rowsAffected(relResult),
+      removedEntities: doomedIds.length,
+      removedTimelineEvents,
+      removedDossierItems,
+      removedInsights,
     };
   });
+}
+
+/** Drizzle's delete result shape differs per driver; normalise to a number. */
+function rowsAffected(result: unknown): number {
+  const count = (result as { rowCount?: number | null } | null)?.rowCount;
+  return typeof count === 'number' ? count : 0;
 }
