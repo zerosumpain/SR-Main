@@ -190,7 +190,7 @@
     min-width: 0;
   }
   .hb-marker.header .hb-icon {
-    max-width: 260px;
+    max-width: 220px;
     min-width: 0;
   }
   .hb-latest {
@@ -216,7 +216,9 @@
     right: 0;
     transform: none;
   }
-  @media (max-width: 799px) {
+  /* The thread header's actions don't shrink, so the preview is dropped before
+     it can start eating the thread title. Icon + count always survive. */
+  @media (max-width: 1099px) {
     .hb-latest {
       display: none;
     }
