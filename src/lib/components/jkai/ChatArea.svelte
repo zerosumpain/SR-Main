@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChatMessage from '$lib/components/jkai/ChatMessage.svelte';
+  import HeartbeatMarker, { type HeartbeatEntry } from '$lib/components/jkai/HeartbeatMarker.svelte';
   import { renderMarkdown } from '$lib/canvas/ChatMarkdown.svelte';
   import Artifact from '$lib/components/jkai/artifacts/Artifact.svelte';
   import type { Artifact as ArtifactT } from '$lib/workflows/site-tools/artifact-types';
@@ -31,7 +32,7 @@
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
-  import { setThreadLedger, clearThreadLedger, setLiveRuns } from '$lib/jkai/hub-bus.svelte';
+  import { setThreadLedger, clearThreadLedger, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
@@ -469,6 +470,7 @@
               : m,
           );
           scrollToBottom();
+          bumpGraphRevision();
           return;
         }
         if (data.type === 'error') {
@@ -718,6 +720,48 @@
     const hb = (m.metadata as { heartbeat?: { kind?: string } } | undefined)?.heartbeat;
     return hb?.kind === 'user-trigger';
   }
+
+  /** The heartbeat engine's own output — progress notes and short LLM replies.
+   *  Distinct from the trigger poke above, which is pure plumbing. */
+  function heartbeatInfo(m: { metadata?: unknown }): { kind: 'note' | 'reply'; activity: string } | null {
+    const hb = (m.metadata as { heartbeat?: { kind?: string; activity?: string } } | undefined)?.heartbeat;
+    if (hb?.kind !== 'note' && hb?.kind !== 'reply') return null;
+    return { kind: hb.kind, activity: hb.activity || 'heartbeat' };
+  }
+
+  // Heartbeat output is collapsed to one marker per *contiguous run* rather than
+  // one bubble each: the engine fires on its own cadence and its notes repeat
+  // almost verbatim ("paused 2 min ago — waiting on your reply"), so rendered in
+  // full they bury the conversation they annotate. Keyed by the run's first
+  // message id — that message draws the marker, the rest of the run draws
+  // nothing. A trigger poke between two entries does NOT break the run; it is
+  // hidden either way.
+  const heartbeatRuns = $derived.by(() => {
+    const runs = new Map<string, HeartbeatEntry[]>();
+    let current: HeartbeatEntry[] | null = null;
+    for (const m of messages) {
+      if (isHeartbeatCheckIn(m)) continue;
+      const info = heartbeatInfo(m);
+      if (!info) {
+        current = null;
+        continue;
+      }
+      const entry: HeartbeatEntry = {
+        id: m.id,
+        kind: info.kind,
+        activity: info.activity,
+        content: m.content,
+        createdAt: m.createdAt,
+      };
+      if (current) {
+        current.push(entry);
+      } else {
+        current = [entry];
+        runs.set(m.id, current);
+      }
+    }
+    return runs;
+  });
 
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
@@ -1153,6 +1197,10 @@
         };
         messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
         scrollToBottom();
+        // The turn is on record now, so the thread's graph can have gained
+        // structure (model, files, canvases) and — on an extraction turn —
+        // concepts once the queue drains. Tell the rail to look again.
+        bumpGraphRevision();
         return;
       }
 
@@ -2036,6 +2084,12 @@
         {#each messages as msg, msgIndex (msg.id)}
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
+          {:else if heartbeatInfo(msg)}
+            <!-- Heartbeat output. The first message of a contiguous run draws the
+                 marker for the whole run; the rest draw nothing. -->
+            {#if heartbeatRuns.has(msg.id)}
+              <HeartbeatMarker entries={heartbeatRuns.get(msg.id)!} />
+            {/if}
           {:else if msg.isProgress}
             <!-- Live delegate_task workers — self-hides when there are none, and
                  renders above both the tool-progress box and the typing state. -->
@@ -2329,7 +2383,7 @@
                 </div>
               {/if}
             {/if}
-            <div class="relative">
+            <div class="relative msg-slot" class:user-turn={msg.role === 'user'}>
               {#if msg.source === 'followup' || msg.source === 'whatsapp'}
                 <div class="src-tag-row" class:justify-end={msg.role === 'user'}>
                   {#if msg.source === 'whatsapp'}
@@ -2758,12 +2812,26 @@
     overflow-y: auto;
     padding: 18px 20px;
   }
+  /* Full-width grid rather than a centred 900px block: a 900px reading column
+     with a gutter either side. Everything lands in the centre column — which is
+     the old geometry, unchanged — but a user turn is additionally allowed to
+     span the right gutter, so on a wide window it sits against the pane edge
+     instead of starting near the middle of the screen. Below 900px the gutters
+     collapse to zero and this behaves exactly as it did. */
   .msg-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    max-width: 900px;
-    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr min(900px, 100%) 1fr;
+    row-gap: 14px;
+  }
+  /* :global because most children are component roots (ChatMessage's wrapper,
+     WorkerTray, Artifact…) and so never carry this component's scope class. */
+  .msg-stack > :global(*) {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .msg-stack > .msg-slot.user-turn {
+    grid-column: 2 / -1;
+    justify-self: end;
   }
 
   /* ── Composer ─────────────────────────────────────────────────────────── */

@@ -38,6 +38,11 @@ export const hub = $state<
     menuOpen: boolean;
     /** Phone knowledge-graph bottom sheet (screen 2b): closed / peek / full. */
     graphSheet: 'closed' | 'peek' | 'full';
+    /** Bumped whenever the active thread gains a completed turn. The knowledge-
+     *  graph rail watches it so a thread that grew while you were looking at it
+     *  redraws — without this the rail only ever loads on a thread switch, which
+     *  is why it used to appear to need a navigation away and back. */
+    graphRevision: number;
   }
 >({
   ...EMPTY,
@@ -47,6 +52,7 @@ export const hub = $state<
   bpm: null,
   menuOpen: false,
   graphSheet: 'closed',
+  graphRevision: 0,
 });
 
 /** Publish the active thread's ledger. Pass a partial — omitted keys are left
@@ -83,4 +89,9 @@ export function cycleGraphSheet(): void {
 
 export function closeGraphSheet(): void {
   hub.graphSheet = 'closed';
+}
+
+/** Signal that the active thread's knowledge graph may have changed. */
+export function bumpGraphRevision(): void {
+  hub.graphRevision += 1;
 }
