@@ -10,6 +10,7 @@
     tokensToday,
     spendTodayUsd,
     budgetUsd,
+    credit = null,
     activeRuns,
     workflowCount,
     workflowLiveCount,
@@ -18,6 +19,8 @@
     tokensToday: number;
     spendTodayUsd: number;
     budgetUsd: number;
+    /** Live OpenRouter balance, or null when it couldn't be read. */
+    credit?: { remainingUsd: number; totalUsd: number; usedUsd: number } | null;
     activeRuns: number;
     workflowCount: number;
     workflowLiveCount: number;
@@ -58,7 +61,9 @@
     {
       label: 'Spend & limits',
       href: '/admin/ops/costs',
-      meta: `${formatGbp(spendTodayUsd)} / ${formatGbp(budgetUsd)}`,
+      meta: credit
+        ? `${formatGbp(spendTodayUsd)} / ${formatGbp(credit.remainingUsd)} CREDIT`
+        : `${formatGbp(spendTodayUsd)} / ${formatGbp(budgetUsd)}`,
     },
     // The site nav bar no longer sits above these pages, so the way out lives
     // in the menu.
@@ -136,6 +141,7 @@
           {tokensToday}
           spendUsd={spendTodayUsd}
           {budgetUsd}
+          {credit}
           contextTokens={hub.contextTokens}
           contextFraction={hub.contextFraction}
           liveRuns={runs}
@@ -211,6 +217,7 @@
       {tokensToday}
       spendUsd={spendTodayUsd}
       {budgetUsd}
+      {credit}
       contextTokens={hub.contextTokens}
       contextFraction={hub.contextFraction}
       liveRuns={runs}

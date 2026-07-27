@@ -735,38 +735,31 @@
     return { kind: hb.kind, activity: hb.activity || 'heartbeat' };
   }
 
-  // Heartbeat output is collapsed to one marker per *contiguous run* rather than
-  // one bubble each: the engine fires on its own cadence and its notes repeat
-  // almost verbatim ("paused 2 min ago — waiting on your reply"), so rendered in
-  // full they bury the conversation they annotate. Keyed by the run's first
-  // message id — that message draws the marker, the rest of the run draws
-  // nothing. A trigger poke between two entries does NOT break the run; it is
-  // hidden either way.
-  const heartbeatRuns = $derived.by(() => {
-    const runs = new Map<string, HeartbeatEntry[]>();
-    let current: HeartbeatEntry[] | null = null;
+  // Heartbeat output is collapsed to ONE marker for the whole session, pinned in
+  // the thread header — not to a marker per contiguous run sitting in the flow of
+  // the conversation (John, 2026-07-27).
+  //
+  // The engine fires on its own cadence and its notes repeat almost verbatim
+  // ("paused 2 min ago — waiting on your reply"), so even one marker per run
+  // punctuated the thread with machinery it contributed nothing to. One marker,
+  // showing the LATEST beat inline with the rest on hover, says the same thing
+  // and stops interrupting the dialogue. Ordered newest-first so "latest" is
+  // both the inline preview and the top of the card.
+  const heartbeatEntries = $derived.by(() => {
+    const entries: HeartbeatEntry[] = [];
     for (const m of messages) {
       if (isHeartbeatCheckIn(m)) continue;
       const info = heartbeatInfo(m);
-      if (!info) {
-        current = null;
-        continue;
-      }
-      const entry: HeartbeatEntry = {
+      if (!info) continue;
+      entries.push({
         id: m.id,
         kind: info.kind,
         activity: info.activity,
         content: m.content,
         createdAt: m.createdAt,
-      };
-      if (current) {
-        current.push(entry);
-      } else {
-        current = [entry];
-        runs.set(m.id, current);
-      }
+      });
     }
-    return runs;
+    return entries.reverse();
   });
 
   // Sync messages when initialMessages or conversationId changes
@@ -2050,6 +2043,10 @@
     </div>
     <div class="th-actions">
       {#if conversationId}
+        {#if heartbeatEntries.length > 0}
+          <!-- One marker for the session, latest beat showing. -->
+          <HeartbeatMarker entries={heartbeatEntries} variant="header" />
+        {/if}
         {#if onToggleGraphRail}
           <button
             type="button"
@@ -2108,11 +2105,8 @@
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
           {:else if heartbeatInfo(msg)}
-            <!-- Heartbeat output. The first message of a contiguous run draws the
-                 marker for the whole run; the rest draw nothing. -->
-            {#if heartbeatRuns.has(msg.id)}
-              <HeartbeatMarker entries={heartbeatRuns.get(msg.id)!} />
-            {/if}
+            <!-- Heartbeat output draws nothing in the thread — the session's
+                 single marker in the thread header carries all of it. -->
           {:else if msg.isProgress}
             <!-- Live delegate_task workers — self-hides when there are none, and
                  renders above both the tool-progress box and the typing state. -->
@@ -2437,6 +2431,7 @@
                 onOpenFileRef={openFileRef}
                 onOpenResearchRef={openResearchRef}
                 {entityMentions}
+                erProcessing={intelRunning && msgIndex === lastAssistantMessageIndex}
               />
               {#if msg.role === 'assistant' && msg.workflowRefs && msg.workflowRefs.length > 0}
                 <div class="wf-chips">
@@ -2463,12 +2458,6 @@
             </div>
           {/if}
         {/each}
-        {#if intelRunning}
-          <div class="intel-working" role="status" aria-live="polite">
-            <span class="iw-dot" aria-hidden="true"></span>
-            <span>linking entities…</span>
-          </div>
-        {/if}
       </div>
     {/if}
   </div>
@@ -2865,32 +2854,8 @@
 
   /* Extraction-in-flight footer. Deliberately the quietest thing in the stack:
      it is background work the user did not ask for and cannot hurry. */
-  .intel-working {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 2px 0;
-    font-family: var(--font-mono);
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-ghost);
-  }
-  .iw-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: var(--radius-round);
-    background: var(--accent-ink);
-    animation: iw-pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes iw-pulse {
-    0%, 100% { opacity: 0.35; }
-    50% { opacity: 1; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .iw-dot { animation: none; }
-  }
+  /* The "linking entities…" footer pill this used to draw now lives on the
+     reply itself — see ChatMessage's `erProcessing` border. */
 
   /* ── Composer ─────────────────────────────────────────────────────────── */
   .composer {

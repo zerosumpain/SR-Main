@@ -54,6 +54,7 @@
     tokensToday={data.hub.tokensToday}
     spendTodayUsd={data.hub.spendTodayUsd}
     budgetUsd={data.hub.budgetUsd}
+    credit={data.hub.credit}
     activeRuns={data.hub.activeRuns}
     workflowCount={data.hub.workflowCount}
     workflowLiveCount={data.hub.workflowLiveCount}

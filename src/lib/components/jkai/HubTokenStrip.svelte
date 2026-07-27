@@ -5,6 +5,7 @@
     tokensToday,
     spendUsd,
     budgetUsd,
+    credit = null,
     contextTokens = null,
     contextFraction = null,
     liveRuns = 0,
@@ -14,6 +15,10 @@
     tokensToday: number;
     spendUsd: number;
     budgetUsd: number;
+    /** Live OpenRouter credit position. When present, `budgetUsd` IS
+     *  `credit.remainingUsd` and the strip says so; when null the strip has
+     *  fallen back to the static app_settings budget. */
+    credit?: { remainingUsd: number; totalUsd: number; usedUsd: number } | null;
     contextTokens?: number | null;
     contextFraction?: number | null;
     liveRuns?: number;
@@ -37,6 +42,15 @@
   const budgetPct = $derived(
     budgetUsd > 0 ? Math.max(0, Math.min(100, (spendUsd / budgetUsd) * 100)) : 0,
   );
+
+  /** Hover detail for the spend chunk. With a live balance this is the whole
+   *  picture — purchased, used, left — so the one-line strip doesn't have to
+   *  carry three numbers. */
+  const spendTitle = $derived(
+    credit
+      ? `Spent today ${formatGbp(spendUsd)} · OpenRouter credit ${formatGbp(credit.remainingUsd)} left of ${formatGbp(credit.totalUsd)} purchased (${formatGbp(credit.usedUsd)} used)`
+      : `Spent today ${formatGbp(spendUsd)} of a ${formatGbp(budgetUsd)} daily budget — OpenRouter balance unavailable`,
+  );
   const contextPct = $derived(
     contextFraction === null ? null : Math.max(0, Math.min(100, Math.round(contextFraction * 100))),
   );
@@ -53,8 +67,10 @@
   {#if !isMobile}
     <span class="unit unit-spend">
       <span class="sep" aria-hidden="true">/</span>
-      <span class="chunk spend">
-        <b class="accent">{formatGbp(spendUsd)}</b><span class="of"> of {formatGbp(budgetUsd)}</span>
+      <span class="chunk spend" title={spendTitle}>
+        <b class="accent">{formatGbp(spendUsd)}</b><span class="of">
+          of {formatGbp(budgetUsd)}{credit ? ' credit' : ''}</span
+        >
       </span>
       <span class="budget-bar" aria-hidden="true">
         <span class="budget-fill" style="width: {budgetPct}%"></span>
