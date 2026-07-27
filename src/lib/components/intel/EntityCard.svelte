@@ -12,6 +12,7 @@
     bestGrade,
     computeConfidence,
     credibilityFromCorroboration,
+    explainConfidence,
     orderedComponents,
     CREDIBILITY_LABEL,
     CREDIBILITY_RATINGS,
@@ -118,6 +119,7 @@
 
   const trust = $derived(serverTrust?.trust ?? localTrust);
   const breakdown = $derived(trust ? orderedComponents(trust.components) : []);
+  const explanation = $derived(trust ? explainConfidence(trust) : []);
   const selectedGrade = $derived(draftGrade ?? trust?.resolved.sourceGrade ?? 'F');
   const selectedCredibility = $derived(draftCredibility ?? trust?.resolved.credibility ?? 6);
   const dirty = $derived(
@@ -238,6 +240,14 @@
         </div>
 
         {#if showBreakdown}
+          <!-- The prose comes first because "why" is a question about evidence,
+               not arithmetic. The points stay underneath for anyone who wants to
+               reconcile the number. -->
+          <ul class="why-prose">
+            {#each explanation as sentence, i (i)}
+              <li>{sentence}</li>
+            {/each}
+          </ul>
           <ul class="bd">
             {#each breakdown as c (c.key)}
               <li>
@@ -579,6 +589,23 @@
   .admiralty.manual {
     border-color: var(--accent-tint-35);
     color: var(--accent);
+  }
+
+  .why-prose {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 0;
+    list-style: none;
+  }
+  .why-prose li {
+    font-family: var(--font-body);
+    font-size: var(--fs-body-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+    padding-left: 9px;
+    border-left: 2px solid var(--accent-tint-20);
   }
 
   .bd {

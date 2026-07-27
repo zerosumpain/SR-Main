@@ -30,7 +30,7 @@ import {
   intelEntityTypes,
   intelRelationships,
 } from '$lib/db/schema';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { shortModelLabel } from '$lib/jkai/model-label';
 import { readTurnStamp } from '$lib/jkai/turn-stamp';
 
@@ -43,6 +43,26 @@ export type ThreadNodeKind =
   | 'run'
   | 'intel';
 
+/**
+ * Whether a node is knowledge the graph ALREADY held, or something this
+ * conversation is the only witness to.
+ *
+ * Note that "does it have an embedding" is NOT the test — every intel entity is
+ * embedded on write, so that flag is true for all of them and separates nothing.
+ * The signal that actually discriminates is note provenance: an entity
+ * referenced by some note other than this thread's own derived note existed
+ * before this conversation (it came from a /drive file, a deep dive, or another
+ * thread); one referenced only by this thread's note is a claim this chat made
+ * and nothing has corroborated yet.
+ */
+export type NodeProvenance =
+  /** Corroborated outside this conversation — already in the knowledge base. */
+  | 'known'
+  /** First seen here; this thread is its only source so far. */
+  | 'new'
+  /** Not a knowledge claim: a model, file, canvas or attachment the thread touched. */
+  | 'thread';
+
 export interface ThreadGraphNode {
   id: string;
   kind: ThreadNodeKind;
@@ -53,6 +73,8 @@ export interface ThreadGraphNode {
   note: string | null;
   /** Deep link, when the node points at something with a page. */
   href: string | null;
+  /** Drives the rail/modal colour — see NodeProvenance. */
+  provenance: NodeProvenance;
   /** ISO timestamp of the turn this node was last seen in. */
   lastSeen: string | null;
   /** Index of the turn(s) this node appeared in — drives co-occurrence edges. */
@@ -106,8 +128,14 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
     .orderBy(asc(orchestratorChats.createdAt));
 
   const byId = new Map<string, ThreadGraphNode>();
+  // Provenance defaults to 'thread': everything the structural pass adds is
+  // something this conversation demonstrably touched, not a knowledge claim.
+  // Only the concept pass below decides between 'known' and 'new'.
   const add = (
-    node: Omit<ThreadGraphNode, 'turns'> & { turns?: number[] },
+    node: Omit<ThreadGraphNode, 'turns' | 'provenance'> & {
+      turns?: number[];
+      provenance?: NodeProvenance;
+    },
     turn: number,
   ): ThreadGraphNode => {
     const existing = byId.get(node.id);
@@ -116,7 +144,7 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
       if (node.lastSeen) existing.lastSeen = node.lastSeen;
       return existing;
     }
-    const created: ThreadGraphNode = { ...node, turns: [turn] };
+    const created: ThreadGraphNode = { provenance: 'thread', ...node, turns: [turn] };
     byId.set(created.id, created);
     return created;
   };
@@ -254,6 +282,28 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
       .innerJoin(intelEntityTypes, eq(intelEntityTypes.id, intelEntities.typeId))
       .where(eq(intelNoteEntities.noteId, derivedNote.id));
 
+    // Which of these the knowledge base already knew. One grouped count over the
+    // note links, excluding THIS thread's derived note — an entity with any other
+    // source pre-dates the conversation. See NodeProvenance for why the embedding
+    // column can't answer this.
+    const priorlyKnown = new Set<string>();
+    if (rows.length > 0) {
+      const priorRows = await db
+        .select({ entityId: intelNoteEntities.entityId })
+        .from(intelNoteEntities)
+        .where(
+          and(
+            inArray(
+              intelNoteEntities.entityId,
+              rows.map((e) => e.id),
+            ),
+            ne(intelNoteEntities.noteId, derivedNote.id),
+          ),
+        )
+        .groupBy(intelNoteEntities.entityId);
+      for (const r of priorRows) priorlyKnown.add(r.entityId);
+    }
+
     for (const e of rows) {
       conceptIds.push(e.id);
       // Concepts belong to the thread as a whole — the extractor works over the
@@ -268,6 +318,7 @@ export async function buildThreadGraph(conversationId: string): Promise<ThreadGr
           note: e.summary,
           href: `/jkai/intel/entities/${e.id}`,
           lastSeen: e.updatedAt instanceof Date ? e.updatedAt.toISOString() : null,
+          provenance: priorlyKnown.has(e.id) ? 'known' : 'new',
         },
         Math.max(0, messages.length - 1),
       );

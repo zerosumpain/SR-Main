@@ -27,8 +27,12 @@
 </script>
 
 {#if refs.length > 0}
-  <div class="refs">
-    <span class="refs-label">research</span>
+  <details class="refs">
+    <summary class="refs-sum">
+      <span class="refs-chev" aria-hidden="true">▸</span>
+      <span>research</span>
+      <span class="refs-count">{refs.length}</span>
+    </summary>
     <div class="refs-row">
       {#each refs as ref, i (ref.factId + ':' + i)}
         <button
@@ -43,31 +47,50 @@
         </button>
       {/each}
     </div>
-  </div>
+  </details>
 {/if}
 
 <style>
+
+  /* Collapsed by default — see FileReferenceChips for the reasoning; the two
+     footers must behave identically or the reply grows a second grammar. */
   .refs {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
     margin: 6px 0 2px;
-    flex-wrap: wrap;
   }
-  .refs-label {
-    flex-shrink: 0;
+  .refs-sum {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
     font-family: var(--font-mono);
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
-    padding-top: 6px;
+    transition: color 0.2s ease-out;
+  }
+  .refs-sum::-webkit-details-marker {
+    display: none;
+  }
+  .refs-sum:hover {
+    color: var(--accent);
+  }
+  .refs-count {
+    color: var(--text-ghost);
+  }
+  .refs-chev {
+    transition: transform 0.15s ease-out;
+  }
+  .refs[open] .refs-chev {
+    transform: rotate(90deg);
   }
   .refs-row {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     min-width: 0;
+    margin-top: 6px;
   }
   .ref-chip {
     display: inline-flex;

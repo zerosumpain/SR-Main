@@ -3,6 +3,7 @@ import {
   ageInDays,
   bestGrade,
   computeConfidence,
+  explainConfidence,
   corroborationFraction,
   credibilityFraction,
   credibilityFromCorroboration,
@@ -391,5 +392,69 @@ describe('orderedComponents', () => {
     const positives = ordered.slice(0, -1).map((c) => c.value);
     expect([...positives].sort((a, b) => b - a)).toEqual(positives);
     expect(ordered[0].label).toBeTruthy();
+  });
+});
+
+describe('explainConfidence', () => {
+  // The `why` button's job is to answer "why is this 62%" with evidence, not to
+  // restate the arithmetic — these assert the prose names the actual inputs.
+
+  it('names the grade and credibility when the source has been graded', () => {
+    const result = computeConfidence({
+      corroboration: 3,
+      sourceGrade: 'B',
+      credibility: 2,
+      ageDays: 0,
+      confirmed: true,
+    });
+    const text = explainConfidence(result).join(' ');
+    expect(text).toContain('Graded B2 — the source is usually reliable, and the claim is probably true.');
+    expect(text).toContain('3 independent sources');
+    expect(text).toContain('confirmed it by hand');
+    expect(text).toContain('age has cost it nothing');
+  });
+
+  it('says so plainly when nothing has been graded or confirmed', () => {
+    const result = computeConfidence({
+      corroboration: 0,
+      sourceGrade: null,
+      credibility: null,
+      ageDays: 0,
+      confirmed: false,
+    });
+    const text = explainConfidence(result).join(' ');
+    expect(text).toContain('Neither the source nor the claim has been graded');
+    expect(text).toContain('Nothing corroborates it yet');
+    expect(text).toContain('Nobody has confirmed it');
+  });
+
+  it('quantifies what age took off when the evidence is old', () => {
+    const result = computeConfidence({
+      corroboration: 2,
+      sourceGrade: 'B',
+      credibility: 2,
+      ageDays: 900,
+      confirmed: false,
+    });
+    const text = explainConfidence(result).join(' ');
+    expect(text).toMatch(/Age has taken \d+ points off/);
+    expect(text).toContain('900 days ago');
+  });
+
+  it('reads as English when only one half of the grade is neutral', () => {
+    // F2 used to render "a cannot be judged source" — each half needs its own clause.
+    const ungraded = computeConfidence({ corroboration: 2, sourceGrade: 'F', credibility: 2 });
+    expect(explainConfidence(ungraded)[0]).toBe(
+      'Graded F2 — source reliability cannot be judged, and the claim is probably true.',
+    );
+    const unrated = computeConfidence({ corroboration: 2, sourceGrade: 'B', credibility: 6 });
+    expect(explainConfidence(unrated)[0]).toBe(
+      'Graded B6 — the source is usually reliable, and the claim itself cannot be judged.',
+    );
+  });
+
+  it('uses the singular for a lone corroborating source', () => {
+    const result = computeConfidence({ corroboration: 1, sourceGrade: 'C', credibility: 3 });
+    expect(explainConfidence(result).join(' ')).toContain('One source asserts this');
   });
 });

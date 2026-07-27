@@ -335,6 +335,68 @@ export function orderedComponents(
   return [...positives, ...decay];
 }
 
+/**
+ * The confidence score, said in English.
+ *
+ * `orderedComponents` answers "what did each part contribute" — a scorecard. It
+ * does not answer "why is this 62%", which is the question the card's `why`
+ * button is actually asking on the reader's behalf. These sentences name the
+ * evidence rather than its arithmetic: which grade, how many sources, whether a
+ * human signed it off, whether age has eaten into it.
+ *
+ * Returned as sentences rather than rendered here so the module stays
+ * unit-testable and free of markup.
+ */
+export function explainConfidence(result: ConfidenceResult): string[] {
+  const { resolved, components } = result;
+  const out: string[] = [];
+
+  // Both label sets use "cannot be judged" for their neutral value, which does
+  // not survive being dropped into "a ___ source". Each half gets its own
+  // clause so every A–F × 1–6 combination reads as English.
+  if (resolved.sourceGrade === 'F' && resolved.credibility === 6) {
+    out.push(
+      'Neither the source nor the claim has been graded, so both are treated as neutral rather than good.',
+    );
+  } else {
+    const reliability =
+      resolved.sourceGrade === 'F'
+        ? 'source reliability cannot be judged'
+        : `the source is ${SOURCE_GRADE_LABEL[resolved.sourceGrade]}`;
+    const credibility =
+      resolved.credibility === 6
+        ? 'the claim itself cannot be judged'
+        : `the claim is ${CREDIBILITY_LABEL[resolved.credibility]}`;
+    out.push(`Graded ${resolved.sourceGrade}${resolved.credibility} — ${reliability}, and ${credibility}.`);
+  }
+
+  if (resolved.corroboration <= 0) {
+    out.push('Nothing corroborates it yet — no source asserts this independently.');
+  } else if (resolved.corroboration === 1) {
+    out.push('One source asserts this. A second independent one would raise it materially.');
+  } else {
+    out.push(
+      `${resolved.corroboration} independent sources assert this, which is where most of the corroboration credit comes from.`,
+    );
+  }
+
+  out.push(
+    resolved.confirmed
+      ? 'You confirmed it by hand, which is the single largest contribution and does not decay.'
+      : 'Nobody has confirmed it by hand yet — that alone would add a large amount.',
+  );
+
+  if (components.recency < -0.005) {
+    out.push(
+      `Age has taken ${Math.round(Math.abs(components.recency) * 100)} points off: the last corroboration was ${Math.round(resolved.ageDays)} days ago.`,
+    );
+  } else {
+    out.push('The evidence is recent enough that age has cost it nothing.');
+  }
+
+  return out;
+}
+
 // ── Evidence presentation ──────────────────────────────────────────────────
 
 /**
