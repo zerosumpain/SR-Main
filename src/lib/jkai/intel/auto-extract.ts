@@ -41,6 +41,17 @@ export interface AutoExtractInput {
   contentHash: string;
   /** Extra provenance stored on the derived note. */
   metadata?: Record<string, unknown>;
+  /**
+   * Re-extract even when the content hash matches.
+   *
+   * The hash gate assumes the only reason to redo an item is that its text
+   * changed. That is wrong whenever the EXTRACTOR changes — a prompt fix, a new
+   * entity type, a model swap — because the same text now yields a different
+   * (better) result and every item would otherwise be skipped as 'unchanged'.
+   * Backfill-only; the live ingest path must keep the gate or every reply would
+   * re-bill an unchanged thread.
+   */
+  force?: boolean;
 }
 
 export type AutoExtractOutcome =
@@ -85,7 +96,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
 
   try {
     const existing = await findDerivedNote(input.kind, input.refId);
-    if (existing) {
+    if (existing && !input.force) {
       const prevHash = (existing.metadata as Record<string, unknown> | null)?.contentHash;
       if (prevHash === input.contentHash) return { status: 'unchanged', noteId: existing.id };
     }
@@ -137,7 +148,24 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       noteId = created.id;
     }
 
-    const extraction = await extractFromNote(clipped, 'summary');
+    // An unparseable model response now THROWS rather than resolving to an
+    // empty extraction (see extractFromNote). Mark the note failed so it is
+    // visibly re-runnable — leaving it 'processing' would strand it, and the old
+    // behaviour marked it 'processed' with nothing in it, which is a lie.
+    let extraction;
+    try {
+      extraction = await extractFromNote(clipped, 'summary');
+    } catch (err) {
+      await db
+        .update(intelNotes)
+        .set({ status: 'failed', updatedAt: new Date() })
+        .where(eq(intelNotes.id, noteId));
+      console.error(
+        `[intel:auto] ${input.kind} ${input.refId} extraction failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      return { status: 'failed', noteId };
+    }
     const stats = await persistExtraction(noteId, extraction);
 
     await db

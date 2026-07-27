@@ -57,6 +57,23 @@ function mockLLMResponse(content: string) {
   });
 }
 
+/** Successive responses, for exercising the parse-failure retry. The last entry
+ *  is reused if the code asks for more attempts than were supplied. */
+function mockLLMResponses(contents: string[]) {
+  const mockCreate = vi.fn();
+  for (const content of contents) {
+    mockCreate.mockResolvedValueOnce({ choices: [{ message: { content } }] });
+  }
+  mockCreate.mockResolvedValue({
+    choices: [{ message: { content: contents[contents.length - 1] ?? '' } }],
+  });
+  lastCreate = mockCreate;
+  vi.mocked(getLLMClient).mockResolvedValue({
+    client: { chat: { completions: { create: mockCreate } } } as any,
+    model: 'test-model',
+  });
+}
+
 describe('extractFromNote', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -75,14 +92,24 @@ describe('extractFromNote', () => {
     expect(result.timelineEvents[0].date).toBe('2026-05-01');
   });
 
-  it('handles malformed JSON gracefully', async () => {
+  it('throws on unparseable output rather than returning an empty extraction', async () => {
+    // This used to resolve to `{summary:'', entities:[], relationships:[]}`,
+    // which the caller could not tell apart from "this note contains nothing" —
+    // so the note was marked `processed` and the thread silently learned
+    // nothing. Two of six production extractions hit this on 2026-07-27.
+    // Failing loudly is what lets extractIntoIntel mark the note `failed`.
     mockLLMResponse('not json at all');
+
+    await expect(extractFromNote('some note', 'text')).rejects.toThrow(/unparseable/i);
+  });
+
+  it('retries once before giving up, and uses the retry when it parses', async () => {
+    mockLLMResponses(['not json at all', JSON.stringify(MOCK_EXTRACTION)]);
 
     const result = await extractFromNote('some note', 'text');
 
-    expect(result.summary).toBe('');
-    expect(result.entities).toEqual([]);
-    expect(result.relationships).toEqual([]);
+    expect(lastCreate).toHaveBeenCalledTimes(2);
+    expect(result.entities).toHaveLength(2);
   });
 
   it('strips markdown fences from response', async () => {
@@ -90,6 +117,16 @@ describe('extractFromNote', () => {
 
     const result = await extractFromNote('test note', 'text');
     expect(result.entities).toHaveLength(2);
+  });
+
+  it('recovers the object when the model adds a preamble before the fence', async () => {
+    // The exact production failure: the old cleanup stripped the fence and left
+    // the prose, so JSON.parse threw on otherwise perfect output.
+    mockLLMResponse('Here is the JSON:\n```json\n' + JSON.stringify(MOCK_EXTRACTION) + '\n```');
+
+    const result = await extractFromNote('test note', 'text');
+    expect(result.entities).toHaveLength(2);
+    expect(lastCreate).toHaveBeenCalledTimes(1); // recovered by parsing, no retry needed
   });
 });
 
