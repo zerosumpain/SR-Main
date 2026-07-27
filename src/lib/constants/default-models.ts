@@ -19,6 +19,25 @@ export const DEFAULT_CHAT_MODEL_ID = 'deepseek/deepseek-v4-flash';
 // and re-split these two constants if agentic timeouts reappear.
 export const DEFAULT_AGENTIC_MODEL_ID = DEFAULT_CHAT_MODEL_ID;
 
+// The ONE carve-out from the single-default rule above (John, 2026-07-27).
+//
+// Entity extraction and resolution are the only LLM calls a user waits on
+// without seeing any output: they run after the reply has been delivered, and
+// until they finish the reply's entity links and the knowledge-graph rail are
+// missing. Measured end-to-end on production that was 20–90s. This is a
+// throughput problem, not a reasoning one — the work is mechanical JSON
+// extraction against a fixed schema — so it gets the fastest cheap model that
+// supports `response_format`, rather than the site default.
+//
+// gpt-oss-120b: 482 tok/s (the highest recorded in `openrouter_models` among
+// JSON-capable models under $1/M output), $0.037/M in vs the chat default's
+// $0.14, 131k context, open-weight. Override with the `jkai.intel.extract_model`
+// setting; nothing else on the site consults it.
+//
+// NOTE the throughput figure is last-known: OpenRouter's frontend stats API died
+// in 2026-07 and the column carries forward — see reference_openrouter_throughput_source.
+export const DEFAULT_EXTRACTION_MODEL_ID = 'openai/gpt-oss-120b';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.

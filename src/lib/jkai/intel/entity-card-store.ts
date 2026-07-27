@@ -84,8 +84,21 @@ export function fetchEntityCard(id: string): Promise<EntityCardData> {
 
 let mentionsPromise: Promise<MentionTarget[]> | null = null;
 
-/** The entity name index, fetched at most once per page load. */
-export function fetchMentionIndex(): Promise<MentionTarget[]> {
+/**
+ * The entity name index.
+ *
+ * Memoised, because a long thread asks for it once per message render. Pass
+ * `{ refresh: true }` after extraction lands: the index is what turns a name in
+ * a reply into a hoverable reference, so a stale one means an already-rendered
+ * reply never gains its links — which used to need a full page reload to fix.
+ * A refresh also drops the per-entity card cache, since an entity that just
+ * gained neighbours would otherwise serve its pre-extraction card.
+ */
+export function fetchMentionIndex(opts?: { refresh?: boolean }): Promise<MentionTarget[]> {
+  if (opts?.refresh) {
+    mentionsPromise = null;
+    cards.clear();
+  }
   if (mentionsPromise) return mentionsPromise;
   mentionsPromise = fetch('/api/jkai/intel/entity-card?mentions=1')
     .then((res) => {

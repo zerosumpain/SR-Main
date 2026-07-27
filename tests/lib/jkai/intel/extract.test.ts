@@ -5,6 +5,9 @@ vi.mock('$lib/jkai/llm-client', () => ({
 }));
 vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'test' }),
+  // Extraction resolves its own model — the one deliberate exception to the
+  // site-wide single default. See DEFAULT_EXTRACTION_MODEL_ID.
+  resolveExtractionModel: vi.fn().mockResolvedValue({ provider: 'openrouter', modelId: 'test' }),
 }));
 vi.mock('$lib/db', () => {
   const mockWhere = vi.fn().mockResolvedValue([]);
@@ -41,10 +44,13 @@ const MOCK_EXTRACTION = {
   proposedNewTypes: [],
 };
 
+let lastCreate: ReturnType<typeof vi.fn>;
+
 function mockLLMResponse(content: string) {
   const mockCreate = vi.fn().mockResolvedValue({
     choices: [{ message: { content } }],
   });
+  lastCreate = mockCreate;
   vi.mocked(getLLMClient).mockResolvedValue({
     client: { chat: { completions: { create: mockCreate } } } as any,
     model: 'test-model',
@@ -84,5 +90,34 @@ describe('extractFromNote', () => {
 
     const result = await extractFromNote('test note', 'text');
     expect(result.entities).toHaveLength(2);
+  });
+});
+
+describe('extraction request shape', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('asks OpenRouter to route on throughput, not price', async () => {
+    // ER is the one call a user waits on with no output on screen. Default
+    // routing picks the cheapest endpoint; measured, that cost ~2x the latency
+    // of the throughput-sorted one for identical extraction quality.
+    mockLLMResponse(JSON.stringify(MOCK_EXTRACTION));
+    await extractFromNote('Some note text', 'markdown');
+
+    const body = lastCreate.mock.calls[0][0] as { provider?: { sort?: string } };
+    expect(body.provider).toEqual({ sort: 'throughput' });
+  });
+
+  it('still sends JSON mode and both prompt roles', async () => {
+    mockLLMResponse(JSON.stringify(MOCK_EXTRACTION));
+    await extractFromNote('Some note text', 'markdown');
+
+    const body = lastCreate.mock.calls[0][0] as {
+      response_format?: { type?: string };
+      messages?: Array<{ role: string }>;
+    };
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.messages?.map((m) => m.role)).toEqual(['system', 'user']);
   });
 });

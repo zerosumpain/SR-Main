@@ -9,7 +9,7 @@ import {
 } from '$lib/db/schema';
 import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveExtractionModel } from '$lib/server/models/settings';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -366,7 +366,7 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
   }));
 
   try {
-    const modelCtx = await resolveDefaultModel('builder');
+    const modelCtx = await resolveExtractionModel();
     const { client, model } = await getLLMClient(modelCtx);
 
     const response = await client.chat.completions.create({
