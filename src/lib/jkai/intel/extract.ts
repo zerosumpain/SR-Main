@@ -174,6 +174,12 @@ Rules:
   cities, and named administrative areas. A note comparing what several
   countries do must yield one entity per country. Estonia, Denmark, Ontario and
   New Zealand are entities in exactly the way a person or a department is.
+- A country, nation, state, region or city is a "location" — INCLUDING when the
+  note casts it as an actor. "Estonia runs X-Road" still makes Estonia a
+  location, not an organisation. Reserve "organisation" for named bodies:
+  departments, agencies, ministries, companies, institutions. So "Estonia" is a
+  location and "the Estonian Information System Authority" is an organisation;
+  "India" is a location and "the National Health Authority" is an organisation.
 - It also includes standards, products, policies, programmes, datasets and
   named documents, reports or surveys.
 - For each entity, check if it matches a known entity (by name similarity) and set possibleMatchId
@@ -185,6 +191,57 @@ Rules:
 - Dates should be ISO format. If only a relative date is given (e.g. "next Thursday"), calculate from today's date provided in the prompt
 - Return ONLY the JSON object, no markdown fences or commentary`;
 
+/**
+ * Recover the JSON object from a model response.
+ *
+ * The old cleanup was a single multiline-flagged replace of an opening code
+ * fence — which strips the fence and LEAVES anything before it. So the moment
+ * the model prefixed its answer with a sentence ("Here is the JSON:"), the
+ * result was prose followed by an object, JSON.parse threw, and the caller
+ * swallowed it into an empty extraction. Silent, and intermittent because
+ * whether a preamble appears is a coin toss — measured at 2 of 6 extractions in
+ * production on 2026-07-27, each one a thread that quietly learned nothing.
+ *
+ * `response_format: json_object` is supposed to prevent this, but the request is
+ * throughput-routed across providers and adherence is not uniform, so the parse
+ * has to be defensive rather than trusting.
+ *
+ * Strategy: try the raw string, then a fence-stripped form, then the widest
+ * brace-delimited slice. Returns null only if none of those is valid JSON.
+ */
+export function parseExtractionJson(raw: string): ExtractionResult | null {
+  const candidates: string[] = [];
+  const trimmed = raw.trim();
+  if (trimmed) candidates.push(trimmed);
+
+  // Content of the first fenced block, if any.
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+
+  // Widest {...} span — drops both a preamble and any trailing commentary.
+  const first = trimmed.indexOf('{');
+  const last = trimmed.lastIndexOf('}');
+  if (first >= 0 && last > first) candidates.push(trimmed.slice(first, last + 1));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as ExtractionResult;
+      // A JSON scalar is valid JSON and useless here — require an object.
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+      return {
+        summary: parsed.summary ?? '',
+        entities: parsed.entities ?? [],
+        relationships: parsed.relationships ?? [],
+        timelineEvents: parsed.timelineEvents ?? [],
+        proposedNewTypes: parsed.proposedNewTypes ?? [],
+      };
+    } catch {
+      // try the next shape
+    }
+  }
+  return null;
+}
+
 /** A chat body plus OpenRouter's non-standard `provider` routing preference.
  *  Pinned to the NON-streaming params so the overload still resolves to a
  *  ChatCompletion rather than the streaming union. */
@@ -192,6 +249,16 @@ type OpenRouterChatBody = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonS
   provider?: { sort?: 'throughput' | 'price' | 'latency' };
 };
 
+/**
+ * Extract from a note.
+ *
+ * Throws when the model's output cannot be parsed after a retry. It used to
+ * return an EMPTY result in that case, which the caller could not distinguish
+ * from "this note genuinely contains nothing" — so the note was marked
+ * `processed`, the thread showed no entities, and nothing anywhere said a word
+ * had gone wrong. A thrown error is caught by extractIntoIntel and surfaces as
+ * `failed`, which is re-runnable.
+ */
 export async function extractFromNote(
   noteText: string,
   noteFormat: string,
@@ -202,16 +269,44 @@ export async function extractFromNote(
 
   const today = new Date().toISOString().split('T')[0];
 
-  const response = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    max_tokens: 16384,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `Today's date: ${today}
+  // Two attempts. Parse failures are non-deterministic (a stray preamble, a
+  // provider that ignored response_format), so resampling usually fixes what
+  // reparsing cannot.
+  let lastRaw = '';
+  let lastDiag = '';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const response = await createExtraction();
+    const choice = response.choices[0];
+    lastRaw = choice?.message?.content ?? '';
+    lastDiag = `attempt=${attempt} finish=${choice?.finish_reason} provider=${
+      (response as { provider?: string }).provider ?? '?'
+    } completion_tokens=${response.usage?.completion_tokens ?? '?'} chars=${lastRaw.length}`;
+
+    const parsed = parseExtractionJson(lastRaw);
+    if (parsed) {
+      if (attempt > 1) console.warn(`[intel] extraction parsed on retry — ${lastDiag}`);
+      return parsed;
+    }
+    console.warn(`[intel] extraction output unparseable, ${attempt === 1 ? 'retrying' : 'giving up'} — ${lastDiag}`);
+  }
+
+  // Log the WHOLE payload, not a 500-char stub. The stub was what made the
+  // production occurrence undiagnosable: every failure looked like a
+  // well-formed object that simply stopped at the log boundary.
+  console.error(`[intel] extraction failed to parse — ${lastDiag}\n--- RAW ---\n${lastRaw}\n--- END RAW ---`);
+  throw new Error(`Intel extraction returned unparseable output (${lastDiag})`);
+
+  async function createExtraction() {
+    return client.chat.completions.create({
+      model,
+      temperature: 0.3,
+      max_tokens: 16384,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `Today's date: ${today}
 Note format: ${noteFormat}
 
 ${context}
@@ -221,40 +316,18 @@ ${noteText}
 --- END NOTE ---
 
 Extract all entities, relationships, timeline events, and any proposed new types from this note.`,
-      },
-    ],
-    // OpenRouter routes to the cheapest endpoint by default; this asks for the
-    // fastest one instead. Measured over 4 trials on the same note: default
-    // routing 0.4–0.9s (CoreWeave/Google), throughput-sorted 0.2–0.4s
-    // (consistently Cerebras), same extraction quality. Applied ONLY here — ER
-    // is the one call a user waits on without seeing any output.
-    //
-    // `provider` is an OpenRouter extension the OpenAI SDK does not type, so the
-    // body is widened rather than the whole argument cast to `any` — a blanket
-    // cast would also stop the compiler checking `messages` and `model`.
-    provider: { sort: 'throughput' },
-  } as OpenRouterChatBody);
-
-  const raw = response.choices[0]?.message?.content ?? '{}';
-  const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
-
-  try {
-    const parsed = JSON.parse(cleaned) as ExtractionResult;
-    return {
-      summary: parsed.summary ?? '',
-      entities: parsed.entities ?? [],
-      relationships: parsed.relationships ?? [],
-      timelineEvents: parsed.timelineEvents ?? [],
-      proposedNewTypes: parsed.proposedNewTypes ?? [],
-    };
-  } catch {
-    console.error('[intel] Failed to parse extraction result:', cleaned.slice(0, 500));
-    return {
-      summary: '',
-      entities: [],
-      relationships: [],
-      timelineEvents: [],
-      proposedNewTypes: [],
-    };
+        },
+      ],
+      // OpenRouter routes to the cheapest endpoint by default; this asks for the
+      // fastest one instead. Measured over 4 trials on the same note: default
+      // routing 0.4–0.9s (CoreWeave/Google), throughput-sorted 0.2–0.4s
+      // (consistently Cerebras), same extraction quality. Applied ONLY here — ER
+      // is the one call a user waits on without seeing any output.
+      //
+      // `provider` is an OpenRouter extension the OpenAI SDK does not type, so
+      // the body is widened rather than the whole argument cast to `any` — a
+      // blanket cast would also stop the compiler checking `messages`/`model`.
+      provider: { sort: 'throughput' },
+    } as OpenRouterChatBody);
   }
 }

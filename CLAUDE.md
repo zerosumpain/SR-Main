@@ -3,10 +3,30 @@
 SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 
 - **Dev:** `npm run dev` (default port 5173)
-- **Deploy:** `~/strange_rambling_svelte/scripts/deploy.sh` (always run after pushing)
+- **Deploy:** merge to `master`; CI builds and deploys. **Never run `scripts/deploy.sh` by hand** — a hand-rolled deploy overwrote the production `.env` with homeserv's, causing a 33-hour outage plus a public `/admin` exposure via `AUTH_BYPASS=1` (2026-07-24).
 - **DB:** PostgreSQL 16 + Drizzle ORM; schema changes → `npx drizzle-kit push`
 - **Auth:** Google OAuth via Auth.js
 - **LLM:** All AI calls via the gateway in `$lib/jkai/llm-client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
+
+### Merging a PR — never use `gh pr merge --auto`
+
+SR-Main is **private on GitHub Free**, so required status checks do not exist
+here: the branch-protection and rulesets APIs both 403. `--auto` therefore has
+no check to wait on and merges IMMEDIATELY, cancelling the branch's in-flight
+CI run. It looks like "merge when green" and is "merge now" (seen 2026-07-27,
+PR #44).
+
+Block on the conclusion and merge explicitly:
+
+```bash
+until [ "$(gh run list --branch "$BRANCH" --limit 1 --json conclusion --jq '.[0].conclusion')" != "" ]; do sleep 45; done
+gh run list --branch "$BRANCH" --limit 1 --json conclusion --jq '.[0].conclusion'   # must be "success"
+gh pr merge <N> --squash
+```
+
+Production itself is never at risk from this — the `deploy` job is `needs: gate`,
+so a red gate cannot reach the VPS. What a premature merge costs is a red commit
+on `master`.
 
 ## Key areas
 

@@ -153,6 +153,10 @@ export async function maybeExtractThreadConcepts(
         text: transcript,
         contentHash: createHash('sha256').update(transcript).digest('hex'),
         metadata: { conversationId, assistantTurns },
+        // A forced pass is the backfill, and the backfill exists because the
+        // EXTRACTOR changed, not the transcript — so the hash gate would skip
+        // every thread it is meant to redo.
+        force: opts.force,
       });
       entityCount = outcome.status === 'extracted' ? outcome.entityCount : 0;
       return outcome;
