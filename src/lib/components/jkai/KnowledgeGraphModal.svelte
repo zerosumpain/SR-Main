@@ -6,6 +6,7 @@
     drawEdges,
     canvasHeight,
   } from '$lib/jkai/graph-layout';
+  import { nodeStyle, edgeStyle, legendFor } from '$lib/jkai/graph-colors';
 
   let {
     graph,
@@ -33,6 +34,7 @@
     run: '▲',
   };
 
+  const legend = $derived(legendFor(graph.nodes, graph.edges));
   const placed = $derived(placeNodes(graph.nodes, MODAL_LAYOUT));
   const edges = $derived(drawEdges(graph.edges, placed, MODAL_LAYOUT, selected?.id ?? null));
   const height = $derived(canvasHeight(graph.nodes.length, MODAL_LAYOUT, 420));
@@ -106,14 +108,16 @@
         <div class="gm-canvas" style="height: {height}px; min-width: {width}px;">
           <svg class="gm-edges" {width} {height} aria-hidden="true">
             {#each edges as e, i (i)}
+              {@const s = edgeStyle(e)}
               <line
                 x1={e.x1}
                 y1={e.y1}
                 x2={e.x2}
                 y2={e.y2}
-                stroke={e.active ? 'var(--accent)' : 'rgba(26,16,8,.24)'}
+                stroke={s.color}
                 stroke-width={e.active ? 2 : 1}
-                stroke-dasharray={e.active ? undefined : '3 3'}
+                stroke-dasharray={s.dash}
+                opacity={e.active ? 1 : 0.5}
               />
             {/each}
           </svg>
@@ -124,16 +128,30 @@
             >{e.verb}</span>
           {/each}
           {#each placed as node (node.id)}
+            {@const s = nodeStyle(node)}
             <button
               type="button"
               class="gm-node"
               class:selected={node.id === selected?.id}
-              style="left: {node.x}px; top: {node.y}px;"
+              style="left: {node.x}px; top: {node.y}px; --n-color: {s.color}; --n-fill: {s.fill};"
               onclick={() => onSelect(node.id)}
+              title={s.hint}
             >
               <span class="gm-glyph" aria-hidden="true">{GLYPH[node.kind]}</span>
               <span class="gm-label">{node.name}</span>
             </button>
+          {/each}
+        </div>
+        <div class="gm-legend">
+          {#each legend as row (row.label)}
+            <span class="lg-row" title={row.hint}>
+              {#if row.kind === 'node'}
+                <span class="lg-swatch" style="background: {row.color};"></span>
+              {:else}
+                <span class="lg-line" style="--lg-color: {row.color};" class:dashed={!!row.dash}></span>
+              {/if}
+              {row.label}
+            </span>
           {/each}
         </div>
       </div>
@@ -254,6 +272,38 @@
     min-height: 0;
     display: flex;
   }
+  .gm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    padding: 8px 10px 2px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .lg-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .lg-swatch {
+    width: 8px;
+    height: 8px;
+    flex: none;
+  }
+  .lg-line {
+    width: 15px;
+    height: 0;
+    flex: none;
+    border-top: 2px solid var(--lg-color);
+  }
+  .lg-line.dashed {
+    border-top-style: dashed;
+  }
+
   .gm-canvas-wrap {
     flex: 1;
     min-width: 0;
@@ -291,8 +341,9 @@
     gap: 7px;
     max-width: 200px;
     padding: 6px 10px;
-    background: var(--bg);
-    border: 1px solid rgba(26, 16, 8, 0.3);
+    /* Per-node provenance colour — see $lib/jkai/graph-colors. */
+    background: var(--n-fill, var(--bg));
+    border: 1px solid var(--n-color, rgba(26, 16, 8, 0.3));
     border-radius: 0;
     cursor: pointer;
     transition: border-color 0.2s ease-out, background 0.2s ease-out;
@@ -301,14 +352,14 @@
     border-color: var(--accent-tint-35);
   }
   .gm-node.selected {
-    background: var(--accent);
-    border: 2px solid var(--accent);
+    background: var(--n-color);
+    border: 2px solid var(--n-color);
   }
   .gm-glyph {
     font-family: var(--font-mono);
     font-size: 9px;
     line-height: 1;
-    color: var(--accent);
+    color: var(--n-color, var(--accent));
   }
   .gm-node.selected .gm-glyph {
     color: rgba(255, 255, 255, 0.8);

@@ -7,6 +7,7 @@
 
   import { onMount, untrack } from 'svelte';
   import EntityCard from './EntityCard.svelte';
+  import RelationshipModal from './RelationshipModal.svelte';
   import { entityHover } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';
@@ -18,6 +19,12 @@
   let host = $state<HTMLDivElement | null>(null);
   let height = $state(300);
   let busy = $state(false);
+
+  /** Open relationship, as [from, to]. Clicking a name under "Connected to"
+   *  used to navigate to /jkai/intel/network, which does not exist and 404'd;
+   *  a relationship is small enough to read in an overlay and leaves the
+   *  conversation where it was. */
+  let relation = $state<{ from: string; to: string } | null>(null);
 
   const anchor = $derived(entityHover.current);
 
@@ -115,9 +122,18 @@
       entityId={anchor.entityId}
       compact={!anchor.pinned}
       onCommission={anchor.pinned ? onCommission : undefined}
-      onFocus={(id) => goto(`/jkai/intel/network?focus=${id}`)}
+      onFocus={(id) => (relation = { from: anchor.entityId, to: id })}
     />
   </div>
+{/if}
+
+{#if relation}
+  <RelationshipModal
+    fromEntityId={relation.from}
+    toEntityId={relation.to}
+    onClose={() => (relation = null)}
+    onOpenEntity={(id) => (relation = relation ? { from: relation.to, to: id } : null)}
+  />
 {/if}
 
 <style>

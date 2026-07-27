@@ -3,6 +3,7 @@
   import type { ThreadGraph, ThreadGraphNode, ThreadNodeKind } from '$lib/jkai/thread-graph';
   import KnowledgeGraphModal from './KnowledgeGraphModal.svelte';
   import { RAIL_LAYOUT, placeNodes, drawEdges } from '$lib/jkai/graph-layout';
+  import { nodeStyle, edgeStyle, legendFor } from '$lib/jkai/graph-colors';
   import { hub } from '$lib/jkai/hub-bus.svelte';
 
   let {
@@ -129,6 +130,8 @@
   const placed = $derived(placeNodes(graph.nodes, RAIL_LAYOUT));
   const drawnEdges = $derived(drawEdges(graph.edges, placed, RAIL_LAYOUT, selected?.id ?? null));
 
+  const legend = $derived(legendFor(graph.nodes, graph.edges));
+
   // The rail is a summary; the modal is where the graph is legible and where
   // you cross over into /jkai/intel.
   let expanded = $state(false);
@@ -148,6 +151,14 @@
       // Typed intel relationships first — they say more than co-occurrence.
       .sort((a, b) => (a.verb === 'MENTIONED WITH' ? 1 : 0) - (b.verb === 'MENTIONED WITH' ? 1 : 0));
   });
+
+  /** Relations shown inline. The rail must not scroll — a 324px column with its
+   *  own scrollbar, inside a page that also scrolls, reads as broken and hides
+   *  the very thing it is meant to surface. So the list is capped to what fits
+   *  and the overflow is handed to the modal, which has room for all of it. */
+  const RAIL_RELATION_LIMIT = 4;
+  const shownRelations = $derived(relations.slice(0, RAIL_RELATION_LIMIT));
+  const hiddenRelationCount = $derived(Math.max(0, relations.length - RAIL_RELATION_LIMIT));
 
   function relativeSeen(iso: string | null): string {
     if (!iso) return '';
@@ -198,32 +209,48 @@
     {:else}
       <svg class="gr-edges" width="324" height="308" aria-hidden="true">
         {#each drawnEdges as e, i (i)}
+          {@const s = edgeStyle(e)}
           <line
             x1={e.x1}
             y1={e.y1}
             x2={e.x2}
             y2={e.y2}
-            stroke={e.active ? 'var(--accent)' : 'rgba(26,16,8,.24)'}
+            stroke={s.color}
             stroke-width={e.active ? 2 : 1}
-            stroke-dasharray={e.active ? undefined : '3 3'}
+            stroke-dasharray={s.dash}
+            opacity={e.active ? 1 : 0.5}
           />
         {/each}
       </svg>
       {#each placed as node (node.id)}
+        {@const s = nodeStyle(node)}
         <button
           type="button"
           class="gr-node"
           class:selected={node.id === selected?.id}
-          style="left: {node.x}px; top: {node.y}px;"
+          style="left: {node.x}px; top: {node.y}px; --n-color: {s.color}; --n-fill: {s.fill};"
           onclick={() => { selectedId = node.id; expanded = true; }}
-          title="{node.name} — click to expand"
+          title="{node.name} — {s.hint}"
         >
           <span class="gr-glyph" aria-hidden="true">{GLYPH[node.kind]}</span>
           <span class="gr-label">{chipLabel(node)}</span>
         </button>
       {/each}
       <div class="gr-legend">
-        <span>◆ entity</span><span>■ artefact</span><span>▲ run</span>
+        {#each legend as row (row.label)}
+          <span class="lg-row" title={row.hint}>
+            {#if row.kind === 'node'}
+              <span class="lg-swatch" style="background: {row.color};"></span>
+            {:else}
+              <span
+                class="lg-line"
+                style="--lg-color: {row.color};"
+                class:dashed={!!row.dash}
+              ></span>
+            {/if}
+            {row.label}
+          </span>
+        {/each}
       </div>
     {/if}
   </div>
@@ -245,17 +272,31 @@
     </div>
 
     <div class="gr-relations">
-      <div class="rail-label">Relations</div>
+      <div class="gr-rel-hd">
+        <span class="rail-label">Relations</span>
+        {#if relations.length > 0}
+          <span class="gr-rel-count">{relations.length}</span>
+        {/if}
+      </div>
       {#if relations.length === 0}
         <p class="gr-note">Nothing else in this thread connects to it yet.</p>
       {:else}
-        {#each relations as r, i (i)}
-          <button type="button" class="gr-rel" onclick={() => (selectedId = r.target.id)}>
+        {#each shownRelations as r, i (i)}
+          <button
+            type="button"
+            class="gr-rel"
+            onclick={() => (selectedId = r.target.id)}
+            title="{r.verb} {r.target.name}"
+          >
             <span class="gr-verb">{r.verb}</span>
             <span class="gr-target">{r.target.name}</span>
-            <span class="gr-where">{r.target.type}</span>
           </button>
         {/each}
+        {#if hiddenRelationCount > 0}
+          <button type="button" class="gr-rel-more" onclick={() => (expanded = true)}>
+            +{hiddenRelationCount} more →
+          </button>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -370,24 +411,28 @@
     gap: 5px;
     padding: 4px 7px;
     max-width: 106px;
-    background: var(--bg);
-    border: 1px solid rgba(26, 16, 8, 0.3);
+    /* --n-color / --n-fill are set per node from graph-colors: petrol for what
+       the knowledge base already held, burnt-orange for what only this chat
+       says, muted for the thread's own artefacts. */
+    background: var(--n-fill, var(--bg));
+    border: 1px solid var(--n-color, rgba(26, 16, 8, 0.3));
     border-radius: 0;
     cursor: pointer;
     transition: background 0.2s ease-out, border-color 0.2s ease-out;
   }
   .gr-node:hover {
-    border-color: var(--accent-tint-35);
+    border-color: var(--n-color);
+    filter: brightness(0.97);
   }
   .gr-node.selected {
-    background: var(--accent);
-    border: 2px solid var(--accent);
+    background: var(--n-color);
+    border: 2px solid var(--n-color);
   }
   .gr-glyph {
     font-family: var(--font-mono);
     font-size: 8px;
     line-height: 1;
-    color: var(--accent);
+    color: var(--n-color, var(--accent));
   }
   .gr-node.selected .gr-glyph {
     color: rgba(255, 255, 255, 0.8);
@@ -403,17 +448,42 @@
   .gr-node.selected .gr-label {
     color: #fff;
   }
+  /* Legend says what the COLOURS mean, not what the glyphs mean — the shapes
+     were self-evident, the provenance split is the thing that needs explaining.
+     Only the provenances actually present are listed (see legendFor). */
   .gr-legend {
     position: absolute;
     left: 9px;
+    right: 9px;
     bottom: 8px;
     display: flex;
-    gap: 7px;
+    flex-wrap: wrap;
+    gap: 4px 9px;
     font-family: var(--font-mono);
     font-size: 8px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.5);
+  }
+  .lg-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .lg-swatch {
+    width: 7px;
+    height: 7px;
+    flex: none;
+  }
+  .lg-line {
+    width: 12px;
+    height: 0;
+    flex: none;
+    border-top: 2px solid var(--lg-color);
+  }
+  .lg-line.dashed {
+    border-top-style: dashed;
   }
 
   .gr-detail {
@@ -442,11 +512,18 @@
     text-transform: uppercase;
     color: var(--text-ghost);
   }
+  /* Names run to a 60-char generated filename. Wrap anywhere so a long token
+     breaks instead of pushing the column wide, and clamp to two lines. */
   .gr-name {
-    display: block;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
     font-family: var(--font-brand);
     font-size: 15px;
     font-weight: 500;
+    line-height: 1.3;
     letter-spacing: -0.01em;
     color: var(--text-primary);
     text-decoration: none;
@@ -461,13 +538,36 @@
     font-size: 11.5px;
     line-height: 1.5;
     color: var(--text-muted);
+    /* Summaries are model-written and occasionally a paragraph. Clamp rather
+       than scroll — the whole point of the rail is a glance, and the modal has
+       the full text. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
   }
 
+  /* Nothing in the rail scrolls. The detail block is bounded by the clamps
+     above and the relation cap below, so it always fits the column. */
   .gr-relations {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
     padding: 12px;
+  }
+  .gr-rel-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+  .gr-rel-count {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
   }
   .gr-rel {
     display: flex;
@@ -482,6 +582,25 @@
     cursor: pointer;
   }
   .gr-rel:hover .gr-target {
+    color: var(--accent);
+  }
+  .gr-rel-more {
+    display: block;
+    width: 100%;
+    margin-top: 7px;
+    padding: 0;
+    border: none;
+    background: none;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+    cursor: pointer;
+    transition: color 0.2s ease-out;
+  }
+  .gr-rel-more:hover {
     color: var(--accent);
   }
   .gr-verb {
@@ -503,16 +622,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .gr-where {
-    flex: none;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(26, 16, 8, 0.4);
-    white-space: nowrap;
-  }
-
   .gr-foot {
     flex: none;
     display: flex;
@@ -584,7 +693,6 @@
       font-size: 12.5px;
     }
     .gr-verb,
-    .gr-where,
     .gr-count,
     .gr-seen,
     .gr-type,
