@@ -107,7 +107,7 @@ export const workflowReview: ActivityHandler = {
       .filter(Boolean)
       .join('\n');
 
-    const model = await resolveDefaultModel('chat');
+    const model = await resolveDefaultModel();
     const { client, model: modelId } = await getLLMClient(model);
 
     const prompt = `You are reviewing a single workflow run for a personal automation site. Be terse and concrete.

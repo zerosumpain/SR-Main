@@ -85,7 +85,7 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { resolveDefaultModel } = await import('$lib/server/models/settings');
       const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
 
-      const ctx = await resolveDefaultModel('chat');
+      const ctx = await resolveDefaultModel();
       const { client, model } = await getLLMClient(ctx);
       // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
       // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.

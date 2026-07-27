@@ -900,7 +900,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       if (exists) conversationId = pinned;
     }
     if (!conversationId) {
-      const defaultCtx = await resolveDefaultModel('chat');
+      const defaultCtx = await resolveDefaultModel();
       const [conv] = await db.insert(conversations).values({
         title: message.slice(0, 50),
         source: 'web',
@@ -926,7 +926,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
   // Workflow-context chats (workflowId present, or explicit generate/modify mode)
   // use the builder model set in /admin/ai/models. General /jkai chats use the chat model.
   const isWorkflowContext = !!workflowId || mode === 'generate' || mode === 'modify';
-  const defaultKind: 'chat' | 'builder' = isWorkflowContext ? 'builder' : 'chat';
+  // Labels the job in the logs (workflow-context vs general chat). It no
+  // longer selects a model — one default drives every task.
+  const contextKind: 'chat' | 'builder' = isWorkflowContext ? 'builder' : 'chat';
 
   let attachmentRows: Array<typeof jkaiAttachments.$inferSelect> = [];
   if (attachmentIds && attachmentIds.length > 0) {
@@ -938,7 +940,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
       return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
     }
 
-    let ctx: ModelContext = await resolveDefaultModel(defaultKind);
+    let ctx: ModelContext = await resolveDefaultModel();
     if (conversationId) {
       const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
       if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
@@ -981,7 +983,7 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
   // Run the orchestrator in the background
   (async () => {
-    console.log(`[orchestrator] Job ${jobId} started — kind=${defaultKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
+    console.log(`[orchestrator] Job ${jobId} started — kind=${contextKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
 
     function onProgress(text: string) {
       if (abortController.signal.aborted) return;
@@ -1115,9 +1117,9 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
 
         // Resolve the model pinned at conversation creation (or admin default).
         // Workflow-context chats (workflowId present) use the builder model; general /jkai chats use the chat model.
-        let modelContext: ModelContext = await resolveDefaultModel(defaultKind);
+        let modelContext: ModelContext = await resolveDefaultModel();
         let priceSnapshot: PriceSnapshot | null = null;
-        console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${defaultKind})`);
+        console.log(`[orchestrator] Job ${jobId} — using ${modelContext.provider}:${modelContext.modelId} (kind=${contextKind})`);
         // Resolved model is internal info (provider:modelId) — kept out of the
         // user-visible stream. Re-enable as a debug status if you need it back.
         if (conversationId) {

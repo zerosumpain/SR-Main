@@ -14,7 +14,7 @@ export { isRateLimitError };
 
 /** Primary client + model: the admin-configured site default (OpenRouter). */
 async function getPrimary(): Promise<{ client: import('openai').default; model: string }> {
-  return getLLMClient(await resolveDefaultModel('chat'));
+  return getLLMClient(await resolveDefaultModel());
 }
 
 // GLM-class reasoning models spend a lot of reasoning time: a medium 2k-token

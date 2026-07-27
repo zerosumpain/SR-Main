@@ -8,7 +8,7 @@ export async function ocrHandwriting(attachment: JkaiAttachment): Promise<string
   const base64 = buffer.toString('base64');
   const mimeType = attachment.mimeType || 'image/jpeg';
 
-  const modelCtx = await resolveDefaultModel('builder');
+  const modelCtx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(modelCtx);
 
   const response = await client.chat.completions.create({

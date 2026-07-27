@@ -73,7 +73,7 @@ async function reviewConversation(conversationId: string): Promise<number> {
   const prompt = EXTRACTION_PROMPT.replace('{EXISTING_MEMORIES}', existingText);
 
   // Call LLM for extraction
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   let response;
   try {

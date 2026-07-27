@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (modelProvider && modelId) {
 		ctx = { provider: modelProvider, modelId };
 	} else {
-		ctx = await resolveDefaultModel('chat');
+		ctx = await resolveDefaultModel();
 	}
 
 	const priceSnapshot = await snapshotPrice(ctx);

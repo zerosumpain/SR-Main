@@ -67,7 +67,7 @@ export const POST: RequestHandler = async (event) => {
       };
       send({ type: 'sources', sources });
       try {
-        const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+        const { client, model } = await getLLMClient(await resolveDefaultModel());
         const completion = await client.chat.completions.create(
           {
             model,

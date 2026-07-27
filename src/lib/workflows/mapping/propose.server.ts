@@ -186,7 +186,7 @@ export async function proposeEdgeMapping(params: {
   // Try the LLM; on any failure, fall back to the deterministic heuristic.
   try {
     const { system, user, targetKeys: keys } = buildPrompt(ctx, `${compat.level} (${compat.reasons[0] ?? ''})`);
-    const model = (await resolveDefaultModel('chat')).modelId;
+    const model = (await resolveDefaultModel()).modelId;
     const res = await resilientChatCompletion(
       model,
       {

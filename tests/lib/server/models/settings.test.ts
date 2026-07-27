@@ -82,33 +82,34 @@ describe('app_settings helpers', () => {
     expect(v).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') returns the configured model", async () => {
+  it("resolveDefaultModel() returns the configured model", async () => {
     await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
     clearSettingsCache();
-    const ctx = await resolveDefaultModel('chat');
+    const ctx = await resolveDefaultModel();
     expect(ctx).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') falls back to the code default when unset", async () => {
+  it("resolveDefaultModel() falls back to the code default when unset", async () => {
     store.delete('jkai.chat.default_model');
     clearSettingsCache();
-    const ctx = await resolveDefaultModel('chat');
+    const ctx = await resolveDefaultModel();
     expect(ctx).toEqual({ provider: 'openrouter', modelId: 'deepseek/deepseek-v4-flash' });
   });
 
-  it("resolveDefaultModel('builder') resolves to the SAME site default", async () => {
-    // One default for every LLM task — the separate jkai.builder.default_model
-    // key is no longer consulted (2026-07-25).
+  it("ignores a stray jkai.builder.default_model — one default drives every task", async () => {
+    // The key was retired in 2026-07-25's consolidation and the row is gone, but
+    // an old backup restore or a hand-written setting could put it back. Nothing
+    // should start reading it again without this failing first.
     await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
     store.set('jkai.builder.default_model', { provider: 'openrouter', modelId: 'z-ai/glm-5-turbo' });
     clearSettingsCache();
-    expect(await resolveDefaultModel('builder')).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
+    expect(await resolveDefaultModel()).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.1' });
   });
 
-  it("resolveDefaultModel('chat') coerces a stored legacy bare GLM id", async () => {
+  it("resolveDefaultModel() coerces a stored legacy bare GLM id", async () => {
     store.set('jkai.chat.default_model', { modelId: 'glm-5.2' });
     clearSettingsCache();
-    const ctx = await resolveDefaultModel('chat');
+    const ctx = await resolveDefaultModel();
     expect(ctx).toEqual({ provider: 'openrouter', modelId: 'z-ai/glm-5.2' });
   });
 

@@ -247,7 +247,7 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     const followUpMessage = `[SYSTEM FOLLOW-UP] A background task has completed.\n\nTask: ${item.taskType} (ID: ${item.taskId})\nResult:\n${resultContext}\n\n${item.completionPrompt}`;
 
     // Resolve pinned model for this conversation (falls back to admin default).
-    let modelContext: ModelContext = await resolveDefaultModel('chat');
+    let modelContext: ModelContext = await resolveDefaultModel();
     let priceSnapshot: PriceSnapshot | null = null;
     const [conv] = await db
       .select()

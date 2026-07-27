@@ -77,7 +77,7 @@ export const POST: RequestHandler = async (event) => {
       send({ type: 'sources', sources });
       try {
         // Direct stream from the shared LLM gateway (OpenRouter).
-        const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+        const { client, model } = await getLLMClient(await resolveDefaultModel());
         const completion = await client.chat.completions.create(
           {
             model,

@@ -79,7 +79,7 @@ export async function createChangeRequest({
     labels: labels ?? ['change-request'],
   });
 
-  const ctx = await resolveDefaultModel('builder');
+  const ctx = await resolveDefaultModel();
   const priceSnapshot = await snapshotPrice(ctx);
 
   // The agent's directive: the ask, plus the issue to close. `Closes #n` is also

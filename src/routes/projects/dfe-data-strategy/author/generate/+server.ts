@@ -84,7 +84,7 @@ export const POST: RequestHandler = async (event) => {
   const answers = cleanAnswers(body?.answers);
   const questions = questionsForDepth(depth);
   const skeleton = SKELETONS[length];
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   if (mode === 'outline') {
     const digest = digestAnswers(questions, answers) || '- (no answers given — write a balanced, evidence-led strategy)';

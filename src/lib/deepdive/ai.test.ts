@@ -4,7 +4,7 @@ import { isRateLimitError, chatCompletion, jsonCompletion, streamCompletion } fr
 
 // ---------------------------------------------------------------------------
 // Post-migration the primary client is the admin-configured OpenRouter default,
-// resolved via getLLMClient(resolveDefaultModel('chat')). The fallback path
+// resolved via getLLMClient(resolveDefaultModel()). The fallback path
 // uses getOpenRouterClient() + getFallbackModel() (both from ./keys). Mock all
 // of these so tests never touch the filesystem, env vars, or the network.
 // ---------------------------------------------------------------------------

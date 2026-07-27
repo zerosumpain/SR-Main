@@ -15,7 +15,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   console.log(`[blog-assistant] post=${postId} user=${userMessage.slice(0, 80).replace(/\n/g, ' ')}`);
 
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(ctx);
   const history = await loadHistory(postId);
 

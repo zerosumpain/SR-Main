@@ -69,7 +69,7 @@ export const load: PageServerLoad = async () => {
   // aggregate queries nothing rendered.
 
   const [defaultChatModel, chatAltOpenRouterModel, approvalUi, freshBriefing] = await Promise.all([
-    resolveDefaultModel('chat'),
+    resolveDefaultModel(),
     resolveChatAltOpenRouterModel(),
     getApprovalUiSettings(),
     loadFreshBriefing(),

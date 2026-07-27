@@ -112,7 +112,7 @@ export async function resolveModelForProfile(
   if (pinned?.modelId) return { ...toCtx(pinned.modelId), source: 'override' };
   const assigned = assignments[profile];
   if (assigned?.modelId) return { ...toCtx(assigned.modelId), source: 'auto' };
-  return { ...(await resolveDefaultModel('chat')), source: 'default' };
+  return { ...(await resolveDefaultModel()), source: 'default' };
 }
 
 /** The full picture for one profile — what the nightly run chose, what (if
@@ -132,7 +132,7 @@ export async function describeProfiles(): Promise<
   const [overrides, assignments, siteDefault] = await Promise.all([
     loadOverrides(),
     loadAssignments(),
-    resolveDefaultModel('chat'),
+    resolveDefaultModel(),
   ]);
   return PROFILES.map((profile) => {
     const auto = assignments[profile] ?? null;

@@ -313,7 +313,7 @@ async function callBatchLLM(
   prompt: { system: string; user: string },
   unitCount: number,
 ): Promise<string | null> {
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(ctx);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
