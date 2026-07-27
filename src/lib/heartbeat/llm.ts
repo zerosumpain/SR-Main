@@ -50,7 +50,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   const ctx = opts.model ?? (
     conv.modelProvider && conv.modelId
       ? coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId })
-      : await resolveDefaultModel('chat')
+      : await resolveDefaultModel()
   );
   const { client, model } = await getLLMClient(ctx);
 

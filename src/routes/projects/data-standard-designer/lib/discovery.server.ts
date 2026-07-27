@@ -211,7 +211,7 @@ interface Classification {
 async function classifyBatch(items: Candidate[]): Promise<Map<string, Classification>> {
   const out = new Map<string, Classification>();
   if (!items.length) return out;
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
   const payload = items.map((c, i) => ({ i, title: c.title, publisher: c.publisher, docType: c.docType, url: c.url, description: c.description }));
   const sys =
     'You classify UK government publications for a registry of DATA STANDARDS. For each item decide: is it actually a data standard, data dictionary, metadata standard, API/technical data standard, identifier scheme, or closely-related guidance — versus unrelated news/policy/forms. Return STRICT JSON: {"items":[{"i":<index>,"isStandard":<bool>,"kind":"data-standard|data-dictionary|metadata|api-standard|identifier|guidance|other","confidence":"high|medium|low","domain":"education|childrens-social-care|child-protection|health|local-gov|cross-gov|metadata|other","summary":"<=160 chars"}]}. Be conservative: news, consultations, statistics releases and forms are "other" with isStandard=false.';

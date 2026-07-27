@@ -83,7 +83,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
   } catch (err) {
     console.warn(`[file-index] ${VISION_MODEL} caption failed (${(err as Error).message}); trying builder default`);
     try {
-      const fallback = await resolveDefaultModel('builder');
+      const fallback = await resolveDefaultModel();
       return await attempt({ provider: fallback.provider, modelId: fallback.modelId });
     } catch (err2) {
       console.warn(`[file-index] image caption fully failed: ${(err2 as Error).message}`);

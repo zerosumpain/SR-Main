@@ -106,7 +106,7 @@ export const builderChatExecutor: NodeExecutor = {
     if (provider === 'openrouter' && modelId) {
       ctx = { provider, modelId };
     } else {
-      ctx = await resolveDefaultModel('builder');
+      ctx = await resolveDefaultModel();
     }
 
     const priceSnapshot = await snapshotPrice(ctx);

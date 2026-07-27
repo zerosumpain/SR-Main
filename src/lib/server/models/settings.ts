@@ -46,14 +46,20 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 /**
  * The site-wide default model. ONE value drives every LLM task — chat, the
  * autonomous builder, deep research, workflow LLM nodes, project-page chats,
- * briefings, self-improve (John, 2026-07-25). The `kind` parameter is kept so
- * call sites still read as intent, but both resolve to the same setting; the
- * separate `jkai.builder.default_model` key is no longer consulted.
+ * briefings, self-improve (John, 2026-07-25).
+ *
+ * This used to take a `'chat' | 'builder'` kind, which it ignored: every caller
+ * got the same value regardless. Keeping it made 14 call sites read as though
+ * they selected a builder-specific model when nothing did, and left a
+ * `jkai.builder.default_model` setting that no code path consulted. The
+ * parameter and that setting are both gone — if a task ever genuinely needs its
+ * own model, give it a named resolver instead, the way `resolveExtractionModel`
+ * does, so the carve-out is visible rather than implied.
  *
  * Set from the /jkai model picker or /admin/ai/models. Stored values (and any
  * legacy bare GLM ids) are coerced to OpenRouter contexts.
  */
-export async function resolveDefaultModel(_kind: 'chat' | 'builder' = 'chat'): Promise<ModelContext> {
+export async function resolveDefaultModel(): Promise<ModelContext> {
   const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.chat.default_model');
   return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_CHAT_MODEL_ID });
 }

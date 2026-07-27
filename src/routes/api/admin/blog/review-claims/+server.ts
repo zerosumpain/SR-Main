@@ -58,7 +58,7 @@ function safeJSON<T>(raw: string): T | null {
 }
 
 async function extractClaims(plain: string): Promise<ClaimSeed[]> {
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
   const res = await client.chat.completions.create({
     model,
     messages: [

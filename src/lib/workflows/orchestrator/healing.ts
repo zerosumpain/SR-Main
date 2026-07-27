@@ -106,7 +106,7 @@ export async function diagnoseAndFix(
   context: HealingContext,
   onProgress?: (text: string) => void,
 ): Promise<HealingDiagnosis> {
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   const userPrompt = buildHealingPrompt(context);
   onProgress?.(`Diagnosing: ${context.error.slice(0, 100)}`);

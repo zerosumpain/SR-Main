@@ -43,7 +43,7 @@ export const POST: RequestHandler = async ({ request }) => {
     'the raw data, no fluff. ~250–400 words.';
   const user = `Tool-usage telemetry (last ${days} days):\n\n${JSON.stringify(summary, null, 2)}`;
 
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(ctx);
 
   // max_tokens generous so GLM's reasoning budget doesn't truncate the answer

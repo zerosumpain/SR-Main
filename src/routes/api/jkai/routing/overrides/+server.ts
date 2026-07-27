@@ -16,7 +16,7 @@ const SITE_DEFAULT_KEY = 'jkai.chat.default_model';
 
 async function picture() {
   const [siteDefault, profiles, routingEnabled] = await Promise.all([
-    resolveDefaultModel('chat'),
+    resolveDefaultModel(),
     describeProfiles(),
     isRoutingEnabled(),
   ]);

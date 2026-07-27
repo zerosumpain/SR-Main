@@ -50,7 +50,7 @@ export class OrchestratorBridge {
 
 		if (existing) return existing.id;
 
-		const modelContext = await resolveDefaultModel('chat');
+		const modelContext = await resolveDefaultModel();
 		const [created] = await db
 			.insert(conversations)
 			.values({
@@ -133,7 +133,7 @@ export class OrchestratorBridge {
 			const priorHistory = history.slice(0, -1);
 
 			// Call general chat with admin default model (WhatsApp flow has no pinned conversation).
-			const modelContext = await resolveDefaultModel('chat');
+			const modelContext = await resolveDefaultModel();
 			const { response: responseText } = await generalChat(
 				{ text: displayText, attachments: attachment ? [attachment] : [] },
 				priorHistory,

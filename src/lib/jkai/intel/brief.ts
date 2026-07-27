@@ -688,7 +688,7 @@ export async function generateBrief(context: BriefContext): Promise<BriefResult>
   const { resolveDefaultModel } = await import('$lib/server/models/settings');
   const { getLLMClient } = await import('$lib/jkai/llm-client');
 
-  const modelCtx = await resolveDefaultModel('chat');
+  const modelCtx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(modelCtx);
   const prompt = buildBriefPrompt(context);
 

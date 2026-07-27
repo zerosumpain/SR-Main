@@ -33,7 +33,7 @@ export async function delegateToAgent(
 
   const modelContext = agent.model
     ? coerceModelContext({ provider: 'openrouter', modelId: agent.model })
-    : await resolveDefaultModel('chat');
+    : await resolveDefaultModel();
 
   const whitelist = agent.allowedTools?.length
     ? [...new Set([...agent.allowedTools, ...META_TOOLS])]

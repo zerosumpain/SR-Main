@@ -128,7 +128,7 @@ function tryParseJson(s: string): unknown {
 }
 
 async function callLLM(input: HeroCopyInput): Promise<HeroCopy | null> {
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(ctx);
   const { system, user } = buildPrompt(input);
 

@@ -31,7 +31,7 @@ register({
   handler: async (args, toolCtx) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
-    const ctx = await resolveDefaultModel('builder');
+    const ctx = await resolveDefaultModel();
     const attachedRaw = args.attachedWorkflowIds;
     const attachedWorkflowIds = Array.isArray(attachedRaw) && attachedRaw.every((s) => typeof s === 'string')
       ? (attachedRaw as string[])
@@ -433,7 +433,7 @@ register({
     const titleArg = typeof args.title === 'string' && args.title.trim().length > 0 ? args.title.trim() : null;
     const title = titleArg ?? prompt.split('\n')[0].slice(0, 60);
 
-    const ctx = await resolveDefaultModel('builder');
+    const ctx = await resolveDefaultModel();
 
     // Pre-create the build row so we have the buildId for the workspace path.
     const insertValues: Record<string, unknown> = {

@@ -10,7 +10,7 @@ export const load: PageServerLoad = async () => {
     .from(jkaiBuilds)
     .orderBy(desc(jkaiBuilds.createdAt));
 
-  const defaultBuilderModel = await resolveDefaultModel('builder');
+  const defaultBuilderModel = await resolveDefaultModel();
 
   return { builds, defaultBuilderModel };
 };

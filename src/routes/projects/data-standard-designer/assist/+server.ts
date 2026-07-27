@@ -79,7 +79,7 @@ export const POST: RequestHandler = async (event) => {
     : body.mode === 'find-standards' ? 'find-standards'
     : 'design';
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   let system: string;
   let user: string;

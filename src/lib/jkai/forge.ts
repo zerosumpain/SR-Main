@@ -53,7 +53,7 @@ export async function createForgeBuild({
   prompt: string;
   trigger?: string;
 }): Promise<{ buildId: string }> {
-  const ctx = await resolveDefaultModel('builder');
+  const ctx = await resolveDefaultModel();
   const priceSnapshot = await snapshotPrice(ctx);
 
   const title = trigger

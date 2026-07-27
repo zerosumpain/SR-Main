@@ -42,7 +42,7 @@ ${buildStrategyContext()}`;
 
   const user = `ITEM TO DRAFT POLICIES FOR:\n${targetBrief(kind, id, label)}`;
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

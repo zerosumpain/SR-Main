@@ -196,7 +196,7 @@ STRATEGY INDEX:
 ${strategyIndex()}`;
   const user = `NEW ITEM:\nTitle: ${c.title}\nPublisher: ${c.publisher ?? '—'}\nType: ${c.docType ?? '—'}\nDate: ${c.publishedAt?.toISOString()?.slice(0, 10) ?? '—'}\nDescription: ${c.description ?? '—'}\nURL: ${c.url}`;
   try {
-    const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+    const { client, model } = await getLLMClient(await resolveDefaultModel());
     const res = await client.chat.completions.create(
       {
         model,

@@ -38,6 +38,6 @@ export async function resolveLLMClient(
     );
   }
 
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   return { ...(await getLLMClient(ctx)), provider: 'openrouter' };
 }

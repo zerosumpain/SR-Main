@@ -93,7 +93,7 @@ For posture nudges, value is −1…1 (−1=left label, +1=right label). For all
 VOCABULARY:
 ${vocab()}`;
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
   let parsed: any;
   try {
     const completion = await client.chat.completions.create(

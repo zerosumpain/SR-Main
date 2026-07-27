@@ -72,7 +72,7 @@ export const POST: RequestHandler = async (event) => {
   const nonEmpty = sections.filter((s) => s.text.trim().length > 0);
   if (!nonEmpty.length) throw error(400, 'The draft is empty — write something first.');
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

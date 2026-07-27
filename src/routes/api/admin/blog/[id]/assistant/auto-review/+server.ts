@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
   const pendingHints = Array.isArray(body?.pending) ? (body.pending as string[]).slice(0, 6) : [];
 
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { client, model } = await getLLMClient(ctx);
   const history = await loadHistory(postId);
 

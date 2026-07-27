@@ -73,7 +73,7 @@ export const POST: RequestHandler = async (event) => {
   const statement = String(body?.statement ?? '').slice(0, 2000).trim();
   if (!statement) throw error(400, 'Write a policy statement first.');
 
-  const { client, model } = await getLLMClient(await resolveDefaultModel('chat'));
+  const { client, model } = await getLLMClient(await resolveDefaultModel());
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

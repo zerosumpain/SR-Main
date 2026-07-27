@@ -66,7 +66,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   if (!conversationId) {
-    const defaultCtx = await resolveDefaultModel('chat');
+    const defaultCtx = await resolveDefaultModel();
     const [conv] = await db
       .insert(conversations)
       .values({

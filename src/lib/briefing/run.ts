@@ -57,7 +57,7 @@ function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = 
 }
 
 async function synthesise(signals: BriefingSignals, topics: string[]): Promise<{ markdown: string; llmCalls: number; costUsd: number }> {
-  const ctx = await resolveDefaultModel('chat');
+  const ctx = await resolveDefaultModel();
   const { getLLMClient } = await import('$lib/jkai/llm-client');
   const { client, model } = await getLLMClient(ctx);
 

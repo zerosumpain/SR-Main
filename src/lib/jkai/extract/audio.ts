@@ -36,7 +36,7 @@ export async function extractAudio(
     }
   }
 
-  const modelCtx = await resolveDefaultModel('builder');
+  const modelCtx = await resolveDefaultModel();
   const { client } = await getLLMClient(modelCtx);
 
   try {

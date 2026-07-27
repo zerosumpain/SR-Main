@@ -109,7 +109,7 @@ export async function getNarrative(
   const fallback = templated(stats);
   let text = '';
   try {
-    const ctx = await resolveDefaultModel('chat');
+    const ctx = await resolveDefaultModel();
     const { client, model } = await getLLMClient(ctx);
     const userPayload = JSON.stringify(stats);
     const completion = await Promise.race([

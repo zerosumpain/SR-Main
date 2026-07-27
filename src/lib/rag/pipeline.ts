@@ -232,7 +232,7 @@ export async function answer(
     ? `${block}\n\n--- Question ---\n${question}`
     : `The document index returned no relevant excerpts for this question.\n\n--- Question ---\n${question}`;
 
-  const ctx = opts.model ?? (await resolveDefaultModel('chat'));
+  const ctx = opts.model ?? (await resolveDefaultModel());
   const text = await streamAnswer(ctx, SYSTEM_PROMPT, userPrompt, { onToken: opts.onToken, signal: opts.signal });
 
   return { text, citations: block ? citations : [], usedContext: !!block };

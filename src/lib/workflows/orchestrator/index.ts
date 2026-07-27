@@ -228,7 +228,7 @@ async function runToolLoop(
   description?: string;
   followUp?: string;
 }> {
-  const model = (await resolveDefaultModel('chat')).modelId;
+  const model = (await resolveDefaultModel()).modelId;
   const draft = existingDraft ?? createEmptyDraft();
   if (!existingDraft) resetNodeCounter();
   const deps = getToolCallDeps();
@@ -503,7 +503,7 @@ async function runCriticRound(
   workflow: GeneratedWorkflow,
   draft: WorkflowDraft,
 ): Promise<{ issues: CritiqueIssue[]; verdict: 'pass' | 'fail' }> {
-  const model = (await resolveDefaultModel('chat')).modelId;
+  const model = (await resolveDefaultModel()).modelId;
 
   const workflowSummary = JSON.stringify({
     name: workflow.name,
