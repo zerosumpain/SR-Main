@@ -46,6 +46,25 @@ export function invalidateGraphAnalysis(): void {
   generation++;
 }
 
+/**
+ * Normalise the two shapes these columns come back in — `aliases` is jsonb (an
+ * array, or a JSON string when the driver hands it back unparsed) and
+ * `categories` is a real text[] built by ARRAY_AGG.
+ */
+function toStringArray(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((v) => typeof v === 'string');
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function parseVector(raw: unknown): number[] | null {
   if (!raw) return null;
   if (Array.isArray(raw)) return raw.map(Number).filter((n) => Number.isFinite(n));
@@ -73,16 +92,25 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       e.created_at,
       e.updated_at,
       e.embedding::text             AS embedding,
+      e.aliases                     AS aliases,
       COALESCE(ne.note_count, 0)    AS note_count,
-      ne.last_seen_at
+      ne.last_seen_at,
+      COALESCE(ne.categories, ARRAY[]::text[]) AS categories
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
     LEFT JOIN (
+      -- ER categories are set per SOURCE, so an entity carries the union of the
+      -- categories of every note asserting it: filtering on 'work' returns
+      -- everything work ever told us about. The lateral expansion multiplies
+      -- rows, hence COUNT(DISTINCT note_id) rather than COUNT(*).
       SELECT ne.entity_id,
-             COUNT(*)::int      AS note_count,
-             MAX(n.created_at)  AS last_seen_at
+             COUNT(DISTINCT ne.note_id)::int AS note_count,
+             MAX(n.created_at)               AS last_seen_at,
+             ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories
       FROM intel_note_entities ne
       JOIN intel_notes n ON n.id = ne.note_id
+      LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(n.categories, '[]'::jsonb))
+        AS cat(value) ON TRUE
       GROUP BY ne.entity_id
     ) ne ON ne.entity_id = e.id
     WHERE e.merged_into_id IS NULL
@@ -109,6 +137,8 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       updatedAt: updated,
       noteCount: Number(r.note_count ?? 0),
       lastSeenAt: r.last_seen_at ? new Date(String(r.last_seen_at)).getTime() : created,
+      aliases: toStringArray(r.aliases),
+      categories: toStringArray(r.categories),
     };
   });
 

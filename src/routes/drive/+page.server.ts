@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { workflowFiles } from '$lib/db/schema';
+import { driveFolderSettings, workflowFiles } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -22,14 +22,22 @@ function parseBytes(raw: string | undefined, fallback: number): number {
 }
 
 export const load: PageServerLoad = async () => {
-  const [files, siteDefault] = await Promise.all([
+  const [files, siteDefault, folderRows] = await Promise.all([
     db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt)),
     // The RAG chat panel starts on the site default like every other LLM
     // surface, rather than on the hard-coded code fallback.
     resolveDefaultModel(),
+    // Per-folder entity-resolution policy. Loaded up front so folder tiles can
+    // show whether their contents feed the Intel graph without a fetch per tile.
+    db.select().from(driveFolderSettings),
   ]);
   // adapter-node default is '512K' when BODY_SIZE_LIMIT is unset.
   const bodyLimit = parseBytes(env.BODY_SIZE_LIMIT, 512 * 1024);
   const maxUploadBytes = Math.min(bodyLimit, MAX_BYTES);
-  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId };
+  const folderSettings = folderRows.map((r) => ({
+    path: r.path,
+    intelMode: r.intelMode,
+    categoryIds: r.categoryIds ?? [],
+  }));
+  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId, folderSettings };
 };

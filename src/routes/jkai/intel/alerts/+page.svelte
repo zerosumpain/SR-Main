@@ -42,7 +42,7 @@
 
 <JkaiPageTitle title="ALERTS" titleHref="/jkai/intel" />
 
-<div class="p-6 sm:p-10 max-w-4xl mx-auto">
+<div class="p-6 sm:p-10 w-full">
   <div class="flex flex-wrap gap-2 mb-6">
     <a
       href="/jkai/intel/alerts"

@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { reindexFileInBackground } from '$lib/file-index/store';
+import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
 import { and, eq, like, sql } from 'drizzle-orm';
 import {
   newDiskPath,
@@ -336,6 +337,9 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
       .where(sql`${workflowFiles.name} LIKE ${descendantPattern(rel)} ESCAPE '\\'`);
     for (const r of all) {
       void deleteFile(r.diskPath).catch(() => {});
+      // Derived intel holds no FK to the file — without this the entities
+      // outlive the document they were read from.
+      queueDerivedIntelDelete('file', r.id);
     }
     return new Response(null, { status: 204 });
   }
@@ -343,6 +347,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
   if (!row) return new Response('not found', { status: 404 });
   await db.delete(workflowFiles).where(eq(workflowFiles.id, row.id));
   void deleteFile(row.diskPath).catch(() => {});
+  queueDerivedIntelDelete('file', row.id);
   return new Response(null, { status: 204 });
 };
 
@@ -508,6 +513,7 @@ async function handleMoveOrCopy(req: Request, urlPath: string, eventOrigin: stri
       if (!overwrite) return new Response('overwrite=F and dest exists', { status: 412 });
       await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
       void deleteFile(existing.diskPath).catch(() => {});
+      queueDerivedIntelDelete('file', existing.id);
     }
 
     if (kind === 'MOVE') {

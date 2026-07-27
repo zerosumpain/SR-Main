@@ -10,6 +10,7 @@ import {
   deleteFile,
   newDiskPath,
 } from '$lib/file-store/storage';
+import { queueDerivedIntelDelete } from '$lib/jkai/intel/auto-extract';
 
 export { fileStoreDef } from './file-store.def';
 
@@ -126,6 +127,9 @@ export const fileStoreExecutor: NodeExecutor = {
       }
       await deleteFile(existing.diskPath);
       await db.delete(workflowFiles).where(eq(workflowFiles.id, existing.id));
+      // Derived intel has no FK to the file — remove what this document put in
+      // the graph, or the entities outlive their only source.
+      queueDerivedIntelDelete('file', existing.id);
       return { output: { ok: true, deleted: true, name: fileName }, rowCount: 1 };
     }
 

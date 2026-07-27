@@ -21,6 +21,8 @@ function node(id: string, typeName = 'person'): GraphSnapshot['nodes'][number] {
     updatedAt: 0,
     noteCount: 1,
     lastSeenAt: 0,
+    aliases: [],
+    categories: [],
   };
 }
 function edge(a: string, b: string, type = 'knows'): GraphSnapshot['edges'][number] {

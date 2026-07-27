@@ -177,6 +177,11 @@
     Everything the graph tells you — importance, paths, clusters, surprising links — is only as good as
     whether one real thing is one node. These are the places it isn't.
   </p>
+  <p class="lede-vs">
+    This page fixes the SHAPE of the graph. To judge whether an individual entity is real or
+    mis-typed, use <a href="/jkai/intel/review">Triage</a>; a duplicate you cannot decide here is
+    usually a triage question about one of the two.
+  </p>
 
   <section class="panel">
     <header>
@@ -238,6 +243,9 @@
                 Merge the other way
               </button>
               <button type="button" class="ghost" onclick={() => dismiss(d)}>Not a duplicate</button>
+              <!-- Below the auto-merge line the question is "is this thing even
+                   right", which is Triage's job, not this page's. -->
+              <a class="ghost-link" href="/jkai/intel/review?focus={d.merge.id}">Judge in Triage</a>
             </div>
           </li>
         {/each}
@@ -324,10 +332,38 @@
 {/if}
 
 <style>
+  .lede-vs {
+    margin: -6px 0 18px;
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--text-ghost);
+  }
+  .lede-vs a {
+    color: var(--accent);
+  }
+  .ghost-link {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 11px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    color: var(--text-ghost);
+    text-decoration: none;
+  }
+  .ghost-link:hover {
+    border-color: var(--accent-tint-35);
+    color: var(--accent);
+  }
+
   .wrap {
     padding: 20px;
-    max-width: 1100px;
-    margin: 0 auto;
+    /* Full-bleed, like every Intel surface — a centred column beside a
+       full-width graph read as a bug. Prose keeps its own measure below. */
+    width: 100%;
   }
   .lede {
     font-size: var(--fs-body-sm);
