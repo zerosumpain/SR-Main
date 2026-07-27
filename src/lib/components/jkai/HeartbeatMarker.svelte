@@ -1,12 +1,18 @@
 <script lang="ts" module>
-  // A run of heartbeat-engine messages, collapsed to one marker.
+  // The session's heartbeat-engine messages, collapsed to one marker.
   //
   // The heartbeat engine posts into the thread on its own cadence — progress
   // notes ("orchestrator paused 2 min ago — waiting on your reply") and short
   // LLM replies. Rendered as bubbles they dominate a thread they contributed
-  // nothing to, and consecutive ones repeat almost verbatim. So a contiguous run
-  // becomes a single quiet marker: the detail is on hover, and a click pins it
-  // open for reading or copying.
+  // nothing to, and consecutive ones repeat almost verbatim. So they become a
+  // single quiet marker: the detail is on hover, and a click pins it open for
+  // reading or copying.
+  //
+  // `variant="header"` is the live shape — ONE marker for the whole session,
+  // pinned in the thread header with the latest beat previewed inline, so the
+  // flow of the conversation is never interrupted. Entries arrive newest-first.
+  // The default inline variant is retained for any caller that still wants a
+  // marker in the flow.
 
   export interface HeartbeatEntry {
     id: string;
@@ -18,7 +24,29 @@
 </script>
 
 <script lang="ts">
-  let { entries }: { entries: HeartbeatEntry[] } = $props();
+  let {
+    entries,
+    variant = 'inline',
+  }: {
+    /** Newest first when `variant="header"` — `latest` reads entries[0]. */
+    entries: HeartbeatEntry[];
+    variant?: 'inline' | 'header';
+  } = $props();
+
+  const isHeader = $derived(variant === 'header');
+  const latest = $derived(entries[0] ?? null);
+
+  /** One-line preview of the latest beat. The stored content carries a
+   *  `[heartbeat] ` prefix and hard newlines; neither survives a single line of
+   *  header, so both are flattened out here rather than in CSS. */
+  const latestPreview = $derived(
+    latest
+      ? latest.content
+          .replace(/^\s*\[heartbeat\]\s*/i, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : '',
+  );
 
   let hovered = $state(false);
   let pinned = $state(false);
@@ -65,6 +93,7 @@
 
 <div
   class="hb-marker"
+  class:header={isHeader}
   onmouseenter={show}
   onmouseleave={scheduleHide}
   role="presentation"
@@ -75,7 +104,7 @@
     class:open
     aria-expanded={open}
     aria-label={label}
-    title={label}
+    title={isHeader && latestPreview ? `${label} — latest: ${latestPreview}` : label}
     onclick={() => (pinned = !pinned)}
     onfocus={show}
     onblur={scheduleHide}
@@ -83,6 +112,11 @@
     <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
       <path d="M2 10h3.2l2-4.2 2.6 8.4 2.1-5.1 1.4 2.9H18" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
+    {#if isHeader && latestPreview}
+      <!-- The latest beat, readable without hovering. Truncates rather than
+           wrapping — the header row is a single line. -->
+      <span class="hb-latest">{latestPreview}</span>
+    {/if}
     {#if entries.length > 1}
       <span class="hb-count">{entries.length}</span>
     {/if}
@@ -146,6 +180,48 @@
     font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.08em;
+  }
+
+  /* ── Header variant: one marker for the session ─────────────────────────── */
+  .hb-marker.header {
+    display: inline-flex;
+    justify-content: flex-start;
+    padding: 0;
+    min-width: 0;
+  }
+  .hb-marker.header .hb-icon {
+    max-width: 220px;
+    min-width: 0;
+  }
+  .hb-latest {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: none;
+    color: var(--text-muted);
+  }
+  .hb-marker.header .hb-icon:hover .hb-latest,
+  .hb-marker.header .hb-icon.open .hb-latest {
+    color: inherit;
+  }
+  /* The card hangs off the right of the header rather than centring on an icon
+     that now sits in a row of chips. */
+  .hb-marker.header .hb-card {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+  /* The thread header's actions don't shrink, so the preview is dropped before
+     it can start eating the thread title. Icon + count always survive. */
+  @media (max-width: 1099px) {
+    .hb-latest {
+      display: none;
+    }
   }
 
   /* Opaque panel — --card-bg is a 7% tint and would let the thread show through.

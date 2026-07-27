@@ -166,11 +166,22 @@ Return ONLY valid JSON matching this schema:
 }
 
 Rules:
-- Extract ALL people, projects, teams, risks, decisions, deadlines, organisations, and systems mentioned
+- Extract EVERY named thing the note mentions. The list of known entity types
+  given below is the authority on what counts — work through it and ask, for
+  each type, "does the note name one of these?". Do not restrict yourself to
+  people and organisations.
+- This explicitly includes PLACES: countries, nations, jurisdictions, regions,
+  cities, and named administrative areas. A note comparing what several
+  countries do must yield one entity per country. Estonia, Denmark, Ontario and
+  New Zealand are entities in exactly the way a person or a department is.
+- It also includes standards, products, policies, programmes, datasets and
+  named documents, reports or surveys.
 - For each entity, check if it matches a known entity (by name similarity) and set possibleMatchId
 - Only propose new types if an entity genuinely doesn't fit any known type
 - Be generous with extraction — capture everything mentioned, even briefly
 - Set confidence to "low" if the entity is ambiguous or only vaguely referenced
+- Ignore the conversational scaffolding itself: do not create entities for the
+  assistant, the user, the chat, or the tools used to answer
 - Dates should be ISO format. If only a relative date is given (e.g. "next Thursday"), calculate from today's date provided in the prompt
 - Return ONLY the JSON object, no markdown fences or commentary`;
 

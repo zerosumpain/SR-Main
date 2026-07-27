@@ -45,6 +45,7 @@
     onOpenFileRef,
     onOpenResearchRef,
     entityMentions = [],
+    erProcessing = false,
   }: {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -83,6 +84,11 @@
      *  the inline "queued" badge so John can see at a glance that the
      *  message hasn't actually been sent to the server yet. */
     queued?: boolean;
+    /** Entity resolution is running over the thread this reply just joined.
+     *  Marks the bubble itself — a pulsing border plus an "ER processing"
+     *  legend on the top edge — rather than dropping a separate pill into the
+     *  thread, so the signal sits on the message it is about. */
+    erProcessing?: boolean;
   } = $props();
 
   function formatClockTime(iso: string | undefined): string {
@@ -266,7 +272,13 @@
     class="msg-bubble"
     class:hb-msg={!!heartbeat}
     class:hb-msg-trigger={isHeartbeatTrigger}
+    class:er-processing={erProcessing}
   >
+    {#if erProcessing}
+      <!-- Legend on the top border, fieldset-style: it belongs to the frame,
+           not to the reply's prose. -->
+      <span class="er-legend" role="status" aria-live="polite">ER processing</span>
+    {/if}
     {#if heartbeat}
       <div class="hb-badge">
         <span class="hb-pulse" aria-hidden="true">●</span>
@@ -413,6 +425,49 @@
   .user-text {
     white-space: pre-wrap;
     margin: 0;
+  }
+
+  /* Entity resolution in flight over the thread. The frame pulses in the
+     design system's blue (--accent-ink, which --info also points at) rather
+     than the burnt-orange accent, so "a background job is chewing on this" is
+     never mistaken for "this is the live turn". */
+  .msg-bubble.er-processing {
+    position: relative;
+    border-color: var(--accent-ink);
+    animation: er-border-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes er-border-pulse {
+    0%,
+    100% {
+      border-color: var(--accent-ink-tint-22);
+      background: var(--card-bg);
+    }
+    50% {
+      border-color: var(--accent-ink);
+      background: var(--accent-ink-tint-06);
+    }
+  }
+  .er-legend {
+    position: absolute;
+    top: -2px;
+    left: 12px;
+    transform: translateY(-50%);
+    padding: 0 6px;
+    /* Opaque, so the border it straddles is cut rather than showing through. */
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent-ink);
+    white-space: nowrap;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .msg-bubble.er-processing {
+      animation: none;
+      border-color: var(--accent-ink);
+    }
   }
 
   /* MODEL / N TOK / LATENCY / £PRICE — the single most important detail of the
