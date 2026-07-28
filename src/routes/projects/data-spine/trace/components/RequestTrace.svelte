@@ -258,7 +258,7 @@
   </div>
 
   <!-- ============ THE SIMPLE PICTURE ============ -->
-  <PlayerMap {scenario} {active} running={playing} {depth} />
+  <PlayerMap {scenario} {active} />
 
   <!-- ============ THE GRID ============ -->
   <div class="stage-scroll">
