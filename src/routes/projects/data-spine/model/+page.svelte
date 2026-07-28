@@ -207,6 +207,7 @@
     <CommitmentsLedger {eli} />
     <div class="next-row">
       <a class="pe-next" href="/projects/data-spine/outcomes">Next: the outcomes — what it does &amp; who wins →</a>
+      <a class="pe-next alt" href="/projects/data-spine/trace">Or trace one request through all six stages and all six layers →</a>
     </div>
   </section>
 </div>
@@ -234,7 +235,10 @@
   .band-quote { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(26px, 4.4vw, 56px); line-height: 1.14; letter-spacing: -0.02em; color: var(--paper, #f1ead6); max-width: 1100px; margin: 0 auto; text-align: center; }
   .band-quote em { font-style: italic; color: #d9a05e; }
 
-  .next-row { margin-top: 32px; }
+  .next-row { margin-top: 32px; display: flex; gap: 10px; flex-wrap: wrap; }
+  /* the secondary route out of the deck — the 2-D trace instrument */
+  .next-row :global(.pe-next.alt) { background: transparent; color: var(--accent-ink); border: 1.5px solid var(--accent-ink); }
+  .next-row :global(.pe-next.alt:hover) { background: var(--accent-ink); color: var(--paper); }
 
   @media (max-width: 860px) {
     .slide { scroll-margin-top: calc(var(--topH, 56px) + 84px); }
