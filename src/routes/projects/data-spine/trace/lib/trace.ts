@@ -1099,7 +1099,7 @@ export const PLAYERS: Player[] = [
   { id: 'a-number', label: 'A national number', sub: 'no PII', kind: 'answer' },
   { id: 'a-facts', label: '3 facts, one child', sub: 'PII — to one named person', kind: 'answer', hot: true },
   { id: 'a-outputs', label: 'Cleared outputs', sub: 'checked before release', kind: 'answer' },
-  { id: 'a-signal', label: 'A signal — and a contribution back', sub: 'school-scoped, no roster', kind: 'answer' },
+  { id: 'a-signal', label: 'A two-way exchange', sub: 'a signal out, a contribution back', kind: 'answer' },
 ];
 
 export const playerById = (id: string) => PLAYERS.find((p) => p.id === id)!;
