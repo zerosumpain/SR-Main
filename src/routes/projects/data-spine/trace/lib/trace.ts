@@ -25,51 +25,74 @@ export type LayerId = 'practical' | 'analytical' | 'compute' | 'storage' | 'netw
 export interface Layer {
   id: LayerId;
   no: number;
+  /** the engineering name — used at Official and Technical depth */
   name: string;
+  /** the plain-English name. At ELI5 the layer is CALLED this: "Storage" means
+   *  nothing to a non-specialist, "What gets kept" means exactly the right thing. */
+  eli5Name: string;
+  /** the same, short enough for the diagram's 90-unit gutter (the long form clips) */
+  eli5Short: string;
   /** the question this layer answers */
   question: string;
+  /** the same question, asked the way a person would actually ask it */
+  eli5Question: string;
   blurb: string;
   eli5: string;
+  /** the single thing to remember about this layer, for the ELI5 table */
+  eli5Point: string;
   /** short mono tag used on the lens rail */
   tag: string;
+  eli5Tag: string;
 }
 
 export const LAYERS: Layer[] = [
   {
-    id: 'practical', no: 1, name: 'Practical', tag: 'PEOPLE',
+    id: 'practical', no: 1, name: 'Practical', eli5Name: 'The people', tag: 'PEOPLE', eli5Tag: 'PEOPLE', eli5Short: 'The people',
     question: 'Who actually does something, and what changes for them?',
+    eli5Question: 'Who asks, who can say no, and who ends up better off?',
     blurb: 'The human and organisational layer — the named person who asks, the headteacher who can refuse, the family who can object, the minister who reads the number. Almost every failure in national data programmes lives here, not in the technology.',
     eli5: 'The people. Who asks, who says yes or no, and who ends up better off.',
+    eli5Point: 'Almost everything that goes wrong with schemes like this goes wrong here — with people and permission, not with computers.',
   },
   {
-    id: 'analytical', no: 2, name: 'Analytical', tag: 'MEANING',
+    id: 'analytical', no: 2, name: 'Analytical', eli5Name: 'What the answer means', tag: 'MEANING', eli5Tag: 'MEANING', eli5Short: 'The meaning',
     question: 'What does the number actually mean, and can you trust it?',
+    eli5Question: 'Is the answer actually right — and does it mean what you think?',
     blurb: 'Definitions, populations, coverage, suppression and provenance. A federated answer with 71% coverage is a materially different claim from one with 99% — this layer is where that distinction is kept, or lost.',
     eli5: 'What the answer means — and how sure we are it is right.',
+    eli5Point: 'An answer from 7 schools in 10 is a different answer from one out of 10 in 10. Somebody has to keep saying which it was.',
   },
   {
-    id: 'compute', no: 3, name: 'Compute', tag: 'EXECUTION',
+    id: 'compute', no: 3, name: 'Compute', eli5Name: 'Who does the sums', tag: 'EXECUTION', eli5Tag: 'THE SUMS', eli5Short: 'The sums',
     question: 'What code runs, where, and who signed it?',
+    eli5Question: 'Which computer does the working out, and where does it sit?',
     blurb: 'Execution: policy decision points, the certified connector, the reducer, the signatures. This is the layer the "open-source connector" argument lives on — one certification instead of ~24,000 bespoke integrations.',
     eli5: 'The programs doing the work, and where they run.',
+    eli5Point: 'The sums are done inside each school\u2019s own computer. The same little program runs everywhere, so nobody has to build 24,000 different ones.',
   },
   {
-    id: 'storage', no: 4, name: 'Storage', tag: 'AT REST',
+    id: 'storage', no: 4, name: 'Storage', eli5Name: 'What gets kept', tag: 'AT REST', eli5Tag: 'KEPT', eli5Short: 'What\u2019s kept',
     question: 'What is written down, where, and for how long?',
+    eli5Question: 'What gets saved afterwards, and who ends up holding it?',
     blurb: 'The layer that decides whether "no central database" is a promise or a property. Watch what each stage persists: if intermediate results start being retained at the centre, the pool has been rebuilt by accretion.',
     eli5: 'What gets saved, and where it sits afterwards.',
+    eli5Point: 'This is the layer where "there is no big database" is either true or quietly stops being true. Watch what the middle keeps.',
   },
   {
-    id: 'network', no: 5, name: 'Network', tag: 'IN FLIGHT',
+    id: 'network', no: 5, name: 'Network', eli5Name: 'What travels', tag: 'IN FLIGHT', eli5Tag: 'TRAVELS', eli5Short: 'What travels',
     question: 'What crosses a boundary, in which direction, and how big is it?',
+    eli5Question: 'What actually goes down the wire between buildings?',
     blurb: 'The wire. Direction matters as much as encryption: the useful property is not that pupil rows are encrypted in flight, but that there is no route by which they can arrive at the centre at all.',
     eli5: 'What travels down the wire between buildings.',
+    eli5Point: 'A question goes out. Small totals come back. No child\u2019s record makes the journey at all.',
   },
   {
-    id: 'physical', no: 6, name: 'Physical', tag: 'MATTER',
+    id: 'physical', no: 6, name: 'Physical', eli5Name: 'Whose machines', tag: 'MATTER', eli5Tag: 'MACHINES', eli5Short: 'The machines',
     question: 'Which buildings, which machines, whose jurisdiction?',
+    eli5Question: 'Whose computers, in whose buildings, under whose rules?',
     blurb: 'Racks, residency and custody. The federated posture barely changes this layer, and that is the argument: the data stays in the datacentres it is already in, under the contracts schools already signed.',
     eli5: 'The actual computers, in actual buildings.',
+    eli5Point: 'Nothing moves house. The records stay on the same computers, under the same contracts the school already signed.',
   },
 ];
 
@@ -410,6 +433,8 @@ export interface ScenarioStage {
   note: string;
   /** the human work, named — only when human > 0 */
   humanWork?: string;
+  /** the same work, without the acronyms */
+  humanWorkEli5?: string;
 }
 
 export interface Scenario {
@@ -423,6 +448,10 @@ export interface Scenario {
   technical: string;
   stages: ScenarioStage[];
   methods: MethodId[];
+  /** the simple picture: only the parts of the network this scenario actually touches */
+  players: string[];
+  /** why it takes the time it takes, in one plain line (the ELI5 clock table) */
+  eli5Why: string;
   /** what comes back */
   result: { value: string; label: string; kind: 'aggregate' | 'pii' | 'dataset' | 'signal' };
   /** the second time this exact class of question is asked */
@@ -454,6 +483,8 @@ export const SCENARIOS: Scenario[] = [
       { stage: 'answer', machine: 0.2, human: 0, mode: 'machine', note: 'The number and its receipt land in the analyst’s dashboard.' },
     ],
     methods: ['federated-analytics', 'query-contract', 'sdc', 'consent-registry'],
+    players: ['p-analyst', 'p-spine', 'p-ledger', 'p-mis1', 'p-mis2', 'p-mis3', 'a-number'],
+    eli5Why: 'Everyone already agreed this question was allowed, so the computers just get on with it.',
     result: { value: '4,120', label: 'pupils · aggregate, no PII', kind: 'aggregate' },
     repeat: { machine: 3.15, human: 0, note: 'Identical. A standing question costs the same every time it is asked.' },
     confidence: 'hypothesis',
@@ -470,14 +501,16 @@ export const SCENARIOS: Scenario[] = [
     official: 'A new purpose, a new variable and a cross-domain linkage: no standing agreement covers it. The governance work is real and largely irreducible — a DPIA, a varied data-sharing agreement, school and trust notification, an objection window, and an MIS release that carries the new field.',
     technical: 'The blocking dependencies are a schema-registry addition (a new canonical variable plus conformance fixtures), a basis-registry entry mapping statute to fields and aggregation, and each supplier shipping the mapping in a scheduled release. None of it is cryptography; all of it is agreement.',
     stages: [
-      { stage: 'commission', machine: 0.6, human: 12 * DAY, mode: 'human', note: 'Framing the question so it can be authorised at all: purpose, minimisation, the smallest version that still answers the policy question.', humanWork: 'Analyst + information governance draft the purpose and minimise the ask' },
+      { stage: 'commission', machine: 0.6, human: 12 * DAY, mode: 'human', note: 'Framing the question so it can be authorised at all: purpose, minimisation, the smallest version that still answers the policy question.', humanWork: 'Analyst + information governance draft the purpose and minimise the ask', humanWorkEli5: 'Working out how to ask it in a way that could ever be allowed' },
       { stage: 'ledger', machine: 0.2, human: 0, mode: 'machine', note: 'The ledger is the one part that is instant on both paths — including logging the refusals along the way.' },
-      { stage: 'consent', machine: 0.4, human: 62 * DAY, mode: 'human', note: 'The bulk of the elapsed time, and none of it is technical: a DPIA, a varied data-sharing agreement, notification to schools and trusts, and an objection window that has to actually be open long enough to mean something.', humanWork: 'DPIA · DSA variation · school & trust notification · objection window' },
-      { stage: 'mis', machine: 4.5, human: 21 * DAY, mode: 'human', note: 'A new canonical variable has to reach the estates. That means a schema-registry version, conformance fixtures, and every supplier shipping the mapping in a release — the critical path runs straight through the MIS market.', humanWork: 'Schema version + conformance fixtures + supplier release cycles' },
-      { stage: 'aggregate', machine: 1.2, human: 3 * DAY, mode: 'human', note: 'A statistician agrees the disclosure-control profile for a variable nobody has published before.', humanWork: 'New suppression profile agreed' },
-      { stage: 'answer', machine: 0.4, human: 2 * DAY, mode: 'human', note: 'First publication sign-off, because the first answer of a new class is also a precedent.', humanWork: 'Publication sign-off' },
+      { stage: 'consent', machine: 0.4, human: 62 * DAY, mode: 'human', note: 'The bulk of the elapsed time, and none of it is technical: a DPIA, a varied data-sharing agreement, notification to schools and trusts, and an objection window that has to actually be open long enough to mean something.', humanWork: 'DPIA · DSA variation · school & trust notification · objection window', humanWorkEli5: 'A privacy assessment, a new agreement with schools, telling everyone, and a window for people to object' },
+      { stage: 'mis', machine: 4.5, human: 21 * DAY, mode: 'human', note: 'A new canonical variable has to reach the estates. That means a schema-registry version, conformance fixtures, and every supplier shipping the mapping in a release — the critical path runs straight through the MIS market.', humanWork: 'Schema version + conformance fixtures + supplier release cycles', humanWorkEli5: 'Adding a new field to every school system — which means waiting for each company’s next software release' },
+      { stage: 'aggregate', machine: 1.2, human: 3 * DAY, mode: 'human', note: 'A statistician agrees the disclosure-control profile for a variable nobody has published before.', humanWork: 'New suppression profile agreed', humanWorkEli5: 'A statistician agreeing how to publish it without identifying anyone' },
+      { stage: 'answer', machine: 0.4, human: 2 * DAY, mode: 'human', note: 'First publication sign-off, because the first answer of a new class is also a precedent.', humanWork: 'Publication sign-off', humanWorkEli5: 'Someone senior signing off the very first one' },
     ],
     methods: ['query-contract', 'consent-registry', 'pprl', 'sdc', 'federated-analytics'],
+    players: ['p-analyst', 'p-spine', 'p-ledger', 'p-mis1', 'p-mis2', 'p-mis3', 'p-la', 'p-dwp', 'a-number'],
+    eli5Why: 'Nobody has asked this before, so the grown-ups have to agree it is allowed first. That is where the months go.',
     result: { value: '31%', label: 'of the cohort · aggregate, no PII', kind: 'aggregate' },
     repeat: { machine: 7.3, human: 0, note: 'The second time this class is asked it is a standing question: seconds, no humans. The 100 days buy a permanent capability, not one answer — which is the argument for asking the governance question once, properly, at the level of a class of request rather than a request.' },
     confidence: 'hypothesis',
@@ -502,6 +535,8 @@ export const SCENARIOS: Scenario[] = [
       { stage: 'answer', machine: 0.3, human: 0, mode: 'machine', note: 'Delivered to a named professional in a case system, not to a dataset. Retention is bounded by the case, not by the department.' },
     ],
     methods: ['query-contract', 'consent-registry', 'pprl'],
+    players: ['p-mash', 'p-spine', 'p-ledger', 'p-mis1', 'p-la', 'p-nhs', 'a-facts'],
+    eli5Why: 'The permission for this was granted years ago, in law — so when a child is at risk it is instant.',
     result: { value: '3 facts', label: 'minimum-necessary · PII, to one named person', kind: 'pii' },
     repeat: { machine: 2.5, human: 0, note: 'Every invocation is the same cost — and every invocation is separately logged. Speed here is not an efficiency; it is the reason a child is found.' },
     confidence: 'hypothesis',
@@ -518,14 +553,16 @@ export const SCENARIOS: Scenario[] = [
     official: 'Accredited access on the DEA 2017 / Secure Research Service pattern, executed as compute-to-data. The analysis code is public before it runs; outputs are checked by a human statistician before release. The researcher never holds a pupil record at any point.',
     technical: 'Code is developed against dummy data, version-controlled in the open, then executed inside each estate’s secure environment. Outputs pass statistical disclosure control by an independent checker; only cleared outputs leave. Reproducibility is a property of the pipeline, not a claim in a paper.',
     stages: [
-      { stage: 'commission', machine: 0.5, human: 26 * DAY, mode: 'human', note: 'Researcher accreditation and project approval by a data-access committee. Slow, and correctly so — this is the Five Safes "safe people" and "safe projects" test.', humanWork: 'Accreditation + project approval (Five Safes)' },
+      { stage: 'commission', machine: 0.5, human: 26 * DAY, mode: 'human', note: 'Researcher accreditation and project approval by a data-access committee. Slow, and correctly so — this is the Five Safes "safe people" and "safe projects" test.', humanWork: 'Accreditation + project approval (Five Safes)', humanWorkEli5: 'Checking the researcher is who they say they are, and that the project is worth doing' },
       { stage: 'ledger', machine: 0.2, human: 0, mode: 'machine', note: 'The protocol, the approval and the code hash all land in the ledger before execution — so what ran can be checked against what was approved.' },
-      { stage: 'consent', machine: 0.4, human: 9 * DAY, mode: 'human', note: 'Objection handling for a research purpose, and the project-level consent posture. Research is a voluntary purpose: objections bind, and coverage drops accordingly.', humanWork: 'Research-purpose objection handling' },
+      { stage: 'consent', machine: 0.4, human: 9 * DAY, mode: 'human', note: 'Objection handling for a research purpose, and the project-level consent posture. Research is a voluntary purpose: objections bind, and coverage drops accordingly.', humanWork: 'Research-purpose objection handling', humanWorkEli5: 'Dealing with anyone who has said no to their data being used for research' },
       { stage: 'mis', machine: 340, human: 0, mode: 'machine', note: 'A real analysis, not a counter — minutes of compute inside each estate, against records that never move. The code is already public; anyone can read what was run.' },
-      { stage: 'aggregate', machine: 12, human: 4 * DAY, mode: 'human', note: 'Output checking: a human statistician clears every table and figure before release. This is the step people forget when they say "automated" — and it is the step that makes the rest safe.', humanWork: 'Independent output checking (SDC)' },
-      { stage: 'answer', machine: 0.6, human: 1 * DAY, mode: 'human', note: 'Cleared outputs released, alongside the code that produced them.', humanWork: 'Release sign-off' },
+      { stage: 'aggregate', machine: 12, human: 4 * DAY, mode: 'human', note: 'Output checking: a human statistician clears every table and figure before release. This is the step people forget when they say "automated" — and it is the step that makes the rest safe.', humanWork: 'Independent output checking (SDC)', humanWorkEli5: 'A person checking every table and chart before it is allowed out' },
+      { stage: 'answer', machine: 0.6, human: 1 * DAY, mode: 'human', note: 'Cleared outputs released, alongside the code that produced them.', humanWork: 'Release sign-off', humanWorkEli5: 'Final sign-off' },
     ],
     methods: ['compute-to-data', 'code-open', 'sdc', 'synthetic', 'federated-analytics', 'pprl'],
+    players: ['p-researcher', 'p-spine', 'p-ledger', 'p-mis1', 'p-mis2', 'p-mis3', 'a-outputs'],
+    eli5Why: 'Checking the researcher, and then checking the results, is done by people — and people take weeks.',
     result: { value: '14 tables', label: 'cleared outputs · no record ever held', kind: 'dataset' },
     repeat: { machine: 353.7, human: 4 * DAY, note: 'Re-running the same approved protocol is machine time plus output checking — the accreditation and the approval are already spent. Output checking never fully disappears, and should not.' },
     confidence: 'fact',
@@ -550,6 +587,8 @@ export const SCENARIOS: Scenario[] = [
       { stage: 'answer', machine: 0.2, human: 0, mode: 'machine', note: 'The signal returns — and the product’s reciprocal contribution is written back as a signed partial, under the same rules.' },
     ],
     methods: ['query-contract', 'consent-registry', 'sdc', 'federated-analytics'],
+    players: ['p-app', 'p-spine', 'p-ledger', 'p-school', 'a-signal'],
+    eli5Why: 'The school already said yes to this app, and can change its mind this afternoon.',
     result: { value: '2-way', label: 'a signal out, a contribution back', kind: 'signal' },
     repeat: { machine: 2.2, human: 0, note: 'Accreditation is a one-off cost of roughly 34 days. After that every request is seconds — which is precisely why suppliers would choose to pay it.' },
     confidence: 'hypothesis',
@@ -587,6 +626,10 @@ export type MethodId =
 export interface Method {
   id: MethodId;
   name: string;
+  /** the same technique, named the way you would explain it out loud */
+  eli5Name: string;
+  eli5: string;
+  eli5NotFor: string;
   short: string;
   what: string;
   solves: string;
@@ -605,6 +648,9 @@ export interface Method {
 export const METHODS: Method[] = [
   {
     id: 'compute-to-data', name: 'Compute to data', short: 'C2D',
+    eli5Name: 'Send the sums, not the records',
+    eli5: 'Instead of copying the records out to whoever wants to study them, you send the sums in to where the records already live.',
+    eli5NotFor: 'It does not fix schools counting things differently from one another.',
     what: 'The analysis travels to the records instead of the records travelling to the analyst. Code executes inside the environment that already holds the data; only results come out.',
     solves: 'Removes the extract. If no copy is ever made, there is no copy to lose, mis-share, or find on a laptop in 2031.',
     stages: ['mis', 'aggregate'], layer: 'compute',
@@ -616,6 +662,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'federated-analytics', name: 'Federated analytics', short: 'FED',
+    eli5Name: 'Ask everyone at once, add up the answers',
+    eli5: 'One question goes to thousands of schools; each sends back its own small total; the totals get added up. No big pile is ever made.',
+    eli5NotFor: 'It cannot find one particular child. That needs a different tool.',
     what: 'One question is fanned out to many independent holders; each returns an aggregate partial; the partials are combined centrally. No combined dataset is ever created.',
     solves: 'National answers without a national database — and coverage becomes a measurable quantity rather than an assumption.',
     stages: ['commission', 'mis', 'aggregate'], layer: 'analytical',
@@ -627,17 +676,23 @@ export const METHODS: Method[] = [
   },
   {
     id: 'sdc', name: 'Statistical disclosure control', short: 'SDC',
+    eli5Name: 'Hide the tiny numbers',
+    eli5: 'If only two children are in a group, you do not publish the two — because someone would work out who they are.',
+    eli5NotFor: 'It is not automatic, and should not be: a person has to look before anything is released.',
     what: 'Suppress small cells, apply complementary suppression so suppressed values cannot be recovered by subtraction, and have a human check outputs before release.',
     solves: 'Stops an "aggregate" quietly identifying a child — the failure mode that discredits aggregate-only claims when it happens.',
     stages: ['mis', 'aggregate', 'answer'], layer: 'analytical',
     precedent: 'ONS output-checking practice · the Five Safes framework · OpenSAFELY output review',
     maturity: 'proven',
     cost: 'Low technically; ongoing in people. Output checking is a permanent staffed function, not a one-off build.',
-    notFor: 'It is not automatic and should not be. A fully automated release gate is a good filter and a bad final decision.',
+    notFor: 'It is not automatic and should not be — a fully automated release gate is a good filter and a bad final decision. And it is calibrated for national statistics, not for communities: OpenSAFELY Schools found that in a real school an output can pass every suppression rule while a teacher, a parent or a local WhatsApp group still knows exactly which pupils were in Intervention Group A.',
     confidence: 'fact',
   },
   {
     id: 'dp', name: 'Differential privacy', short: 'DP',
+    eli5Name: 'Add a little fuzz, on purpose',
+    eli5: 'Nudge the numbers very slightly so nobody can work backwards to a person — with maths that proves it worked.',
+    eli5NotFor: 'For small local numbers the fuzz can end up bigger than the thing you are measuring.',
     what: 'Add calibrated noise so that any individual’s presence or absence cannot be inferred from a published result, with a formal, budgetable guarantee.',
     solves: 'Repeated-query attacks — the case where each answer is safe and a thousand answers together are not.',
     stages: ['aggregate', 'answer'], layer: 'analytical',
@@ -649,6 +704,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'smpc', name: 'Secure multi-party computation', short: 'MPC',
+    eli5Name: 'Work it out together without showing each other',
+    eli5: 'Several organisations calculate one answer between them, and none of them ever sees the others\u2019 figures.',
+    eli5NotFor: 'Overkill for most questions, and everybody has to be switched on at the same moment.',
     what: 'Several parties jointly compute a function over their combined inputs while none of them learns the others’ inputs.',
     solves: 'Cross-organisation statistics where even the aggregate partials are too sensitive to reveal to the aggregator.',
     stages: ['mis', 'aggregate'], layer: 'compute',
@@ -660,6 +718,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'pprl', name: 'Privacy-preserving record linkage', short: 'PPRL',
+    eli5Name: 'Match people without swapping names',
+    eli5: 'Work out that a child in the school system and a child in the health system are the same child — without either side handing over a name.',
+    eli5NotFor: 'It does not make the matching correct. In real children\u2019s data it never matches perfectly.',
     what: 'Match the same person across datasets without either side revealing identifiers — split-file protocols, keyed hashing, or Bloom-filter encodings with a trusted third party.',
     solves: 'The cross-domain problem: education × health × benefits, without a shared identifier being handed around or a combined register being created.',
     stages: ['consent', 'mis'], layer: 'compute',
@@ -671,6 +732,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'synthetic', name: 'Synthetic data', short: 'SYN',
+    eli5Name: 'Practise on made-up data',
+    eli5: 'Invented records that behave like real ones, so people can build and test without touching anything real.',
+    eli5NotFor: 'Never for the actual answer — only for building the machine.',
     what: 'Statistically realistic fake records that carry the shape of the real data and none of the people, used for building and testing before anything touches production.',
     solves: 'The development bottleneck — the reason analysts wait months for access before they can write a line of code.',
     stages: ['commission', 'mis'], layer: 'storage',
@@ -682,6 +746,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'code-open', name: 'Code in the open', short: 'OPEN',
+    eli5Name: 'Show your working, first',
+    eli5: 'Publish the sums before you run them, so anyone can check what was asked.',
+    eli5NotFor: 'It does not protect the data by itself. Public sums over a leaked copy is still a leak.',
     what: 'The analysis code is public, version-controlled and reviewable before it ever runs against real records — so what was executed can be checked against what was approved.',
     solves: 'The reproducibility and trust gap. It converts "trust us, the query was safe" into "here is the query; read it."',
     stages: ['commission', 'ledger', 'mis'], layer: 'practical',
@@ -693,6 +760,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'consent-registry', name: 'Consent & objection registry', short: 'CONSENT',
+    eli5Name: 'A list of who said no',
+    eli5: 'A simple list of who has objected to what, checked before every single question runs.',
+    eli5NotFor: 'It cannot settle the hard case where the law overrides a "no" in order to protect a child.',
     what: 'A data-blind register of who has objected to what, enforced before a query executes rather than remembered afterwards at the centre.',
     solves: 'Makes an objection real. Today a parent’s objection is a letter in a file; here it is an executable obligation that binds every subsequent query.',
     stages: ['consent'], layer: 'storage',
@@ -704,6 +774,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'query-contract', name: 'Purpose-bound query contracts', short: 'CONTRACT',
+    eli5Name: 'Ask in writing, on a fixed form',
+    eli5: 'The request is a form a computer can read — who, why, what for, how detailed — instead of an email and a spreadsheet.',
+    eli5NotFor: 'Writing it down does not make it honest. It has to be enforced at the school and logged.',
     what: 'The request is a signed, machine-readable object carrying purpose, legal basis, aggregation level, minimum cell size and retention — not an email and a spreadsheet.',
     solves: 'Makes purpose limitation enforceable rather than aspirational, and makes every request countable and auditable by construction.',
     stages: ['commission', 'ledger', 'consent'], layer: 'analytical',
@@ -715,6 +788,9 @@ export const METHODS: Method[] = [
   },
   {
     id: 'he', name: 'Homomorphic encryption', short: 'HE',
+    eli5Name: 'Do sums on locked-up data',
+    eli5: 'Calculate on information without ever unlocking it.',
+    eli5NotFor: 'Far too slow for this job — and this job does not need it.',
     what: 'Compute directly on encrypted data without ever decrypting it.',
     solves: 'In principle, the strongest possible version of "the holder never sees the query and the querier never sees the data".',
     stages: ['mis'], layer: 'compute',
@@ -782,6 +858,9 @@ export interface Tier {
   /** what joining costs them */
   gives: string;
   gets: string;
+  eli5Gives: string;
+  eli5Gets: string;
+  eli5Unlock: string;
   /** the questions this tier makes answerable that were not before */
   unlocks: string[];
   hardPart: string;
@@ -793,6 +872,9 @@ export const TIERS: Tier[] = [
     id: 't1', no: 1, name: 'The three majors', who: 'Arbor · ESS SIMS · Bromcom',
     coverage: TOP3_COVERAGE,
     gives: 'A conformant gateway on their existing estate, and the release-cycle commitment to keep it current.',
+    eli5Gives: 'They add one standard connection to the systems they already run.',
+    eli5Gets: 'One connection instead of an ever-growing pile of data requests.',
+    eli5Unlock: 'You can ask about attendance across the country without asking anyone to fill in a form.',
     gets: 'One integration instead of a growing queue of bespoke DfE data requests — and a defensible answer when a trust asks how they support national reporting.',
     unlocks: [
       'National attendance and absence aggregates without a collection',
@@ -806,6 +888,9 @@ export const TIERS: Tier[] = [
     id: 't2', no: 2, name: 'The mid-tail and self-hosted', who: `${SUPPLIER_COUNT - 3}+ further suppliers, down to schools running their own servers`,
     coverage: ALL_MIS_COVERAGE,
     gives: 'The same conformant gateway, at a scale where the build cost is a much larger share of revenue.',
+    eli5Gives: 'The same connection, built by much smaller companies.',
+    eli5Gets: 'A small supplier competes on how good its product is, not on who it plugs into.',
+    eli5Unlock: 'Small areas stop vanishing from published tables because their numbers were too small.',
     gets: 'Parity. A small supplier that is certified competes on product rather than on integration reach.',
     unlocks: [
       'Place-based answers that survive suppression — small LAs stop disappearing from published tables',
@@ -819,6 +904,9 @@ export const TIERS: Tier[] = [
     id: 't3', no: 3, name: 'The 153 local authorities', who: 'Children’s services, admissions, attendance, SEND casework',
     coverage: ALL_MIS_COVERAGE,
     gives: 'Connectors on case-management systems that were never built to be queried.',
+    eli5Gives: 'Connections on council case systems that were never built to be asked questions.',
+    eli5Gets: 'The join councils have wanted for twenty years, without a manual matching exercise every time.',
+    eli5Unlock: 'You can see, for the first time, how missing school and needing social care go together.',
     gets: 'The join they have wanted for twenty years — their own children, across school and service, without a manual data-matching exercise per question.',
     unlocks: [
       'Absence × children in need — visible for the first time without a bespoke study',
@@ -832,6 +920,9 @@ export const TIERS: Tier[] = [
     id: 't4', no: 4, name: 'Accredited edtech', who: 'Assessment, safeguarding, wellbeing, attendance-intervention and parental-engagement products',
     coverage: ALL_MIS_COVERAGE,
     gives: 'Non-PII signals back to the network under school authorisation — usage, reach, and outcome flags — plus audit and a published accreditation status.',
+    eli5Gives: 'Basic non-personal signals back to the network, plus being audited.',
+    eli5Gets: 'A DfE badge a school can point to when buying — and no more re-typing the pupil list.',
+    eli5Unlock: 'You can finally tell whether the thing a school bought actually works.',
     gets: 'Certified, school-authorised read access to school-scoped context. No more re-keying a pupil roll at every onboarding, and a DfE accreditation a school can point to in procurement.',
     unlocks: [
       'Intervention effectiveness at national scale — what actually works, without a single new form',
@@ -845,6 +936,9 @@ export const TIERS: Tier[] = [
     id: 't5', no: 5, name: 'Cross-sector', who: 'Health, DWP, youth justice, police — as federated peers, never as a pool',
     coverage: ALL_MIS_COVERAGE,
     gives: 'Their own connectors, under their own controllers, with objections and statutory overrides handled in their own domain.',
+    eli5Gives: 'Health and benefits connect on the same terms, each keeping their own records.',
+    eli5Gets: 'Answers no single department can get today.',
+    eli5Unlock: 'You can find young people who have fallen out of every system — without building one giant file.',
     gets: 'Answers to questions no single department can currently ask at all.',
     unlocks: [
       'The hidden NEETs — Milburn’s ~314,000 invisible young people, findable with no combined database',
@@ -925,3 +1019,136 @@ export const DEPTHS: DepthOption[] = [
 
 /** Pick the right depth string off any object carrying all three. */
 export const say = (o: { eli5: string; official: string; technical: string }, d: Depth) => o[d];
+
+// ---------------------------------------------------------------------------
+// ELI5 TABLES — at the plainest depth, a table beats a paragraph. These are not
+// summaries of the prose above; they are the same six stages written for someone
+// who has never heard the word "aggregate".
+// ---------------------------------------------------------------------------
+
+export interface StageEli5 { what: string; moves: string; who: string; }
+
+export const STAGE_ELI5: Record<StageId, StageEli5> = {
+  commission: {
+    what: 'Somebody asks a question, and has to write down why they want to know.',
+    moves: 'A question. Nothing about any child.',
+    who: 'The person asking — named, and accountable for the reason.',
+  },
+  ledger: {
+    what: 'The question is written into a permanent list before anything happens.',
+    moves: 'A receipt.',
+    who: 'The small service in the middle, on everyone else’s behalf.',
+  },
+  consent: {
+    what: 'The rules get checked: is this allowed, and has anyone said no?',
+    moves: 'A yes or a no — plus any conditions attached.',
+    who: 'Schools, who own the records. Families, who can object.',
+  },
+  mis: {
+    what: 'The question is sent to each school’s own computer, which works out its own small answer.',
+    moves: 'A question in. A small total out. No records.',
+    who: 'The system the school already pays for.',
+  },
+  aggregate: {
+    what: 'All the small answers get added into one national number.',
+    moves: 'Totals only — never a list of children.',
+    who: 'The department’s statisticians.',
+  },
+  answer: {
+    what: 'The number comes back, with a note saying how it was worked out.',
+    moves: 'One answer, and the receipt that proves how it was obtained.',
+    who: 'Whoever has to decide something.',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// THE PLAYERS — the simple picture. Each scenario lights up only the parts of the
+// network it actually touches, so the shape of a safeguarding disclosure and the
+// shape of a national statistic are visibly different things.
+// ---------------------------------------------------------------------------
+
+export type PlayerKind = 'requester' | 'spine' | 'ledger' | 'edge' | 'answer';
+
+export interface Player {
+  id: string;
+  label: string;
+  sub: string;
+  kind: PlayerKind;
+  /** true when this node can hold or receive pupil-level data */
+  hot?: boolean;
+}
+
+export const PLAYERS: Player[] = [
+  // requesters
+  { id: 'p-analyst', label: 'DfE analyst', sub: 'asks a statistical question', kind: 'requester' },
+  { id: 'p-mash', label: 'MASH practitioner', sub: 'named, verified, statutory role', kind: 'requester', hot: true },
+  { id: 'p-researcher', label: 'Accredited researcher', sub: 'approved project, code published', kind: 'requester' },
+  { id: 'p-app', label: 'Accredited app', sub: 'the school authorised it', kind: 'requester' },
+  // the centre
+  { id: 'p-spine', label: 'The trust layer', sub: 'directory · consent · rules · identity — holds 0 records', kind: 'spine' },
+  { id: 'p-ledger', label: 'The ledger', sub: 'written before anything runs', kind: 'ledger' },
+  // the edge
+  { id: 'p-mis1', label: 'Arbor schools', sub: 'records stay put', kind: 'edge' },
+  { id: 'p-mis2', label: 'ESS SIMS schools', sub: 'records stay put', kind: 'edge' },
+  { id: 'p-mis3', label: 'Bromcom + the tail', sub: 'records stay put', kind: 'edge' },
+  { id: 'p-school', label: 'One school', sub: 'the controller — can revoke today', kind: 'edge' },
+  { id: 'p-la', label: 'Local authority', sub: 'children’s services case system', kind: 'edge' },
+  { id: 'p-nhs', label: 'NHS', sub: 'federated peer, never pooled', kind: 'edge' },
+  { id: 'p-dwp', label: 'DWP', sub: 'federated peer, never pooled', kind: 'edge' },
+  // answers
+  { id: 'a-number', label: 'A national number', sub: 'no PII', kind: 'answer' },
+  { id: 'a-facts', label: '3 facts, one child', sub: 'PII — to one named person', kind: 'answer', hot: true },
+  { id: 'a-outputs', label: 'Cleared outputs', sub: 'checked before release', kind: 'answer' },
+  { id: 'a-signal', label: 'A signal — and a contribution back', sub: 'school-scoped, no roster', kind: 'answer' },
+];
+
+export const playerById = (id: string) => PLAYERS.find((p) => p.id === id)!;
+
+// ---------------------------------------------------------------------------
+// OPENSAFELY SCHOOLS — the part of this argument that is no longer hypothetical.
+// Everything here is documented by the Bennett Institute and the NIoT.
+// ---------------------------------------------------------------------------
+
+export const OPENSAFELY_SCHOOLS = {
+  title: 'OpenSAFELY Schools',
+  strap: 'They have already tried it on schools data — and published what broke.',
+  eli5:
+    'The same team that did this for doctors’ records is now doing it for school records. They have built it with a group of academy trusts, and they have written down honestly what turned out to be harder in schools than in the NHS. That write-up is the most useful document in this whole field.',
+  official:
+    'OpenSAFELY Schools is a collaboration between the National Institute of Teaching and the University of Oxford’s Bennett Institute, running as a two-year proof of concept funded by XTX Markets and the Nuffield Foundation, with research partners at Evidence Based Education, UCL’s Institute of Education and Faculty AI. It sits over the Teacher Education Dataset (TED), which links anonymised teacher and pupil records across the trusts that founded the NIoT — around 170 schools, 6,500 teachers and 115,000 pupils. A 36-school pilot published in July 2024 demonstrated that teacher impact on pupil progress could be measured from anonymised assessment data.',
+  technical:
+    'TED runs in a segregated Microsoft Azure tenancy, ingesting trust data through a purpose-built extraction API and independently security-audited. The Bennett Institute rebuilt ehrQL — OpenSAFELY’s query language — removing its patient-centric framing so it can express a two-entity world of pupils AND teachers. Because TED’s schema is still evolving, the pilot currently runs a more direct SQL runner rather than the full production query layer. Disclosure control has been pushed upstream into data design: standardising and aggregating locally-defined category codes and applying minimum group sizes before analysis, rather than relying on output checking alone.',
+  facts: [
+    { k: '170 schools · 6,500 teachers · 115,000 pupils', v: 'The trusts that founded the National Institute of Teaching, which already share standardised systems.' },
+    { k: '36 schools in the first pilot', v: 'Published July 2024: teacher impact on pupil progress, measured from anonymised assessment data.' },
+    { k: '2-year proof of concept', v: 'Funded by XTX Markets and the Nuffield Foundation; partners at Evidence Based Education, UCL IoE and Faculty AI.' },
+    { k: 'A segregated Azure environment', v: 'Data extracted through a bespoke API, independently security-audited, with governance explicitly modelled on OpenSAFELY’s.' },
+  ] as CaseStudyPoint[],
+  /** the four findings that matter most to anyone designing a national spine */
+  lessons: [
+    {
+      k: 'Health has one entity. Education has two.',
+      v: 'Everything in OpenSAFELY was built around the patient. Schools need pupils AND teachers, and the relationships between them — so the query language had to have its patient-centric framing stripped out entirely before it could express an education question at all.',
+      soWhat: 'The canonical model a spine standardises on cannot be lifted from health. It has to be designed, and that is a multi-year piece of work, not a procurement.',
+    },
+    {
+      k: 'The NHS schema is mature and stable. Education’s is not.',
+      v: 'GP data uses a schema agreed, governed and largely unchanged for years. TED is a younger system with an evolving schema — which is precisely why the pilot runs a direct SQL runner instead of the full production query layer they built for health.',
+      soWhat: 'This is the binding constraint, stated by the people who hit it. Not privacy technology — schema stability. It is the same finding this study reaches from the other direction.',
+    },
+    {
+      k: 'There is no SNOMED for schools.',
+      v: 'Health has decades of clinical terminologies and the infrastructure to manage them. In schools, attainment scores, SEND categories and intervention types vary between schools, between trusts, and over time.',
+      soWhat: 'A spine’s first deliverable is not a pipe. It is a published, versioned vocabulary — and the absence of one is why the same question returns incomparable answers from two schools today.',
+    },
+    {
+      k: 'Re-identification works differently in a school.',
+      v: 'In health the risk is statistical — reconstructing records from published outputs. In a school the risk is social: an output can look perfectly safe while a teacher, a parent, or a local WhatsApp group knows exactly which pupils were in Intervention Group A. Staff lists are public. Parents attend events.',
+      soWhat: 'The most important new idea on this page. Small-cell suppression is calibrated for a national statistic, not a community of 400 people who all know each other — so disclosure control has to move upstream into data design, and "it is only aggregates" stops being a sufficient answer.',
+    },
+  ],
+  /** and the honest limits of the analogy, even now */
+  caveat:
+    'It is a proof of concept, not a national service — and it deliberately started with the easiest part of the estate: four large trusts that already share standardised systems. That is the right way to start, and it is also exactly the population a national spine does not get to choose. The 24,000-school estate includes the long tail, the self-hosting school and the local authority case system, where none of the standardisation the pilot relies on exists yet.',
+  confidence: 'fact' as Confidence,
+};

@@ -19,6 +19,7 @@
 
   let sel = $state(1);                 // default to the slow path — it is the point
   let shown = $state(false);
+  const eli = $derived(depth === 'eli5');
   onMount(() => { shown = true; });
 
   const scenario = $derived(SCENARIOS[sel]);
@@ -29,10 +30,10 @@
   /** Machine time against human time. A percentage here reads as "8.4e-5%", which is
    *  true and useless; a ratio is the thing a reader can actually hold. */
   const machineShare = $derived.by(() => {
-    if (!hTotal) return { v: 'all of it', l: 'IS THE MACHINE', t: 'No governance time: this class of request is already authorised.' };
+    if (!hTotal) return { v: 'all of it', l: depth === 'eli5' ? 'IS THE COMPUTER' : 'IS THE MACHINE', t: 'No governance time: this class of request is already authorised.' };
     const r = hTotal / mTotal;
     const v = r >= 1e6 ? `1 : ${(r / 1e6).toFixed(1)}M` : r >= 1e3 ? `1 : ${(r / 1e3).toFixed(1)}k` : `1 : ${Math.round(r)}`;
-    return { v, l: 'MACHINE : HUMAN', t: `${fmtDuration(mTotal)} of computing for every ${fmtDuration(hTotal)} of waiting.` };
+    return { v, l: depth === 'eli5' ? 'COMPUTER : PEOPLE' : 'MACHINE : HUMAN', t: `${fmtDuration(mTotal)} of computing for every ${fmtDuration(hTotal)} of waiting.` };
   });
 
   // ---- geometry -----------------------------------------------------------
@@ -77,6 +78,32 @@
 </script>
 
 <div class="tl">
+  {#if eli}
+    <!-- ============ ELI5: the same comparison as a table ============ -->
+    <div class="scroll">
+      <table class="e-tbl">
+        <thead>
+          <tr><th class="c-n">The kind of question</th><th class="c-t">Computers</th><th class="c-t">Waiting for people</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          {#each SCENARIOS as s, i}
+            {@const m = totalMachine(s)}
+            {@const h = totalHuman(s)}
+            <tr class:on={i === sel}>
+              <th class="c-n"><button onclick={() => (sel = i)}>{s.name}</button></th>
+              <td class="c-t mach">{fmtDuration(m)}</td>
+              <td class="c-t" class:hum={h > 0}>{h > 0 ? fmtDuration(h) : 'none'}</td>
+              <td>{s.eli5Why}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <p class="e-note">
+        Read the middle two columns together. The computers are never the slow part — not once, in any row.
+        What takes months is people agreeing that a question is allowed to be asked at all.
+      </p>
+    </div>
+  {:else}
   <!-- ============ THE COMPARISON ============ -->
   <div class="scroll">
     <svg viewBox="0 0 {W} {H}" role="img"
@@ -127,6 +154,7 @@
     <span class="lg human">■ human &amp; governance time</span>
     <span class="lg hint">logarithmic axis — each gridline is a different order of magnitude</span>
   </div>
+  {/if}
 
   <!-- ============ THE SELECTED SCENARIO ============ -->
   <div class="focus">
@@ -168,7 +196,7 @@
         {/if}
       </p>
 
-      <span class="brk-lab">WHERE THE HUMAN TIME ACTUALLY GOES</span>
+      <span class="brk-lab">{eli ? 'WHAT EVERYONE IS ACTUALLY WAITING FOR' : 'WHERE THE HUMAN TIME ACTUALLY GOES'}</span>
       {#key sel}
         <div class="brk">
           {#each humanStages as hs}
@@ -176,7 +204,7 @@
               <span class="brk-stage">{stageById(hs.stage).name}</span>
               <div class="brk-track"><div class="brk-fill"></div></div>
               <span class="brk-time">{fmtDuration(hs.human)}</span>
-              <span class="brk-work">{hs.humanWork}</span>
+              <span class="brk-work">{eli ? (hs.humanWorkEli5 ?? hs.humanWork) : hs.humanWork}</span>
             </div>
           {/each}
         </div>
@@ -291,6 +319,21 @@
   .ru-fill.again { width: var(--w); background: var(--accent-ink, #0e5b66); }
   .ru b { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--ink); text-align: right; }
   .ru-note { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.8); margin: 10px 0 0; max-width: 82ch; }
+
+  /* ELI5 table */
+  .e-tbl { width: 100%; min-width: 700px; border-collapse: collapse; }
+  .e-tbl th, .e-tbl td { text-align: left; vertical-align: top; padding: 10px 11px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid rgba(26,16,8,0.14); }
+  .e-tbl thead th { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.32); }
+  .e-tbl tbody th.c-n { width: 220px; }
+  .e-tbl tbody th.c-n button { font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600; color: var(--accent-ink, #0e5b66); background: transparent; border: none; padding: 0; text-align: left; cursor: pointer; }
+  .e-tbl tbody th.c-n button:hover { text-decoration: underline; }
+  .e-tbl tr.on { background: #ffffff; }
+  .e-tbl tr.on th.c-n button { color: var(--ink); }
+  .e-tbl td.c-t, .e-tbl th.c-t { width: 130px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: rgba(26,16,8,0.5); }
+  .e-tbl td.c-t.mach { color: var(--accent-ink, #0e5b66); }
+  .e-tbl td.c-t.hum { color: #8c5a10; }
+  .e-tbl td { color: rgba(26,16,8,0.84); }
+  .e-note { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 2px; max-width: 82ch; }
 
   .note { font-size: 11.5px; line-height: 1.55; color: rgba(26,16,8,0.66); margin: 0; padding: 12px 18px 14px; border-top: 1px solid rgba(26,16,8,0.16); }
 

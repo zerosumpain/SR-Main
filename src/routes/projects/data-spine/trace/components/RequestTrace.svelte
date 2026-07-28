@@ -12,11 +12,12 @@
   //  • Opaque fills only — the faint-diagram bug on this project was translucent boxes.
   import { onMount } from 'svelte';
   import {
-    LAYERS, STAGES, SCENARIOS, MATRIX, DAY,
+    LAYERS, STAGES, SCENARIOS, MATRIX, DAY, STAGE_ELI5,
     fmtDuration, say, methodById,
     type Depth, type LayerId, type StageId, type Scenario,
   } from '../lib/trace';
   import ConfidenceBadge from '../../components/ConfidenceBadge.svelte';
+  import PlayerMap from './PlayerMap.svelte';
 
   let { depth = 'official' as Depth }: { depth?: Depth } = $props();
 
@@ -171,6 +172,13 @@
     return colCx(active) + (colCx(Math.min(active + 1, STAGES.length - 1)) - colCx(active)) * e;
   });
 
+  // At ELI5 the layers are CALLED their plain-English names — "Storage" tells a
+  // non-specialist nothing, "What gets kept" tells them exactly the right thing.
+  const eli = $derived(depth === 'eli5');
+  const lName = (L: typeof LAYERS[number]) => (eli ? L.eli5Short : L.name);
+  const lTag = (L: typeof LAYERS[number]) => (eli ? L.eli5Tag : L.tag);
+  const lQuestion = (L: typeof LAYERS[number]) => (eli ? L.eli5Question : L.question);
+
   const PLACE: Record<string, { label: string; cls: string }> = {
     requester: { label: 'REQUESTER', cls: 'p-req' },
     spine: { label: 'TRUST LAYER', cls: 'p-spine' },
@@ -249,6 +257,9 @@
     </div>
   </div>
 
+  <!-- ============ THE SIMPLE PICTURE ============ -->
+  <PlayerMap {scenario} {active} running={playing} {depth} />
+
   <!-- ============ THE GRID ============ -->
   <div class="stage-scroll">
     <svg viewBox="0 0 {W} {H}" role="img"
@@ -288,10 +299,10 @@
           <!-- layer name gutter (clickable) -->
           <rect x="0" y={y} width={LX - 8} height={h} rx="5" class="lg" class:open />
           <text x="10" y={y + (open ? 20 : 17)} class="lg-no">L{L.no}</text>
-          <text x="34" y={y + (open ? 20 : 17)} class="lg-name">{L.name}</text>
+          <text x="34" y={y + (open ? 20 : 17)} class="lg-name">{lName(L)}</text>
           {#if open}
-            <text x="10" y={y + 36} class="lg-tag">{L.tag}</text>
-            {#each wrap(depth === 'eli5' ? L.eli5 : L.question, 20, 4) as ln, k}
+            <text x="10" y={y + 36} class="lg-tag">{lTag(L)}</text>
+            {#each wrap(lQuestion(L), 20, 4) as ln, k}
               <text x="10" y={y + 54 + k * 12} class="lg-q">{ln}</text>
             {/each}
           {/if}
@@ -340,17 +351,62 @@
     </svg>
   </div>
 
+  <!-- ============ ELI5: THE WHOLE JOURNEY IN SIX ROWS ============ -->
+  {#if eli}
+    <div class="e-all">
+      <span class="e-lab">THE WHOLE THING, IN SIX STEPS</span>
+      <table class="e-tbl wide">
+        <thead>
+          <tr><th class="c-no">Step</th><th>What happens</th><th>What moves</th><th class="c-t">How long</th></tr>
+        </thead>
+        <tbody>
+          {#each STAGES as st, i}
+            {@const ss = scenario.stages[i]}
+            <tr class:on={i === active}>
+              <th class="c-no"><button onclick={() => seek(i)}>{st.no}. {st.name}</button></th>
+              <td>{STAGE_ELI5[st.id].what}</td>
+              <td class="mv">{STAGE_ELI5[st.id].moves}</td>
+              <td class="c-t">
+                {fmtDuration(ss.machine)} <span class="unit">computer</span>{#if ss.human > 0}<br /><span class="hum">+ {fmtDuration(ss.human)} <span class="unit">people</span></span>{/if}
+              </td>
+            </tr>
+          {/each}
+          <tr class="tot">
+            <th class="c-no">All six</th>
+            <td colspan="2">{scenario.eli5Why}</td>
+            <td class="c-t"><b>{fmtDuration(scenario.stages.reduce((a, x) => a + x.machine + x.human, 0))}</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {/if}
+
   <!-- ============ DETAIL CARD ============ -->
   <div class="detail">
     <div class="d-head">
       <span class="d-stage">STAGE {STAGES[active].no} · {STAGES[active].name}</span>
       <span class="d-x">×</span>
-      <span class="d-layer">L{LAYERS[layerIdx].no} · {LAYERS[layerIdx].name.toUpperCase()}</span>
+      <span class="d-layer">L{LAYERS[layerIdx].no} · {lName(LAYERS[layerIdx]).toUpperCase()}</span>
       <span class="d-actor">{STAGES[active].actor}</span>
     </div>
 
     <p class="d-say">{say(STAGES[active], depth)}</p>
 
+    {#if eli}
+      <!-- ELI5: a two-column table beats four columns of prose -->
+      <table class="e-tbl">
+        <tbody>
+          <tr><th>What happens</th><td>{STAGE_ELI5[activeStage].what}</td></tr>
+          <tr><th>What moves</th><td class="mv">{STAGE_ELI5[activeStage].moves}</td></tr>
+          <tr><th>Who is involved</th><td>{STAGE_ELI5[activeStage].who}</td></tr>
+          <tr><th>In this scenario</th><td>{sStage.note}</td></tr>
+          <tr><th>How long</th><td>
+            <b>{fmtDuration(sStage.machine)}</b> of computer time{#if sStage.human > 0}, plus <b class="hum">{fmtDuration(sStage.human)}</b> waiting for people — {(sStage.humanWorkEli5 ?? sStage.humanWork ?? '').toLowerCase()}{/if}.
+          </td></tr>
+          <tr class="bad"><th>What goes wrong</th><td>{activeCell.fails}</td></tr>
+        </tbody>
+      </table>
+    {:else}
     <div class="d-grid">
       <div class="dc">
         <span class="dc-lab">What happens here</span>
@@ -380,6 +436,7 @@
         <p>{activeCell.fails}</p>
       </div>
     </div>
+    {/if}
 
     <div class="d-nav">
       <button class="dn" onclick={() => seek(active - 1)} disabled={active === 0}>← previous stage</button>
@@ -518,6 +575,35 @@
   .dots { display: flex; gap: 5px; }
   .dot { width: 9px; height: 9px; border-radius: var(--radius-pill, 100px); border: 1px solid rgba(26,16,8,0.4); background: transparent; padding: 0; cursor: pointer; }
   .dot.on { background: var(--accent-ink, #0e5b66); border-color: var(--accent-ink, #0e5b66); }
+
+  /* ELI5 tables — the plainest depth gets a table, not four columns of prose */
+  .e-all { background: #ffffff; border-top: 1.5px solid rgba(26,16,8,0.4); padding: 14px 18px 16px; }
+  .e-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: rgba(26,16,8,0.58); margin-bottom: 9px; }
+  .e-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .e-tbl th, .e-tbl td { text-align: left; vertical-align: top; padding: 8px 10px; font-size: 13px; line-height: 1.5;
+    border-bottom: 1px solid rgba(26,16,8,0.12); }
+  .e-tbl th { font-family: 'DM Sans', sans-serif; font-weight: 600; color: var(--ink); width: 150px; }
+  .e-tbl td { color: rgba(26,16,8,0.84); }
+  .e-tbl td.mv { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--accent-ink, #0e5b66); }
+  .e-tbl tr.bad th { color: #8a2d3a; }
+  .e-tbl tr.bad td { color: #6d232d; }
+  .e-tbl b.hum, .e-tbl .hum { color: #8c5a10; }
+  .e-tbl.wide { table-layout: fixed; }
+  .e-tbl.wide thead th { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.3); width: auto; }
+  .e-tbl.wide th.c-no { width: 168px; }
+  .e-tbl.wide td.c-t, .e-tbl.wide th.c-t { width: 148px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .e-tbl.wide td.c-t .unit { font-family: 'DM Sans', sans-serif; font-size: 10.5px; color: rgba(26,16,8,0.5); }
+  .e-tbl.wide td.c-t .hum .unit { color: rgba(140,90,16,0.75); }
+  .e-tbl.wide th.c-no button { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--accent-ink, #0e5b66);
+    background: transparent; border: none; padding: 0; text-align: left; cursor: pointer; }
+  .e-tbl.wide th.c-no button:hover { text-decoration: underline; }
+  .e-tbl.wide tr.on { background: rgba(14,91,102,0.06); }
+  .e-tbl.wide tr.on th.c-no button { color: var(--ink); }
+  .e-tbl.wide tr.tot { background: rgba(26,16,8,0.04); }
+  .e-tbl.wide tr.tot th { color: rgba(26,16,8,0.6); font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    letter-spacing: 0.1em; text-transform: uppercase; }
 
   .point { font-size: 14px; line-height: 1.55; color: rgba(26,16,8,0.84); margin: 0; padding: 12px 18px 16px; background: rgba(14,91,102,0.05); border-top: 1px solid rgba(26,16,8,0.14); }
   .point b { color: var(--accent-ink, #0e5b66); }
