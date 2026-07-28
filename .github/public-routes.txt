@@ -120,6 +120,7 @@
 /projects/data-spine/next
 /projects/data-spine/outcomes
 /projects/data-spine/sources
+/projects/data-spine/trace
 /projects/data-spine/value
 /projects/data-standard-designer
 /projects/data-standard-designer/assist

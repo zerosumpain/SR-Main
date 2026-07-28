@@ -20,10 +20,16 @@
   const isGov = (href: string) => href.endsWith('/governance');
   const pathname = $derived($page.url.pathname.replace(/\/$/, ''));
   const active = (href: string) => pathname === href.replace(/\/$/, '');
-  // the live 3-D model lives outside the 7 sections; keep its own obvious CTA
+  // The two instruments live outside the 7 sections and keep their own CTAs: the 2-D
+  // trace (what happens, in order, at every layer) and the 3-D simulator (the shape of
+  // the whole network).
+  const TRACE_HREF = '/projects/data-spine/trace';
   const SIM_HREF = '/projects/data-spine/federation/sim';
+  const onTrace = $derived(pathname.startsWith(TRACE_HREF));
   const onSim = $derived(pathname.startsWith('/projects/data-spine/federation'));
-  const current = $derived(onSim ? 'Live simulator' : (SECTIONS.find((n) => active(n.href))?.label ?? 'Sections'));
+  const current = $derived(
+    onTrace ? 'Trace a request' : onSim ? 'Live simulator' : (SECTIONS.find((n) => active(n.href))?.label ?? 'Sections'),
+  );
   let menuOpen = $state(false);
 </script>
 
@@ -32,6 +38,7 @@
     {#each SECTIONS as n}
       <a class="tab" class:gov={isGov(n.href)} class:active={active(n.href)} href={n.href}>{isGov(n.href) ? '⚖ ' : ''}{n.label}</a>
     {/each}
+    <a class="tab tracelink" class:active={onTrace} href={TRACE_HREF} title="Trace one request through all six stages and all six layers (2-D)">◧ Trace a request</a>
     <a class="tab simlink" class:active={onSim} href={SIM_HREF} title="Open the live 3-D federation simulator">▶ Live simulator</a>
   </nav>
 
@@ -41,15 +48,20 @@
     <span class="bg-chev" class:open={menuOpen} aria-hidden="true">▾</span>
   </button>
 
-  <div class="detail" role="group" aria-label="Explanation detail">
-    <span class="d-lab">Explain it as</span>
-    <div class="seg">
-      <button class:on={app.narrative === 'research'} onclick={() => (app.narrative = 'research')}
-              title="Research view — the full explanation with the evidence.">Research</button>
-      <button class:on={app.narrative === 'eli5'} onclick={() => (app.narrative = 'eli5')}
-              title="ELI5 — the same thing in plain, jargon-free English.">ELI5</button>
+  <!-- The trace page carries its own three-way depth control (ELI5 · Official ·
+       Technical), so this two-way one would sit there doing nothing. Hide it rather
+       than leave a dead control in the chrome. -->
+  {#if !onTrace}
+    <div class="detail" role="group" aria-label="Explanation detail">
+      <span class="d-lab">Explain it as</span>
+      <div class="seg">
+        <button class:on={app.narrative === 'research'} onclick={() => (app.narrative = 'research')}
+                title="Research view — the full explanation with the evidence.">Research</button>
+        <button class:on={app.narrative === 'eli5'} onclick={() => (app.narrative = 'eli5')}
+                title="ELI5 — the same thing in plain, jargon-free English.">ELI5</button>
+      </div>
     </div>
-  </div>
+  {/if}
 
   {#if menuOpen}
     <button class="nav-scrim" aria-label="Close menu" onclick={() => (menuOpen = false)}></button>
@@ -57,6 +69,7 @@
       {#each SECTIONS as n}
         <a class="nm-item" class:active={active(n.href)} href={n.href} onclick={() => (menuOpen = false)}>{n.label}</a>
       {/each}
+      <a class="nm-item tracelink" class:active={onTrace} href={TRACE_HREF} onclick={() => (menuOpen = false)}>◧ Trace a request</a>
       <a class="nm-item simlink" class:active={onSim} href={SIM_HREF} onclick={() => (menuOpen = false)}>▶ Live simulator</a>
     </nav>
   {/if}
@@ -74,10 +87,13 @@
   .tab.gov:hover { background: var(--error-bg); border-color: #8a2d3a; }
   .tab.gov.active { background: #8a2d3a; color: var(--paper); border-color: #8a2d3a; }
 
-  /* the live-simulator CTA — deliberately the loudest thing in the bar */
+  /* the two instrument CTAs — deliberately the loudest things in the bar */
   .tab.simlink { background: var(--accent-ink); color: #fff; border-color: var(--accent-ink); font-weight: 600; margin-left: 6px; letter-spacing: 0.01em; }
   .tab.simlink:hover { background: #0b4a53; border-color: #0b4a53; color: #fff; }
   .tab.simlink.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .tab.tracelink { background: #fff; color: var(--accent-ink); border-color: var(--accent-ink); border-width: 1.5px; font-weight: 600; margin-left: 8px; letter-spacing: 0.01em; }
+  .tab.tracelink:hover { background: var(--accent-ink-tint-12, rgba(14,91,102,0.12)); border-color: var(--accent-ink); color: var(--accent-ink); }
+  .tab.tracelink.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
   .detail { display: inline-flex; align-items: center; gap: 7px; }
   .d-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
@@ -102,6 +118,8 @@
   .nm-item.active { background: var(--ink); color: var(--paper); }
   .nm-item.simlink { background: var(--accent-ink); color: #fff; font-weight: 600; margin-top: 6px; }
   .nm-item.simlink.active { background: var(--ink); color: var(--paper); }
+  .nm-item.tracelink { background: #fff; color: var(--accent-ink); border-color: var(--accent-ink); font-weight: 600; margin-top: 6px; }
+  .nm-item.tracelink.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
   @media (max-width: 860px) {
     .tabs { display: none; }
