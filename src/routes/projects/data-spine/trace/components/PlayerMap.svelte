@@ -7,10 +7,13 @@
   //
   // It shares the parent's scenario AND its active stage, so as the trace plays the
   // corresponding hop lights here. Detail lives in the grid below; this is the map.
-  import { PLAYERS, STAGES, type Scenario, type StageId, type Depth } from '../lib/trace';
+  import { PLAYERS, STAGES, type Scenario, type StageId } from '../lib/trace';
 
-  interface Props { scenario: Scenario; active: number; running: boolean; depth: Depth }
-  let { scenario, active, running }: Props = $props();
+  // The dots loop continuously rather than following the parent's play/pause: the map
+  // is illustrating "this is the hop that is happening", and it should keep saying so
+  // while the reader is paused and actually looking at it.
+  interface Props { scenario: Scenario; active: number }
+  let { scenario, active }: Props = $props();
 
   const on = $derived(new Set(scenario.players));
   const shown = $derived(PLAYERS.filter((p) => on.has(p.id)));
@@ -85,26 +88,24 @@
         <path d={legPath(i)} class="link" class:live={liveDown || liveUp} />
       {/each}
 
-      <!-- ============ MOVING DOTS — only while that hop is happening ============ -->
-      {#if running || true}
-        {#key `${scenario.id}-${active}`}
-          {#if liveAsk}
-            <circle r="7" class="dot ask"><animateMotion dur="1.1s" repeatCount="indefinite" path={askPath} /></circle>
-          {:else if liveLog}
-            <circle r="6" class="dot log"><animateMotion dur="0.9s" repeatCount="indefinite" path={logPath} /></circle>
-          {:else if liveDown}
-            {#each edges as e, i (e.id)}
-              <circle r="6" class="dot ask"><animateMotion dur="1.2s" begin="{(i * 0.12).toFixed(2)}s" repeatCount="indefinite" path={legPath(i)} /></circle>
-            {/each}
-          {:else if liveUp}
-            {#each edges as e, i (e.id)}
-              <circle r="6" class="dot back" class:pii><animateMotion dur="1.2s" begin="{(i * 0.12).toFixed(2)}s" repeatCount="indefinite" path={legPath(i)} keyPoints="1;0" keyTimes="0;1" calcMode="linear" /></circle>
-            {/each}
-          {:else if liveAns}
-            <circle r="7" class="dot back" class:pii><animateMotion dur="1.1s" repeatCount="indefinite" path={ansPath} /></circle>
-          {/if}
-        {/key}
-      {/if}
+      <!-- ============ MOVING DOTS — only for the hop that is happening ============ -->
+      {#key `${scenario.id}-${active}`}
+        {#if liveAsk}
+          <circle r="7" class="dot ask"><animateMotion dur="1.1s" repeatCount="indefinite" path={askPath} /></circle>
+        {:else if liveLog}
+          <circle r="6" class="dot log"><animateMotion dur="0.9s" repeatCount="indefinite" path={logPath} /></circle>
+        {:else if liveDown}
+          {#each edges as e, i (e.id)}
+            <circle r="6" class="dot ask"><animateMotion dur="1.2s" begin="{(i * 0.12).toFixed(2)}s" repeatCount="indefinite" path={legPath(i)} /></circle>
+          {/each}
+        {:else if liveUp}
+          {#each edges as e, i (e.id)}
+            <circle r="6" class="dot back" class:pii><animateMotion dur="1.2s" begin="{(i * 0.12).toFixed(2)}s" repeatCount="indefinite" path={legPath(i)} keyPoints="1;0" keyTimes="0;1" calcMode="linear" /></circle>
+          {/each}
+        {:else if liveAns}
+          <circle r="7" class="dot back" class:pii><animateMotion dur="1.1s" repeatCount="indefinite" path={ansPath} /></circle>
+        {/if}
+      {/key}
 
       <!-- ============ THE SPINE ============ -->
       <g class="node spine" class:lit={liveConsent}>
