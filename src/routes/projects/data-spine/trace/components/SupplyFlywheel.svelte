@@ -19,6 +19,7 @@
   let spinCount = $state(0);
   let spinning = $state(true);
   let openRisk = $state<number | null>(0);
+  const eli = $derived(depth === 'eli5');
 
   // plain lets — never $state (svelte5-pitfalls §1)
   let spinHandle: ReturnType<typeof setInterval> | undefined;
@@ -59,6 +60,30 @@
       </div>
     </div>
 
+    {#if eli}
+      <div class="tbl-wrap">
+        <table class="e-tbl">
+          <thead>
+            <tr><th class="c-n">Who joins</th><th>What they give</th><th>What they get</th><th class="c-u">What it lets you finally ask</th></tr>
+          </thead>
+          <tbody>
+            {#each TIERS as t, i}
+              <tr class:on={i === tier}>
+                <th class="c-n"><button onclick={() => (tier = i)}>{t.no}. {t.name}</button><span class="cov">{t.coverage}% of schools</span></th>
+                <td>{t.eli5Gives}</td>
+                <td>{t.eli5Gets}</td>
+                <td class="c-u">{t.eli5Unlock}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <p class="e-note">
+        Read it downwards. Each row only becomes possible because the row above it happened — and each row
+        makes the network worth more to whoever is deciding about the next one. That is the whole argument
+        for going in this order.
+      </p>
+    {:else}
     <div class="t-body">
       <div class="t-meta">
         <span class="t-who">{active.who}</span>
@@ -101,6 +126,7 @@
         {/each}
       </div>
     </div>
+    {/if}
   </div>
 
   <!-- ============ THE FLYWHEEL ============ -->
@@ -250,6 +276,21 @@
   .u-group.current li { animation: fw-in 0.45s ease both; }
   .u-group li::before { content: '✓'; position: absolute; left: 0; color: #2f7d4f; font-size: 11px; }
   @keyframes fw-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+
+  /* ELI5 tier table */
+  .tbl-wrap { overflow-x: auto; margin-top: 14px; background: #ffffff; border: 1.4px solid rgba(26,16,8,0.35); border-radius: var(--radius-round); padding: 2px 14px 8px; }
+  .e-tbl { width: 100%; min-width: 760px; border-collapse: collapse; }
+  .e-tbl th, .e-tbl td { text-align: left; vertical-align: top; padding: 10px 11px; font-size: 12.5px; line-height: 1.5; border-bottom: 1px solid rgba(26,16,8,0.12); }
+  .e-tbl thead th { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.3); }
+  .e-tbl tbody th.c-n { width: 200px; }
+  .e-tbl tbody th.c-n button { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--accent-ink, #0e5b66); background: transparent; border: none; padding: 0; text-align: left; cursor: pointer; }
+  .e-tbl tbody th.c-n button:hover { text-decoration: underline; }
+  .e-tbl tbody th.c-n .cov { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 400; color: rgba(26,16,8,0.55); margin-top: 3px; }
+  .e-tbl tr.on { background: rgba(14,91,102,0.05); }
+  .e-tbl tr.on th.c-n button { color: var(--ink); }
+  .e-tbl td { color: rgba(26,16,8,0.84); }
+  .e-tbl td.c-u, .e-tbl th.c-u { width: 28%; color: #216b3f; }
+  .e-note { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 0; max-width: 84ch; }
 
   /* flywheel */
   .loop { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 4px 18px 18px; align-items: start; }

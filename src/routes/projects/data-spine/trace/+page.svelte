@@ -27,13 +27,23 @@
   <header class="slide hero">
     <span class="kicker">Field study · The Data Spine · The instrument</span>
     <h1>Trace a request.<br /><em>All six layers, all six stages.</em></h1>
-    <p class="hero-lede">
-      One question, followed the whole way: who commissions it, what gets written into the ledger before
-      anything runs, how consent is checked, what each school's own system actually calculates, how the
-      department adds it up, and what comes back. At every step you can change which <b>layer</b> you are
-      looking at — from the people involved down to the machines in the racks — and the clock keeps running,
-      because the honest answer to "how long does this take" is the most important number on the page.
-    </p>
+    {#if depth === 'eli5'}
+      <p class="hero-lede">
+        Follow one question all the way through. Somebody asks it, it gets written down, the rules get
+        checked, each school's own computer works out its own small answer, the answers get added up, and a
+        number comes back. At every step you can switch between six different ways of looking at the same
+        moment — from the people involved, down to the actual computers. And the clock keeps running, because
+        <b>how long it really takes</b> is the most important thing on this page.
+      </p>
+    {:else}
+      <p class="hero-lede">
+        One question, followed the whole way: who commissions it, what gets written into the ledger before
+        anything runs, how consent is checked, what each school's own system actually calculates, how the
+        department adds it up, and what comes back. At every step you can change which <b>layer</b> you are
+        looking at — from the people involved down to the machines in the racks — and the clock keeps running,
+        because the honest answer to "how long does this take" is the most important number on the page.
+      </p>
+    {/if}
 
     <div class="depth-bar">
       <span class="db-lab">Explain everything at</span>
@@ -64,11 +74,21 @@
   <section class="slide" id="trace">
     <span class="kicker">The instrument · interactive</span>
     <h2>One request, followed all the way down</h2>
-    <p class="slide-lede">
-      Pick a scenario, press play, and watch the marker move. The six columns are the stages; the six rows
-      are the layers of the stack. Only one layer is open at a time — but the marker appears on every row at
-      once, because all six layers are happening simultaneously. <b>Click any layer to open it.</b>
-    </p>
+    {#if depth === 'eli5'}
+      <p class="slide-lede">
+        Start with the picture at the top: <b>who is actually involved</b> — and notice how completely that
+        changes between "how many children were absent" and "this child might be in danger". Then press play
+        and watch the dot move. Underneath, there is a table of the whole thing in six steps.
+      </p>
+    {:else}
+      <p class="slide-lede">
+        Start with the map at the top: <b>who is actually involved in this scenario</b> — and notice how
+        completely it changes between a national statistic and a child at risk. Then press play. Below the map,
+        the six columns are the stages and the six rows are the layers of the stack; only one layer is open at a
+        time, but the marker appears on every row at once, because all six are happening simultaneously.
+        <b>Click any layer to open it.</b>
+      </p>
+    {/if}
     <RequestTrace {depth} />
   </section>
 
@@ -76,23 +96,51 @@
   <section class="slide" id="layers">
     <span class="kicker">The stack · what each layer is for</span>
     <h2>Six ways to be right about the same thing</h2>
-    <p class="slide-lede">
-      A data architecture argument goes wrong when two people are describing different layers and both think
-      they are describing the system. "Nothing moves" is true at the storage layer and misleading at the
-      network layer. "It is just an API" is true at the compute layer and useless at the practical one. Each
-      layer below answers a different question, and a design is only sound when the answer holds at all six.
-    </p>
-    <div class="layer-cards">
-      {#each LAYERS as L}
-        <div class="lc">
-          <span class="lc-no">L{L.no}</span>
-          <span class="lc-tag">{L.tag}</span>
-          <b>{L.name}</b>
-          <p class="lc-q">{depth === 'eli5' ? L.eli5 : L.question}</p>
-          {#if depth !== 'eli5'}<p class="lc-b">{L.blurb}</p>{/if}
-        </div>
-      {/each}
-    </div>
+    {#if depth === 'eli5'}
+      <p class="slide-lede">
+        People arguing about this talk past each other, because they are describing different bits and each
+        thinks they are describing the whole thing. "Nothing moves" is true about <em>what gets kept</em> and
+        misleading about <em>what travels</em>. Each row below is a different question — and the design only
+        works if the answer is a good one on all six.
+      </p>
+    {:else}
+      <p class="slide-lede">
+        A data architecture argument goes wrong when two people are describing different layers and both think
+        they are describing the system. "Nothing moves" is true at the storage layer and misleading at the
+        network layer. "It is just an API" is true at the compute layer and useless at the practical one. Each
+        layer below answers a different question, and a design is only sound when the answer holds at all six.
+      </p>
+    {/if}
+    {#if depth === 'eli5'}
+      <div class="tbl-wrap">
+        <table class="l-tbl">
+          <thead>
+            <tr><th class="c-n">The layer</th><th>What it means</th><th>The one thing to remember</th></tr>
+          </thead>
+          <tbody>
+            {#each LAYERS as L}
+              <tr>
+                <th class="c-n"><span class="ln">L{L.no}</span>{L.eli5Name}</th>
+                <td>{L.eli5Question}</td>
+                <td class="pt">{L.eli5Point}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {:else}
+      <div class="layer-cards">
+        {#each LAYERS as L}
+          <div class="lc">
+            <span class="lc-no">L{L.no}</span>
+            <span class="lc-tag">{L.tag}</span>
+            <b>{L.name}</b>
+            <p class="lc-q">{L.question}</p>
+            <p class="lc-b">{L.blurb}</p>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </section>
 
   <!-- rhythm break -->
@@ -104,13 +152,23 @@
   <section class="slide" id="clock">
     <span class="kicker">The clock · interactive</span>
     <h2>How much time actually passes</h2>
-    <p class="slide-lede">
-      This is the question that decides whether a spine is worth building. A pre-agreed, non-PII question is
-      answered in about the time it takes to load a web page. A question <em>nobody has asked before</em> —
-      new purpose, new variable, new linkage — takes months, and almost none of that is computing. The
-      machinery cannot make permission instant. What it can do is make permission <b>reusable</b>: pay the
-      cost once per class of question rather than once per question, and the second ask costs seconds forever.
-    </p>
+    {#if depth === 'eli5'}
+      <p class="slide-lede">
+        This is the question that decides whether the whole thing is worth building. A question everyone has
+        already agreed to is answered in about the time it takes to load a web page. A question
+        <em>nobody has asked before</em> takes months — and almost none of those months are the computers.
+        You cannot make permission instant. What you <b>can</b> do is only have to ask for it once: do the
+        arguing once for a whole kind of question, and every question of that kind afterwards takes seconds.
+      </p>
+    {:else}
+      <p class="slide-lede">
+        This is the question that decides whether a spine is worth building. A pre-agreed, non-PII question is
+        answered in about the time it takes to load a web page. A question <em>nobody has asked before</em> —
+        new purpose, new variable, new linkage — takes months, and almost none of that is computing. The
+        machinery cannot make permission instant. What it can do is make permission <b>reusable</b>: pay the
+        cost once per class of question rather than once per question, and the second ask costs seconds forever.
+      </p>
+    {/if}
     <TimeLedger {depth} />
   </section>
 
@@ -118,12 +176,23 @@
   <section class="slide" id="methods">
     <span class="kicker">The methods · interactive</span>
     <h2>Eleven techniques, and what each one is <em>not</em> for</h2>
-    <p class="slide-lede">
-      Every privacy-preserving method on this list is oversold somewhere. Differential privacy is aimed at a
-      larger scale than most education statistics; homomorphic encryption is not needed here at all;
-      compute-to-data does nothing about definitions. The matrix maps each technique to the stages it
-      governs — and the third column of every detail card is the one worth reading first.
-    </p>
+    {#if depth === 'eli5'}
+      <p class="slide-lede">
+        There is a set of clever tricks for answering questions about people without exposing the people. Every
+        one of them is genuinely useful, and every one of them gets oversold — so the table below has a column
+        for what each one <em>cannot</em> do. Then <b>OpenSAFELY</b>: the part that is not a proposal, because
+        they have already tried this on real English school records and written down what went wrong.
+      </p>
+    {:else}
+      <p class="slide-lede">
+        Every privacy-preserving method on this list is oversold somewhere. Differential privacy is aimed at a
+        larger scale than most education statistics; homomorphic encryption is not needed here at all;
+        compute-to-data does nothing about definitions. The matrix maps each technique to the stages it
+        governs — and the third column of every detail card is the one worth reading first. Below it,
+        <b>OpenSAFELY</b>, and the part that is no longer hypothetical: they have already run this method on
+        English schools data, and published what broke.
+      </p>
+    {/if}
     <MethodsMatrix {depth} />
   </section>
 
@@ -131,14 +200,24 @@
   <section class="slide" id="network">
     <span class="kicker">The network effect · interactive</span>
     <h2>Why the market joins — and what that costs</h2>
-    <p class="slide-lede">
-      None of this works unless the systems that hold the data choose to connect. Suppliers will not do that
-      out of civic duty; they will do it because one certified integration is cheaper than an indefinite queue
-      of bespoke data requests, and because an accreditation a school asks for in procurement is worth money.
-      Once the MIS estate is on, the same argument recruits the wider edtech market — products get certified,
-      school-authorised context instead of re-keyed spreadsheets, and contribute non-PII signals back under
-      the same rules. That flywheel is the most valuable and the most dangerous idea on this page.
-    </p>
+    {#if depth === 'eli5'}
+      <p class="slide-lede">
+        None of this works unless the companies that hold the records choose to plug in. They will not do it to
+        be nice. They will do it because plugging in once is cheaper than answering data requests forever, and
+        because schools will start asking "are you certified?" when they buy. Once the school systems are in,
+        the other education apps want in too — and the price of joining is putting something useful back.
+        That is the most valuable idea on this page, and also the most dangerous one.
+      </p>
+    {:else}
+      <p class="slide-lede">
+        None of this works unless the systems that hold the data choose to connect. Suppliers will not do that
+        out of civic duty; they will do it because one certified integration is cheaper than an indefinite queue
+        of bespoke data requests, and because an accreditation a school asks for in procurement is worth money.
+        Once the MIS estate is on, the same argument recruits the wider edtech market — products get certified,
+        school-authorised context instead of re-keyed spreadsheets, and contribute non-PII signals back under
+        the same rules. That flywheel is the most valuable and the most dangerous idea on this page.
+      </p>
+    {/if}
     <SupplyFlywheel {depth} />
   </section>
 
@@ -226,6 +305,17 @@
   .lc b { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--ink); margin: 3px 0 6px; }
   .lc-q { font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--accent-ink); margin: 0 0 7px; }
   .lc-b { font-size: 12.5px; line-height: 1.55; color: rgba(26,16,8,0.78); margin: 0; }
+
+  /* ELI5 layer table */
+  .tbl-wrap { overflow-x: auto; background: #ffffff; border: 1.5px solid rgba(26,16,8,0.35); border-radius: var(--radius-round); padding: 4px 16px 10px; }
+  .l-tbl { width: 100%; min-width: 640px; border-collapse: collapse; }
+  .l-tbl th, .l-tbl td { text-align: left; vertical-align: top; padding: 11px 12px; font-size: 14px; line-height: 1.5; border-bottom: 1px solid rgba(26,16,8,0.12); }
+  .l-tbl thead th { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.3); }
+  .l-tbl tbody th { font-family: 'DM Sans', sans-serif; font-weight: 600; color: var(--ink); width: 210px; }
+  .l-tbl tbody th .ln { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); margin-right: 7px; }
+  .l-tbl td { color: rgba(26,16,8,0.84); }
+  .l-tbl td.pt { color: rgba(26,16,8,0.7); }
+  .l-tbl tbody tr:last-child th, .l-tbl tbody tr:last-child td { border-bottom: none; }
 
   /* inverted band */
   .band { max-width: none; background: var(--ink); padding: clamp(48px, 8vh, 100px) clamp(16px, 3vw, 40px); }

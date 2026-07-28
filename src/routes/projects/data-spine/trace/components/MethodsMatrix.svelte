@@ -5,7 +5,7 @@
   // means "this method governs that stage". Picking a row cascades the governed stages
   // left-to-right and opens the detail — including the `notFor` field, which is the
   // point of the whole component: every one of these techniques is oversold somewhere.
-  import { METHODS, STAGES, LAYERS, OPENSAFELY, say, type Depth, type MethodId } from '../lib/trace';
+  import { METHODS, STAGES, LAYERS, OPENSAFELY, OPENSAFELY_SCHOOLS, say, type Depth, type MethodId } from '../lib/trace';
   import ConfidenceBadge from '../../components/ConfidenceBadge.svelte';
 
   let { depth = 'official' as Depth }: { depth?: Depth } = $props();
@@ -13,6 +13,7 @@
   let selId = $state<MethodId>('compute-to-data');
   const sel = $derived(METHODS.find((m) => m.id === selId)!);
   const selLayer = $derived(LAYERS.find((l) => l.id === sel.layer)!);
+  const eli = $derived(depth === 'eli5');
 
   const MATURITY: Record<string, { label: string; cls: string }> = {
     proven: { label: 'Proven in production', cls: 'mt-proven' },
@@ -22,6 +23,29 @@
 </script>
 
 <div class="mm">
+  {#if eli}
+    <!-- ============ ELI5: one table, no matrix ============ -->
+    <div class="grid-scroll">
+      <table class="e-tbl">
+        <thead>
+          <tr><th class="c-n">The trick</th><th>What it actually is</th><th class="c-x">What it can’t do</th></tr>
+        </thead>
+        <tbody>
+          {#each METHODS as m}
+            <tr>
+              <th class="c-n">{m.eli5Name}<span class="real">{m.name}</span></th>
+              <td>{m.eli5}</td>
+              <td class="c-x">{m.eli5NotFor}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <p class="e-note">
+        Every one of these is genuinely useful and every one is oversold somewhere — which is why the
+        third column exists. None of them is the hard part: the hard part is agreeing what the words mean.
+      </p>
+    </div>
+  {:else}
   <!-- ============ THE MATRIX ============ -->
   <div class="grid-scroll">
     <div class="grid" style="--cols:{STAGES.length}">
@@ -80,6 +104,7 @@
       </div>
     </div>
   </div>
+  {/if}
 
   <!-- ============ OPENSAFELY ============ -->
   <div class="os">
@@ -115,6 +140,46 @@
       scale. What education has that health did not is a fragmented supplier estate and a thinner set of
       shared definitions — which is why the hard work on the next screen is <em>onboarding</em>, not cryptography.
     </p>
+  </div>
+
+  <!-- ============ OPENSAFELY SCHOOLS ============ -->
+  <div class="oss">
+    <div class="oss-head">
+      <div>
+        <span class="oss-kick">AND THEY HAVE ALREADY TRIED IT ON SCHOOLS</span>
+        <h4>{OPENSAFELY_SCHOOLS.title}</h4>
+        <p class="oss-strap">{OPENSAFELY_SCHOOLS.strap}</p>
+      </div>
+      <ConfidenceBadge level={OPENSAFELY_SCHOOLS.confidence} note="A documented, funded programme with published findings." />
+    </div>
+
+    <p class="oss-body">{say(OPENSAFELY_SCHOOLS, depth)}</p>
+
+    <div class="facts">
+      {#each OPENSAFELY_SCHOOLS.facts as f}
+        <div class="fact"><b>{f.k}</b><span>{f.v}</span></div>
+      {/each}
+    </div>
+
+    <span class="oss-lab">WHAT THEY FOUND WHEN THEY MOVED FROM HEALTH DATA TO SCHOOLS DATA</span>
+    <div class="tbl-wrap">
+      <table class="l-tbl">
+        <thead>
+          <tr><th class="c-n">What they hit</th><th>What happened</th><th class="c-s">Why it matters for a national spine</th></tr>
+        </thead>
+        <tbody>
+          {#each OPENSAFELY_SCHOOLS.lessons as l}
+            <tr>
+              <th class="c-n">{l.k}</th>
+              <td>{l.v}</td>
+              <td class="c-s">{l.soWhat}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="oss-caveat"><b>△ And the honest limit.</b> {OPENSAFELY_SCHOOLS.caveat}</p>
   </div>
 </div>
 
@@ -201,9 +266,45 @@
   .os-foot b { color: var(--ink); }
   .os-foot em { font-style: italic; color: var(--accent-ink, #0e5b66); }
 
+  /* ELI5 methods table */
+  .e-tbl { width: 100%; min-width: 700px; border-collapse: collapse; }
+  .e-tbl th, .e-tbl td { text-align: left; vertical-align: top; padding: 9px 11px; font-size: 13px; line-height: 1.5; border-bottom: 1px solid rgba(26,16,8,0.12); }
+  .e-tbl thead th { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.3); }
+  .e-tbl tbody th.c-n { font-family: 'DM Sans', sans-serif; font-weight: 600; color: var(--ink); width: 210px; }
+  .e-tbl tbody th.c-n .real { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 400; letter-spacing: 0.06em; color: rgba(26,16,8,0.5); margin-top: 2px; }
+  .e-tbl td { color: rgba(26,16,8,0.84); }
+  .e-tbl td.c-x, .e-tbl th.c-x { width: 30%; color: #6d232d; }
+  .e-note { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.72); margin: 12px 0 4px; max-width: 82ch; }
+
+  /* OpenSAFELY Schools */
+  .oss { border-top: 1.5px solid rgba(26,16,8,0.4); padding: 18px; background: #ffffff; }
+  .oss-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+  .oss-kick { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em; color: #216b3f; }
+  .oss-head h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(22px, 3vw, 34px); line-height: 1.05; margin: 4px 0 6px; color: var(--ink); }
+  .oss-strap { font-family: 'Fraunces', serif; font-size: clamp(15px, 1.8vw, 19px); font-style: italic; line-height: 1.35; color: #216b3f; margin: 0; max-width: 58ch; }
+  .oss-body { font-size: 14px; line-height: 1.6; color: rgba(26,16,8,0.84); margin: 14px 0 16px; max-width: 84ch; }
+
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .fact { border-left: 3px solid #2f7d4f; padding-left: 10px; }
+  .fact b { display: block; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .fact span { display: block; font-size: 12px; line-height: 1.5; color: rgba(26,16,8,0.72); margin-top: 3px; }
+
+  .oss-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.58); margin-bottom: 9px; }
+  .tbl-wrap { overflow-x: auto; }
+  .l-tbl { width: 100%; min-width: 700px; border-collapse: collapse; }
+  .l-tbl th, .l-tbl td { text-align: left; vertical-align: top; padding: 10px 11px; font-size: 12.5px; line-height: 1.55; border-bottom: 1px solid rgba(26,16,8,0.12); }
+  .l-tbl thead th { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(26,16,8,0.55); border-bottom: 1.5px solid rgba(26,16,8,0.3); }
+  .l-tbl tbody th.c-n { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); width: 220px; }
+  .l-tbl td { color: rgba(26,16,8,0.84); }
+  .l-tbl td.c-s, .l-tbl th.c-s { width: 34%; color: var(--accent-ink, #0e5b66); }
+
+  .oss-caveat { font-size: 13.5px; line-height: 1.6; color: #6f460b; background: #fdf4e6; border: 1px solid rgba(168,112,26,0.4);
+    border-radius: var(--radius-round); padding: 11px 14px; margin: 18px 0 0; max-width: 90ch; }
+  .oss-caveat b { color: #8c5a10; }
+
   @media (max-width: 700px) {
     .grid-scroll { padding: 12px 12px 8px; }
-    .detail, .os { padding-left: 12px; padding-right: 12px; }
+    .detail, .os, .oss { padding-left: 12px; padding-right: 12px; }
     .d-layer { margin-left: 0; }
   }
 </style>

@@ -88,4 +88,12 @@ export const SOURCES: Source[] = [
   { org: '1EdTech', what: 'OneRoster — the roster and gradebook interoperability profile', url: 'https://www.1edtech.org/standards/oneroster' },
   { org: 'W3C', what: 'ODRL — the machine-readable policy language behind usage control', url: 'https://www.w3.org/TR/odrl-model/' },
   { org: 'NHS England', what: 'National data opt-out — a live, population-scale objection register', url: 'https://digital.nhs.uk/services/national-data-opt-out' },
+  // OpenSAFELY Schools — the same method, already being tried on English schools data
+  { org: 'OpenSAFELY Schools', what: 'The programme — NIoT × Bennett Institute; 170 schools, 6,500 teachers, 115,000 pupils', url: 'https://schools.opensafely.org/' },
+  { org: 'OpenSAFELY Schools', what: 'About — partners, funders (XTX Markets, Nuffield Foundation) and the two-year proof of concept', url: 'https://schools.opensafely.org/about/' },
+  { org: 'Bennett Institute', what: '“What we learned when we took OpenSAFELY from GP data to schools data” — the schema, vocabulary and re-identification findings', url: 'https://www.bennett.ox.ac.uk/blog/2026/05/what-we-learned-when-we-took-opensafely-from-gp-data-to-schools-data/' },
+  { org: 'Bennett Institute', what: 'OpenSAFELY Schools — announcing the collaboration with education professionals', url: 'https://www.bennett.ox.ac.uk/blog/2025/06/opensafely-schools-a-new-collaboration-with-education-professionals/' },
+  { org: 'OpenSAFELY Schools', what: 'Building TED — segregated Azure environment, extraction API, security audit, governance', url: 'https://schools.opensafely.org/building-ted-unlocking-the-power-of-education-data-securely/' },
+  { org: 'NIoT', what: 'Teacher Education Dataset (TED) — the 36-school pilot published July 2024, and the SEND finding', url: 'https://niot.org.uk/research-projects/teacher_education_dataset' },
+  { org: 'Nuffield Foundation', what: 'TIDE — Teaching improvement through data and evaluation', url: 'https://www.nuffieldfoundation.org/project/teaching-improvement-through-data-and-evaluation-tide' },
 ];
