@@ -41,6 +41,22 @@ import {
 } from './efficiency';
 import { TRIAL, errMsg, parseJsonLoose, type RunAction } from './types';
 
+/** Trim to `max` chars on a word boundary — ledger details and the WhatsApp
+ *  summary both render these, and a mid-word cut ("drastical") reads as a bug. */
+export function clip(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const sp = cut.lastIndexOf(' ');
+  return `${(sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[.,;:\s]+$/, '')}…`;
+}
+
+/** Never advertise these as a cheaper route (mirrors context.ts). */
+const UNSAFE_TO_SUGGEST = new Set([
+  'create_tool', 'promote_tool', 'delete_tool', 'datastore_delete',
+  'datastore_collection_delete', 'blog_delete', 'workflow_delete', 'build_cancel',
+]);
+
 /** Patterns below this many wasted calls aren't worth a prompt-token overlay. */
 const MIN_REPEAT_CALLS = 8;
 
@@ -67,23 +83,151 @@ export function schemaSupportsBatching(schema: unknown): boolean {
 }
 
 /**
- * Reject an overlay that promises what the schema cannot do. Cheap, and it
- * closes the one way this phase could make things worse rather than merely
- * failing to make them better.
+ * Does the text tell the caller to put MORE THAN ONE value into THIS tool's
+ * arguments? That is the only claim a single-value schema cannot honour.
+ *
+ * Scoped per sentence, and a sentence naming a sibling tool is exempt: "a
+ * single call to ha_render_template returns every entity" is both true and the
+ * advice we want, while a blanket keyword match rejected it. The first version
+ * of this check matched "all … in one call" anywhere in the text, which
+ * collided with the prompt's own instruction to answer the whole question in
+ * one call — so the model was pushed into phrasing the guard then refused, and
+ * two of two attempts died on it.
+ */
+export function claimsBatching(text: string, siblingNames: string[]): boolean {
+  const siblings = siblingNames.map((n) => n.toLowerCase()).filter(Boolean);
+  return text
+    .split(/[.;\n]+/)
+    .some((sentence) => {
+      const t = sentence.trim();
+      if (!t) return false;
+      // Advice about a DIFFERENT tool cannot over-promise this one's schema.
+      if (siblings.some((n) => t.includes(n))) return false;
+      if (/\b(an? array|arrays|comma-separated|batch(es|ed|ing)?)\b/.test(t)) return true;
+      // "pass/accepts/supply … all/multiple/several/a list of …" — a supply verb
+      // next to a plurality marker is the shape that over-promises the schema.
+      return /\b(pass|passing|supply|provide|send|give|accepts?|takes?|specify|include)\b[^,]{0,60}\b(a list of|lists of|multiple|several|many|all|every|both)\b/.test(
+        t,
+      );
+    });
+}
+
+/**
+ * Below this share of byte-identical repeats, "stop making redundant calls" is
+ * the wrong fix and writing it wastes the night.
+ *
+ * The first live pick made exactly this mistake: told that `fetch_url` repeated
+ * 151 times, the model wrote a careful warning against fetching the same URL
+ * twice — when only 1 of those 151 was identical. The 119-call turn was 119
+ * DIFFERENT urls. Across all chat patterns duplicates are 15 of 398 repeats
+ * (4%), so redundancy advice is almost always aimed at the wrong 4%.
+ */
+export const LOW_DUPLICATE_SHARE = 0.25;
+
+/** Fraction of a pattern's repeats that were byte-identical calls. */
+export function duplicateShare(pattern: Pick<CallPattern, 'repeatCalls' | 'duplicateCalls'>): number {
+  if (pattern.repeatCalls <= 0) return 0;
+  return pattern.duplicateCalls / pattern.repeatCalls;
+}
+
+/** Does the text talk about repeated/identical calls? */
+function framesAsRedundancy(text: string): boolean {
+  return /\b(redundant|identical|same (url|arguments|args|value|entity|query|parameters)|again|twice|already (fetched|called|retrieved))\b/.test(
+    text,
+  );
+}
+
+/**
+ * Does the text offer a way to answer the whole question with fewer DISTINCT
+ * calls — naming a sibling tool, or consolidating onto one call?
+ */
+function offersConsolidation(text: string, siblingNames: string[]): boolean {
+  if (siblingNames.some((n) => n && text.includes(n.toLowerCase()))) return true;
+  return /\b(one (call|request|page|query)|single (call|request|page|query)|index|table of contents|instead of|rather than|in one go|consolidat)\b/.test(
+    text,
+  );
+}
+
+/**
+ * Snake_case identifiers in the text that are not real tools and not one of
+ * this tool's own parameters.
+ *
+ * The overlay is the only thing the model sees about a tool, so a confidently
+ * named tool that does not exist is worse than saying nothing: it sends the
+ * caller looking for a capability that isn't there. Seen on all three trial
+ * runs before this guard existed.
+ */
+export function unknownToolsNamed(
+  text: string,
+  knownTools: Set<string>,
+  schemaParams: string[],
+): string[] {
+  const params = new Set(schemaParams.map((p) => p.toLowerCase()));
+  const found = text.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? [];
+  return [...new Set(found)].filter(
+    (id) => !knownTools.has(id) && !params.has(id) && id.length > 4,
+  );
+}
+
+/**
+ * Reject an overlay that would not help. Two failure modes, both seen live:
+ *
+ *   1. It promises what the schema cannot do (an array parameter that isn't
+ *      there) — that turns repetition into invalid calls, strictly worse.
+ *   2. It only says "don't repeat identical calls" on a pattern whose repeats
+ *      are overwhelmingly DISTINCT — true, harmless, and aimed at a few percent
+ *      of the waste, so it burns a 30-turn trial slot to prove nothing.
+ *
+ * A prompt asking for better is not enough on its own; both of the prompt
+ * defects this pipeline has shipped were invisible to tests and to the model.
  */
 export function validateOverride(
   override: ToolOverride,
   schema: unknown,
+  opts?: {
+    pattern?: Pick<CallPattern, 'repeatCalls' | 'duplicateCalls'>;
+    siblingNames?: string[];
+    knownTools?: Set<string>;
+    schemaParams?: string[];
+  },
 ): { ok: boolean; reason?: string } {
   const text = `${override.description ?? ''} ${override.guidance ?? ''}`.toLowerCase();
   if (!text.trim()) return { ok: false, reason: 'empty override' };
-  const claimsBatch = /\b(array|list of|multiple .* at once|all .* in one call|batch)\b/.test(text);
-  if (claimsBatch && !schemaSupportsBatching(schema)) {
+
+  if (claimsBatching(text, opts?.siblingNames ?? []) && !schemaSupportsBatching(schema)) {
     return {
       ok: false,
       reason: 'override promises batching but no parameter accepts an array',
     };
   }
+
+  if (opts?.knownTools) {
+    const bogus = unknownToolsNamed(text, opts.knownTools, opts.schemaParams ?? []);
+    if (bogus.length) {
+      return {
+        ok: false,
+        reason: `override names tool(s) that do not exist: ${bogus.join(', ')}`,
+      };
+    }
+  }
+
+  if (opts?.pattern) {
+    const share = duplicateShare(opts.pattern);
+    if (
+      share < LOW_DUPLICATE_SHARE &&
+      framesAsRedundancy(text) &&
+      !offersConsolidation(text, opts.siblingNames ?? [])
+    ) {
+      return {
+        ok: false,
+        reason:
+          `override only warns against repeated/identical calls, but just ${opts.pattern.duplicateCalls} of ` +
+          `${opts.pattern.repeatCalls} repeats were identical (${Math.round(share * 100)}%) — the waste is ` +
+          `distinct calls, so it must name a cheaper single call or a sibling tool instead`,
+      };
+    }
+  }
+
   return { ok: true };
 }
 
@@ -112,25 +256,50 @@ function coerceOverlay(json: unknown): OverlaySpec | null {
 }
 
 /**
- * Sibling tools in the same toolset, as `name — description` lines.
+ * Candidate tools whose single call might replace many calls to `toolName`.
  *
- * Load-bearing for the non-batchable case, which is the common one: on the
- * sample that motivated this phase NONE of the top four repeat offenders took
- * an array (`fetch_url`, `ha_query_state`, `ha_render_template` and
- * `research_web_search` all take a single string). The only way to collapse 19
- * `ha_query_state` calls is to point at `ha_render_template`, which can return
- * every entity in one call — and the model cannot suggest a tool it was never
- * shown. Without this the phase can only ever say "call it less".
+ * NOT limited to the same toolset — that was a real defect. `fetch_url` is the
+ * only tool in the `web` toolset, so same-toolset siblings came back EMPTY
+ * while the prompt still demanded the model "name the specific sibling tool".
+ * All three trial runs duly invented one (`search_web`, which does not exist;
+ * the real tool is `research_web_search`).
+ *
+ * So: same-toolset tools first, then the best keyword matches from the whole
+ * registry. Capped, because the point is a short relevant menu rather than a
+ * second copy of the manifest.
  */
-function siblingTools(toolName: string, limit = 25): string[] {
+export function siblingCandidates(toolName: string, limit = 24): Array<{ name: string; description: string }> {
   try {
+    const all = getTools();
+    const self = all.find((t) => t.name === toolName);
+    if (!self) return [];
+
     const manifest = getToolsetManifest();
     const owning = manifest.find((ts) => ts.tools.some((t) => t.name === toolName));
-    if (!owning) return [];
-    return owning.tools
-      .filter((t) => t.name !== toolName)
-      .slice(0, limit)
-      .map((t) => `- ${t.name} — ${(t.description ?? '').slice(0, 160)}`);
+    const sameToolset = new Set((owning?.tools ?? []).map((t) => t.name));
+
+    // Score by shared significant words between names/descriptions.
+    const words = (s: string) =>
+      new Set(
+        s
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((w) => w.length > 3),
+      );
+    const mine = words(`${self.name} ${self.description ?? ''}`);
+    const scored = all
+      .filter((t) => t.name !== toolName && !UNSAFE_TO_SUGGEST.has(t.name))
+      .map((t) => {
+        const theirs = words(`${t.name} ${t.description ?? ''}`);
+        let overlap = 0;
+        for (const w of theirs) if (mine.has(w)) overlap++;
+        return { t, score: overlap + (sameToolset.has(t.name) ? 100 : 0) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return scored.map(({ t }) => ({ name: t.name, description: (t.description ?? '').slice(0, 150) }));
   } catch {
     return [];
   }
@@ -142,6 +311,7 @@ function buildOverlayMessages(
   batchable: boolean,
   priorFailures: string[],
   siblings: string[],
+  dominantlyDistinct: boolean,
 ): Array<{ role: 'system' | 'user'; content: string }> {
   const system =
     'You improve how an AI assistant CALLS its existing tools. You are given one tool, its exact input schema, ' +
@@ -158,6 +328,19 @@ function buildOverlayMessages(
         'say so by name and describe exactly when to reach for it instead; (b) tell the caller what one ' +
         'well-chosen call already returns, so they stop probing for it; (c) warn that repeating it with ' +
         'near-identical arguments returns the same data.\n\n') +
+    (dominantlyDistinct
+      ? 'CRITICAL — read the two repeat numbers below before you write anything. Almost NONE of these repeats ' +
+        'were the same call made twice: the caller passed a DIFFERENT argument nearly every time. So ' +
+        '"do not make redundant calls", "you already fetched that", "calling it twice returns the same data" ' +
+        'and any other warning about identical or repeated calls would be TRUE BUT USELESS — it addresses a ' +
+        'few percent of the waste and this change will be measured and thrown away. Do NOT write that. Write ' +
+        'guidance that removes DISTINCT calls: name the specific SIBLING TOOL (by name) whose single call ' +
+        'covers the whole question, or the one well-chosen starting call that makes the rest unnecessary, ' +
+        'and say when to reach for it. Never tell the caller to put more than one value into THIS ' +
+        "tool's arguments — its schema takes exactly one. Only ever name a tool that appears in the " +
+        'SIBLING TOOLS list below, exactly as spelled there; if that list is absent or empty, name no ' +
+        'tool at all and give strategy guidance instead.\n\n'
+      : '') +
     'Respond with ONLY JSON: {"tool": string, "description": string, "guidance": string, ' +
     '"globalGuidance": string[], "rationale": string}. "description" replaces the tool description (keep every ' +
     'capability the original mentions — this text is all the caller sees). "guidance" is one extra sentence ' +
@@ -171,7 +354,9 @@ function buildOverlayMessages(
     `Observed waste (last ${TRIAL.windowDays} days, ordinary chat turns only):\n` +
     `- ${pattern.repeatCalls} calls were repeats of this same tool within a turn\n` +
     `- spread over ${pattern.turns} turn(s); the worst single turn called it ${pattern.worstInOneTurn} times\n` +
-    `- ${pattern.duplicateCalls} of those were byte-identical repeat calls\n` +
+    `- of those ${pattern.repeatCalls} repeats, only ${pattern.duplicateCalls} were byte-identical ` +
+    `(${Math.round(duplicateShare(pattern) * 100)}%) — the other ${pattern.repeatCalls - pattern.duplicateCalls} ` +
+    `passed DIFFERENT arguments\n` +
     (siblings.length
       ? `\nSibling tools in the same toolset (a single call to one of these may replace many calls to ${tool.name}):\n${siblings.join('\n')}\n`
       : '') +
@@ -260,6 +445,16 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
   }
 
   const batchable = schemaSupportsBatching(chosen.tool.parameters);
+  const siblingPool = siblingCandidates(chosen.tool.name);
+  const siblings = siblingPool.map((c) => `- ${c.name} — ${c.description}`);
+  const siblingNames = siblingPool.map((c) => c.name);
+  // Every registered tool name, so the guard can tell a real suggestion from an
+  // invented one, plus this tool's own parameter names (which are snake_case
+  // too and must not read as bogus tools).
+  const knownTools = new Set(registry.map((t) => t.name));
+  const schemaParams = Object.keys(
+    ((chosen.tool.parameters as { properties?: Record<string, unknown> } | null)?.properties) ?? {},
+  );
   const { json } = await budget.call(
     buildOverlayMessages(
       chosen.pattern,
@@ -270,12 +465,13 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
       },
       batchable,
       priorFailures,
-      siblingTools(chosen.tool.name),
+      siblings,
+      duplicateShare(chosen.pattern) < LOW_DUPLICATE_SHARE,
     ),
     { maxTokens: 3000, temperature: 0.2 },
   );
 
-  const spec = coerceOverlay(json);
+  let spec = coerceOverlay(json);
   if (!spec) {
     actions.push({ kind: 'proposal', detail: `Call policy for ${chosen.tool.name}: model returned no usable overlay` });
     return actions;
@@ -283,11 +479,61 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
 
   // The model may name a different tool than the one we asked about; the
   // override must land on the tool whose schema we validated, not that one.
-  const override: ToolOverride = {
-    ...(spec.description ? { description: spec.description } : {}),
-    ...(spec.guidance ? { guidance: spec.guidance } : {}),
-  };
-  const check = validateOverride(override, chosen.tool.parameters);
+  const toOverride = (sp: OverlaySpec): ToolOverride => ({
+    ...(sp.description ? { description: sp.description } : {}),
+    ...(sp.guidance ? { guidance: sp.guidance } : {}),
+  });
+  const validate = (o: ToolOverride) =>
+    validateOverride(o, chosen.tool.parameters, {
+      pattern: chosen.pattern,
+      siblingNames,
+      knownTools,
+      schemaParams,
+    });
+
+  let override = toOverride(spec);
+  let check = validate(override);
+
+  // One retry with the rejection fed back. The guards below are strict enough
+  // that a first-attempt rejection is common, and without a retry that costs
+  // the whole night for one bad paragraph.
+  if (!check.ok && budget.timeLeftMs() > 30_000) {
+    const retry = await budget.call(
+      [
+        ...buildOverlayMessages(
+          chosen.pattern,
+          {
+            name: chosen.tool.name,
+            description: chosen.tool.description ?? '',
+            parameters: chosen.tool.parameters,
+          },
+          batchable,
+          priorFailures,
+          siblings,
+          duplicateShare(chosen.pattern) < LOW_DUPLICATE_SHARE,
+        ),
+        { role: 'assistant', content: JSON.stringify(spec) },
+        {
+          role: 'user',
+          content:
+            `That overlay was REJECTED: ${check.reason}.\n\nWrite a different one that fixes exactly that. ` +
+            `Same JSON shape, no prose.`,
+        },
+      ],
+      { maxTokens: 3000, temperature: 0.2 },
+    );
+    const second = coerceOverlay(retry.json);
+    if (second) {
+      const secondOverride = toOverride(second);
+      const secondCheck = validate(secondOverride);
+      if (secondCheck.ok) {
+        spec = second;
+        override = secondOverride;
+        check = secondCheck;
+      }
+    }
+  }
+
   if (!check.ok) {
     actions.push({
       kind: 'tool_rejected',
@@ -319,7 +565,7 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
       detail:
         `v${published.version} targets ${chosen.tool.name} ` +
         `(${chosen.pattern.repeatCalls} repeat calls over ${chosen.pattern.turns} turns) — ` +
-        `${spec.rationale.slice(0, 160)}. On trial from ${eff.chat.meanCalls} calls/turn.`,
+        `${clip(spec.rationale, 160)} On trial from ${eff.chat.meanCalls} calls/turn.`,
     });
   } catch (err) {
     actions.push({
