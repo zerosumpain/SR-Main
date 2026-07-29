@@ -58,6 +58,17 @@
     topUnmet?: string[];
     summary?: string;
   };
+  type BacklogView = {
+    slug: string;
+    title: string;
+    detail?: string;
+    kind: string;
+    status: string;
+    priority: number;
+    attempts: number;
+    lastError?: string;
+    prUrl?: string;
+  };
 
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
@@ -71,6 +82,14 @@
   let runs = $state<RunView[]>(data.runs as RunView[]);
   let apis = $state<ApiView[]>(data.apis as ApiView[]);
   let tools = $state<ToolView[]>(data.tools as ToolView[]);
+  const backlog = $derived((data.backlog ?? []) as BacklogView[]);
+  const openBacklog = $derived(backlog.filter((b) => b.status === 'open'));
+
+  function backlogState(status: string): string {
+    if (status === 'shipped') return 'success';
+    if (status === 'abandoned') return 'error';
+    return 'draft';
+  }
 
   let expandedRunId = $state<string | null>(null);
   let starting = $state(false);
@@ -513,7 +532,49 @@
           </tbody>
         </table>
       </div>
-      <p class="muted note">Re-enabling a tool takes effect after the next process restart (in-memory registry).</p>
+      <p class="muted note">
+        Tools the engine ships are enabled and registered live. Manually re-enabling a disabled tool
+        takes effect after the next process restart (in-memory registry).
+      </p>
+    {/if}
+  </section>
+
+  <!-- Backlog — the engine's memory between nights -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Backlog</span>
+      <span class="nm-sec-meta">{openBacklog.length} open / {backlog.length}</span>
+    </div>
+    {#if backlog.length === 0}
+      <div class="nm-empty">Nothing queued yet — the next run will populate this from unmet needs.</div>
+    {:else}
+      <div class="table-scroll">
+        <table class="nm-table">
+          <thead>
+            <tr><th>Idea</th><th>Kind</th><th>Pri</th><th>Tries</th><th>State</th><th>Last failure</th></tr>
+          </thead>
+          <tbody>
+            {#each backlog as b (b.slug)}
+              <tr>
+                <td>
+                  <span class="tool-name mono">{b.title}</span>
+                  {#if b.detail}<span class="tool-desc">{b.detail}</span>{/if}
+                  {#if b.prUrl}
+                    <a class="nm-link-btn" href={b.prUrl} target="_blank" rel="noreferrer">View PR</a>
+                  {/if}
+                </td>
+                <td class="mono small">{b.kind}</td>
+                <td class="mono small">{b.priority}</td>
+                <td class="mono small">{b.attempts}</td>
+                <td>
+                  <span class="nm-pill" data-state={backlogState(b.status)}>{b.status}</span>
+                </td>
+                <td class="small muted">{b.lastError ?? '—'}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {/if}
   </section>
 </PageWrap>

@@ -20,6 +20,7 @@ import {
   type RunAction,
 } from './types';
 import type { Budget } from './run';
+import { addIdeas } from './backlog';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_MESSAGES = 300;
@@ -171,19 +172,76 @@ export async function learnInsights(
     return { insights: empty, actions: [{ kind: 'insight', detail: 'no questions this week' }] };
   }
 
-  const { json } = await budget.call(buildLearnMessages(signals), { maxTokens: 3000, temperature: 0.3 });
-  const insights = coerceInsights(json, week);
+  const { content, json } = await budget.call(buildLearnMessages(signals), {
+    maxTokens: 3000,
+    temperature: 0.3,
+  });
+  let insights = coerceInsights(json, week);
+
+  // Zero intents from a non-empty question set means the model's JSON did not
+  // survive parsing — it is not a real finding. This happened twice in ten
+  // nights (60 questions → 0 intents on 29 Jul) and silently starved discover
+  // and build of everything they needed. Retry once, tightly.
+  if (insights.intents.length === 0) {
+    console.warn(
+      `[selfimprove] learn produced 0 intents from ${signals.messages.length} questions; raw head: ${content.slice(0, 200)}`,
+    );
+    const retry = await budget.call(
+      [
+        {
+          role: 'system',
+          content:
+            'Output ONLY a JSON object, no markdown fence, no commentary. Shape: {"summary": string, ' +
+            '"intents": [{"intent": string, "count": number, "examples": string[], "servedWell": boolean, ' +
+            '"missingCapability": string}], "topUnmet": string[]}. At least one intent is required.',
+        },
+        {
+          role: 'user',
+          content: `Group these questions into intents and list unmet needs:\n${JSON.stringify(
+            signals.messages.slice(0, 120).map((m) => m.content),
+          )}`,
+        },
+      ],
+      { maxTokens: 3000, temperature: 0.1 },
+    );
+    const second = coerceInsights(retry.json, week);
+    if (second.intents.length > 0) insights = second;
+  }
 
   await upsertRecord(COLLECTIONS.questionInsights, { key: 'latest', data: asData(insights) }, SYSTEM_ACTOR);
   await upsertRecord(COLLECTIONS.questionInsights, { key: `weekly:${week}`, data: asData(insights) }, SYSTEM_ACTOR);
 
-  return {
-    insights,
-    actions: [
-      {
-        kind: 'insight',
-        detail: `${insights.intents.length} intents, ${insights.topUnmet.length} unmet need(s) across ${signals.messages.length} questions`,
-      },
-    ],
-  };
+  const actions: RunAction[] = [
+    {
+      kind: 'insight',
+      detail: `${insights.intents.length} intents, ${insights.topUnmet.length} unmet need(s) across ${signals.messages.length} questions`,
+    },
+  ];
+
+  // Unmet needs are the engine's best source of work. Queue them so they
+  // outlive this run — previously they existed only inside one run record.
+  const ideas = [
+    ...insights.topUnmet.map((need) => ({
+      title: need,
+      detail: `Unmet need identified from ${signals.messages.length} questions in ${week}.`,
+      kind: 'tool' as const,
+      priority: 2,
+    })),
+    ...insights.intents
+      .filter((i) => !i.servedWell && i.missingCapability)
+      .map((i) => ({
+        title: i.missingCapability as string,
+        detail: `Intent "${i.intent}" (${i.count} questions) is not served well. Examples: ${(i.examples ?? []).join(' | ')}`,
+        kind: 'tool' as const,
+        priority: 2,
+      })),
+  ];
+  try {
+    const added = await addIdeas(ideas);
+    for (const slug of added) actions.push({ kind: 'backlog_added', detail: slug });
+  } catch (err) {
+    console.error('[selfimprove] queueing insights to backlog failed:', errMsg(err));
+  }
+
+  return { insights, actions };
 }

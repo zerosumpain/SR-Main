@@ -216,6 +216,17 @@ export async function ensureSystemCollections(): Promise<void> {
     },
     SYSTEM_ACTOR,
   );
+  await ensureCollection(
+    COLLECTIONS.backlog,
+    {
+      name: 'Improvement Backlog',
+      description:
+        'Durable queue of ideas the engine intends to build, with attempt counts and last failure — its memory between nights.',
+      isSystem: true,
+      defaultPermissions: SYSTEM_PERMISSIONS.improvement_backlog,
+    },
+    SYSTEM_ACTOR,
+  );
 }
 
 /**

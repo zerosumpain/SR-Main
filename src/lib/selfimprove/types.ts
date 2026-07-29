@@ -22,7 +22,20 @@ export const COLLECTIONS = {
   // including the generated handler code and the failure reason. `custom_tools`
   // only keeps surviving tools; this keeps the ones the engine tried and dropped.
   toolAttempts: 'tool_attempts',
+  // Durable idea queue. Before this existed every "proposal" was a dead string on
+  // a run record, so each night re-invented the same ideas (the 19–29 Jul runs
+  // re-proposed "news digest" and "current time" repeatedly) and never learned
+  // from a previous night's failure. Ideas now persist with attempt counts and
+  // last-error, so the engine resumes work instead of restarting it.
+  backlog: 'improvement_backlog',
 } as const;
+
+/**
+ * Model for every self-improvement gateway call (owner's standing choice,
+ * 2026-07-29). Pinned rather than using `resolveDefaultModel()` so a change to
+ * the chat default cannot silently alter code-authoring quality overnight.
+ */
+export const SELFIMPROVE_MODEL = 'deepseek/deepseek-v4-flash';
 
 /** app_settings kill-switch key. Default (unset/null) is treated as enabled. */
 export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
@@ -41,7 +54,30 @@ export const BUDGET_CAPS = {
   maxWallMs: 25 * 60 * 1000, // 25 minutes wall clock
 } as const;
 
-export type PhaseName = 'gather' | 'learn' | 'discover' | 'build' | 'report';
+/**
+ * Work caps for the build/repair loops. Sized so a worst-case night stays inside
+ * BUDGET_CAPS: learn 1(+1) + discover 3 + build 3×3 + repair 2×2 + propose 2 ≈ 20
+ * of the 40 available calls. Before these loops existed a run spent 2 calls of
+ * 40 and shipped nothing — the caps exist to USE the budget, not to ration it.
+ */
+export const WORK_CAPS = {
+  /** Distinct tool ideas attempted per night. */
+  maxToolCandidates: 3,
+  /** Repair rounds per candidate — the smoke-test error is fed back each time. */
+  maxRepairRounds: 2,
+  /** Existing broken tools re-authored per night. */
+  maxToolsRepaired: 2,
+  /** Draft PRs opened per night (never merged). */
+  maxPullRequests: 1,
+  /** A tool must beat this error rate to be considered healthy. */
+  repairErrorRateThreshold: 0.25,
+  /** Minimum runs before an error rate is meaningful. */
+  repairMinRuns: 5,
+  /** Leave this much wall-clock headroom for the report phase. */
+  reserveWallMs: 60 * 1000,
+} as const;
+
+export type PhaseName = 'gather' | 'learn' | 'discover' | 'build' | 'repair' | 'propose' | 'report';
 export type PhaseStatus = 'ok' | 'failed' | 'skipped';
 
 export type RunStatus =
@@ -64,7 +100,15 @@ export type ActionKind =
   | 'api_verified'
   | 'tool_created'
   | 'tool_rejected'
-  | 'proposal';
+  | 'proposal'
+  /** Built, verified AND enabled — live in the registry without a restart. */
+  | 'tool_shipped'
+  /** An existing tool's handler was replaced by one that beat it on smoke tests. */
+  | 'tool_repaired'
+  /** An idea was queued for a future night. */
+  | 'backlog_added'
+  /** A draft PR was opened for review (never merged by the engine). */
+  | 'pr_opened';
 
 export interface RunAction {
   kind: ActionKind;
@@ -120,6 +164,40 @@ export interface ToolAttemptData {
   /** The sample args used for the smoke test. */
   sampleArgs: Record<string, unknown>;
   attemptedAt: string;
+  /** 'create' = new tool, 'repair' = re-author of an existing tool. */
+  mode?: 'create' | 'repair';
+  /** Which repair round produced this code (0 = first attempt). */
+  round?: number;
+  /** True when the tool was enabled + registered live, not just persisted. */
+  shipped?: boolean;
+  /** Per-case smoke results, so a failure is diagnosable from the ledger. */
+  cases?: Array<{ args: Record<string, unknown>; ok: boolean; error?: string; ms?: number }>;
+  /** For repairs: the handler that was replaced, kept for rollback. */
+  previousHandlerCode?: string;
+}
+
+/** Lifecycle of a queued idea. */
+export type BacklogStatus = 'open' | 'shipped' | 'abandoned';
+
+/** Shape of an `improvement_backlog` record's `data`. */
+export interface BacklogItemData {
+  /** Stable slug key, derived from the title. */
+  slug: string;
+  title: string;
+  detail: string;
+  /** 'tool' = buildable as a runtime custom tool; 'feature' = needs repo code. */
+  kind: 'tool' | 'feature';
+  status: BacklogStatus;
+  /** 1 (highest) … 5. Drives pick order. */
+  priority: number;
+  attempts: number;
+  /** Why the most recent attempt failed — fed back into the next author call. */
+  lastError?: string;
+  lastAttemptRunId?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Set when kind='feature' and a draft PR was opened. */
+  prUrl?: string;
 }
 
 /** Auth spec stored in an api_catalog record (env-var NAMES only, never secrets). */
@@ -168,6 +246,13 @@ export const SYSTEM_PERMISSIONS: Record<string, PermissionSet> = {
     write: ['system', 'owner'],
     delete: ['owner', 'system'],
   },
+  // Idea queue: jkai can read it (so chat can answer "what are you working on"),
+  // the engine and owner write it.
+  improvement_backlog: {
+    read: ['owner', 'jkai', 'system'],
+    write: ['system', 'owner'],
+    delete: ['owner', 'system'],
+  },
 };
 
 /** Compact error message extractor. */
@@ -197,8 +282,19 @@ export function emptyPhases(): Record<PhaseName, PhaseRecord> {
     learn: { status: 'skipped' },
     discover: { status: 'skipped' },
     build: { status: 'skipped' },
+    repair: { status: 'skipped' },
+    propose: { status: 'skipped' },
     report: { status: 'skipped' },
   };
+}
+
+/** Stable slug for a backlog idea — the dedupe key across nights. */
+export function slugifyIdea(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
 }
 
 /** Best-effort JSON extraction: strips ```fences and trailing prose. */

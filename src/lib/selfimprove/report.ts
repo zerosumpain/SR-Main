@@ -44,16 +44,40 @@ export function buildReportText(data: ImprovementRunData): string {
   return lines.join('\n');
 }
 
-/** Short WhatsApp summary, hard-capped at 600 chars. */
+/**
+ * Short WhatsApp summary, hard-capped at 600 chars.
+ *
+ * Leads with SHIPPED work and names each tool. The old summary reported
+ * "1 tool(s) built" for something staged disabled and therefore not callable —
+ * which read as progress on a night that delivered none. Anything the engine
+ * enabled by itself is named here, because that is the message worth waking up
+ * to and the trigger for turning something off if it looks wrong.
+ */
 export function buildWhatsappSummary(data: ImprovementRunData): string {
-  const learned = countActions(data, ['insight']);
+  const shipped = data.actions.filter((a) => a.kind === 'tool_shipped');
+  const repaired = data.actions.filter((a) => a.kind === 'tool_repaired');
+  const prs = data.actions.filter((a) => a.kind === 'pr_opened');
   const apis = countActions(data, ['api_registered', 'api_verified']);
-  const built = countActions(data, ['tool_created']);
-  const proposed = countActions(data, ['proposal']);
-  const msg =
-    `sr. nightly self-improve (${data.status}): ` +
-    `${learned} insight(s), ${apis} API(s) added, ${built} tool(s) built, ${proposed} proposal(s). ` +
-    `~$${data.costUsd.toFixed(2)}, ${data.llmCalls} LLM calls.\n${ADMIN_LINK}`;
+  const rejected = countActions(data, ['tool_rejected']);
+  const queued = countActions(data, ['backlog_added']);
+
+  const names = (list: typeof shipped) =>
+    list
+      .map((a) => a.detail.split(':')[0])
+      .filter(Boolean)
+      .join(', ');
+
+  const parts: string[] = [`sr. nightly self-improve (${data.status}):`];
+  if (shipped.length) parts.push(`SHIPPED ${shipped.length} live tool(s): ${names(shipped)}.`);
+  if (repaired.length) parts.push(`Repaired ${repaired.length}: ${names(repaired)}.`);
+  if (prs.length) parts.push(`${prs.length} draft PR(s) awaiting review.`);
+  if (apis) parts.push(`${apis} API(s) added.`);
+  if (!shipped.length && !repaired.length && !prs.length) parts.push('Nothing shipped.');
+  if (rejected) parts.push(`${rejected} rejected.`);
+  if (queued) parts.push(`${queued} queued.`);
+  parts.push(`~$${data.costUsd.toFixed(2)}, ${data.llmCalls} calls.`);
+
+  const msg = `${parts.join(' ')}\n${ADMIN_LINK}`;
   return msg.length > 600 ? msg.slice(0, 597) + '...' : msg;
 }
 

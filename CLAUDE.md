@@ -34,7 +34,23 @@ on `master`.
 - `src/routes/admin/` — admin UIs (blog, biome, scraper, gmail, jkai)
 - `src/routes/jkai/` — jkai chat hub + autonomous builder
 - `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
-- `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`): learns question intents, grows the `api_catalog`, authors runtime custom tools. Dashboard: `/admin/ai/improvement`
+- `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`). Dashboard: `/admin/ai/improvement`.
+
+  Phases: `gather → learn → discover → build → repair → propose → report`. All LLM calls are pinned to
+  `SELFIMPROVE_MODEL` (`deepseek/deepseek-v4-flash`), not the chat default.
+
+  **Tools it builds are auto-enabled and registered live** — no restart, no approval step. That is only
+  safe because of `verify.ts`, which every candidate must clear: a deny-list `staticScan` over the
+  handler source (blocks `process`, `require`, `import()`, `eval`, `Function()`, `.constructor`,
+  `globalThis`, `fs`, `child_process`) plus a `smokeTest` in which **every** case must pass. Handlers are
+  compiled with `new AsyncFunction` in full Node scope, so that scan is the only thing between
+  LLM-authored text and the environment. Do not weaken it.
+
+  `backlog.ts` is the engine's memory between nights (`improvement_backlog` collection): ideas persist
+  with attempt counts and the last failure, and that failure text is fed back into the next authoring
+  call. `repair.ts` re-authors existing tools with high error rates, swapping the handler in only when
+  it strictly beats the incumbent on identical smoke cases. `propose.ts` turns `feature`-kind backlog
+  items into **draft** PRs via `$lib/github/pr` (new files only; it has no merge call).
 
 ### Web scraper (stealth Playwright)
 
