@@ -545,6 +545,7 @@ export class WorkflowEngine {
             dryRun: options?.dryRun ?? false,
             emit: (event) => emitWorkflowEvent(event),
             getNodeOutput: (id) => nodeOutputs.get(id),
+            getNodeError: (id) => nodeErrors.get(id),
             checkBreakpoint: async () => {},
             abortSignal: nodeController.signal,
             getOutgoingEdges: (id) => graph.edgesBySource.get(id) || [],

@@ -17,7 +17,11 @@ export const healthQueryExecutor: NodeExecutor = {
       return { output: { success: false, error: 'No operation configured' }, rowCount: 1 };
     }
 
-    const toolName = `site_health_${operation}`;
+    // Registered tool names are `health_<operation>` (see site-tools/tools/health.ts).
+    // This used to build `site_health_<operation>`, which never resolved — every
+    // health-query node returned `{success:false, error:"Unknown tool: …"}` and
+    // downstream LLM nodes invented the numbers instead (2026-07-29).
+    const toolName = `health_${operation}`;
 
     switch (operation) {
       case 'stats':
