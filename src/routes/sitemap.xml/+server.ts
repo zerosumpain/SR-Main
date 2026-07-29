@@ -5,7 +5,7 @@ export const GET: RequestHandler = async () => {
   const posts = await getAllPosts();
   const site = 'https://strangeramblings.com';
 
-  const staticPages = ['', '/blog', '/health'];
+  const staticPages = ['', '/blog', '/health', '/releases'];
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -2,9 +2,11 @@ import { db } from '$lib/db';
 import { appleHealthMetrics } from '$lib/db/schema';
 import { and, eq, gte } from 'drizzle-orm';
 import { snapHeroTitle } from '$lib/landing/hero-titles-service';
+import { getReleaseShowcase } from '$lib/releases/public';
+import { isOwnerRequest } from '$lib/server/owner';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ fetch }) => {
+export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) => {
   const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
   // Fast, awaited — a single indexed read. The hero strap and the title snap
@@ -47,5 +49,20 @@ export const load: PageServerLoad = async ({ fetch }) => {
     }),
   );
 
-  return { steps, dateStr, initialBiome, heroTitle };
+  // Awaited, NOT streamed. The streaming above exists because /api/biome/state
+  // calls an external weather API on every render; this is a local Postgres read
+  // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
+  // promises at the end of the body, so streamed data never lands in the SSR
+  // HTML — and a section whose entire job is to make the work visible has to be
+  // visible to crawlers and to visitors with JS off. It sits well below the
+  // fold, so it is not an LCP candidate.
+  const releases = await getReleaseShowcase(90);
+
+  // The "More" index lists a few surfaces that are owner-only or belong to a
+  // private project. Signed in they are useful shortcuts; signed out they were
+  // dead ends (two 404s and two redirects to the login page), which is a poor
+  // showing on the one page that has to work for strangers.
+  const isOwner = await isOwnerRequest({ locals, getClientAddress }).catch(() => false);
+
+  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner };
 };

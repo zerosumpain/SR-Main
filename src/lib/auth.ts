@@ -30,6 +30,17 @@ const PUBLIC_PATHS = [
   // Write-only frame-rate telemetry beacon from the landing heartbeat — logs a
   // single line to stdout, stores nothing. See its +server.ts for rationale.
   '/api/landing/ecg-telemetry',
+  // Public release history — the showcase behind the Shipped section on the
+  // landing page. Read-only, and every item it renders has passed
+  // (NB: no apostrophes in this block. check-public-routes.mjs extracts the
+  // array with a single-quote regex, so a stray one silently truncates the
+  // inventory and the gate stops covering everything below it.)
+  // $lib/releases/public-filter (user-facing only, no private project or /admin
+  // surface, no security prose, no file paths or shas). Note this is /releases,
+  // NOT /api/releases: hooks.server.ts deliberately auth-bypasses
+  // POST /api/releases/* for CI, so a prefix entry there would expose the
+  // LLM-spending /summarise endpoint to anonymous callers.
+  '/releases',
   '/projects',
   // sr. decks — presentations. The hook lets everyone through; per-deck privacy
   // is enforced by requireDeckVisible in the route loads (private-by-default,

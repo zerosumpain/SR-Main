@@ -17,6 +17,7 @@
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
   import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
   import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
+  import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
   import Ecg from '$lib/components/shared/Ecg.svelte';
   import EcgAscii from '$lib/components/shared/EcgAscii.svelte';
   import LiveWalkBanner from '$lib/components/LiveWalkBanner.svelte';
@@ -195,8 +196,12 @@
   </div>
 </section>
 
+<!-- SHIPPED — the record of every deploy, as one continuous mark. Sits directly
+     under the hero: it is the substance, and "More" is the closer. -->
+<ShippedSeam data={data.releases} />
+
 <!-- MORE — terminal-index of the non-live field studies, tools and writing -->
-<FeatureIndex />
+<FeatureIndex isOwner={data.isOwner} />
 
 <!-- FOOTER — dense, utilitarian -->
 <footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">

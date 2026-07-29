@@ -173,5 +173,6 @@
 /projects/policy-engine/regions
 /projects/policy-engine/send
 /projects/policy-engine/themes
+/releases
 /rss.xml
 /sitemap.xml

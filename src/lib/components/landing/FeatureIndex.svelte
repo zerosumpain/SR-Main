@@ -1,18 +1,29 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
+  let { isOwner = false }: { isOwner?: boolean } = $props();
+
   // The non-live "everything else" — Field Studies, tools and writing that
   // don't surface a live number. A terminal-style directory listing that extends
   // the brand `>` prompt. Real routes only.
-  const ITEMS: { name: string; hook: string; href: string }[] = [
-    { name: 'Policy Engine', hook: 'Pull 39 levers, watch England’s schools respond', href: '/projects/policy-engine' },
-    { name: 'Deep Dive', hook: 'Fan out across sources, red-team the claims, cite it', href: '/deepdive' },
+  //
+  // `ownerOnly` marks a row an anonymous visitor cannot actually reach: either
+  // the project is toggled private in project_visibility, or the route is behind
+  // the auth gate. Those rows stay for a signed-in owner (they are useful
+  // shortcuts) and are dropped for everyone else rather than shown as dead ends.
+  const ITEMS: { name: string; hook: string; href: string; ownerOnly?: boolean }[] = [
+    { name: 'Shipped', hook: 'Every deploy since March, and what each one put live', href: '/releases' },
+    { name: 'Policy Engine', hook: 'Pull 39 levers, watch England’s schools respond', href: '/projects/policy-engine', ownerOnly: true },
+    { name: 'Deep Dive', hook: 'Fan out across sources, red-team the claims, cite it', href: '/deepdive', ownerOnly: true },
     { name: 'Data Standard Designer', hook: 'Design & publish an adoptable data standard', href: '/projects/data-standard-designer' },
-    { name: 'The Spine', hook: 'Separate data streams converging into one source of truth', href: '/projects/data-convergence' },
-    { name: 'Quick Answer', hook: 'A fast, fact-checked answer with citations', href: '/quickanswer' },
+    { name: 'The Spine', hook: 'Separate data streams converging into one source of truth', href: '/projects/data-convergence', ownerOnly: true },
+    { name: 'Quick Answer', hook: 'A fast, fact-checked answer with citations', href: '/quickanswer', ownerOnly: true },
+    { name: 'Broads Pilot', hook: 'Plan a Norfolk Broads passage — tides, bridges, moorings', href: '/projects/broads-pilot' },
     { name: 'Heart', hook: '9,000 particles pumped through an SDF heart, valves per beat', href: '/heart' },
     { name: 'Writing', hook: 'Essays on code, design, and building things', href: '/blog' },
   ];
+
+  let items = $derived(ITEMS.filter((i) => isOwner || !i.ownerOnly));
 
   let visible = $state(false);
   let sectionEl: HTMLElement;
@@ -43,7 +54,7 @@
   bind:this={sectionEl}
   class="index-sec"
   class:visible
-  style="--n: {ITEMS.length}"
+  style="--n: {items.length}"
 >
   <header class="index-hd">
     <span class="index-eyebrow">More</span>
@@ -52,7 +63,7 @@
   </header>
 
   <ul class="index-list">
-    {#each ITEMS as item, i (item.href)}
+    {#each items as item, i (item.href)}
       <li style="--i: {i}">
         <a class="row" href={item.href}>
           <span class="row-idx">{String(i + 1).padStart(2, '0')}</span>
