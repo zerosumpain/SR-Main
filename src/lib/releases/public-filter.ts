@@ -115,6 +115,41 @@ const CODE_PATH_RE =
 const API_PATH_RE = /\/api\//i;
 
 /**
+ * Personal data quoted in a summary.
+ *
+ * Caught in production: a WhatsApp JID fix whose summary quoted the real
+ * number it was failing on — "Panel-formatted numbers like '+44 7359228511'
+ * retained the space". Nothing else in this module came close to catching it.
+ * It is not a secret, an env var, a host or a path; it is simply a phone
+ * number sitting in ordinary prose, and the only reason it was in the commit
+ * message is that it was the test case.
+ *
+ * That is the general shape of the risk: bug reports quote the data that
+ * triggered the bug. So this matches personal identifiers broadly and drops
+ * the whole item rather than trying to redact mid-sentence.
+ *
+ * Long digit runs are deliberately included. They cost almost nothing — a
+ * legitimate summary rarely needs a bare 7+ digit number — and they catch
+ * account ids, JIDs and phone numbers written without punctuation.
+ */
+const PII_RE = new RegExp(
+  [
+    // +44 7359 228511, +447359228511, (0)7359-228511 …
+    '\\+\\d[\\d\\s()-]{7,}\\d',
+    // UK mobile/landline in national form
+    '\\b0?7\\d{3}[\\s-]?\\d{6}\\b',
+    // Any bare run of 7+ digits (JIDs, account ids, phone numbers)
+    '\\b\\d{7,}\\b',
+    // Email addresses
+    '[\\w.+-]+@[\\w-]+\\.[\\w.]{2,}',
+    // UK postcodes
+    '\\b[A-Z]{1,2}\\d[A-Z\\d]?\\s*\\d[A-Z]{2}\\b',
+    // Lat/long pairs precise enough to locate a person
+    '\\b-?\\d{1,3}\\.\\d{4,}\\s*,\\s*-?\\d{1,3}\\.\\d{4,}\\b',
+  ].join('|'),
+);
+
+/**
  * Surfaces that must never appear in public output.
  *
  * `/admin` is owner-only, and naming its sub-routes to the world is free
@@ -200,6 +235,7 @@ export function isItemPublic(item: FilterableItem, visibility: Record<string, bo
   // from the sentence — a half-redacted summary reads worse than no summary.
   if (CODE_PATH_RE.test(prose)) return false;
   if (API_PATH_RE.test(prose)) return false;
+  if (PII_RE.test(prose)) return false;
 
   const surfaces = item.surfaces ?? [];
   // A surface naming a private route condemns the item; a surface that is
