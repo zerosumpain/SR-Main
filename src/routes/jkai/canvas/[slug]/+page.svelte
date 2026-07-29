@@ -6369,6 +6369,32 @@
                 </div>
               {/if}
 
+              <!-- Universal "truth required" flag, available on every node
+                   regardless of which editor renders above. Stored as the
+                   engine-level `_truthRequired` key (same convention as
+                   `_onError`). Summarising nodes read it to decide whether a
+                   missing source is a footnote or the headline. -->
+              <label class="nm-truth">
+                <input
+                  type="checkbox"
+                  checked={configDraft._truthRequired === true}
+                  onchange={(e) => {
+                    const on = (e.currentTarget as HTMLInputElement).checked;
+                    const next = { ...configDraft };
+                    if (on) next._truthRequired = true;
+                    else delete next._truthRequired;
+                    configDraft = next;
+                    configDirty = true;
+                  }}
+                />
+                <span class="nm-truth-text">
+                  <span class="sr-label-tight">Truth required</span>
+                  <span class="nm-truth-hint">
+                    If this source produces nothing, say so prominently rather than quietly leaving it out.
+                  </span>
+                </span>
+              </label>
+
               <!-- Universal "Advanced — raw JSON" disclosure available on every
                    node, regardless of which editor renders above. The structured
                    editors are the primary surface; this is the power-user
@@ -8260,6 +8286,15 @@
     color: var(--text-primary);
     word-break: break-all;
   }
+  .nm-truth {
+    display: flex; align-items: flex-start; gap: 8px; cursor: pointer;
+    padding: 10px 0; margin-top: 4px;
+    border-top: 1px solid var(--divider, var(--card-border));
+  }
+  .nm-truth input { width: auto; margin-top: 2px; flex-shrink: 0; }
+  .nm-truth-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .nm-truth-hint { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+
   .nm-raw-json {
     margin-top: 8px;
     border-top: 1px dashed var(--card-border);

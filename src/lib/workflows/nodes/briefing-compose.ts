@@ -26,6 +26,56 @@ export interface BriefingFact {
 export interface BriefingGap {
   section: string;
   reason: string;
+  /**
+   * True when the source that failed was marked `_truthRequired` in the canvas.
+   * A required gap means the briefing is knowingly incomplete rather than merely
+   * thin — it leads the message instead of trailing it as a footnote.
+   */
+  required?: boolean;
+}
+
+/**
+ * Universal node-config flag, set per-node in the canvas inspector. Same
+ * `_`-prefixed convention as `_onError`: engine-level, not part of any node's
+ * own config schema.
+ *
+ * Marking a source REQUIRED says "if this is missing, say so loudly". It
+ * deliberately does NOT halt the run — a briefing missing one source is still
+ * worth more than no briefing, and a silent non-delivery is indistinguishable
+ * from a broken cron.
+ */
+export const TRUTH_REQUIRED_KEY = '_truthRequired';
+
+/**
+ * Which source key(s) a node feeds, derived from its type and its own config.
+ * Deterministic rather than guessed: two `health-query` nodes are told apart by
+ * `operation`, and the two `weather-brief` nodes by which coordinate pair they
+ * template from. Returns [] for nodes that feed no named section.
+ */
+export function sectionsForNode(type: string, config: Obj = {}): string[] {
+  switch (type) {
+    case 'location-context':
+      return ['location'];
+    case 'weather-brief': {
+      const lat = String(config.latitude ?? '');
+      if (lat.includes('home')) return ['weather-home'];
+      if (lat.includes('current')) return ['weather-here'];
+      return ['weather-home', 'weather-here'];
+    }
+    case 'health-query': {
+      const op = String(config.operation ?? '');
+      return op === 'sleep' || op === 'readiness' ? [op] : [];
+    }
+    case 'home-assistant':
+      return ['indoor'];
+    case 'gmail-search':
+    case 'gmail-fetch':
+      return ['email'];
+    case 'intel-query':
+      return ['knowledge'];
+    default:
+      return [];
+  }
 }
 
 const obj = (v: unknown): Obj | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : null);
@@ -303,7 +353,10 @@ export const briefingComposeExecutor: NodeExecutor = {
     // each ancestor actually did, so a real failure is never recorded as a
     // benign gap. Node executions are not in the DB yet — the run is still
     // in flight — which is why this reads the live engine state.
-    if (config.auditRun !== false && context.getNodeError && context._currentNodeId) {
+    // Source keys whose producing node was marked `_truthRequired` in the canvas.
+    const requiredSections = new Set<string>();
+
+    if (config.auditRun !== false && context._currentNodeId) {
       try {
         const seen = new Set<string>();
         const queue = [context._currentNodeId];
@@ -314,9 +367,14 @@ export const briefingComposeExecutor: NodeExecutor = {
             if (seen.has(src)) continue;
             seen.add(src);
             queue.push(src);
-            const err = context.getNodeError(src);
-            if (!err) continue;
+
             const meta = context.getNodeConfig(src);
+            if (meta?.config?.[TRUTH_REQUIRED_KEY] === true) {
+              for (const s of sectionsForNode(meta.type, meta.config)) requiredSections.add(s);
+            }
+
+            const err = context.getNodeError?.(src);
+            if (!err) continue;
             const key = `node:${meta?.type ?? src}`;
             if (sources.some((s) => s.key === key)) continue;
             recordLedgerOnly(key, meta?.label || meta?.type || 'Upstream node', err, err);
@@ -327,13 +385,25 @@ export const briefingComposeExecutor: NodeExecutor = {
       }
     }
 
+    // Promote gaps whose source was declared required. Done after the walk so
+    // it covers BOTH hard node failures and soft ones (a node that "completed"
+    // while returning success:false — how the sleep figure came to be invented).
+    for (const gap of gaps) {
+      const row = sources.find((s) => s.label === gap.section);
+      if (row && requiredSections.has(row.key)) gap.required = true;
+    }
+    const requiredGaps = gaps.filter((g) => g.required);
+    const truthCompromised = requiredGaps.length > 0;
+
     // ---- Rendered sheets for the LLM ------------------------------------
     const sections = [...new Set(facts.map((f) => f.section))];
     const factSheet = sections
       .map((s) => `[${s}]\n` + facts.filter((f) => f.section === s).map((f) => `  ${f.label}: ${f.value}`).join('\n'))
       .join('\n\n');
     const gapSheet = gaps.length
-      ? gaps.map((g) => `  ${g.section}: UNAVAILABLE — ${g.reason}`).join('\n')
+      ? gaps
+          .map((g) => `  ${g.section}: UNAVAILABLE${g.required ? ' (REQUIRED)' : ''} — ${g.reason}`)
+          .join('\n')
       : '  (none — every source reported)';
 
     // A deterministic headline, so there is always a true summary line even if
@@ -345,7 +415,10 @@ export const briefingComposeExecutor: NodeExecutor = {
       const mx = num(hereW.maxC);
       headlineBits.push(`${str(hereW.condition) ?? 'weather unknown'}${mx !== null ? `, up to ${mx}°C` : ''}`);
     }
-    const headline = headlineBits.join(' · ') || 'Briefing';
+    let headline = headlineBits.join(' · ') || 'Briefing';
+    if (truthCompromised) {
+      headline = `⚠ ${requiredGaps.map((g) => g.section).join(', ')} unavailable · ${headline}`;
+    }
 
     const briefing = {
       date: now.toISOString().slice(0, 10),
@@ -354,6 +427,8 @@ export const briefingComposeExecutor: NodeExecutor = {
       generatedAt: now.toISOString(),
       timezone,
       headline,
+      truthCompromised,
+      requiredGaps,
       location: locationBlock,
       weather: { home: wHome, here: sameSpot ? null : wHere, sameSpot },
       knowledge: intelContext ? { query: str(knowRaw?.intelQuery), context: intelContext } : null,
@@ -368,6 +443,8 @@ export const briefingComposeExecutor: NodeExecutor = {
         factSheet,
         gapSheet,
         headline,
+        truthCompromised,
+        requiredGaps,
         availableCount: sources.filter((s) => s.status === 'ok').length,
         gapCount: gaps.length,
       },
@@ -394,6 +471,8 @@ export const briefingComposeExecutor: NodeExecutor = {
         factSheet: { type: 'string', description: 'Rendered FACTS block for the LLM prompt' },
         gapSheet: { type: 'string', description: 'Rendered GAPS block for the LLM prompt' },
         headline: { type: 'string', description: 'Deterministic one-line summary, true without any LLM' },
+        truthCompromised: { type: 'boolean', description: 'A source marked _truthRequired produced nothing' },
+        requiredGaps: { type: 'array', description: 'The subset of gaps whose source was declared required' },
         availableCount: { type: 'number' },
         gapCount: { type: 'number' },
       },

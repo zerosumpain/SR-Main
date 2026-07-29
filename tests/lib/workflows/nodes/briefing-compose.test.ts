@@ -176,3 +176,79 @@ describe('briefingComposeExecutor', () => {
     expect(empty.factSheet).toBe('');
   });
 });
+
+describe('truth-required sources', () => {
+  /** Build a context whose ancestor walk exposes one flagged source node. */
+  function ctxWith(nodes: Array<{ id: string; type: string; config: Record<string, unknown>; label: string }>): ExecutionContext {
+    return {
+      ...ctx,
+      _currentNodeId: 'compose',
+      getIncomingEdges: (id) =>
+        id === 'compose'
+          ? (nodes.map((n, i) => ({ id: `e${i}`, sourceNodeId: n.id, targetNodeId: 'compose' })) as never)
+          : ([] as never),
+      getNodeConfig: (id) => nodes.find((n) => n.id === id),
+    };
+  }
+
+  const SLEEP_REQUIRED = [
+    { id: 'sleep', type: 'health-query', config: { operation: 'sleep', _truthRequired: true }, label: 'Sleep' },
+  ];
+
+  it('promotes a flagged source’s gap and leads the headline with it', async () => {
+    const { output } = await briefingComposeExecutor.execute(
+      { location: AWAY_LOCATION, weatherHome: HOME_WEATHER, weatherHere: HERE_WEATHER, sleep: { success: false, error: 'tool exploded' } },
+      {},
+      ctxWith(SLEEP_REQUIRED),
+    );
+    const out = output as unknown as Out & { truthCompromised: boolean; requiredGaps: Array<{ section: string }> };
+    expect(out.truthCompromised).toBe(true);
+    expect(out.requiredGaps.map((g) => g.section)).toEqual(['Sleep']);
+    expect(out.headline.startsWith('⚠ Sleep unavailable')).toBe(true);
+    expect(out.gapSheet).toContain('Sleep: UNAVAILABLE (REQUIRED)');
+  });
+
+  it('leaves unflagged gaps as ordinary footnotes', async () => {
+    const { output } = await briefingComposeExecutor.execute(
+      { location: AWAY_LOCATION, weatherHome: HOME_WEATHER, weatherHere: HERE_WEATHER, sleep: { success: false, error: 'tool exploded' } },
+      {},
+      ctxWith([{ id: 'sleep', type: 'health-query', config: { operation: 'sleep' }, label: 'Sleep' }]),
+    );
+    const out = output as unknown as Out & { truthCompromised: boolean };
+    expect(out.truthCompromised).toBe(false);
+    expect(out.headline.startsWith('⚠')).toBe(false);
+    expect(out.gapSheet).toContain('Sleep: UNAVAILABLE —');
+    expect(out.gapSheet).not.toContain('(REQUIRED)');
+  });
+
+  it('does not fire when the required source actually reported', async () => {
+    const { output } = await briefingComposeExecutor.execute(
+      {
+        location: AWAY_LOCATION,
+        weatherHome: HOME_WEATHER,
+        weatherHere: HERE_WEATHER,
+        sleep: { success: true, data: { latest: { totalDuration: 24930910, performance: 78, deepPercent: 24, remPercent: 24 } } },
+      },
+      {},
+      ctxWith(SLEEP_REQUIRED),
+    );
+    const out = output as unknown as Out & { truthCompromised: boolean };
+    expect(out.truthCompromised).toBe(false);
+    expect(out.factSheet).toContain('Time in bed');
+  });
+
+  it('tells two same-type sources apart by their own config', async () => {
+    // Only the HOME forecast is required; the "where I am" one is not.
+    const nodes = [
+      { id: 'wxh', type: 'weather-brief', config: { latitude: '{{input.home.lat}}', _truthRequired: true }, label: 'Weather · home' },
+      { id: 'wxc', type: 'weather-brief', config: { latitude: '{{input.current.lat}}' }, label: 'Weather · here' },
+    ];
+    const { output } = await briefingComposeExecutor.execute(
+      { location: AWAY_LOCATION, weatherHomeError: 'Open-Meteo 503', weatherHereError: 'Open-Meteo 503' },
+      {},
+      ctxWith(nodes),
+    );
+    const out = output as unknown as Out & { requiredGaps: Array<{ section: string }> };
+    expect(out.requiredGaps.map((g) => g.section)).toEqual(['Weather · home']);
+  });
+});
