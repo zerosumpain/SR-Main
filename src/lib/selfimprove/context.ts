@@ -218,7 +218,10 @@ export function renderContext(pack: ContextPack): string {
   }
 
   lines.push('');
-  lines.push('## Catalogued APIs — reach these via platform.call("api_call", { api, path, method })');
+  lines.push(
+    '## Catalogued APIs — reach these via ' +
+      'platform.call("api_call", { api: "<name below>", url: "<full url starting with that baseUrl>", method: "GET" })',
+  );
   for (const a of pack.catalogApis) {
     lines.push(
       `- ${a.name} [${a.auth}] ${a.baseUrl} — ${a.description}${a.example ? ` (e.g. ${a.example})` : ''}`,
