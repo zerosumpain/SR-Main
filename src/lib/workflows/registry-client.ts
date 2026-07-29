@@ -32,6 +32,9 @@ import { llmAgentDef } from './nodes/llm-agent.def';
 import { whatsappDef } from './nodes/whatsapp.def';
 import { homeAssistantDef } from './nodes/home-assistant.def';
 import { healthQueryDef } from './nodes/health-query.def';
+import { briefingComposeDef } from './nodes/briefing-compose.def';
+import { locationContextDef } from './nodes/location-context.def';
+import { weatherBriefDef } from './nodes/weather-brief.def';
 import { blogDef } from './nodes/blog.def';
 import { jkaiDef } from './nodes/jkai.def';
 import { siteToolDef } from './nodes/site-tool.def';
@@ -867,6 +870,9 @@ const builtInDefinitions: NodeDefinition[] = [
   whatsappDef,
   homeAssistantDef,
   healthQueryDef,
+  briefingComposeDef,
+  locationContextDef,
+  weatherBriefDef,
   blogDef,
   jkaiDef,
   siteToolDef,

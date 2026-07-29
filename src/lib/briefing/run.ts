@@ -2,7 +2,7 @@
 // the self-improve run loop (one synthesis, no budget phases) but shares the
 // gates/dogfooding pattern. Single-flight guard prevents overlap.
 import { randomUUID } from 'crypto';
-import { ensureCollection, upsertRecord } from '$lib/datastore';
+import { ensureCollection, updateCollection, upsertRecord } from '$lib/datastore';
 import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { gatherBriefingSignals, type BriefingSignals } from './gather';
 import {
@@ -26,11 +26,26 @@ export function isBriefingRunning(): boolean {
 }
 
 export async function ensureBriefingsCollection(): Promise<void> {
-  await ensureCollection(
+  const existing = await ensureCollection(
     BRIEFINGS_COLLECTION,
     { name: 'Briefings', description: 'Personalised briefings', isSystem: true, defaultPermissions: BRIEFING_PERMS },
     SYSTEM_ACTOR,
   );
+
+  // ensureCollection is create-only, so a collection made before the workflow
+  // became the producer still carries the old permissions and rejects the
+  // `workflow:<id>` actor with `forbidden`. Reconcile on boot rather than
+  // requiring a manual DB edit on every environment.
+  const current = (existing.defaultPermissions ?? {}) as Record<string, string[] | undefined>;
+  const missing = (['read', 'write'] as const).some((cap) => !(current[cap] ?? []).includes('workflow:*'));
+  if (missing) {
+    try {
+      await updateCollection(BRIEFINGS_COLLECTION, { defaultPermissions: BRIEFING_PERMS }, SYSTEM_ACTOR);
+      console.log('[briefing] collection permissions reconciled (added workflow:*)');
+    } catch (err) {
+      console.error('[briefing] failed to reconcile collection permissions:', errMsg(err));
+    }
+  }
 }
 
 function buildPrompt(signals: BriefingSignals, topics: string[], feedbackLine = ''): string {

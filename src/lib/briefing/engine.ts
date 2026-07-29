@@ -22,6 +22,15 @@ export function startBriefingEngine(): void {
   // Ensure the collection exists everywhere (dev + prod).
   void ensureBriefingsCollection().catch((err) => console.error('[briefing] ensure collection failed:', errMsg(err)));
 
+  // The briefing is produced by the `canvas:morning-briefing` workflow, which
+  // gathers the signals, verifies them and sends the WhatsApp summary. This
+  // engine's own cron would be a second, competing producer writing into the
+  // same collection, so it stays off unless explicitly asked for (2026-07-29).
+  if (process.env.BRIEFING_ALLOW_DEV !== '1') {
+    console.log('[briefing] cron disabled — canvas:morning-briefing owns the schedule. Set BRIEFING_ALLOW_DEV=1 to override.');
+    return;
+  }
+
   const host = os.hostname();
   if (host === 'homeserv' && process.env.BRIEFING_ALLOW_DEV !== '1') {
     console.log('[briefing] host is homeserv — daily cron disabled. Set BRIEFING_ALLOW_DEV=1 to enable locally.');
