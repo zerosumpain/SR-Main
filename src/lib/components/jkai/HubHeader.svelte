@@ -35,9 +35,17 @@
   const runs = $derived(hub.liveRuns ?? activeRuns);
 
   type MenuRow = { label: string; href: string; meta: string };
+  // Canvas carries the workflow counts directly — there used to be a second
+  // `Workflows` row under System pointing at the same href, which read as two
+  // destinations when it was always one.
+  const canvasMeta = $derived(
+    workflowFailedToday > 0
+      ? `${workflowCount} · ${workflowLiveCount} LIVE · ${workflowFailedToday} FAIL`
+      : `${workflowCount} · ${workflowLiveCount} LIVE`,
+  );
   const surfaces = $derived<MenuRow[]>([
     { label: 'Chat', href: '/jkai', meta: 'THREAD' },
-    { label: 'Canvas', href: '/jkai/canvas', meta: `${workflowCount} SAVED` },
+    { label: 'Canvas', href: '/jkai/canvas', meta: canvasMeta },
     { label: 'Intel', href: '/jkai/intel', meta: 'GRAPH' },
     { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
   ]);
@@ -48,15 +56,8 @@
     { label: 'Monitors', href: '/jkai/monitors', meta: 'WATCHES' },
   ];
   const system = $derived<MenuRow[]>([
-    {
-      label: 'Workflows',
-      href: '/jkai/canvas',
-      meta:
-        workflowFailedToday > 0
-          ? `${workflowCount} · ${workflowLiveCount} LIVE · ${workflowFailedToday} FAIL`
-          : `${workflowCount} · ${workflowLiveCount} LIVE`,
-    },
     { label: 'Agent team', href: '/jkai/agents', meta: 'DELEGATES' },
+    { label: 'Improvement', href: '/jkai/improvement', meta: 'NIGHTLY' },
     { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
     {
       label: 'Spend & limits',
@@ -197,7 +198,7 @@
             <div class="menu-group last">
               <div class="menu-heading">System</div>
               {#each system as row (row.href + row.label)}
-                <a class="menu-row" href={row.href} onclick={closeHubMenu} role="menuitem">
+                <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
                   <span class="menu-label">{row.label}</span>
                   <span class="menu-meta">{row.meta}</span>
                 </a>
