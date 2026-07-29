@@ -22,6 +22,7 @@ vi.mock('./discover', () => ({ discoverApis: vi.fn() }));
 vi.mock('./toolsmith', () => ({ buildTool: vi.fn() }));
 vi.mock('./repair', () => ({ repairTools: vi.fn() }));
 vi.mock('./propose', () => ({ proposeFeatures: vi.fn() }));
+vi.mock('./optimise', () => ({ optimiseCalls: vi.fn() }));
 vi.mock('./report', () => ({ finalizeAndNotify: vi.fn() }));
 vi.mock('./seed-apis', () => ({
   ensureSystemCollections: vi.fn(),
@@ -36,6 +37,7 @@ import { discoverApis } from './discover';
 import { buildTool } from './toolsmith';
 import { repairTools } from './repair';
 import { proposeFeatures } from './propose';
+import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import { ensureSystemCollections } from './seed-apis';
 import {
@@ -77,6 +79,7 @@ beforeEach(() => {
   vi.mocked(buildTool).mockResolvedValue([] as never);
   vi.mocked(repairTools).mockResolvedValue([] as never);
   vi.mocked(proposeFeatures).mockResolvedValue([] as never);
+  vi.mocked(optimiseCalls).mockResolvedValue([] as never);
 });
 
 describe('isUserActive (idle gate)', () => {

@@ -6,6 +6,7 @@
 // insights, and one record per nightly run.
 
 import type { PermissionSet } from '$lib/datastore';
+import { TOOL_POLICY_COLLECTION, TOOL_POLICY_PERMISSIONS } from '$lib/toolpolicy/policy';
 
 /** Actor every self-improvement datastore write runs as. */
 export const SYSTEM_ACTOR = 'system';
@@ -28,6 +29,11 @@ export const COLLECTIONS = {
   // from a previous night's failure. Ideas now persist with attempt counts and
   // last-error, so the engine resumes work instead of restarting it.
   backlog: 'improvement_backlog',
+  // Versioned overlay controlling how tools are DESCRIBED and which are
+  // directly visible — the engine's lever on call efficiency. Owned by
+  // $lib/toolpolicy/policy.ts, which is also read by the MCP server, so the
+  // slug is re-exported from there rather than duplicated.
+  toolPolicy: TOOL_POLICY_COLLECTION,
 } as const;
 
 /**
@@ -77,7 +83,18 @@ export const WORK_CAPS = {
   reserveWallMs: 60 * 1000,
 } as const;
 
-export type PhaseName = 'gather' | 'learn' | 'discover' | 'build' | 'repair' | 'propose' | 'report';
+export type PhaseName =
+  | 'gather'
+  | 'learn'
+  | 'discover'
+  | 'build'
+  | 'repair'
+  // Prime outcome: fewer tool calls per answered question. Runs before propose
+  // so the cheapest, highest-leverage work is never the phase that gets
+  // squeezed out by the budget.
+  | 'optimise'
+  | 'propose'
+  | 'report';
 export type PhaseStatus = 'ok' | 'failed' | 'skipped';
 
 export type RunStatus =
@@ -108,7 +125,15 @@ export type ActionKind =
   /** An idea was queued for a future night. */
   | 'backlog_added'
   /** A draft PR was opened for review (never merged by the engine). */
-  | 'pr_opened';
+  | 'pr_opened'
+  /** Calls-per-turn was measured and snapshotted. */
+  | 'efficiency_measured'
+  /** A new tool-call policy version went live on trial. */
+  | 'policy_published'
+  /** A trialled policy beat its baseline and was kept. */
+  | 'policy_kept'
+  /** A trialled policy failed to beat its baseline and was rolled back. */
+  | 'policy_reverted';
 
 export interface RunAction {
   kind: ActionKind;
@@ -253,7 +278,34 @@ export const SYSTEM_PERMISSIONS: Record<string, PermissionSet> = {
     write: ['system', 'owner'],
     delete: ['owner', 'system'],
   },
+  // Owned by $lib/toolpolicy — reused here so ensureSystemCollections seeds it
+  // with exactly the permissions the MCP read path expects.
+  [TOOL_POLICY_COLLECTION]: TOOL_POLICY_PERMISSIONS,
 };
+
+/**
+ * Trial rule for a live policy change (owner decision, 2026-07-29).
+ *
+ * Only ~7 turns a day reach the assistant, so judging a change the next morning
+ * would be judging noise — good changes would be reverted and bad ones kept at
+ * roughly the rate of a coin flip. A trial therefore runs until it has seen
+ * enough turns to mean something, with a day cap so a quiet fortnight can never
+ * leave an unproven change live indefinitely.
+ */
+export const TRIAL = {
+  /** Chat turns that must accumulate before a verdict is possible. */
+  minTurns: 30,
+  /** Hard age cap — decide on whatever evidence exists once this is reached. */
+  maxDays: 14,
+  /**
+   * Relative drop in mean calls per chat turn required to KEEP a change.
+   * A neutral result reverts: the overlay costs prompt tokens on every turn, so
+   * "made no difference" is a reason to remove it, not to leave it.
+   */
+  minImprovement: 0.05,
+  /** Measurement window for the metric itself. */
+  windowDays: 30,
+} as const;
 
 /** Compact error message extractor. */
 export function errMsg(err: unknown): string {
@@ -283,6 +335,7 @@ export function emptyPhases(): Record<PhaseName, PhaseRecord> {
     discover: { status: 'skipped' },
     build: { status: 'skipped' },
     repair: { status: 'skipped' },
+    optimise: { status: 'skipped' },
     propose: { status: 'skipped' },
     report: { status: 'skipped' },
   };

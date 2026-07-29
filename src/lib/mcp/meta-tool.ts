@@ -11,7 +11,8 @@
 
 import { executeTool, getTools } from '$lib/workflows/site-tools/registry';
 import type { ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
-import { ESSENTIAL_TOOL_NAMES } from './essentials';
+import { isEssentialUnderPolicy } from './essentials';
+import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
 
 export type MetaOperation = 'list' | 'schema' | 'invoke';
@@ -95,9 +96,11 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
   },
 };
 
-function getExtendedTools(): ReturnType<typeof getTools> {
+function getExtendedTools(policy: ToolPolicyVersion): ReturnType<typeof getTools> {
   const all = getTools();
-  return all.filter((t) => !ESSENTIAL_TOOL_NAMES.has(t.name)) as typeof all;
+  // A tool promoted into the visible set must leave the extended catalogue, or
+  // the model sees it twice and can reach it by two different call shapes.
+  return all.filter((t) => !isEssentialUnderPolicy(t.name, policy)) as typeof all;
 }
 
 /**
@@ -127,7 +130,11 @@ export async function dispatchMetaTool(
     return { error: 'jkai_extended: "operation" is required (one of: list, schema, invoke)' };
   }
 
-  const extended = getExtendedTools();
+  // Descriptions here go through the same policy overlay as tools/list, so a
+  // published call-efficiency hint reaches the model whether it discovers the
+  // tool directly or through this dispatcher.
+  const policy = await getActivePolicy();
+  const extended = getExtendedTools(policy);
 
   if (operation === 'list') {
     const filtered = query
@@ -141,7 +148,7 @@ export async function dispatchMetaTool(
       : extended;
     return filtered.map((t) => ({
       name: t.name,
-      description: t.description ?? '',
+      description: describeWithPolicy(policy, t.name, t.description ?? ''),
       ...(t.destructive ? { destructive: true } : {}),
     }));
   }
@@ -152,7 +159,7 @@ export async function dispatchMetaTool(
     if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
     return {
       name: tool.name,
-      description: tool.description ?? '',
+      description: describeWithPolicy(policy, tool.name, tool.description ?? ''),
       inputSchema: (tool.parameters as unknown as Record<string, unknown>) ?? {
         type: 'object',
         properties: {},

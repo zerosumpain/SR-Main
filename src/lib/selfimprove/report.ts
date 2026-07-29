@@ -20,11 +20,20 @@ function countActions(data: ImprovementRunData, kinds: string[]): number {
   return data.actions.filter((a) => kinds.includes(a.kind)).length;
 }
 
+/** The prime-outcome line, or null when the phase couldn't measure. */
+export function primeOutcomeLine(data: ImprovementRunData): string | null {
+  const measured = data.actions.find((a) => a.kind === 'efficiency_measured');
+  return measured ? measured.detail : null;
+}
+
 /** Full markdown-ish report stored on the run record. */
 export function buildReportText(data: ImprovementRunData): string {
   const lines: string[] = [];
   lines.push(`# Self-improvement run (${data.trigger})`);
   lines.push(`Status: ${data.status}`);
+  // The prime outcome leads: every other action is a means to this end.
+  const prime = primeOutcomeLine(data);
+  if (prime) lines.push(`Prime outcome — tool calls per answered question: ${prime}`);
   lines.push(`Started: ${data.startedAt}${data.finishedAt ? ` · Finished: ${data.finishedAt}` : ''}`);
   lines.push(
     `Budget: ${data.llmCalls} LLM call(s), ${data.tokensIn}+${data.tokensOut} tokens, ~$${data.costUsd.toFixed(3)}`,
@@ -67,12 +76,24 @@ export function buildWhatsappSummary(data: ImprovementRunData): string {
       .filter(Boolean)
       .join(', ');
 
+  const policyPublished = data.actions.filter((a) => a.kind === 'policy_published');
+  const policyKept = data.actions.filter((a) => a.kind === 'policy_kept');
+  const policyReverted = data.actions.filter((a) => a.kind === 'policy_reverted');
+
   const parts: string[] = [`sr. nightly self-improve (${data.status}):`];
+  // Calls-per-turn leads the message — it is the number the engine exists to
+  // move, and a rollback is the one event worth waking up to.
+  const efficiency = data.actions.find((a) => a.kind === 'efficiency_measured');
+  if (efficiency) parts.push(efficiency.detail.split(';')[0].trim() + '.');
+  if (policyKept.length) parts.push(`Call policy KEPT: ${policyKept[0].detail}.`);
+  if (policyReverted.length) parts.push(`Call policy ROLLED BACK: ${policyReverted[0].detail}.`);
+  if (policyPublished.length) parts.push(`New call policy on trial: ${policyPublished[0].detail.split('—')[0].trim()}.`);
   if (shipped.length) parts.push(`SHIPPED ${shipped.length} live tool(s): ${names(shipped)}.`);
   if (repaired.length) parts.push(`Repaired ${repaired.length}: ${names(repaired)}.`);
   if (prs.length) parts.push(`${prs.length} draft PR(s) awaiting review.`);
   if (apis) parts.push(`${apis} API(s) added.`);
-  if (!shipped.length && !repaired.length && !prs.length) parts.push('Nothing shipped.');
+  if (!shipped.length && !repaired.length && !prs.length && !policyPublished.length && !policyKept.length && !policyReverted.length)
+    parts.push('Nothing shipped.');
   if (rejected) parts.push(`${rejected} rejected.`);
   if (queued) parts.push(`${queued} queued.`);
   parts.push(`~$${data.costUsd.toFixed(2)}, ${data.llmCalls} calls.`);

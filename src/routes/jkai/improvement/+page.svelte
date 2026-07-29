@@ -14,6 +14,69 @@
   const stats = $derived(data.stats);
   const insights = $derived(data.insights);
 
+  // ── Prime outcome: tool calls per answered question ──────────────────────
+  const eff = $derived(data.efficiency?.latest ?? null);
+  const history = $derived(data.efficiency?.history ?? []);
+  const activePolicy = $derived(data.activePolicy);
+
+  let measuring = $state(false);
+  let measureError = $state<string | null>(null);
+  let reverting = $state<number | null>(null);
+
+  async function measureNow() {
+    measuring = true;
+    measureError = null;
+    try {
+      const res = await fetch('/api/admin/improvement/efficiency', { method: 'POST' });
+      if (!res.ok) {
+        measureError = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'measurement failed';
+      } else {
+        location.reload();
+      }
+    } catch {
+      measureError = 'measurement failed';
+    } finally {
+      measuring = false;
+    }
+  }
+
+  async function revertTo(version: number) {
+    if (!confirm(`Roll the tool-call policy back to v${version}${version === 0 ? ' (no overlay at all)' : ''}?`)) return;
+    reverting = version;
+    try {
+      const res = await fetch('/api/admin/improvement/policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+      });
+      if (res.ok) location.reload();
+    } finally {
+      reverting = null;
+    }
+  }
+
+  /** Sparkline path over the persisted daily means. */
+  function sparkPath(points: Array<{ meanCalls: number }>, w = 220, h = 34): string {
+    if (points.length < 2) return '';
+    const vals = points.map((p) => p.meanCalls);
+    const max = Math.max(...vals, 1);
+    const min = Math.min(...vals, 0);
+    const span = max - min || 1;
+    return vals
+      .map((v, i) => {
+        const x = (i / (vals.length - 1)) * w;
+        const y = h - ((v - min) / span) * h;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }
+
+  function trialLabel(p: NonNullable<typeof activePolicy>): string {
+    if (!p.trial) return 'no trial';
+    if (p.trial.status === 'running') return `on trial · ${p.trial.turnsObserved}/30 turns`;
+    return p.trial.status;
+  }
+
   const visibleAttempts = $derived(
     attemptFilter === 'all'
       ? data.attempts
@@ -68,6 +131,146 @@
       <a class="back-link" href="/admin/ai/improvement">Controls →</a>
     </div>
   </header>
+
+  <!-- ── PRIME OUTCOME ──────────────────────────────────────────────────
+       Leads the page: every other number here is a means to this end. -->
+  <section class="prime">
+    <div class="prime-hd">
+      <div>
+        <div class="sr-label-tight">Prime outcome · tool calls per answered question</div>
+        <p class="prime-sub">
+          Fewer calls per answer is the metric the engine is graded on. The headline is
+          <strong>ordinary chat turns</strong>; agentic work (browser, terminal, delegation) is tracked
+          beside it but never optimised against — its step count belongs to the task.
+        </p>
+      </div>
+      <button class="measure-btn" onclick={measureNow} disabled={measuring}>
+        {measuring ? 'Measuring…' : 'Measure now'}
+      </button>
+    </div>
+
+    {#if measureError}
+      <div class="empty err">{measureError}</div>
+    {/if}
+
+    {#if !eff}
+      <div class="empty">
+        Not measured yet — run the nightly engine or press <strong>Measure now</strong>.
+      </div>
+    {:else}
+      <div class="prime-grid">
+        <div class="stat-tile prime-tile">
+          <div class="stat-num">{eff.chat.meanCalls}</div>
+          <div class="stat-label">calls / chat turn</div>
+          <div class="stat-sub">
+            median {eff.chat.medianCalls} · p90 {eff.chat.p90Calls} · {eff.chat.turns} turns
+          </div>
+        </div>
+        <div class="stat-tile prime-tile">
+          <div class="stat-num">{eff.chat.repeatCalls}</div>
+          <div class="stat-label">repeat calls</div>
+          <div class="stat-sub">
+            same tool twice in one turn · {eff.chat.duplicateCalls} byte-identical
+          </div>
+        </div>
+        <div class="stat-tile prime-tile muted">
+          <div class="stat-num">{eff.agentic.meanCalls}</div>
+          <div class="stat-label">calls / agentic turn</div>
+          <div class="stat-sub">{eff.agentic.turns} turns · tracked, not optimised</div>
+        </div>
+        <div class="stat-tile prime-tile muted">
+          <div class="stat-num">{eff.discoveryCalls}</div>
+          <div class="stat-label">discovery calls</div>
+          <div class="stat-sub">jkai_extended list/schema round-trips</div>
+        </div>
+      </div>
+
+      {#if history.length >= 2}
+        <div class="spark-row">
+          <svg class="spark" viewBox="0 0 220 34" preserveAspectRatio="none" aria-hidden="true">
+            <path d={sparkPath(history)} fill="none" stroke="var(--accent)" stroke-width="1.5" />
+          </svg>
+          <span class="spark-meta mono">
+            {history[0].day} → {history[history.length - 1].day} ·
+            {history[0].meanCalls} → {history[history.length - 1].meanCalls} calls/turn
+          </span>
+        </div>
+      {/if}
+
+      {#if eff.patterns?.length}
+        <div class="patterns">
+          <div class="sr-label-tight">Biggest repeat patterns (chat turns) — the engine's work list</div>
+          <div class="rows tight">
+            {#each eff.patterns.slice(0, 6) as pat (pat.tool)}
+              <div class="pat-row">
+                <span class="pat-tool mono">{pat.tool}</span>
+                <span class="pat-bar" style="--w:{Math.min(100, (pat.repeatCalls / (eff.patterns[0].repeatCalls || 1)) * 100)}%"></span>
+                <span class="pat-num mono">
+                  {pat.repeatCalls} wasted · {pat.turns} turn{pat.turns === 1 ? '' : 's'} · worst {pat.worstInOneTurn}×
+                </span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    {/if}
+  </section>
+
+  <!-- ── Tool-call policy: the non-destructive lever + its history ───────── -->
+  <section class="block">
+    <div class="block-hd">
+      <span class="sr-label-tight">Tool-call policy</span>
+      <span class="block-meta">
+        {activePolicy ? `v${activePolicy.version} live` : 'no overlay'} · {data.policyVersions.length} version{data.policyVersions.length === 1 ? '' : 's'}
+      </span>
+    </div>
+    <p class="policy-note">
+      Description overlays the engine publishes to make tools cheaper to call. These are
+      <strong>data, not code</strong> — no deploy to apply, no revert to undo. Each change goes live on
+      trial against the baseline above and rolls itself back if it doesn't beat it.
+    </p>
+    {#if data.policyVersions.length === 0}
+      <div class="empty">No policy versions yet — the base tool descriptions are in force.</div>
+    {:else}
+      <div class="rows">
+        {#each data.policyVersions as v (v.version)}
+          <div class="row policy-row" class:live={activePolicy?.version === v.version}>
+            <div class="policy-head">
+              <span class="ver mono">v{v.version}</span>
+              <span class="status-pill s-{v.trial?.status ?? 'none'}">{trialLabel(v)}</span>
+              <span class="row-title">{v.targetTool ?? '—'}</span>
+              <span class="row-tags mono">
+                <span>{fmtDate(v.createdAt)}</span>
+                <span>{v.createdBy}</span>
+              </span>
+              {#if activePolicy?.version !== v.version}
+                <button class="revert-btn" onclick={() => revertTo(v.version)} disabled={reverting === v.version}>
+                  {reverting === v.version ? '…' : 'Revert to this'}
+                </button>
+              {:else}
+                <span class="live-tag mono">LIVE</span>
+              {/if}
+            </div>
+            <div class="policy-body">
+              <div class="rationale">{v.rationale}</div>
+              {#if v.trial?.verdict}<div class="verdict mono">{v.trial.verdict}</div>{/if}
+              {#each Object.entries(v.overrides) as [tool, o] (tool)}
+                <div class="ovr">
+                  <span class="ovr-tool mono">{tool}</span>
+                  <span class="ovr-text">{o.description ?? ''}{o.guidance ? ` ${o.guidance}` : ''}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+      {#if activePolicy && activePolicy.version > 0}
+        <button class="revert-btn base" onclick={() => revertTo(0)} disabled={reverting === 0}>
+          Remove all overlays (back to base descriptions)
+        </button>
+      {/if}
+    {/if}
+  </section>
 
   <!-- ── Summary statistics ─────────────────────────────────────────────── -->
   <section class="stats">
@@ -254,6 +457,49 @@
 </div>
 
 <style>
+  /* Prime outcome */
+  .prime { border: 2px solid var(--text-primary); padding: 1rem 1.1rem 1.1rem; margin-bottom: 1.25rem; background: var(--bg-section); }
+  .prime-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.25rem; margin-bottom: 0.9rem; }
+  .prime-sub { margin: 0.5rem 0 0; font-size: 0.88rem; line-height: 1.5; color: var(--text-secondary); max-width: 62ch; }
+  .prime-sub strong { color: var(--text-primary); font-weight: 700; }
+  .prime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; }
+  .prime-tile { background: var(--bg); }
+  .prime-tile.muted .stat-num { color: var(--text-muted); }
+  .measure-btn, .revert-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; padding: 0.5rem 0.8rem; border: 1px solid var(--card-border); background: var(--bg); color: var(--text-primary); cursor: pointer; white-space: nowrap; }
+  .measure-btn:hover:not(:disabled), .revert-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .measure-btn:disabled, .revert-btn:disabled { opacity: 0.5; cursor: default; }
+  .revert-btn.base { margin-top: 0.6rem; }
+  .empty.err { color: var(--accent); }
+
+  .spark-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.8rem; }
+  .spark { width: 220px; height: 34px; flex: none; }
+  .spark-meta { font-size: 10px; color: var(--text-ghost); }
+
+  .patterns { margin-top: 1rem; }
+  .rows.tight { margin-top: 0.4rem; }
+  .pat-row { display: grid; grid-template-columns: minmax(140px, 1fr) 90px minmax(180px, auto); align-items: center; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--divider); }
+  .pat-tool { font-size: 11px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pat-bar { height: 6px; background: var(--accent); width: var(--w); min-width: 2px; }
+  .pat-num { font-size: 10px; color: var(--text-ghost); text-align: right; }
+
+  /* Policy history */
+  .policy-note { margin: 0.5rem 0 0.9rem; font-size: 0.88rem; line-height: 1.5; color: var(--text-secondary); max-width: 66ch; }
+  .policy-note strong { color: var(--text-primary); font-weight: 700; }
+  .policy-row.live { border-left: 3px solid var(--accent); }
+  .policy-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem; flex-wrap: wrap; }
+  .ver { font-size: 11px; font-weight: 700; color: var(--accent); }
+  .live-tag { font-size: 9px; letter-spacing: 0.14em; color: var(--accent); }
+  .policy-body { padding: 0 0.75rem 0.7rem; }
+  .rationale { font-size: 0.88rem; line-height: 1.45; color: var(--text-secondary); }
+  .verdict { font-size: 10px; color: var(--text-ghost); margin-top: 0.3rem; }
+  .ovr { display: flex; gap: 0.5rem; margin-top: 0.45rem; font-size: 0.82rem; line-height: 1.4; }
+  .ovr-tool { flex: none; font-size: 10px; color: var(--accent); padding-top: 0.15rem; }
+  .ovr-text { color: var(--text-secondary); }
+  .status-pill.s-running { background: var(--accent-tint-25, rgba(196,87,10,0.18)); }
+  .status-pill.s-kept { background: rgba(40, 120, 60, 0.18); }
+  .status-pill.s-reverted { background: rgba(150, 40, 40, 0.18); }
+  .status-pill.s-none { background: var(--divider); }
+
   .wrap { max-width: 980px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.75rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
   .kicker { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }

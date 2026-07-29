@@ -6,6 +6,8 @@ import {
   queryRecords,
 } from '$lib/datastore';
 import { getImprovementStatus } from '$lib/selfimprove/run';
+import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
+import type { CallEfficiency } from '$lib/server/hermes-sessions';
 import { COLLECTIONS, CRON_EXPR, CRON_TZ } from '$lib/selfimprove/types';
 import type { ImprovementRunData, QuestionInsights, ToolAttemptData } from '$lib/selfimprove/types';
 
@@ -58,6 +60,51 @@ async function loadInsights(): Promise<QuestionInsights | null> {
   }
 }
 
+/**
+ * The last persisted calls-per-turn measurement plus its recent history.
+ *
+ * Read from the datastore rather than measured live: `getCallEfficiency` walks
+ * every message in the window and on the VPS costs a Tailscale round-trip, so a
+ * page load must not trigger it. The nightly optimise phase writes these, and
+ * the "Measure now" button re-writes them on demand.
+ */
+async function loadEfficiency(): Promise<{
+  latest: CallEfficiency | null;
+  history: Array<{ day: string; meanCalls: number; turns: number }>;
+}> {
+  if (!(await getCollectionBySlug(COLLECTIONS.toolPolicy))) return { latest: null, history: [] };
+  let latest: CallEfficiency | null = null;
+  try {
+    const rec = await getRecordByKey(COLLECTIONS.toolPolicy, 'metric:latest', OWNER);
+    latest = rec.data as unknown as CallEfficiency;
+  } catch (err) {
+    if (!(err instanceof DatastoreError && err.code === 'not_found')) throw err;
+  }
+  let history: Array<{ day: string; meanCalls: number; turns: number }> = [];
+  try {
+    const { records } = await queryRecords(
+      COLLECTIONS.toolPolicy,
+      { sort: { field: 'createdAt', dir: 'desc' }, limit: 120 },
+      OWNER,
+    );
+    history = records
+      .filter((r) => (r.key ?? '').startsWith('metric:') && r.key !== 'metric:latest')
+      .map((r) => {
+        const d = r.data as unknown as CallEfficiency;
+        return {
+          day: (r.key ?? '').slice('metric:'.length),
+          meanCalls: d?.chat?.meanCalls ?? 0,
+          turns: d?.chat?.turns ?? 0,
+        };
+      })
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .slice(-30);
+  } catch {
+    history = [];
+  }
+  return { latest, history };
+}
+
 async function loadApiStatus(): Promise<{ total: number; byStatus: Record<string, number> }> {
   if (!(await getCollectionBySlug(COLLECTIONS.apiCatalog))) return { total: 0, byStatus: {} };
   const { records } = await queryRecords(COLLECTIONS.apiCatalog, { limit: 500 }, OWNER);
@@ -79,11 +126,13 @@ const ACTION_KINDS = [
 ] as const;
 
 export const load: PageServerLoad = async () => {
-  const [runs, attempts, insights, apiStatus] = await Promise.all([
+  const [runs, attempts, insights, apiStatus, efficiency, policyVersions] = await Promise.all([
     loadRuns(),
     loadAttempts(),
     loadInsights(),
     loadApiStatus(),
+    loadEfficiency().catch(() => ({ latest: null, history: [] })),
+    listPolicyVersions(25).catch(() => [] as ToolPolicyVersion[]),
   ]);
 
   // ── Statistics (computed over the loaded window) ──────────────────────────
@@ -123,10 +172,18 @@ export const load: PageServerLoad = async () => {
     insightsLogged: actionKindCounts.insight ?? 0,
   };
 
+  // The live overlay is whichever version was published last — `listPolicyVersions`
+  // returns newest first, and `publishPolicy` always moves the pointer to the
+  // version it just wrote.
+  const activePolicy = policyVersions[0] ?? null;
+
   return {
     runs,
     attempts,
     insights,
+    efficiency,
+    policyVersions,
+    activePolicy,
     stats,
     schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: '03:30 Europe/London' },
     running: getImprovementStatus().running,
