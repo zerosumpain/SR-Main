@@ -23,6 +23,7 @@ import { db } from '$lib/db';
 import { releases } from '$lib/db/schema';
 import { nextVersionLabel, summariseRelease } from '$lib/releases/summarise';
 import { isOwnerRequest } from '$lib/server/owner';
+import { redactSensitive } from '$lib/security/sensitive';
 import { RELEASE_VIA, type CommitFact, type FileFact, type ReleaseIngestPayload, type ReleaseVia } from '$lib/releases/types';
 import type { RequestEvent, RequestHandler } from './$types';
 
@@ -51,13 +52,19 @@ function cleanCommits(input: unknown): CommitFact[] {
       const sha = typeof c.sha === 'string' ? c.sha : '';
       if (!sha) return null;
       const prRaw = num(c.pr);
+      // Commit prose is scrubbed on the way in. A commit message quotes the
+      // data that provoked the change — a WhatsApp JID fix quoted the real
+      // phone number it was failing on — and this table is the source the
+      // summariser reads, so cleaning it here stops the value propagating into
+      // every derived row. sha/short/date are structural and left alone; the
+      // author line keeps only the name, never the address.
       return {
         sha,
         short: typeof c.short === 'string' && c.short ? c.short : sha.slice(0, 8),
-        author: typeof c.author === 'string' ? c.author : '',
+        author: redactSensitive(typeof c.author === 'string' ? c.author : ''),
         date: typeof c.date === 'string' ? c.date : '',
-        subject: typeof c.subject === 'string' ? c.subject : '',
-        body: typeof c.body === 'string' ? c.body.slice(0, 4000) : '',
+        subject: redactSensitive(typeof c.subject === 'string' ? c.subject : ''),
+        body: redactSensitive(typeof c.body === 'string' ? c.body.slice(0, 4000) : ''),
         pr: prRaw > 0 ? prRaw : null,
       } satisfies CommitFact;
     })
