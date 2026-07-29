@@ -15,6 +15,7 @@ import {
   BUDGET_CAPS,
   COLLECTIONS,
   IDLE_WINDOW_MS,
+  SELFIMPROVE_MODEL,
   SYSTEM_ACTOR,
   asData,
   emptyPhases,
@@ -27,6 +28,8 @@ import { ensureSystemCollections } from './seed-apis';
 import { gatherSignals, learnInsights, type GatheredSignals } from './analyze';
 import { discoverApis } from './discover';
 import { buildTool } from './toolsmith';
+import { repairTools } from './repair';
+import { proposeFeatures } from './propose';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
 
@@ -58,14 +61,22 @@ export interface Budget {
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     opts?: LlmCallOpts,
   ): Promise<{ content: string; json: unknown }>;
+  /**
+   * Wall-clock remaining. The build/repair/propose phases loop internally, so
+   * they need to self-limit — the between-phase check alone would let one long
+   * loop eat the whole night.
+   */
+  timeLeftMs(): number;
 }
 
-type Caps = { maxLlmCalls: number; maxCostUsd: number };
+type Caps = { maxLlmCalls: number; maxCostUsd: number; maxWallMs: number };
 
 /** Create a fresh budget counter. Caps are overridable for tests. */
 export function createBudget(caps: Partial<Caps> = {}): Budget {
   const maxLlmCalls = caps.maxLlmCalls ?? BUDGET_CAPS.maxLlmCalls;
   const maxCostUsd = caps.maxCostUsd ?? BUDGET_CAPS.maxCostUsd;
+  const maxWallMs = caps.maxWallMs ?? BUDGET_CAPS.maxWallMs;
+  const startedAt = Date.now();
 
   const budget: Budget = {
     llmCalls: 0,
@@ -73,6 +84,9 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
     tokensOut: 0,
     costUsd: 0,
     exceeded: false,
+    timeLeftMs() {
+      return Math.max(0, maxWallMs - (Date.now() - startedAt));
+    },
     async call(messages, opts) {
       if (budget.llmCalls >= maxLlmCalls || budget.costUsd >= maxCostUsd) {
         budget.exceeded = true;
@@ -82,11 +96,15 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       }
       // Lazy imports keep the module light for tests that never reach the gateway.
       const { getLLMClient } = await import('$lib/jkai/llm-client');
-      const { resolveDefaultModel } = await import('$lib/server/models/settings');
       const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
 
-      const ctx = await resolveDefaultModel();
-      const { client, model } = await getLLMClient(ctx);
+      // Pinned to SELFIMPROVE_MODEL rather than resolveDefaultModel(): this
+      // pipeline writes code that ships unattended, so a change to the chat
+      // default must not silently change what authors it.
+      const { client, model } = await getLLMClient({
+        provider: 'openrouter',
+        modelId: SELFIMPROVE_MODEL,
+      });
       // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
       // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.
       const resp = await client.chat.completions.create({
@@ -246,6 +264,12 @@ export async function runImprovementNow(
       ],
       ['discover', async () => discoverApis(state.insights, budget)],
       ['build', async () => buildTool(state.insights, state.signals, budget, runId)],
+      // Repair runs AFTER build so a night that ships nothing new still has a
+      // chance to fix something that already exists.
+      ['repair', async () => repairTools(budget, runId)],
+      // Propose runs last: it is the most expensive phase and the least urgent,
+      // so it yields its budget to build and repair.
+      ['propose', async () => proposeFeatures(budget, runId)],
     ];
 
     for (const [name, fn] of phases) {
@@ -288,9 +312,9 @@ export async function runImprovementNow(
     if (stop === 'user') data.status = 'aborted_user_active';
     else if (stop === 'budget' || budget.exceeded) data.status = 'budget_exceeded';
     else {
-      const anyFailed = (['gather', 'learn', 'discover', 'build'] as PhaseName[]).some(
-        (n) => data.phases[n].status === 'failed',
-      );
+      const anyFailed = (
+        ['gather', 'learn', 'discover', 'build', 'repair', 'propose'] as PhaseName[]
+      ).some((n) => data.phases[n].status === 'failed');
       data.status = anyFailed ? 'partial' : 'complete';
     }
 

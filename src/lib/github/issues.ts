@@ -8,8 +8,11 @@
  * a parameter so that no caller — and no LLM-authored tool argument — can point
  * this at another repository. Same reasoning as the Forge's git-target scope.
  *
- * Auth: `GITHUB_API_TOKEN` (preferred) or `FORGE_GITHUB_TOKEN` (the name the
- * builder already uses for pushes/PRs, accepted so one token can serve both).
+ * Auth: `GITHUB_API_TOKEN` (preferred), `FORGE_GITHUB_TOKEN` (the name the
+ * builder already uses for pushes/PRs), or `GITHUB_PAT`/`GITHUB_TOKEN`.
+ * The last two matter: the production VPS container sets ONLY those, so before
+ * they were accepted here every call in this module failed the configured check
+ * and this whole path was silently dead in production (found 2026-07-29).
  * Everything degrades gracefully when unset — `githubConfigured()` is false and
  * callers surface a clear "not configured" result rather than throwing deep in
  * a tool call.
@@ -20,8 +23,19 @@ export const REPO_SLUG = 'zerosumpain/SR-Main';
 
 const API = 'https://api.github.com';
 
+/** Shared by every GitHub client in the app — see also `$lib/github/pr`. */
+export function githubToken(): string {
+  return (
+    process.env.GITHUB_API_TOKEN ||
+    process.env.FORGE_GITHUB_TOKEN ||
+    process.env.GITHUB_PAT ||
+    process.env.GITHUB_TOKEN ||
+    ''
+  );
+}
+
 function token(): string {
-  return process.env.GITHUB_API_TOKEN || process.env.FORGE_GITHUB_TOKEN || '';
+  return githubToken();
 }
 
 /** True when a token is available, so callers can fail politely up front. */

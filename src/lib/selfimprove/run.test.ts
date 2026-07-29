@@ -20,6 +20,8 @@ vi.mock('$lib/datastore', () => ({
 vi.mock('./analyze', () => ({ gatherSignals: vi.fn(), learnInsights: vi.fn() }));
 vi.mock('./discover', () => ({ discoverApis: vi.fn() }));
 vi.mock('./toolsmith', () => ({ buildTool: vi.fn() }));
+vi.mock('./repair', () => ({ repairTools: vi.fn() }));
+vi.mock('./propose', () => ({ proposeFeatures: vi.fn() }));
 vi.mock('./report', () => ({ finalizeAndNotify: vi.fn() }));
 vi.mock('./seed-apis', () => ({
   ensureSystemCollections: vi.fn(),
@@ -32,6 +34,8 @@ import { upsertRecord } from '$lib/datastore';
 import { gatherSignals, learnInsights } from './analyze';
 import { discoverApis } from './discover';
 import { buildTool } from './toolsmith';
+import { repairTools } from './repair';
+import { proposeFeatures } from './propose';
 import { finalizeAndNotify } from './report';
 import { ensureSystemCollections } from './seed-apis';
 import {
@@ -71,6 +75,8 @@ beforeEach(() => {
   } as never);
   vi.mocked(discoverApis).mockResolvedValue([] as never);
   vi.mocked(buildTool).mockResolvedValue([] as never);
+  vi.mocked(repairTools).mockResolvedValue([] as never);
+  vi.mocked(proposeFeatures).mockResolvedValue([] as never);
 });
 
 describe('isUserActive (idle gate)', () => {
@@ -130,9 +136,23 @@ describe('runImprovementNow — gating & status', () => {
     expect(learnInsights).toHaveBeenCalled();
     expect(discoverApis).toHaveBeenCalled();
     expect(buildTool).toHaveBeenCalled();
+    // Repair and propose are the phases that make a night productive when there
+    // is nothing new worth building — they must run, not just exist.
+    expect(repairTools).toHaveBeenCalled();
+    expect(proposeFeatures).toHaveBeenCalled();
     expect(finalizeAndNotify).toHaveBeenCalled();
     expect(lastPersisted().data.status).toBe('complete');
     expect(getImprovementStatus().running).toBe(false);
+  });
+
+  it('still runs repair when build fails — a bad build must not sink the night', async () => {
+    vi.mocked(buildTool).mockRejectedValueOnce(new Error('author failed'));
+    await runImprovementNow({ trigger: 'manual' });
+    expect(repairTools).toHaveBeenCalled();
+    const data = lastPersisted().data;
+    expect(data.phases.build.status).toBe('failed');
+    expect(data.phases.repair.status).toBe('ok');
+    expect(data.status).toBe('partial');
   });
 
   it('marks the run partial when a phase throws (never rethrows)', async () => {

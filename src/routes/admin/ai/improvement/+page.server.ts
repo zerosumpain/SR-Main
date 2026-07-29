@@ -69,12 +69,26 @@ async function loadSelfBuiltTools() {
   }));
 }
 
+/** The engine's durable idea queue — open items first, then most recently touched. */
+async function loadBacklog() {
+  if (!(await getCollectionBySlug(COLLECTIONS.backlog))) return [];
+  const { records } = await queryRecords(
+    COLLECTIONS.backlog,
+    { sort: { field: 'updatedAt', dir: 'desc' }, limit: 200 },
+    OWNER,
+  );
+  return records
+    .map((r) => r.data as Record<string, unknown>)
+    .sort((a, b) => Number(a.status !== 'open') - Number(b.status !== 'open'));
+}
+
 export const load: PageServerLoad = async () => {
-  const [runs, insights, apis, tools, enabledSetting] = await Promise.all([
+  const [runs, insights, apis, tools, backlog, enabledSetting] = await Promise.all([
     loadRuns(),
     loadInsights(),
     loadApis(),
     loadSelfBuiltTools(),
+    loadBacklog(),
     getSetting(SETTINGS_ENABLED_KEY),
   ]);
 
@@ -88,5 +102,6 @@ export const load: PageServerLoad = async () => {
     insights,
     apis,
     tools,
+    backlog,
   };
 };
