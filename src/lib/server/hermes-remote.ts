@@ -12,7 +12,14 @@
  */
 import { env } from '$env/dynamic/private';
 import os from 'node:os';
-import type { Telemetry, ToolAudit, HermesSessionRow, SearchHit, SessionDetail } from './hermes-sessions';
+import type {
+  Telemetry,
+  ToolAudit,
+  CallEfficiency,
+  HermesSessionRow,
+  SearchHit,
+  SessionDetail,
+} from './hermes-sessions';
 import type { HermesStatus, ActionResult, ServiceAction } from './hermes-control';
 import type { CronJob, CronOp, CronOpResult } from './hermes-cron';
 
@@ -93,6 +100,16 @@ export async function rToolAudit(days: number): Promise<ToolAudit> {
     return getToolAudit(days);
   }
   return proxyGet<ToolAudit>(`/toolaudit?days=${days}`);
+}
+/** Tool calls per answered turn — the self-improvement engine's prime outcome.
+ *  Same host switch as rToolAudit: the turn data only exists in homeserv's
+ *  Hermes SQLite, and the engine that consumes it runs on the VPS. */
+export async function rCallEfficiency(days: number): Promise<CallEfficiency> {
+  if (IS_HOMESERV) {
+    const { getCallEfficiency } = await import('./hermes-sessions');
+    return getCallEfficiency(days);
+  }
+  return proxyGet<CallEfficiency>(`/callefficiency?days=${days}`);
 }
 export async function rStatus(): Promise<HermesStatus> {
   if (IS_HOMESERV) {

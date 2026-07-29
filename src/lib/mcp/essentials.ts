@@ -57,3 +57,22 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
 export function isMetaToolEnabled(): boolean {
   return process.env.JKAI_MCP_META_TOOL === '1';
 }
+
+/**
+ * Is `name` directly visible in `tools/list`? The hardcoded set above, plus
+ * anything the active tool-call policy has promoted.
+ *
+ * Promotion is ADDITIVE ONLY. Every name in ESSENTIAL_TOOL_NAMES is there for a
+ * documented reason, so letting an overlay demote one would be a capability
+ * regression rather than the hint change the overlay is allowed to make —
+ * see `promoteToEssential` in $lib/toolpolicy/policy.ts.
+ *
+ * Lives here rather than in server.ts because meta-tool.ts needs it too and
+ * already imports from server.ts; putting it there would close an import cycle.
+ */
+export function isEssentialUnderPolicy(
+  name: string,
+  policy: { promoteToEssential: string[] },
+): boolean {
+  return ESSENTIAL_TOOL_NAMES.has(name) || policy.promoteToEssential.includes(name);
+}

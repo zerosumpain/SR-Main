@@ -375,3 +375,308 @@ export async function getTelemetry(daysIn = 30): Promise<Telemetry> {
     topSessions,
   };
 }
+
+// ── Call efficiency (the self-improvement engine's PRIME OUTCOME) ────────────
+//
+// `getToolAudit` answers "which tools get called". This answers the different
+// and more actionable question: "how many calls does it take to answer one
+// question". A 30-day sample on 2026-07-29 read 10.8 calls per turn, and 74% of
+// every call made was a REPEAT of a tool already called in that same turn
+// (one turn called `fetch_url` 119 times). That repeat pressure — not tool
+// discovery — is where the waste lives, so it is measured explicitly.
+//
+// Turns are segmented because they are not comparable. A browser/terminal
+// debugging session legitimately runs dozens of steps; an ordinary chat answer
+// should not. The headline metric is the CHAT segment; agentic turns are
+// tracked beside it so a long, correct piece of work can never read as a
+// regression (owner decision, 2026-07-29).
+
+/**
+ * Tools whose presence marks a turn as agentic — interactive dev work whose
+ * step count is a property of the task, not of prompt quality. Matched as
+ * prefixes against both raw tool names and resolved jkai sub-tools.
+ */
+const AGENTIC_TOOL_PREFIXES = [
+  'browser_',
+  'terminal',
+  'delegate_task',
+  'read_file',
+  'write_file',
+  'edit_file',
+  'search_files',
+  'scraper_script_',
+];
+
+function isAgenticTool(name: string): boolean {
+  const bare = name.startsWith('jkai:') ? name.slice(5) : name;
+  return AGENTIC_TOOL_PREFIXES.some((p) => bare.startsWith(p));
+}
+
+/**
+ * Resolve the real tool behind one recorded call. `jkai_extended` masks ~128
+ * tools behind list/schema/invoke, so an unresolved name would collapse most of
+ * the catalogue into a single bar (the same trap `getToolAudit` documents).
+ */
+function resolveCallName(fnName: string, rawArgs: string): string {
+  if (!fnName.includes('jkai_extended')) return fnName;
+  try {
+    const a = JSON.parse(rawArgs || '{}') as { operation?: string; name?: string };
+    if (a.operation === 'invoke' && a.name) return `jkai:${a.name}`;
+    // list/schema are the meta-tool's own discovery overhead — kept distinct so
+    // it can be told apart from real work.
+    return `jkai_extended:${a.operation ?? 'unknown'}`;
+  } catch {
+    return fnName;
+  }
+}
+
+export interface CallPattern {
+  /** Resolved tool name. */
+  tool: string;
+  /** Calls beyond the first within a turn, summed across turns. The number of
+   *  calls a perfect batch/cache would have removed. */
+  repeatCalls: number;
+  /** How many distinct turns showed this repetition. */
+  turns: number;
+  /** Worst single-turn repeat count seen. */
+  worstInOneTurn: number;
+  /** Of `repeatCalls`, how many were byte-identical (same tool AND same args). */
+  duplicateCalls: number;
+}
+
+export interface SegmentEfficiency {
+  turns: number;
+  totalCalls: number;
+  meanCalls: number;
+  medianCalls: number;
+  p90Calls: number;
+  maxCalls: number;
+  /** Turns answered with no tool at all — healthy, not waste. */
+  zeroToolTurns: number;
+  /** Calls that repeated a tool already used in the same turn. */
+  repeatCalls: number;
+  /** Calls byte-identical to an earlier call in the same turn — pure waste. */
+  duplicateCalls: number;
+}
+
+export interface CallEfficiency {
+  days: number;
+  /** Headline segment: ordinary question-answering turns. */
+  chat: SegmentEfficiency;
+  /** Interactive dev work — reported, never optimised against. */
+  agentic: SegmentEfficiency;
+  /** Both segments together, for continuity with `getToolAudit().totalCalls`. */
+  all: SegmentEfficiency;
+  /** Biggest repeat offenders in the CHAT segment — the engine's work list. */
+  patterns: CallPattern[];
+  /** Meta-tool discovery overhead (list/schema round-trips) across all turns. */
+  discoveryCalls: number;
+  generatedAt: string;
+}
+
+export interface TurnRow {
+  session_id: string;
+  turn: number;
+  tool_calls: string | null;
+}
+
+function emptySegment(): SegmentEfficiency {
+  return {
+    turns: 0,
+    totalCalls: 0,
+    meanCalls: 0,
+    medianCalls: 0,
+    p90Calls: 0,
+    maxCalls: 0,
+    zeroToolTurns: 0,
+    repeatCalls: 0,
+    duplicateCalls: 0,
+  };
+}
+
+function quantile(sorted: number[], q: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.floor(q * sorted.length));
+  return sorted[idx];
+}
+
+function summarise(counts: number[], repeats: number, duplicates: number): SegmentEfficiency {
+  if (counts.length === 0) return emptySegment();
+  const sorted = [...counts].sort((a, b) => a - b);
+  const total = counts.reduce((s, n) => s + n, 0);
+  return {
+    turns: counts.length,
+    totalCalls: total,
+    meanCalls: Number((total / counts.length).toFixed(2)),
+    medianCalls: quantile(sorted, 0.5),
+    p90Calls: quantile(sorted, 0.9),
+    maxCalls: sorted[sorted.length - 1],
+    zeroToolTurns: counts.filter((c) => c === 0).length,
+    repeatCalls: repeats,
+    duplicateCalls: duplicates,
+  };
+}
+
+/**
+ * Tool calls per answered turn over `days`, segmented and with the repeat
+ * patterns that drive them.
+ *
+ * A "turn" is one user message plus everything the assistant did before the
+ * next user message, scoped to a session. The running SUM window over
+ * `role='user'` is what numbers them; rows before the first user message in a
+ * session (turn 0) are system/bootstrap and dropped.
+ */
+export async function getCallEfficiency(daysIn = 30): Promise<CallEfficiency> {
+  const days = clampDays(daysIn);
+  const since = `strftime('%s','now') - ${days} * 86400`;
+
+  // Every assistant row that made calls, tagged with its turn number.
+  const rows = await querySqlite<TurnRow>(
+    `WITH m AS (
+       SELECT session_id, id, role, tool_calls, timestamp,
+              SUM(CASE WHEN role='user' THEN 1 ELSE 0 END)
+                OVER (PARTITION BY session_id ORDER BY timestamp, id
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS turn
+       FROM messages WHERE timestamp >= ${since}
+     )
+     SELECT session_id, turn, tool_calls FROM m
+     WHERE turn > 0 AND role='assistant' AND tool_calls IS NOT NULL
+     ORDER BY session_id, turn, id;`,
+  );
+
+  // Total turns INCLUDING those answered with no tool at all. Counting only the
+  // rows above would compute the mean over tool-using turns only and overstate
+  // it badly (65 of 217 turns in the 30-day sample used no tool).
+  const [totals] = await querySqlite<{ turns: number }>(
+    `WITH m AS (
+       SELECT session_id, id, role, timestamp,
+              SUM(CASE WHEN role='user' THEN 1 ELSE 0 END)
+                OVER (PARTITION BY session_id ORDER BY timestamp, id
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS turn
+       FROM messages WHERE timestamp >= ${since}
+     )
+     SELECT COUNT(*) AS turns FROM (SELECT DISTINCT session_id, turn FROM m WHERE turn > 0);`,
+  );
+
+  return aggregateTurnEfficiency(rows, Number(totals?.turns ?? 0), days);
+}
+
+/**
+ * Pure aggregation over already-fetched turn rows. Split out from the SQL so it
+ * is directly testable — the numbers this produces decide whether a live policy
+ * change is kept or rolled back, so they need tests that don't need a database.
+ */
+export function aggregateTurnEfficiency(
+  rows: TurnRow[],
+  totalTurns: number,
+  days: number,
+): CallEfficiency {
+  const turns = new Map<string, Array<{ name: string; args: string }>>();
+  for (const r of rows) {
+    let calls: unknown;
+    try {
+      calls = JSON.parse(r.tool_calls ?? '[]');
+    } catch {
+      continue; // malformed row — skip, same as getToolAudit
+    }
+    if (!Array.isArray(calls)) continue;
+    const key = `${r.session_id}#${r.turn}`;
+    const list = turns.get(key) ?? [];
+    for (const c of calls as Array<{ function?: { name?: string; arguments?: string } }>) {
+      const fn = c?.function;
+      if (!fn?.name) continue;
+      list.push({ name: resolveCallName(fn.name, fn.arguments ?? ''), args: fn.arguments ?? '' });
+    }
+    turns.set(key, list);
+  }
+
+  const chatCounts: number[] = [];
+  const agenticCounts: number[] = [];
+  let chatRepeats = 0;
+  let chatDups = 0;
+  let agenticRepeats = 0;
+  let agenticDups = 0;
+  let discoveryCalls = 0;
+
+  const patterns = new Map<string, CallPattern>();
+
+  for (const list of turns.values()) {
+    const agentic = list.some((c) => isAgenticTool(c.name));
+    // Meta-tool list/schema round-trips are discovery overhead, not work.
+    const real = list.filter((c) => {
+      if (c.name.startsWith('jkai_extended:')) {
+        discoveryCalls++;
+        return false;
+      }
+      return true;
+    });
+
+    const byTool = new Map<string, string[]>();
+    for (const c of real) {
+      const seen = byTool.get(c.name) ?? [];
+      seen.push(c.args);
+      byTool.set(c.name, seen);
+    }
+
+    let turnRepeats = 0;
+    let turnDups = 0;
+    for (const [tool, argsList] of byTool) {
+      if (argsList.length <= 1) continue;
+      const repeats = argsList.length - 1;
+      turnRepeats += repeats;
+
+      const argCounts = new Map<string, number>();
+      for (const a of argsList) argCounts.set(a, (argCounts.get(a) ?? 0) + 1);
+      let dups = 0;
+      for (const n of argCounts.values()) if (n > 1) dups += n - 1;
+      turnDups += dups;
+
+      // Only chat turns feed the engine's work list — optimising an agentic
+      // step count would be optimising against correct behaviour.
+      if (!agentic) {
+        const p = patterns.get(tool) ?? {
+          tool,
+          repeatCalls: 0,
+          turns: 0,
+          worstInOneTurn: 0,
+          duplicateCalls: 0,
+        };
+        p.repeatCalls += repeats;
+        p.turns += 1;
+        p.worstInOneTurn = Math.max(p.worstInOneTurn, argsList.length);
+        p.duplicateCalls += dups;
+        patterns.set(tool, p);
+      }
+    }
+
+    if (agentic) {
+      agenticCounts.push(real.length);
+      agenticRepeats += turnRepeats;
+      agenticDups += turnDups;
+    } else {
+      chatCounts.push(real.length);
+      chatRepeats += turnRepeats;
+      chatDups += turnDups;
+    }
+  }
+
+  // Turns that made no tool call never appear in `rows`. Attribute them to
+  // chat: a turn answered without tools is by definition not agentic work.
+  const observed = chatCounts.length + agenticCounts.length;
+  const silent = Math.max(0, totalTurns - observed);
+  for (let i = 0; i < silent; i++) chatCounts.push(0);
+
+  return {
+    days,
+    chat: summarise(chatCounts, chatRepeats, chatDups),
+    agentic: summarise(agenticCounts, agenticRepeats, agenticDups),
+    all: summarise(
+      [...chatCounts, ...agenticCounts],
+      chatRepeats + agenticRepeats,
+      chatDups + agenticDups,
+    ),
+    patterns: [...patterns.values()].sort((a, b) => b.repeatCalls - a.repeatCalls).slice(0, 15),
+    discoveryCalls,
+    generatedAt: new Date().toISOString(),
+  };
+}

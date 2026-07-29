@@ -30,6 +30,7 @@ import { discoverApis } from './discover';
 import { buildTool } from './toolsmith';
 import { repairTools } from './repair';
 import { proposeFeatures } from './propose';
+import { optimiseCalls } from './optimise';
 import { finalizeAndNotify } from './report';
 import type { QuestionInsights } from './types';
 
@@ -267,6 +268,10 @@ export async function runImprovementNow(
       // Repair runs AFTER build so a night that ships nothing new still has a
       // chance to fix something that already exists.
       ['repair', async () => repairTools(budget, runId)],
+      // Optimise runs before propose: reducing the calls an answer costs is the
+      // prime outcome, and it is far cheaper (1 LLM call) than authoring a
+      // feature proposal — it must never be the phase the budget squeezes out.
+      ['optimise', async () => optimiseCalls(budget, runId)],
       // Propose runs last: it is the most expensive phase and the least urgent,
       // so it yields its budget to build and repair.
       ['propose', async () => proposeFeatures(budget, runId)],
@@ -313,7 +318,7 @@ export async function runImprovementNow(
     else if (stop === 'budget' || budget.exceeded) data.status = 'budget_exceeded';
     else {
       const anyFailed = (
-        ['gather', 'learn', 'discover', 'build', 'repair', 'propose'] as PhaseName[]
+        ['gather', 'learn', 'discover', 'build', 'repair', 'optimise', 'propose'] as PhaseName[]
       ).some((n) => data.phases[n].status === 'failed');
       data.status = anyFailed ? 'partial' : 'complete';
     }

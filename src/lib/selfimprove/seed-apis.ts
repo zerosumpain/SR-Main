@@ -15,6 +15,7 @@ import {
   upsertRecord,
 } from '$lib/datastore';
 import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
+import { ensureToolPolicyCollection } from '$lib/toolpolicy/policy';
 import { COLLECTIONS, SYSTEM_ACTOR, SYSTEM_PERMISSIONS, errMsg, type SeedApiEntry } from './types';
 
 /** ~12 public data APIs already used across the site (and a few obvious extras). */
@@ -176,6 +177,10 @@ export const SEEDED_APIS: SeedApiEntry[] = [
  * returns the existing collection unchanged, so existing metadata is preserved.
  */
 export async function ensureSystemCollections(): Promise<void> {
+  // The tool-call policy collection is owned by $lib/toolpolicy (the MCP read
+  // path needs it whether or not the engine has ever run), so it seeds itself.
+  await ensureToolPolicyCollection();
+
   await ensureCollection(
     COLLECTIONS.apiCatalog,
     {
