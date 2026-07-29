@@ -65,13 +65,20 @@ interface ToolsmithPlan {
 const HANDLER_RULES = [
   'handler_code is the BODY of an async JavaScript function with `args`, `fetch` and `platform` in scope.',
   'It MUST return { success: boolean, data?: any, error?: string } on every path — including error paths.',
-  'Prefer platform.call("api_call", { api: "<catalogued API name>", path: "/…", method: "GET" }) over raw fetch:',
-  '  those calls are SSRF-guarded and can use owner credentials you are not allowed to see.',
+  'Prefer platform.call over raw fetch for catalogued APIs — those calls are SSRF-guarded and can use owner',
+  '  credentials you are not allowed to see. The EXACT shape is:',
+  '    platform.call("api_call", { api: "<catalogue name>", url: "<FULL url>", method: "GET" })',
+  '  `url` is required and must be a complete URL that STARTS WITH that API\'s baseUrl (there is no "path"',
+  '  parameter — passing one fails). Build query strings into `url` yourself.',
+  '  It resolves to { success, data?, error? } — check `.success` before using `.data`.',
   'Raw fetch is allowed ONLY for public, no-auth, documented HTTPS endpoints.',
   'FORBIDDEN and automatically rejected: process, require(), import(), eval, Function(), .constructor(),',
   '  globalThis, fs, child_process, __dirname, setInterval. Never read env vars or secrets.',
   'Check response.ok and handle non-200 before parsing JSON. Verify the HTTP METHOD the endpoint expects.',
-  'Provide 2-3 smoke_cases with REAL arguments that must all succeed — they are executed for real.',
+  'SMOKE CASES: provide 2-3, each with REAL arguments. They are EXECUTED for real and EVERY one must',
+  '  return success:true. Supply only happy-path cases. Do NOT include negative, empty, malformed or',
+  '  "does-not-exist" arguments to demonstrate error handling — a case that is expected to fail is',
+  '  indistinguishable from a broken tool and will cause the whole tool to be rejected.',
 ].join('\n');
 
 function buildAuthorMessages(
@@ -136,6 +143,9 @@ function buildRepairMessages(
     'return a corrected version. Do not restate the same approach — if an endpoint returned 404/405 the URL or ' +
     'HTTP method is wrong; if authentication failed, route the call through a catalogued API with a credential ' +
     'handle instead; if the handler returned undefined, make every path return the result object.\n\n' +
+    'IMPORTANT: if a failing case was a deliberate error/edge case (an empty string, a "does not exist" value), ' +
+    'the TOOL is not what is wrong — the case is. Replace it with a realistic happy-path case. Every smoke case ' +
+    'must return success:true.\n\n' +
     HANDLER_RULES +
     '\n\nRespond with ONLY JSON: {"name": string, "description": string, "toolset": string, ' +
     '"parameters": {...}, "handler_code": string, "smoke_cases": [{"args": {...}}]}. No prose outside the JSON.';

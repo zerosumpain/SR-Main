@@ -78,11 +78,14 @@ function buildRepairMessages(
     'a missing User-Agent, unhandled rate limiting, an unchecked response, a missing null guard — and rewrite the ' +
     'handler so it is robust.\n\n' +
     'handler_code is the BODY of an async function with `args`, `fetch` and `platform` in scope and MUST return ' +
-    '{ success: boolean, data?: any, error?: string } on every path. Prefer platform.call("api_call", …) for ' +
-    'catalogued APIs. FORBIDDEN: process, require(), import(), eval, Function(), .constructor(), globalThis, fs, ' +
-    'child_process, setInterval.\n\n' +
-    'Also supply 2-4 smoke_cases of REAL arguments that a correct implementation must handle — include the awkward ' +
-    'ones that probably cause the current failures.\n\n' +
+    '{ success: boolean, data?: any, error?: string } on every path. For catalogued APIs prefer ' +
+    'platform.call("api_call", { api: "<catalogue name>", url: "<FULL url starting with that API\'s baseUrl>", ' +
+    'method: "GET" }) — `url` is required and there is no "path" parameter. FORBIDDEN: process, require(), ' +
+    'import(), eval, Function(), .constructor(), globalThis, fs, child_process, setInterval.\n\n' +
+    'Also supply 2-4 smoke_cases of REAL arguments that a correct implementation must handle SUCCESSFULLY — ' +
+    'realistic inputs of the kind the tool is failing on in production. Every case is executed and must return ' +
+    'success:true, so do NOT include deliberate error cases (empty values, "does not exist" inputs): they would ' +
+    'make a working repair look broken and it would be discarded.\n\n' +
     'Respond with ONLY JSON: {"handler_code": string, "smoke_cases": [{"args": {...}}], "notes": string}. No prose.';
 
   const user =
