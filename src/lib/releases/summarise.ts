@@ -30,6 +30,7 @@ import {
   type ReleaseSummary,
   type ReleaseItemSummary,
 } from './types';
+import { redactDeep } from '$lib/security/sensitive';
 
 /** Hard ceiling on prompt evidence. Big deploys exist (a 300-file refactor);
  *  past this the extra file paths add noise, not signal. */
@@ -174,6 +175,27 @@ export function kindFromSubject(subject: string): ReleaseItemKind {
  * step: a plausible-but-invented file path is the failure mode that would make
  * the whole log untrustworthy).
  */
+/**
+ * Storage-time scrub for secrets and personal data.
+ *
+ * The summariser is reading commit messages, and commit messages quote the
+ * data that provoked the change — a WhatsApp JID fix quoted the real phone
+ * number it was failing on, and that reached the public /releases page. The
+ * evidence-binding above cannot catch this: the number was not invented, it
+ * was faithfully reported from the commits.
+ *
+ * So sensitive spans are removed HERE, before the row is written, rather than
+ * only being filtered at render. $lib/releases/public-filter still gates the
+ * public view — this is the layer that keeps it out of the database at all,
+ * which also protects every other reader of the table.
+ *
+ * Redact rather than drop: the release log is the owner's own record and
+ * should stay complete. Only the sensitive span goes.
+ */
+function scrub<T>(value: T): T {
+  return redactDeep(value);
+}
+
 export function normaliseSummary(
   raw: unknown,
   evidence: { commits: CommitFact[]; files: FileFact[] },
@@ -192,11 +214,11 @@ export function normaliseSummary(
       return {
         kind: pick(it.kind, RELEASE_ITEM_KINDS, 'improvement'),
         impact: pick(it.impact, RELEASE_IMPACTS, 'internal'),
-        title: title.slice(0, 140),
-        summary: (typeof it.summary === 'string' ? it.summary.trim() : '').slice(0, 1200),
-        includes: strList(it.includes, 12),
-        excludes: strList(it.excludes, 12),
-        surfaces: strList(it.surfaces, 10),
+        title: scrub(title.slice(0, 140)),
+        summary: scrub((typeof it.summary === 'string' ? it.summary.trim() : '').slice(0, 1200)),
+        includes: scrub(strList(it.includes, 12)),
+        excludes: scrub(strList(it.excludes, 12)),
+        surfaces: scrub(strList(it.surfaces, 10)),
         // Evidence pointers must exist in the release, or they're dropped.
         files: strList(it.files, 40).filter((f) => validFiles.has(f)),
         commits: strList(it.commits, 40)
@@ -209,8 +231,10 @@ export function normaliseSummary(
     .filter((i): i is ReleaseItemSummary => i !== null);
 
   return {
-    title: (typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim() : fallbackTitle).slice(0, 200),
-    summary: (typeof obj.summary === 'string' ? obj.summary.trim() : '').slice(0, 2000),
+    title: scrub(
+      (typeof obj.title === 'string' && obj.title.trim() ? obj.title.trim() : fallbackTitle).slice(0, 200),
+    ),
+    summary: scrub((typeof obj.summary === 'string' ? obj.summary.trim() : '').slice(0, 2000)),
     items,
   };
 }
@@ -240,8 +264,18 @@ export function fallbackSummary(evidence: { commits: CommitFact[]; files: FileFa
   };
 }
 
-/** Persist a summary over a release, replacing any previous items. */
-async function writeSummary(id: number, summary: ReleaseSummary, model: string, status: 'ok' | 'failed', errorText?: string) {
+/**
+ * Persist a summary over a release, replacing any previous items.
+ *
+ * The scrub is repeated here even though normaliseSummary already ran it,
+ * because this is the single choke point every producer passes through —
+ * including fallbackSummary, which copies commit subjects and bodies verbatim
+ * and is therefore the likeliest source of raw personal data of all. Redaction
+ * is idempotent, so running it twice costs nothing and means a future code
+ * path cannot bypass it by accident.
+ */
+async function writeSummary(id: number, rawSummary: ReleaseSummary, model: string, status: 'ok' | 'failed', errorText?: string) {
+  const summary = redactDeep(rawSummary);
   const kinds = [...new Set(summary.items.map((i) => i.kind))];
   await db.transaction(async (tx) => {
     await tx
