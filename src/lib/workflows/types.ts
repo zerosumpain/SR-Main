@@ -145,6 +145,14 @@ export interface ExecutionContext {
   dryRun: boolean;
   emit: (event: WorkflowEvent) => void;
   getNodeOutput: (nodeId: string) => Record<string, unknown> | undefined;
+  /**
+   * The error a previously-executed node failed with, if any. Node executions
+   * are only persisted to the DB once the whole run finishes, so this is the
+   * only way for a node to see *during* the run that an upstream source failed
+   * — needed by summarising nodes that must report gaps rather than let a
+   * missing input pass as benign.
+   */
+  getNodeError?: (nodeId: string) => string | undefined;
   checkBreakpoint: () => Promise<void>;
   abortSignal: AbortSignal;
   /** Get outgoing edges from a node (for agent tool discovery) */
