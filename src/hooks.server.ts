@@ -98,6 +98,7 @@ startScheduledEngine().catch((err) => {
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
+import { startConnectorMonitor, stopConnectorMonitor } from '$lib/connectors/monitor';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // Nightly intel maintenance: confidence scores, watchlist diffs, live-query
 // lenses. Each of those had a batch half nothing was calling — a watchlist that
@@ -107,6 +108,7 @@ if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
   startBriefingEngine();
+  startConnectorMonitor();
   startModelRouting();
   startIntelEngine();
 }
@@ -141,6 +143,7 @@ async function gracefulShutdown() {
   stopDatastoreReaper();
   stopSelfImprovement();
   stopBriefingEngine();
+  stopConnectorMonitor();
   stopModelRouting();
   stopIntelEngine();
   process.exit(0);
