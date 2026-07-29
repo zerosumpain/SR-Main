@@ -843,6 +843,42 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     },
   },
   {
+    type: 'briefing-compose',
+    label: 'Briefing compose',
+    kind: 'parse',
+    group: 'Parse & Transform',
+    description: 'Fact sheet + gap list + source ledger. The step that stops an LLM inventing data.',
+    defaultConfig: { timezone: 'Europe/London', titlePrefix: 'Briefing', auditRun: true },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['json', 'text'] }],
+    },
+  },
+  {
+    type: 'location-context',
+    label: 'Location context',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Where home is and where you actually are right now, from Home Assistant.',
+    defaultConfig: { personEntity: 'person.john', homeZoneEntity: 'zone.home', staleAfterMins: 120 },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
+    type: 'weather-brief',
+    label: 'Weather brief',
+    kind: 'output',
+    group: 'Integrations',
+    description: 'Decoded weather for a coordinate pair, with derived local factors.',
+    defaultConfig: { latitude: '', longitude: '', label: '', timezone: 'Europe/London' },
+    handles: {
+      inputs: [{ id: 'in', kinds: ['any', 'json'] }],
+      outputs: [{ id: 'out', kinds: ['json'] }],
+    },
+  },
+  {
     type: 'data-store',
     label: 'Data store (KV)',
     kind: 'output',
