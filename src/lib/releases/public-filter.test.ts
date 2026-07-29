@@ -160,6 +160,45 @@ describe('isItemPublic — structural and infrastructure prose', () => {
   });
 });
 
+describe('isItemPublic — personal data quoted in prose', () => {
+  it('rejects the real production leak that reached the live site', () => {
+    expect(
+      isItemPublic(
+        item({
+          title: 'Normalise WhatsApp JIDs for panel-formatted numbers',
+          summary:
+            "The toJid function was only stripping the leading '+'. Panel-formatted numbers like '+44 7359228511' retained the space, resulting in an invalid JID.",
+        }),
+        VIS,
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects phone numbers in any common form', () => {
+    for (const s of ['+447359228511', '+44 7359 228511', '07359228511', '07359 228511']) {
+      expect(isItemPublic(item({ summary: `Failed on ${s} in the panel.` }), VIS)).toBe(false);
+    }
+  });
+
+  it('rejects emails, postcodes and precise coordinates', () => {
+    expect(isItemPublic(item({ summary: 'Bounced for john@example.com.' }), VIS)).toBe(false);
+    expect(isItemPublic(item({ summary: 'Geocoding failed for NR12 8TB.' }), VIS)).toBe(false);
+    expect(
+      isItemPublic(item({ summary: 'Pinned the marker at 52.6301, 1.2974 on load.' }), VIS),
+    ).toBe(false);
+  });
+
+  it('rejects bare long digit runs, which are usually ids or numbers', () => {
+    expect(isItemPublic(item({ summary: 'Bumped z-index to 2147483646.' }), VIS)).toBe(false);
+  });
+
+  it('still allows ordinary numbers a summary legitimately needs', () => {
+    expect(isItemPublic(item({ summary: 'Now renders 1,056 rows in under 200ms.' }), VIS)).toBe(true);
+    expect(isItemPublic(item({ summary: 'Raised the cap from 300 to 3000 tokens.' }), VIS)).toBe(true);
+    expect(isItemPublic(item({ summary: 'Backfilled 403 releases to 2026-03-19.' }), VIS)).toBe(true);
+  });
+});
+
 describe('isSurfacePublic — non-route labels', () => {
   it('allows a short human label', () => {
     expect(isSurfacePublic('workflow engine', VIS)).toBe(true);
