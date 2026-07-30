@@ -6,6 +6,9 @@ import {
   queryRecords,
 } from '$lib/datastore';
 import { getImprovementStatus } from '$lib/selfimprove/run';
+import { listBacklog } from '$lib/selfimprove/backlog';
+import { loadCustomToolHealth } from '$lib/selfimprove/context';
+import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { CallEfficiency } from '$lib/server/hermes-sessions';
 import { COLLECTIONS, CRON_EXPR, CRON_TZ } from '$lib/selfimprove/types';
@@ -126,14 +129,17 @@ const ACTION_KINDS = [
 ] as const;
 
 export const load: PageServerLoad = async () => {
-  const [runs, attempts, insights, apiStatus, efficiency, policyVersions] = await Promise.all([
-    loadRuns(),
-    loadAttempts(),
-    loadInsights(),
-    loadApiStatus(),
-    loadEfficiency().catch(() => ({ latest: null, history: [] })),
-    listPolicyVersions(25).catch(() => [] as ToolPolicyVersion[]),
-  ]);
+  const [runs, attempts, insights, apiStatus, efficiency, policyVersions, backlog, toolHealth] =
+    await Promise.all([
+      loadRuns(),
+      loadAttempts(),
+      loadInsights(),
+      loadApiStatus(),
+      loadEfficiency().catch(() => ({ latest: null, history: [] })),
+      listPolicyVersions(25).catch(() => [] as ToolPolicyVersion[]),
+      listBacklog().catch(() => []),
+      loadCustomToolHealth().catch(() => []),
+    ]);
 
   // ── Statistics (computed over the loaded window) ──────────────────────────
   const runStatusCounts: Record<string, number> = {};
@@ -177,6 +183,17 @@ export const load: PageServerLoad = async () => {
   // version it just wrote.
   const activePolicy = policyVersions[0] ?? null;
 
+  // The plain-English narrative. Derived here rather than in the component so
+  // the whole derivation stays testable without a browser, and so the page ships
+  // finished sentences rather than the client re-deriving them on every render.
+  const stories = buildStories({
+    runs,
+    backlog,
+    policyVersions,
+    toolHealth,
+    insights,
+  });
+
   return {
     runs,
     attempts,
@@ -184,6 +201,8 @@ export const load: PageServerLoad = async () => {
     efficiency,
     policyVersions,
     activePolicy,
+    stories,
+    storySummary: summariseStories(stories),
     stats,
     schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: '03:30 Europe/London' },
     running: getImprovementStatus().running,

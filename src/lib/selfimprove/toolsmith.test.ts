@@ -10,6 +10,8 @@ const h = vi.hoisted(() => ({
   existingNames: [] as string[],
   addedIdeas: [] as Array<{ title: string }>,
   markedAttempts: [] as Array<{ slug: string; status: string; error?: string }>,
+  /** Backlog as `listBacklog()` sees it — set per test to drive attribution. */
+  backlog: [] as Array<{ slug: string; title: string; detail: string }>,
 }));
 
 vi.mock('$lib/db', () => ({
@@ -52,6 +54,9 @@ vi.mock('./backlog', () => ({
     h.markedAttempts.push({ slug: item.slug, status: o.status, error: o.error });
   }),
   pickWork: vi.fn(() => []),
+  // Re-read after this run's ideas are queued, so a tool built tonight can be
+  // linked to an idea queued tonight — see the driver-attribution fix.
+  listBacklog: vi.fn(async () => h.backlog),
 }));
 
 vi.mock('$lib/workflows/site-tools/registry-internal', () => ({
@@ -113,6 +118,96 @@ beforeEach(() => {
   h.existingNames = [];
   h.addedIdeas = [];
   h.markedAttempts = [];
+  h.backlog = [];
+});
+
+describe('buildTool — driver attribution (the link the ledger reads)', () => {
+  const SENSOR_IDEA = {
+    slug: 'real-time-home-sensor-data-battery-security',
+    title: 'Real-time home sensor data (battery, security)',
+    detail: 'Needs a Home Assistant read path for battery levels and door contacts',
+  };
+
+  it('closes the backlog item a shipped tool serves, matching on `serves`', async () => {
+    // The regression this pins: on 30 Jul the engine shipped home_sensor_status
+    // and govuk_search while leaving both driving ideas open at attempts:0,
+    // because it only searched items picked BEFORE this run queued them.
+    h.backlog = [SENSOR_IDEA];
+    h.responses = [
+      {
+        tools: [
+          toolJson({
+            name: 'home_sensor_status',
+            description: 'Query the current state of Home Assistant entities by entity ID',
+            serves: 'Real-time home sensor data (battery, security)',
+          }),
+        ],
+        ideas: [],
+      },
+    ];
+
+    const actions = await buildTool(undefined, undefined, fakeBudget(), 'run1');
+
+    expect(h.markedAttempts).toContainEqual(
+      expect.objectContaining({ slug: SENSOR_IDEA.slug, status: 'shipped' }),
+    );
+    const shipped = actions.find((a) => a.kind === 'tool_shipped');
+    expect(shipped?.story?.driverRef).toBe(SENSOR_IDEA.slug);
+    expect(shipped?.story?.driver).toContain('Real-time home sensor data');
+    expect(shipped?.story?.subject).toBe('home_sensor_status');
+  });
+
+  it('still attributes when `serves` is absent, via description overlap', async () => {
+    h.backlog = [SENSOR_IDEA];
+    h.responses = [
+      {
+        tools: [
+          toolJson({
+            name: 'home_sensor_status',
+            description:
+              'Reads real-time home sensor data from Home Assistant: battery levels, door contacts and security status',
+          }),
+        ],
+        ideas: [],
+      },
+    ];
+
+    await buildTool(undefined, undefined, fakeBudget(), 'run1');
+    expect(h.markedAttempts).toContainEqual(
+      expect.objectContaining({ slug: SENSOR_IDEA.slug, status: 'shipped' }),
+    );
+  });
+
+  it('does NOT attribute an unrelated tool to a queued idea', async () => {
+    h.backlog = [SENSOR_IDEA];
+    h.responses = [
+      {
+        tools: [
+          toolJson({
+            name: 'timezone_converter',
+            description: 'Converts a timestamp between two named timezones',
+            serves: 'Converting timestamps between timezones',
+          }),
+        ],
+        ideas: [],
+      },
+    ];
+
+    const actions = await buildTool(undefined, undefined, fakeBudget(), 'run1');
+    expect(h.markedAttempts).toHaveLength(0);
+    // The driver still reads as plain English, taken from `serves`.
+    expect(actions.find((a) => a.kind === 'tool_shipped')?.story?.driver).toContain('timezones');
+  });
+
+  it('records the failure reason as the outcome on a rejected build', async () => {
+    h.responses = [{ tools: [toolJson({ name: 'bad_tool' })], ideas: [] }, {}];
+    h.smokeResults = [{ success: false, error: 'HTTP 405' }];
+
+    const actions = await buildTool(undefined, undefined, fakeBudget(), 'run1');
+    const rejected = actions.find((a) => a.kind === 'tool_rejected');
+    expect(rejected?.story?.subject).toBe('bad_tool');
+    expect(rejected?.story?.outcome).toBeTruthy();
+  });
 });
 
 describe('buildTool — shipping is the whole point', () => {

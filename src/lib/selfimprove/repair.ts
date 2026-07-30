@@ -215,6 +215,19 @@ export async function repairTools(budget: Budget, runId: string): Promise<RunAct
           `${tool.name}: ${passCount(before)}→${passCount(after)} of ${spec.smoke_cases.length} smoke cases ` +
           `(was ${(tool.errorRate * 100).toFixed(0)}% errors over ${tool.runCount} runs)` +
           (spec.notes ? ` — ${spec.notes.slice(0, 160)}` : ''),
+        story: {
+          subject: tool.name,
+          mode: 'repair',
+          driver:
+            `\`${tool.name}\` was failing most of the time it was used, so it was rewritten rather than ` +
+            'left in place to keep breaking answers.',
+          driverEvidence: `${(tool.errorRate * 100).toFixed(0)}% of its ${tool.runCount} calls errored`,
+          solution: spec.notes ? spec.notes.slice(0, 300) : 'Re-authored the tool\'s handler.',
+          outcome: `${passCount(before)}→${passCount(after)} of ${spec.smoke_cases.length} smoke cases now pass.`,
+          // The counter is cumulative, so the ledger needs the value AT repair
+          // time to report "errors since the fix" instead of errors ever.
+          runCountAtAction: tool.runCount,
+        },
       });
     } catch (err) {
       const reason = errMsg(err).slice(0, 300);

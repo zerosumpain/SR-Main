@@ -31,6 +31,7 @@ import {
   WORK_CAPS,
   asData,
   errMsg,
+  slugifyIdea,
   type BacklogItemData,
   type QuestionInsights,
   type RunAction,
@@ -40,7 +41,8 @@ import type { Budget } from './run';
 import type { GatheredSignals } from './analyze';
 import { buildContextPack, renderContext, type ContextPack } from './context';
 import { staticScan, smokeTest, type SmokeCase, type SmokeResult } from './verify';
-import { addIdeas, markAttempt, pickWork } from './backlog';
+import { addIdeas, listBacklog, markAttempt, pickWork } from './backlog';
+import { findRelatedIdea } from './narrative';
 
 const NAME_RE = /^[a-z][a-z0-9_]{2,60}$/;
 
@@ -51,6 +53,16 @@ export interface ToolSpec {
   parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
   handler_code: string;
   smoke_cases: SmokeCase[];
+  /**
+   * The user need this tool exists to serve, in the model's own words.
+   *
+   * This is the ROOT DRIVER shown on the plain-English ledger, and the only
+   * moment it is cheaply knowable is here, where the need and the code are being
+   * decided together. Reconstructing it afterwards means guessing from a tool
+   * description written in API terms, which is exactly what the ledger has to
+   * label as inferred rather than recorded.
+   */
+  serves?: string;
 }
 
 interface ToolsmithPlan {
@@ -95,9 +107,13 @@ function buildAuthorMessages(
     "A tool that reads the owner's own data or a catalogued API is worth ten timezone converters.\n\n" +
     HANDLER_RULES +
     '\n\nRespond with ONLY JSON: {"tools": [{"name": snake_case, "description": string, "toolset": string, ' +
-    '"parameters": {"type":"object","properties":{...},"required":[...]}, "handler_code": string, ' +
+    '"serves": string, "parameters": {"type":"object","properties":{...},"required":[...]}, ' +
+    '"handler_code": string, ' +
     '"smoke_cases": [{"args": {...}}]}], "ideas": [{"title": string, "detail": string, ' +
     '"kind": "tool"|"feature", "priority": 1-5}]}. ' +
+    '"serves" is the user need this tool addresses, in one plain-English sentence, COPIED from the unmet ' +
+    'needs or backlog items given below wherever one applies. It is shown to the owner as the reason the ' +
+    'tool exists, so it must describe the question a person was unable to get answered — not what the code does. ' +
     'Use "feature" for ideas that need real repository code rather than a runtime tool. No prose outside the JSON.';
 
   const sections = [renderContext(pack)];
@@ -201,6 +217,7 @@ export function coerceSpec(raw: unknown): ToolSpec | null {
     parameters: { type: 'object', properties: params.properties ?? {}, required: params.required },
     handler_code,
     smoke_cases,
+    serves: typeof o.serves === 'string' && o.serves.trim() ? o.serves.trim().slice(0, 400) : undefined,
   };
 }
 
@@ -339,6 +356,21 @@ export async function toolNameExists(name: string): Promise<boolean> {
   }
 }
 
+/**
+ * The plain-English reason a tool was built, for the ledger's DRIVER column.
+ *
+ * Prefers the need the model was asked to state, falls back to the backlog item
+ * it was matched to, and says plainly when neither exists. It never describes
+ * what the code does — that is the SOLUTION column, and conflating the two is
+ * what made the old ledger unreadable.
+ */
+function driverSentence(spec: ToolSpec, related: BacklogItemData | null | undefined): string {
+  const need = (spec.serves ?? '').trim().replace(/[.\s]+$/, '');
+  if (need) return `${need}.`;
+  if (related) return `Queued as an unmet need: ${related.title.replace(/[.\s]+$/, '')}.`;
+  return 'Built from the week\'s question analysis; the specific need was not recorded.';
+}
+
 // ---------------------------------------------------------------------------
 // BUILD
 // ---------------------------------------------------------------------------
@@ -403,12 +435,20 @@ export async function buildTool(
       outcome = await verifyAndShip(spec);
     }
 
-    // Attribute the outcome to the backlog item that inspired it, when there is one.
-    const related = work.find(
-      (w) =>
-        w.slug === spec.name ||
-        spec.description.toLowerCase().includes(w.title.toLowerCase().slice(0, 20)),
-    );
+    // Attribute the outcome to the backlog item that inspired it.
+    //
+    // This used to search only `work` — the items picked BEFORE this run's own
+    // ideas were queued — with a matcher that required the tool's description to
+    // contain the first 20 characters of the item's title. On 30 Jul it shipped
+    // `home_sensor_status` and `govuk_search` while leaving "Real-time home
+    // sensor data" and "Up-to-date knowledge on UK government projects" open at
+    // attempts:0, so the backlog recorded nothing and would have rebuilt both.
+    // Now it searches the whole backlog as it stands after this run's additions,
+    // and leads with `serves` — the need in the model's own words.
+    const backlogNow = await listBacklog();
+    const related =
+      backlogNow.find((w) => w.slug === slugifyIdea(spec.serves ?? '')) ??
+      findRelatedIdea(`${spec.serves ?? ''} ${spec.description} ${spec.name.replace(/_/g, ' ')}`, backlogNow);
 
     if (outcome.shipped) {
       await recordAttempt(runId, spec, 'created', {
@@ -421,6 +461,20 @@ export async function buildTool(
         detail:
           `${spec.name}: ${spec.description} — live now` +
           (round > 0 ? ` (fixed after ${round} repair round${round > 1 ? 's' : ''})` : ''),
+        story: {
+          subject: spec.name,
+          mode: 'create',
+          driver: driverSentence(spec, related),
+          driverRef: related?.slug,
+          driverEvidence: related?.detail?.slice(0, 240),
+          solution: spec.description,
+          outcome:
+            `Passed the safety scan and every smoke case, and was enabled live` +
+            (round > 0 ? ` after ${round} repair round${round > 1 ? 's' : ''}` : '') + '.',
+          // Snapshot so the ledger can later say "called N times SINCE shipping"
+          // rather than quoting a lifetime counter that never resets.
+          runCountAtAction: 0,
+        },
       });
       if (related) await markAttempt(related, { status: 'shipped', runId });
     } else {
@@ -432,6 +486,14 @@ export async function buildTool(
       actions.push({
         kind: 'tool_rejected',
         detail: `${spec.name}: ${(outcome.failure ?? 'failed verification').slice(0, 200)}`,
+        story: {
+          subject: spec.name,
+          mode: 'create',
+          driver: driverSentence(spec, related),
+          driverRef: related?.slug,
+          solution: spec.description,
+          outcome: (outcome.failure ?? 'failed verification').slice(0, 300),
+        },
       });
       if (related) {
         await markAttempt(related, { status: 'open', error: outcome.failure, runId });

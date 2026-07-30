@@ -566,6 +566,19 @@ export async function optimiseCalls(budget: Budget, runId: string): Promise<RunA
         `v${published.version} targets ${chosen.tool.name} ` +
         `(${chosen.pattern.repeatCalls} repeat calls over ${chosen.pattern.turns} turns) — ` +
         `${clip(spec.rationale, 160)} On trial from ${eff.chat.meanCalls} calls/turn.`,
+      story: {
+        subject: chosen.tool.name,
+        driver:
+          `\`${chosen.tool.name}\` was being called over and over inside single conversations — ` +
+          `the same tool again and again to settle one question, which is slow and costs tokens.`,
+        driverEvidence:
+          `${chosen.pattern.repeatCalls} repeated calls across ${chosen.pattern.turns} turn` +
+          `${chosen.pattern.turns === 1 ? '' : 's'} (worst single turn: ${chosen.pattern.worstInOneTurn}×)`,
+        solution: clip(spec.rationale, 300),
+        outcome:
+          `Live on trial from a baseline of ${eff.chat.meanCalls} calls per chat turn. ` +
+          `It is kept only if that drops by at least 5%.`,
+      },
     });
   } catch (err) {
     actions.push({

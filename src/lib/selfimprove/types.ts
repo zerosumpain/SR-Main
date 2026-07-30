@@ -135,9 +135,50 @@ export type ActionKind =
   /** A trialled policy failed to beat its baseline and was rolled back. */
   | 'policy_reverted';
 
+/**
+ * The plain-English record of one improvement, captured WHERE THE FACTS ARE
+ * KNOWN rather than reconstructed later.
+ *
+ * `detail` is a single prose string built for the WhatsApp summary, and the
+ * numbers that matter — the error rate that triggered a repair, the repeat-call
+ * count behind an overlay, how often a tool had been called at the moment it
+ * shipped — survive in it only as text. Re-parsing that on the read side works
+ * until someone rewords a template, and then it fails silently.
+ *
+ * Every field here is optional and additive: runs recorded before this existed
+ * still render, via the inference path in `narrative.ts`, which labels what it
+ * could not establish.
+ */
+export interface ActionStory {
+  /** The tool / API / policy target this action is about. */
+  subject?: string;
+  /** Why it happened, in plain English. */
+  driver?: string;
+  /** The measurement behind the driver ("80% of 5 calls errored"). */
+  driverEvidence?: string;
+  /** Verbatim user questions that motivated it. Owner-only surfaces. */
+  driverQuotes?: string[];
+  /** Backlog slug this addresses — the link that makes the driver `recorded`. */
+  driverRef?: string;
+  /** What was chosen and done. */
+  solution?: string;
+  /** What came of it, as known at the time. */
+  outcome?: string;
+  /** Distinguishes a build from a re-author of an existing tool. */
+  mode?: 'create' | 'repair';
+  /**
+   * The tool's lifetime call count at the moment of this action. `custom_tools`
+   * counters are cumulative and never reset, so this snapshot is the only way to
+   * later say "called 12 times SINCE it shipped" rather than "12 times ever".
+   */
+  runCountAtAction?: number;
+}
+
 export interface RunAction {
   kind: ActionKind;
   detail: string;
+  /** Structured narrative for the plain-English ledger. Optional by design. */
+  story?: ActionStory;
 }
 
 /** Shape of an `improvement_runs` record's `data`. */
