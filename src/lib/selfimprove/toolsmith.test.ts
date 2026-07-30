@@ -199,6 +199,21 @@ describe('buildTool — driver attribution (the link the ledger reads)', () => {
     expect(actions.find((a) => a.kind === 'tool_shipped')?.story?.driver).toContain('timezones');
   });
 
+  it('leaves the driver UNSET when nothing about the reason is known', async () => {
+    // The ledger treats any stored driver as `recorded`. Writing a "the need was
+    // not recorded" sentence here would stamp full confidence on text that
+    // admits it knows nothing; unset lets the ledger infer and label honestly.
+    h.backlog = [];
+    h.responses = [
+      { tools: [toolJson({ name: 'mystery_tool', description: 'Does something unrelated' })], ideas: [] },
+    ];
+    const actions = await buildTool(undefined, undefined, fakeBudget(), 'run1');
+    const shipped = actions.find((a) => a.kind === 'tool_shipped');
+    expect(shipped?.story).toBeDefined();
+    expect(shipped?.story?.driver).toBeUndefined();
+    expect(shipped?.story?.driverRef).toBeUndefined();
+  });
+
   it('records the failure reason as the outcome on a rejected build', async () => {
     h.responses = [{ tools: [toolJson({ name: 'bad_tool' })], ideas: [] }, {}];
     h.smokeResults = [{ success: false, error: 'HTTP 405' }];
