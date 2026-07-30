@@ -68,7 +68,7 @@
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
     text-decoration: none;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .as-dot {
     width: 7px;

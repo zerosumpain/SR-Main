@@ -249,7 +249,7 @@
     background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     overflow: hidden;
   }
@@ -261,7 +261,7 @@
     border-bottom: 1px solid var(--divider);
   }
   .title {
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -272,7 +272,7 @@
     border: 1px solid transparent;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     padding: 0 6px;
     border-radius: 2px;
   }
@@ -288,7 +288,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   th,
   td {
@@ -303,7 +303,7 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     position: sticky;
     top: 0;
     background: var(--bg);
@@ -341,7 +341,7 @@
   }
   .type {
     color: var(--text-ghost);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
@@ -365,12 +365,12 @@
   }
   .dl {
     color: var(--text-ghost);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
   .dv {
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
   }
@@ -388,7 +388,7 @@
   }
   .last-err-hdr {
     color: #b53b3b;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     margin-bottom: 2px;
@@ -396,7 +396,7 @@
   .last-err pre {
     margin: 0;
     color: var(--text-primary);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -406,7 +406,7 @@
     border: 1px solid var(--card-border);
     color: var(--text-secondary);
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 4px 10px;
@@ -421,7 +421,7 @@
     padding: 4px 6px;
     background: rgba(204, 68, 68, 0.06);
     border-left: 2px solid #c44;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     display: flex;
     gap: 6px;
     align-items: baseline;
@@ -430,7 +430,7 @@
   .last-error .le-msg { color: #c44; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .error-strip {
     color: #b53b3b;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 6px 8px;
     border: 1px solid rgba(181, 59, 59, 0.4);
     background: rgba(181, 59, 59, 0.06);
@@ -438,7 +438,7 @@
   .skel {
     color: var(--text-ghost);
     font-style: italic;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 8px;
     text-align: center;
   }

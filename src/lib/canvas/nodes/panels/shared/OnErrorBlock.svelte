@@ -77,12 +77,12 @@
     padding: 8px 10px;
   }
   .oe-hdr { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .oe-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .oe-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .oe-row { display: flex; gap: 8px; }
   .oe-field { display: flex; flex-direction: column; gap: 3px; flex: 1; }
   .oe-field-half { flex: 1; }
   .oe-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
   select, input[type='number'] {

@@ -515,7 +515,7 @@
     padding: 16px;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     font-style: italic;
   }
@@ -523,7 +523,7 @@
     margin: 0;
     padding: 8px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-primary);
     white-space: pre-wrap;
@@ -533,7 +533,7 @@
   }
   .num {
     font-family: var(--font-mono);
-    font-size: 20px;
+    font-size: 1.25rem;
     color: var(--accent);
     padding: 12px;
   }
@@ -550,7 +550,7 @@
   .url-ref {
     display: block;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     margin-top: 6px;
     word-break: break-all;
@@ -571,7 +571,7 @@
   .tbl {
     border-collapse: collapse;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     width: 100%;
   }
   .kv th {
@@ -582,7 +582,7 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     border: 1px solid var(--card-border);
     width: 35%;
     vertical-align: top;
@@ -606,7 +606,7 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     padding: 4px 8px;
     border: 1px solid var(--card-border);
     text-align: left;
@@ -628,7 +628,7 @@
     margin: 0;
     padding-left: 20px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.6;
     color: var(--text-primary);
   }
@@ -638,7 +638,7 @@
     gap: 4px;
     padding: 1px 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     background: var(--bg);
@@ -658,7 +658,7 @@
     background: rgba(196, 87, 10, 0.08);
   }
   .pill-caret {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
   }
   .copy-cell {
@@ -679,7 +679,7 @@
   .copied {
     margin-left: 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -701,7 +701,7 @@
   }
   .nested-crumb {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -728,7 +728,7 @@
     border: 1px solid var(--card-border);
     padding: 2px 8px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     cursor: pointer;
@@ -744,7 +744,7 @@
   }
   .pill-modal {
     padding: 1px 5px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1;
   }
   .str-toggle {
@@ -754,7 +754,7 @@
     padding: 0;
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -796,7 +796,7 @@
   }
   .im-dialog-crumb {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -807,7 +807,7 @@
     color: var(--text-muted);
     padding: 2px 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     cursor: pointer;
   }
   .im-dialog-close:hover {

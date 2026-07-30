@@ -537,14 +537,14 @@
     justify-content: space-between;
   }
   .rn-title {
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.08em;
     color: var(--accent);
   }
   .rn-expand,
   .rn-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     background: transparent;
     border: 1px solid var(--card-border);
     color: var(--text-primary);
@@ -566,7 +566,7 @@
     color: var(--accent);
   }
   .rn-muted {
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--divider);
     margin: 0;
   }
@@ -575,7 +575,7 @@
   }
   .rn-exec p {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     margin: 0;
   }
@@ -590,7 +590,7 @@
     padding-top: 6px;
   }
   .rn-sec-h {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--divider);
@@ -606,13 +606,13 @@
     display: flex;
     justify-content: space-between;
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .rn-cl-count {
     color: var(--accent);
   }
   .rn-cl-summary {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--divider);
     margin: 4px 0;
   }
@@ -623,7 +623,7 @@
   }
   .rn-fact-list li,
   .rn-fu-list li {
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
     margin-bottom: 3px;
   }
@@ -633,7 +633,7 @@
     gap: 4px;
   }
   .rn-chip {
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 2px 6px;
     border-radius: 3px;
     border: 1px solid var(--chip);
@@ -641,7 +641,7 @@
     background: transparent;
   }
   .rn-ent {
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 2px 6px;
     border: 1px solid var(--card-border);
     border-radius: 3px;
@@ -654,15 +654,15 @@
     margin-bottom: 6px;
   }
   .rn-hyp-text {
-    font-size: 12px;
+    font-size: var(--fs-label);
     margin: 0;
   }
   .rn-hyp-meta {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--divider);
   }
   .rn-hyp-line {
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 2px 0 0;
   }
   .rn-tension {
@@ -670,11 +670,11 @@
   }
   .rn-fu-q {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .rn-fu-c {
     display: block;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--divider);
   }
   .rn-actions {
@@ -700,7 +700,7 @@
   }
   .rn-brief-input {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     line-height: 1.45;
     background: var(--bg-section, #111);
     border: 1px solid var(--card-border);
@@ -724,7 +724,7 @@
     gap: 5px;
   }
   .rn-hint {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--divider);
     margin: 0;
   }
@@ -742,7 +742,7 @@
     gap: 4px;
   }
   .rn-src-chip {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 2px 6px;
     border: 1px solid var(--card-border);
     border-radius: 3px;

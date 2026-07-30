@@ -277,7 +277,7 @@
     padding: 2px 6px;
     background: var(--bg-section);
     border-bottom: 1px solid var(--card-border);
-    font-size: 12px;
+    font-size: var(--fs-label);
     flex: 0 0 auto;
   }
   .webpage-url-bar {
@@ -286,7 +286,7 @@
     border: none;
     color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--fs-label);
     outline: none;
     padding: 2px 4px;
   }
@@ -297,7 +297,7 @@
     cursor: pointer;
     padding: 2px 6px;
     font: inherit;
-    font-size: 12px;
+    font-size: var(--fs-label);
     border-radius: var(--radius-sharp);
     text-decoration: none;
     display: inline-flex;
@@ -314,7 +314,7 @@
   .webpage-badge {
     background: var(--accent-ink);
     color: #fff;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 1px 6px;
     border-radius: var(--radius-pill);
     margin-left: 4px;
@@ -335,7 +335,7 @@
     padding: 24px;
     color: var(--text-muted);
     text-align: center;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .webpage-status {
     position: absolute;
@@ -344,7 +344,7 @@
     background: var(--bg-section);
     color: var(--text-muted);
     padding: 2px 6px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     border-radius: var(--radius-sharp);
     pointer-events: none;
   }

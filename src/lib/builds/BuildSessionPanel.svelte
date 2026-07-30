@@ -218,19 +218,19 @@
   }
   .bsp-title {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.18em;
   }
   .bsp-status {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted, #6b675f);
   }
   .bsp-status.connected { color: var(--success); }
   .bsp-err {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     margin-left: auto;
   }
@@ -246,7 +246,7 @@
   }
   .bsp-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted, #6b675f);
@@ -286,7 +286,7 @@
   }
   .bsp-input {
     font-family: var(--font-mono), monospace;
-    font-size: 0.85rem;
+    font-size: var(--fs-body);
     padding: 0.5rem 0.6rem;
     border: 1px solid var(--text-primary, #1f1c18);
     background: var(--bg, #ede4d4);

@@ -154,7 +154,7 @@
   }
   .x:hover { color: var(--text-primary); background: var(--card-bg); }
   .conv-name {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     font-weight: 500;
     color: var(--text-secondary);
     margin: 0 0 14px;
@@ -193,8 +193,8 @@
       radial-gradient(circle at center, var(--accent) 0 4px, transparent 5px);
   }
   .opt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .opt-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-  .opt-desc { font-size: 11.5px; color: var(--text-ghost); line-height: 1.35; }
+  .opt-label { font-size: var(--fs-nav); font-weight: 600; color: var(--text-primary); }
+  .opt-desc { font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.35; }
 
   .link-row { display: flex; gap: 6px; margin-top: 14px; }
   .link-in {
@@ -205,7 +205,7 @@
     border-radius: var(--radius-round);
     background: var(--bg);
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--fs-body);
     color: var(--text-secondary);
   }
   .link-in:focus { outline: none; border-color: var(--accent); }
@@ -216,7 +216,7 @@
     background: var(--accent);
     color: #fff;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
@@ -224,5 +224,5 @@
     transition: background 0.12s;
   }
   .copy:hover { background: var(--accent-hover); }
-  .hint { font-size: 11px; color: var(--text-ghost); margin: 8px 0 0; line-height: 1.4; }
+  .hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 8px 0 0; line-height: 1.4; }
 </style>

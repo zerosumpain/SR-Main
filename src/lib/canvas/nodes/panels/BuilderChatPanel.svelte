@@ -246,27 +246,27 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .bcp-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .bcp-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .bcp-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .bcp-field-wide { grid-column: 1 / -1; }
   .bcp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
   .bcp-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
     display: inline-flex; gap: 6px; align-items: baseline;
   }
-  .bcp-req { color: var(--status-error, #c0392b); font-size: 9px; }
-  .bcp-opt { color: var(--text-ghost); font-size: 9px; }
-  .bcp-hint { font-size: 11px; color: var(--text-ghost); }
-  .bcp-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
-  .bcp-empty code, .bcp-hint code { font-size: 11px; color: var(--text-muted); }
+  .bcp-req { color: var(--status-error, #c0392b); font-size: var(--fs-label-xs); }
+  .bcp-opt { color: var(--text-ghost); font-size: var(--fs-label-xs); }
+  .bcp-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .bcp-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
+  .bcp-empty code, .bcp-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .bcp-checkbox {
     display: inline-flex; gap: 8px; align-items: center;
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
   }
   .bcp-checkbox input { accent-color: var(--accent); width: 14px; height: 14px; }
 
@@ -276,10 +276,10 @@
     border: 1px solid var(--card-border);
     background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
-  .bcp-code-inline { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .bcp-code-inline { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
   .bcp-link {
     background: transparent; border: none; padding: 0;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--accent); cursor: pointer;
   }
@@ -291,7 +291,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

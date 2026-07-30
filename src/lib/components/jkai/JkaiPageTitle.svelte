@@ -54,7 +54,7 @@
   }
   .pt-back {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     color: var(--text-muted);
     text-decoration: none;
     transition: color 0.2s ease-out;
@@ -68,7 +68,7 @@
     gap: 0.45ch;
     margin: 0;
     font-family: var(--font-brand);
-    font-size: 15px;
+    font-size: var(--fs-body);
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--text-primary);
@@ -87,7 +87,7 @@
     gap: 8px;
     min-width: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);

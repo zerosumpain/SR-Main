@@ -33,7 +33,7 @@
     flex-direction: column;
     gap: 4px;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   li {
     display: flex;
@@ -50,7 +50,7 @@
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     margin-left: auto;
     text-transform: uppercase;
     letter-spacing: 0.1em;

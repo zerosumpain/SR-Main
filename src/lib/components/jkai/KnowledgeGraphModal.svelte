@@ -232,7 +232,7 @@
   }
   .gm-title {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -240,7 +240,7 @@
   }
   .gm-count {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -253,7 +253,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -278,7 +278,7 @@
     gap: 5px 14px;
     padding: 8px 10px 2px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -326,7 +326,7 @@
     padding: 1px 4px;
     background: var(--bg);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent);
@@ -357,7 +357,7 @@
   }
   .gm-glyph {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     color: var(--n-color, var(--accent));
   }
@@ -366,7 +366,7 @@
   }
   .gm-label {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -386,7 +386,7 @@
   }
   .gm-type {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -395,7 +395,7 @@
   .gm-name {
     margin-top: 6px;
     font-family: var(--font-brand);
-    font-size: 17px;
+    font-size: var(--fs-body-lg);
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--text-primary);
@@ -404,7 +404,7 @@
   .gm-note {
     margin: 8px 0 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
   }
@@ -416,7 +416,7 @@
     border-radius: var(--radius-sharp);
     background: var(--accent-tint-08);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -433,7 +433,7 @@
     padding-bottom: 6px;
     border-bottom: 1px solid var(--divider);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -467,7 +467,7 @@
   .gm-verb {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent);
@@ -477,7 +477,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -486,7 +486,7 @@
   .gm-where {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.4);
@@ -495,7 +495,7 @@
     flex: none;
     padding: 4px 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-decoration: none;
   }

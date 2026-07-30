@@ -222,17 +222,17 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .bo-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .bo-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .bo-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .bo-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
   .bo-req { color: var(--status-error, #c0392b); }
-  .bo-hint { font-size: 11px; color: var(--text-ghost); }
-  .bo-hint code, .bo-warn code { color: var(--text-muted); font-size: 11px; }
-  .bo-warn { font-size: 11px; color: var(--status-error, #c0392b); }
+  .bo-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .bo-hint code, .bo-warn code { color: var(--text-muted); font-size: var(--fs-label); }
+  .bo-warn { font-size: var(--fs-label); color: var(--status-error, #c0392b); }
 
   .bo-content { min-height: 180px; }
 
@@ -240,8 +240,8 @@
     display: flex; align-items: center; gap: 8px;
     cursor: pointer;
   }
-  .bo-toggle-label { font-size: 12px; color: var(--text-primary); }
-  .bo-toggle-meta { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
+  .bo-toggle-label { font-size: var(--fs-label); color: var(--text-primary); }
+  .bo-toggle-meta { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label); }
 
   input[type='text'], select, textarea {
     width: 100%;
@@ -261,7 +261,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

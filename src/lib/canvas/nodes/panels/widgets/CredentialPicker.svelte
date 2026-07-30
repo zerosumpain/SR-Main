@@ -100,7 +100,7 @@
   }
   .cp-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -121,7 +121,7 @@
     border: 1px solid var(--card-border);
     font: inherit;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
@@ -134,7 +134,7 @@
     color: var(--text-muted);
     border: 1px dashed var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -144,7 +144,7 @@
     color: var(--text-primary);
   }
   .cp-hint {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
   .cp-hint a {
@@ -155,7 +155,7 @@
   }
   .cp-warn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--status-error, #c0392b);

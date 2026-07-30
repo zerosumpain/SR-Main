@@ -435,7 +435,7 @@
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     white-space: nowrap;
@@ -460,7 +460,7 @@
   }
   .chart-title {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -475,7 +475,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     white-space: nowrap;
   }
@@ -503,12 +503,12 @@
   }
   .axis-lab {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-ghost);
   }
   .axis-title {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-ghost);
     letter-spacing: 0.06em;
   }
@@ -544,7 +544,7 @@
   }
   .point-lab {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-secondary);
     pointer-events: none;
   }
@@ -568,7 +568,7 @@
     transform: translate(calc(-100% - 8px), -50%);
   }
   .tip-name {
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     overflow: hidden;
@@ -584,7 +584,7 @@
     border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
     color: var(--accent);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     vertical-align: 1px;
@@ -592,7 +592,7 @@
   .tip-id,
   .tip-stats {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -602,7 +602,7 @@
   .chart-note {
     margin: 6px 0 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 
@@ -637,14 +637,14 @@
   .bar-rank,
   .bar-val {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .bar-val {
     text-align: right;
   }
   .bar-name {
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -681,7 +681,7 @@
       gap: 8px;
     }
     .key {
-      font-size: 9px;
+      font-size: var(--fs-label-xs);
     }
   }
 </style>

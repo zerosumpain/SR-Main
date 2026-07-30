@@ -55,14 +55,14 @@
   .rc-sec { display: flex; flex-direction: column; gap: 8px; }
   .rc-field { display: flex; flex-direction: column; gap: 4px; }
   .rc-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
-  .rc-readout { margin: 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .rc-readout { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); }
   .rc-readout code { color: var(--accent); }
   .rc-code {
     width: 100%; padding: 8px; background: var(--bg); color: var(--text-primary);
-    border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: 11px;
+    border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .rc-code:focus { border-color: var(--text-muted); }

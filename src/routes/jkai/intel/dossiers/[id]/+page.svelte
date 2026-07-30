@@ -536,7 +536,7 @@
   }
   .titlebtn {
     font-family: var(--font-display);
-    font-size: 20px;
+    font-size: 1.25rem;
     text-transform: none;
     letter-spacing: 0;
     padding: 2px 4px;
@@ -548,7 +548,7 @@
   .titleinput {
     flex: 1;
     font-family: var(--font-display);
-    font-size: 20px;
+    font-size: 1.25rem;
     padding: 3px 6px;
     background: var(--bg);
     color: var(--text-primary);
@@ -624,7 +624,7 @@
     width: 100%;
     padding: 7px 9px;
     font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
@@ -703,7 +703,7 @@
     padding-top: 2px;
   }
   .ico {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.4;
   }
   .ibody {
@@ -744,7 +744,7 @@
     line-height: 1.5;
   }
   .itemedit {
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
   }
   .rowacts {
     display: flex;

@@ -412,7 +412,7 @@
   select {
     padding: 6px 8px;
     font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
@@ -601,7 +601,7 @@
     color: var(--accent);
   }
   .icon {
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
   }
   .who {
     display: flex;
@@ -655,7 +655,7 @@
     border-color: transparent;
     padding: 2px 5px;
     color: var(--text-ghost);
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
   .star.on {
     color: var(--accent);

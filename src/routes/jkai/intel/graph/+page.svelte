@@ -105,7 +105,10 @@
       .data(edges)
       .join('text')
       .text((d) => d.type.replace(/_/g, ' '))
-      .attr('font-size', '9px')
+      // Literal px, not var(--fs-label-xs): browsers do not substitute custom
+      // properties inside an SVG presentation attribute. Keep these two in step
+      // with the --fs-label-xs / --fs-label tokens by hand.
+      .attr('font-size', '12px')
       .attr('fill', '#6b7280')
       .attr('text-anchor', 'middle')
       .attr('dy', -4);
@@ -151,7 +154,7 @@
       .text((d) => d.name)
       .attr('text-anchor', 'middle')
       .attr('dy', (d) => radiusScale(d.connectionCount) + 14)
-      .attr('font-size', '11px')
+      .attr('font-size', '13px')
       .attr('fill', '#e5e7eb')
       .attr('font-weight', '500');
 

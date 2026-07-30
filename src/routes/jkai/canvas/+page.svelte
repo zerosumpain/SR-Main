@@ -413,7 +413,7 @@
   }
   .idx-head-meta {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
 
@@ -428,7 +428,7 @@
   }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--accent);
@@ -451,7 +451,7 @@
   }
   .sub code, code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -459,7 +459,7 @@
   }
   .back-link {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--accent);
@@ -484,7 +484,7 @@
   }
   .sr-label-tight {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -492,7 +492,7 @@
   }
   .nm-sec-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     margin-left: auto;
   }
@@ -504,7 +504,7 @@
   .sort-select {
     width: auto;
     padding: 3px 6px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     background: var(--bg);
     cursor: pointer;
   }
@@ -522,14 +522,14 @@
   }
   .bucket-name {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
   }
   .bucket-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 
@@ -551,13 +551,13 @@
   }
   .stat-val {
     font-family: var(--font-mono);
-    font-size: 20px;
+    font-size: 1.25rem;
     color: var(--text-primary);
     line-height: 1.1;
   }
   .stat-lbl {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -576,7 +576,7 @@
   .nm-text-input {
     width: 100%;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     color: var(--text-primary);
     background: rgba(26, 16, 8, 0.04);
     border: 1px solid var(--card-border);
@@ -589,7 +589,7 @@
 
   .err-line {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--error);
     padding: 6px 8px;
     background: var(--error-bg);
@@ -603,13 +603,13 @@
   }
   .hint {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
 
   .nm-save-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 6px 14px;
@@ -629,7 +629,7 @@
     padding: 1.5rem;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     font-style: italic;
     border: 1px dashed var(--card-border);
@@ -678,7 +678,7 @@
   .card-title {
     font-family: var(--font-body);
     font-weight: 500;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -686,7 +686,7 @@
   }
   .card-slug {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     white-space: nowrap;
     overflow: hidden;
@@ -699,7 +699,7 @@
     height: 18px;
     padding: 0 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     background: rgba(26, 16, 8, 0.04);
@@ -730,7 +730,7 @@
   }
   .mini-val {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     display: inline-flex;
     align-items: center;
@@ -742,14 +742,14 @@
   .mini-muted { color: var(--text-ghost); }
   .mini-lbl {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
   .card-foot {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     padding-top: 0.35rem;
     border-top: 1px dashed var(--card-border);
@@ -773,7 +773,7 @@
   /* Delete as discreet row-link in corner, matches /drive */
   .row-link {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);

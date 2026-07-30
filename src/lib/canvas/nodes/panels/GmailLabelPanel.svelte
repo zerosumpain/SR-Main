@@ -281,23 +281,23 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .gl-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .gl-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .gl-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .gl-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .gl-hint { font-size: 11px; color: var(--text-ghost); }
-  .gl-hint code, .gl-label code { font-size: 11px; color: var(--text-muted); }
+  .gl-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .gl-hint code, .gl-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .gl-hint a { color: var(--accent); text-decoration: none; }
   .gl-hint a:hover { text-decoration: underline; }
   .gl-hint em { font-style: normal; color: var(--text-primary); }
 
-  .gl-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .gl-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
   .gl-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
 
@@ -307,7 +307,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: none;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -324,7 +324,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

@@ -155,7 +155,7 @@
   }
   .ff-sec h3 {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -165,7 +165,7 @@
   .ff-search-wrap { display: flex; flex-direction: column; gap: 3px; }
   .ff-search {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     padding: 5px 8px;
     width: 100%;
     box-sizing: border-box;
@@ -177,14 +177,14 @@
   }
   .ff-search:focus { border-color: var(--accent); }
   .ff-search::placeholder { color: var(--text-ghost); }
-  .ff-search-hint { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
+  .ff-search-hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .ff-filters { display: flex; flex-direction: column; gap: 6px; }
   .ff-row {
     display: flex;
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     cursor: pointer;
   }
@@ -197,7 +197,7 @@
   .ff-label { flex: 1; }
   .ff-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
 
@@ -211,13 +211,13 @@
   }
   .ff-group-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--text-muted, rgba(26, 16, 8, 0.55));
   }
   .ff-select {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.02em;
     padding: 5px 8px;
     background: var(--surface-elevated);
@@ -237,14 +237,14 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     cursor: pointer;
   }
   .ff-arrange-row.off { color: var(--text-ghost); }
   .ff-arrange-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.02em;
     padding: 5px 8px;
     background: var(--surface-elevated);
@@ -266,7 +266,7 @@
   }
   .ff-arrange-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     line-height: 1.3;
     color: var(--text-ghost);
   }

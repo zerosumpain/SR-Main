@@ -171,16 +171,16 @@
   }
   .fd-danger-tag {
     flex: 0 0 auto;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--status-error, #c0392b);
     border: 1px solid var(--status-error, #c0392b);
     padding: 2px 6px;
   }
   .fd-danger-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .fd-danger-title { font-size: 12px; color: var(--text-primary); }
-  .fd-danger-text { margin: 0; font-size: 11px; color: var(--text-muted); line-height: 1.45; }
-  .fd-danger-text code { font-size: 11px; color: var(--text-muted); }
+  .fd-danger-title { font-size: var(--fs-label); color: var(--text-primary); }
+  .fd-danger-text { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.45; }
+  .fd-danger-text code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .fd-sec { display: flex; flex-direction: column; gap: 8px; }
   .fd-sec-hdr {
@@ -188,11 +188,11 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .fd-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .fd-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .fd-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-  .fd-hint { font-size: 11px; color: var(--text-ghost); }
-  .fd-hint code { font-size: 11px; color: var(--text-muted); }
+  .fd-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .fd-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .fd-toggle {
     display: grid;
@@ -208,7 +208,7 @@
     cursor: pointer;
   }
   .fd-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .fd-toggle-text strong { font-size: 12px; color: var(--text-primary); font-weight: 600; }
+  .fd-toggle-text strong { font-size: var(--fs-label); color: var(--text-primary); font-weight: 600; }
 
   .fd-code {
     width: 100%;
@@ -216,7 +216,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

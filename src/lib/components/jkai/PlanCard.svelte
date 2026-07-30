@@ -120,7 +120,7 @@
   }
   .plan-summary {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     flex: 1;
   }
@@ -139,7 +139,7 @@
   }
   .plan-step-kind {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 2px 6px;
@@ -151,7 +151,7 @@
   }
   .plan-step-kind[data-kind="write"] { border-color: var(--accent); color: var(--accent); }
   .plan-step-kind[data-kind="run"]   { border-color: var(--status-success); color: var(--status-success); }
-  .plan-step-body { font-family: var(--font-mono); font-size: 11px; flex: 1; min-width: 0; }
+  .plan-step-body { font-family: var(--font-mono); font-size: var(--fs-label); flex: 1; min-width: 0; }
   .plan-step-title { color: var(--text-primary); font-weight: 500; }
   .plan-step-detail { color: var(--text-muted); margin-top: 1px; }
 
@@ -164,7 +164,7 @@
     padding-left: 0;
     margin: 6px 0 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-secondary);
     display: flex;
     flex-direction: column;
@@ -175,7 +175,7 @@
     min-width: 46px;
     text-align: center;
     padding: 1px 4px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     border: 1px solid var(--card-border);
     margin-right: 6px;
@@ -187,7 +187,7 @@
 
   .plan-error {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--status-error);
     background: var(--error-bg);
     border-left: 2px solid var(--status-error);

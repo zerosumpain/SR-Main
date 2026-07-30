@@ -87,7 +87,7 @@
     padding: 0;
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     cursor: pointer;
     text-align: left;
@@ -132,7 +132,7 @@
     align-items: center;
     line-height: 1.1;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .tput-rail.live {
@@ -142,7 +142,7 @@
     font-variant-numeric: tabular-nums;
   }
   .rail-unit {
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     opacity: 0.7;
   }
 </style>

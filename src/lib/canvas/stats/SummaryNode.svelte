@@ -163,27 +163,27 @@
     overflow: hidden;
   }
   header { display: flex; justify-content: space-between; align-items: center; }
-  .title { font-weight: 600; font-size: 12px; }
+  .title { font-weight: 600; font-size: var(--fs-label); }
   .refresh {
     background: transparent; border: none; color: var(--text-muted);
-    cursor: pointer; font-size: 14px; padding: 0 4px;
+    cursor: pointer; font-size: var(--fs-body-sm); padding: 0 4px;
   }
   .refresh:hover { color: var(--text-primary); }
   .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 6px; }
   .counter { display: flex; flex-direction: column; align-items: center; }
-  .counter .v { font-size: 14px; font-weight: 600; }
+  .counter .v { font-size: var(--fs-body-sm); font-weight: 600; }
   .counter .v.ok { color: var(--success); }
   .counter .v.fail { color: var(--error); }
-  .counter .l { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .spark-label { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .counter .l { color: var(--text-muted); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.5px; }
+  .spark-label { font-size: var(--fs-label-xs); margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .spark { height: 96px; }
-  .spark :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .spark :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .spark :global(.tick) { stroke: var(--divider); }
   .spark :global(.rule line) { stroke: var(--divider); }
   .spark :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
-  .list h4 { font-size: 10px; margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .list h4 { font-size: var(--fs-label-xs); margin: 4px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
   .list ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
-  .list li { display: flex; gap: 6px; align-items: center; font-size: 10px; }
+  .list li { display: flex; gap: 6px; align-items: center; font-size: var(--fs-label-xs); }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
   .dot.s-completed { background: var(--success); }
   .dot.s-failed { background: var(--error); }
@@ -191,6 +191,6 @@
   .dur { min-width: 40px; color: var(--text-muted); }
   .when { color: var(--text-muted); }
   .edit { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .empty, .skel { color: var(--text-muted); font-style: italic; font-size: 10px; }
-  .error-strip { color: var(--error); font-size: 10px; padding: 4px; border: 1px solid var(--error); border-radius: var(--radius-round); }
+  .empty, .skel { color: var(--text-muted); font-style: italic; font-size: var(--fs-label-xs); }
+  .error-strip { color: var(--error); font-size: var(--fs-label-xs); padding: 4px; border: 1px solid var(--error); border-radius: var(--radius-round); }
 </style>

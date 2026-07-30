@@ -456,7 +456,9 @@
       .attr('text-anchor', 'middle')
       .attr('dy', (d) => (4 + Math.log(d.connectionCount + 1) * 2) + 10)
       .attr('fill', 'var(--text-muted, #888)')
-      .attr('font-size', '8px')
+      // 12px == --fs-label-xs, the floor. Literal, not a token: var() is not
+      // substituted inside an SVG presentation attribute.
+      .attr('font-size', '12px')
       .attr('font-family', 'var(--font-mono, monospace)');
 
     // Drag behaviour
@@ -703,7 +705,7 @@
     gap: 6px;
     padding: 4px 8px;
     border-bottom: 1px solid var(--divider);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     letter-spacing: 0.08em;
   }
@@ -721,7 +723,7 @@
     border-radius: var(--radius-round);
     padding: 6px;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-body);
     resize: none;
   }
   .query:focus { outline: none; border-color: var(--text-muted); }
@@ -739,7 +741,7 @@
     border-radius: var(--radius-pill);
     padding: 2px 7px;
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
@@ -767,7 +769,7 @@
     flex-wrap: wrap;
   }
   .view-label {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -780,7 +782,7 @@
     border-radius: var(--radius-pill);
     padding: 3px 10px;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-label);
     cursor: pointer;
     transition: background 0.1s, color 0.1s, border-color 0.1s;
   }
@@ -805,12 +807,12 @@
     border-radius: var(--radius-pill);
     padding: 2px 8px;
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .facet-chip:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .meta {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     padding: 0 8px 4px;
   }
@@ -825,7 +827,7 @@
   .item {
     padding: 4px 8px;
     border-top: 1px solid var(--divider);
-    font-size: 11px;
+    font-size: var(--fs-label);
     display: grid;
     grid-template-columns: auto 1fr;
     column-gap: 6px;
@@ -834,13 +836,13 @@
     grid-row: span 2;
     align-self: start;
     color: var(--text-muted);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
   }
   .item-title { color: var(--text-primary); }
   .item-snippet {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     grid-column: 2;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -855,7 +857,7 @@
     gap: 3px;
     padding: 6px 8px;
     border-top: 1px solid var(--divider);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .item-row {
     display: flex;
@@ -865,17 +867,17 @@
   .item-score {
     margin-left: auto;
     color: var(--text-ghost);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
   .item-snippet-full {
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
   }
   .item-meta-row {
     display: flex;
     gap: 8px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .item-tag {
@@ -902,7 +904,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
   .pane-error {
@@ -910,7 +912,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--error);
     padding: 8px;
     text-align: center;
@@ -924,7 +926,7 @@
     padding: 12px 16px;
     line-height: 1.5;
   }
-  .empty { color: var(--text-ghost); padding: 8px; font-size: 11px; }
+  .empty { color: var(--text-ghost); padding: 8px; font-size: var(--fs-label); }
   .footer {
     position: relative;
     padding: 6px 8px;
@@ -937,7 +939,7 @@
     border-radius: var(--radius-round);
     padding: 4px 10px;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-label);
     cursor: pointer;
   }
   .explore-menu {
@@ -959,7 +961,7 @@
     padding: 6px 10px;
     text-align: left;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-label);
     cursor: pointer;
   }
   .explore-menu button:hover { background: rgba(93, 190, 163, 0.08); }

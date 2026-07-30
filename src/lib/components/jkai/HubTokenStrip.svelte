@@ -109,7 +109,7 @@
     gap: 13px;
     min-width: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -176,7 +176,7 @@
   }
 
   .strip.mobile {
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
   }
 
   /* Drop order as the header tightens — BPM first, spend last. Suspended for

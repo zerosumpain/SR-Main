@@ -148,7 +148,7 @@
 
 <style>
   .dd { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
-  .dd-lead { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .dd-lead { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.5; }
   .dd-lead strong { color: var(--text-primary); }
 
   .dd-sec { display: flex; flex-direction: column; gap: 8px; }
@@ -166,14 +166,14 @@
     border: 1px solid var(--card-border);
     font: inherit;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
   .dd-text:focus, .dd-select:focus { border-color: var(--text-muted); }
 
-  .dd-hint { font-size: 11px; color: var(--text-ghost); margin: 0; line-height: 1.4; }
-  .dd-hint code { font-size: 11px; color: var(--text-muted); }
+  .dd-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
+  .dd-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .dd-code {
     width: 100%;
@@ -181,7 +181,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

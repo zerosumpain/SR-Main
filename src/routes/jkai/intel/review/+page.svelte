@@ -743,7 +743,7 @@
     opacity: 0.42;
   }
   .row .icon {
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1;
   }
   .who {
@@ -770,11 +770,11 @@
   }
   .star {
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .mark {
     color: var(--success);
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
   .mark.reject {
     color: var(--error);
@@ -793,7 +793,7 @@
     margin-bottom: 10px;
   }
   .big-icon {
-    font-size: 26px;
+    font-size: 1.625rem;
     line-height: 1;
   }
   .headline {
@@ -960,7 +960,7 @@
   }
   kbd {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     padding: 1px 4px;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
@@ -980,7 +980,7 @@
   input {
     padding: 5px 7px;
     font: inherit;
-    font-size: var(--fs-label);
+    font-size: var(--fs-body);
     font-family: var(--font-body);
     text-transform: none;
     letter-spacing: 0;

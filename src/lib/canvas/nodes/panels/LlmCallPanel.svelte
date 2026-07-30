@@ -188,15 +188,15 @@
   .lc-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .lc-field-narrow { max-width: 220px; }
   .lc-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .lc-hint { font-size: 11px; color: var(--text-ghost); }
-  .lc-hint code, .lc-label code { font-size: 11px; color: var(--text-muted); }
+  .lc-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .lc-hint code, .lc-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .lc-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     margin-left: 6px;
   }
@@ -206,12 +206,12 @@
   }
   .lc-temp-readout {
     display: inline-flex; gap: 8px; align-items: baseline;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
   .lc-temp-value { color: var(--text-primary); }
   .lc-temp-word {
     color: var(--accent);
-    text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-label-xs);
   }
 
   .lc-range {
@@ -226,7 +226,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

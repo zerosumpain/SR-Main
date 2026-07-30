@@ -67,7 +67,7 @@
   .line:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
   .line.streaming { border-left-color: var(--accent); }
   .tag {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 1px 6px;
@@ -105,7 +105,7 @@
     border: 1px solid var(--card-border);
     color: var(--text-muted);
     font-family: inherit;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 1px 6px;

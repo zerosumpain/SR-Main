@@ -291,7 +291,7 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .tp-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .tp-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 
   .tp-row { display: flex; gap: 10px; }
   .tp-mode-row { align-items: flex-end; }
@@ -299,15 +299,15 @@
   .tp-field-mode   { flex: 0 0 170px; }
   .tp-field-source { flex: 1; }
   .tp-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .tp-hint { font-size: 11px; color: var(--text-ghost); }
-  .tp-hint code, .tp-label code { font-size: 11px; color: var(--text-muted); }
+  .tp-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .tp-hint code, .tp-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
-  .tp-empty { margin: 0; font-size: 12px; color: var(--text-ghost); line-height: 1.5; }
-  .tp-empty code { font-size: 11px; color: var(--text-muted); }
+  .tp-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.5; }
+  .tp-empty code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .tp-code {
     width: 100%;
@@ -315,7 +315,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -327,7 +327,7 @@
     padding: 5px 12px;
     background: var(--bg); color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     cursor: pointer;
   }
@@ -336,7 +336,7 @@
     padding: 5px 10px;
     background: transparent; color: var(--text-muted);
     border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     cursor: pointer;
   }
@@ -344,7 +344,7 @@
   .tp-test-clear:not(:disabled):hover { color: var(--text-primary); }
 
   .tp-result-chip {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     padding: 2px 6px;
     border: 1px solid var(--card-border);
@@ -358,15 +358,15 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 220px;
     overflow: auto;
   }
 
-  .tp-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
-  .tp-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
+  .tp-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
+  .tp-ok   { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-success, #2a9d4a); }
 
   input[type='text'], select, textarea {
     width: 100%;

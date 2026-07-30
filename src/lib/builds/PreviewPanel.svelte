@@ -74,7 +74,7 @@
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
@@ -98,7 +98,7 @@
     border: 1px solid var(--card-border);
     background: var(--accent);
     color: var(--bg);
-    font-size: 18px;
+    font-size: var(--fs-body-lg);
     cursor: pointer;
     line-height: 1;
   }

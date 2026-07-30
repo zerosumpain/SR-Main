@@ -44,14 +44,14 @@
   }
   .title {
     font-family: var(--font-display, 'Archivo Black', sans-serif);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.15;
     letter-spacing: -0.01em;
     color: var(--text-primary, #1a1008);
   }
   .count {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--accent, #c4570a);
     flex: 0 0 auto;
   }
@@ -61,7 +61,7 @@
   .summary {
     margin: 7px 0 0;
     font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     color: var(--text-secondary, rgba(26, 16, 8, 0.78));
     display: -webkit-box;

@@ -4173,15 +4173,15 @@
         <div
           style="pointer-events:auto; max-width:380px; text-align:center; padding:28px 32px; background:var(--surface-elevated, var(--bg)); border:1px solid var(--card-border); display:flex; flex-direction:column; gap:10px; align-items:center;"
         >
-          <span style="font-family:var(--font-mono); font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted);">Empty canvas</span>
-          <strong style="font-size:18px; color:var(--text-primary); font-weight:700; line-height:1.2;">Build your first automation</strong>
-          <span style="font-size:13px; color:var(--text-muted); line-height:1.45;">Add a node to begin — a trigger such as when an email arrives, or any action.</span>
+          <span style="font-family:var(--font-mono); font-size:var(--fs-label-xs); letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted);">Empty canvas</span>
+          <strong style="font-size:var(--fs-body-lg); color:var(--text-primary); font-weight:700; line-height:1.2;">Build your first automation</strong>
+          <span style="font-size:var(--fs-nav); color:var(--text-muted); line-height:1.45;">Add a node to begin — a trigger such as when an email arrives, or any action.</span>
           <button
             class="composer-pill"
             style="margin-top:6px;"
             onclick={() => openPalette({ anchor: 'center', mode: { kind: 'workflow-ranked' } })}
           >+ Add a node</button>
-          <span style="font-size:11px; color:var(--text-ghost, var(--text-muted)); line-height:1.4;">Tip: press <kbd>/</kbd> or right-click the canvas to add a node.</span>
+          <span style="font-size:var(--fs-label); color:var(--text-ghost, var(--text-muted)); line-height:1.4;">Tip: press <kbd>/</kbd> or right-click the canvas to add a node.</span>
         </div>
       </div>
     {/if}
@@ -5256,14 +5256,14 @@
               <span
                 class="nm-req-warn"
                 title={`Required field${menuRequiredMissing.length === 1 ? '' : 's'} still empty: ${menuRequiredMissing.join(', ')}`}
-                style="font-family:var(--font-mono); font-size:10px; color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
+                style="font-family:var(--font-mono); font-size:var(--fs-label-xs); color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
               >⚠ {menuRequiredMissing.length} required</span>
             {/if}
             {#if menuUpstreamCollisions.length}
               <span
                 class="nm-req-warn"
                 title={`Field name clash — ${menuUpstreamCollisions.map((c) => `"${c.key}" arrives from ${c.labels.join(' & ')}`).join('; ')}. They silently overwrite each other in {{input}} (last upstream wins).`}
-                style="font-family:var(--font-mono); font-size:10px; color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
+                style="font-family:var(--font-mono); font-size:var(--fs-label-xs); color:var(--status-error, #c0392b); white-space:nowrap; cursor:default; align-self:center;"
               >⚠ {menuUpstreamCollisions.length} clash</span>
             {/if}
             <button
@@ -5380,7 +5380,7 @@
                       onChange={(c) => setConfigField('cron', c)}
                     />
                     <details class="nm-cron-adv" style="margin-top:8px;">
-                      <summary style="cursor:pointer; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Advanced — presets &amp; raw cron</summary>
+                      <summary style="cursor:pointer; font-family:var(--font-mono); font-size:var(--fs-label-xs); text-transform:uppercase; letter-spacing:0.08em; color:var(--text-muted);">Advanced — presets &amp; raw cron</summary>
                       <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
                         <select
                           class="nm-text-input"
@@ -6821,7 +6821,7 @@
     align-items: baseline;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
   .canvas-head-slug {
@@ -6847,7 +6847,7 @@
   }
   .sr-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--text-muted);
@@ -6859,7 +6859,7 @@
   }
   .mono11 {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .canvas-title {
     max-width: 320px;
@@ -6877,7 +6877,7 @@
   }
   .mono10 {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .primary {
     color: var(--text-primary);
@@ -6908,14 +6908,14 @@
   }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-transform: uppercase;
     letter-spacing: 0.12em;
   }
   .composer-pill {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 4px 10px;
@@ -6930,7 +6930,7 @@
   }
   .run-input {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 4px 8px;
     border: 1px solid var(--card-border);
     background: var(--bg);
@@ -6954,7 +6954,7 @@
   }
   .run-err {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
     padding: 0 6px;
   }
@@ -6963,7 +6963,7 @@
     align-items: center;
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .hifi-zoomctl button {
     background: var(--bg);
@@ -6988,7 +6988,7 @@
     border: 1px solid var(--card-border);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 1px 6px;
@@ -7006,7 +7006,7 @@
     justify-content: space-between;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink, var(--accent));
     padding: 6px 8px;
     border: 1px solid var(--accent-ink, var(--accent));
@@ -7039,8 +7039,8 @@
   .run-row-dot[data-status='completed_with_errors'] { background: var(--warn, #b0892a); }
   .run-row-dot[data-status='running'] { background: var(--accent, #c4570a); }
   .run-row-main { display: flex; flex-direction: column; min-width: 0; }
-  .run-row-top { font-family: var(--font-mono); font-size: 11px; }
-  .run-row-sub { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); }
+  .run-row-top { font-family: var(--font-mono); font-size: var(--fs-label); }
+  .run-row-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   /* Find bar (⌘F) — floats below the toolbar, opaque per modal rules.
      Absolute within .canvas-root; the toolbar is in-flow above the viewport,
@@ -7063,7 +7063,7 @@
   }
   .find-icon {
     color: var(--text-ghost);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     flex-shrink: 0;
   }
   .find-input {
@@ -7074,14 +7074,14 @@
     outline: none;
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
   }
   .find-input::placeholder {
     color: var(--text-ghost);
   }
   .find-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -7091,7 +7091,7 @@
     color: var(--text-muted);
     cursor: pointer;
     padding: 0 2px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     flex-shrink: 0;
   }
   .find-x:hover {
@@ -7105,7 +7105,7 @@
       bottom: max(16px, env(safe-area-inset-bottom));
     }
     .find-input {
-      font-size: 16px; /* stop iOS zoom-on-focus */
+      font-size: var(--fs-body); /* stop iOS zoom-on-focus */
     }
   }
 
@@ -7183,7 +7183,7 @@
     color: var(--bg);
     cursor: grab;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     flex-shrink: 0;
@@ -7208,7 +7208,7 @@
   .chat-node-count {
     margin-left: auto;
     color: rgba(237, 228, 212, 0.55);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
   .chat-node-working {
     display: inline-flex;
@@ -7217,7 +7217,7 @@
     margin-left: 6px;
     padding: 2px 7px 2px 8px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: lowercase;
     color: var(--accent);
@@ -7251,11 +7251,11 @@
     border-radius: var(--radius-round);
     background: var(--accent-tint-20);
     color: var(--accent);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
   }
   .chat-node-working-chev {
     opacity: 0.7;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   @keyframes chat-working-pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -7263,7 +7263,7 @@
   }
   .chat-node-act {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     padding: 2px 6px;
@@ -7292,7 +7292,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
     cursor: auto;
@@ -7354,7 +7354,7 @@
   }
   .p-pane-title {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--bg);
@@ -7371,12 +7371,12 @@
   }
   .p-pane-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: rgba(237, 228, 212, 0.6);
   }
   .chat-body {
     padding: 12px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-primary);
     flex: 1;
@@ -7404,7 +7404,7 @@
     justify-content: flex-start;
   }
   .chat-msg-body {
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
@@ -7422,12 +7422,12 @@
   }
   .chat-msg-pending .chat-msg-body {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .chat-plain-stream {
     white-space: pre-wrap;
     word-break: break-word;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.55;
   }
   .chat-cursor {
@@ -7451,7 +7451,7 @@
     background: var(--bg-section);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .chat-tool-step {
@@ -7490,7 +7490,7 @@
     border: none;
     background: transparent;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-body);
     line-height: 1.5;
     color: var(--text-primary);
     resize: none;
@@ -7507,12 +7507,12 @@
   }
   .chat-composer-foot .run-btn {
     padding: 4px 14px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .chat-locked-hint {
     padding: 12px 14px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: var(--text-ghost);
     background: rgba(26, 16, 8, 0.03);
@@ -7520,7 +7520,7 @@
   }
   .msg-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-ghost);
@@ -7535,7 +7535,7 @@
   }
   .cite {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     background: var(--accent-tint-08);
     padding: 0 4px;
@@ -7559,7 +7559,7 @@
   }
   .chip {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 2px 8px;
@@ -7606,7 +7606,7 @@
     background: var(--bg);
     border: 1.5px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     transition: border-color 0.15s;
     white-space: nowrap;
@@ -7655,7 +7655,7 @@
   }
   .trig-icon {
     color: var(--success);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     flex-shrink: 0;
   }
   .trig-stack {
@@ -7665,7 +7665,7 @@
     overflow: hidden;
   }
   .trig-summary {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -7679,7 +7679,7 @@
     align-self: flex-start;
     max-width: 100%;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     color: var(--accent-ink, var(--accent));
     background: var(--accent-tint-08, transparent);
@@ -7698,7 +7698,7 @@
   }
   .trig-pill {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 5px 12px;
@@ -7717,7 +7717,7 @@
     color: var(--bg);
   }
   .wf-node .wf-name {
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     font-weight: 500;
     text-overflow: ellipsis;
@@ -7807,7 +7807,7 @@
   .pip {
     position: absolute;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -7827,7 +7827,7 @@
     display: flex;
     gap: 12px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -7857,7 +7857,7 @@
     border: 1px solid var(--card-border);
     padding: 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -7909,7 +7909,7 @@
   .mem-panel-sub {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -7919,7 +7919,7 @@
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1;
     padding: 2px 4px;
   }
@@ -7933,7 +7933,7 @@
   }
   .mem-empty {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     line-height: 1.5;
   }
@@ -7945,7 +7945,7 @@
     background: var(--bg);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     line-height: 1.4;
     max-height: 120px;
@@ -7956,7 +7956,7 @@
   .mem-actions { display: flex; gap: 6px; }
   .mem-clear, .mem-cancel {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 3px 10px;
@@ -7995,7 +7995,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     flex: 1;
     min-width: 0;
@@ -8007,7 +8007,7 @@
     padding: 2px 6px;
     border: 1px solid var(--card-border);
     background: var(--bg);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -8038,7 +8038,7 @@
   }
   .edge-arrow {
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .edge-inspector-body {
     padding: 10px 12px;
@@ -8054,7 +8054,7 @@
    * moved to $lib/styles/nm-tokens.css */
   .mono12 {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .nm-bar {
     display: inline-block;
@@ -8078,14 +8078,14 @@
   }
   .nm-hdr-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-ghost);
   }
   .nm-hdr-type {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-primary);
@@ -8093,7 +8093,7 @@
   }
   .nm-hdr-typecode {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     background: var(--bg-section);
     padding: 1px 5px;
@@ -8102,13 +8102,13 @@
   }
   .nm-hdr-id {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     margin-left: 4px;
   }
   .nm-hdr-name {
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: var(--fs-body);
     color: var(--text-primary);
     font-weight: 500;
   }
@@ -8142,7 +8142,7 @@
   }
   .nm-ctx-lbl {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -8151,7 +8151,7 @@
   }
   .nm-ctx-empty {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     font-style: italic;
   }
@@ -8159,7 +8159,7 @@
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     background: var(--bg-section);
     border: 1px solid var(--card-border);
     padding: 2px 7px;
@@ -8210,22 +8210,22 @@
   }
   .nm-summary-eyebrow {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
-  .nm-summary-line { margin: 0; font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+  .nm-summary-line { margin: 0; font-size: var(--fs-nav); color: var(--text-primary); line-height: 1.4; }
   .nm-summary-grid {
     display: grid;
     grid-template-columns: minmax(0, max-content) 1fr;
     gap: 2px 10px;
     margin: 4px 0 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .nm-summary-grid dt {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -8252,7 +8252,7 @@
   }
   .nm-action-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -8262,7 +8262,7 @@
   }
   .nm-action-line {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     line-height: 1.4;
   }
@@ -8271,11 +8271,11 @@
     grid-template-columns: minmax(0, max-content) 1fr;
     gap: 4px 12px;
     margin: 4px 0 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .nm-action-grid dt {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -8293,7 +8293,7 @@
   }
   .nm-truth input { width: auto; margin-top: 2px; flex-shrink: 0; }
   .nm-truth-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .nm-truth-hint { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+  .nm-truth-hint { font-size: var(--fs-label); color: var(--text-muted); line-height: 1.35; }
 
   .nm-raw-json {
     margin-top: 8px;
@@ -8311,7 +8311,7 @@
     margin-top: 8px;
     padding: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
@@ -8324,7 +8324,7 @@
    * .nm-sec-meta moved to $lib/styles/nm-tokens.css */
   .nm-link {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     margin-left: auto;
     cursor: pointer;
@@ -8340,7 +8340,7 @@
   .nm-field pre {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
     white-space: pre-wrap;
@@ -8355,7 +8355,7 @@
     word-break: break-word;
     max-height: 320px;
     overflow-y: auto;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
   }
   /* Self-healing + friendly-error cards in the OUTPUT panel (#2). */
@@ -8364,23 +8364,23 @@
     flex-direction: column;
     gap: 4px;
     padding: 8px 10px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
     border: 1px solid var(--card-border);
   }
   .nm-heal-active { background: color-mix(in srgb, var(--warn) 10%, transparent); border-color: color-mix(in srgb, var(--warn) 40%, var(--card-border)); }
   .nm-heal-ok { background: color-mix(in srgb, var(--accent) 7%, transparent); }
   .nm-heal-blocked { background: color-mix(in srgb, var(--accent-ink) 9%, transparent); border-color: color-mix(in srgb, var(--accent-ink) 40%, var(--card-border)); }
-  .nm-heal-hd { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-primary); font-weight: 600; }
+  .nm-heal-hd { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-primary); font-weight: 600; }
   .nm-heal-fix { color: var(--text-primary); }
   .nm-heal-action { color: var(--accent); font-weight: 600; }
-  .nm-heal-note { color: var(--text-muted); font-size: 10px; }
-  .nm-heal-log { margin: 4px 0 0; padding: 6px; background: var(--bg); color: var(--text-muted); font-size: 10px; max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+  .nm-heal-note { color: var(--text-muted); font-size: var(--fs-label-xs); }
+  .nm-heal-log { margin: 4px 0 0; padding: 6px; background: var(--bg); color: var(--text-muted); font-size: var(--fs-label-xs); max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
   .nm-err { background: color-mix(in srgb, var(--error) 7%, transparent); border-color: color-mix(in srgb, var(--error) 35%, var(--card-border)); }
-  .nm-err-hd { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--error); font-weight: 700; }
+  .nm-err-hd { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.06em; color: var(--error); font-weight: 700; }
   .nm-err-sub { color: var(--text-primary); }
   .nm-err-diag { color: var(--text-muted); }
-  .nm-err-tech summary { cursor: pointer; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .nm-err-tech summary { cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
   .nm-err-tech summary:hover { color: var(--text-primary); }
   .nm-err-tech pre.error-text { margin-top: 6px; }
   /* Run-info strip at the bottom of a wf-node */
@@ -8394,7 +8394,7 @@
     align-items: center;
     padding: 0 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     pointer-events: auto;
@@ -8414,7 +8414,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: none;
     letter-spacing: 0;
     opacity: 0.85;
@@ -8461,7 +8461,7 @@
     right: 18px;
     padding: 2px 6px;
     border-radius: var(--radius-pill);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-family: var(--font-mono, monospace);
     line-height: 1.4;
     white-space: nowrap;
@@ -8499,7 +8499,7 @@
   }
   .edge-rowcount text {
     font-family: var(--font-mono, monospace);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-primary);
     pointer-events: none;
   }
@@ -8527,7 +8527,7 @@
     display: inline-block;
     margin-top: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     word-break: break-word;
   }
   .wh-test-result.ok {
@@ -8538,7 +8538,7 @@
   }
   .nm-select {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     background: var(--bg);
     border: 1px solid var(--card-border);
     padding: 5px 9px;
@@ -8582,7 +8582,7 @@
   }
   .nm-slider-val {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     width: 24px;
   }
@@ -8590,7 +8590,7 @@
     background: var(--bg-section);
     padding: 6px 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     line-height: 1.8;
     color: var(--text-muted);
   }
@@ -8617,7 +8617,7 @@
   }
   .nm-scope-lbl {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-ghost);
@@ -8653,7 +8653,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     background: transparent;
     border: 1px solid transparent;
     padding: 5px 9px;
@@ -8679,7 +8679,7 @@
   }
   .nm-action-err {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
     padding: 4px 6px;
     margin-bottom: 6px;
@@ -8737,7 +8737,7 @@
     color: var(--accent);
     width: 14px;
     text-align: center;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
 
   .nm-toggle {
@@ -8745,7 +8745,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     cursor: pointer;
   }
@@ -8754,7 +8754,7 @@
     cursor: pointer;
   }
   .chat-explainer {
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-muted);
   }
@@ -8769,14 +8769,14 @@
    * .nm-text-input (+:focus) moved to $lib/styles/nm-tokens.css */
   .nm-save-err {
     color: var(--error);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
   }
   .nm-field textarea {
     width: 100%;
     border: none;
     background: transparent;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-body);
     line-height: 1.5;
     color: var(--text-primary);
     resize: vertical;
@@ -8801,7 +8801,7 @@
     border: 1px solid var(--card-border);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 2px 7px;
     cursor: pointer;
     line-height: 1;
@@ -8836,7 +8836,7 @@
     gap: 8px;
     padding: 5px 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     cursor: grab;
@@ -8853,7 +8853,7 @@
     box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35);
   }
   .postit-title { font-weight: 600; }
-  .postit-name { opacity: 0.65; text-transform: none; font-size: 11px; letter-spacing: 0; }
+  .postit-name { opacity: 0.65; text-transform: none; font-size: var(--fs-label); letter-spacing: 0; }
   .postit-colors { margin-left: auto; display: flex; gap: 4px; }
   .postit-color-swatch {
     width: 12px;
@@ -8937,7 +8937,7 @@
     outline: none;
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-body);
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -9089,7 +9089,7 @@
     background: var(--warn);
     color: #000;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.16em;
@@ -9136,7 +9136,7 @@
     margin-bottom: 14px;
   }
   .run-summary-icon {
-    font-size: 18px;
+    font-size: var(--fs-body-lg);
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -9150,7 +9150,7 @@
   .run-summary-icon-failed { background: var(--error-bg); color: var(--error); }
   .run-summary-title {
     flex: 1;
-    font-size: 15px;
+    font-size: var(--fs-body);
     font-weight: 600;
     color: var(--text-primary);
   }
@@ -9158,7 +9158,7 @@
     background: transparent;
     border: none;
     color: var(--text-ghost);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
@@ -9178,13 +9178,13 @@
     flex-direction: column;
     gap: 2px;
   }
-  .run-summary-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
-  .run-summary-stat-value { font-size: 13px; font-weight: 500; color: var(--text-primary); }
-  .run-summary-tok { font-size: 10px; font-weight: 400; color: var(--text-muted); }
+  .run-summary-stat-label { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+  .run-summary-stat-value { font-size: var(--fs-nav); font-weight: 500; color: var(--text-primary); }
+  .run-summary-tok { font-size: var(--fs-label-xs); font-weight: 400; color: var(--text-muted); }
   .run-summary-failed { color: var(--error); }
   .run-summary-skipped { color: var(--text-muted); }
   .run-summary-plain-overall {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.45;
     color: var(--text-primary);
     background: var(--bg-section);
@@ -9193,27 +9193,27 @@
   }
   .run-summary-plain-loading,
   .run-summary-plain-failed {
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     font-style: italic;
   }
   .run-summary-node-plain {
     grid-column: 2 / -1;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     color: var(--text-primary);
     margin-top: 4px;
   }
   .run-summary-node-plain.ghost { color: var(--text-muted); font-style: italic; }
   .run-summary-section { margin-top: 12px; }
-  .run-summary-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px; }
+  .run-summary-section-title { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px; }
   .run-summary-error {
     margin: 0;
     background: var(--error-bg);
     border: 1px solid var(--error-border);
     color: var(--error);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     padding: 8px 10px;
     border-radius: var(--radius-round);
     white-space: pre-wrap;
@@ -9223,7 +9223,7 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
@@ -9248,7 +9248,7 @@
     border-radius: 4px;
     background: var(--bg-section);
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .run-summary-node-completed .run-summary-node-status,
   .run-summary-node-ok .run-summary-node-status { color: var(--accent); }
@@ -9256,18 +9256,18 @@
   .run-summary-node-failed .run-summary-node-status { color: var(--error); }
   .run-summary-node-running .run-summary-node-status { color: var(--accent); }
   .run-summary-node-status {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1;
     text-align: center;
     margin-top: 1px;
   }
   .run-summary-node-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
   .run-summary-node-name { font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .run-summary-node-type { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .run-summary-node-type { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .run-summary-node-err-row {
     grid-column: 2;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--error);
     margin-top: 3px;
     white-space: pre-wrap;
@@ -9276,7 +9276,7 @@
   .run-summary-node-out {
     grid-column: 2;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     margin-top: 3px;
     white-space: pre-wrap;
@@ -9286,7 +9286,7 @@
   .run-summary-tools { display: flex; flex-wrap: wrap; gap: 4px; }
   .run-summary-tool {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 2px 8px;
     border-radius: var(--radius-pill);
     background: var(--bg-section);
@@ -9295,7 +9295,7 @@
   .run-summary-tool-error { color: var(--error); background: var(--error-bg); }
   .run-summary-tool-running { color: var(--accent); background: var(--accent-tint-08); }
   .run-summary-reply {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
     background: var(--bg-section);
@@ -9399,7 +9399,7 @@
       display: none;
     }
     .canvas-stats {
-      font-size: 10px;
+      font-size: var(--fs-label-xs);
     }
     .toolbar-right {
       margin-left: 0;
@@ -9411,7 +9411,7 @@
     .composer-pill {
       min-height: 38px;
       padding: 8px 12px;
-      font-size: 11px;
+      font-size: var(--fs-label);
     }
     .hifi-zoomctl button {
       min-height: 38px;

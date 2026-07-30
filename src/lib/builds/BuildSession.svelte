@@ -447,12 +447,12 @@
   }
   .bs-preview-cta:hover { background: var(--accent); }
   .bs-preview-url {
-    font-family: var(--font-mono); font-size: 0.74rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted); flex: 1; min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .bs-preview-copy {
-    font-family: var(--font-mono); font-size: 0.74rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     background: transparent;
     border: 1px solid var(--card-border);
     padding: 0.18rem 0.5rem;
@@ -470,12 +470,12 @@
     flex-shrink: 0;
   }
   .bs-back {
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     color: var(--text-muted); text-decoration: none;
   }
   .bs-back:hover { color: var(--text-primary); }
   .bs-pill {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.14em;
     padding: 2px 8px; border: 1px solid currentColor;
     color: var(--text-muted);
@@ -484,7 +484,7 @@
   .bs-pill[data-status='completed'] { color: var(--status-success, #10b981); }
   .bs-pill[data-status='failed'] { color: var(--status-error, #c0392b); }
   .bs-meta {
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -496,7 +496,7 @@
   }
   .bs-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
   .bs-act {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     padding: 4px 10px;
     border: 1px solid var(--text-primary, #1f1c18);
@@ -521,7 +521,7 @@
   }
   .bs-chip {
     font-family: var(--font-mono), monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 3px 9px;
@@ -552,7 +552,7 @@
     animation: bs-pulse 1.4s ease-in-out infinite;
   }
   .bs-focus-hint {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     margin-left: 0.5rem;
     font-style: italic;
@@ -564,7 +564,7 @@
     background: var(--bg-section, color-mix(in srgb, var(--text-primary) 4%, transparent));
     border: 1px solid var(--card-border);
     font-family: var(--font-mono), 'Menlo', 'Monaco', monospace;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     min-height: 200px;
   }

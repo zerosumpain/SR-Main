@@ -799,7 +799,7 @@
     border-bottom: 1px solid var(--divider);
   }
   .picker-title {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -807,7 +807,7 @@
   }
   .picker-close {
     color: var(--text-ghost);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     line-height: 1;
     padding: 4px 6px;
     border-radius: var(--radius-round);
@@ -845,19 +845,19 @@
   .target-chip.pinned .target-label::after {
     content: '●';
     margin-left: 4px;
-    font-size: 7px;
+    font-size: var(--fs-label-xs);
     vertical-align: middle;
     color: var(--accent);
   }
   .target-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     white-space: nowrap;
   }
   .target-model {
-    font-size: 11px;
+    font-size: var(--fs-label);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -867,7 +867,7 @@
   .target-clear {
     margin-left: 2px;
     padding: 0 5px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     border: 1px solid var(--card-border);
     border-left: 0;
     border-radius: 0 var(--radius-round) var(--radius-round) 0;
@@ -879,7 +879,7 @@
   .target-clear:disabled { opacity: 0.4; cursor: not-allowed; }
   .target-hint {
     margin: 8px 16px 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
     color: var(--text-ghost);
   }
@@ -894,7 +894,7 @@
   }
   .quick-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -909,7 +909,7 @@
     border: 1px solid var(--card-border);
     background: var(--surface-overlay);
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--fs-label);
     cursor: pointer;
     max-width: 100%;
   }
@@ -928,7 +928,7 @@
   }
   .quick-chip-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     opacity: 0.7;
@@ -945,7 +945,7 @@
     flex: 1;
     min-width: 0;
     padding: 9px 12px;
-    font-size: 13px;
+    font-size: var(--fs-body);
     border-radius: var(--radius-round);
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
@@ -955,7 +955,7 @@
     flex-shrink: 0;
     padding: 7px 12px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     border-radius: var(--radius-round);
@@ -973,7 +973,7 @@
   }
   .picker-hint {
     margin: 0 16px 8px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     font-family: var(--font-mono);
   }
@@ -988,7 +988,7 @@
   }
   .picker-tab {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -1023,7 +1023,7 @@
   .preset-row { margin-top: 8px; }
   .metric-blurb {
     margin: 5px 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
     color: var(--text-ghost);
   }
@@ -1035,7 +1035,7 @@
     background: none;
     color: var(--text-ghost);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     white-space: nowrap;
@@ -1055,7 +1055,7 @@
     justify-content: space-between;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-ghost);
@@ -1073,7 +1073,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-round);
     background: var(--surface-overlay);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-secondary);
   }
@@ -1086,7 +1086,7 @@
   .explainer-warn b { color: var(--accent); }
   .explainer-cov {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .preset-chip {
@@ -1096,7 +1096,7 @@
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     white-space: nowrap;
@@ -1133,7 +1133,7 @@
        instead of widening the table into a horizontal scrollbar. */
     table-layout: fixed;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
   /* col-name (first) takes the remaining width. */
   .col-num { width: 84px; }
@@ -1147,7 +1147,7 @@
     color: var(--text-ghost);
     font-family: var(--font-mono);
     text-transform: uppercase;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     padding: 8px 10px;
     border-bottom: 1px solid var(--divider);
@@ -1197,7 +1197,7 @@
     border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
     color: var(--accent);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     vertical-align: 1px;
@@ -1206,7 +1206,7 @@
     display: block;
     margin-top: 1px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1222,7 +1222,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 12px 16px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
   .foot-notice { color: var(--success); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -1231,7 +1231,7 @@
   .pager-btn {
     border-radius: var(--radius-round);
     padding: 5px 12px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     border: 1px solid var(--card-border);
     background: var(--surface-overlay);
     color: var(--text-secondary);
@@ -1279,7 +1279,7 @@
     .target-row::-webkit-scrollbar { display: none; }
     .target-chip { max-width: 140px; }
     /* 16px stops iOS Safari auto-zooming the input on focus. */
-    .picker-search { font-size: 16px; padding: 10px 12px; }
+    .picker-search { font-size: var(--fs-body); padding: 10px 12px; }
     .picker-hint { display: none; }
     /* Three sliders side by side are unusable at 390px — stack them. */
     .sliders { grid-template-columns: 1fr; gap: 4px; }
@@ -1299,7 +1299,7 @@
       background: var(--surface-overlay);
       color: var(--text-secondary);
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: var(--fs-label);
       white-space: nowrap;
     }
     .sort-chip.active {
@@ -1324,7 +1324,7 @@
       text-align: left;
       margin-right: 12px;
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: var(--fs-label);
     }
     .cell-q::before { content: 'q '; color: var(--text-ghost); }
     .cell-in-price::before { content: 'in '; color: var(--text-ghost); }

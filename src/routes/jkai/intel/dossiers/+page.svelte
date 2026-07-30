@@ -174,7 +174,7 @@
     min-width: 220px;
     padding: 8px 10px;
     font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);

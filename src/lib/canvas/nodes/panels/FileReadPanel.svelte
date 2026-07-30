@@ -172,12 +172,12 @@
   .fr-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .fr-field-disabled { opacity: 0.55; }
   .fr-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .fr-hint { font-size: 11px; color: var(--text-ghost); }
-  .fr-hint code, .fr-label code { font-size: 11px; color: var(--text-muted); }
+  .fr-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .fr-hint code, .fr-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .fr-code {
     width: 100%;
@@ -185,7 +185,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

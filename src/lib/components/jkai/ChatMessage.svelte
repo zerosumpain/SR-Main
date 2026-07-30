@@ -378,7 +378,7 @@
     gap: 6px;
     margin-bottom: 5px;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: rgba(26, 16, 8, 0.5);
@@ -412,7 +412,10 @@
     background: var(--card-bg);
     color: var(--text-primary);
     font-family: var(--font-body);
-    font-size: 13px;
+    /* The one surface on the site that is read rather than scanned — full body
+       size, not a label size. Everything nested in .chat-markdown sizes in em
+       off this, so this is the anchor for the whole transcript. */
+    font-size: var(--fs-body);
     line-height: 1.6;
   }
   .msg-row.user .msg-bubble {
@@ -456,7 +459,7 @@
     /* Opaque, so the border it straddles is cut rather than showing through. */
     background: var(--bg);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.16em;
@@ -478,7 +481,7 @@
     gap: 8px;
     margin-top: 5px;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -499,7 +502,7 @@
     border: none;
     padding: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -514,19 +517,19 @@
     padding-top: 8px;
     border-top: 1px solid var(--divider);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
   }
 
   @media (max-width: 799px) {
-    .msg-bubble {
-      font-size: 13.5px;
-    }
+    /* No .msg-bubble override here any more. It used to nudge mobile UP (13.5px
+       against 13px) — against a 16px base it would have quietly nudged mobile
+       back DOWN, which is the opposite of the point. */
     .msg-meta,
     .cost-stamp {
-      font-size: 9.5px;
+      font-size: var(--fs-label-xs);
     }
   }
   .chat-markdown :global(p) {
@@ -543,7 +546,7 @@
   }
   .chat-markdown :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
     border-radius: var(--radius-sharp);
@@ -554,7 +557,7 @@
     border-radius: var(--radius-round);
     background: var(--bg-section);
     overflow-x: auto;
-    font-size: 0.8em;
+    font-size: max(0.8em, var(--fs-label-xs));
   }
   .chat-markdown :global(pre code) {
     background: none;
@@ -601,7 +604,7 @@
   }
   .chat-markdown :global(a.cite-link)::after {
     content: '\2197'; /* ↗ */
-    font-size: 0.7em;
+    font-size: max(0.75em, var(--fs-label-xs)); /* 12px against the 16px bubble — the floor */
     vertical-align: super;
     margin-left: 1px;
     opacity: 0.6;
@@ -652,7 +655,7 @@
     width: auto;
     min-width: 100%;
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.45;
   }
   .chat-markdown :global(.md-table-wrap th),
@@ -669,7 +672,7 @@
   .chat-markdown :global(.md-table-wrap thead th) {
     background: var(--bg-section);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -691,7 +694,7 @@
     padding: 2px 0 2px 8px;
     border-left: 2px solid var(--accent-tint-20);
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: var(--text-ghost);
   }
@@ -707,14 +710,14 @@
   .hb-msg-trigger {
     opacity: 0.7;
     font-style: italic;
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
   }
   .hb-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.4em;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);

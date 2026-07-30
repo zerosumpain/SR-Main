@@ -71,23 +71,23 @@
     display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   }
   .tf-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
   .tf-readout {
     display: inline-flex; gap: 8px; align-items: baseline;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
   .tf-value { color: var(--text-primary); }
   .tf-word {
     color: var(--accent);
-    text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-label-xs);
   }
   .tf-range {
     width: 100%;
     accent-color: var(--accent);
     cursor: pointer;
   }
-  .tf-hint { font-size: 11px; color: var(--text-ghost); }
+  .tf-hint { font-size: var(--fs-label); color: var(--text-ghost); }
 </style>

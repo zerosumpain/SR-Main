@@ -179,22 +179,22 @@
 
   .gf-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .gf-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .gf-hint { font-size: 11px; color: var(--text-ghost); margin: 0; }
-  .gf-hint code, .gf-label code { font-size: 11px; color: var(--text-muted); }
+  .gf-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; }
+  .gf-hint code, .gf-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .gf-hint a { color: var(--accent); text-decoration: none; }
   .gf-hint a:hover { text-decoration: underline; }
 
-  .gf-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .gf-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
   .gf-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
   .gf-info {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
 
@@ -217,7 +217,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -232,7 +232,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

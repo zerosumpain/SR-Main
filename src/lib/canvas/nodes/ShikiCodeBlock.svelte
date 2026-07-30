@@ -166,20 +166,20 @@
   }
   .scb-lang {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .scb-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .scb-spacer { flex: 1; }
   .scb-btn {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 2px 8px;
@@ -216,7 +216,7 @@
     margin: 0 !important;
     padding: 8px 10px !important;
     font-family: var(--font-mono), 'Menlo', 'Monaco', monospace !important;
-    font-size: 11px !important;
+    font-size: var(--fs-label) !important;
     line-height: 1.55 !important;
     background: var(--bg) !important;
     color: var(--text-primary);
@@ -252,7 +252,7 @@
     background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-mono), 'Menlo', 'Monaco', monospace;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     overflow-x: auto;
     white-space: pre;
@@ -271,7 +271,7 @@
     width: fit-content;
     padding: 3px 12px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     border: 1px solid var(--text-primary);

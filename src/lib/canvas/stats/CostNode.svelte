@@ -171,13 +171,13 @@
     overflow: hidden;
   }
   .hd { display: flex; justify-content: space-between; align-items: center; }
-  .title { font-weight: 600; font-size: 12px; }
-  .refresh { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0 4px; }
-  .headline { font-size: 22px; font-weight: 700; }
+  .title { font-weight: 600; font-size: var(--fs-label); }
+  .refresh { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: var(--fs-body-sm); padding: 0 4px; }
+  .headline { font-size: 1.375rem; font-weight: 700; }
   .chart { height: 130px; }
   /* layerchart puts the class on the element itself: <text class="tickLabel">,
      <line class="tick">. Descendant selectors (.tick text) do not match. */
-  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .chart :global(.tick) { stroke: var(--divider); }
   .chart :global(.rule line) { stroke: var(--card-border); }
   .chart :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
@@ -185,17 +185,17 @@
   .tabs button {
     background: transparent; border: 1px solid var(--card-border);
     color: var(--text-muted); padding: 1px 6px; font: inherit; cursor: pointer; border-radius: 2px;
-    text-transform: uppercase; letter-spacing: 0.4px; font-size: 9px;
+    text-transform: uppercase; letter-spacing: 0.4px; font-size: var(--fs-label-xs);
   }
   .tabs button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
   .breakdown { list-style: none; padding: 0; margin: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-  .breakdown li { display: flex; flex-direction: column; gap: 1px; font-size: 10px; }
+  .breakdown li { display: flex; flex-direction: column; gap: 1px; font-size: var(--fs-label-xs); }
   .bd-row { display: grid; grid-template-columns: 1fr 70px 50px 100px; gap: 6px; align-items: baseline; }
   .bd-bar { height: 3px; background: var(--accent); border-radius: 1px; min-width: 1px; }
   .bd-key { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bd-cost { text-align: right; font-weight: 600; }
   .bd-pct { text-align: right; color: var(--text-muted); }
-  .bd-n { color: var(--text-muted); font-size: 9px; }
+  .bd-n { color: var(--text-muted); font-size: var(--fs-label-xs); }
   .empty, .skel { color: var(--text-muted); font-style: italic; padding: 8px; text-align: center; }
-  .error-strip { color: var(--status-error); font-size: 10px; padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
+  .error-strip { color: var(--status-error); font-size: var(--fs-label-xs); padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
 </style>

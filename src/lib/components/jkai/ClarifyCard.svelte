@@ -100,12 +100,12 @@
   .q-item { display: flex; flex-direction: column; gap: 4px; }
   .q-text {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .clarify-error {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--status-error);
     background: var(--error-bg);
     border-left: 2px solid var(--status-error);

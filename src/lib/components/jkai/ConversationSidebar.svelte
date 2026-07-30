@@ -431,7 +431,7 @@
 
   .rail-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -461,7 +461,7 @@
     border: none;
     padding: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     cursor: pointer;
     transition: color 0.2s ease-out;
@@ -480,7 +480,7 @@
     border: none;
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     font-weight: 500;
     line-height: 1;
     cursor: pointer;
@@ -502,7 +502,7 @@
     border-radius: var(--radius-sharp);
     background: transparent;
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-body);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-primary);
@@ -523,7 +523,7 @@
     background: none;
     padding: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     cursor: pointer;
   }
@@ -550,7 +550,7 @@
   }
   .sec-cnt {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-ghost);
   }
@@ -589,7 +589,7 @@
   }
   .tr-idx {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--text-ghost);
     flex: none;
@@ -598,7 +598,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     font-weight: 500;
     line-height: 1.3;
     color: var(--text-primary);
@@ -615,7 +615,7 @@
   .tr-flag {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     opacity: 0.8;
   }
@@ -648,7 +648,7 @@
     gap: 4px;
     margin-top: 5px;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -686,7 +686,7 @@
     border: none;
     background: none;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     cursor: pointer;
     transition: color 0.2s ease-out, background 0.2s ease-out;
@@ -711,7 +711,7 @@
     border-radius: var(--radius-sharp);
     background: var(--bg);
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-body);
     color: var(--text-primary);
   }
   .rename-input:focus {
@@ -725,12 +725,12 @@
   }
   .empty-big {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
   .empty-sm {
     font-family: var(--font-body);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     margin-top: 3px;
   }
@@ -762,7 +762,7 @@
     background: none;
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -815,7 +815,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     background: none;
     cursor: pointer;
@@ -829,7 +829,7 @@
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
   .rbtn.primary:hover {
     background: var(--accent-hover);

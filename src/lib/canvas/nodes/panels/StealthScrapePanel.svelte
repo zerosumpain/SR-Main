@@ -572,14 +572,14 @@
   .ps-hd { display: flex; align-items: baseline; gap: 8px; }
   .ps-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .ps-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .ps-highlight {
@@ -591,7 +591,7 @@
     resize: vertical;
     min-height: 54px;
     font-family: var(--font-ui, inherit);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
   }
   .ps-advanced-toggle {
@@ -600,7 +600,7 @@
     color: var(--text-muted);
     padding: 6px 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     text-align: left;
@@ -623,7 +623,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .ps-playbook-summary b { font-weight: 600; color: var(--text-primary); }
@@ -652,7 +652,7 @@
     border: none;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
@@ -667,7 +667,7 @@
     margin-top: 8px;
     max-height: 320px;
     overflow: auto;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     padding: 8px;
     background: var(--bg, #0d0d0d);
@@ -681,7 +681,7 @@
   }
   .ps-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .ps-hint code {
@@ -694,7 +694,7 @@
     border: 1px solid var(--card-border);
     padding: 4px 7px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     outline: none;
     box-sizing: border-box;
   }
@@ -706,7 +706,7 @@
     border: 1px solid var(--card-border);
     padding: 4px 7px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     outline: none;
   }
   .ps-select:focus { border-color: var(--accent); }
@@ -719,7 +719,7 @@
     align-items: center;
     gap: 3px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     cursor: pointer;
     flex-shrink: 0;
@@ -730,7 +730,7 @@
     align-items: center;
     gap: 5px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .ps-rules { display: flex; flex-direction: column; gap: 5px; }
@@ -748,7 +748,7 @@
     border: none;
     color: var(--text-ghost);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     padding: 0 2px;
     line-height: 1;
     flex-shrink: 0;
@@ -756,7 +756,7 @@
   .ps-remove:hover { color: #c44; }
   .ps-add-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 4px 10px;

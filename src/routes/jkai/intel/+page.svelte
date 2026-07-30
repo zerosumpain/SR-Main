@@ -808,7 +808,7 @@
   }
   .tile .n {
     font-family: var(--font-display);
-    font-size: 24px;
+    font-size: 1.5rem;
     line-height: 1.05;
     color: var(--accent-ink);
   }
@@ -893,7 +893,7 @@
     width: 100%;
     padding: 5px 7px;
     font: inherit;
-    font-size: var(--fs-label);
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);

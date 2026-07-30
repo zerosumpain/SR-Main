@@ -141,14 +141,14 @@
     gap: 8px;
     margin-top: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .slash-btn {
     padding: 4px 10px;
     border-radius: var(--radius-sharp);
     border: none;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     cursor: pointer;

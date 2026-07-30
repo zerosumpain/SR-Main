@@ -217,27 +217,27 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .eh-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .eh-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .eh-row { display: flex; gap: 10px; }
   .eh-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .eh-field-half { flex: 1; }
   .eh-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .eh-label code { font-size: 11px; color: var(--text-muted); }
-  .eh-hint { font-size: 11px; color: var(--text-ghost); margin: 0; }
-  .eh-hint code { font-size: 11px; color: var(--text-muted); }
+  .eh-label code { font-size: var(--fs-label); color: var(--text-muted); }
+  .eh-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; }
+  .eh-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .eh-check {
     display: flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
     cursor: pointer;
   }
   .eh-check input[type='checkbox'] { width: auto; margin: 0; }
-  .eh-check code { font-size: 11px; color: var(--text-muted); }
+  .eh-check code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .eh-code {
     width: 100%;
@@ -245,7 +245,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

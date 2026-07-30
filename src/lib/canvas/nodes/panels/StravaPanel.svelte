@@ -332,18 +332,18 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .st-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .st-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .st-row { display: flex; gap: 10px; }
   .st-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .st-field-half { flex: 1; }
   .st-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .st-hint { font-size: 11px; color: var(--text-ghost); }
-  .st-hint code, .st-label code { font-size: 11px; color: var(--text-muted); }
+  .st-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .st-hint code, .st-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .st-code {
     width: 100%;
@@ -351,7 +351,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

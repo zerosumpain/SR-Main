@@ -73,7 +73,7 @@
     border: 1px solid var(--text-primary);
     padding: 10px 12px;
     border-radius: var(--radius-round);
-    font-size: 11px;
+    font-size: var(--fs-label);
     min-width: 220px;
     z-index: 20;
   }
@@ -85,13 +85,13 @@
     border: 0;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
   }
   .section { margin: 6px 0; }
   .label {
     color: var(--text-muted);
     letter-spacing: 0.08em;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     margin-bottom: 4px;
   }
   .chip {
@@ -101,7 +101,7 @@
     border-radius: var(--radius-pill);
     padding: 2px 8px;
     margin: 2px 4px 2px 0;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .chip:hover { color: var(--text-primary); border-color: var(--text-muted); }

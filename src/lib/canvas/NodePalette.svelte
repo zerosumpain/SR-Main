@@ -336,7 +336,7 @@
     color: var(--text-primary);
     outline: none;
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     letter-spacing: 0.02em;
     position: sticky;
     top: 0;
@@ -351,7 +351,7 @@
     background: var(--bg-section);
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     border-bottom: 1px solid var(--card-border);
@@ -360,7 +360,7 @@
     padding: 10px 14px 4px;
     text-transform: uppercase;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--text-muted);
     letter-spacing: 0.15em;
@@ -389,7 +389,7 @@
   }
   .palette-group-name {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--text-primary);
@@ -398,7 +398,7 @@
   }
   .palette-group-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     letter-spacing: 0.05em;
   }
@@ -424,14 +424,14 @@
   }
   .palette-row-label {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 500;
     white-space: nowrap;
     color: var(--text-primary);
   }
   .palette-row-group {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -439,7 +439,7 @@
   }
   .palette-row-desc {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--fs-label);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -447,13 +447,13 @@
   }
   .palette-row-recent {
     color: var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .palette-empty {
     padding: 14px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-align: center;
     letter-spacing: 0.05em;
   }
@@ -493,7 +493,7 @@
       margin: 8px auto 4px;
     }
     .palette-search {
-      font-size: 16px;
+      font-size: var(--fs-body);
       padding: 14px 16px;
     }
     .palette-row {

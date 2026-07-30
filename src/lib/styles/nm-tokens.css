@@ -38,7 +38,7 @@
 
 .sr-label-tight {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -50,17 +50,20 @@
 
 .nm-sec-meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   color: var(--text-ghost);
   margin-left: auto;
 }
 
-/* ——— Text input ——— */
+/* ——— Text input ———
+ * 16px is a floor for form controls, not a taste call: mobile Safari force-
+ * zooms the viewport when a focused field is under 16px, which breaks reflow
+ * and strands the rest of the form off-screen. */
 .nm-text-input {
   width: 100%;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-body);
   color: var(--text-primary);
   background: rgba(26, 16, 8, 0.04);
   border: 1px solid var(--card-border);
@@ -76,7 +79,7 @@
 /* ——— Save button — primary action ——— */
 .nm-save-btn {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   padding: 6px 14px;
@@ -97,7 +100,7 @@
 /* ——— Ghost button — secondary/tertiary action ——— */
 .nm-btn-ghost {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   padding: 6px 14px;
@@ -171,19 +174,20 @@
   border-bottom: 0;
   gap: 8px;
 }
+/* Denser inside a panel that already provides chrome — but density comes from
+ * padding and weight only. Font size stays at the canonical token: the inline
+ * inspector used to drop labels to 9px and inputs to 11px, which is below the
+ * floor and made the busiest surface on the site the least readable. */
 .nm-inline .sr-label-tight,
 .edge-inspector-body .sr-label-tight {
-  font-size: 9px;
   font-weight: 400;
   color: var(--text-ghost);
 }
 .nm-inline .nm-text-input {
-  font-size: 11px;
   padding: 5px 8px;
   background: var(--bg);
 }
 .nm-inline .nm-save-btn {
-  font-size: 10px;
   letter-spacing: 0.1em;
   padding: 3px 10px;
 }
@@ -199,7 +203,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-weight: 500;
   color: var(--text-primary);
   background: transparent;

@@ -155,15 +155,15 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .sw-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
-  .sw-hint { font-size: 11px; color: var(--text-ghost); line-height: 1.4; }
-  .sw-hint code { font-size: 11px; color: var(--text-muted); }
-  .sw-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .sw-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .sw-hint { font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.4; }
+  .sw-hint code { font-size: var(--fs-label); color: var(--text-muted); }
+  .sw-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
 
   .sw-rows { display: flex; flex-direction: column; gap: 6px; }
   .sw-row { display: flex; align-items: center; gap: 6px; }
   .sw-when {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted); white-space: nowrap;
   }
   .sw-arrow { color: var(--text-muted); }
@@ -195,7 +195,7 @@
     border: 1px dashed var(--card-border);
     padding: 4px 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -204,7 +204,7 @@
 
   .sw-field { display: flex; flex-direction: column; gap: 4px; }
   .sw-flabel {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
@@ -216,7 +216,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .sw-code:focus { border-color: var(--text-muted); }

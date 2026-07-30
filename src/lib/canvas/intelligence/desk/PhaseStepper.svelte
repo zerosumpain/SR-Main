@@ -62,7 +62,7 @@
     height: 18px;
     border-radius: 50%;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     line-height: 1;
     flex-shrink: 0;
@@ -73,7 +73,7 @@
     background: var(--success);
     color: var(--bg);
     border: 1.5px solid var(--success);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
 
   .dot-current {
@@ -90,7 +90,7 @@
 
   .label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.03em;
     transition: color 0.2s;
   }

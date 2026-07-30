@@ -2739,7 +2739,7 @@
     align-items: baseline;
     gap: 0.45ch;
     font-family: var(--font-brand);
-    font-size: 15px;
+    font-size: var(--fs-body);
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--text-primary);
@@ -2757,7 +2757,7 @@
     gap: 6px;
     margin-top: 5px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -2783,7 +2783,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -2817,7 +2817,7 @@
     border: none;
     padding: 0 8px 0 0;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: var(--fs-body);
     color: var(--text-muted);
     cursor: pointer;
   }
@@ -2895,7 +2895,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     cursor: pointer;
     transition: color 0.2s ease-out, border-color 0.2s ease-out;
@@ -2910,7 +2910,7 @@
   .chip-est {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -2931,7 +2931,7 @@
     border-radius: 0;
     background: var(--card-bg);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-body);
     line-height: 1.5;
     color: var(--text-primary);
     resize: none;
@@ -2974,8 +2974,8 @@
     cursor: pointer;
   }
   .cmd-row.active { background: var(--accent-tint-08); }
-  .cmd-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); flex-shrink: 0; }
-  .cmd-hint { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmd-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); flex-shrink: 0; }
+  .cmd-hint { font-size: var(--fs-label); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Workflow chips — deep-link to a canvas created/updated this turn.
      Same visual family as the file/research "sources" chips. */
@@ -2988,7 +2988,7 @@
   }
   .wf-chips-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -3002,7 +3002,7 @@
     color: var(--accent-ink, var(--accent));
     border-radius: 2px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-decoration: none;
     max-width: 260px;
   }
@@ -3023,7 +3023,7 @@
     align-items: center;
     gap: 0.4rem;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-secondary);
     padding: 0.2rem 0.5rem;
     border-radius: var(--radius-round);
@@ -3036,7 +3036,7 @@
   .model-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--accent); flex-shrink: 0; }
   .model-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .model-tag {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-ghost);
@@ -3054,7 +3054,7 @@
   .route-fb {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     max-width: 48rem; margin: 0 auto; padding: 6px 12px;
-    font-size: 11px; color: var(--text-ghost);
+    font-size: var(--fs-label); color: var(--text-ghost);
   }
   .route-fb-txt { color: var(--text-secondary); }
   .route-fb-model { font-family: var(--font-mono); color: var(--accent); }
@@ -3062,7 +3062,7 @@
   .route-fb-ask { margin-left: auto; }
   .route-fb-btn {
     border: 1px solid var(--card-border); background: var(--surface-overlay);
-    border-radius: var(--radius-pill); padding: 2px 9px; font-size: 13px; line-height: 1.1; cursor: pointer;
+    border-radius: var(--radius-pill); padding: 2px 9px; font-size: var(--fs-nav); line-height: 1.1; cursor: pointer;
   }
   .route-fb-btn:hover { border-color: var(--accent); }
   .route-fb--done { color: var(--success); }
@@ -3093,9 +3093,9 @@
   }
   .model-opt:hover { background: var(--bg-section); }
   .model-opt.active { background: var(--accent-tint-08); }
-  .model-opt-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
-  .model-opt-provider { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .skill-glyph { font-size: 11px; color: var(--accent); flex-shrink: 0; line-height: 1; }
+  .model-opt-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
+  .model-opt-provider { font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .skill-glyph { font-size: var(--fs-label); color: var(--accent); flex-shrink: 0; line-height: 1; }
 
   /* ── Dangerous-command approval card (structured `pendingApproval`) ── */
   .approval-card {
@@ -3110,7 +3110,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--error);
@@ -3118,7 +3118,7 @@
   }
   .approval-cmd {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg-section);
     border: 1px solid var(--card-border);
@@ -3130,7 +3130,7 @@
     max-height: 8rem;
     overflow: auto;
   }
-  .approval-reason { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  .approval-reason { font-size: var(--fs-label); color: var(--text-secondary); margin-bottom: 4px; }
 
   /* Empty-state hero — a centred greeting + tappable starter prompts shown on
    * a fresh conversation. The composer stays docked at the bottom; clicking a
@@ -3169,7 +3169,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     padding: 8px 14px;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-pill);
@@ -3184,7 +3184,7 @@
     color: var(--accent);
     background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
-  .hero-chip-icon { font-size: 13px; }
+  .hero-chip-icon { font-size: var(--fs-nav); }
 
   /* Message-origin tags — replaces the cryptic "FU"/"WA" gutter pills with
    * clearly labelled, in-flow chips aligned to the message's side. */
@@ -3198,7 +3198,7 @@
     align-items: center;
     gap: 4px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 2px 8px;
@@ -3213,7 +3213,7 @@
     color: var(--wa-green);
     background: color-mix(in srgb, var(--wa-green) 15%, transparent);
   }
-  .src-tag-glyph { font-size: 10px; line-height: 1; }
+  .src-tag-glyph { font-size: var(--fs-label-xs); line-height: 1; }
 
   /* Reasoning panel — Hermes thinking deltas (Phase 4 TTFT) */
   .reasoning-panel {
@@ -3223,7 +3223,7 @@
     border-radius: var(--radius-round);
     background: color-mix(in srgb, var(--accent) 3%, transparent);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     overflow: hidden;
   }
   .reasoning-toggle {
@@ -3247,7 +3247,7 @@
     letter-spacing: 0.06em;
     font-weight: 600;
     color: var(--accent);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .reasoning-preview {
     flex: 1;
@@ -3258,7 +3258,7 @@
   }
   .reasoning-chev {
     opacity: 0.55;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   /* Reasoning body — renders the model's chain-of-thought as markdown.
    * Uses `:global()` to style the marked-produced HTML, mirroring the
@@ -3272,7 +3272,7 @@
     max-height: 320px;
     overflow-y: auto;
     font-family: var(--font-sans, inherit);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     word-break: break-word;
   }
@@ -3294,7 +3294,7 @@
   .reasoning-body :global(h3),
   .reasoning-body :global(h4) {
     margin: 0.7em 0 0.3em;
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--accent);
     text-transform: uppercase;
@@ -3325,7 +3325,7 @@
   }
   .reasoning-body :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: max(0.9em, var(--fs-label-xs));
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     padding: 0 4px;
     border-radius: 2px;
@@ -3338,7 +3338,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     overflow-x: auto;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
   }
@@ -3371,7 +3371,7 @@
     gap: 8px;
     padding: 6px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     background: color-mix(in srgb, var(--accent) 4%, transparent);
     border-bottom: 1px solid var(--card-border);
@@ -3388,7 +3388,7 @@
     letter-spacing: 0.06em;
     font-weight: 600;
     color: var(--accent);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .heartbeat-line .hb-summary { flex: 1; }
   .heartbeat-line[data-phase='tool_running'] .hb-dot { background: var(--status-success); }
@@ -3412,7 +3412,7 @@
     margin-left: 4px;
     padding: 2px 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     background: var(--status-error);
@@ -3430,7 +3430,7 @@
     gap: 8px;
     padding: 6px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--status-error);
     background: color-mix(in srgb, var(--status-error) 6%, transparent);
     border-bottom: 1px solid var(--card-border);
@@ -3474,7 +3474,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .step-status {
     width: 14px;
@@ -3501,7 +3501,7 @@
   .step-cat {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -3530,7 +3530,7 @@
     border: 0;
     color: var(--text-ghost);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
@@ -3547,7 +3547,7 @@
   /* Sub-agent rows under a delegate_task step now live in DelegateChildren.svelte. */
   .step-body-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -3564,7 +3564,7 @@
   .tool-activity {
     margin: 0 0 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .tool-activity-summary {
     display: flex;
@@ -3632,7 +3632,7 @@
   .cancel-btn {
     margin-left: auto;
     padding: 3px 10px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
 
   /* Inline status-update block inside the step list */
@@ -3641,7 +3641,7 @@
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     color: var(--text-primary);
     border-left: 2px solid var(--accent);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.45;
   }
   .status-update-label {
@@ -3658,7 +3658,7 @@
     padding-bottom: 2px;
     color: var(--text-secondary);
     border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-style: italic;
     line-height: 1.5;
   }
@@ -3685,7 +3685,7 @@
     border: none;
     border-radius: 0;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: var(--fs-body);
     cursor: pointer;
     transition: background 0.2s ease-out;
   }
@@ -3709,7 +3709,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     cursor: pointer;
@@ -3752,8 +3752,8 @@
     }
     .composer-textarea {
       min-height: 48px;
-      /* 16px keeps iOS from zooming the viewport on focus. */
-      font-size: 16px;
+      /* No font-size bump needed here any more — the base rule is 16px, which
+         is what keeps iOS from zooming the viewport on focus. */
     }
     .composer-send {
       width: 48px;

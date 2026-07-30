@@ -321,19 +321,19 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .hq-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .hq-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .hq-row { display: flex; gap: 10px; }
   .hq-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .hq-field-half { flex: 1; }
   .hq-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .hq-hint { font-size: 11px; color: var(--text-ghost); }
-  .hq-hint code { font-size: 11px; color: var(--text-muted); }
-  .hq-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .hq-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .hq-hint code { font-size: var(--fs-label); color: var(--text-muted); }
+  .hq-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
 
   .hq-chip-input {
     display: flex; flex-wrap: wrap; gap: 4px;
@@ -349,12 +349,12 @@
     padding: 2px 4px 2px 8px;
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--card-border));
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-primary);
+    font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary);
   }
   .hq-chip-text { white-space: nowrap; }
   .hq-chip-rm {
     background: transparent; border: none; color: var(--text-muted);
-    font-size: 14px; line-height: 1; padding: 0 2px;
+    font-size: var(--fs-body-sm); line-height: 1; padding: 0 2px;
     cursor: pointer;
   }
   .hq-chip-rm:hover { color: var(--status-error, #c0392b); }
@@ -363,7 +363,7 @@
     padding: 3px 4px;
     background: transparent; color: var(--text-primary);
     border: none; outline: none;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
 
   .hq-suggest { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
@@ -371,7 +371,7 @@
     padding: 2px 8px;
     background: var(--bg); color: var(--text-muted);
     border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .hq-suggest-chip:hover { color: var(--text-primary); border-style: solid; }
@@ -382,7 +382,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -411,7 +411,7 @@
   .hq-raw summary { cursor: pointer; }
 
   kbd {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     padding: 1px 4px;
     background: var(--bg);
     border: 1px solid var(--card-border);

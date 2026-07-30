@@ -70,7 +70,7 @@
   }
   .brand {
     font-family: var(--font-brand, var(--font-mono));
-    font-size: 20px;
+    font-size: 1.25rem;
     font-weight: 500;
     color: var(--text-primary);
     text-decoration: none;
@@ -81,7 +81,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-secondary);
@@ -103,7 +103,7 @@
   }
   .sub {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -118,7 +118,7 @@
   }
   .empty {
     color: var(--text-ghost);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     text-align: center;
     padding: 40px 0;
   }
@@ -126,7 +126,7 @@
     margin-top: 36px;
     padding-top: 18px;
     border-top: 1px solid var(--card-border);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     line-height: 1.5;
   }

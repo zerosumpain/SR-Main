@@ -244,23 +244,23 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .bpp-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .bpp-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .bpp-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .bpp-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
     display: inline-flex; gap: 6px; align-items: baseline;
   }
-  .bpp-opt { color: var(--text-ghost); font-size: 9px; }
-  .bpp-hint { font-size: 11px; color: var(--text-ghost); }
-  .bpp-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
-  .bpp-empty code, .bpp-checkbox code { font-size: 11px; color: var(--text-muted); }
+  .bpp-opt { color: var(--text-ghost); font-size: var(--fs-label-xs); }
+  .bpp-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .bpp-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
+  .bpp-empty code, .bpp-checkbox code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .bpp-checkbox {
     display: inline-flex; gap: 8px; align-items: center;
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
   }
   .bpp-checkbox input { accent-color: var(--accent); width: 14px; height: 14px; }
 
@@ -270,7 +270,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -326,7 +326,7 @@
   }
   .bpp-pill {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 1px 6px;
@@ -340,26 +340,26 @@
   .bpp-pill[data-status='awaiting_iter_approval'] { color: #d28a3a; }
   .bpp-build-id {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .bpp-build-iter,
   .bpp-build-when {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     font-variant-numeric: tabular-nums;
   }
   .bpp-attached {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
     margin-left: auto;
   }
   .bpp-build-title {
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -372,7 +372,7 @@
   }
   .bpp-bbtn {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 3px 8px;
@@ -396,7 +396,7 @@
   }
   .bpp-build-spinner {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     align-self: center;
     margin-left: auto;

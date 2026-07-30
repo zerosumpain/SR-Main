@@ -220,14 +220,14 @@
     font: inherit;
   }
   .chart { height: 180px; }
-  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: 8px; }
+  .chart :global(.tickLabel) { fill: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .chart :global(.tick) { stroke: var(--divider); }
   .chart :global(.rule line) { stroke: var(--divider); }
   .chart :global(.Grid line) { stroke: var(--divider); opacity: 0.5; }
   .summary { display: flex; gap: 12px; flex-wrap: wrap; }
   .kv { display: flex; gap: 4px; align-items: baseline; }
-  .kv .k { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kv .k { color: var(--text-muted); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.5px; }
   .kv .v { font-weight: 600; }
   .empty, .skel { color: var(--text-muted); font-style: italic; padding: 12px; text-align: center; }
-  .error-strip { color: var(--status-error); font-size: 10px; padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
+  .error-strip { color: var(--status-error); font-size: var(--fs-label-xs); padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
 </style>

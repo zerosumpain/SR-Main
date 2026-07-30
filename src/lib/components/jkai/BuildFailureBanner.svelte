@@ -163,7 +163,7 @@
             bind:value={improvementPrompt}
             placeholder={defaultPrompt}
             rows="3"
-            class="w-full rounded border px-2 py-1 text-sm"
+            class="w-full rounded border px-2 py-1 text-base"
             style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
           ></textarea>
         </div>

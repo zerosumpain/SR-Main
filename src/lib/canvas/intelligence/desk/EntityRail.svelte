@@ -36,7 +36,7 @@
   }
   .rail-label {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted, rgba(26, 16, 8, 0.45));
@@ -44,7 +44,7 @@
   }
   .rail-badge {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted, rgba(26, 16, 8, 0.45));
     line-height: 1;

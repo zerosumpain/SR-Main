@@ -213,7 +213,7 @@
   }
   .bcf-preview-eyebrow {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -221,7 +221,7 @@
   }
   .bcf-preview-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -231,7 +231,7 @@
   }
   .bcf-preview-line {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     line-height: 1.4;
   }
@@ -240,11 +240,11 @@
     grid-template-columns: minmax(0, max-content) 1fr;
     gap: 4px 12px;
     margin: 4px 0 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .bcf-preview-grid dt {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -258,31 +258,31 @@
   .bcf-section {
     margin: 8px 0 0 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
-  .bcf-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .bcf-label { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .bcf-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-label); }
+  .bcf-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
   .bcf-req { color: var(--status-error, #c0392b); font-weight: 700; }
-  .bcf-desc { font-size: 11px; color: var(--text-ghost); }
+  .bcf-desc { font-size: var(--fs-label); color: var(--text-ghost); }
   .bcf-slider { display: flex; gap: 8px; align-items: center; color: var(--text-primary); }
-  .bcf-code { font-family: var(--font-mono); font-size: 11px; }
+  .bcf-code { font-family: var(--font-mono); font-size: var(--fs-label); }
   .bcf-cheatsheet {
     margin-top: 4px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
   .bcf-cheatsheet summary {
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .bcf-cheatsheet ul { margin: 4px 0 0 12px; padding: 0; }
-  .bcf-cheatsheet code { font-size: 11px; }
+  .bcf-cheatsheet code { font-size: var(--fs-label); }
   .bcf-advanced-toggle {
     margin-top: 8px;
     background: var(--bg);
@@ -290,7 +290,7 @@
     border: 1px dashed var(--card-border);
     padding: 4px 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
@@ -304,7 +304,7 @@
   .bcf-raw summary {
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);

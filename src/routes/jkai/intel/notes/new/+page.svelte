@@ -74,7 +74,7 @@
         type="text"
         bind:value={title}
         placeholder="e.g., 1:1 with Sarah — Platform concerns"
-        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base focus:outline-none border"
         style="background: var(--card-bg); border-color: var(--card-border);"
       />
     </div>
@@ -85,7 +85,7 @@
         bind:value={content}
         placeholder="Paste or type your notes, transcript, email, etc."
         rows={12}
-        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border resize-y"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base focus:outline-none border resize-y"
         style="background: var(--card-bg); border-color: var(--card-border);"
       ></textarea>
     </div>
@@ -109,7 +109,7 @@
         type="file"
         accept="image/*,audio/*"
         onchange={handleFileChange}
-        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm border"
+        class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base border"
         style="background: var(--card-bg); border-color: var(--card-border);"
       />
       {#if file}

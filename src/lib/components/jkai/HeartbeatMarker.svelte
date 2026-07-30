@@ -178,7 +178,7 @@
   }
   .hb-count {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
   }
 
@@ -200,7 +200,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: none;
     color: var(--text-muted);
@@ -250,7 +250,7 @@
     padding-bottom: 5px;
     border-bottom: 1px solid var(--divider);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-ghost);
@@ -261,7 +261,7 @@
     padding: 0;
     color: var(--text-ghost);
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .hb-close:hover {
     color: var(--accent);
@@ -281,7 +281,7 @@
     gap: 6px;
     margin-bottom: 2px;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -298,7 +298,7 @@
   .hb-text {
     margin: 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-primary);
     white-space: pre-wrap;

@@ -280,7 +280,7 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .ha-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .ha-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .ha-pills {
     display: flex; flex-wrap: wrap; gap: 4px;
@@ -292,7 +292,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
     transition: color 0.12s, border-color 0.12s, background 0.12s;
@@ -307,13 +307,13 @@
   .ha-row { display: flex; gap: 10px; }
   .ha-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .ha-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
     display: inline-flex; gap: 6px; align-items: baseline;
   }
-  .ha-hint { font-size: 11px; color: var(--text-ghost); }
-  .ha-hint code, .ha-label code { font-size: 11px; color: var(--text-muted); }
+  .ha-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .ha-hint code, .ha-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .ha-code {
     width: 100%;
@@ -321,15 +321,15 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
   }
   .ha-code:focus { border-color: var(--text-muted); }
 
-  .ha-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
-  .ha-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
+  .ha-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
+  .ha-ok   { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-success, #2a9d4a); }
 
   input[type='text'], textarea {
     width: 100%;

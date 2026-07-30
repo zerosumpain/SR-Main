@@ -37,7 +37,7 @@
     word-break: break-word;
   }
   .chat-md {
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.35;
     color: var(--text-primary);
     word-break: break-word;
@@ -65,7 +65,7 @@
   }
   .chat-md :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: max(0.9em, var(--fs-label-xs));
     background: var(--bg-section);
     border: 1px solid var(--card-border);
     padding: 0 4px;
@@ -78,7 +78,7 @@
     color: #ede4d4;
     border: 1px solid var(--card-border);
     overflow-x: auto;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     border-radius: 2px;
   }
@@ -140,7 +140,7 @@
     font-size: 1em;
   }
   .chat-md :global(h4) {
-    font-size: 0.95em;
+    font-size: max(0.95em, var(--fs-label-xs));
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-muted);
@@ -167,7 +167,7 @@
   .chat-md :global(table) {
     border-collapse: collapse;
     margin: 0.5em 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     width: 100%;
   }
   .chat-md :global(th),
@@ -179,7 +179,7 @@
   .chat-md :global(th) {
     background: var(--bg-section);
     font-weight: 600;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }

@@ -129,7 +129,7 @@
     background: rgba(26, 16, 8, 0.82);
     color: var(--bg);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     white-space: nowrap;
@@ -166,7 +166,7 @@
     padding: 3px 5px;
     border: 1px solid var(--accent-tint-35);
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -175,7 +175,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -185,7 +185,7 @@
   .att-meta {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.5);
@@ -229,11 +229,11 @@
       min-height: 44px;
     }
     .att-name {
-      font-size: 12.5px;
+      font-size: var(--fs-label);
     }
     .att-meta,
     .att-caption {
-      font-size: 9.5px;
+      font-size: var(--fs-label-xs);
     }
   }
 </style>

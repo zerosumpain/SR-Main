@@ -68,12 +68,12 @@
   .confirm-prompt {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .confirm-details {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     background: var(--bg-section);
     padding: 6px 8px;
@@ -83,7 +83,7 @@
   }
   .confirm-error {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--status-error);
     background: var(--error-bg);
     border-left: 2px solid var(--status-error);

@@ -98,7 +98,7 @@
   }
   .dim {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--fs-label);
     margin: 0 0 0.5rem;
   }
   .opts {
@@ -120,7 +120,7 @@
   .lbl {
     display: block;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -128,13 +128,13 @@
   }
   textarea {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     margin-top: 0.3rem;
   }
   .err {
     color: var(--status-error);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 0.5rem 0 0;
   }
 </style>

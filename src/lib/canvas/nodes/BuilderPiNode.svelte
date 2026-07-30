@@ -474,12 +474,12 @@
     flex-shrink: 0;
   }
   .bpn-empty-hdr {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     font-style: italic;
   }
   .bpn-pill {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.14em;
     padding: 2px 7px; border: 1px solid currentColor;
     color: var(--text-muted);
@@ -489,7 +489,7 @@
   .bpn-pill[data-status='failed'] { color: var(--status-error, #c0392b); }
   .bpn-pill[data-status='paused'] { color: var(--text-ghost); }
   .bpn-meta {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -502,7 +502,7 @@
 
   .bpn-acts { display: flex; gap: 0.25rem; flex-shrink: 0; flex-basis: 100%; }
   .bpn-act {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     padding: 4px 9px;
     border: 1px solid var(--text-primary);
@@ -520,7 +520,7 @@
     padding: 0.4rem 0.6rem;
     background: color-mix(in srgb, var(--text-primary) 4%, transparent);
     font-family: var(--font-mono), monospace;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
   }
   .bpn-empty {
@@ -549,7 +549,7 @@
   .bpn-line[data-type='system'] .bpn-tag,
   .bpn-line[data-type='system'] .bpn-content { color: var(--text-ghost); }
   .bpn-tag {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: lowercase;
     color: var(--text-muted);
     text-align: right;

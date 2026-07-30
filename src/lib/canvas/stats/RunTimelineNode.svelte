@@ -158,17 +158,17 @@
     overflow: hidden;
   }
   .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .title { font-weight: 600; font-size: 12px; }
+  .title { font-weight: 600; font-size: var(--fs-label); }
   .picker { flex: 1; background: transparent; color: inherit; border: 1px solid var(--card-border); font: inherit; padding: 1px 4px; }
   .gantt { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
   .row { display: grid; grid-template-columns: 100px 1fr 50px; gap: 6px; align-items: center; }
-  .rowlabel { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+  .rowlabel { font-size: var(--fs-label-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
   .track { position: relative; height: 14px; background: var(--bg-section); border-radius: 2px; }
   .bar { position: absolute; top: 0; height: 100%; border: none; cursor: pointer; border-radius: 2px; padding: 0; }
   .bar:hover { filter: brightness(1.15); }
-  .rowdur { color: var(--text-muted); font-size: 9px; text-align: right; }
-  .ft { display: flex; gap: 6px; color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .rowdur { color: var(--text-muted); font-size: var(--fs-label-xs); text-align: right; }
+  .ft { display: flex; gap: 6px; color: var(--text-muted); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.4px; }
   .sep { opacity: 0.5; }
   .empty, .skel { color: var(--text-muted); font-style: italic; padding: 8px; }
-  .error-strip { color: var(--status-error); font-size: 10px; padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
+  .error-strip { color: var(--status-error); font-size: var(--fs-label-xs); padding: 4px; border: 1px solid var(--status-error); border-radius: 4px; }
 </style>

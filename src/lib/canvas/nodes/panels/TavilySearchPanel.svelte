@@ -221,13 +221,13 @@
   .tv-field-days { flex: 1; }
 
   .tv-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .tv-hint { font-size: 11px; color: var(--text-ghost); }
-  .tv-hint code { font-size: 11px; color: var(--text-muted); }
-  .tv-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
+  .tv-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .tv-hint code { font-size: var(--fs-label); color: var(--text-muted); }
+  .tv-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
 
   .tv-code {
     width: 100%;
@@ -235,7 +235,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -245,7 +245,7 @@
 
   .tv-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   .tv-toggle input[type='checkbox'] { width: auto; margin: 0; }
-  .tv-toggle-label { font-size: 13px; color: var(--text-primary); }
+  .tv-toggle-label { font-size: var(--fs-nav); color: var(--text-primary); }
 
   input[type='text'], input[type='number'], select, textarea {
     width: 100%;

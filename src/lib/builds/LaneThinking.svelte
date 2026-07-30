@@ -48,14 +48,14 @@
   }
   .caret {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--accent);
     width: 12px;
     flex-shrink: 0;
   }
   .lbl {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -65,7 +65,7 @@
   .head {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: none;
     letter-spacing: 0;
     overflow: hidden;
@@ -76,7 +76,7 @@
   }
   .cue {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -90,7 +90,7 @@
   }
   pre {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     margin: 0.3rem 0 0;
     padding: 8px 10px;

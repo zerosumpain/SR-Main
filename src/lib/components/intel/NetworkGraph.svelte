@@ -244,7 +244,10 @@
       .text((d) => (d.name.length > 26 ? `${d.name.slice(0, 24)}…` : d.name))
       .attr('x', (d) => radius(d) + 5)
       .attr('y', 4)
-      .attr('font-size', 11)
+      // 13 == --fs-label. Kept as a literal number because this is an SVG
+      // presentation attribute: browsers do not substitute var() there, so a
+      // token would silently fall back to the inherited size.
+      .attr('font-size', 13)
       .attr('font-family', 'var(--font-body)')
       .attr('fill', 'var(--text-secondary)')
       .attr('paint-order', 'stroke')

@@ -117,14 +117,14 @@
   .iter-hdr:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
   .caret {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     width: 12px;
     color: var(--text-muted);
   }
   .iter-summary {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -133,7 +133,7 @@
   }
   .iter-think-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     background: transparent;
     border: 1px solid var(--card-border);
     padding: 0.15rem 0.4rem;
@@ -147,7 +147,7 @@
   }
   .syslog {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     margin: 0.4rem 0 0;
     padding: 6px 8px;
@@ -189,7 +189,7 @@
     color: var(--success);
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .think-x {
     background: transparent;
@@ -204,7 +204,7 @@
   .think-body {
     margin: 0;
     padding: 0.9rem 1rem;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     overflow-y: auto;
     white-space: pre-wrap;

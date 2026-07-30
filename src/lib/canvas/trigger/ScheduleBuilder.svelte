@@ -142,7 +142,7 @@
 <style>
   .sb { display: flex; flex-direction: column; gap: 8px; }
   .sb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .sb-lbl { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .sb-lbl { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); }
   .sb-sel, .sb-num, .sb-time {
     padding: 6px 8px;
     background: var(--bg);
@@ -160,7 +160,7 @@
     color: var(--text-muted);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .sb-day:hover { color: var(--text-primary); }
@@ -169,6 +169,6 @@
     color: var(--text-primary);
     border-color: var(--accent);
   }
-  .sb-preview { margin: 0; font-size: 12px; color: var(--text-primary); }
-  .sb-tz { color: var(--text-ghost); font-size: 11px; }
+  .sb-preview { margin: 0; font-size: var(--fs-label); color: var(--text-primary); }
+  .sb-tz { color: var(--text-ghost); font-size: var(--fs-label); }
 </style>

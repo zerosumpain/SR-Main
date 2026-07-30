@@ -122,7 +122,7 @@
     color: var(--text-muted);
     border: none;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -138,13 +138,13 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
   }
   .rl-code:focus { border-color: var(--text-muted); }
-  .rl-hint { font-size: 11px; color: var(--text-ghost); }
+  .rl-hint { font-size: var(--fs-label); color: var(--text-ghost); }
   .rl-hint :global(code) {
     font-family: var(--font-mono);
     background: var(--bg);

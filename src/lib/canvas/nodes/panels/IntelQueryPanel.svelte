@@ -242,23 +242,23 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .iq-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .iq-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .iq-row { display: flex; gap: 10px; }
   .iq-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .iq-field-half { flex: 1; }
   .iq-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .iq-hint { font-size: 11px; color: var(--text-ghost); }
-  .iq-hint code, .iq-label code { font-size: 11px; color: var(--text-muted); }
+  .iq-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .iq-hint code, .iq-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .iq-toggles { display: flex; flex-wrap: wrap; gap: 14px; padding-top: 2px; }
   .iq-toggle {
     display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
     cursor: pointer;
   }
   .iq-toggle input { width: auto; margin: 0; }
@@ -276,13 +276,13 @@
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--card-border));
     color: var(--text-primary);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
   .iq-chip-text { line-height: 1; }
   .iq-chip-rm {
     background: transparent; color: var(--text-muted);
     border: none; padding: 0 4px; cursor: pointer;
-    font-size: 13px; line-height: 1;
+    font-size: var(--fs-nav); line-height: 1;
   }
   .iq-chip-rm:hover { color: var(--status-error, #c0392b); }
   .iq-chip-input {
@@ -291,7 +291,7 @@
     background: transparent;
     color: var(--text-primary);
     border: none; outline: none;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
 
   .iq-adv, .iq-raw {
@@ -308,7 +308,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

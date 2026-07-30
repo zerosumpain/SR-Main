@@ -64,17 +64,17 @@
   }
   textarea {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
   }
   .dim {
     color: var(--text-muted);
     margin: 0 0 0.5rem;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .err {
     color: var(--status-error);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 0.5rem 0 0;
   }
 </style>

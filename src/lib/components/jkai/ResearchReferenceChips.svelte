@@ -64,7 +64,7 @@
     cursor: pointer;
     list-style: none;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -103,7 +103,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     text-decoration: none;
   }
@@ -114,7 +114,7 @@
   }
   .ref-icon {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .ref-name {
     min-width: 0;
@@ -125,7 +125,7 @@
   .ref-score {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     color: var(--text-muted);
   }
