@@ -281,20 +281,20 @@
 
   .dd-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .dd-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
     display: flex; align-items: baseline; gap: 8px;
   }
   .dd-req {
     color: var(--status-error, #c0392b);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
   }
-  .dd-hint { font-size: 11px; color: var(--text-ghost); }
-  .dd-hint code, .dd-label code { font-size: 11px; color: var(--text-muted); }
+  .dd-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .dd-hint code, .dd-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .dd-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     margin-left: 6px;
   }
@@ -329,11 +329,11 @@
     color: var(--accent);
   }
   .dd-pill-label {
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     text-transform: uppercase; letter-spacing: 0.06em;
   }
   .dd-pill-sub {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .dd-pill-btn.active .dd-pill-sub { color: color-mix(in srgb, var(--accent) 80%, var(--text-muted)); }
@@ -344,7 +344,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -376,7 +376,7 @@
     padding: 8px;
     background: var(--bg);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     white-space: pre-wrap;
     word-break: break-word;
     color: var(--text-primary);

@@ -48,9 +48,9 @@
 <style>
   .kv { display: flex; flex-direction: column; gap: 4px; }
   .kv-row { display: grid; grid-template-columns: 1fr 1.6fr 24px; gap: 4px; }
-  .kv-k, .kv-v { padding: 4px 6px; background: var(--bg); color: var(--text-primary); border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: 11px; }
+  .kv-k, .kv-v { padding: 4px 6px; background: var(--bg); color: var(--text-primary); border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label); }
   .kv-rm { background: transparent; color: var(--text-muted); border: 1px solid var(--card-border); cursor: pointer; }
   .kv-rm:hover { color: var(--status-error, #c0392b); }
-  .kv-add { align-self: flex-start; margin-top: 4px; padding: 3px 8px; background: var(--bg); color: var(--text-muted); border: 1px dashed var(--card-border); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+  .kv-add { align-self: flex-start; margin-top: 4px; padding: 3px 8px; background: var(--bg); color: var(--text-muted); border: 1px dashed var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
   .kv-add:hover { color: var(--text-primary); }
 </style>

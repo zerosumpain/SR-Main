@@ -138,18 +138,18 @@
     align-items: center;
     gap: 8px;
     width: auto;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
   .ma-spark { color: var(--accent-ink, var(--accent, #b5651d)); }
 
   .ma-hdr { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .ma-title { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+  .ma-title { display: flex; align-items: center; gap: 6px; font-size: var(--fs-label); min-width: 0; }
   .ma-route { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ma-route b { color: var(--text-primary); }
   .ma-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .ma-compat, .ma-prov {
-    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em;
     padding: 0 4px; border: 1px solid var(--card-border); color: var(--text-ghost);
   }
   .ma-compat-direct { color: var(--status-success, #2a9d4a); border-color: currentColor; }
@@ -157,36 +157,36 @@
   .ma-compat-transform { color: var(--accent-ink, #b5651d); border-color: currentColor; }
   .ma-x {
     background: transparent; border: none; color: var(--text-ghost);
-    font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px;
+    font-size: var(--fs-body); line-height: 1; cursor: pointer; padding: 0 2px;
   }
   .ma-x:hover { color: var(--text-primary); }
 
-  .ma-rationale { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.45; }
+  .ma-rationale { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.45; }
 
   .ma-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
   .ma-check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
   .ma-check input { margin-top: 2px; width: auto; flex-shrink: 0; }
   .ma-action-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .ma-action-label { font-size: 12px; color: var(--text-primary); }
+  .ma-action-label { font-size: var(--fs-label); color: var(--text-primary); }
   .ma-field {
-    font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted);
     background: color-mix(in srgb, var(--card-border) 20%, transparent);
     padding: 1px 4px; word-break: break-all; align-self: flex-start;
   }
-  .ma-action-detail { font-size: 11px; color: var(--text-ghost); line-height: 1.35; }
-  .ma-warn { font-family: var(--font-mono); font-size: 9px; color: var(--status-error, #c0392b); margin-left: 4px; text-transform: uppercase; }
+  .ma-action-detail { font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.35; }
+  .ma-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); margin-left: 4px; text-transform: uppercase; }
 
-  .ma-empty { margin: 0; font-size: 11px; color: var(--text-ghost); }
+  .ma-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
 
   .ma-advisory { list-style: none; margin: 0; padding: 6px 0 0; border-top: 1px dashed var(--card-border); display: flex; flex-direction: column; gap: 4px; }
-  .ma-advisory li { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
-  .ma-adv-badge { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; padding: 0 4px; border: 1px solid var(--card-border); margin-right: 4px; }
+  .ma-advisory li { font-size: var(--fs-label); color: var(--text-muted); line-height: 1.35; }
+  .ma-adv-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; padding: 0 4px; border: 1px solid var(--card-border); margin-right: 4px; }
   .ma-adv-insert { color: var(--accent-ink, #b5651d); }
   .ma-adv-detail { color: var(--text-ghost); }
 
   .ma-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
   .ma-btn {
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     padding: 5px 12px; cursor: pointer; border: 1px solid var(--card-border);
     background: transparent; color: var(--text-muted);
   }

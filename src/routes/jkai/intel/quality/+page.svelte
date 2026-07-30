@@ -519,7 +519,7 @@
   }
   .fuse {
     color: var(--accent);
-    font-size: 18px;
+    font-size: var(--fs-body-lg);
   }
 
   .why {

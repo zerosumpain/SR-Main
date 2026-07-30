@@ -204,13 +204,13 @@
   .ac-label,
   .ac-entity-type {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted);
   }
   .ac-title {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     font-weight: 600;
     line-height: 1.25;
     overflow: hidden;
@@ -219,7 +219,7 @@
     -webkit-box-orient: vertical;
   }
   .ac-content {
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.35;
     overflow: hidden;
     display: -webkit-box;
@@ -231,13 +231,13 @@
     justify-content: space-between;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .ac-domain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ac-cred {
     flex-shrink: 0;
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     padding: 1px 5px;
     border: 1px solid currentColor;
@@ -254,7 +254,7 @@
   .ac-conf i { display: block; height: 100%; }
   .ac-conf-label {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     align-self: flex-start;
   }
@@ -269,7 +269,7 @@
   .ac-tab {
     align-self: flex-start;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     padding: 1px 6px;
     background: #b3261e;
@@ -287,12 +287,12 @@
   .ac[data-variant='entity'] .ac-entity-type { color: rgba(237, 228, 212, 0.6); }
   .ac-entity-name {
     font-family: var(--font-display);
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.1;
     text-transform: uppercase;
   }
   .ac-entity-desc {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: rgba(237, 228, 212, 0.7);
     line-height: 1.3;
     overflow: hidden;
@@ -307,7 +307,7 @@
 
   .ac-unfiled-tag {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--accent);
   }
@@ -336,7 +336,7 @@
     gap: 5px;
     align-self: flex-start;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);

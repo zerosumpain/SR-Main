@@ -78,12 +78,12 @@
     }
     .glyph {
       font-family: var(--font-mono);
-      font-size: 15px;
+      font-size: var(--fs-body);
       line-height: 1;
     }
     .label {
       font-family: var(--font-mono);
-      font-size: 9px;
+      font-size: var(--fs-label-xs);
       text-transform: uppercase;
       letter-spacing: 0.12em;
     }

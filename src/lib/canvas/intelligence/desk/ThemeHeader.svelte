@@ -41,7 +41,7 @@
   }
   .label {
     font-family: var(--font-display, 'Archivo Black', sans-serif);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     line-height: 1.1;
     letter-spacing: 0.01em;
     text-transform: uppercase;
@@ -49,7 +49,7 @@
   }
   .count {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--accent, #c4570a);
     flex: 0 0 auto;
   }

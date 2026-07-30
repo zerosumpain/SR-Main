@@ -387,13 +387,13 @@
 
   .lane-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .tick {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
 
   .sel {
@@ -479,7 +479,7 @@
     border-radius: var(--radius-sharp);
     padding: 4px 6px;
     font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
+    font-size: var(--fs-body);
     color: var(--text-secondary);
   }
   .field input:focus-visible {

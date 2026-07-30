@@ -112,7 +112,7 @@
   }
   .sa-task {
     flex: 1;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     min-width: 0;
     overflow: hidden;
@@ -120,7 +120,7 @@
     white-space: nowrap;
   }
   .sa-status {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -140,7 +140,7 @@
   }
 
   .sa-summary {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-secondary);
     padding: 4px 8px;
     background: var(--bg-section);
@@ -166,7 +166,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .sa-step-status {
     width: 14px;
@@ -180,7 +180,7 @@
   .sa-step-cat {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -206,7 +206,7 @@
     background: transparent;
     border: 0;
     color: var(--text-ghost);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
@@ -216,7 +216,7 @@
   .sa-step-body { margin-top: 6px; }
 
   .sa-live {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     background: var(--bg-section);
     padding: 6px 8px;

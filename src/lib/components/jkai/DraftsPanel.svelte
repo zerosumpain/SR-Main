@@ -110,7 +110,7 @@
     cursor: pointer;
     padding: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;

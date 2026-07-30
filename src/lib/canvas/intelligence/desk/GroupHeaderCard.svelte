@@ -81,7 +81,7 @@
   }
   .ghc-title {
     font-family: var(--font-display, 'Archivo Black', sans-serif);
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.15;
     letter-spacing: -0.01em;
     color: var(--text-primary, #1a1008);
@@ -94,7 +94,7 @@
   }
   .ghc-count {
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 700;
     color: var(--accent, #c4570a);
     flex: 0 0 auto;
@@ -102,7 +102,7 @@
   .ghc-summary {
     margin: 7px 0 0;
     font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     color: var(--text-secondary, rgba(26, 16, 8, 0.78));
     display: -webkit-box;
@@ -115,7 +115,7 @@
   .ghc-hint {
     display: inline-block;
     margin-top: 8px;
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-ghost, rgba(26, 16, 8, 0.45));

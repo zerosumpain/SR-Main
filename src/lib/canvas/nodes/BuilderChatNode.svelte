@@ -435,7 +435,7 @@
     flex-shrink: 0;
   }
   .bcn-pill {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.14em;
     padding: 2px 7px; border: 1px solid currentColor;
     color: var(--text-muted);
@@ -445,7 +445,7 @@
   .bcn-pill[data-status='failed'] { color: var(--status-error, #c0392b); }
   .bcn-pill[data-status='paused'] { color: var(--text-ghost); }
   .bcn-meta {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -454,13 +454,13 @@
     flex: 1; min-width: 0;
   }
   .bcn-link {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--accent); text-decoration: none;
     margin-left: auto;
   }
   .bcn-link:hover { text-decoration: underline; }
   .bcn-err {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     margin-left: auto;
     flex-basis: 100%;
@@ -472,13 +472,13 @@
     padding: 0.4rem 0.6rem;
     display: flex; flex-direction: column; gap: 0.25rem;
     font-family: var(--font-mono), monospace;
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.45;
   }
   .bcn-empty {
     color: var(--text-ghost);
     font-style: italic;
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 0.5rem 0;
   }
   .bcn-empty code {
@@ -500,7 +500,7 @@
   .bcn-row[data-role='system'] { color: var(--text-muted); }
   .bcn-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -525,7 +525,7 @@
     width: 100%;
     padding: 0.45rem 0.55rem;
     font-family: var(--font-mono), monospace;
-    font-size: 11px;
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
@@ -540,14 +540,14 @@
   }
   .bcn-foot-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
   .bcn-foot-link {
     background: transparent; border: none; padding: 0;
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     color: var(--text-muted); cursor: pointer;
   }
@@ -555,7 +555,7 @@
   .bcn-send {
     margin-left: auto;
     font-family: var(--font-mono), monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     padding: 5px 12px;
     border: 1px solid var(--text-primary);

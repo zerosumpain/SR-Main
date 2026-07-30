@@ -132,7 +132,7 @@
   }
   code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .tree-row.active code {
@@ -143,7 +143,7 @@
   }
   .viewer {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 10px 12px;
     background: var(--code-bg);
     color: var(--code-text);
@@ -157,12 +157,12 @@
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .err {
     color: var(--status-error);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 0 0 0.5rem;
   }
 </style>

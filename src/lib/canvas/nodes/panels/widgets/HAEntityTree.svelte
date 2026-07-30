@@ -253,25 +253,25 @@
     color: var(--text-muted);
     border: 1px solid var(--card-border);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
   .hat-refresh:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-muted); }
   .hat-refresh:disabled { opacity: 0.5; cursor: default; }
 
   .hat-selcount {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     display: flex; gap: 8px; align-items: center;
   }
   .hat-clear {
     background: none; border: none; padding: 0;
     color: var(--accent); cursor: pointer;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-decoration: underline;
   }
 
-  .hat-msg { margin: 0; padding: 8px; font-size: 12px; color: var(--text-ghost); }
+  .hat-msg { margin: 0; padding: 8px; font-size: var(--fs-label); color: var(--text-ghost); }
   .hat-err { color: var(--status-error, #c0392b); }
 
   .hat-tree {
@@ -293,18 +293,18 @@
     cursor: pointer;
     color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .hat-row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-  .hat-caret { color: var(--text-muted); width: 10px; flex: 0 0 auto; font-size: 10px; }
+  .hat-caret { color: var(--text-muted); width: 10px; flex: 0 0 auto; font-size: var(--fs-label-xs); }
   .hat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hat-count {
     flex: 0 0 auto;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
-  .hat-area .hat-name { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .hat-area .hat-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
   .hat-domain { padding-left: 22px; }
   .hat-domain .hat-name { color: var(--text-secondary, var(--text-muted)); }
   .hat-leaf { padding-left: 38px; }
@@ -312,14 +312,14 @@
   .hat-eid {
     flex: 1; min-width: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .hat-state {
     flex: 0 0 auto;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     max-width: 90px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -334,7 +334,7 @@
     width: 13px; height: 13px;
     border: 1px solid var(--text-muted);
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 9px; line-height: 1;
+    font-size: var(--fs-label-xs); line-height: 1;
     color: var(--bg);
   }
   .hat-check.on { background: var(--accent); border-color: var(--accent); }
@@ -345,7 +345,7 @@
   .hat-adv summary {
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
@@ -358,11 +358,11 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
   .hat-manual:focus { border-color: var(--text-muted); }
-  .hat-hint { display: block; margin-top: 4px; font-size: 11px; color: var(--text-ghost); }
-  .hat-hint code { font-size: 11px; color: var(--text-muted); }
+  .hat-hint { display: block; margin-top: 4px; font-size: var(--fs-label); color: var(--text-ghost); }
+  .hat-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 </style>

@@ -197,7 +197,7 @@
     background: var(--bg);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     min-width: 220px;
     max-width: 360px;
@@ -223,7 +223,7 @@
   .ti-popup-foot {
     border-top: 1px dashed var(--card-border);
     color: var(--text-ghost);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 4px 8px;
     cursor: default;
   }

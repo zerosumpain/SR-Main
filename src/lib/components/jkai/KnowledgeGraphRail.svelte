@@ -332,7 +332,7 @@
 
   .rail-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -368,7 +368,7 @@
   }
   .gr-count {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -399,7 +399,7 @@
     padding: 0 24px;
     text-align: center;
     font-family: var(--font-body);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-ghost);
   }
@@ -430,7 +430,7 @@
   }
   .gr-glyph {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     color: var(--n-color, var(--accent));
   }
@@ -439,7 +439,7 @@
   }
   .gr-label {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -460,7 +460,7 @@
     flex-wrap: wrap;
     gap: 4px 9px;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.5);
@@ -499,7 +499,7 @@
   }
   .gr-type {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.15em;
@@ -507,7 +507,7 @@
   }
   .gr-seen {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -521,7 +521,7 @@
     line-clamp: 2;
     overflow: hidden;
     font-family: var(--font-brand);
-    font-size: 15px;
+    font-size: var(--fs-body);
     font-weight: 500;
     line-height: 1.3;
     letter-spacing: -0.01em;
@@ -535,7 +535,7 @@
   .gr-note {
     margin: 6px 0 0;
     font-family: var(--font-body);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
     /* Summaries are model-written and occasionally a paragraph. Clamp rather
@@ -565,7 +565,7 @@
   }
   .gr-rel-count {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
@@ -593,7 +593,7 @@
     background: none;
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -606,7 +606,7 @@
   .gr-verb {
     flex: none;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent);
@@ -616,7 +616,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--font-body);
-    font-size: 11.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -631,7 +631,7 @@
     padding: 9px 12px;
     border-top: 1px solid var(--divider);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: rgba(26, 16, 8, 0.5);
@@ -690,14 +690,14 @@
     }
     .gr-target,
     .gr-note {
-      font-size: 12.5px;
+      font-size: var(--fs-label);
     }
     .gr-verb,
     .gr-count,
     .gr-seen,
     .gr-type,
     .gr-foot {
-      font-size: 10px;
+      font-size: var(--fs-label-xs);
     }
     .gr-foot {
       padding-bottom: max(9px, env(safe-area-inset-bottom));

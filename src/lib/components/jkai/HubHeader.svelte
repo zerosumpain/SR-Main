@@ -254,7 +254,7 @@
   }
   .brand {
     flex: none;
-    font-size: 16px;
+    font-size: var(--fs-body);
   }
   .hdr-divider {
     width: 1px;
@@ -283,7 +283,7 @@
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -328,7 +328,7 @@
   .menu-heading {
     padding: 8px 12px 6px;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.16em;
@@ -352,13 +352,13 @@
   }
   .menu-label {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     font-weight: 400;
     color: var(--text-primary);
   }
   .menu-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -391,7 +391,7 @@
       background: rgba(196, 87, 10, 0.1);
       border: 1px solid var(--accent-tint-25);
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: var(--fs-label);
       font-weight: 500;
       color: var(--accent);
       text-decoration: none;
@@ -414,7 +414,7 @@
     .menu-burger {
       display: inline;
       font-family: var(--font-mono);
-      font-size: 20px;
+      font-size: 1.25rem;
       font-weight: 400;
       letter-spacing: 0;
       text-transform: none;
@@ -441,10 +441,10 @@
       align-items: center;
     }
     .menu-label {
-      font-size: 13.5px;
+      font-size: var(--fs-nav);
     }
     .menu-meta {
-      font-size: 10px;
+      font-size: var(--fs-label-xs);
     }
     /* 34px, scrolls horizontally, never wraps. The `mobile` variant already
        drops spend and suspends the desktop chunk-drop rules. */

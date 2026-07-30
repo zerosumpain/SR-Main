@@ -213,7 +213,7 @@
   .ism-prompt {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     font-weight: 500;
     overflow: hidden;
@@ -230,7 +230,7 @@
 
   .ism-btn {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     padding: 3px 8px;
@@ -266,7 +266,7 @@
 
   .ism-error {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: #c44;
     padding: 6px 16px;
     background: rgba(204, 68, 68, 0.08);
@@ -291,13 +291,13 @@
 
   .ism-vnc-hint {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-primary);
     margin: 0;
   }
   .ism-vnc-hint code {
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     background: var(--bg-section, #111);
     padding: 1px 4px;
     border-radius: 2px;
@@ -308,7 +308,7 @@
     align-self: stretch;
     justify-content: center;
     padding: 8px 12px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
 
   .ism-vnc-expired {
@@ -316,7 +316,7 @@
     align-items: center;
     justify-content: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     padding: 32px;
   }
@@ -339,7 +339,7 @@
 
   .ism-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -347,7 +347,7 @@
 
   .ism-input {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     padding: 6px 8px;
     background: var(--bg, #0d0d0d);
     border: 1px solid var(--card-border, #333);
@@ -380,14 +380,14 @@
 
   .ism-checkbox-text {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
 
   .ism-no-fields {
     padding: 16px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
 </style>

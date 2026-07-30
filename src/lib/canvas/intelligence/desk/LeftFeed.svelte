@@ -181,7 +181,7 @@
     background: var(--card-bg);
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     z-index: 2;
   }
   .spine-toggle:hover { color: var(--accent); border-color: var(--accent); }
@@ -196,7 +196,7 @@
     writing-mode: vertical-rl;
     transform: rotate(180deg);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--text-ghost);
   }
@@ -205,7 +205,7 @@
   .feed-sec { margin-bottom: 18px; }
   .feed-sec h3 {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--text-ghost);
     margin: 0 0 8px;
@@ -219,7 +219,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     cursor: pointer;
   }
@@ -232,7 +232,7 @@
   .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
   .legend li {
     display: flex; align-items: center; gap: 8px;
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted);
   }
   .lg-card { width: 14px; height: 10px; background: #faf6ee; border: 1px solid var(--card-border); }
   .lg-chip { width: 14px; height: 10px; background: #1a1008; }
@@ -247,22 +247,22 @@
   }
   .run:hover { border-color: var(--accent); }
   .run-status {
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase;
     align-self: flex-start; padding: 1px 5px; border-radius: var(--radius-sharp);
   }
   .run-running { color: var(--accent); background: var(--accent-tint-08); }
   .run-complete { color: var(--success); background: var(--success-bg); }
   .run-failed, .run-cancelled { color: var(--error); background: var(--error-bg); }
-  .run-summary { font-family: var(--font-body); font-size: 12px; color: var(--text-primary); }
-  .run-time { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .run-summary { font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary); }
+  .run-time { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .source { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; text-decoration: none; border-bottom: 1px solid var(--bg-section); }
-  .src-domain { font-family: var(--font-mono); font-size: 10px; color: var(--accent); }
-  .src-title { font-family: var(--font-body); font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .src-domain { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
+  .src-title { font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .src-cred {
     align-self: flex-start;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     padding: 1px 5px;
     border: 1px solid currentColor;
@@ -271,6 +271,6 @@
   }
   .source:hover .src-title { color: var(--accent); }
 
-  .log li { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); padding: 3px 0; line-height: 1.4; }
+  .log li { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); padding: 3px 0; line-height: 1.4; }
   .log-time { color: var(--text-ghost); margin-right: 6px; }
 </style>

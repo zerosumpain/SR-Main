@@ -108,7 +108,7 @@
   }
   .bvm-id {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     padding-right: 4px;
     border-right: 1px dashed var(--card-border);
@@ -116,7 +116,7 @@
   .bvm-iconlink,
   .bvm-iconbtn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1;
     padding: 5px 9px;
     border: 1px solid var(--text-primary);

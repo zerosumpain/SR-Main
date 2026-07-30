@@ -152,19 +152,19 @@
   .ps-hd { display: flex; align-items: baseline; gap: 8px; }
   .ps-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .ps-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .ps-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .ps-input {
@@ -173,7 +173,7 @@
     border: 1px solid var(--card-border);
     padding: 4px 7px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     outline: none;
     box-sizing: border-box;
     width: 100%;
@@ -191,16 +191,16 @@
     outline: none;
     box-sizing: border-box;
     font-family: var(--font-sans, inherit);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
   }
   .ps-textarea-code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .ps-error {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: #c44;
   }
 </style>

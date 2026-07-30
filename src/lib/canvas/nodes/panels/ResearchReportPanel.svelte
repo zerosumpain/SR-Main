@@ -66,13 +66,13 @@
   .rr-check { display: flex; align-items: center; gap: 8px; }
   .rr-check input { width: auto; }
   .rr-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
-  .rr-readout { margin: 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .rr-readout { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); }
   .rr-code {
     width: 100%; padding: 8px; background: var(--bg); color: var(--text-primary);
-    border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: 11px;
+    border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .rr-code:focus { border-color: var(--text-muted); }

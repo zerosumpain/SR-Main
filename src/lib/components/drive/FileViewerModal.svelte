@@ -333,7 +333,7 @@
   }
   .fv-name {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -341,7 +341,7 @@
   }
   .fv-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -353,7 +353,7 @@
   }
   .fv-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 5px 10px;
@@ -369,7 +369,7 @@
     border-color: var(--accent);
   }
   .fv-close {
-    font-size: 12px;
+    font-size: var(--fs-label);
     padding: 4px 9px;
   }
   .fv-body {
@@ -422,7 +422,7 @@
     gap: 12px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .fv-error {
     color: var(--error);
@@ -433,7 +433,7 @@
     margin: 0 auto;
     white-space: pre-wrap;
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     line-height: 1.7;
     color: var(--text-primary);
   }
@@ -442,7 +442,7 @@
     max-width: 80ch;
     margin: 0 auto;
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.72;
     color: var(--text-primary);
   }
@@ -476,7 +476,7 @@
   .fv-prose :global(img) { max-width: 100%; height: auto; border-radius: 2px; margin: 0.4em 0; }
   .fv-prose :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
     border-radius: 2px;
@@ -488,7 +488,7 @@
     overflow-x: auto;
     border-radius: 2px;
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
   }
   .fv-prose :global(pre code) { background: none; padding: 0; color: inherit; }
 
@@ -497,7 +497,7 @@
     border-collapse: collapse;
     width: 100%;
     margin: 1.1em 0 1.6em;
-    font-size: 0.92em;
+    font-size: max(0.92em, var(--fs-label-xs));
     font-variant-numeric: tabular-nums;
   }
   .fv-prose :global(th),
@@ -535,7 +535,7 @@
   }
   .fv-rich :global(.pptx-slide-no) {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
@@ -554,12 +554,12 @@
     padding-top: 12px;
     border-top: 1px dashed var(--card-border);
     color: var(--text-secondary);
-    font-size: 0.9em;
+    font-size: max(0.9em, var(--fs-label-xs));
   }
   .fv-rich :global(.pptx-notes-label) {
     display: block;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -575,7 +575,7 @@
   }
   .fv-rich :global(.xlsx-sheet-name) {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
@@ -588,11 +588,11 @@
     border: 1px solid var(--divider);
     border-radius: 2px;
   }
-  .fv-rich :global(.xlsx-sheet table) { font-size: 0.85em; min-width: 100%; margin: 0; }
+  .fv-rich :global(.xlsx-sheet table) { font-size: max(0.85em, var(--fs-label-xs)); min-width: 100%; margin: 0; }
   .fv-rich :global(.xlsx-sheet thead th) {
     background: var(--surface-elevated);
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-secondary);
@@ -624,14 +624,14 @@
     border: 1px solid var(--card-border);
     border-left: 3px solid var(--accent);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: var(--text-primary);
   }
   .fv-caption-label {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -645,7 +645,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     line-height: 1.75;
     color: var(--text-primary);
   }

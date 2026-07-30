@@ -312,18 +312,18 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .lp-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .lp-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .lp-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .lp-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .lp-hint { font-size: 11px; color: var(--text-ghost); }
-  .lp-hint code, .lp-label code { font-size: 11px; color: var(--text-muted); }
+  .lp-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .lp-hint code, .lp-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
-  .lp-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
+  .lp-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
 
   .lp-code {
     width: 100%;
@@ -331,7 +331,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

@@ -117,11 +117,11 @@
 <button type="button" class="sft-add" onclick={add}>+ Add field</button>
 
 <style>
-  .sft { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--text-primary); }
+  .sft { width: 100%; border-collapse: collapse; font-size: var(--fs-label); color: var(--text-primary); }
   .sft th, .sft td { padding: 4px 6px; border-bottom: 1px solid var(--card-border); text-align: left; }
   .sft th {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -143,11 +143,11 @@
     border: 1px dashed var(--card-border);
     padding: 4px 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     cursor: pointer;
   }
   .sft-add:hover { color: var(--text-primary); }
-  button[aria-label='remove'] { background: none; border: none; font-size: 16px; cursor: pointer; color: #c44; }
+  button[aria-label='remove'] { background: none; border: none; font-size: var(--fs-body); cursor: pointer; color: #c44; }
 </style>

@@ -1959,7 +1959,7 @@
     position: absolute;
     top: -10px;
     right: 2px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     pointer-events: none;
     font-family: var(--font-mono);
@@ -2052,7 +2052,7 @@
     justify-content: space-between;
     padding: 3px 6px;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--text-muted);
     border-bottom: 1px solid rgba(26, 16, 8, 0.12);
@@ -2074,7 +2074,7 @@
     border: 1px solid var(--card-border);
     background: var(--surface-elevated);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .hifi-zoomctl button {
     background: transparent;
@@ -2109,7 +2109,7 @@
   .synthesis-zone-label {
     display: block;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted, rgba(26, 16, 8, 0.45));
@@ -2175,7 +2175,7 @@
     background: var(--surface-elevated);
     cursor: grab;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -2243,14 +2243,14 @@
   }
   .desk-node-label {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     letter-spacing: 0.02em;
   }
   .desk-node-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -2279,7 +2279,7 @@
     background: transparent;
     border: none;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.06em;
     text-align: left;
     cursor: pointer;

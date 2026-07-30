@@ -124,7 +124,7 @@
     border-top: 1px solid rgba(250, 246, 238, 0.12);
     color: #ede4d4;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.02em;
     overflow: hidden;
     z-index: 30;
@@ -145,7 +145,7 @@
   }
 
   .conn-label {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.10em;
     white-space: nowrap;
     font-weight: 600;
@@ -194,7 +194,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.55;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     opacity: 0.85;
     padding: 0;
   }

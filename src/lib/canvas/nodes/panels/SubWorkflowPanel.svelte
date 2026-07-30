@@ -213,17 +213,17 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .sw-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .sw-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .sw-field { display: flex; flex-direction: column; gap: 4px; }
   .sw-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .sw-hint { font-size: 11px; color: var(--text-ghost); margin: 0; }
-  .sw-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
-  .sw-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
+  .sw-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; }
+  .sw-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
+  .sw-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
 
   .sw-chip-row { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .sw-chip {
@@ -232,12 +232,12 @@
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
     border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-family: var(--font-mono);
     border-radius: 2px;
   }
-  .sw-chip-dot { font-size: 8px; line-height: 1; }
-  .sw-chip-id { font-size: 10px; color: var(--text-ghost); font-family: var(--font-mono); }
+  .sw-chip-dot { font-size: var(--fs-label-xs); line-height: 1; }
+  .sw-chip-id { font-size: var(--fs-label-xs); color: var(--text-ghost); font-family: var(--font-mono); }
 
   .sw-kv-grid {
     display: grid;
@@ -245,7 +245,7 @@
     gap: 4px;
   }
   .sw-kv-head {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
   .sw-kv-input {
@@ -253,7 +253,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
@@ -268,7 +268,7 @@
     padding: 4px 10px;
     background: var(--bg); color: var(--text-muted);
     border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -287,7 +287,7 @@
     accent-color: var(--accent);
     flex: 0 0 auto;
   }
-  .sw-toggle-text { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+  .sw-toggle-text { display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-label); }
   .sw-toggle-text strong { color: var(--text-primary); }
 
   .sw-code {
@@ -296,7 +296,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

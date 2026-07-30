@@ -251,7 +251,7 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     box-sizing: border-box;
     outline: none;
   }
@@ -259,11 +259,11 @@
 
   .ds-caption {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     line-height: 1.45;
   }
-  .ds-caption code { font-size: 11px; color: var(--text-primary); }
+  .ds-caption code { font-size: var(--fs-label); color: var(--text-primary); }
 
   .ds-num {
     width: 100%;
@@ -273,7 +273,7 @@
     border: 1px solid var(--card-border);
     font: inherit;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
@@ -293,37 +293,37 @@
   .ds-mode-text { display: flex; flex-direction: column; gap: 2px; }
   .ds-mode-title {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-primary);
   }
-  .ds-mode-sub { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+  .ds-mode-sub { font-size: var(--fs-label); color: var(--text-muted); line-height: 1.4; }
 
   .ds-field { display: flex; flex-direction: column; gap: 4px; }
   .ds-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
 
-  .ds-hint { font-size: 11px; color: var(--text-ghost); margin: 0; line-height: 1.4; }
-  .ds-hint code { font-size: 11px; color: var(--text-muted); }
+  .ds-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
+  .ds-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .ds-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
 
   .ds-inspect-note {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     line-height: 1.5;
     border-left: 2px solid var(--card-border);
     padding: 4px 8px;
   }
-  .ds-inspect-note code { font-size: 11px; color: var(--text-muted); }
+  .ds-inspect-note code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .ds-code {
     width: 100%;
@@ -331,7 +331,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

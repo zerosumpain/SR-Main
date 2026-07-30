@@ -216,17 +216,17 @@
     font-family: var(--font-body, system-ui);
   }
   .jl-search { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
-  .jl-slash { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); border: 1px solid var(--card-border); padding: 1px 5px; flex-shrink: 0; }
-  .jl-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 15px; }
+  .jl-slash { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); border: 1px solid var(--card-border); padding: 1px 5px; flex-shrink: 0; }
+  .jl-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: var(--fs-body); }
   .jl-input::placeholder { color: var(--text-ghost); }
 
   .jl-body { overflow-y: auto; padding: 6px 0; }
   .jl-group { padding: 4px 0; }
-  .jl-group-hd { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); padding: 4px 14px; }
+  .jl-group-hd { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); padding: 4px 14px; }
   .jl-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 8px 14px; background: transparent; border: none; cursor: pointer; color: var(--text-primary); }
   .jl-item.sel { background: color-mix(in srgb, var(--accent-ink, var(--accent, #c4570a)) 14%, transparent); }
   .jl-code {
-    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em;
     width: 40px; height: 30px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     border: 1px solid currentColor; color: var(--text-muted);
@@ -236,14 +236,14 @@
   .jl-code-2 { color: #7a4ec2; }
   .jl-code-3 { color: #2a9d4a; }
   .jl-text { display: flex; flex-direction: column; min-width: 0; }
-  .jl-label { font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
-  .jl-badge { font-family: var(--font-mono); font-size: 9px; color: var(--accent-ink, var(--accent)); border: 1px solid currentColor; padding: 0 4px; text-transform: uppercase; }
-  .jl-desc { font-size: 11px; color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .jl-empty { padding: 20px 14px; color: var(--text-ghost); font-size: 13px; }
+  .jl-label { font-size: var(--fs-nav); color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+  .jl-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink, var(--accent)); border: 1px solid currentColor; padding: 0 4px; text-transform: uppercase; }
+  .jl-desc { font-size: var(--fs-label); color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jl-empty { padding: 20px 14px; color: var(--text-ghost); font-size: var(--fs-nav); }
 
-  .jl-status { padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: 12px; color: var(--status-success, #2a9d4a); }
+  .jl-status { padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: var(--fs-label); color: var(--status-success, #2a9d4a); }
   .jl-status.busy { color: var(--text-muted); }
-  .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: 10px; color: var(--text-ghost); }
+  .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .jl-foot kbd { font-family: var(--font-mono); border: 1px solid var(--card-border); padding: 0 3px; margin-right: 2px; }
 
   /* Mobile / PWA: give the panel room, drop the keyboard-hint footer on very
@@ -251,7 +251,7 @@
   @media (max-width: 640px) {
     .jl-bg { padding: 8vh 10px 10px; align-items: flex-start; }
     .jl { max-height: 80vh; }
-    .jl-input { font-size: 16px; } /* ≥16px stops iOS auto-zoom on focus */
+    .jl-input { font-size: var(--fs-body); } /* ≥16px stops iOS auto-zoom on focus */
     .jl-foot { display: none; }
     .jl-desc { white-space: normal; }
   }

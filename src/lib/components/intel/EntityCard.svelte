@@ -499,7 +499,7 @@
   .entity-card.compact {
     max-width: 340px;
     padding: 12px;
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
 
   .state {
@@ -515,7 +515,7 @@
     margin-bottom: 8px;
   }
   .icon {
-    font-size: 18px;
+    font-size: var(--fs-body-lg);
     line-height: 1.2;
   }
   .head-text {

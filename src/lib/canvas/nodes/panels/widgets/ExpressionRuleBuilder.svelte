@@ -227,7 +227,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: none;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -243,7 +243,7 @@
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
   }
   .erb-sec-meta {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--text-ghost);
   }
@@ -256,7 +256,7 @@
     padding: 2px 8px;
     background: var(--bg); color: var(--text-muted);
     border: none;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -278,11 +278,11 @@
   .erb-stub {
     padding: 6px 8px;
     background: var(--bg); border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     color: var(--text-ghost); text-align: center;
   }
   .erb-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
 
@@ -299,7 +299,7 @@
     padding: 4px 10px;
     background: var(--bg); color: var(--text-muted);
     border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -311,7 +311,7 @@
     background: color-mix(in srgb, var(--card-border) 16%, transparent);
     border: 1px solid var(--card-border);
     color: var(--text-primary);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     white-space: pre-wrap; word-break: break-word;
     max-height: 100px; overflow-y: auto;
   }
@@ -321,13 +321,13 @@
     padding: 8px;
     background: var(--bg); color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box; outline: none; resize: vertical;
   }
   .erb-code:focus { border-color: var(--text-muted); }
 
-  .erb-hint { font-size: 11px; color: var(--text-ghost); }
-  .erb-hint :global(code) { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+  .erb-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .erb-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
 
   input[type='text'], select {
     width: 100%; padding: 6px 8px;

@@ -119,7 +119,7 @@
 
   .cd-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .cd-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
@@ -130,7 +130,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -143,14 +143,14 @@
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     color: var(--accent);
     border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
   .cd-test:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
   .cd-result {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     padding: 2px 6px;
     border: 1px solid var(--card-border);
   }

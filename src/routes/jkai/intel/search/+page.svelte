@@ -133,38 +133,38 @@
 
 <style>
   .kn { max-width: 860px; margin: 0 auto; padding: 24px 20px 80px; color: var(--text-primary); }
-  .kn-sub { margin: 0 0 20px; color: var(--text-muted); font-size: 13px; }
+  .kn-sub { margin: 0 0 20px; color: var(--text-muted); font-size: var(--fs-nav); }
   .kn-sub code { font-family: var(--font-mono); color: var(--accent-ink, var(--accent)); }
 
   .kn-search { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
   .kn-row { display: flex; gap: 8px; }
-  .kn-input { flex: 1; padding: 10px 12px; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-size: 14px; outline: none; }
+  .kn-input { flex: 1; padding: 10px 12px; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-size: var(--fs-body); outline: none; }
   .kn-input:focus { border-color: var(--text-muted); }
-  .kn-go { padding: 0 18px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; font-family: var(--font-mono); font-size: 12px; cursor: pointer; }
+  .kn-go { padding: 0 18px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer; }
   .kn-go:disabled { opacity: 0.5; cursor: default; }
 
   .kn-sources { display: flex; gap: 6px; flex-wrap: wrap; }
-  .kn-src { font-family: var(--font-mono); font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--card-border); color: var(--text-ghost); cursor: pointer; }
+  .kn-src { font-family: var(--font-mono); font-size: var(--fs-label); padding: 4px 10px; background: transparent; border: 1px solid var(--card-border); color: var(--text-ghost); cursor: pointer; }
   .kn-src.on { color: var(--text-primary); border-color: var(--text-muted); background: color-mix(in srgb, var(--card-border) 18%, transparent); }
   .kn-count { color: var(--text-ghost); }
 
-  .kn-err { color: var(--status-error, #c0392b); font-size: 13px; }
-  .kn-empty, .kn-summary { color: var(--text-muted); font-size: 13px; }
-  .kn-src-err { color: var(--text-ghost); font-size: 11px; margin-top: 12px; }
+  .kn-err { color: var(--status-error, #c0392b); font-size: var(--fs-nav); }
+  .kn-empty, .kn-summary { color: var(--text-muted); font-size: var(--fs-nav); }
+  .kn-src-err { color: var(--text-ghost); font-size: var(--fs-label); margin-top: 12px; }
 
   .kn-hits { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .kn-hit { border: 1px solid var(--card-border); padding: 12px; }
   .kn-hit-hd { display: flex; align-items: baseline; gap: 8px; }
-  .kn-badge { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 5px; border: 1px solid currentColor; flex-shrink: 0; }
+  .kn-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 5px; border: 1px solid currentColor; flex-shrink: 0; }
   .kn-badge-notes { color: var(--accent-ink, #c4570a); }
   .kn-badge-entities { color: #2a9d4a; }
   .kn-badge-files { color: #2a7de1; }
   .kn-badge-research { color: #7a4ec2; }
   .kn-badge-memory { color: #2a9d4a; }
   .kn-badge-datastore { color: var(--accent-ink, #c4570a); }
-  .kn-title { font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .kn-type { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); flex-shrink: 0; }
-  .kn-score { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); flex-shrink: 0; }
-  .kn-passage { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
-  .kn-open { display: inline-block; margin-top: 6px; font-family: var(--font-mono); font-size: 10px; color: var(--accent-ink, var(--accent)); text-decoration: none; }
+  .kn-title { font-size: var(--fs-label); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .kn-type { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); flex-shrink: 0; }
+  .kn-score { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); flex-shrink: 0; }
+  .kn-passage { margin: 8px 0 0; font-size: var(--fs-nav); line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
+  .kn-open { display: inline-block; margin-top: 6px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink, var(--accent)); text-decoration: none; }
 </style>

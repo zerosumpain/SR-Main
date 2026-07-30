@@ -97,14 +97,14 @@
     border: 0;
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-secondary);
     text-align: left;
   }
   .wt-hdr:hover { color: var(--text-primary); }
   .wt-chev { color: var(--text-ghost); width: 10px; flex-shrink: 0; }
   .wt-icon { color: var(--accent-ink); flex-shrink: 0; }
-  .wt-title { flex-shrink: 0; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+  .wt-title { flex-shrink: 0; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-label-xs); }
   .wt-latest {
     flex: 1;
     min-width: 0;
@@ -112,7 +112,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-muted);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .wt-dot {
     margin-left: auto;
@@ -132,5 +132,5 @@
     border-top: 1px solid var(--card-border);
   }
   .wt-agent-meta { display: flex; justify-content: flex-end; }
-  .wt-agent-elapsed { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
+  .wt-agent-elapsed { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 </style>

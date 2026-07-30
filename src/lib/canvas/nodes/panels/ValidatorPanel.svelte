@@ -277,13 +277,13 @@
     padding: 6px 10px;
   }
   .va-handles-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
     margin-right: 4px;
   }
   .va-handle {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     padding: 2px 8px;
     border: 1px solid var(--card-border);
@@ -299,7 +299,7 @@
     background: color-mix(in srgb, var(--status-error, #c0392b) 8%, transparent);
   }
   .va-handle-arrow {
-    font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost);
   }
   .va-handle-sep {
     color: var(--text-ghost); margin: 0 4px;
@@ -314,7 +314,7 @@
   .va-mode-btn {
     background: transparent; color: var(--text-muted);
     border: 1px solid transparent;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     padding: 4px 10px; cursor: pointer;
   }
@@ -331,18 +331,18 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .va-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
-  .va-sec-meta code { font-size: 10px; color: var(--text-muted); }
+  .va-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .va-sec-meta code { font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .va-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .va-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
 
-  .va-hint { margin: 0; font-size: 11px; color: var(--text-ghost); }
-  .va-hint code { font-size: 11px; color: var(--text-muted); }
+  .va-hint { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
+  .va-hint code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .va-code {
     width: 100%;
@@ -350,7 +350,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -363,14 +363,14 @@
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     color: var(--accent);
     border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
   .va-test:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
   .va-result {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     padding: 2px 6px;
     border: 1px solid var(--card-border);
   }
@@ -381,7 +381,7 @@
   .va-errs {
     margin: 0;
     padding-left: 16px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--status-error, #c0392b);
   }
   .va-errs li { font-family: var(--font-mono); }

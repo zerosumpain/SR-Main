@@ -84,7 +84,7 @@
         bind:value={prompt}
         rows={5}
         placeholder="Describe what you want to build..."
-        class="w-full rounded-[var(--radius-round)] border p-3 text-sm resize-y"
+        class="w-full rounded-[var(--radius-round)] border p-3 text-base resize-y"
         style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
       ></textarea>
     </div>
@@ -104,21 +104,21 @@
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Max tokens per hour</label>
           <input type="number" bind:value={maxTokensPerHour} placeholder="Unlimited"
-            class="w-full rounded border px-2 py-1 text-sm"
+            class="w-full rounded border px-2 py-1 text-base"
             style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
         </div>
 
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Max iterations</label>
           <input type="number" bind:value={maxIterations} placeholder="Unlimited"
-            class="w-full rounded border px-2 py-1 text-sm"
+            class="w-full rounded border px-2 py-1 text-base"
             style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
         </div>
 
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Total time cap (minutes)</label>
           <input type="number" bind:value={maxTotalMinutes} placeholder="Unlimited"
-            class="w-full rounded border px-2 py-1 text-sm"
+            class="w-full rounded border px-2 py-1 text-base"
             style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
         </div>
       </div>

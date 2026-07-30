@@ -48,14 +48,14 @@
   }
   code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     margin: 0 6px;
   }
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
@@ -65,7 +65,7 @@
     background: var(--code-bg);
     color: var(--code-text);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     white-space: pre-wrap;
     word-break: break-word;
     border: 1px solid var(--card-border);

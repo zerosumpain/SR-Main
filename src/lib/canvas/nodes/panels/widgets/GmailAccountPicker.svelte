@@ -78,13 +78,13 @@
   }
   .gap-warn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--status-error, #c0392b);
   }
   .gap-hint {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
   .gap-hint a { color: var(--text-muted); }

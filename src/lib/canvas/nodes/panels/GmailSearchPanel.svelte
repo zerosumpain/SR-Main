@@ -204,18 +204,18 @@
   .gx-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .gx-field-narrow { max-width: 200px; }
   .gx-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .gx-hint { font-size: 11px; color: var(--text-ghost); }
-  .gx-hint code, .gx-label code { font-size: 11px; color: var(--text-muted); }
+  .gx-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .gx-hint code, .gx-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .gx-hint a { color: var(--accent); text-decoration: none; }
   .gx-hint a:hover { text-decoration: underline; }
 
-  .gx-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .gx-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
   .gx-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
 
@@ -225,7 +225,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -263,7 +263,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     cursor: pointer;
   }
   .gx-chip:hover {
@@ -271,7 +271,7 @@
     border-color: var(--text-muted);
     background: color-mix(in srgb, var(--accent) 8%, transparent);
   }
-  .gx-chip code { font-size: 11px; color: inherit; }
+  .gx-chip code { font-size: var(--fs-label); color: inherit; }
 
   .gx-toggle {
     display: inline-flex; align-items: center; gap: 8px;
@@ -279,7 +279,7 @@
   }
   .gx-toggle input[type='checkbox'] { width: auto; cursor: pointer; }
   .gx-toggle-label {
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
   }
 
   .gx-raw {

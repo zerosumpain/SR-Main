@@ -128,7 +128,7 @@
     text-align: left;
     color: var(--text-primary);
     font-family: var(--font-mono), monospace;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .iter-toggle:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .iter-caret { color: var(--accent); flex-shrink: 0; width: 12px; }
@@ -149,7 +149,7 @@
   .iter-status {
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     padding: 1px 6px;
     border: 1px solid currentColor;
     color: var(--text-muted);
@@ -179,7 +179,7 @@
     gap: 0.4rem 0.7rem;
     padding: 0.2rem 0.6rem 0.5rem 1.7rem;
     font-family: var(--font-mono), monospace;
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   .iter-section {
     display: contents;
@@ -187,7 +187,7 @@
   .iter-section-label {
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     align-self: start;
   }

@@ -174,7 +174,7 @@
     white-space: nowrap;
   }
   .chev {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 

@@ -161,14 +161,14 @@
 
   .em-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .em-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .em-hint { font-size: 11px; color: var(--text-ghost); }
-  .em-hint code, .em-label code { font-size: 11px; color: var(--text-muted); }
+  .em-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .em-hint code, .em-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
-  .em-info { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .em-info { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .em-mode-toggle { display: inline-flex; gap: 0; border: 1px solid var(--card-border); }
   .em-mode-btn {
@@ -176,7 +176,7 @@
     background: var(--bg);
     color: var(--text-muted);
     border: none;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
@@ -193,7 +193,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

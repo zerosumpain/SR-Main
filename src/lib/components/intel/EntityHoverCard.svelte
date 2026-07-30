@@ -172,7 +172,7 @@
     width: 22px;
     height: 22px;
     line-height: 1;
-    font-size: 16px;
+    font-size: var(--fs-body);
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     background: var(--surface-elevated);

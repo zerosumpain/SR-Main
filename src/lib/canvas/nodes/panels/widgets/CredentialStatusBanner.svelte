@@ -50,7 +50,7 @@
   .banner {
     padding: 5px 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     border: 1px solid var(--card-border);

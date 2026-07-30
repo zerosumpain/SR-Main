@@ -75,12 +75,12 @@
   .ms-sec { display: flex; flex-direction: column; gap: 8px; }
   .ms-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .ms-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .ms-hint { font-size: 11px; color: var(--text-ghost); }
-  .ms-hint :global(code) { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+  .ms-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .ms-hint :global(code) { font-size: var(--fs-label); color: var(--text-muted); font-family: var(--font-mono); }
   select {
     width: 100%;
     padding: 6px 8px;

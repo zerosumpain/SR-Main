@@ -303,7 +303,7 @@
     gap: 6px;
     padding: 4px 8px;
     border-bottom: 1px solid var(--divider);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     letter-spacing: 0.08em;
     flex-shrink: 0;
@@ -317,13 +317,13 @@
     border-radius: var(--radius-pill);
     padding: 0 6px;
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
     flex-shrink: 0;
   }
   .cancel:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .open-link {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     text-decoration: none;
     flex-shrink: 0;
@@ -346,8 +346,8 @@
     animation: spin 0.9s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .log { color: var(--text-muted); font-size: 11px; text-align: center; padding: 0 12px; }
-  .rr-failed { padding: 12px; color: var(--error); font-size: 11px; flex-shrink: 0; }
+  .log { color: var(--text-muted); font-size: var(--fs-label); text-align: center; padding: 0 12px; }
+  .rr-failed { padding: 12px; color: var(--error); font-size: var(--fs-label); flex-shrink: 0; }
 
   /*
     .rr-body — quick engine scroll container.
@@ -359,7 +359,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: 8px 10px;
-    font-size: 11px;
+    font-size: var(--fs-label);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -376,12 +376,12 @@
   }
   .rr-body::-webkit-scrollbar-thumb:hover { background: var(--accent); }
   .report { white-space: pre-wrap; color: var(--text-primary); }
-  .sources { margin-top: 4px; font-size: 10px; }
+  .sources { margin-top: 4px; font-size: var(--fs-label-xs); }
   .sources summary { cursor: pointer; color: var(--text-muted); }
   .sources ul { list-style: none; padding: 0; margin: 4px 0 0; }
   .sources a { color: var(--accent); text-decoration: none; }
   .domain { color: var(--text-ghost); margin-left: 6px; }
-  .duration { color: var(--text-ghost); font-size: 9px; text-align: right; margin-top: 4px; }
+  .duration { color: var(--text-ghost); font-size: var(--fs-label-xs); text-align: right; margin-top: 4px; }
 
   /*
     .rr-desk — embedded readonly ResearchDesk wrapper. The desk fills its box

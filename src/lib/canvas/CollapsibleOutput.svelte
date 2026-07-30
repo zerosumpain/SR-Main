@@ -43,7 +43,7 @@
   .co-pre {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
@@ -63,7 +63,7 @@
     cursor: pointer;
     padding: 2px 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.06em;

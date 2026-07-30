@@ -120,5 +120,5 @@
   tr:last-child td { border-bottom: none; }
   .align-right { text-align: right; }
   .align-center { text-align: center; }
-  .sort-indicator { margin-left: 0.25rem; font-size: 0.7rem; }
+  .sort-indicator { margin-left: 0.25rem; font-size: var(--fs-label-xs); }
 </style>

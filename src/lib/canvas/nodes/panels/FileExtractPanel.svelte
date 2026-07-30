@@ -421,29 +421,29 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .fe-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .fe-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .fe-row { display: flex; gap: 8px; }
   .fe-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .fe-field-third { flex: 1; }
   .fe-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .fe-hint { font-size: 11px; color: var(--text-ghost); }
-  .fe-hint code, .fe-label code { font-size: 11px; color: var(--text-muted); }
-  .fe-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); margin-left: 6px; }
+  .fe-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .fe-hint code, .fe-label code { font-size: var(--fs-label); color: var(--text-muted); }
+  .fe-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); margin-left: 6px; }
 
   .fe-temp-hdr { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .fe-temp-readout { display: inline-flex; gap: 8px; align-items: baseline; font-family: var(--font-mono); font-size: 11px; }
+  .fe-temp-readout { display: inline-flex; gap: 8px; align-items: baseline; font-family: var(--font-mono); font-size: var(--fs-label); }
   .fe-temp-value { color: var(--text-primary); }
-  .fe-temp-word { color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+  .fe-temp-word { color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-label-xs); }
   .fe-range { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
   .fe-toggle {
     display: flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--text-primary);
+    font-size: var(--fs-label); color: var(--text-primary);
   }
   .fe-toggle input { accent-color: var(--accent); }
 
@@ -453,7 +453,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

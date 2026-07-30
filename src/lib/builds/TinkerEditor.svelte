@@ -130,7 +130,7 @@
   }
   .path {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     flex: 1;
     word-break: break-all;
@@ -138,7 +138,7 @@
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
   }
@@ -151,7 +151,7 @@
   }
   .cm-host :global(.cm-editor) {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     height: 100%;
   }
   .cm-host :global(.cm-scroller) {
@@ -160,7 +160,7 @@
   .err {
     color: var(--status-error);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 4px 0 0;
   }
 </style>

@@ -188,7 +188,7 @@
   }
   .fv-name {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -196,7 +196,7 @@
   }
   .fv-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -211,7 +211,7 @@
   }
   .fv-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 5px 10px;
@@ -228,7 +228,7 @@
     border-color: var(--accent);
   }
   .fv-close {
-    font-size: 12px;
+    font-size: var(--fs-label);
     padding: 4px 9px;
   }
   .fv-body {
@@ -248,7 +248,7 @@
     gap: 12px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
   }
   .fv-error {
     color: var(--error);
@@ -264,14 +264,14 @@
     border: 1px solid var(--card-border);
     border-left: 3px solid var(--accent);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: var(--text-primary);
   }
   .fv-caption-label {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -282,7 +282,7 @@
     max-width: 78ch;
     margin: 0 auto;
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.7;
     color: var(--text-primary);
   }
@@ -314,11 +314,11 @@
     padding: 12px 14px;
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
   }
   .fv-prose :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
   }

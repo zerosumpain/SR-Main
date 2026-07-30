@@ -359,55 +359,55 @@
 
   .d-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
   .d-kind {
-    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     padding: 3px 8px; border-radius: var(--radius-sharp); color: var(--text-muted); border: 1px solid var(--card-border);
   }
   .d-kind-entity { background: #1a1008; color: #ede4d4; border-color: #1a1008; }
   .d-kind-source { color: var(--accent); border-color: var(--accent-tint-35); }
   .d-kind.challenge { color: var(--error); border-color: var(--error); background: var(--error-bg); }
-  .d-close { background: none; border: none; color: var(--text-muted); font-size: 15px; cursor: pointer; }
+  .d-close { background: none; border: none; color: var(--text-muted); font-size: var(--fs-body); cursor: pointer; }
   .d-close:hover { color: var(--accent); }
 
   .d-body { flex: 1; overflow-y: auto; padding: 16px 14px; }
-  .d-title { font-family: var(--font-body); font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px; }
-  .d-link { font-family: var(--font-mono); font-size: 12px; color: var(--accent); text-decoration: none; }
+  .d-title { font-family: var(--font-body); font-size: var(--fs-body-lg); font-weight: 700; color: var(--text-primary); margin: 0 0 6px; }
+  .d-link { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--accent); text-decoration: none; }
   .d-link:hover { text-decoration: underline; }
   .d-meta { margin: 16px 0 0; display: flex; flex-direction: column; gap: 10px; }
   .d-meta div { display: flex; justify-content: space-between; gap: 12px; }
-  .d-meta dt { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; color: var(--text-ghost); text-transform: uppercase; margin: 0; }
-  .d-meta dd { font-family: var(--font-body); font-size: 13px; color: var(--text-primary); margin: 0; text-align: right; display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .d-meta dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; color: var(--text-ghost); text-transform: uppercase; margin: 0; }
+  .d-meta dd { font-family: var(--font-body); font-size: var(--fs-nav); color: var(--text-primary); margin: 0; text-align: right; display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 
   .d-credbadge {
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em;
     padding: 2px 6px; border-radius: var(--radius-sharp); border: 1px solid var(--card-border);
   }
-  .d-credscore { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .d-credscore { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-muted); }
 
-  .d-fact { font-family: var(--font-body); font-size: 15px; line-height: 1.5; color: var(--text-primary); margin: 0 0 14px; }
+  .d-fact { font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.5; color: var(--text-primary); margin: 0 0 14px; }
   .d-confbar { height: 6px; background: var(--card-bg); border-radius: var(--radius-pill); overflow: hidden; }
   .d-conffill { display: block; height: 100%; }
-  .d-confnum { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .d-confnum { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .d-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-  .d-tag { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); background: var(--card-bg); border: 1px solid var(--card-border); padding: 2px 7px; border-radius: var(--radius-pill); }
-  .d-date { font-family: var(--font-mono); font-size: 11px; color: var(--text-ghost); margin-top: 10px; }
+  .d-tag { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); background: var(--card-bg); border: 1px solid var(--card-border); padding: 2px 7px; border-radius: var(--radius-pill); }
+  .d-date { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-ghost); margin-top: 10px; }
 
-  .d-entity { font-family: var(--font-display); font-size: 22px; color: var(--text-primary); margin: 0 0 4px; }
-  .d-etype { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
-  .d-desc { font-family: var(--font-body); font-size: 14px; line-height: 1.55; color: var(--text-secondary); margin-top: 12px; }
+  .d-entity { font-family: var(--font-display); font-size: 1.375rem; color: var(--text-primary); margin: 0 0 4px; }
+  .d-etype { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--accent); }
+  .d-desc { font-family: var(--font-body); font-size: var(--fs-body-sm); line-height: 1.55; color: var(--text-secondary); margin-top: 12px; }
 
   .d-sec { margin-top: 22px; }
-  .d-sec h3 { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; color: var(--text-ghost); margin: 0 0 8px; }
+  .d-sec h3 { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; color: var(--text-ghost); margin: 0 0 8px; }
   .d-related { list-style: none; margin: 0; padding: 0; }
   .d-rel { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 6px 8px; margin-bottom: 6px; cursor: pointer; }
   .d-rel:hover { border-color: var(--accent); }
-  .d-rel-kind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; padding: 1px 5px; border-radius: var(--radius-sharp); border: 1px solid var(--card-border); color: var(--text-muted); }
-  .d-rel-label { flex: 1; min-width: 0; font-family: var(--font-body); font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .d-rel-note { flex: 0 0 auto; font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+  .d-rel-kind { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; padding: 1px 5px; border-radius: var(--radius-sharp); border: 1px solid var(--card-border); color: var(--text-muted); }
+  .d-rel-label { flex: 1; min-width: 0; font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-rel-note { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); white-space: nowrap; }
 
   .d-foot { padding: 12px 14px; border-top: 1px solid var(--card-border); }
-  .d-err { font-family: var(--font-mono); font-size: 11px; color: var(--error); margin: 0 0 8px; }
+  .d-err { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--error); margin: 0 0 8px; }
   .d-explore {
-    width: 100%; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    width: 100%; font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.04em;
     padding: 10px; border: 1px solid var(--accent); border-radius: var(--radius-sharp);
     background: var(--accent); color: #faf6ee; cursor: pointer;
   }
@@ -416,25 +416,25 @@
 
   /* In-drawer confirm card (reuses the drawer footer surface, not a new modal). */
   .d-confirm { display: flex; flex-direction: column; gap: 8px; }
-  .d-confirm-head { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; color: var(--text-primary); margin: 0; }
-  .d-confirm-body { font-family: var(--font-body); font-size: 12px; line-height: 1.45; color: var(--text-secondary); margin: 0; }
+  .d-confirm-head { font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.12em; color: var(--text-primary); margin: 0; }
+  .d-confirm-body { font-family: var(--font-body); font-size: var(--fs-label); line-height: 1.45; color: var(--text-secondary); margin: 0; }
   .d-confirm-quote { display: block; margin-top: 4px; font-style: italic; color: var(--text-primary); }
-  .d-confirm-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-ghost); }
+  .d-confirm-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-ghost); }
   .d-confirm-note {
-    font-family: var(--font-body); font-size: 12px; color: var(--text-primary);
+    font-family: var(--font-body); font-size: var(--fs-body); color: var(--text-primary);
     background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp);
     padding: 6px 8px; resize: vertical; min-height: 38px;
   }
   .d-confirm-note:focus { outline: none; border-color: var(--accent); }
   .d-confirm-actions { display: flex; gap: 8px; margin-top: 2px; }
   .d-cancel {
-    flex: 0 0 auto; font-family: var(--font-mono); font-size: 12px;
+    flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label);
     padding: 8px 12px; border: 1px solid var(--card-border); border-radius: var(--radius-sharp);
     background: var(--card-bg); color: var(--text-muted); cursor: pointer;
   }
   .d-cancel:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .d-start {
-    flex: 1; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    flex: 1; font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: 0.04em;
     padding: 8px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sharp);
     background: var(--accent); color: #faf6ee; cursor: pointer;
   }
@@ -451,14 +451,14 @@
   }
   .d-summary-head-row h3 {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--text-ghost);
     margin: 0;
   }
   .d-summary-trigger {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--accent);
     border: 1px solid var(--accent-tint-35);
@@ -471,7 +471,7 @@
   .d-summary-trigger:hover { background: var(--accent-tint-35); }
   .d-summary-trigger-hint {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-ghost);
   }
@@ -508,7 +508,7 @@
 
   .d-summary-text {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: var(--text-secondary);
     margin: 0 0 8px;
@@ -517,13 +517,13 @@
   }
   .d-summary-error {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--error);
     margin: 0;
   }
   .d-summary-source {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     color: var(--text-ghost);
     margin: 0 0 6px;
@@ -531,7 +531,7 @@
   }
   .d-summary-refresh {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-ghost);
     background: none;

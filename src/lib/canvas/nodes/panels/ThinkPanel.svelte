@@ -121,15 +121,15 @@
   .th-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .th-field-narrow { max-width: 220px; }
   .th-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .th-hint { font-size: 11px; color: var(--text-ghost); }
-  .th-hint code, .th-label code { font-size: 11px; color: var(--text-muted); }
+  .th-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .th-hint code, .th-label code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .th-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     margin-left: 6px;
   }
@@ -139,12 +139,12 @@
   }
   .th-temp-readout {
     display: inline-flex; gap: 8px; align-items: baseline;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
   }
   .th-temp-value { color: var(--text-primary); }
   .th-temp-word {
     color: var(--accent);
-    text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-label-xs);
   }
 
   .th-range {
@@ -159,7 +159,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

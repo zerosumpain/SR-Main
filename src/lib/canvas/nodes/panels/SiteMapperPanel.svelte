@@ -129,14 +129,14 @@
   .ps-hd { display: flex; align-items: center; gap: 8px; }
   .ps-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .ps-input {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     padding: 6px 8px;
     background: var(--bg, #0d0d0d);
     border: 1px solid var(--card-border, #333);
@@ -148,7 +148,7 @@
   .ps-textarea { resize: vertical; min-height: 64px; }
   .ps-hint {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     line-height: 1.4;
   }
@@ -156,7 +156,7 @@
     background: var(--bg-section, #111);
     padding: 1px 4px;
     border-radius: 2px;
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
   }
   .ps-note {
     padding: 10px 12px;

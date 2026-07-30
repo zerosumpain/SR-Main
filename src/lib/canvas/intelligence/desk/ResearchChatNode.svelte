@@ -223,7 +223,7 @@
     gap: 6px;
     padding: 4px 8px;
     border-bottom: 1px solid var(--divider);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     letter-spacing: 0.08em;
     flex-shrink: 0;
@@ -237,7 +237,7 @@
     border-radius: var(--radius-pill);
     padding: 0 6px;
     font: inherit;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -257,7 +257,7 @@
   .rc-intro { padding: 2px; }
   .rc-lede {
     margin: 0 0 10px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
     max-width: 56ch;
@@ -266,7 +266,7 @@
   .sg {
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -279,13 +279,13 @@
   .msg { display: flex; flex-direction: column; gap: 4px; }
   .msg .role {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
   .msg.user .role { color: var(--accent); }
-  .msg .body { font-size: 12px; line-height: 1.45; color: var(--text-primary); }
+  .msg .body { font-size: var(--fs-label); line-height: 1.45; color: var(--text-primary); }
   .msg .body.plain { white-space: pre-wrap; word-break: break-word; color: var(--text-primary); }
 
   .thinking { display: flex; gap: 4px; padding: 4px 0; }
@@ -308,12 +308,12 @@
   }
   .src-lab {
     font-family: var(--font-mono);
-    font-size: 8px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted); margin-right: 2px;
   }
   .src {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -336,7 +336,7 @@
   .rc-input input {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-body);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -347,7 +347,7 @@
   .rc-input input:focus { border-color: var(--accent); }
   .ask {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--bg);
     background: var(--accent);
     border: none;

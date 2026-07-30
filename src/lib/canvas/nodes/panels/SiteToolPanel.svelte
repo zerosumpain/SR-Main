@@ -259,10 +259,10 @@
 
 <style>
   .st { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
-  .st-lead { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .st-lead { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.5; }
   .st-lead strong { color: var(--text-primary); }
-  .st-lead code, .st-hint code { font-size: 11px; color: var(--text-muted); }
-  .st-err { margin: 0; font-size: 12px; color: var(--status-error, #c0392b); }
+  .st-lead code, .st-hint code { font-size: var(--fs-label); color: var(--text-muted); }
+  .st-err { margin: 0; font-size: var(--fs-label); color: var(--status-error, #c0392b); }
 
   .st-sec { display: flex; flex-direction: column; gap: 8px; }
   .st-sec-hdr {
@@ -277,11 +277,11 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 12px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
-  .st-code { font-size: 11px; padding: 8px; resize: vertical; }
+  .st-code { font-size: var(--fs-label); padding: 8px; resize: vertical; }
   .st-text:focus, .st-code:focus { border-color: var(--text-muted); }
 
   .st-picker {
@@ -292,7 +292,7 @@
   .st-group-hdr {
     position: sticky; top: 0;
     background: var(--surface-elevated, var(--bg));
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-ghost);
     padding: 4px 8px;
@@ -304,7 +304,7 @@
     padding: 5px 8px;
     background: transparent; border: none;
     color: var(--text-primary);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     cursor: pointer;
   }
   .st-tool:hover { background: color-mix(in srgb, var(--card-border) 18%, transparent); }
@@ -312,7 +312,7 @@
   .st-tool-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .st-badge-dest {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--status-error, #c0392b);
     border: 1px solid currentColor;
@@ -320,32 +320,32 @@
     flex-shrink: 0;
   }
 
-  .st-selected-name { margin: 0; font-size: 12px; }
-  .st-selected-name code { font-size: 12px; color: var(--text-primary); }
-  .st-selected-ts { color: var(--text-ghost); font-size: 11px; }
-  .st-hint { font-size: 11px; color: var(--text-ghost); margin: 0; line-height: 1.4; }
+  .st-selected-name { margin: 0; font-size: var(--fs-label); }
+  .st-selected-name code { font-size: var(--fs-label); color: var(--text-primary); }
+  .st-selected-ts { color: var(--text-ghost); font-size: var(--fs-label); }
+  .st-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
 
   .st-schema { margin-top: 2px; }
   .st-schema summary { cursor: pointer; }
   .st-schema-list { margin: 6px 0 0; padding-left: 14px; display: flex; flex-direction: column; gap: 4px; }
-  .st-schema-list li { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
-  .st-schema-list code { color: var(--text-primary); font-size: 11px; }
-  .st-schema-type { color: var(--text-ghost); font-size: 10px; margin-left: 4px; }
+  .st-schema-list li { font-size: var(--fs-label); color: var(--text-muted); line-height: 1.4; }
+  .st-schema-list code { color: var(--text-primary); font-size: var(--fs-label); }
+  .st-schema-type { color: var(--text-ghost); font-size: var(--fs-label-xs); margin-left: 4px; }
   .st-schema-desc { color: var(--text-ghost); }
-  .st-req { color: var(--status-error, #c0392b); font-size: 9px; text-transform: uppercase; margin-left: 4px; }
+  .st-req { color: var(--status-error, #c0392b); font-size: var(--fs-label-xs); text-transform: uppercase; margin-left: 4px; }
 
   .st-args-actions { display: flex; align-items: center; gap: 8px; }
-  .st-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
-  .st-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
+  .st-ok   { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-success, #2a9d4a); }
+  .st-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
   .st-prefill {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     background: transparent; border: 1px solid var(--card-border);
     color: var(--text-muted); cursor: pointer; padding: 1px 6px;
   }
   .st-prefill:hover { border-color: var(--text-muted); }
 
   .st-dest { border: 1px solid var(--status-error, #c0392b); padding: 8px; }
-  .st-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-primary); cursor: pointer; }
+  .st-check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
   .st-check input { width: auto; }
 
   .st-raw { margin-top: 4px; border-top: 1px dashed var(--card-border); padding-top: 8px; }

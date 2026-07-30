@@ -66,7 +66,7 @@
     color: var(--text-muted);
     border: 1px dashed var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -81,14 +81,14 @@
   }
   .tca-ok {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--status-success, #27ae60);
   }
   .tca-err {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--status-error, #c0392b);

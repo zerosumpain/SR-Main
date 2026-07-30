@@ -253,7 +253,7 @@
   }
   .rm-title {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.16em;
@@ -270,7 +270,7 @@
     border-radius: 0;
     background: none;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -306,19 +306,19 @@
     background: var(--bg);
   }
   .rm-icon {
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1.2;
   }
   .rm-end-name {
     font-family: var(--font-brand);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     font-weight: 500;
     color: var(--text-primary);
     overflow-wrap: anywhere;
   }
   .rm-end-type {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -332,12 +332,12 @@
   }
   .rm-arrow {
     color: var(--accent);
-    font-size: 15px;
+    font-size: var(--fs-body);
     line-height: 1;
   }
   .rm-verb {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--accent);
@@ -345,7 +345,7 @@
   }
   .rm-cross {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -354,7 +354,7 @@
   .rm-summary {
     margin: 12px 0 0;
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-muted);
   }
@@ -381,7 +381,7 @@
   .rm-sec h4 {
     margin: 0 0 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -390,7 +390,7 @@
   .rm-note {
     margin: 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-muted);
   }
@@ -405,7 +405,7 @@
   }
   .rm-sources li {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.4;
   }
   .rm-sources a {
@@ -418,7 +418,7 @@
   }
   .rm-src {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -430,13 +430,13 @@
     gap: 8px;
     margin-bottom: 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .rm-grade {
     padding: 1px 6px;
     border: 1px solid var(--card-border);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -466,7 +466,7 @@
     padding-left: 9px;
     border-left: 2px solid var(--accent-tint-20);
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     line-height: 1.45;
     color: var(--text-muted);
   }
@@ -498,12 +498,12 @@
   }
   .rm-next-name {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .rm-next-rel {
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);

@@ -63,7 +63,7 @@
     align-items: center;
     gap: 7px;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 12px;
+    font-size: var(--fs-label);
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;

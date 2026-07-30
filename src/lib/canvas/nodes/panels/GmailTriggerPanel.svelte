@@ -215,27 +215,27 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .gt-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .gt-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .gt-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .gt-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .gt-hint { font-size: 11px; color: var(--text-ghost); }
-  .gt-hint code, .gt-label code { font-size: 11px; color: var(--text-muted); }
+  .gt-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .gt-hint code, .gt-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .gt-hint a { color: var(--accent); text-decoration: none; }
   .gt-hint a:hover { text-decoration: underline; }
 
-  .gt-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .gt-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
   .gt-warn {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
   .gt-note {
     margin: -4px 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
     font-style: italic;
   }
@@ -246,7 +246,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;

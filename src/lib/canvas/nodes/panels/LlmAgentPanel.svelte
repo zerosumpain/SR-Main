@@ -367,30 +367,30 @@
   .la-field { display: flex; flex-direction: column; gap: 4px; }
   .la-label {
     display: flex; align-items: center; gap: 8px;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
   .la-req {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
     text-transform: uppercase; letter-spacing: 0.08em;
   }
   .la-opt {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-transform: uppercase; letter-spacing: 0.08em;
   }
 
-  .la-hint { font-size: 11px; color: var(--text-ghost); }
-  .la-hint code, .la-label code { font-size: 11px; color: var(--text-muted); }
+  .la-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .la-hint code, .la-label code { font-size: var(--fs-label); color: var(--text-muted); }
   .la-explain {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     line-height: 1.5;
   }
-  .la-explain code { font-size: 11px; color: var(--text-primary); }
+  .la-explain code { font-size: var(--fs-label); color: var(--text-primary); }
 
   .la-code {
     width: 100%;
@@ -398,7 +398,7 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -407,17 +407,17 @@
 
   :global(.la-temp-scale-row) {
     display: flex; justify-content: space-between;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     width: 100%;
   }
 
-  .la-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
-  .la-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
+  .la-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
+  .la-ok   { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-success, #2a9d4a); }
 
   .la-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .la-chip {
     display: inline-flex; align-items: center; gap: 4px;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     background: color-mix(in srgb, var(--card-border) 18%, transparent);
     border: 1px solid var(--card-border);
     padding: 1px 4px 1px 6px;
@@ -425,7 +425,7 @@
   }
   .la-chip-x {
     background: transparent; border: none; cursor: pointer;
-    color: var(--text-muted); font-size: 13px; line-height: 1; padding: 0 2px;
+    color: var(--text-muted); font-size: var(--fs-nav); line-height: 1; padding: 0 2px;
   }
   .la-chip-x:hover { color: var(--status-error, #c0392b); }
 
@@ -443,7 +443,7 @@
     content: '▸';
     display: inline-block;
     margin-right: 6px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     transition: transform 0.15s;
   }

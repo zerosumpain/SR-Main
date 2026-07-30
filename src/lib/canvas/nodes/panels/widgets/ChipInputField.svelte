@@ -186,7 +186,7 @@
   .chip-input-wrap { position: relative; }
   .chip-input { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--card-border); }
   .chip-input input { flex: 1; min-width: 80px; padding: 2px 4px; background: transparent; border: none; color: var(--text-primary); font: inherit; outline: none; }
-  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-label); }
   .chip-rm { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0 0 0 2px; }
   .chip-rm:hover { color: var(--status-error, #c0392b); }
 
@@ -213,7 +213,7 @@
     border: none;
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     cursor: pointer;
   }
   .chip-suggest-item:hover,

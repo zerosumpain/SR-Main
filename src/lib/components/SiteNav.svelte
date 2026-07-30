@@ -185,7 +185,7 @@
   }
   .burger-link {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-nav);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-secondary);

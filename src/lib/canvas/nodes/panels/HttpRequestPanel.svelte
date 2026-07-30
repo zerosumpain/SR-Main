@@ -449,11 +449,11 @@
   }
   .hp-preview-hdr { display: flex; justify-content: space-between; align-items: center; }
   .hp-preview-kind {
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
     padding: 2px 6px; border-radius: 2px;
   }
-  .hp-preview-line { margin: 0; font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+  .hp-preview-line { margin: 0; font-size: var(--fs-nav); color: var(--text-primary); line-height: 1.4; }
 
   .hp-sec { display: flex; flex-direction: column; gap: 8px; }
   .hp-sec-disabled { opacity: 0.55; }
@@ -462,7 +462,7 @@
     border-bottom: 1px dashed var(--card-border);
     padding-bottom: 4px;
   }
-  .hp-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .hp-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .hp-row { display: flex; gap: 10px; }
   .hp-method-row { align-items: flex-end; }
@@ -470,13 +470,13 @@
   .hp-field-method { flex: 0 0 110px; }
   .hp-field-url { flex: 1; }
   .hp-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .hp-hint { font-size: 11px; color: var(--text-ghost); }
-  .hp-hint code, .hp-label code { font-size: 11px; color: var(--text-muted); }
-  .hp-live-url { font-size: 11px; color: var(--accent); word-break: break-all; }
+  .hp-hint { font-size: var(--fs-label); color: var(--text-ghost); }
+  .hp-hint code, .hp-label code { font-size: var(--fs-label); color: var(--text-muted); }
+  .hp-live-url { font-size: var(--fs-label); color: var(--accent); word-break: break-all; }
 
   .hp-kv-grid {
     display: grid;
@@ -484,14 +484,14 @@
     gap: 4px;
   }
   .hp-kv-head {
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
   }
   .hp-kv-input {
     padding: 5px 7px;
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
@@ -506,12 +506,12 @@
     padding: 4px 10px;
     background: var(--bg); color: var(--text-muted);
     border: 1px dashed var(--card-border);
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     cursor: pointer;
   }
   .hp-add:hover { color: var(--text-primary); }
-  .hp-empty { margin: 0; font-size: 12px; color: var(--text-ghost); }
+  .hp-empty { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); }
 
   .hp-code {
     width: 100%;
@@ -519,16 +519,16 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
   }
   .hp-code:focus { border-color: var(--text-muted); }
 
-  .hp-warn { font-family: var(--font-mono); font-size: 10px; color: var(--status-error, #c0392b); }
-  .hp-ok   { font-family: var(--font-mono); font-size: 10px; color: var(--status-success, #2a9d4a); }
-  .hp-info { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .hp-warn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-error, #c0392b); }
+  .hp-ok   { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--status-success, #2a9d4a); }
+  .hp-info { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   input[type='text'], input[type='number'], select, textarea {
     width: 100%;
@@ -544,7 +544,7 @@
 
   .hp-toggle {
     display: inline-flex; align-items: center; gap: 6px;
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--text-muted); cursor: pointer;
   }
   .hp-toggle input[type='checkbox'] { width: auto; margin: 0; cursor: pointer; }

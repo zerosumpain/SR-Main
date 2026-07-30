@@ -61,20 +61,20 @@
 
 <style>
   .subagents { list-style: none; margin: 7px 0 0; padding: 0 0 0 12px; display: flex; flex-direction: column; gap: 7px; border-left: 2px solid var(--card-border); }
-  .subagent { font-size: 11px; }
+  .subagent { font-size: var(--fs-label); }
   .sa-hdr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-  .sa-badge { font-size: 10px; flex-shrink: 0; color: var(--text-muted); }
+  .sa-badge { font-size: var(--fs-label-xs); flex-shrink: 0; color: var(--text-muted); }
   .sa-badge[data-status='completed'], .sa-badge[data-status='done'] { color: var(--status-success); }
   .sa-badge[data-status='error'], .sa-badge[data-status='failed'] { color: var(--status-error); }
-  .sa-title { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); flex-shrink: 0; }
-  .sa-meta { font-size: 9px; color: var(--text-muted); }
+  .sa-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); flex-shrink: 0; }
+  .sa-meta { font-size: var(--fs-label-xs); color: var(--text-muted); }
   .sa-trace-toggle {
     margin-left: auto;
     background: transparent;
     border: 0;
     color: var(--text-ghost);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -82,8 +82,8 @@
     flex-shrink: 0;
   }
   .sa-trace-toggle:hover { color: var(--text-primary); }
-  .sa-summary { margin-top: 4px; font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 9rem; overflow-y: auto; }
-  .sa-trace { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 10px; }
+  .sa-summary { margin-top: 4px; font-size: var(--fs-label); line-height: 1.45; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 9rem; overflow-y: auto; }
+  .sa-trace { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: var(--fs-label-xs); }
   .sa-tool { background: var(--bg-section); border-radius: var(--radius-sharp); padding: 0 4px; color: var(--text-secondary); }
   .sa-tool[data-error='true'] { color: var(--status-error); }
   .sa-arrow { color: var(--text-ghost); }

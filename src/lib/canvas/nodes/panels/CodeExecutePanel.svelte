@@ -85,14 +85,14 @@
   }
   .panel-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .panel-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .panel-langsel {
@@ -106,7 +106,7 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--fs-label);
     padding: 2px 6px;
     outline: none;
   }
@@ -126,19 +126,19 @@
   }
   .panel-textarea-code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     tab-size: 2;
   }
   .panel-hint {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     line-height: 1.4;
   }
   .panel-hint code {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     background: var(--bg-section);
     padding: 0 4px;
     border-radius: 3px;

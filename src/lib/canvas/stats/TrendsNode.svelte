@@ -436,7 +436,7 @@
     background: var(--bg);
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     overflow: auto;
   }
@@ -448,14 +448,14 @@
     border-bottom: 1px solid var(--divider);
   }
   .title {
-    font-size: 11px;
+    font-size: var(--fs-label);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-secondary);
   }
   .gran {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -466,7 +466,7 @@
     border: 1px solid transparent;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-nav);
     padding: 0 6px;
     border-radius: 2px;
   }
@@ -491,13 +491,13 @@
     border: 1px solid var(--card-border);
   }
   .kpi-l {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
   .kpi-v {
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     font-weight: 500;
     color: var(--text-primary);
   }
@@ -512,7 +512,7 @@
     flex: 0 0 auto;
   }
   .block h4 {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     margin: 0;
     color: var(--text-ghost);
     text-transform: uppercase;
@@ -553,7 +553,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -596,7 +596,7 @@
   .chart-host :global(text.tickLabel) {
     fill: var(--text-ghost);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     stroke: none;
   }
   /* Axis rule lines (the axis spine) — Rule wraps in <g class="rule"> → <line> */
@@ -626,7 +626,7 @@
 
   .error-strip {
     color: #b53b3b;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 6px 8px;
     border: 1px solid rgba(181, 59, 59, 0.4);
     background: rgba(181, 59, 59, 0.06);
@@ -635,7 +635,7 @@
   .empty-msg {
     color: var(--text-ghost);
     font-style: italic;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 8px;
     text-align: center;
   }
@@ -646,7 +646,7 @@
     flex-wrap: wrap;
     gap: 4px 8px;
     margin-top: 4px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted, #888);
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -670,14 +670,14 @@
     border: 1px solid var(--card-border, #333);
     padding: 4px 6px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     pointer-events: none;
     white-space: nowrap;
   }
   .tt-t {
     color: var(--text-ghost, #666);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
   }
   .tt-v {
     color: var(--text-primary, #eee);

@@ -42,11 +42,11 @@
   .mt-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
   .mt-field-narrow { max-width: 220px; }
   .mt-label {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .mt-hint { font-size: 11px; color: var(--text-ghost); }
+  .mt-hint { font-size: var(--fs-label); color: var(--text-ghost); }
   input[type='number'] {
     width: 100%;
     padding: 6px 8px;

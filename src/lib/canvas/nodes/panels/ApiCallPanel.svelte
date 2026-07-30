@@ -272,10 +272,10 @@
 
 <style>
   .ac { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
-  .ac-lead { margin: 0; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .ac-lead { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.5; }
   .ac-lead strong { color: var(--text-primary); }
-  .ac-lead code, .ac-hint code, .ac-preview code, .ac-base code { font-size: 11px; color: var(--text-muted); }
-  .ac-err { margin: 0; font-size: 12px; color: var(--status-error, #c0392b); }
+  .ac-lead code, .ac-hint code, .ac-preview code, .ac-base code { font-size: var(--fs-label); color: var(--text-muted); }
+  .ac-err { margin: 0; font-size: var(--fs-label); color: var(--status-error, #c0392b); }
 
   .ac-sec { display: flex; flex-direction: column; gap: 8px; }
   .ac-sec-hdr {
@@ -290,19 +290,19 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 12px;
+    font-family: var(--font-mono); font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
-  .ac-code { font-size: 11px; padding: 8px; resize: vertical; }
+  .ac-code { font-size: var(--fs-label); padding: 8px; resize: vertical; }
   .ac-text:focus, .ac-code:focus, .ac-select:focus { border-color: var(--text-muted); }
 
-  .ac-hint { font-size: 11px; color: var(--text-ghost); margin: 0; line-height: 1.4; }
+  .ac-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
 
   .ac-detail { border: 1px solid var(--card-border); padding: 8px; gap: 6px; }
   .ac-badges { display: flex; gap: 6px; }
   .ac-badge {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--text-ghost);
     border: 1px solid var(--card-border);
@@ -312,12 +312,12 @@
   .ac-status-broken { color: var(--status-error, #c0392b); border-color: currentColor; }
   .ac-status-candidate { color: var(--text-muted); }
 
-  .ac-base { margin: 0; font-size: 11px; }
-  .ac-base-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; color: var(--text-ghost); margin-right: 4px; }
+  .ac-base { margin: 0; font-size: var(--fs-label); }
+  .ac-base-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; color: var(--text-ghost); margin-right: 4px; }
 
   .ac-chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .ac-chip {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted);
     background: color-mix(in srgb, var(--card-border) 18%, transparent);
     padding: 1px 6px;
@@ -329,15 +329,15 @@
   .ac-ex {
     display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
     padding: 4px 6px; background: transparent; border: 1px solid transparent;
-    color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; cursor: pointer;
+    color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer;
   }
   .ac-ex:hover { border-color: var(--card-border); background: color-mix(in srgb, var(--card-border) 12%, transparent); }
-  .ac-ex-method { color: var(--text-ghost); font-size: 9px; flex-shrink: 0; width: 44px; }
+  .ac-ex-method { color: var(--text-ghost); font-size: var(--fs-label-xs); flex-shrink: 0; width: 44px; }
   .ac-ex-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .ac-ex-use { color: var(--text-ghost); font-size: 10px; flex-shrink: 0; }
+  .ac-ex-use { color: var(--text-ghost); font-size: var(--fs-label-xs); flex-shrink: 0; }
 
-  .ac-preview { margin: 0; font-size: 11px; line-height: 1.4; word-break: break-all; }
-  .ac-preview-label { font-family: var(--font-mono); font-size: 9px; color: var(--accent-ink, var(--text-muted)); margin-right: 4px; }
+  .ac-preview { margin: 0; font-size: var(--fs-label); line-height: 1.4; word-break: break-all; }
+  .ac-preview-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink, var(--text-muted)); margin-right: 4px; }
 
   .ac-adv, .ac-raw { border-top: 1px dashed var(--card-border); padding-top: 8px; display: flex; flex-direction: column; gap: 12px; }
   .ac-adv summary, .ac-raw summary { cursor: pointer; }

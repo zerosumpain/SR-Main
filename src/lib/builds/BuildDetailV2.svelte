@@ -462,7 +462,7 @@
   }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--accent);
@@ -535,14 +535,14 @@
   }
   .app-url-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--accent);
   }
   .app-url-value {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     word-break: break-all;
     flex: 1 1 auto;
@@ -563,7 +563,7 @@
   .dim {
     color: var(--text-muted);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     margin: 0;
   }
   @media (max-width: 900px) {

@@ -71,14 +71,14 @@
   }
   .bc-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent-ink, var(--accent));
     flex-shrink: 0;
   }
   .bc-title {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     flex: 1;
     min-width: 0;
@@ -94,7 +94,7 @@
   }
   .bc-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 3px 8px;
@@ -117,6 +117,6 @@
     border-top: 1px solid var(--divider, var(--card-border));
     max-height: 40vh;
     overflow-y: auto;
-    font-size: 13px;
+    font-size: var(--fs-nav);
   }
 </style>

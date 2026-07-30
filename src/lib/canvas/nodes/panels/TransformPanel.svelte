@@ -397,7 +397,7 @@
   }
   .tr-sec-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
 
@@ -408,22 +408,22 @@
   }
   .tr-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
   }
   .tr-hint {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
   .tr-hint code {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
   }
   .tr-empty {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-ghost);
   }
 
@@ -434,7 +434,7 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
     resize: vertical;
@@ -455,7 +455,7 @@
   }
   .tr-cheat-summary {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -463,14 +463,14 @@
   .tr-cheat-list {
     margin: 6px 0 0;
     padding-left: 18px;
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     display: flex;
     flex-direction: column;
     gap: 3px;
   }
   .tr-cheat-list code {
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--accent);
   }
 
@@ -485,7 +485,7 @@
     color: var(--bg);
     border: 1px solid var(--accent);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -500,7 +500,7 @@
     background: var(--bg);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-word;
@@ -522,7 +522,7 @@
   }
   .tr-kv-head {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
@@ -533,7 +533,7 @@
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     box-sizing: border-box;
     outline: none;
   }
@@ -562,7 +562,7 @@
     color: var(--text-muted);
     border: 1px dashed var(--card-border);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
@@ -577,12 +577,12 @@
 
   .tr-warn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
   .tr-ok {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--status-success, #2a9d4a);
   }
 

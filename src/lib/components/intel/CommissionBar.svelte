@@ -110,7 +110,7 @@
     min-width: 220px;
     padding: 7px 11px;
     font: inherit;
-    font-size: var(--fs-body-sm);
+    font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);

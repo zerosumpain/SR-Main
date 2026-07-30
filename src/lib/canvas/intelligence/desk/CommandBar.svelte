@@ -150,7 +150,7 @@
   .left { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .mono-mark {
     font-family: var(--font-brand);
-    font-size: 18px;
+    font-size: var(--fs-body-lg);
     font-weight: 500;
     color: var(--accent);
     text-decoration: none;
@@ -159,7 +159,7 @@
   .mono-mark:hover { color: var(--accent-hover); }
   .topic {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
@@ -173,7 +173,7 @@
   .counters { display: flex; align-items: center; gap: 10px; }
   .counter {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     letter-spacing: 0.02em;
   }
@@ -182,7 +182,7 @@
 
   .controls { display: flex; align-items: center; gap: 4px; }
   .ctl {
-    font-size: 13px;
+    font-size: var(--fs-nav);
     line-height: 1;
     width: 30px;
     height: 30px;
@@ -217,7 +217,7 @@
     width: 100%;
     text-align: left;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: transparent;
     border: none;
@@ -229,7 +229,7 @@
 
   .pill {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     letter-spacing: 0.04em;
     padding: 5px 10px;
     border-radius: var(--radius-pill);

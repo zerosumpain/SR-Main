@@ -69,14 +69,14 @@
   }
   .panel-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
   }
   .panel-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .panel-field {
@@ -97,12 +97,12 @@
   }
   .panel-textarea-code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     line-height: 1.5;
   }
   .panel-error {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: #c44;
     padding: 2px 0;
   }

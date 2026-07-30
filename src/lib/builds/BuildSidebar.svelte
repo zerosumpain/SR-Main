@@ -121,13 +121,13 @@
     gap: 4px 12px;
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
   }
   dt {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   dd {
     margin: 0;
@@ -141,7 +141,7 @@
     flex-direction: column;
     gap: 4px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -152,7 +152,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     margin-bottom: 0.4rem;
   }
