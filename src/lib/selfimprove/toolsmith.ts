@@ -105,15 +105,23 @@ function buildAuthorMessages(
     'questions it currently cannot, and propose further ideas for the backlog.\n\n' +
     'Favour tools that compose the platform and catalogued APIs listed below over generic internet toys. ' +
     "A tool that reads the owner's own data or a catalogued API is worth ten timezone converters.\n\n" +
+    // Stated up here as a hard requirement, not only in the schema line below:
+    // when it appeared once, at the end, after the JSON shape, the model omitted
+    // it on 3 of 3 tools (2026-07-30) and the reason each tool existed had to be
+    // recovered by text-matching instead.
+    'EVERY tool object MUST include a "serves" field. It is the single most important field after the ' +
+    'code itself: it is shown to the owner as the reason the tool exists. Write the user need in one ' +
+    'plain-English sentence, COPIED from the unmet needs or backlog items below wherever one applies. ' +
+    'Describe the question a person could not get answered — never what the code does. ' +
+    'Good: "You could not ask what the front door battery level is." ' +
+    'Bad: "Queries Home Assistant entities by ID." A tool without "serves" is incomplete.\n\n' +
     HANDLER_RULES +
     '\n\nRespond with ONLY JSON: {"tools": [{"name": snake_case, "description": string, "toolset": string, ' +
     '"serves": string, "parameters": {"type":"object","properties":{...},"required":[...]}, ' +
     '"handler_code": string, ' +
     '"smoke_cases": [{"args": {...}}]}], "ideas": [{"title": string, "detail": string, ' +
     '"kind": "tool"|"feature", "priority": 1-5}]}. ' +
-    '"serves" is the user need this tool addresses, in one plain-English sentence, COPIED from the unmet ' +
-    'needs or backlog items given below wherever one applies. It is shown to the owner as the reason the ' +
-    'tool exists, so it must describe the question a person was unable to get answered — not what the code does. ' +
+    '"serves" is REQUIRED on every tool — see the rule above. ' +
     'Use "feature" for ideas that need real repository code rather than a runtime tool. No prose outside the JSON.';
 
   const sections = [renderContext(pack)];
@@ -364,11 +372,19 @@ export async function toolNameExists(name: string): Promise<boolean> {
  * what the code does — that is the SOLUTION column, and conflating the two is
  * what made the old ledger unreadable.
  */
-function driverSentence(spec: ToolSpec, related: BacklogItemData | null | undefined): string {
+function driverSentence(
+  spec: ToolSpec,
+  related: BacklogItemData | null | undefined,
+): string | undefined {
   const need = (spec.serves ?? '').trim().replace(/[.\s]+$/, '');
   if (need) return `${need}.`;
   if (related) return `Queued as an unmet need: ${related.title.replace(/[.\s]+$/, '')}.`;
-  return 'Built from the week\'s question analysis; the specific need was not recorded.';
+  // UNDEFINED, not a "nothing was recorded" sentence. The ledger treats any
+  // stored driver as `recorded`, so returning prose here would stamp full
+  // confidence on a sentence whose own content admits it knows nothing. Leaving
+  // it unset lets narrative.ts fall through to matching the tool against the
+  // week's unmet needs and label that honestly as `inferred`.
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
