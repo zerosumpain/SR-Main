@@ -64,7 +64,7 @@ export function formatFeedEvent(
   }
 }
 
-// Leading emoji/icon prefix used by emitLog (same pattern as tickerText.ts)
+// Leading emoji/icon prefix used by emitLog
 const LEADING_ICON =
   /^[\p{Extended_Pictographic}\u{FE0F}\u{1F3FB}-\u{1F3FF}ℹ⚠✅]+\s*/u;
 
