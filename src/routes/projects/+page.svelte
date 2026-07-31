@@ -464,6 +464,45 @@
     </div>
     {/if}
 
+    {#if showCard('archetype')}
+    <div class="project-card group">
+      <a href="/projects/archetype/" class="absolute inset-0 z-0" aria-label="Open Archetype"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field Study №7
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Playable · WebGL
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        Archetype — an arms race you can watch
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        An isometric 4X board game whose real subject is the AI. Six named strategists — the Spear,
+        the Jackal, the Sprawl, the Ledger, the Concord, the Bulwark — build models of each other
+        from what they can see through the fog, bend their strategy to exploit what they infer, and
+        provoke each other into counter-adapting. A strategy observatory shows every drive vector,
+        belief and change of mind as it happens.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          Three.js · opponent modelling · co-evolution
+        </span>
+        {@render visToggle('archetype', '/projects/archetype/', 'Archetype')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('brass-and-rails')}
     <div class="project-card group">
       <a href="/projects/brass-and-rails/" class="absolute inset-0 z-0" aria-label="Play Brass & Rails"></a>
