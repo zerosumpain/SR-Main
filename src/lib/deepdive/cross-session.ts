@@ -4,9 +4,8 @@ import {
   globalEntities,
   globalEntityLinks,
   researchSessions,
-  facts,
 } from '$lib/db/schema';
-import { eq, and, sql, ne, ilike } from 'drizzle-orm';
+import { eq, and, sql, ne } from 'drizzle-orm';
 import { generateEmbedding } from './ai';
 import { toVectorLiteral } from './vector';
 import { loadKeys } from './keys';
@@ -204,81 +203,4 @@ export async function findRelatedSessions(
   }
 
   return results.sort((a, b) => b.overlapScore - a.overlapScore);
-}
-
-export async function globalSearch(
-  query: string,
-): Promise<{
-  entities: { id: string; name: string; type: string; sessions: { id: string; topic: string }[] }[];
-  facts: { id: string; content: string; sessionId: string; sessionTopic: string; confidence: number }[];
-}> {
-  const searchPattern = `%${query}%`;
-
-  // Search global entities by name
-  const matchedEntities = await db
-    .select()
-    .from(globalEntities)
-    .where(ilike(globalEntities.canonicalName, searchPattern))
-    .limit(20);
-
-  const entityResults: { id: string; name: string; type: string; sessions: { id: string; topic: string }[] }[] = [];
-
-  for (const ge of matchedEntities) {
-    const links = await db
-      .select({ sessionId: globalEntityLinks.sessionId })
-      .from(globalEntityLinks)
-      .where(eq(globalEntityLinks.globalEntityId, ge.id));
-
-    const sessions: { id: string; topic: string }[] = [];
-    const seenSessions = new Set<string>();
-    for (const link of links) {
-      if (seenSessions.has(link.sessionId)) continue;
-      seenSessions.add(link.sessionId);
-      const [s] = await db
-        .select({ id: researchSessions.id, topic: researchSessions.topic })
-        .from(researchSessions)
-        .where(eq(researchSessions.id, link.sessionId))
-        .limit(1);
-      if (s) sessions.push(s);
-    }
-
-    entityResults.push({
-      id: ge.id,
-      name: ge.canonicalName,
-      type: ge.type,
-      sessions,
-    });
-  }
-
-  // Search facts by content
-  const matchedFacts = await db
-    .select({
-      id: facts.id,
-      content: facts.content,
-      sessionId: facts.sessionId,
-      confidence: facts.confidence,
-    })
-    .from(facts)
-    .where(and(ilike(facts.content, searchPattern), eq(facts.isCounterfactual, false)))
-    .limit(20);
-
-  const factResults: { id: string; content: string; sessionId: string; sessionTopic: string; confidence: number }[] = [];
-
-  for (const f of matchedFacts) {
-    const [s] = await db
-      .select({ topic: researchSessions.topic })
-      .from(researchSessions)
-      .where(eq(researchSessions.id, f.sessionId))
-      .limit(1);
-
-    factResults.push({
-      id: f.id,
-      content: f.content,
-      sessionId: f.sessionId,
-      sessionTopic: s?.topic ?? 'Unknown',
-      confidence: f.confidence,
-    });
-  }
-
-  return { entities: entityResults, facts: factResults };
 }

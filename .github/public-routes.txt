@@ -92,7 +92,6 @@
 /jkai/intel/dossiers/[id]
 /jkai/intel/entities
 /jkai/intel/entities/[id]
-/jkai/intel/graph
 /jkai/intel/notes
 /jkai/intel/notes/[id]
 /jkai/intel/notes/new
