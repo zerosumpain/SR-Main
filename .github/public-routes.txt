@@ -106,6 +106,7 @@
 /login
 /projects
 /projects/[slug]/[...path]
+/projects/archetype/llm
 /projects/broads-pilot
 /projects/broads-pilot/method
 /projects/data-convergence
