@@ -21,6 +21,7 @@ export const STATIC_PROJECT_KEYS = [
   'policy-engine',
   'whitehall',
   'brass-and-rails',
+  'archetype',
   'data-convergence',
 ] as const;
 
