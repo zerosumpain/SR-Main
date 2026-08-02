@@ -31,6 +31,18 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // workflow_build_from_spec call, and the model must reliably hit it
   // after the user confirms. Cheap insurance.
   'workflow_build_from_spec',
+  // The GROUNDED build path, and the reason build_from_spec above is no longer
+  // the default. Both the canvas skill and build_from_spec's own description
+  // said "prefer workflow_generate" — and production did the opposite, 26 hand-
+  // authored specs to 3 generates, because only one of them was free to reach.
+  // The model was not ignoring the instruction; it was pricing it. A tool the
+  // prompt calls mandatory has to cost the same as the one it warns about.
+  'workflow_generate',
+  // Read-only, ~163 tokens, and the single cheapest way to stop a bad build
+  // reaching the DB. It was used on 9 of 29 builds while sitting behind a
+  // jkai_extended round-trip; the run that thrashed hardest (13 builds, 14
+  // deletes, 2026-07-17) never called it once.
+  'workflow_lint',
   // New-presentation path (sr. decks). Same design-first flow: outline agreed
   // in chat, then one build call — must survive the meta-tool squeeze.
   'presentation_build_from_spec',
