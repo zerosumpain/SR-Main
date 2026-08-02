@@ -94,6 +94,80 @@ class EntityHoverState {
 
 export const entityHover = new EntityHoverState();
 
+/** Card geometry. Exported so the layout maths can be tested without a DOM. */
+export const CARD_W = 380;
+const GAP = 10;
+const MARGIN = 12;
+/** Below this a card is too cramped to read, so we stop trying to fit it beside
+ *  the mention and let it overlap instead. */
+const MIN_H = 180;
+
+export interface HoverLayout {
+  left: number;
+  /** Cap for the scrolling content, so the card can never exceed the viewport. */
+  maxHeight: number;
+  placement: 'below' | 'above' | 'overlay';
+  /** Set for 'below' and 'overlay' — the card grows downward from here. */
+  top?: number;
+  /**
+   * Set for 'above', measured from the viewport bottom. Above-placement MUST be
+   * bottom-anchored: anchoring the top edge and letting content grow pushes the
+   * card down over the mention and off the bottom of the screen. Anchoring the
+   * bottom makes it grow upward into the space we measured.
+   */
+  bottom?: number;
+}
+
+/**
+ * Place the card so it is ALWAYS fully on screen, capping its height to the
+ * space actually available so any overflow scrolls.
+ *
+ * The previous version flipped above only when there was any room at all above,
+ * and otherwise fell back to below with NO height cap — so a tall card near the
+ * bottom of the viewport ran off the bottom edge with no way to reach the rest.
+ * Clamping only `top` fixed the top edge and left the bottom unbounded.
+ *
+ * This is stable against a ResizeObserver feeding the measured height back in:
+ * once capped to a side's available space the measured height equals that
+ * space, which still satisfies the same branch next pass. Capped-to-below keeps
+ * `height <= spaceBelow`; and above is only chosen when it is the larger side,
+ * so capped-to-above keeps `spaceBelow < height <= spaceAbove`.
+ */
+export function computeHoverLayout(
+  rect: HoverAnchor['rect'],
+  height: number,
+  viewport: { w: number; h: number },
+): HoverLayout {
+  let left = rect.left;
+  if (left + CARD_W + MARGIN > viewport.w) left = viewport.w - CARD_W - MARGIN;
+  if (left < MARGIN) left = MARGIN;
+
+  const spaceBelow = viewport.h - rect.bottom - GAP - MARGIN;
+  const spaceAbove = rect.top - GAP - MARGIN;
+
+  // Neither side can hold a readable card (short viewport, mention mid-screen):
+  // stop dodging the mention and use the full column, scrolling inside.
+  if (Math.max(spaceBelow, spaceAbove) < MIN_H) {
+    return {
+      top: MARGIN,
+      left,
+      maxHeight: Math.max(MIN_H, viewport.h - MARGIN * 2),
+      placement: 'overlay',
+    };
+  }
+
+  if (height <= spaceBelow || spaceBelow >= spaceAbove) {
+    return { top: rect.bottom + GAP, left, maxHeight: spaceBelow, placement: 'below' };
+  }
+
+  return {
+    bottom: viewport.h - rect.top + GAP,
+    left,
+    maxHeight: spaceAbove,
+    placement: 'above',
+  };
+}
+
 /**
  * Delegated handlers for a container holding rendered chat HTML.
  *

@@ -8,17 +8,20 @@
   import { onMount, untrack } from 'svelte';
   import EntityCard from './EntityCard.svelte';
   import RelationshipModal from './RelationshipModal.svelte';
-  import { entityHover } from './entity-hover.svelte';
+  import { entityHover, computeHoverLayout, CARD_W } from './entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import { goto } from '$app/navigation';
-
-  const CARD_W = 380;
-  const GAP = 10;
-  const MARGIN = 12;
 
   let host = $state<HTMLDivElement | null>(null);
   let height = $state(300);
   let busy = $state(false);
+
+  // Positioning reads the viewport, so it has to be reactive or the card stays
+  // where it was when the window changes size under it.
+  let viewport = $state({
+    w: typeof window === 'undefined' ? 1200 : window.innerWidth,
+    h: typeof window === 'undefined' ? 800 : window.innerHeight,
+  });
 
   /** Open relationship, as [from, to]. Clicking a name under "Connected to"
    *  used to navigate to /jkai/intel/network, which does not exist and 404'd;
@@ -55,22 +58,19 @@
     return () => ro.disconnect();
   });
 
-  const position = $derived.by(() => {
-    if (!anchor) return { top: 0, left: 0 };
-    const vw = typeof window === 'undefined' ? 1200 : window.innerWidth;
-    const vh = typeof window === 'undefined' ? 800 : window.innerHeight;
+  // Pure maths, so it is unit-tested in entity-hover.layout.test.ts rather than
+  // eyeballed against a live chat.
+  const layout = $derived(
+    anchor
+      ? computeHoverLayout(anchor.rect, height, viewport)
+      : { top: 0, left: 0, maxHeight: 0, placement: 'below' as const },
+  );
 
-    let left = anchor.rect.left;
-    if (left + CARD_W + MARGIN > vw) left = vw - CARD_W - MARGIN;
-    if (left < MARGIN) left = MARGIN;
-
-    // Prefer below; flip above when there isn't room and there is above.
-    const below = anchor.rect.bottom + GAP;
-    const above = anchor.rect.top - GAP - height;
-    const top = below + height + MARGIN > vh && above > MARGIN ? above : below;
-
-    return { top: Math.max(MARGIN, top), left };
-  });
+  // Exactly one vertical anchor is set; 'above' uses `bottom` so the card grows
+  // upward instead of sliding down over the mention.
+  const vStyle = $derived(
+    layout.bottom !== undefined ? `bottom: ${layout.bottom}px` : `top: ${layout.top ?? 0}px`,
+  );
 
   async function onCommission(kind: string, payload: string, entityIds: string[]) {
     if (busy) return;
@@ -90,15 +90,26 @@
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') entityHover.close();
     };
-    const onScroll = () => {
-      // The card is anchored to a viewport rect; scrolling invalidates it.
+    const onScroll = (e: Event) => {
+      // Scrolling INSIDE the card must not dismiss it — that is the whole point
+      // of capping the height. This listener is on window with capture:true, so
+      // it sees scroll from every element, including the card's own overflow.
+      const t = e.target;
+      if (host && t instanceof Node && host.contains(t)) return;
+      // Page scroll is different: the card is anchored to a viewport rect, which
+      // scrolling invalidates.
       if (entityHover.current && !entityHover.current.pinned) entityHover.close();
+    };
+    const onResize = () => {
+      viewport = { w: window.innerWidth, h: window.innerHeight };
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   });
 </script>
@@ -109,7 +120,7 @@
     bind:this={host}
     class="hover-card"
     class:pinned={anchor.pinned}
-    style="top: {position.top}px; left: {position.left}px; width: {CARD_W}px;"
+    style="{vStyle}; left: {layout.left}px; width: {CARD_W}px;"
     onmouseenter={() => entityHover.keepOpen()}
     onmouseleave={() => entityHover.release()}
     role="dialog"
@@ -118,12 +129,16 @@
     {#if anchor.pinned}
       <button class="close" type="button" onclick={() => entityHover.close()} aria-label="Close">×</button>
     {/if}
-    <EntityCard
-      entityId={anchor.entityId}
-      compact={!anchor.pinned}
-      onCommission={anchor.pinned ? onCommission : undefined}
-      onFocus={(id) => (relation = { from: anchor.entityId, to: id })}
-    />
+    <!-- The scroller is INSIDE the positioned host so the close button stays put
+         while the content moves under it. -->
+    <div class="scroll" style="max-height: {layout.maxHeight}px;">
+      <EntityCard
+        entityId={anchor.entityId}
+        compact={!anchor.pinned}
+        onCommission={anchor.pinned ? onCommission : undefined}
+        onFocus={(id) => (relation = { from: anchor.entityId, to: id })}
+      />
+    </div>
   </div>
 {/if}
 
@@ -148,6 +163,24 @@
     z-index: 95;
   }
 
+  .scroll {
+    overflow-y: auto;
+    /* Radius has to be repeated here: the scroller is what actually clips the
+       card's content, so without it EntityCard's corners square off. */
+    border-radius: var(--radius-round);
+    /* Stop a flick at the end of the card scrolling the chat behind it — which
+       would then fire the page-scroll handler and dismiss the card. */
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scroll::-webkit-scrollbar-thumb {
+    background: var(--card-border);
+    border-radius: var(--radius-round);
+  }
+
   @keyframes card-in {
     from {
       opacity: 0;
@@ -167,7 +200,8 @@
   .close {
     position: absolute;
     top: 6px;
-    right: 6px;
+    /* Clears the scroller's 6px gutter so the two never overlap. */
+    right: 12px;
     z-index: 1;
     width: 22px;
     height: 22px;
