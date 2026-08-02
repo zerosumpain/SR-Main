@@ -428,6 +428,47 @@ function validateHosts(hosts: string[]): string[] {
   return Array.from(new Set(out));
 }
 
+/**
+ * Refuse a `ref` row for an OAuth provider whose companion vault row is absent.
+ *
+ * The two rows for such a provider are one credential wearing two hats: the
+ * `<provider>-oauth` vault row holds the client_id/client_secret/refresh_token,
+ * and the `<provider>` ref row mints a short-lived access token from it on every
+ * request (see oauth-refresh.ts). A ref row on its own is not a credential — it
+ * is a handle that resolves to nothing, and every node that references it fails
+ * at RUN time with "no credential stored", long after whoever created it has
+ * moved on.
+ *
+ * That is not hypothetical. On 2026-08-02 a migration created the `truelayer`
+ * and `paypal` ref rows by direct SQL, leaving the vault halves to be entered
+ * later by hand. They never were, nothing surfaced the half-registered state,
+ * and the daily-spend-summary canvas failed silently on a cron for a day.
+ * Writing the rows in the wrong order is the easiest mistake to make here, so
+ * make it impossible rather than documenting it: create the credential set
+ * first, then the ref row that mints from it.
+ */
+async function assertCompanionVaultRow(refKey: string): Promise<void> {
+  const provider = OAUTH_PROVIDERS[refKey as keyof typeof OAUTH_PROVIDERS];
+  if (!provider) return;
+
+  const [companion] = await db
+    .select()
+    .from(apiSecrets)
+    .where(eq(apiSecrets.handle, provider.vaultHandle))
+    .limit(1);
+
+  if (!companion?.payloadEnc) {
+    throw new SecretError(
+      `"${refKey}" mints its access token from the stored credential set "${provider.vaultHandle}", ` +
+        `and that ${companion ? 'row has no value stored' : 'credential has not been added yet'}. ` +
+        `Add "${provider.vaultHandle}" first — a store-only credential bound to "${provider.tokenHost}", ` +
+        `whose value is a JSON object with client_id, client_secret` +
+        `${refKey === 'truelayer' ? ' and refresh_token' : ''} — then save this one. ` +
+        `A ref row without it resolves to nothing and every node using it fails at run time.`,
+    );
+  }
+}
+
 export async function upsertSecret(input: UpsertSecretInput): Promise<SecretMeta> {
   const handle = normaliseHandle(input.handle);
   if (!handle) throw new SecretError('handle is required');
@@ -462,8 +503,16 @@ export async function upsertSecret(input: UpsertSecretInput): Promise<SecretMeta
       throw new SecretError(`unknown ref source "${key}" — one of: ${Object.keys(REF_SOURCES).join(', ')}`);
     }
     refKey = key;
-    const resolved = await REF_SOURCES[key].resolve();
-    hint = resolved && resolved.length > 4 ? resolved.slice(-4) : null;
+    await assertCompanionVaultRow(key);
+    // A ref source can be legitimately unresolvable at write time (an env var
+    // not set on this host, a provider outage). That must not 500 the save —
+    // `toMeta` already reports it as unavailable — so only the hint is lost.
+    try {
+      const resolved = await REF_SOURCES[key].resolve();
+      hint = resolved && resolved.length > 4 ? resolved.slice(-4) : null;
+    } catch {
+      hint = null;
+    }
   } else {
     throw new SecretError('source must be "vault" or "ref"');
   }
@@ -498,6 +547,22 @@ export async function deleteSecret(handle: string): Promise<boolean> {
   const h = normaliseHandle(handle);
   const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
   if (!row) return false;
+
+  // Deleting the credential set out from under its ref row recreates exactly the
+  // half-registered state `assertCompanionVaultRow` exists to prevent — the ref
+  // row survives, still looks registered, and fails at run time. Remove the ref
+  // row first; it is the one that is safe to lose, since it holds no value.
+  const orphaned = Object.entries(OAUTH_PROVIDERS).find(([, p]) => p.vaultHandle === h);
+  if (orphaned) {
+    const [refRow] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, orphaned[0])).limit(1);
+    if (refRow) {
+      throw new SecretError(
+        `"${orphaned[0]}" mints its access token from this credential set, so deleting it would leave ` +
+          `that handle registered but broken. Delete "${orphaned[0]}" first, then this one.`,
+      );
+    }
+  }
+
   await db.delete(apiSecrets).where(eq(apiSecrets.handle, h));
   return true;
 }
