@@ -58,7 +58,9 @@ export function mergeUpstreamInput(
         ) {
           console.warn(
             `[engine] fan-in collision run=${runId} node=${nodeId} key=${k}: ` +
-              `value from ${edge.sourceNodeId} overwrites differing value from ${prevSource} (last-writer-wins)`,
+              `value from ${edge.sourceNodeId} overwrites differing value from ${prevSource} ` +
+              `(last-writer-wins — the overwritten data is LOST before this node runs; ` +
+              `give each branch its own key with a transform, a merge node will not help)`,
           );
         }
         keyProvenance.set(k, edge.sourceNodeId);
