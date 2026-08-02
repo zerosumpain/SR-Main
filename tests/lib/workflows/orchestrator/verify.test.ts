@@ -233,3 +233,65 @@ describe('verifyWorkflow — C1 destructive site-tool needs an upstream approval
     expect(siteToolApprovalIssues([trigger, st], [edge(trigger, st)])).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// E: fan-in whose branches overwrite each other
+//
+// Upstream inputs are merged FLAT, so two branches emitting the same top-level
+// key mean one is discarded before the target node runs. This is what broke
+// daily-spend-summary on 2026-08-02 and it surfaced three nodes later as an
+// unrelated HTTP 404 — precisely the class of thing the linter should catch
+// before a run, not after.
+// ---------------------------------------------------------------------------
+
+/** Every api-call emits the same keys — that identity is the whole problem. */
+const API_CALL_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: { success: {}, api: {}, status: {}, url: {}, json: {} },
+};
+const fanInSchema = (type: string, config: Record<string, unknown>): JsonSchema => {
+  const configured = config?.outputSchema;
+  if (configured && typeof configured === 'object') {
+    return { type: 'object', properties: configured as Record<string, JsonSchema> };
+  }
+  return type === 'api-call' ? API_CALL_SCHEMA : { type: 'object', properties: {} };
+};
+
+/** Only the graph-level fan-in findings. */
+function fanInIssues(nodes: WorkflowNodeDef[], edges: WorkflowEdgeDef[]) {
+  return verifyWorkflow(nodes, edges, getDefinition, fanInSchema).filter((i) =>
+    i.issue.includes('merged flat'),
+  );
+}
+
+describe('E: fan-in collision', () => {
+  it('warns when two api-call branches converge on one node', () => {
+    const a = node('api-call', {}, 'Get accounts');
+    const b = node('api-call', {}, 'Get cards');
+    const t = node('transform', {}, 'Extract IDs + dates');
+    const found = fanInIssues([a, b, t], [edge(a, t), edge(b, t)]);
+    expect(found).toHaveLength(1);
+    expect(found[0].nodeLabel).toBe('Extract IDs + dates');
+    expect(found[0].severity).toBe('warning');
+    expect(found[0].field).toContain('json');
+    expect(found[0].issue).toContain('Get accounts');
+    expect(found[0].issue).toContain('Get cards');
+  });
+
+  it('goes quiet once each branch is given its own key', () => {
+    const a = node('api-call', {}, 'Get accounts');
+    const b = node('api-call', {}, 'Get cards');
+    const la = node('transform', { outputSchema: { accounts: {} } }, 'Label accounts');
+    const lb = node('transform', { outputSchema: { cards: {} } }, 'Label cards');
+    const t = node('transform', {}, 'Extract IDs + dates');
+    expect(
+      fanInIssues([a, b, la, lb, t], [edge(a, la), edge(b, lb), edge(la, t), edge(lb, t)]),
+    ).toEqual([]);
+  });
+
+  it('does not warn on a single upstream', () => {
+    const a = node('api-call', {}, 'Get accounts');
+    const t = node('transform', {}, 'Next');
+    expect(fanInIssues([a, t], [edge(a, t)])).toEqual([]);
+  });
+});

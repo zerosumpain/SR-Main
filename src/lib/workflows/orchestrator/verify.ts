@@ -11,6 +11,7 @@ import type { WorkflowNodeDef, WorkflowEdgeDef, JsonSchema, NodeDefinition } fro
 import { resolveUpstreamSchema, schemaToVariablePaths } from '../schema-propagation';
 import { extractTemplateTokens, classifyTemplateToken } from '../state-templates';
 import { validateWorkflowCompatibility } from '../mapping/compatibility';
+import { findFanInCollisions } from '../fan-in';
 
 export interface VerificationIssue {
   nodeId: string;
@@ -650,6 +651,23 @@ export function verifyWorkflow(
 
   // --- Graph-level: handle-kind compatibility between connected nodes (D) ---
   issues.push(...detectEdgeIncompatibility(nodes, edges));
+
+  // --- Graph-level: fan-in whose branches overwrite each other (E) ---
+  // Upstream inputs are merged FLAT, so two branches emitting the same key mean
+  // one is silently discarded before the target node runs. This is the mistake
+  // that broke daily-spend-summary on 2026-08-02 — and it is invisible until a
+  // run fails somewhere unrelated, which is exactly what a linter is for.
+  // Warning, not error: some collisions are benign (both branches carry the
+  // same value, or only one side ever runs).
+  for (const collision of findFanInCollisions(nodes, edges, getOutputSchema)) {
+    issues.push({
+      nodeId: collision.nodeId,
+      nodeLabel: collision.nodeLabel,
+      field: collision.keys.join(', '),
+      issue: collision.message,
+      severity: 'warning',
+    });
+  }
 
   return issues;
 }
