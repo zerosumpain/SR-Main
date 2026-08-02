@@ -48,6 +48,13 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   'api_secrets_list',
   'api_integration_list',
   'api_integration_call',
+  // The out-of-band credential form. This one MUST be top-level: it is needed
+  // at the exact moment the model discovers a credential is missing, and if
+  // reaching it costs a jkai_extended round-trip the model will do the cheap
+  // thing instead and ask the user to paste the key into the chat. That is the
+  // failure this tool exists to prevent — on 2026-08-01 it put a live bank
+  // client_secret into ten places including an LLM provider. Cheap insurance.
+  'request_credential',
   'datastore_query',
   // Unified recall across files + research + memory + datastore — the @knowledge
   // entry point. Kept visible so "what do I know about X" reaches it directly.
