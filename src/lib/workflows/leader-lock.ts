@@ -30,6 +30,14 @@ export const SCHEDULER_LOCK_LANE = 'jkai:workflow-scheduler';
 export const FORGE_SCHEDULER_LOCK_LANE = 'jkai:forge-scheduler';
 
 /**
+ * Advisory-lock lane for the nightly workflow doctor. Its own lane: the doctor
+ * writes to workflow_nodes and workflow_schedules, so two of it running would
+ * double-apply fixes — but it must NOT be mutually exclusive with the cron
+ * scheduler, which is why the key is verified distinct from both lanes above.
+ */
+export const DOCTOR_LOCK_LANE = 'jkai:workflow-doctor';
+
+/**
  * PURE: derive a stable signed-32-bit advisory-lock key from a lane name.
  * Deterministic (FNV-1a-ish) so the same lane always maps to the same key
  * across processes/restarts. Exported for tests.

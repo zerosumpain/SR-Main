@@ -65,6 +65,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'API Registry', href: '/admin/ai/apis' },
       { label: 'Datastore', href: '/admin/ai/datastore' },
       { label: 'Improvement', href: '/admin/ai/improvement' },
+      { label: 'Doctor', href: '/admin/ai/doctor' },
       { label: 'Approvals', href: '/admin/ai/approvals' },
       { label: 'Config', href: '/admin/ai/config' },
     ],

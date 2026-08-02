@@ -65,6 +65,7 @@
       section: 'Ops',
       items: [
         { code: 'IMP', label: 'Improvement', href: '/jkai/improvement', desc: 'Self-improvement ledger', keywords: 'ledger self improve nightly' },
+        { code: 'DOC', label: 'Doctor', href: '/jkai/doctor', desc: 'Why your workflows are failing', keywords: 'doctor failed workflow fix repair triage' },
       ],
     },
   ];
