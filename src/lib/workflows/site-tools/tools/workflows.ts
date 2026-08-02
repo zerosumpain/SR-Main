@@ -16,6 +16,28 @@ import { slugify } from '$lib/canvas/slug';
 import { registerCronJob } from '$lib/workflows/scheduler';
 import { registry } from '$lib/workflows';
 import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
+import { findFanInCollisions, type FanInCollision } from '$lib/workflows/fan-in';
+import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
+
+/**
+ * Which nodes in this workflow have upstreams that overwrite each other.
+ *
+ * The engine merges fan-in flat, so two branches emitting the same keys silently
+ * lose one of them. That is invisible until a run fails somewhere else entirely
+ * (see $lib/workflows/fan-in), so it is surfaced on every structural read and on
+ * every edge that creates one.
+ */
+async function fanInWarnings(workflowId: string): Promise<FanInCollision[]> {
+  const [nodes, edges] = await Promise.all([
+    db.select().from(workflowNodes).where(eq(workflowNodes.workflowId, workflowId)),
+    db.select().from(workflowEdges).where(eq(workflowEdges.workflowId, workflowId)),
+  ]);
+  return findFanInCollisions(
+    nodes as unknown as WorkflowNodeDef[],
+    edges as unknown as WorkflowEdgeDef[],
+    (type, config) => registry.getExecutor(type)?.getOutputSchema(config),
+  );
+}
 
 /**
  * Coerce the generator's `workflow.trigger` (set by the orchestrator's
@@ -771,12 +793,20 @@ register({
       .orderBy(desc(workflowRuns.startedAt))
       .limit(5);
 
+    const fanIn = findFanInCollisions(
+      nodes as unknown as WorkflowNodeDef[],
+      edges as unknown as WorkflowEdgeDef[],
+      (type, config) => registry.getExecutor(type)?.getOutputSchema(config),
+    );
+
     return {
       success: true,
       data: {
         ...wf,
         nodes,
         edges,
+        // Present only when there is something wrong, so a clean canvas reads clean.
+        ...(fanIn.length ? { fanInWarnings: fanIn.map((c) => c.message) } : {}),
         schedules: schedules.map((s) => ({
           ...s,
           lastRunAtFormatted: formatTimestamp(s.lastRunAt),
@@ -1254,7 +1284,13 @@ register({
       },
       ts: Date.now(),
     });
-    return { success: true, data: edge };
+
+    // If this edge just created a fan-in whose branches overwrite each other,
+    // say so HERE — at the moment the mistake is made and cheap to undo, rather
+    // than leaving it to surface as an unrelated failure on the first real run.
+    const collisions = await fanInWarnings(edge.workflowId);
+    const hit = collisions.find((c) => c.nodeId === edge.targetNodeId);
+    return { success: true, data: hit ? { ...edge, warning: hit.message } : edge };
   },
 });
 
