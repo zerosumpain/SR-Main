@@ -72,6 +72,26 @@ export type JobEvent =
   | { type: 'confirm_ack'; confirmId: string; decision: 'approved' | 'rejected' }
   | { type: 'clarify'; clarifyId: string; questions: ClarifyQuestion[] }
   | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> }
+  // Credential request. Every field here is SERVER-AUTHORED from the code
+  // catalogue in $lib/secrets/credential-requests — the model contributes only a
+  // provider key (validated against that table) and `reason`. There is
+  // deliberately no field on either event that can carry a secret value: the
+  // browser posts the value straight to /api/admin/apis/secrets and reports back
+  // only that it stored it. See SecretRequestModal + secret-gate.
+  | {
+      type: 'secret_request';
+      requestId: string;
+      provider: string;
+      title: string;
+      reason: string;
+      helpUrl?: string;
+      fields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; help?: string }>;
+      /** What the owner is agreeing to, shown above the form. */
+      destination: { handle: string; store: string; hosts: string[]; methods: string[]; storeOnly: boolean };
+      companions: Array<{ handle: string; hosts: string[]; methods: string[] }>;
+      assemble: 'single' | 'json';
+    }
+  | { type: 'secret_ack'; requestId: string; handle?: string; stored: boolean }
   // Dangerous-command approval gate surfaced by the Hermes plugin's
   // `send_exec_approval` (kind="approval" frame). The card's buttons reply
   // `/approve` | `/deny`, resolved gateway-side by the chat's session_key — so

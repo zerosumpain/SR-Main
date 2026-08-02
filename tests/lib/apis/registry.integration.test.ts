@@ -23,6 +23,7 @@ import {
   getSecretMeta,
   resolveSecretForUrl,
   assertSecretAllowedForUrl,
+  deleteSecret,
 } from '$lib/secrets/registry';
 import { handleApiRegister, handleApiCall, findApiEntry } from '$lib/workflows/site-tools/tools/apis';
 import { saveIntegration, callIntegration, deleteIntegration } from '$lib/apis/integrations';
@@ -232,5 +233,46 @@ d('API secret registry + integration register (integration)', () => {
       'owner',
     );
     await expect(callIntegration({ key: WRITE_KEY })).rejects.toThrow(/confirmWrite/);
+  });
+
+  it('refuses to inject a store-only credential set, whatever the URL', async () => {
+    // A multi-field credential SET (client_id + client_secret + refresh_token)
+    // is held for one server module to read, never attached to a request. Before
+    // {kind:'none'} existed such a row had to claim some injection, and
+    // {kind:'bearer'} would have pasted the entire JSON blob into an
+    // Authorization header for any caller that resolved it.
+    await upsertSecret({
+      handle: 'test-store-only',
+      source: 'vault',
+      value: JSON.stringify({ client_id: 'a', client_secret: 'b' }),
+      injection: { kind: 'none' },
+      allowedHosts: ['auth.example.com'],
+      allowedMethods: ['POST'],
+      allowedPathPrefixes: [],
+    });
+    // Even on its OWN allowed host and method, it refuses.
+    await expect(
+      resolveSecretForUrl('test-store-only', 'https://auth.example.com/token', 'POST'),
+    ).rejects.toThrow(/store-only/);
+    await expect(
+      assertSecretAllowedForUrl('test-store-only', 'https://auth.example.com/token', 'POST'),
+    ).rejects.toThrow(/store-only/);
+    await deleteSecret('test-store-only');
+  });
+
+  it('still requires a host binding on a store-only row', async () => {
+    // The binding stays mandatory: $lib/secrets/oauth-refresh checks the token
+    // endpoint against it before sending the client_secret anywhere.
+    await expect(
+      upsertSecret({
+        handle: 'test-store-only-nohost',
+        source: 'vault',
+        value: 'x',
+        injection: { kind: 'none' },
+        allowedHosts: [],
+        allowedMethods: [],
+        allowedPathPrefixes: [],
+      }),
+    ).rejects.toThrow(/at least one allowed host/);
   });
 });

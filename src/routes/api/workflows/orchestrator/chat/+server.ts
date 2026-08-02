@@ -18,8 +18,15 @@ import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabili
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
-import { subscribeToolSteps, registerToolConfirmer, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
+import {
+  subscribeToolSteps,
+  registerToolConfirmer,
+  registerSecretRequester,
+  type ToolStepEvent,
+} from '$lib/jkai/tool-step-bus';
 import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
+import { requireSecret } from '$lib/workflows/chat/secret-gate';
+import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
@@ -380,6 +387,15 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     }
     const approved = await requireConfirmation(jobId, req.prompt, req.args, { destructive: true });
     return { approved, reason: approved ? undefined : 'the user declined it' };
+  });
+  // Credential-request gate. Same join as the confirmer above (busKey -> jobId),
+  // for `request_credential`. The value never passes through here: this only
+  // opens the form and reports the outcome. See secret-gate.ts.
+  const unregisterSecretRequester = registerSecretRequester(toolStepKey, async (req) => {
+    if (abortController.signal.aborted) return { status: 'declined' };
+    const spec = specForRequest({ provider: req.provider, custom: req.custom });
+    if (!spec) return { status: 'declined' };
+    return requireSecret(jobId, spec, req.reason);
   });
   const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
     if (abortController.signal.aborted) return;
@@ -857,6 +873,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // budget expires.
       unsubscribeToolSteps();
       unregisterConfirmer();
+      unregisterSecretRequester();
     }
   })();
 
@@ -1425,19 +1442,37 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
   const typed = body as
     | { type: 'plan_ack'; planId: string; decision: 'approved' | 'rejected' | 'adjusted'; adjustment?: string }
     | { type: 'confirm_ack'; confirmId: string; decision: 'approved' | 'rejected' }
-    | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> };
+    | { type: 'clarify_ack'; clarifyId: string; answers: Record<string, string> }
+    | { type: 'secret_ack'; requestId: string; handle?: string; stored: boolean };
+
+  // A `secret_ack` sits one hop from a plaintext credential, and this handler
+  // echoes the ack onto the SSE stream. REJECT any unexpected key rather than
+  // stripping it: stripping would let a future edit quietly widen the shape
+  // into a value channel, whereas a 400 shows up immediately.
+  if ((body as { type?: string }).type === 'secret_ack') {
+    const allowed = new Set(['type', 'requestId', 'handle', 'stored']);
+    const extra = Object.keys(body as Record<string, unknown>).filter((k) => !allowed.has(k));
+    if (extra.length) {
+      return json(
+        { error: `secret_ack accepts only ${[...allowed].join(', ')} — got unexpected ${extra.join(', ')}` },
+        { status: 400 },
+      );
+    }
+  }
 
   let key: string;
   switch (typed.type) {
     case 'plan_ack':     key = `plan:${typed.planId}`; break;
     case 'confirm_ack':  key = `confirm:${typed.confirmId}`; break;
     case 'clarify_ack':  key = `clarify:${typed.clarifyId}`; break;
+    case 'secret_ack':   key = `secret:${typed.requestId}`; break;
     default:             return json({ error: 'unknown ack type' }, { status: 400 });
   }
 
   const payload: unknown =
     typed.type === 'plan_ack'     ? { decision: typed.decision, adjustment: typed.adjustment } :
     typed.type === 'confirm_ack'  ? { decision: typed.decision } :
+    typed.type === 'secret_ack'   ? { stored: typed.stored === true, handle: typed.handle } :
     /* clarify_ack */               { answers: typed.answers };
 
   const ok = respondToWaiter(jobId, key, payload);

@@ -310,12 +310,12 @@ async function executeApiCall(
 async function authHint(entry: ApiEntry, url: string): Promise<string> {
   try {
     if ((entry.auth?.kind ?? 'none') !== 'none') {
-      return ' — the configured credential was rejected by the API. Check the auth style (bearer vs custom header) or ask the owner to re-enter the key at /admin/ai/apis.';
+      return ' — the configured credential was rejected by the API. Check the auth style (bearer vs custom header), or call `request_credential` to have the owner re-enter it (never ask for it in the chat).';
     }
     const { secretsForUrl } = await import('$lib/secrets/registry');
     const candidates = await secretsForUrl(url);
     if (candidates.length === 0) {
-      return ' — this API needs authentication and no credential in the secret registry is bound to this host. Ask the owner to add one at /admin/ai/apis (you cannot read key values, only reference them by handle).';
+      return ' — this API needs authentication and no credential in the secret registry is bound to this host. Call `request_credential` to ask the owner for it: that opens a secure form in their browser and stores the value encrypted. NEVER ask them to paste a key into the chat.';
     }
     const names = candidates.map((c) => `"${c.handle}"`).join(', ');
     return (
@@ -802,7 +802,13 @@ export async function handleApiSecretsList(): Promise<ToolResult> {
           label: s.label,
           allowedHosts: s.allowedHosts,
           allowedPathPrefixes: s.allowedPathPrefixes,
-          injection: s.injection.kind === 'bearer' ? 'bearer' : `${s.injection.kind}:${s.injection.name}`,
+          injection:
+            s.injection.kind === 'bearer' || s.injection.kind === 'none'
+              ? s.injection.kind
+              : `${s.injection.kind}:${s.injection.name}`,
+          // A store-only row holds a credential SET for one server module to
+          // read; it is never attached to a request, so `api_call` cannot use it.
+          storeOnly: s.injection.kind === 'none',
           available: s.available,
           unavailableReason: s.unavailableReason,
           lastUsedAt: s.lastUsedAt,
@@ -810,7 +816,8 @@ export async function handleApiSecretsList(): Promise<ToolResult> {
         note:
           'You can never read these values. To use one, catalogue the API with api_register and set ' +
           'auth {"kind":"secret","handle":"<handle>"} — the value is injected server-side at call time and ' +
-          'only for the hosts/paths listed here. Ask the owner to add or re-scope a credential at /admin/ai/apis.',
+          'only for the hosts/paths listed here. To obtain a credential that is missing, call `request_credential` — ' +
+          'it opens a secure form in the owner\'s browser. NEVER ask the owner to paste a key, token or password into the chat.',
       },
     };
   } catch (err) {
