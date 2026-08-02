@@ -48,10 +48,14 @@ packages/jkai-run-worker/dist/
 # scrape scripts + metadata). Never synced to the VPS; see script-store.ts.
 scraper-scripts/
 
-# Claude Code agent scratch space
+# Claude Code agent scratch space. `.claude/skills/` is deliberately NOT here:
+# those five skills are project knowledge (deploy flow, local QA, design system,
+# project pages, workflow nodes) and encode real incidents. Ignoring them meant
+# a `git worktree` — which is how agents do feature work — checked out CLAUDE.md
+# but none of the skills, so the guidance was missing exactly where it was
+# needed, and edits to it died on the next clone.
 .claude/worktrees/
 .claude/settings.json
-.claude/skills/
 
 # Playwright artifacts
 test-results/
