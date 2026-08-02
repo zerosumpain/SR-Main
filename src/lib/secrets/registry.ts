@@ -33,6 +33,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { apiSecrets, type ApiSecretRow } from '$lib/db/schema';
 import { decryptPayload, encryptPayload } from '$lib/integrations/crypto';
+import { getOAuthAccessToken, OAUTH_PROVIDERS } from './oauth-refresh';
 
 export type SecretInjection =
   | { kind: 'bearer' }
@@ -105,6 +106,19 @@ const REF_SOURCES: Record<string, { label: string; resolve: () => Promise<string
   github: {
     label: 'GitHub API token (env GITHUB_API_TOKEN)',
     resolve: async () => process.env.GITHUB_API_TOKEN,
+  },
+  // OAuth2 providers: `resolve()` runs on every request, so these trade the
+  // stored credential set for a short-lived access token and cache it until it
+  // is close to expiry. The client_secret / refresh_token live encrypted in the
+  // companion `<provider>-oauth` vault secret and never leave the server.
+  // See $lib/secrets/oauth-refresh.
+  truelayer: {
+    label: OAUTH_PROVIDERS.truelayer.label,
+    resolve: async () => getOAuthAccessToken('truelayer'),
+  },
+  paypal: {
+    label: OAUTH_PROVIDERS.paypal.label,
+    resolve: async () => getOAuthAccessToken('paypal'),
   },
 };
 
