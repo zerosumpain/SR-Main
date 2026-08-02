@@ -6,6 +6,7 @@ import { engine } from '$lib/workflows';
 import type { WorkflowDefinition } from '$lib/workflows';
 import { isDisplayOnlyType } from '$lib/workflows/types';
 import { emitObs } from '$lib/workflows/observability-bus';
+import { cronTimezone } from '$lib/workflows/cron-timezone';
 
 // Tracks active Cron instances keyed by schedule ID
 const activeJobs = new Map<string, Cron>();
@@ -88,11 +89,16 @@ export function registerCronJob(schedule: {
     return;
   }
 
-  const job = new Cron(expression, async () => {
+  // Without an explicit timezone croner uses server local time, which on the
+  // VPS is UTC — so "0 20 * * *" fired at 21:00 through BST while the canvas UI
+  // labelled it Europe/London. See $lib/workflows/cron-timezone.
+  const timezone = cronTimezone(cfg);
+  const job = new Cron(expression, { timezone }, async () => {
     await runScheduledWorkflow(schedule.workflowId, schedule.id);
   });
 
   activeJobs.set(schedule.id, job);
+  console.log(`[scheduler] Registered schedule ${schedule.id} (${expression} ${timezone})`);
 }
 
 export function unregisterCronJob(scheduleId: string): void {

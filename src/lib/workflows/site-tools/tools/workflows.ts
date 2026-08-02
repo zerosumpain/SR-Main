@@ -1388,7 +1388,7 @@ register({
     properties: {
       workflowId: { type: 'string', description: 'Workflow ID' },
       type: { type: 'string', description: 'Schedule type (e.g. "cron")' },
-      config: { type: 'object', description: 'Schedule config. For cron, set the 5-field cron string as { "expression": "0 8 * * *" } (daily at 8am). "cron" is accepted as an alias.' },
+      config: { type: 'object', description: 'Schedule config. For cron, set the 5-field cron string as { "expression": "0 8 * * *" } (daily at 8am). "cron" is accepted as an alias. Times are interpreted in Europe/London (so "0 8" means 8am the owner\'s time, all year) unless you set { "timezone": "..." } to an IANA zone.' },
     },
     required: ['workflowId', 'type', 'config'],
   },
