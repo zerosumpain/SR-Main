@@ -55,8 +55,24 @@ export async function handleUpdateCredential(
   // The MCP dispatcher publishes args to the tool-step SSE stream BEFORE the
   // handler runs, so a key in `reason` would be in the transcript already.
   // Refuse rather than sanitise — continuing would teach the model it works.
+  //
+  // `handle` is deliberately EXEMPT from the length heuristic, and only from
+  // that one. `looksLikeCredential` fires on any unbroken 25-character run of
+  // [A-Za-z0-9_-], which a perfectly ordinary handle reaches — `normaliseHandle`
+  // permits 64 such characters, so `companies-house-production` would have been
+  // rejected outright and that credential could never have been updated at all.
+  // (Found by probing the deployed tool with the handle
+  // `definitely-not-registered`: exactly 25 characters, refused as a secret.)
+  //
+  // Exempting it is safe because a handle is not secret — `api_secrets_list`
+  // already returns every one of them to the model — and because it is checked
+  // against the registry below, so a key smuggled in as a handle matches nothing
+  // and is refused anyway. `hasSensitive` still covers it, and every other
+  // argument keeps the full scan.
+  const { handle: rawHandle, ...rest } = args ?? {};
   const argText = JSON.stringify(args ?? {});
-  if (hasSensitive(argText) || looksLikeCredential(argText)) {
+  const scannable = JSON.stringify(rest);
+  if (hasSensitive(argText) || looksLikeCredential(scannable)) {
     return {
       success: false,
       error:
@@ -65,9 +81,20 @@ export async function handleUpdateCredential(
     };
   }
 
-  const handle = String(args.handle ?? '').trim();
+  const handle = String(rawHandle ?? '').trim();
   if (!handle) {
     return { success: false, error: 'handle is required — call api_secrets_list to see which handles exist.' };
+  }
+  // Structural check on the exempted field: a registry handle is lower-case
+  // letters, digits, dash and underscore. Anything else is not a handle, so it
+  // is refused before it can be looked up.
+  if (!/^[a-z0-9_-]{1,64}$/.test(handle)) {
+    return {
+      success: false,
+      error:
+        `"${handle.slice(0, 24)}…" is not a registry handle — handles are lower-case letters, digits, dash and ` +
+        `underscore. Call api_secrets_list to see the real ones.`,
+    };
   }
 
   const change = String(args.change ?? 'value');

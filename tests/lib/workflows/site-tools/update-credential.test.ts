@@ -59,6 +59,43 @@ describe('argument guard', () => {
     expect(requests).toHaveLength(0);
   });
 
+  it('REGRESSION: a long but perfectly ordinary handle is NOT mistaken for a secret', async () => {
+    // `looksLikeCredential` fires on any unbroken 25-character run of
+    // [A-Za-z0-9_-]. `normaliseHandle` permits 64 such characters, so scanning
+    // the handle rejected legitimate ones outright and made those credentials
+    // permanently un-updatable. Caught by probing the DEPLOYED tool with
+    // `definitely-not-registered` — exactly 25 characters.
+    const long = 'companies-house-production';
+    expect(long.length, 'precondition: long enough to trip the heuristic').toBeGreaterThanOrEqual(25);
+    secrets[long] = vaultRow({ handle: long });
+    outcomes.push({ status: 'declined' });
+
+    const res = await handleUpdateCredential({ handle: long, change: 'value', reason: 'the key expired' }, ctx);
+    expect(res.success).toBe(true);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('still refuses a credential-shaped string in any OTHER argument', async () => {
+    const long = 'companies-house-production';
+    secrets[long] = vaultRow({ handle: long });
+    const res = await handleUpdateCredential(
+      { handle: long, change: 'value', reason: `use ${CANARY}` },
+      ctx,
+    );
+    expect(res.success).toBe(false);
+    expect(JSON.stringify(res)).not.toContain(CANARY);
+  });
+
+  it('refuses a handle that is not handle-shaped, so a key smuggled there matches nothing', async () => {
+    const res = await handleUpdateCredential(
+      { handle: 'sk-Live/Key+Value=', change: 'value', reason: 'probe' },
+      ctx,
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not a registry handle/);
+    expect(requests).toHaveLength(0);
+  });
+
   it('refuses a credential smuggled through a proposed hostname', async () => {
     const res = await handleUpdateCredential(
       { handle: 'companies-house', change: 'binding', reason: 'vendor moved', binding: { addHosts: [CANARY] } },
