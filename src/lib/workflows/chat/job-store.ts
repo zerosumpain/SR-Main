@@ -1,3 +1,8 @@
+// Type-only: `credential-requests` reaches the DB transitively, so a value
+// import here would drag server code into any client bundle that types a
+// JobEvent. `import type` is erased at compile.
+import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
+
 /** One sub-agent row under a `delegate_task` tool step (sub-agent visualizer).
  *  Parsed adapter-side from the delegation result, so the full child summary +
  *  tool trace survive the per-tool result preview cap. */
@@ -78,19 +83,15 @@ export type JobEvent =
   // deliberately no field on either event that can carry a secret value: the
   // browser posts the value straight to /api/admin/apis/secrets and reports back
   // only that it stored it. See SecretRequestModal + secret-gate.
-  | {
-      type: 'secret_request';
-      requestId: string;
-      provider: string;
-      title: string;
-      reason: string;
-      helpUrl?: string;
-      fields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; help?: string }>;
-      /** What the owner is agreeing to, shown above the form. */
-      destination: { handle: string; store: string; hosts: string[]; methods: string[]; storeOnly: boolean };
-      companions: Array<{ handle: string; hosts: string[]; methods: string[] }>;
-      assemble: 'single' | 'json';
-    }
+  //
+  // Two variants share the event: a CREATE names a provider from that table and
+  // describes the row about to be written; an UPDATE names an existing handle
+  // and describes the change to it. Both are authored server-side, and the
+  // update variant additionally has its write registered under `requestId` in
+  // $lib/secrets/pending-updates so the browser cannot alter where the
+  // credential ends up. The `kind` discriminant is absent on create, for
+  // backwards compatibility with clients that predate updates.
+  | ({ type: 'secret_request' } & (SecretRequestEvent | SecretUpdateEvent))
   | { type: 'secret_ack'; requestId: string; handle?: string; stored: boolean }
   // Dangerous-command approval gate surfaced by the Hermes plugin's
   // `send_exec_approval` (kind="approval" frame). The card's buttons reply

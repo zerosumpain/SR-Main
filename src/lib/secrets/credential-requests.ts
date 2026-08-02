@@ -20,7 +20,7 @@
 // hand them over. They ended up in ten places including an LLM provider. This
 // table plus the modal is the supported alternative.
 
-import type { SecretInjection } from './registry';
+import { classifyBindingChange, type BindingChange, type SecretBinding, type SecretInjection } from './registry';
 import { OAUTH_PROVIDERS } from './oauth-refresh';
 
 export interface CredentialField {
@@ -202,4 +202,242 @@ export interface SecretRequestEvent {
 /** Provider keys the tool's enum offers, plus `custom`. */
 export function credentialProviderKeys(): string[] {
   return [...Object.keys(CREDENTIAL_REQUEST_SPECS), 'custom'];
+}
+
+// ---------------------------------------------------------------------------
+// Updating a credential that already exists
+//
+// Everything above is the CREATE path: the model names a provider, the binding
+// comes from the table, and a brand-new row is written. An update is a different
+// question — it targets a row that already exists, so the tool that drives it
+// must take a handle, which is the parameter the create path deliberately does
+// not have.
+//
+// What keeps that safe is that a handle is not a capability. `update_credential`
+// can only name a row the owner already created, it cannot change `injection`,
+// `source` or `refKey` (see the narrow primitives in registry.ts), and a binding
+// change that reaches a NEW host requires the owner to type that host. The model
+// contributes a suggestion; the server authors the plan; the owner types the one
+// thing that could move a key somewhere new.
+// ---------------------------------------------------------------------------
+
+/** The `secret_request` payload when the request is an UPDATE, as the browser
+ *  receives it. Like its create sibling it has no field that can carry a value. */
+export interface SecretUpdateEvent {
+  requestId: string;
+  kind: 'update';
+  handle: string;
+  title: string;
+  reason: string;
+  /** 'rotate' replaces the whole value, 'amend' changes some fields of a
+   *  credential set, 'rebind' changes where the credential may be sent. */
+  mode: 'rotate' | 'amend' | 'rebind';
+  helpUrl?: string;
+  /** Value modes only. On `amend` nothing is required — blank keeps the current. */
+  fields: Array<{
+    key: string;
+    label: string;
+    type: string;
+    required: boolean;
+    placeholder?: string;
+    help?: string;
+  }>;
+  assemble: 'single' | 'json';
+  /** What the row looks like now — the left-hand side of the diff. */
+  current: {
+    label: string;
+    hosts: string[];
+    methods: string[];
+    pathPrefixes: string[];
+    storeOnly: boolean;
+  };
+  /** Rebind only — the right-hand side. */
+  proposed?: { hosts: string[]; methods: string[]; pathPrefixes: string[] };
+  /** Rebind only — which way each part of the binding moved. */
+  change?: BindingChange;
+  /** Hostnames the owner must retype before the form will save. */
+  requiresTypedHosts: string[];
+}
+
+/** Metadata this module needs about an existing row. Structurally the subset of
+ *  `SecretMeta` that matters here, declared locally so nothing imports a value
+ *  from the registry just to describe a row. */
+export interface ExistingSecret {
+  handle: string;
+  label: string;
+  source: 'vault' | 'ref';
+  refKey?: string;
+  injectionKind: string;
+  allowedHosts: string[];
+  allowedMethods: string[];
+  allowedPathPrefixes: string[];
+}
+
+/** The catalogue entry that owns a handle, if any. Lets an update of a known
+ *  provider reuse its real field list instead of a generic "new value" box. */
+export function specByHandle(handle: string): CredentialRequestSpec | null {
+  const h = String(handle ?? '').toLowerCase();
+  for (const spec of Object.values(CREDENTIAL_REQUEST_SPECS)) {
+    if (spec.binding.handle.toLowerCase() === h) return spec;
+  }
+  return null;
+}
+
+/** A binding delta as the model may propose it. Adds and removes rather than an
+ *  absolute list, so "add POST" cannot silently drop a host by omission. */
+export interface BindingDelta {
+  addHosts?: string[];
+  removeHosts?: string[];
+  addMethods?: string[];
+  removeMethods?: string[];
+  addPathPrefixes?: string[];
+  removePathPrefixes?: string[];
+}
+
+function normList(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => String(x ?? '').trim()).filter(Boolean);
+}
+
+/** Apply a delta to the current binding. Pure — no validation, that is the
+ *  registry's job on write; this only has to produce the diff the owner sees. */
+export function applyBindingDelta(current: SecretBinding, delta: BindingDelta): SecretBinding {
+  const merge = (kept: string[], drop: string[], add: string[]) =>
+    Array.from(new Set([...kept.filter((x) => !drop.includes(x)), ...add]));
+
+  const lower = (xs: string[]) => xs.map((x) => x.toLowerCase());
+  const upper = (xs: string[]) => xs.map((x) => x.toUpperCase());
+  const prefix = (xs: string[]) => xs.map((p) => (p.startsWith('/') ? p : '/' + p));
+
+  return {
+    allowedHosts: merge(
+      lower(current.allowedHosts),
+      lower(normList(delta.removeHosts)),
+      lower(normList(delta.addHosts)),
+    ),
+    allowedMethods: merge(
+      upper(current.allowedMethods),
+      upper(normList(delta.removeMethods)),
+      upper(normList(delta.addMethods)),
+    ),
+    allowedPathPrefixes: merge(
+      current.allowedPathPrefixes,
+      prefix(normList(delta.removePathPrefixes)),
+      prefix(normList(delta.addPathPrefixes)),
+    ),
+  };
+}
+
+export interface UpdatePlan {
+  event: SecretUpdateEvent;
+  /** What the endpoint will actually write. Never travels via the browser. */
+  write: {
+    handle: string;
+    mode: 'rotate' | 'amend' | 'rebind';
+    allowedFieldKeys: string[];
+    binding?: SecretBinding;
+    requiresTypedHosts: string[];
+  };
+}
+
+/**
+ * Turn "jkai wants to change <handle>" into the form the owner sees and the
+ * write the server will perform. Both halves are derived HERE, server-side; the
+ * model supplied only the handle, a reason, and (for a rebind) a suggested
+ * delta that this function turns into a reviewable diff.
+ */
+export function buildUpdatePlan(input: {
+  requestId: string;
+  existing: ExistingSecret;
+  change: 'value' | 'binding';
+  reason: string;
+  delta?: BindingDelta;
+}): UpdatePlan {
+  const { requestId, existing } = input;
+  const spec = specByHandle(existing.handle);
+  const title = spec?.title ?? existing.label ?? existing.handle;
+  const reason = String(input.reason ?? '').slice(0, 200);
+
+  const current: SecretBinding = {
+    allowedHosts: existing.allowedHosts ?? [],
+    allowedMethods: existing.allowedMethods ?? [],
+    allowedPathPrefixes: existing.allowedPathPrefixes ?? [],
+  };
+  const currentView = {
+    label: existing.label,
+    hosts: current.allowedHosts,
+    methods: current.allowedMethods,
+    pathPrefixes: current.allowedPathPrefixes,
+    storeOnly: existing.injectionKind === 'none',
+  };
+
+  if (input.change === 'binding') {
+    const proposed = applyBindingDelta(current, input.delta ?? {});
+    const change = classifyBindingChange(current, proposed);
+    return {
+      event: {
+        requestId,
+        kind: 'update',
+        handle: existing.handle,
+        title,
+        reason,
+        mode: 'rebind',
+        // A rebind moves no secret value, so the form has no inputs for one.
+        fields: [],
+        assemble: 'single',
+        current: currentView,
+        proposed: {
+          hosts: proposed.allowedHosts,
+          methods: proposed.allowedMethods,
+          pathPrefixes: proposed.allowedPathPrefixes,
+        },
+        change,
+        requiresTypedHosts: change.addedHosts,
+      },
+      write: {
+        handle: existing.handle,
+        mode: 'rebind',
+        allowedFieldKeys: [],
+        binding: proposed,
+        requiresTypedHosts: change.addedHosts,
+      },
+    };
+  }
+
+  // Value change. A catalogued multi-field provider gets its real field list
+  // with everything optional — that is what makes "only the refresh token
+  // rotated" a one-box job. Anything else replaces a single value outright.
+  const isFieldSet = spec?.assemble === 'json';
+  const fields = isFieldSet
+    ? spec!.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        type: f.type as string,
+        required: false,
+        placeholder: f.placeholder,
+        help: f.help ? `${f.help} Leave blank to keep the current value.` : 'Leave blank to keep the current value.',
+      }))
+    : [{ key: 'value', label: 'New value', type: 'password', required: true }];
+
+  return {
+    event: {
+      requestId,
+      kind: 'update',
+      handle: existing.handle,
+      title,
+      reason,
+      mode: isFieldSet ? 'amend' : 'rotate',
+      helpUrl: spec?.helpUrl,
+      fields,
+      assemble: isFieldSet ? 'json' : 'single',
+      current: currentView,
+      requiresTypedHosts: [],
+    },
+    write: {
+      handle: existing.handle,
+      mode: isFieldSet ? 'amend' : 'rotate',
+      allowedFieldKeys: fields.map((f) => f.key),
+      requiresTypedHosts: [],
+    },
+  };
 }

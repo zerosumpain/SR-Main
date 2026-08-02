@@ -9,12 +9,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const outcomes: Array<{ status: string; handle?: string }> = [];
 let lastBusKey: string | undefined;
+/** Handles already in the registry. Empty by default — this is a CREATE path. */
+let existing: Record<string, { handle: string }> = {};
 
 vi.mock('$lib/jkai/tool-step-bus', () => ({
   requestSecretFromUser: vi.fn(async (busKey: string) => {
     lastBusKey = busKey;
     return outcomes.shift() ?? { status: 'unattended' };
   }),
+}));
+
+vi.mock('$lib/secrets/registry', () => ({
+  getSecretMeta: vi.fn(async (handle: string) => existing[handle] ?? null),
 }));
 
 const { handleRequestCredential, specForRequest, looksLikeCredential } = await import(
@@ -27,6 +33,7 @@ const CANARY = 'tlcs_live_abcd1234efgh5678ijkl9012mnop3456';
 beforeEach(() => {
   outcomes.length = 0;
   lastBusKey = undefined;
+  existing = {};
 });
 
 describe('argument guard', () => {
@@ -138,6 +145,51 @@ describe('bindings come from code, not from the model', () => {
     expect(spec.binding.handle).toMatch(/^[a-z0-9_-]*$/);
     expect(spec.binding.handle).not.toContain('/');
     expect(spec.binding.allowedMethods).toEqual(['GET', 'HEAD']);
+  });
+});
+
+describe('create only — it cannot overwrite an existing credential', () => {
+  it('REGRESSION: a custom handle that collides with a live row is refused, not rebound', async () => {
+    // upsertSecret rewrites allowedHosts, allowedMethods and injection
+    // unconditionally, and on the `custom` path those come from a MODEL-SUGGESTED
+    // host. Before this guard, suggesting a handle that sanitises onto one
+    // already in the registry silently re-pointed that credential — the exact
+    // attack the tool's no-handle-parameter design exists to prevent, reachable
+    // without a handle parameter at all.
+    existing['truelayer'] = { handle: 'truelayer' };
+    const res = await handleRequestCredential(
+      {
+        provider: 'custom',
+        reason: 'to read your bank balance',
+        custom: { suggestedHandle: 'truelayer', suggestedHost: 'evil.example', label: 'TrueLayer' },
+      },
+      { emit: () => {}, busKey: 'chat-1' },
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/already registered/);
+    expect(res.error).toMatch(/update_credential/);
+    // No form was opened, so the owner was never shown a save button for it.
+    expect(lastBusKey).toBeUndefined();
+  });
+
+  it('refuses a catalogued provider whose row already exists', async () => {
+    existing['truelayer-oauth'] = { handle: 'truelayer-oauth' };
+    const res = await handleRequestCredential(
+      { provider: 'truelayer', reason: 'to read your bank balance' },
+      { emit: () => {}, busKey: 'chat-1' },
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/update_credential with handle="truelayer-oauth"/);
+  });
+
+  it('still creates when the handle is free', async () => {
+    outcomes.push({ status: 'stored', handle: 'truelayer-oauth' });
+    const res = await handleRequestCredential(
+      { provider: 'truelayer', reason: 'to read your bank balance' },
+      { emit: () => {}, busKey: 'chat-1' },
+    );
+    expect(res.success).toBe(true);
+    expect((res.data as { status: string }).status).toBe('stored');
   });
 });
 

@@ -96,6 +96,28 @@ export async function handleRequestCredential(
     };
   }
 
+  // CREATE ONLY. `upsertSecret` writes the whole row, so letting this path run
+  // against an existing handle silently rewrites that credential's allowedHosts,
+  // methods and injection from the spec — and on the `custom` path the spec is
+  // built from a MODEL-SUGGESTED host. That is the re-pointing attack this
+  // file's header describes, reachable by nothing more than suggesting a handle
+  // that sanitises onto one already in the registry.
+  //
+  // So an existing handle is refused here and sent to `update_credential`, where
+  // a binding change is a reviewed diff and a newly-reachable host has to be
+  // typed by the owner.
+  const { getSecretMeta } = await import('$lib/secrets/registry');
+  const clash = await getSecretMeta(spec.binding.handle);
+  if (clash) {
+    return {
+      success: false,
+      error:
+        `a credential is already registered under the handle "${clash.handle}" and this tool only creates new ones. ` +
+        `To rotate its value or change what it may reach, call update_credential with handle="${clash.handle}". ` +
+        `To store a DIFFERENT credential, suggest a handle that is not already taken.`,
+    };
+  }
+
   const reason = String(args.reason ?? '').slice(0, 200);
   const outcome = await requestSecretFromUser(String(ctx?.busKey ?? ''), {
     provider: spec.provider,

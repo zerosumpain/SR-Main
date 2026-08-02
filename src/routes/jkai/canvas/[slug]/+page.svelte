@@ -27,7 +27,7 @@
   import NodePalette, { type Mode as PaletteMode } from '$lib/canvas/NodePalette.svelte';
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
   import SecretRequestModal from '$lib/components/jkai/SecretRequestModal.svelte';
-  import type { SecretRequestEvent } from '$lib/secrets/credential-requests';
+  import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
   // Shared canvas-shell geometry (E1). These are the SAME formulas this surface
   // already shipped, extracted so the research desk shares one implementation.
   // The local wrappers below keep their names + signatures; only their bodies
@@ -339,7 +339,7 @@
   let liveHealing = $state.raw<Record<string, HealingInfo>>({});
   let nowTick = $state(Date.now());
   // Credential request raised by `request_credential` from a canvas chat.
-  let pendingSecret = $state<SecretRequestEvent | null>(null);
+  let pendingSecret = $state<SecretRequestEvent | SecretUpdateEvent | null>(null);
   let pendingSecretJobId = $state<string | null>(null);
 
   /** Outcome only — { requestId, handle, stored }. The server rejects any other key. */
@@ -1281,7 +1281,7 @@
         // Without this branch the credential form never appears on the canvas
         // and `request_credential` blocks invisibly for its full 180s — on the
         // exact surface where the 2026-08-01 plaintext-credential leak happened.
-        pendingSecret = data as unknown as SecretRequestEvent;
+        pendingSecret = data as unknown as SecretRequestEvent | SecretUpdateEvent;
         pendingSecretJobId = jobId;
       } else if (data.type === 'secret_ack') {
         pendingSecret = null;

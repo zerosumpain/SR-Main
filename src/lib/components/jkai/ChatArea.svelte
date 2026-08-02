@@ -10,7 +10,7 @@
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
   import SecretRequestModal from '$lib/components/jkai/SecretRequestModal.svelte';
-  import type { SecretRequestEvent } from '$lib/secrets/credential-requests';
+  import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
   import ClarifyCard from '$lib/components/jkai/ClarifyCard.svelte';
   import SlashCommandButtonBar from '$lib/components/jkai/SlashCommandButtonBar.svelte';
   import { approvalAffordance } from '$lib/jkai/slash-commands';
@@ -301,7 +301,7 @@
   // Credential request from `request_credential`. Every field is server-authored
   // from $lib/secrets/credential-requests; the value never comes back through
   // here — the modal posts it straight to the owner-gated secrets endpoint.
-  let pendingSecret = $state<SecretRequestEvent | null>(null);
+  let pendingSecret = $state<SecretRequestEvent | SecretUpdateEvent | null>(null);
 
   /**
    * Report the OUTCOME of a credential request back to the blocked tool.
