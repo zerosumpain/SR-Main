@@ -126,7 +126,10 @@ describe('mcp/jsonrpc', () => {
     expect(Array.isArray(ok.result.content)).toBe(true);
     expect(ok.result.content[0].type).toBe('text');
     const parsed = JSON.parse(ok.result.content[0].text);
-    expect(Array.isArray(parsed.data)).toBe(true);
+    // workflow_list_node_types returns { matched, total, types } rather than a
+    // bare array, so a filtered call can say how much of the catalogue it cut.
+    expect(Array.isArray(parsed.data.types)).toBe(true);
+    expect(parsed.data.total).toBeGreaterThan(0);
   });
 
   it('publishes started + completed tool-step events to the bus on a successful tools/call', async () => {

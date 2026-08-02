@@ -18,6 +18,54 @@ import { registry } from '$lib/workflows';
 import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
 import { findFanInCollisions, type FanInCollision } from '$lib/workflows/fan-in';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
+import { credentialFields } from '$lib/canvas/mutate.server';
+
+/**
+ * The recovery instruction that ships INSIDE the failure, not in a skill file.
+ *
+ * On 2026-07-17 one session called workflow_build_from_spec 13 times and
+ * workflow_delete 14 times — the same canvas rebuilt from scratch on every
+ * verification failure, with zero lints and zero repairs. The advice that would
+ * have stopped it existed, in jkai-canvas/SKILL.md, inside a 2,063-character
+ * line of literal `\n` escapes that no reader could parse.
+ *
+ * A tool result is the only prompt slot guaranteed to be read at the moment the
+ * model is wrong, and it costs nothing when nothing is wrong. Anything the model
+ * must do ONLY on failure belongs here rather than in the always-loaded prompt.
+ */
+const REPAIR_DONT_REBUILD =
+  `The canvas EXISTS and every node is saved — this is a repair job, not a rebuild. ` +
+  `Fix each issue above with workflow_update_node (it takes a config patch; pass null to drop a key), ` +
+  `then workflow_lint to confirm they are gone. ` +
+  `Do NOT call workflow_delete and build again: deleting loses the node ids, the run history and the ` +
+  `canvas URL the user may already have open, and the rebuild reproduces the same guesses. ` +
+  `If a single node's shape is the problem, call workflow_describe_node for its exact config schema first.`;
+
+/**
+ * The refusal every MCP node-write shares.
+ *
+ * The human canvas (PATCH /api/workflows/[id]/nodes/[nodeId]) has thrown
+ * `SensitiveRefusalError` for a while, but the MCP tools wrote straight to the
+ * table — so the actor most likely to paste a key, the LLM, was the one actor
+ * with no guard. That is how a live bank client_secret reached nine tables on
+ * 2026-08-01.
+ *
+ * Names the offending FIELDS only, never the values, and points at the tool that
+ * exists precisely for this — otherwise the model does the cheap thing and asks
+ * the user to paste the key into the chat.
+ */
+function refuseCredentialConfig(fields: string[]): { success: false; error: string } {
+  return {
+    success: false,
+    error:
+      `Refusing to write this node: config field(s) ${fields.join(', ')} look like a live credential. ` +
+      `A secret in a node config spreads to the workflow row, run records, audit log and canvas history — ` +
+      `deleting the node afterwards does not recall it. ` +
+      `Never put a key in node config and never ask the user to paste one into the chat. ` +
+      `Instead call request_credential (new secret) or update_credential (rotation), then reference the ` +
+      `stored secret by its registry handle. Re-send this node with the credential field removed.`,
+  };
+}
 
 /**
  * Which nodes in this workflow have upstreams that overwrite each other.
@@ -335,6 +383,10 @@ register({
   name: 'workflow_build_from_spec',
   description:
     'Build a NEW canvas (workflow) from an EXPLICIT JSON spec — name, trigger, nodes, edges. ' +
+    'PREFER workflow_generate UNLESS the user dictated exact node types and config: this tool takes your spec verbatim, ' +
+    'so every config shape is a guess you are making, whereas workflow_generate grounds itself in the live node registry, ' +
+    'plans, runs a critic round, then verifies and self-heals before saving. Reach for this one when you need precise ' +
+    'control over an exact DAG the user specified. ' +
     'Use this when the user has confirmed the design you proposed in chat. ' +
     'DESIGN-FIRST WORKFLOW: Before calling this tool, you MUST have written out the design ' +
     'in chat (numbered nodes with type+label+config, edge wiring) and the user must have ' +
@@ -430,6 +482,13 @@ register({
     const v = validateSpec(args);
     if (!v.ok) return { success: false, error: v.error };
     const spec = v.spec;
+
+    // Scan the WHOLE spec before the canvas row exists — refusing halfway would
+    // leave a half-built canvas holding the secret it was refused over.
+    const specOffenders = [
+      ...new Set(spec.nodes.flatMap((n) => credentialFields(n.config ?? {}))),
+    ];
+    if (specOffenders.length > 0) return refuseCredentialConfig(specOffenders);
 
     // Slug + canvas URL up-front. Emit before any DB work so the user can
     // open the canvas before the first node lands.
@@ -695,7 +754,7 @@ register({
         error:
           `Workflow "${spec.name}" was created at ${url} but verification found ${errorIssues.length} blocking error(s) — fix them before telling the user it's done:\n\n` +
           formatIssues(errorIssues) +
-          `\n\nUse workflow_update_node to correct each node's config (the nodes are already on the canvas), then workflow_lint to confirm the errors are gone.`,
+          `\n\n${REPAIR_DONT_REBUILD}`,
         data,
       };
     }
@@ -1011,6 +1070,8 @@ register({
         }
       }
       for (const k of removeKeys) delete merged[k];
+      const offending = credentialFields(merged);
+      if (offending.length > 0) return refuseCredentialConfig(offending);
       updates.config = merged;
     }
 
@@ -1075,6 +1136,9 @@ register({
     const configErr = await validateNodeConfig(type, config);
     if (configErr) return { success: false, error: configErr };
 
+    const offending = credentialFields(config);
+    if (offending.length > 0) return refuseCredentialConfig(offending);
+
     const explicitPosition = args.position as { x: number; y: number } | undefined;
     const position = explicitPosition ?? (await nextNodePosition(workflowId));
 
@@ -1138,63 +1202,126 @@ async function nextNodePosition(workflowId: string): Promise<{ x: number; y: num
 
 register({
   name: 'workflow_list_node_types',
-  description: 'List all registered workflow node types with their labels, categories, and descriptions. Use this before workflow_add_node or workflow_update_node to discover the exact type string to use — this is the authoritative list, and anything not in it will be rejected.',
-  parameters: { type: 'object', properties: {}, required: [] },
+  description:
+    'List registered workflow node types with their labels, categories and descriptions. This is the authoritative list — anything not in it will be rejected by workflow_add_node / workflow_update_node. ' +
+    'PASS A `query` describing what you need ("whatsapp", "scrape a page", "run python") — the unfiltered catalogue is 88 types and costs ~5k tokens, a filtered one costs a few hundred. ' +
+    'Only omit `query` when you genuinely need to survey everything.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description:
+          'Case-insensitive filter over type, label, category and description. Space-separated words are OR-ed, so "email whatsapp notify" returns every messaging node.',
+      },
+      category: {
+        type: 'string',
+        description: 'Exact category filter (e.g. "control", "integration"). Combine with query to narrow further.',
+      },
+    },
+    required: [],
+  },
   category: 'Workflows',
   toolset: 'workflows',
-  handler: async () => {
+  handler: async (args) => {
     const { registry } = await import('$lib/workflows');
-    const defs = registry.listDefinitions().map((d) => ({
+    const all = registry.listDefinitions().map((d) => ({
       type: d.type,
       label: d.label,
       category: d.category,
       description: d.description,
     })).sort((a, b) => a.type.localeCompare(b.type));
-    return { success: true, data: defs };
+
+    const category = typeof args.category === 'string' ? args.category.trim().toLowerCase() : '';
+    const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : '';
+    const words = query ? query.split(/\s+/).filter(Boolean) : [];
+
+    let defs = all;
+    if (category) defs = defs.filter((d) => (d.category ?? '').toLowerCase() === category);
+    if (words.length > 0) {
+      defs = defs.filter((d) => {
+        const hay = `${d.type} ${d.label} ${d.category} ${d.description}`.toLowerCase();
+        return words.some((w) => hay.includes(w));
+      });
+    }
+
+    // A filter that matches nothing is worse than no filter — the model would
+    // conclude the capability does not exist and reach for jkai-node-builder.
+    // Fall back to the full catalogue and say so.
+    if (defs.length === 0 && (words.length > 0 || category)) {
+      return {
+        success: true,
+        data: {
+          matched: 0,
+          note: `No node type matched ${category ? `category "${category}"` : ''}${category && query ? ' + ' : ''}${query ? `query "${query}"` : ''}. Returning the full catalogue — do not conclude the capability is missing without reading it.`,
+          types: all,
+        },
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        matched: defs.length,
+        total: all.length,
+        ...(defs.length < all.length
+          ? { note: `Filtered to ${defs.length} of ${all.length} types. Re-run with a broader query if none fit.` }
+          : {}),
+        types: defs,
+      },
+    };
   },
 });
 
 register({
   name: 'workflow_describe_node',
   description:
-    'Get the FULL detail for a single node type — its config schema (every field with type, required flag, enum values and defaults), its input/output ports, usage guidance, and concrete example configs. ' +
-    'Call this after workflow_list_node_types (which only returns type/label/category/description) when you need to know exactly what config keys a node accepts before adding or updating it. ' +
-    'This returns the same grounding the orchestrator sees in its Node Registry, scoped to one type — use it to avoid guessing config shapes and getting rejected at write time.',
+    'Get the FULL detail for one or more node types — config schema (every field with type, required flag, enum values and defaults), input/output ports, usage guidance and example configs. ' +
+    'Call this after workflow_list_node_types when you need the exact config keys before adding or updating nodes. ' +
+    'PASS EVERY TYPE YOU PLAN TO USE IN ONE CALL: `types: ["llm-call","whatsapp","conditional"]`. A six-node build should cost one list + one describe, not seven round-trips. ' +
+    'This returns the same grounding the orchestrator sees in its Node Registry — use it instead of guessing config shapes and getting rejected at write time.',
   parameters: {
     type: 'object',
     properties: {
+      types: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Registered node types to describe, e.g. ["llm-call", "stealth-scrape", "conditional"]. Preferred over `type` — ask for everything the planned workflow needs at once.',
+      },
       type: {
         type: 'string',
-        description: 'The registered node type to describe (e.g. "llm-call", "stealth-scrape", "conditional"). Must match exactly — call workflow_list_node_types if unsure.',
+        description: 'Single registered node type. Accepted for convenience; prefer `types` when you need more than one.',
       },
     },
-    required: ['type'],
+    required: [],
   },
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const type = typeof args.type === 'string' ? args.type.trim() : '';
-    if (!type) return { success: false, error: '`type` (string) is required.' };
+    const requested = [
+      ...(Array.isArray(args.types) ? (args.types as unknown[]) : []),
+      ...(typeof args.type === 'string' ? [args.type] : []),
+    ]
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map((t) => t.trim());
+    const unique = [...new Set(requested)];
 
-    const { registry } = await import('$lib/workflows');
-    const def = registry.getDefinition(type);
-    if (!def) {
-      const valid = registry
-        .listDefinitions()
-        .map((d) => d.type)
-        .sort();
-      return {
-        success: false,
-        error: `Unknown node type "${type}". Valid types: ${valid.join(', ')}. Call workflow_list_node_types for labels/descriptions.`,
-      };
+    if (unique.length === 0) {
+      return { success: false, error: 'Pass `types` (array of node types) or `type` (single node type).' };
     }
 
+    const { registry } = await import('$lib/workflows');
     const { buildSingleNodeGrounding } = await import('$lib/workflows/orchestrator/grounding');
-    const grounding = buildSingleNodeGrounding(def, []);
 
-    return {
-      success: true,
-      data: {
+    const described: Record<string, unknown>[] = [];
+    const unknown: string[] = [];
+    for (const type of unique) {
+      const def = registry.getDefinition(type);
+      if (!def) {
+        unknown.push(type);
+        continue;
+      }
+      described.push({
         type: def.type,
         label: def.label,
         category: def.category,
@@ -1205,7 +1332,32 @@ register({
         defaultConfig: def.defaultConfig ?? {},
         required: def.configSchema?.required ?? [],
         examples: def.llmExamples ?? [],
-        grounding,
+        grounding: buildSingleNodeGrounding(def, []),
+      });
+    }
+
+    // All-unknown is a real failure. A partial miss is not: returning the good
+    // ones alongside the bad saves the model re-requesting the whole batch.
+    if (described.length === 0) {
+      const valid = registry.listDefinitions().map((d) => d.type).sort();
+      return {
+        success: false,
+        error: `Unknown node type(s): ${unknown.join(', ')}. Valid types: ${valid.join(', ')}. Call workflow_list_node_types with a query for labels/descriptions.`,
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        nodes: described,
+        ...(unknown.length > 0
+          ? {
+              unknown,
+              note: `Not registered: ${unknown.join(', ')}. Call workflow_list_node_types with a query to find the right type — do not invent one.`,
+            }
+          : {}),
+        // Kept so existing single-type callers that read data.configSchema keep working.
+        ...(described.length === 1 ? described[0] : {}),
       },
     };
   },
@@ -1933,6 +2085,17 @@ register({
     }
 
     const workflow = result.workflow;
+    if (workflow && workflow.nodes.length > 0) {
+      // Guard the generated graph BEFORE persisting. The generator is an LLM too,
+      // and a prompt like "call the API with key sk-…" hands it a live secret to
+      // copy into a node config. Same refusal as the hand-authored paths.
+      const generatedOffenders = [
+        ...new Set(
+          workflow.nodes.flatMap((n) => credentialFields((n.config ?? {}) as Record<string, unknown>)),
+        ),
+      ];
+      if (generatedOffenders.length > 0) return refuseCredentialConfig(generatedOffenders);
+    }
     if (!workflow || workflow.nodes.length === 0) {
       return {
         success: false,
@@ -2016,7 +2179,7 @@ register({
         error:
           `Workflow "${workflow.name}" was generated and saved at ${url}, but verification found ${errorIssues.length} blocking error(s) — fix them before telling the user it's done:\n\n` +
           formatIssues(errorIssues) +
-          `\n\nUse workflow_update_node to correct each node's config, then workflow_lint to confirm.`,
+          `\n\n${REPAIR_DONT_REBUILD}`,
         data,
       };
     }

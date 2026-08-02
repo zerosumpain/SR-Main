@@ -73,7 +73,7 @@ async function pickUniqueSlug(seed: string): Promise<string> {
 function validateSlide(slide: SlideSpec, path: string, depth: number): string[] {
   const issues: string[] = [];
   if (slide.layout && !isLayout(slide.layout)) {
-    issues.push(`${path}: unknown layout "${slide.layout}" — see the layout list in this tool's description`);
+    issues.push(`${path}: unknown layout "${slide.layout}" — call presentation_describe_vocabulary for the layout list`);
   }
   if (!Array.isArray(slide.blocks) || slide.blocks.length === 0) {
     issues.push(`${path}: blocks must be a non-empty array`);
@@ -137,6 +137,75 @@ function outlineMarkdown(slides: SlideSpec[], indent = ''): string {
     .join('\n');
 }
 
+/**
+ * The deck vocabulary, moved out of `presentation_build_from_spec`'s description.
+ *
+ * That description was 10,962 of the tool's 12,588 bytes — 3,147 tokens, 38% of
+ * the ENTIRE essential MCP manifest — and `presentation_build_from_spec` is an
+ * essential, so the full block catalogue was prefilled into every canvas chat,
+ * every workflow build and every WhatsApp turn on the chance a deck came up.
+ *
+ * It is now fetched on the one turn that needs it. The build tool still refuses
+ * an unknown block type and now returns this catalogue in the refusal, so a
+ * model that skips the lookup is corrected in one round-trip instead of guessing.
+ */
+/**
+ * When a spec was rejected over an unknown layout/block, append the catalogue to
+ * the refusal. The vocabulary left the always-loaded description, so a model that
+ * skipped `presentation_describe_vocabulary` gets it here — once, on the turn it
+ * actually needs it — rather than guessing a second time.
+ */
+function unknownBlockHint(issues: string[]): string {
+  const relevant = issues.some((i) => /unknown (layout|block)/i.test(i));
+  if (!relevant) return '';
+  const vocab = deckVocabulary();
+  return (
+    `\n\nValid layouts: ${vocab.layouts}\n\n` +
+    `Valid blocks: ${Object.entries(vocab.blocks).map(([k, v]) => `${k} — ${v}`).join(' | ')}`
+  );
+}
+
+export function deckVocabulary(): { layouts: string; blocks: Record<string, string> } {
+  return {
+    layouts: layoutDocsForLLM(),
+    blocks: Object.fromEntries(Object.entries(BLOCK_DOCS)) as Record<string, string>,
+  };
+}
+
+register({
+  name: 'presentation_describe_vocabulary',
+  description:
+    'The sr. decks authoring vocabulary: every slide LAYOUT and every BLOCK type with its usage note. ' +
+    'Call this before presentation_build_from_spec or presentation_rewrite — the build tools no longer carry the catalogue in their descriptions, and an unrecognised block type is rejected at write time.',
+  parameters: {
+    type: 'object',
+    properties: {
+      block: {
+        type: 'string',
+        description: 'Optional — return the note for a single block type instead of the whole catalogue.',
+      },
+    },
+    required: [],
+  },
+  category: 'Presentations',
+  toolset: 'presentations',
+  handler: async (args) => {
+    const vocab = deckVocabulary();
+    const block = typeof args.block === 'string' ? args.block.trim() : '';
+    if (block) {
+      const doc = vocab.blocks[block];
+      if (!doc) {
+        return {
+          success: false,
+          error: `Unknown block type "${block}". Valid block types: ${Object.keys(vocab.blocks).join(', ')}.`,
+        };
+      }
+      return { success: true, data: { block, doc } };
+    }
+    return { success: true, data: vocab };
+  },
+});
+
 register({
   name: 'presentation_build_from_spec',
   description:
@@ -149,10 +218,7 @@ register({
     'parent ("down for <journey_label>") leads down into the journey; ↑/Escape climb back. ' +
     'Every slide is a FIXED 1280×720 page — nothing scrolls, overfull specs are REJECTED with fit feedback: ' +
     'tighten the words, use a denser prose register (columns/ledger/cards), or split the content over two slides. ' +
-    `Layouts (pick for impact and vary them for rhythm): ${layoutDocsForLLM()} ` +
-    `Block vocabulary: ${Object.entries(BLOCK_DOCS)
-      .map(([k, v]) => `${k} — ${v}`)
-      .join(' | ')} ` +
+    'CALL presentation_describe_vocabulary FIRST for the layout and block catalogue — it is not repeated here. ' +
     'Any content block may carry step: N (1-12) — a build step: it stays hidden until the presenter\'s Nth ' +
     'forward press within the slide. Use sparingly to stage an argument on a single slide. ' +
     'Draw content from real site material (research_search, file_search, the data-spine study) — decks are ' +
@@ -193,7 +259,9 @@ register({
     if (issues.length) {
       return {
         success: false,
-        error: `spec failed validation — fix these and call again:\n- ${issues.join('\n- ')}`,
+        error:
+          `spec failed validation — fix these and call again:\n- ${issues.join('\n- ')}` +
+          unknownBlockHint(issues),
       };
     }
 
@@ -441,7 +509,12 @@ register({
 
     const issues = slides.flatMap((s, i) => validateSlide(s, `slides[${i}]`, 0));
     if (issues.length) {
-      return { success: false, error: `spec failed validation — fix these and call again:\n- ${issues.join('\n- ')}` };
+      return {
+        success: false,
+        error:
+          `spec failed validation — fix these and call again:\n- ${issues.join('\n- ')}` +
+          unknownBlockHint(issues),
+      };
     }
 
     const baseUrl = (process.env.PUBLIC_SITE_URL || 'https://strangeramblings.com').replace(/\/+$/, '');

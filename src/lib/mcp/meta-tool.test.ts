@@ -125,7 +125,7 @@ describe('jkai_extended meta-tool', () => {
         fakeCtx,
       )) as { success: boolean; data?: unknown };
       expect(result.success).toBe(true);
-      expect(Array.isArray(result.data)).toBe(true);
+      expect(Array.isArray((result.data as { types: unknown[] }).types)).toBe(true);
     });
 
     it('refuses to invoke an essential tool (essentials are not in the extended catalogue)', async () => {
