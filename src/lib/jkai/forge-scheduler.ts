@@ -17,6 +17,7 @@
 import { Cron } from 'croner';
 import { db } from '$lib/db';
 import { forgeSchedules, jkaiBuilds } from '$lib/db/schema';
+import { cronTimezone } from '$lib/workflows/cron-timezone';
 import { eq, and } from 'drizzle-orm';
 import type { ForgeSchedule } from '$lib/db/schema';
 import { createForgeBuild } from '$lib/jkai/forge';
@@ -130,9 +131,12 @@ export function registerForgeJob(schedule: ForgeSchedule): void {
   activeJobs.get(schedule.id)?.stop();
   activeJobs.delete(schedule.id);
 
+  // Same reason as the workflow scheduler: no timezone means server local time,
+  // which is UTC on the VPS. A forge schedule is a wall-clock time a human
+  // chose, so it has to be interpreted in theirs.
   let job: Cron;
   try {
-    job = new Cron(schedule.cron, async () => {
+    job = new Cron(schedule.cron, { timezone: cronTimezone(schedule) }, async () => {
       await fireForgeSchedule(schedule);
     });
   } catch (err) {
