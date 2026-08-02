@@ -97,6 +97,10 @@ startScheduledEngine().catch((err) => {
 // idle-time run. Neither belongs in the jkai-builder sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+// Nightly workflow doctor — triages node_executions failures, quarantines
+// runaway schedules, proposes fixes. Structural sibling of selfimprove: same
+// prod-only cron gate, same leader-elected lane, so it boots the same way.
+import { startWorkflowDoctor, stopWorkflowDoctor } from '$lib/workflowdoctor/engine';
 import { startBriefingEngine, stopBriefingEngine } from '$lib/briefing/engine';
 import { startConnectorMonitor, stopConnectorMonitor } from '$lib/connectors/monitor';
 import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
@@ -107,6 +111,7 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
+  startWorkflowDoctor();
   startBriefingEngine();
   startConnectorMonitor();
   startModelRouting();
@@ -142,6 +147,7 @@ async function gracefulShutdown() {
   unregisterGmailBridge();
   stopDatastoreReaper();
   stopSelfImprovement();
+  stopWorkflowDoctor();
   stopBriefingEngine();
   stopConnectorMonitor();
   stopModelRouting();

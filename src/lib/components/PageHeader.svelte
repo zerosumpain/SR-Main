@@ -42,6 +42,7 @@
     { href: '/jkai/canvas', label: 'Canvases' },
     { href: '/jkai/briefing', label: 'Briefing' },
     { href: '/jkai/improvement', label: 'Improvement' },
+    { href: '/jkai/doctor', label: 'Doctor' },
     { href: '/jkai/prompts', label: 'Prompts' },
   ];
 

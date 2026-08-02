@@ -34,12 +34,27 @@ function read(p) {
   return existsSync(p) ? readFileSync(p, 'utf8') : '';
 }
 
-/** String literals in the PUBLIC_PATHS array in src/lib/auth.ts. */
+/**
+ * String literals in the PUBLIC_PATHS array in src/lib/auth.ts.
+ *
+ * Comments are stripped BEFORE the literals are extracted. They used not to be,
+ * and the entries in that array are heavily commented — so any quoted word in
+ * the prose became a public prefix. The comment explaining that /jkai is NOT
+ * public reads `isPublicPath('/jkai') remains false`, which handed the scraper
+ * `/jkai` as a prefix and made the gate treat the entire owner-only jkai area
+ * as known-anonymous. It then stopped reporting anything added under it: ~40
+ * routes were listed in the snapshot as reachable without a session when they
+ * all 302 to /login. A gate that is green for the wrong reason is the one
+ * failure mode this script exists to prevent, so strip prose first.
+ */
 function publicPathsFromAuth() {
   const src = read(join(REPO, 'src', 'lib', 'auth.ts'));
   const block = src.match(/const PUBLIC_PATHS\s*=\s*\[([\s\S]*?)\n\];/);
   if (!block) return [];
-  return [...block[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const code = block[1]
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }
 
 // Hook-level bypasses: paths hooks.server.ts lets through BEFORE the Auth.js

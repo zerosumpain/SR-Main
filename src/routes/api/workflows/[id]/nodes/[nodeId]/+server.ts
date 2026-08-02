@@ -3,8 +3,13 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowNodes, workflowEdges } from '$lib/db/schema';
 import { and, eq, or } from 'drizzle-orm';
-import { recordAudit, recordAuditBatch } from '$lib/canvas/audit';
-import { diffNodePatch } from '$lib/canvas/audit-diff';
+import { recordAudit } from '$lib/canvas/audit';
+import {
+  mutateNodeConfig,
+  NodeNotFoundError,
+  SensitiveRefusalError,
+  VersionConflictError,
+} from '$lib/canvas/mutate.server';
 import { registry } from '$lib/workflows';
 import { resolveUpstreamSchema, schemaToVariablePaths } from '$lib/workflows/schema-propagation';
 
@@ -50,67 +55,68 @@ export const GET: RequestHandler = async ({ params }) => {
   }
 };
 
+/**
+ * The read-modify-write, the version check and the redacted audit entry all
+ * live in `mutateNodeConfig` now, so the nightly workflow doctor and this route
+ * cannot diverge on any of them. Status codes and body shapes are unchanged.
+ *
+ * One nuance: `config` is now MERGED over the stored value rather than
+ * replacing it, because that is what the doctor needs and there must be one
+ * door. Every in-tree client already sends `{ ...node.config, ...changes }`, so
+ * the result is identical for them — and a partial body no longer silently
+ * wipes the keys it omitted.
+ */
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}));
-  const updates: Record<string, unknown> = {};
-  if (body.config !== undefined) updates.config = body.config;
-  if (typeof body.label === 'string') updates.label = body.label;
-  if (body.position && typeof body.position === 'object') updates.position = body.position;
 
-  if (Object.keys(updates).length === 0) {
+  const wantsConfig = body.config !== undefined;
+  const wantsLabel = typeof body.label === 'string';
+  const wantsPosition = body.position && typeof body.position === 'object';
+  if (!wantsConfig && !wantsLabel && !wantsPosition) {
     return json({ error: 'No updatable fields provided' }, { status: 400 });
   }
-
-  // Load current state BEFORE the update so we can diff.
-  const [before] = await db
-    .select()
-    .from(workflowNodes)
-    .where(and(eq(workflowNodes.id, params.nodeId), eq(workflowNodes.workflowId, params.id)));
-  if (!before) return json({ error: 'Node not found' }, { status: 404 });
-
-  // Optimistic concurrency: if the client told us which version it edited and
-  // the node has since moved on (e.g. the AI orchestrator changed it), reject
-  // rather than silently overwrite the concurrent change.
-  if (typeof body.expectedVersion === 'number' && before.version !== body.expectedVersion) {
-    return json({ error: 'conflict', currentVersion: before.version }, { status: 409 });
-  }
-  updates.version = (before.version ?? 0) + 1;
-
-  const [updated] = await db
-    .update(workflowNodes)
-    .set(updates)
-    .where(and(eq(workflowNodes.id, params.nodeId), eq(workflowNodes.workflowId, params.id)))
-    .returning();
-
-  if (!updated) {
-    return json({ error: 'Node not found' }, { status: 404 });
+  if (wantsConfig && (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))) {
+    return json({ error: 'config must be an object' }, { status: 400 });
   }
 
-  // Emit audit entries for non-cosmetic changes.
-  const entries = diffNodePatch(
-    {
-      label: before.label,
-      config: (before.config as Record<string, unknown>) ?? {},
-      position: (before.position as { x: number; y: number }) ?? { x: 0, y: 0 },
-    },
-    {
-      label: typeof body.label === 'string' ? body.label : undefined,
-      config: body.config as Record<string, unknown> | undefined,
-    },
-  );
-  if (entries.length > 0) {
-    await recordAuditBatch(
-      entries.map((e) => ({
-        workflowId: params.id,
-        entity: 'node' as const,
-        entityId: params.nodeId,
-        action: e.action,
-        details: { ...e.details, label: updated.label, nodeType: updated.type },
-      })),
-    );
+  try {
+    const result = await mutateNodeConfig({
+      workflowId: params.id,
+      nodeId: params.nodeId,
+      patch: wantsConfig ? (body.config as Record<string, unknown>) : undefined,
+      label: wantsLabel ? (body.label as string) : undefined,
+      position: wantsPosition ? (body.position as { x: number; y: number }) : undefined,
+      expectedVersion:
+        typeof body.expectedVersion === 'number' ? body.expectedVersion : undefined,
+      actor: 'owner',
+      reason: 'canvas edit',
+    });
+    return json({ node: result.node });
+  } catch (err) {
+    if (err instanceof VersionConflictError) {
+      return json({ error: 'conflict', currentVersion: err.currentVersion }, { status: 409 });
+    }
+    if (err instanceof SensitiveRefusalError) {
+      // 422, not 409: nothing the client can retry. Patching a node that holds
+      // a credential republishes it through workflow_audit_log.details, so the
+      // node has to be deleted and recreated with the value in the secret
+      // registry instead. Field names only — the response is a log surface too.
+      return json(
+        {
+          error:
+            `This node holds a credential in: ${err.fields.join(', ')}. ` +
+            'Editing it would republish the value through the workflow audit log. ' +
+            'Delete the node and recreate it, keeping the secret in /admin/ai/apis.',
+          sensitiveFields: err.fields,
+        },
+        { status: 422 },
+      );
+    }
+    if (err instanceof NodeNotFoundError) {
+      return json({ error: 'Node not found' }, { status: 404 });
+    }
+    throw err;
   }
-
-  return json({ node: updated });
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {

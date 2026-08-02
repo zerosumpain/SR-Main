@@ -71,6 +71,9 @@
   // normal grouping, whatever the sort — failures were previously invisible
   // unless each canvas was opened.
   const FAILING_STATUSES = new Set(['failed', 'completed_with_errors']);
+  // Named so the header's Doctor link keys off the same string the bucket is
+  // built with — two literals would drift.
+  const FAILING_BUCKET = '⚠ Needs attention';
 
   const groupedCanvases = $derived.by(() => {
     const now = Date.now();
@@ -94,7 +97,7 @@
     const groups = BUCKET_ORDER[sortKey]
       .filter((name) => bucketed.has(name))
       .map((name) => ({ name, items: bucketed.get(name)! }));
-    return failing.length > 0 ? [{ name: '⚠ Needs attention', items: failing }, ...groups] : groups;
+    return failing.length > 0 ? [{ name: FAILING_BUCKET, items: failing }, ...groups] : groups;
   });
 
   function formatPct(v: number | null) {
@@ -329,6 +332,10 @@
           <div class="bucket-hd">
             <span class="bucket-name">{group.name}</span>
             <span class="bucket-count">{group.items.length}</span>
+            {#if group.name === FAILING_BUCKET}
+              <!-- The bucket names the casualties; the doctor says why. -->
+              <a class="row-link bucket-doctor" href="/jkai/doctor">Doctor →</a>
+            {/if}
           </div>
           <div class="grid">
             {#each group.items as c (c.workflowId)}
@@ -532,6 +539,8 @@
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
+  /* Pushed to the far end of the header row; typography comes from .row-link. */
+  .bucket-doctor { margin-left: auto; }
 
   /* ——— Stats ——— */
   .stats {
