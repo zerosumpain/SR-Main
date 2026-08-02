@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 /** The single fake `api_secrets` row the mocked db reads and writes. */
 let storedPayload: string;
+let storedHosts: string[] = ['auth.truelayer.com', 'api-m.paypal.com'];
 let updateCount = 0;
 
 vi.mock('$lib/db', () => ({
@@ -15,7 +16,9 @@ vi.mock('$lib/db', () => ({
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: async () => [{ handle: 'truelayer-oauth', payloadEnc: storedPayload }],
+          limit: async () => [
+            { handle: 'truelayer-oauth', payloadEnc: storedPayload, allowedHosts: storedHosts },
+          ],
         }),
       }),
     }),
@@ -61,6 +64,7 @@ function mockTokenEndpoint(body: Record<string, unknown>, ok = true, status = 20
 
 beforeEach(() => {
   updateCount = 0;
+  storedHosts = ['auth.truelayer.com', 'api-m.paypal.com'];
   vi.restoreAllMocks();
 });
 
@@ -166,5 +170,41 @@ describe('getOAuthAccessToken', () => {
   it('reports an actionable message when the vault row is missing its payload', async () => {
     storedPayload = '';
     await expect(getOAuthAccessToken('truelayer')).rejects.toThrow(/has no stored value/);
+  });
+
+  it('refuses to send the credential to a host the row is not bound to', async () => {
+    seed({ access_token: 'old', expires_at: now() - 10 });
+    storedHosts = ['evil.example.com'];
+    const f = mockTokenEndpoint({ access_token: 'nope' });
+    vi.stubGlobal('fetch', f);
+
+    await expect(getOAuthAccessToken('truelayer')).rejects.toThrow(/not bound to "auth\.truelayer\.com"/);
+    expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe('the documented vault-row setup is actually creatable', () => {
+  // REGRESSION. The module originally documented the vault row's allowedHosts as
+  // "stay empty". registry.validateHosts rejects an empty list outright, so the
+  // row could never be created through /admin/ai/apis and the whole feature was
+  // unusable. This asserts the documented host is present and non-empty, which
+  // is exactly the precondition upsertSecret enforces.
+  it('every provider declares a non-empty token host for its vault row', async () => {
+    const { OAUTH_PROVIDERS } = await import('$lib/secrets/oauth-refresh');
+    for (const [name, p] of Object.entries(OAUTH_PROVIDERS)) {
+      expect(p.tokenHost, `${name} tokenHost`).toBeTruthy();
+      expect(p.tokenUrl, `${name} tokenUrl must sit on tokenHost`).toContain(p.tokenHost);
+      expect(p.dataHost, `${name} dataHost`).toBeTruthy();
+      expect(p.vaultHandle, `${name} vaultHandle`).toMatch(/-oauth$/);
+    }
+  });
+
+  it('the declared token host survives registry host validation', async () => {
+    // Import the real validator rather than asserting a regex by eye.
+    const { hostMatchesPattern } = await import('$lib/secrets/registry');
+    const { OAUTH_PROVIDERS } = await import('$lib/secrets/oauth-refresh');
+    for (const p of Object.values(OAUTH_PROVIDERS)) {
+      expect(hostMatchesPattern(p.tokenHost, p.tokenHost)).toBe(true);
+    }
   });
 });

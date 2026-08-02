@@ -171,8 +171,93 @@ export async function requestToolConfirmation(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Credential requests
+// ---------------------------------------------------------------------------
+//
+// Same shape as the confirmer above, for a different question: not "may I run
+// this?" but "please hand me a credential I must never see". The value does NOT
+// travel back through this bus — the browser posts it straight to the
+// owner-gated secrets endpoint. What comes back here is only an outcome.
+
+/** What the model asked for. `provider` is validated against a code table by
+ *  the tool BEFORE it reaches here; nothing host- or handle-shaped from the
+ *  model is carried on this request. */
+export interface SecretRequest {
+  provider: string;
+  /** One sentence, rendered to the owner as quoted text — never as instruction. */
+  reason: string;
+  custom?: { label?: string; suggestedHost?: string; suggestedHandle?: string };
+}
+
+export interface SecretRequestOutcome {
+  status: 'stored' | 'declined' | 'timeout' | 'unattended';
+  /** Present only on 'stored'. A handle is not a value. */
+  handle?: string;
+}
+
+type SecretRequester = (req: SecretRequest) => Promise<SecretRequestOutcome>;
+
+const secretRequesters = new Map<string, SecretRequester>();
+
+/** Attach a credential-request handler for `busKey`, for the lifetime of the
+ *  SSE response. Unregister in the same cleanup block as the tool-step
+ *  unsubscribe or a stale requester will answer for a dead job. */
+export function registerSecretRequester(busKey: string, fn: SecretRequester): () => void {
+  if (!busKey) return () => {};
+  secretRequesters.set(busKey, fn);
+  return () => {
+    if (secretRequesters.get(busKey) === fn) secretRequesters.delete(busKey);
+  };
+}
+
+/** Whether a browser is attached that could show the form. */
+export function hasSecretRequester(busKey: string): boolean {
+  return !!busKey && secretRequesters.has(busKey);
+}
+
+/**
+ * Budget for the human to fetch a key out of a vendor console. Deliberately
+ * longer than a yes/no confirm but still under Hermes' 300s httpx read timeout,
+ * past which the MCP client has given up and waiting protects nothing.
+ */
+export const SECRET_REQUEST_TIMEOUT_MS = 180_000;
+
+/**
+ * Ask the human attached to `busKey` for a credential.
+ *
+ * Unlike `requestToolConfirmation` this deliberately does NOT honour
+ * `MCP_CONFIRM_UNATTENDED=allow`. That escape hatch exists so an unattended
+ * cron can still perform an approved action; there is no equivalent meaning
+ * here, because with no browser attached there is nobody to type a secret and
+ * "proceed anyway" would be nonsense. Unattended always reports back as such.
+ */
+export async function requestSecretFromUser(
+  busKey: string,
+  req: SecretRequest,
+): Promise<SecretRequestOutcome> {
+  const fn = busKey ? secretRequesters.get(busKey) : undefined;
+  if (!fn) return { status: 'unattended' };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      fn(req),
+      new Promise<SecretRequestOutcome>((resolve) => {
+        timer = setTimeout(() => resolve({ status: 'timeout' }), SECRET_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    // A cancelled or reaped job rejects its waiters. Nothing was stored.
+    return { status: 'declined' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Test helper — reset listener state between unit tests. */
 export function _resetToolStepBusForTests(): void {
   listeners.clear();
   confirmers.clear();
+  secretRequesters.clear();
 }

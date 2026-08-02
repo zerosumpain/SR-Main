@@ -9,6 +9,8 @@
   import PromoteToolBanner from '$lib/components/jkai/PromoteToolBanner.svelte';
   import PlanCard from '$lib/components/jkai/PlanCard.svelte';
   import ConfirmBanner from '$lib/components/jkai/ConfirmBanner.svelte';
+  import SecretRequestModal from '$lib/components/jkai/SecretRequestModal.svelte';
+  import type { SecretRequestEvent } from '$lib/secrets/credential-requests';
   import ClarifyCard from '$lib/components/jkai/ClarifyCard.svelte';
   import SlashCommandButtonBar from '$lib/components/jkai/SlashCommandButtonBar.svelte';
   import { approvalAffordance } from '$lib/jkai/slash-commands';
@@ -296,6 +298,36 @@
   let connectionWarning = $state<string | null>(null);
   let pendingPlan = $state<{ planId: string; plan: PlanPayload } | null>(null);
   let pendingConfirm = $state<{ confirmId: string; prompt: string; destructive?: boolean; details?: Record<string, unknown> } | null>(null);
+  // Credential request from `request_credential`. Every field is server-authored
+  // from $lib/secrets/credential-requests; the value never comes back through
+  // here — the modal posts it straight to the owner-gated secrets endpoint.
+  let pendingSecret = $state<SecretRequestEvent | null>(null);
+
+  /**
+   * Report the OUTCOME of a credential request back to the blocked tool.
+   * Carries only { requestId, handle, stored } — the server REJECTS any other
+   * key, so this cannot quietly become a value channel.
+   */
+  async function ackSecretRequest(result: { stored: boolean; handle?: string }) {
+    const req = pendingSecret;
+    pendingSecret = null;
+    if (!req || !currentJobId) return;
+    try {
+      await fetch(`/api/workflows/orchestrator/chat?jobId=${currentJobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'secret_ack',
+          requestId: req.requestId,
+          handle: result.handle,
+          stored: result.stored,
+        }),
+      });
+    } catch {
+      // The tool's own 180s timeout is the backstop if this never lands.
+    }
+  }
+
   let pendingClarify = $state<{ clarifyId: string; questions: ClarifyQuestion[] } | null>(null);
   // Dangerous-command approval gate (Hermes `send_exec_approval` → kind="approval").
   // No waiter/id: the card's buttons reply /approve|/deny, resolved gateway-side by
@@ -1091,6 +1123,20 @@
 
       if (data.type === 'confirm_ack') {
         pendingConfirm = null;
+        return;
+      }
+
+      // Credential request. Rendered as a modal, NOT as an inline card: a
+      // credential form must not live inside a scrolling progress bubble where
+      // it can be half-visible or scrolled away mid-entry.
+      if (data.type === 'secret_request') {
+        pendingSecret = data;
+        heartbeat = null;
+        return;
+      }
+
+      if (data.type === 'secret_ack') {
+        pendingSecret = null;
         return;
       }
 
@@ -2148,6 +2194,12 @@
                     details={pendingConfirm.details}
                     jobId={currentJobId ?? ''}
                     onresolve={() => { pendingConfirm = null; }}
+                  />
+                {/if}
+                {#if pendingSecret}
+                  <SecretRequestModal
+                    request={pendingSecret}
+                    onDone={(r) => ackSecretRequest(r)}
                   />
                 {/if}
                 {#if pendingClarify}

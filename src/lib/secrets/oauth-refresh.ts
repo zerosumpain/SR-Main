@@ -25,15 +25,26 @@
 // no new injection kind, no schema change, no new node type. Each provider gets
 // two rows in `api_secrets`:
 //
-//   <provider>-oauth   source=vault   payload = JSON credential set (encrypted)
+//   <provider>-oauth   source=vault   injection={kind:'none'} (store-only)
+//                                     payload = JSON credential set (encrypted)
+//                                     allowed_hosts = the TOKEN host
 //   <provider>         source=ref     ref_key=<provider>, injection={kind:'bearer'}
-//                                     allowed_hosts pinned to the DATA host only
+//                                     allowed_hosts = the DATA host
 //
-// The vault row is a credential *store* and is never injected into a request
-// (its allowedHosts stay empty). The ref row is what nodes reference; resolving
-// it runs the exchange below and yields a fresh access token. The token
-// endpoint is called by this module directly, so it never needs to appear in
-// any secret's allowedHosts — the guarded path only ever sees the data host.
+// The vault row is a credential *store*: `injection:{kind:'none'}` makes
+// `resolveSecretForUrl` refuse it outright, so no caller can ever get the JSON
+// credential set attached to a request — only this module reads it. It is still
+// bound to the token host,
+// for two reasons. First it has to be: `validateHosts` in registry.ts rejects an
+// empty host list outright ("that binding is what stops it being exfiltrated"),
+// so a store-only row with no hosts cannot be created through /admin/ai/apis at
+// all. Second it makes the binding load-bearing rather than decorative —
+// `readCredential` below refuses to use a credential set that is not bound to
+// the endpoint it is about to be sent to, so re-pointing the row at another host
+// fails closed instead of silently shipping the client_secret somewhere new.
+//
+// The ref row is what nodes reference; resolving it runs the exchange below and
+// yields a fresh access token, and the guarded path only ever sees the data host.
 //
 // Rotated refresh tokens are written back into the vault row's encrypted
 // payload. TrueLayer rotates on every refresh; dropping the new token silently
@@ -52,18 +63,20 @@ export type OAuthProvider = 'truelayer' | 'paypal';
 
 export const OAUTH_PROVIDERS: Record<
   OAuthProvider,
-  { label: string; vaultHandle: string; tokenUrl: string; dataHost: string }
+  { label: string; vaultHandle: string; tokenUrl: string; tokenHost: string; dataHost: string }
 > = {
   truelayer: {
     label: 'TrueLayer access token (refresh_token grant, auto-rotating)',
     vaultHandle: 'truelayer-oauth',
     tokenUrl: 'https://auth.truelayer.com/connect/token',
+    tokenHost: 'auth.truelayer.com',
     dataHost: 'api.truelayer.com',
   },
   paypal: {
     label: 'PayPal access token (client_credentials grant)',
     vaultHandle: 'paypal-oauth',
     tokenUrl: 'https://api-m.paypal.com/v1/oauth2/token',
+    tokenHost: 'api-m.paypal.com',
     dataHost: 'api-m.paypal.com',
   },
 };
@@ -89,17 +102,33 @@ export class OAuthRefreshError extends Error {
   }
 }
 
+/** Exact-match rather than reusing registry.hostAllowed: registry.ts imports
+ *  this module for its REF_SOURCES, so importing back would be circular. */
+function boundToTokenHost(allowedHosts: unknown, tokenHost: string): boolean {
+  return Array.isArray(allowedHosts) && allowedHosts.some((h) => String(h).toLowerCase() === tokenHost);
+}
+
 async function readCredential(provider: OAuthProvider): Promise<StoredOAuthCredential> {
-  const { vaultHandle } = OAUTH_PROVIDERS[provider];
+  const { vaultHandle, tokenHost } = OAUTH_PROVIDERS[provider];
   const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, vaultHandle)).limit(1);
 
   if (!row) {
     throw new OAuthRefreshError(
-      `no credential stored for "${provider}" — add the "${vaultHandle}" secret at /admin/ai/apis`,
+      `no credential stored for "${provider}" — add a vault secret named "${vaultHandle}" at ` +
+        `/admin/ai/apis, bound to host "${tokenHost}", whose value is a JSON object ` +
+        `with client_id, client_secret${provider === 'truelayer' ? ' and refresh_token' : ''}`,
     );
   }
   if (!row.payloadEnc) {
     throw new OAuthRefreshError(`secret "${vaultHandle}" has no stored value`);
+  }
+  // Fail closed if the row has been re-pointed away from the endpoint we are
+  // about to send the client_secret to.
+  if (!boundToTokenHost(row.allowedHosts, tokenHost)) {
+    throw new OAuthRefreshError(
+      `secret "${vaultHandle}" is not bound to "${tokenHost}" — refusing to send it there. ` +
+        `Fix the allowed hosts at /admin/ai/apis.`,
+    );
   }
 
   let parsed: unknown;

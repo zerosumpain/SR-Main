@@ -342,6 +342,10 @@ export async function dispatchJsonRpc(
             // attaches a chat node configured with the originating
             // conversation id so the canvas chat continues the design talk).
             conversationId: typeof meta.chat_id === 'string' ? meta.chat_id : undefined,
+            // Tools that need a human in the loop (request_credential) resolve
+            // their SSE/requester channel by this key, not by conversationId —
+            // on a canvas chat the two differ.
+            busKey: busKey || undefined,
             emit: (msg: string) => {
               // Heavyweight tools (workflow_create, generateWorkflow's internal
               // loop) can run for minutes. The Streamable HTTP transport buffers

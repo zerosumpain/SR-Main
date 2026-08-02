@@ -13,6 +13,16 @@ export interface ToolExecContext {
   emit: (text: string) => void;
   jobId?: string;
   conversationId?: string;
+  /**
+   * The tool-step bus key for this call — `workflow_id` on a canvas chat,
+   * otherwise the chat id. Distinct from `conversationId`, which is always the
+   * chat id: on a canvas chat the two differ, and the bus (SSE subscribers,
+   * the destructive confirmer, the credential requester) is keyed by this one.
+   * Set by the MCP dispatcher; absent for headless callers (heartbeat,
+   * briefing, scheduled, selfimprove, workflow nodes), which is what makes a
+   * human-in-the-loop tool correctly report "unattended" there.
+   */
+  busKey?: string;
 }
 
 /**

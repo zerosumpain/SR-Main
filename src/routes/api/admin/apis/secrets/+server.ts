@@ -10,6 +10,7 @@ import {
   type SecretInjection,
   type SecretSource,
 } from '$lib/secrets/registry';
+import { CREDENTIAL_REQUEST_SPECS, customSpec } from '$lib/secrets/credential-requests';
 
 // There is deliberately NO endpoint that returns a secret value — not even for
 // the owner, not even write-then-read. `listSecrets` returns SecretMeta, which
@@ -72,6 +73,58 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     body = await request.json();
   } catch {
     return json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  // Credential-modal path. The browser sends only { provider, value }: the
+  // handle, source, injection, hosts, methods and path scoping all come from the
+  // code catalogue, so the page cannot choose where a credential lands or which
+  // host it may be sent to. That is the same reason `request_credential` has no
+  // binding parameters — see $lib/secrets/credential-requests.
+  if (typeof body.provider === 'string') {
+    const spec =
+      body.provider === 'custom'
+        ? customSpec({
+            label: typeof body.label === 'string' ? body.label : undefined,
+            suggestedHost: typeof body.suggestedHost === 'string' ? body.suggestedHost : undefined,
+            suggestedHandle: typeof body.suggestedHandle === 'string' ? body.suggestedHandle : undefined,
+          })
+        : CREDENTIAL_REQUEST_SPECS[body.provider];
+    if (!spec) return json({ error: `unknown provider "${body.provider}"` }, { status: 400 });
+    if (typeof body.value !== 'string' || !body.value.trim()) {
+      return json({ error: 'value is required' }, { status: 400 });
+    }
+    try {
+      const meta = await upsertSecret({
+        handle: spec.binding.handle,
+        label: spec.title,
+        source: spec.binding.source,
+        value: body.value,
+        refKey: spec.binding.refKey,
+        injection: spec.binding.injection,
+        allowedHosts: spec.binding.allowedHosts,
+        allowedPathPrefixes: spec.binding.allowedPathPrefixes ?? [],
+        allowedMethods: spec.binding.allowedMethods,
+        notes: spec.binding.notes,
+      });
+      // Companion rows carry no value of their own — a `ref` row's value is
+      // minted at call time from the vault row just written.
+      for (const c of spec.companions ?? []) {
+        await upsertSecret({
+          handle: c.handle,
+          label: `${spec.title} (token)`,
+          source: c.source,
+          refKey: c.refKey,
+          injection: c.injection,
+          allowedHosts: c.allowedHosts,
+          allowedPathPrefixes: c.allowedPathPrefixes ?? [],
+          allowedMethods: c.allowedMethods,
+          notes: c.notes,
+        });
+      }
+      return json({ secret: meta });
+    } catch (err) {
+      return errResponse(err);
+    }
   }
 
   try {

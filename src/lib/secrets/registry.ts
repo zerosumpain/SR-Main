@@ -38,7 +38,23 @@ import { getOAuthAccessToken, OAUTH_PROVIDERS } from './oauth-refresh';
 export type SecretInjection =
   | { kind: 'bearer' }
   | { kind: 'header'; name: string }
-  | { kind: 'query'; name: string };
+  | { kind: 'query'; name: string }
+  /**
+   * STORE-ONLY. The value is never attached to an outbound request by this
+   * module; it exists so a multi-field credential SET (a client_id +
+   * client_secret + refresh_token JSON blob) can be held encrypted and read by
+   * one specific server module — see $lib/secrets/oauth-refresh.
+   *
+   * Without this kind such a row would have to claim some injection, and
+   * `{kind:'bearer'}` would mean any caller that resolved it got the entire
+   * JSON credential set pasted into an Authorization header. `resolveSecretForUrl`
+   * refuses these rows outright.
+   *
+   * Note this does NOT exempt the row from host binding: it still needs an
+   * allowed host, which is what `oauth-refresh` checks the token endpoint
+   * against before sending anything.
+   */
+  | { kind: 'none' };
 
 export type SecretSource = 'vault' | 'ref';
 
@@ -61,6 +77,9 @@ export interface SecretMeta {
   unavailableReason?: string;
   lastUsedAt?: string;
   useCount: number;
+  /** When the row was last written. Used by the credential-request gate to
+   *  verify a claimed write actually happened. A timestamp is not a value. */
+  updatedAt?: string;
 }
 
 export class SecretError extends Error {
@@ -262,6 +281,7 @@ function injectionOf(row: ApiSecretRow): SecretInjection {
   const kind = String(raw.kind ?? 'bearer');
   if (kind === 'header') return { kind: 'header', name: String(raw.name ?? 'X-API-Key') };
   if (kind === 'query') return { kind: 'query', name: String(raw.name ?? 'key') };
+  if (kind === 'none') return { kind: 'none' };
   return { kind: 'bearer' };
 }
 
@@ -308,6 +328,7 @@ async function toMeta(row: ApiSecretRow): Promise<SecretMeta> {
     unavailableReason,
     lastUsedAt: row.lastUsedAt ? new Date(row.lastUsedAt).toISOString() : undefined,
     useCount: row.useCount ?? 0,
+    updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
   };
 }
 
@@ -371,6 +392,7 @@ export interface UpsertSecretInput {
 
 function validateInjection(injection: SecretInjection): SecretInjection {
   const kind = injection?.kind;
+  if (kind === 'none') return { kind: 'none' };
   if (kind === 'bearer') return { kind: 'bearer' };
   if (kind === 'header' || kind === 'query') {
     const name = String((injection as { name?: string }).name ?? '').trim();
@@ -381,7 +403,9 @@ function validateInjection(injection: SecretInjection): SecretInjection {
     }
     return kind === 'header' ? { kind: 'header', name } : { kind: 'query', name };
   }
-  throw new SecretError('injection must be {kind:"bearer"} | {kind:"header",name} | {kind:"query",name}');
+  throw new SecretError(
+    'injection must be {kind:"bearer"} | {kind:"header",name} | {kind:"query",name} | {kind:"none"}',
+  );
 }
 
 function validateHosts(hosts: string[]): string[] {
@@ -525,6 +549,15 @@ function effectiveMethods(methods: string[] | null | undefined): string[] {
 
 /** The host/path/method binding check, shared by resolution and per-redirect-hop re-checks. */
 function assertBindingAllows(row: ApiSecretRow, url: string, method?: string): void {
+  // A store-only row holds a credential SET for one server module to read. It is
+  // never attached to an outbound request, so every resolution path refuses it
+  // before any binding maths — otherwise the whole JSON blob would be injected.
+  if (injectionOf(row).kind === 'none') {
+    throw new SecretError(
+      `secret "${row.handle}" is store-only and is never attached to a request. ` +
+        `It holds a credential set for a specific server module to read.`,
+    );
+  }
   const u = parseTarget(url);
   if (!hostAllowed(u.hostname, row.allowedHosts ?? [])) {
     throw new SecretError(
@@ -591,7 +624,11 @@ export async function resolveSecretForUrl(handle: string, url: string, method?: 
   const query: Record<string, string> = {};
   if (injection.kind === 'bearer') headers.Authorization = `Bearer ${value}`;
   else if (injection.kind === 'header') headers[injection.name] = value;
-  else query[injection.name] = value;
+  else if (injection.kind === 'query') query[injection.name] = value;
+  // 'none' is unreachable — assertBindingAllows above throws on store-only rows.
+  // Kept explicit so adding a kind is a compile error here rather than a silent
+  // fall-through that injects a value in the wrong place.
+  else throw new SecretError(`secret "${row.handle}" has no injectable form`);
 
   void noteSecretUse(h);
 
