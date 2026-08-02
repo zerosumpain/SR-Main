@@ -45,6 +45,18 @@
     useCount: number;
   };
 
+  type CredField = { key: string; label: string; type: string; required: boolean; placeholder?: string; help?: string };
+  type CredSpec = {
+    provider: string;
+    title: string;
+    helpUrl?: string;
+    assemble: 'single' | 'json';
+    fields: CredField[];
+    handle: string;
+    hosts: string[];
+    companions: Array<{ handle: string; hosts: string[] }>;
+  };
+
   let { data } = $props();
   const adminToken = getContext<string>('adminToken');
 
@@ -52,6 +64,7 @@
   let apis = $state<ApiRow[]>(data.apis as ApiRow[]);
   let secrets = $state<Secret[]>(data.secrets as Secret[]);
   const refSources = data.refSources as Array<{ key: string; label: string }>;
+  const credentialSpecs = data.credentialSpecs as CredSpec[];
 
   let expanded = $state<string | null>(null);
   let busy = $state<string | null>(null);
@@ -130,7 +143,7 @@
   let sSource = $state<'ref' | 'vault'>('vault');
   let sValue = $state('');
   let sRefKey = $state(refSources[0]?.key ?? '');
-  let sInjKind = $state<'bearer' | 'header' | 'query'>('bearer');
+  let sInjKind = $state<'bearer' | 'header' | 'query' | 'none'>('bearer');
   let sInjName = $state('');
   let sHosts = $state('');
   let sPaths = $state('');
@@ -144,7 +157,7 @@
     sSource = s.source === 'ref' ? 'ref' : 'vault';
     sValue = '';
     sRefKey = s.refKey ?? refSources[0]?.key ?? '';
-    sInjKind = (s.injection.kind as 'bearer' | 'header' | 'query') ?? 'bearer';
+    sInjKind = (s.injection.kind as 'bearer' | 'header' | 'query' | 'none') ?? 'bearer';
     sInjName = s.injection.name ?? '';
     sHosts = s.allowedHosts.join(', ');
     sPaths = s.allowedPathPrefixes.join(', ');
@@ -168,6 +181,66 @@
     editing = false;
   }
 
+  // ── Quick-add from the credential catalogue ─────────────────────────────
+  // The generic form below can express any credential, but a multi-row one (an
+  // OAuth provider's stored credential set PLUS the ref row that mints access
+  // tokens from it) has to be assembled by hand in the right order, and getting
+  // it wrong leaves a handle that looks registered and fails at run time. This
+  // posts `{provider, value}` to the same endpoint path the jkai modal uses, so
+  // the server writes every row from the code catalogue in one go.
+  let quickProvider = $state('');
+  let quickValues = $state<Record<string, string>>({});
+
+  const quickSpec = $derived(credentialSpecs.find((s) => s.provider === quickProvider) ?? null);
+  const quickMissing = $derived(
+    (quickSpec?.fields ?? []).filter((f) => f.required && !String(quickValues[f.key] ?? '').trim()).length,
+  );
+
+  function openQuickAdd(spec: CredSpec) {
+    quickProvider = spec.provider;
+    quickValues = {};
+  }
+
+  function closeQuickAdd() {
+    quickProvider = '';
+    quickValues = {};
+  }
+
+  async function saveQuickAdd() {
+    const spec = quickSpec;
+    if (!spec || quickMissing) return;
+    busy = 'quick';
+    try {
+      // 'json' assembles the multi-field credential set into one encrypted
+      // value — the shape $lib/secrets/oauth-refresh reads back.
+      const value =
+        spec.assemble === 'json'
+          ? JSON.stringify(
+              Object.fromEntries(
+                spec.fields
+                  .map((f) => [f.key, String(quickValues[f.key] ?? '').trim()])
+                  .filter(([, v]) => v !== ''),
+              ),
+            )
+          : String(quickValues[spec.fields[0]?.key] ?? '').trim();
+
+      const res = await fetch(qs('/api/admin/apis/secrets'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: spec.provider, value }),
+      });
+      const body = await res.json();
+      if (res.ok) {
+        const rows = [spec.handle, ...spec.companions.map((c) => c.handle)].join(' + ');
+        say(`Stored ${spec.title} — registered ${rows}`);
+        closeQuickAdd();
+        await refresh();
+      } else say(body.error ?? 'Save failed', true);
+    } finally {
+      busy = null;
+    }
+  }
+
   async function saveSecret() {
     busy = 'secret';
     try {
@@ -180,7 +253,10 @@
           source: sSource,
           value: sSource === 'vault' && sValue ? sValue : undefined,
           refKey: sSource === 'ref' ? sRefKey : undefined,
-          injection: sInjKind === 'bearer' ? { kind: 'bearer' } : { kind: sInjKind, name: sInjName },
+          injection:
+            sInjKind === 'bearer' || sInjKind === 'none'
+              ? { kind: sInjKind }
+              : { kind: sInjKind, name: sInjName },
           allowedHosts: sHosts.split(',').map((h) => h.trim()).filter(Boolean),
           allowedPathPrefixes: sPaths.split(',').map((p) => p.trim()).filter(Boolean),
           allowedMethods: sMethods.split(',').map((m) => m.trim().toUpperCase()).filter(Boolean),
@@ -343,7 +419,7 @@
             <span class="s-hosts">{s.allowedHosts.join(', ')}{#if s.allowedPathPrefixes.length}<span class="dim"> · {s.allowedPathPrefixes.join(', ')}</span>{/if}</span>
             <span class="s-inj">{s.injection.kind}{s.injection.name ? `:${s.injection.name}` : ''} · {(s.allowedMethods ?? ['GET','HEAD']).join('/')}</span>
             <span class="s-hint">{s.source === 'ref' ? `ref:${s.refKey}` : s.hint ? `…${s.hint}` : 'stored'}</span>
-            <span class="nm-pill" data-state={s.available ? 'ok' : 'error'} title={s.unavailableReason ?? ''}>
+            <span class="nm-pill" data-state={s.available ? 'ok' : 'error'}>
               {s.available ? 'available' : 'unavailable'}
             </span>
             <span class="s-used">{s.useCount} uses · {fmtDate(s.lastUsedAt)}</span>
@@ -352,10 +428,70 @@
               <button class="link-btn danger" onclick={() => removeSecret(s)} disabled={busy === `dels:${s.handle}`}>delete</button>
             </span>
           </div>
+          {#if !s.available && s.unavailableReason}
+            <!-- Inline, not a title tooltip. A half-registered credential reads as
+                 fine at a glance and only fails when a canvas runs it, so the
+                 reason has to be visible without hovering. -->
+            <p class="s-why">{s.unavailableReason}</p>
+          {/if}
         {/each}
       </div>
     {:else}
       <div class="nm-empty">No credentials registered. Add one below to let jkai authenticate an API.</div>
+    {/if}
+
+    {#if credentialSpecs.length && !editing}
+      <div class="sform">
+        <div class="nm-sec-hd"><span class="sr-label-tight">Known providers</span></div>
+        <p class="sec-lede">
+          These write every row the provider needs in one go — an OAuth provider stores its credential
+          set <em>and</em> the handle that mints access tokens from it, correctly bound. Prefer this over
+          the generic form below, where the two can be created out of order.
+        </p>
+        <div class="quick-row">
+          {#each credentialSpecs as spec (spec.provider)}
+            <button
+              class="link-btn"
+              class:is-on={quickProvider === spec.provider}
+              onclick={() => (quickProvider === spec.provider ? closeQuickAdd() : openQuickAdd(spec))}
+            >{spec.title}</button>
+          {/each}
+        </div>
+
+        {#if quickSpec}
+          {#key quickSpec.provider}
+            <div class="quick-form">
+              <p class="quick-dest">
+                Writes <code>{quickSpec.handle}</code> ({quickSpec.hosts.join(', ')}){#each quickSpec.companions as c (c.handle)}
+                  &nbsp;+ <code>{c.handle}</code> ({c.hosts.join(', ')}){/each}.
+                {#if quickSpec.helpUrl}
+                  <a href={quickSpec.helpUrl} target="_blank" rel="noopener noreferrer">Where to find these</a>.
+                {/if}
+              </p>
+              {#each quickSpec.fields as f (f.key)}
+                <label class="nm-field">
+                  <span class="sr-label-tight">{f.label}{#if !f.required}<em> (optional)</em>{/if}</span>
+                  <input
+                    class="nm-text-input"
+                    type={f.type === 'password' ? 'password' : 'text'}
+                    placeholder={f.placeholder ?? ''}
+                    autocomplete="off"
+                    value={quickValues[f.key] ?? ''}
+                    oninput={(e) => (quickValues = { ...quickValues, [f.key]: e.currentTarget.value })}
+                  />
+                  {#if f.help}<span class="field-help">{f.help}</span>{/if}
+                </label>
+              {/each}
+              <div class="r-actions">
+                <button class="nm-save-btn" onclick={saveQuickAdd} disabled={busy === 'quick' || quickMissing > 0}>
+                  {busy === 'quick' ? 'Saving…' : `Store ${quickSpec.title}`}
+                </button>
+                <button class="link-btn" onclick={closeQuickAdd}>cancel</button>
+              </div>
+            </div>
+          {/key}
+        {/if}
+      </div>
     {/if}
 
     <div class="sform">
@@ -401,15 +537,25 @@
             <option value="bearer">Authorization: Bearer &lt;key&gt;</option>
             <option value="header">Custom header</option>
             <option value="query">Query parameter</option>
+            <option value="none">Store only — never attached to a request</option>
           </select>
         </label>
-        {#if sInjKind !== 'bearer'}
+        {#if sInjKind === 'header' || sInjKind === 'query'}
           <label class="nm-field">
             <span class="sr-label-tight">{sInjKind === 'header' ? 'Header name' : 'Parameter name'}</span>
             <input class="nm-text-input" type="text" bind:value={sInjName} placeholder={sInjKind === 'header' ? 'X-API-Key' : 'api_key'} />
           </label>
         {/if}
       </div>
+      {#if sInjKind === 'none'}
+        <p class="inj-note">
+          A store-only credential is never attached to an outbound request — <code>resolveSecretForUrl</code>
+          refuses it outright. Use it for a credential <em>set</em> that server code trades for something
+          else, such as the <code>client_id</code> / <code>client_secret</code> / <code>refresh_token</code>
+          JSON an OAuth provider's <code>*-oauth</code> row holds. Bind it to the <strong>token</strong>
+          host, and paste the value as a JSON object.
+        </p>
+      {/if}
 
       <label class="nm-field">
         <span class="sr-label-tight">Allowed hosts <em>(comma separated — required)</em></span>
@@ -518,6 +664,25 @@
   .s-acts { display: flex; gap: 0.5rem; }
 
   .sform { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px dashed var(--divider); display: flex; flex-direction: column; gap: 0.5rem; }
+
+  /* Why a credential is unavailable — read at a glance, not on hover. */
+  .s-why {
+    margin: 0; padding: 0.35rem 0 0.6rem 0.2rem;
+    border-bottom: 1px solid var(--divider);
+    font-size: 0.78rem; line-height: 1.5; color: var(--error);
+  }
+
+  .inj-note { margin: 0; font-size: 0.78rem; line-height: 1.55; color: var(--text-muted); }
+  .inj-note code { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .inj-note strong { color: var(--text-primary); }
+
+  .quick-row { display: flex; flex-wrap: wrap; gap: 0.9rem; }
+  .link-btn.is-on { color: var(--accent); }
+  .quick-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
+  .quick-dest { margin: 0; font-size: 0.78rem; line-height: 1.55; color: var(--text-muted); }
+  .quick-dest code { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .quick-dest a { color: var(--accent); }
+  .field-help { font-size: 0.75rem; line-height: 1.45; color: var(--text-muted); }
 
   .link-btn {
     background: none; border: 0; padding: 0;
