@@ -180,14 +180,38 @@ export async function requestToolConfirmation(
 // travel back through this bus — the browser posts it straight to the
 // owner-gated secrets endpoint. What comes back here is only an outcome.
 
-/** What the model asked for. `provider` is validated against a code table by
- *  the tool BEFORE it reaches here; nothing host- or handle-shaped from the
- *  model is carried on this request. */
+/** Changing a credential that already exists.
+ *
+ *  Unlike the create path this DOES carry a handle and, for a rebind, a proposed
+ *  host list — an update has to name its target, and the whole point of a rebind
+ *  is to move one. What is carried here is still only the model's REQUEST: the
+ *  subscriber re-reads the row from the database and authors the actual write
+ *  itself (see `buildUpdatePlan`), and a newly-reachable host does not land in
+ *  the row unless the owner types it into the form. */
+export interface SecretUpdateRequest {
+  handle: string;
+  /** 'value' replaces or amends what is stored; 'binding' changes where it may go. */
+  change: 'value' | 'binding';
+  delta?: {
+    addHosts?: string[];
+    removeHosts?: string[];
+    addMethods?: string[];
+    removeMethods?: string[];
+    addPathPrefixes?: string[];
+    removePathPrefixes?: string[];
+  };
+}
+
+/** What the model asked for. On the create path `provider` is validated against
+ *  a code table by the tool BEFORE it reaches here, and nothing host- or
+ *  handle-shaped from the model is carried at all. */
 export interface SecretRequest {
-  provider: string;
+  provider?: string;
   /** One sentence, rendered to the owner as quoted text — never as instruction. */
   reason: string;
   custom?: { label?: string; suggestedHost?: string; suggestedHandle?: string };
+  /** Present iff this is an update to an existing row rather than a new one. */
+  update?: SecretUpdateRequest;
 }
 
 export interface SecretRequestOutcome {

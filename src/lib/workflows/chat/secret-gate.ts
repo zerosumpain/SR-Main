@@ -20,7 +20,10 @@ import { publishJobEvent, createWaiter, getJob } from './job-store';
 import { notifyAllSubscribers } from '$lib/server/push';
 import { getSecretMeta } from '$lib/secrets/registry';
 import type { CredentialRequestSpec } from '$lib/secrets/credential-requests';
-import type { SecretRequestOutcome } from '$lib/jkai/tool-step-bus';
+import { buildUpdatePlan } from '$lib/secrets/credential-requests';
+import { registerPendingUpdate, discardPendingUpdate } from '$lib/secrets/pending-updates';
+import type { SecretRequestOutcome, SecretUpdateRequest } from '$lib/jkai/tool-step-bus';
+import { SECRET_REQUEST_TIMEOUT_MS } from '$lib/jkai/tool-step-bus';
 
 /** Clock skew allowance when comparing the secret's updatedAt to the request. */
 const SKEW_MS = 5_000;
@@ -105,4 +108,117 @@ export async function requireSecret(
   }
 
   return { status: 'stored', handle };
+}
+
+const lower = (xs: string[]) => Array.from(new Set((xs ?? []).map((x) => String(x).toLowerCase()))).sort();
+
+/** Order-insensitive set equality. */
+function sameSet(a: string[], b: string[]): boolean {
+  const [x, y] = [lower(a), lower(b)];
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+/** Is every member of `a` present in `b`? Used where the owner is allowed to
+ *  land LESS than was proposed but never more. */
+function subsetOf(a: string[], b: string[]): boolean {
+  const big = new Set(lower(b));
+  return lower(a).every((v) => big.has(v));
+}
+
+/**
+ * The update sibling of `requireSecret`. Same three-step shape — publish, wait,
+ * re-verify — with two differences that matter:
+ *
+ *  * The plan is registered server-side under the request id BEFORE the form is
+ *    shown, so the endpoint writes the binding THIS function authored rather
+ *    than one the browser sends back. See $lib/secrets/pending-updates.
+ *
+ *  * Verification checks the RESULT, not the acknowledgement. For a value change
+ *    that means the row's `updatedAt` moved; for a rebind it means the stored
+ *    binding now equals the approved one. An ack that claims a rebind which did
+ *    not land reports as declined, so the model is never told it may use a host
+ *    the row is not actually bound to.
+ */
+export async function requireSecretUpdate(
+  jobId: string,
+  req: SecretUpdateRequest,
+  reason: string,
+): Promise<SecretRequestOutcome> {
+  const requestId = crypto.randomUUID();
+  const openedAt = Date.now();
+
+  const before = await getSecretMeta(req.handle);
+  if (!before) return { status: 'declined' };
+
+  const { event, write } = buildUpdatePlan({
+    requestId,
+    existing: {
+      handle: before.handle,
+      label: before.label,
+      source: before.source,
+      refKey: before.refKey,
+      injectionKind: before.injection.kind,
+      allowedHosts: before.allowedHosts,
+      allowedMethods: before.allowedMethods,
+      allowedPathPrefixes: before.allowedPathPrefixes,
+    },
+    change: req.change,
+    reason,
+    delta: req.delta,
+  });
+
+  registerPendingUpdate({ requestId, ...write }, SECRET_REQUEST_TIMEOUT_MS);
+
+  publishJobEvent(jobId, { type: 'secret_request', ...event });
+
+  try {
+    const conversationId = getJob(jobId)?.scope.conversationId ?? null;
+    void notifyAllSubscribers({
+      title: 'Credential change needed',
+      body: `${event.title} — jkai needs you to confirm a change`,
+      url: conversationId ? `/jkai?c=${conversationId}` : '/jkai',
+    }).catch((e) => console.warn('[jkai-pwa] credential update push failed', e));
+  } catch (e) {
+    console.warn('[jkai-pwa] credential update push failed', e);
+  }
+
+  const { awaitResponse } = createWaiter<{ stored: boolean; handle?: string }>(
+    jobId,
+    `secret:${requestId}`,
+  );
+
+  let ack: { stored: boolean; handle?: string };
+  try {
+    ack = await awaitResponse();
+  } catch {
+    discardPendingUpdate(requestId);
+    return { status: 'declined' };
+  }
+
+  // Whatever the answer, the plan is spent. A declined form must not leave a
+  // usable write sitting in memory for the rest of its TTL.
+  discardPendingUpdate(requestId);
+  if (!ack?.stored) return { status: 'declined' };
+
+  const after = await getSecretMeta(before.handle);
+  if (!after) return { status: 'declined' };
+
+  if (write.mode === 'rebind') {
+    const b = write.binding!;
+    // Hosts may land as a SUBSET of the proposal: the endpoint drops any newly-
+    // reachable host the owner declined to type. Never a superset — a row bound
+    // to a host that was not in the approved plan means something other than
+    // this form wrote it, and the model must not be told it may use that host.
+    // Methods and paths are not owner-editable in the form, so they must match.
+    const landed =
+      subsetOf(after.allowedHosts, b.allowedHosts) &&
+      sameSet(after.allowedMethods, b.allowedMethods) &&
+      sameSet(after.allowedPathPrefixes, b.allowedPathPrefixes);
+    if (!landed) return { status: 'declined' };
+    return { status: 'stored', handle: after.handle };
+  }
+
+  const updatedAt = after.updatedAt ? Date.parse(after.updatedAt) : NaN;
+  if (Number.isFinite(updatedAt) && updatedAt < openedAt - SKEW_MS) return { status: 'declined' };
+  return { status: 'stored', handle: after.handle };
 }

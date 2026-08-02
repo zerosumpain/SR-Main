@@ -2,15 +2,19 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isOwnerEmail } from '$lib/server/access';
 import {
+  amendSecretValueFields,
   deleteSecret,
   listRefSources,
   listSecrets,
+  rotateSecretValue,
+  updateSecretBinding,
   upsertSecret,
   SecretError,
   type SecretInjection,
   type SecretSource,
 } from '$lib/secrets/registry';
 import { CREDENTIAL_REQUEST_SPECS, customSpec } from '$lib/secrets/credential-requests';
+import { bindingAfterConfirmation, consumePendingUpdate } from '$lib/secrets/pending-updates';
 
 // There is deliberately NO endpoint that returns a secret value — not even for
 // the owner, not even write-then-read. `listSecrets` returns SecretMeta, which
@@ -75,7 +79,70 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  // Credential-modal path. The browser sends only { provider, value }: the
+  // Credential-modal UPDATE path. The browser sends a request id, not a
+  // destination: the write was authored server-side by the chat gate and parked
+  // in $lib/secrets/pending-updates before the form was ever shown. So the page
+  // decides WHAT VALUE goes in, and nothing about where the credential may go.
+  //
+  // Its one genuine contribution is `confirmedHosts` — the hostnames the owner
+  // typed — and those are checked against the plan rather than trusted. A host
+  // the plan never proposed cannot be added by typing it, and a proposed host
+  // the owner did NOT type is dropped before the write. Both directions
+  // therefore fail towards less reach.
+  if (typeof body.requestId === 'string') {
+    const allowed = new Set(['requestId', 'value', 'fields', 'confirmedHosts']);
+    const extra = Object.keys(body).filter((k) => !allowed.has(k));
+    if (extra.length) {
+      return json(
+        { error: `a credential update accepts only ${[...allowed].join(', ')} — got unexpected ${extra.join(', ')}` },
+        { status: 400 },
+      );
+    }
+
+    const plan = consumePendingUpdate(body.requestId);
+    if (!plan) {
+      return json(
+        { error: 'that credential form has expired or was already submitted — ask jkai to try again' },
+        { status: 409 },
+      );
+    }
+
+    try {
+      if (plan.mode === 'rebind') {
+        // Every newly-reachable host needs the owner to have typed it; ones they
+        // skipped are dropped rather than rejecting the proposal wholesale.
+        const meta = await updateSecretBinding(
+          plan.handle,
+          bindingAfterConfirmation(plan, body.confirmedHosts),
+        );
+        return json({ secret: meta });
+      }
+
+      if (plan.mode === 'amend') {
+        const raw = (body.fields ?? {}) as Record<string, unknown>;
+        // Field keys come from the plan too, so the page cannot inject a key the
+        // catalogue never declared into the stored credential set.
+        const patch: Record<string, string> = {};
+        for (const key of plan.allowedFieldKeys) {
+          const v = String(raw[key] ?? '').trim();
+          if (v) patch[key] = v;
+        }
+        if (Object.keys(patch).length === 0) {
+          return json({ error: 'nothing to change — fill in at least one field' }, { status: 400 });
+        }
+        return json({ secret: await amendSecretValueFields(plan.handle, patch) });
+      }
+
+      if (typeof body.value !== 'string' || !body.value.trim()) {
+        return json({ error: 'value is required' }, { status: 400 });
+      }
+      return json({ secret: await rotateSecretValue(plan.handle, body.value) });
+    } catch (err) {
+      return errResponse(err);
+    }
+  }
+
+  // Credential-modal CREATE path. The browser sends only { provider, value }: the
   // handle, source, injection, hosts, methods and path scoping all come from the
   // code catalogue, so the page cannot choose where a credential lands or which
   // host it may be sent to. That is the same reason `request_credential` has no

@@ -55,6 +55,10 @@ export const ESSENTIAL_TOOL_NAMES = new Set<string>([
   // failure this tool exists to prevent — on 2026-08-01 it put a live bank
   // client_secret into ten places including an LLM provider. Cheap insurance.
   'request_credential',
+  // Its update sibling, top-level for the same reason: the moment that matters
+  // is "your key expired", and if changing one costs a jkai_extended round-trip
+  // the model asks for a paste instead.
+  'update_credential',
   'datastore_query',
   // Unified recall across files + research + memory + datastore — the @knowledge
   // entry point. Kept visible so "what do I know about X" reaches it directly.

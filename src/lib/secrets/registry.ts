@@ -503,6 +503,228 @@ export async function deleteSecret(handle: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Narrow update primitives
+//
+// `upsertSecret` is a WIDE write: it rewrites allowedHosts, allowedMethods,
+// injection and label unconditionally while the value stays optional. That is
+// fine for the owner's admin form, where every field is on screen, but it is the
+// wrong primitive for "jkai asks to change one thing" — routing an update
+// through it means a request that only meant to rotate a value silently
+// restates the entire binding, and any bug in assembling that restatement
+// re-points a live credential.
+//
+// So updates get three primitives, each of which can only touch its own slice:
+//
+//   rotateSecretValue      value + hint + updatedAt.  No binding surface AT ALL.
+//   amendSecretValueFields same, for one key of a multi-field credential set.
+//   updateSecretBinding    hosts / methods / paths.   Never touches the value.
+//
+// None of them can change `injection`, `source` or `refKey`. Injection in
+// particular is deliberately immutable here: flipping a store-only credential
+// SET from {kind:'none'} to {kind:'bearer'} would paste an entire client_id +
+// client_secret + refresh_token JSON blob into an Authorization header for any
+// caller that resolved it. That change stays an owner action at /admin/ai/apis.
+// ---------------------------------------------------------------------------
+
+/** Last-4 identification hint, or null when the value is too short to hint at. */
+function hintOf(value: string): string | null {
+  return value.length > 4 ? value.slice(-4) : null;
+}
+
+async function requireVaultRow(handle: string): Promise<ApiSecretRow> {
+  const h = normaliseHandle(handle);
+  if (!h) throw new SecretError('handle is required');
+  const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
+  if (!row) {
+    throw new SecretError(
+      `no secret registered under the handle "${handle}" — use api_secrets_list to see which handles exist`,
+    );
+  }
+  if (row.source !== 'vault') {
+    // A `ref` row has no stored value: it resolves from keys.json or an env var
+    // on this host every time it is used. There is nothing here to rotate, and
+    // writing one through would materialise a plaintext keys.json (which is
+    // gitignored AND outside the restic backup set).
+    const ref = REF_SOURCES[row.refKey ?? ''];
+    throw new SecretError(
+      `secret "${row.handle}" is a ref row — its value is not stored in the registry, it resolves from ` +
+        `${ref?.label ?? `the ref source "${row.refKey}"`} on this host. Rotate it where it actually lives.`,
+    );
+  }
+  return row;
+}
+
+/**
+ * Replace a vault secret's stored value. Nothing else about the row changes —
+ * not the host binding, not the methods, not the injection.
+ */
+export async function rotateSecretValue(handle: string, value: string): Promise<SecretMeta> {
+  const row = await requireVaultRow(handle);
+  const v = String(value ?? '').trim();
+  if (!v) throw new SecretError('value is empty');
+
+  await db
+    .update(apiSecrets)
+    .set({ payloadEnc: encryptPayload(v), hint: hintOf(v), updatedAt: new Date() })
+    .where(eq(apiSecrets.handle, row.handle));
+
+  const meta = await getSecretMeta(row.handle);
+  if (!meta) throw new SecretError('secret update failed');
+  return meta;
+}
+
+/**
+ * Merge new values into a multi-field credential SET, keeping every field the
+ * owner left blank. This is what makes "the refresh token expired" a one-field
+ * job instead of re-entering a client_id and client_secret that never changed.
+ *
+ * The decrypt happens here and the merged blob is re-encrypted immediately; no
+ * caller ever receives it, and no error raised on this path quotes any part of
+ * it.
+ */
+export async function amendSecretValueFields(
+  handle: string,
+  patch: Record<string, string>,
+): Promise<SecretMeta> {
+  const row = await requireVaultRow(handle);
+  if (!row.payloadEnc) throw new SecretError(`secret "${row.handle}" has no stored value to amend`);
+
+  const updates = Object.entries(patch ?? {})
+    .map(([k, v]) => [String(k), String(v ?? '').trim()] as const)
+    .filter(([k, v]) => k !== '' && v !== '');
+  if (updates.length === 0) throw new SecretError('no fields were supplied to change');
+
+  let current: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(decryptPayload(row.payloadEnc));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    current = parsed as Record<string, unknown>;
+  } catch {
+    // Deliberately says nothing about what the value IS beyond "not a field set".
+    throw new SecretError(
+      `secret "${row.handle}" holds a single value, not a multi-field set — replace the whole value instead of amending a field`,
+    );
+  }
+
+  for (const [k, v] of updates) current[k] = v;
+  const merged = JSON.stringify(current);
+
+  await db
+    .update(apiSecrets)
+    .set({ payloadEnc: encryptPayload(merged), hint: hintOf(merged), updatedAt: new Date() })
+    .where(eq(apiSecrets.handle, row.handle));
+
+  const meta = await getSecretMeta(row.handle);
+  if (!meta) throw new SecretError('secret update failed');
+  return meta;
+}
+
+export interface SecretBinding {
+  allowedHosts: string[];
+  allowedMethods: string[];
+  allowedPathPrefixes: string[];
+}
+
+/**
+ * Change where a credential may be sent. Never touches `payloadEnc`, `hint`,
+ * `source`, `refKey` or `injection` — so this cannot rotate a value, and it
+ * cannot turn a store-only credential set into an injectable one.
+ */
+export async function updateSecretBinding(handle: string, binding: SecretBinding): Promise<SecretMeta> {
+  const h = normaliseHandle(handle);
+  if (!h) throw new SecretError('handle is required');
+  const [row] = await db.select().from(apiSecrets).where(eq(apiSecrets.handle, h)).limit(1);
+  if (!row) throw new SecretError(`no secret registered under the handle "${handle}"`);
+
+  const allowedHosts = validateHosts(binding.allowedHosts);
+  const allowedPathPrefixes = (binding.allowedPathPrefixes ?? [])
+    .map((p) => String(p ?? '').trim())
+    .filter(Boolean)
+    .map((p) => (p.startsWith('/') ? p : '/' + p));
+
+  await db
+    .update(apiSecrets)
+    .set({
+      allowedHosts,
+      allowedPathPrefixes,
+      allowedMethods: effectiveMethods(binding.allowedMethods),
+      updatedAt: new Date(),
+    })
+    .where(eq(apiSecrets.handle, h));
+
+  const meta = await getSecretMeta(h);
+  if (!meta) throw new SecretError('secret update failed');
+  return meta;
+}
+
+// ---------------------------------------------------------------------------
+// Binding-change classification
+//
+// Splits a proposed binding into "strictly reduces reach" and "extends reach".
+// The distinction drives the modal: narrowing is one click, widening a HOST
+// makes the owner type the hostname themselves, because a new host is the one
+// change that can carry a credential somewhere it has never been.
+// ---------------------------------------------------------------------------
+
+export interface BindingChange {
+  addedHosts: string[];
+  removedHosts: string[];
+  addedMethods: string[];
+  removedMethods: string[];
+  addedPathPrefixes: string[];
+  removedPathPrefixes: string[];
+  /** True when the proposal reaches anywhere the current binding does not. */
+  widens: boolean;
+  /** True when it reaches a HOST the current binding does not — the exfil case. */
+  widensHosts: boolean;
+}
+
+/** Is `pattern` already fully covered by an existing allow-list entry? */
+function patternCovered(pattern: string, current: string[]): boolean {
+  const p = normaliseHost(pattern);
+  if (current.some((c) => normaliseHost(c) === p)) return true;
+  // A concrete host is covered by an existing wildcard over its parent domain.
+  // A wildcard is NEVER covered by a concrete host — `*.example.com` reaches
+  // strictly more than `api.example.com`.
+  if (p.startsWith('*.')) return false;
+  return current.some((c) => normaliseHost(c).startsWith('*.') && hostMatchesPattern(p, c));
+}
+
+export function classifyBindingChange(current: SecretBinding, proposed: SecretBinding): BindingChange {
+  const curHosts = (current.allowedHosts ?? []).map(normaliseHost);
+  const propHosts = (proposed.allowedHosts ?? []).map(normaliseHost);
+  const curMethods = effectiveMethods(current.allowedMethods);
+  const propMethods = effectiveMethods(proposed.allowedMethods);
+  const curPaths = current.allowedPathPrefixes ?? [];
+  const propPaths = proposed.allowedPathPrefixes ?? [];
+
+  const addedHosts = propHosts.filter((h) => !patternCovered(h, curHosts));
+  const removedHosts = curHosts.filter((h) => !propHosts.includes(h));
+  const addedMethods = propMethods.filter((m) => !curMethods.includes(m));
+  const removedMethods = curMethods.filter((m) => !propMethods.includes(m));
+
+  // An EMPTY prefix list means "any path". So []→['/v1'] narrows, and
+  // ['/v1']→[] widens to the whole host. A proposed prefix is non-widening only
+  // when it sits underneath one the owner already allowed.
+  const addedPathPrefixes =
+    curPaths.length === 0 ? [] : propPaths.filter((p) => !pathAllowed(p, curPaths));
+  const removedPathPrefixes = curPaths.filter((c) => !propPaths.some((p) => pathAllowed(p, [c])));
+  const pathsWiden = curPaths.length > 0 && (propPaths.length === 0 || addedPathPrefixes.length > 0);
+
+  const widensHosts = addedHosts.length > 0;
+  return {
+    addedHosts,
+    removedHosts,
+    addedMethods,
+    removedMethods,
+    addedPathPrefixes,
+    removedPathPrefixes,
+    widens: widensHosts || addedMethods.length > 0 || pathsWiden,
+    widensHosts,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Resolution — the ONLY path that touches plaintext
 // ---------------------------------------------------------------------------
 

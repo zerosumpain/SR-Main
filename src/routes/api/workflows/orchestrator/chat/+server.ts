@@ -25,7 +25,7 @@ import {
   type ToolStepEvent,
 } from '$lib/jkai/tool-step-bus';
 import { requireConfirmation } from '$lib/workflows/chat/confirmation-gate';
-import { requireSecret } from '$lib/workflows/chat/secret-gate';
+import { requireSecret, requireSecretUpdate } from '$lib/workflows/chat/secret-gate';
 import { specForRequest } from '$lib/workflows/site-tools/tools/request-credential';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
@@ -393,6 +393,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // opens the form and reports the outcome. See secret-gate.ts.
   const unregisterSecretRequester = registerSecretRequester(toolStepKey, async (req) => {
     if (abortController.signal.aborted) return { status: 'declined' };
+    // An update re-reads the row and authors its own write here, server-side —
+    // the tool passed only the handle, the kind of change, and a proposed delta.
+    if (req.update) return requireSecretUpdate(jobId, req.update, req.reason);
     const spec = specForRequest({ provider: req.provider, custom: req.custom });
     if (!spec) return { status: 'declined' };
     return requireSecret(jobId, spec, req.reason);

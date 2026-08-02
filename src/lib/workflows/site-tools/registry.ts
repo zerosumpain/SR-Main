@@ -41,6 +41,7 @@ import './tools/datastore';
 import './tools/apis';
 import './tools/api-integrations';
 import './tools/request-credential';
+import './tools/update-credential';
 
 // --- Public API ---
 
