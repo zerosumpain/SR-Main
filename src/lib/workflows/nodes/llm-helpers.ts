@@ -1,7 +1,9 @@
 import type OpenAI from 'openai';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
+import { DEFAULT_NODE_MAX_TOKENS, LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
+
+export { DEFAULT_NODE_MAX_TOKENS };
 
 /**
  * Resolve an LLM client + model ID from a node's `config.model` string.
@@ -40,4 +42,19 @@ export async function resolveLLMClient(
 
   const ctx = await resolveDefaultModel();
   return { ...(await getLLMClient(ctx)), provider: 'openrouter' };
+}
+
+/**
+ * Resolve the output budget from a node's `config.maxTokens`.
+ *
+ * A positive number wins; anything else (missing, 0, negative, non-numeric)
+ * falls back to DEFAULT_NODE_MAX_TOKENS. Deliberately pure — the per-model
+ * ceiling is applied downstream by `withProviderCap` in
+ * $lib/jkai/usage-capture, so every LLM path gets clamped, not just the four
+ * node executors that call this.
+ */
+export function resolveMaxTokens(configuredMaxTokens: unknown): number {
+  const n = typeof configuredMaxTokens === 'number' ? configuredMaxTokens : Number(configuredMaxTokens);
+  if (Number.isFinite(n) && n >= 1) return Math.floor(n);
+  return DEFAULT_NODE_MAX_TOKENS;
 }

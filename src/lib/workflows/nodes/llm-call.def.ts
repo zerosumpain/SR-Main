@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '../types';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 export const llmCallDef: NodeDefinition = {
   type: 'llm-call',
@@ -12,12 +13,15 @@ export const llmCallDef: NodeDefinition = {
       systemPrompt: { type: 'string', description: 'System prompt. Supports {{input.field}} templates.' },
       userPrompt: { type: 'string', description: 'User prompt. Supports {{input.field}} templates.' },
       temperature: { type: 'number', description: 'Sampling temperature 0–2 (default 0.7)' },
-      maxTokens: { type: 'number', description: 'Max tokens to generate (default 2048). Note: reasoning-heavy models (GLM, o1, etc.) charge reasoning tokens against this cap — values below ~1000 frequently return an empty content with finish_reason=length. Bias high.' },
+      maxTokens: { type: 'number', description: 'Max tokens to generate (default 25000). This is a CEILING, not a spend — leave it alone unless you specifically want to cut a response short. Note: reasoning-heavy models (GLM, DeepSeek V4, o1, etc.) charge reasoning tokens against this cap, so values below ~1000 frequently return empty content with finish_reason=length. Requests over a model\'s advertised provider ceiling are clamped automatically.' },
       outputSchema: { type: 'object', description: 'Optional JSON Schema. When set, the node requests a JSON response, parses it, validates that top-level `required` keys are present, retries once on failure, and returns the parsed object under `data` (raw text still on `response`). Use for reliable data extraction.' },
     },
     required: ['userPrompt'],
   },
-  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: 2048 },
+  // A new node is born on the site default model (model: '' resolves through
+  // resolveLLMClient at run time, so it keeps tracking the /jkai picker) with a
+  // deliberately generous ceiling — see DEFAULT_NODE_MAX_TOKENS.
+  defaultConfig: { model: '', systemPrompt: '', userPrompt: '', temperature: 0.7, maxTokens: DEFAULT_NODE_MAX_TOKENS },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Response' }],
   basicConfig: [

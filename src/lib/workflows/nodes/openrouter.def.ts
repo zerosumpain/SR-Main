@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '../types';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 export const openrouterDef: NodeDefinition = {
   type: 'openrouter',
@@ -15,7 +16,7 @@ export const openrouterDef: NodeDefinition = {
       },
       model: {
         type: 'string',
-        description: 'Model ID for chat_completion (e.g. openai/gpt-4o-mini)',
+        description: 'Model ID for chat_completion (e.g. openai/gpt-4o-mini). LEAVE EMPTY to use the site default, the same default every other LLM node uses.',
       },
       systemPrompt: {
         type: 'string',
@@ -31,18 +32,20 @@ export const openrouterDef: NodeDefinition = {
       },
       maxTokens: {
         type: 'number',
-        description: 'Max tokens to generate (default 1024)',
+        description: 'Max tokens to generate (default 25000). A ceiling, not a spend; requests over a model\'s advertised provider ceiling are clamped automatically.',
       },
     },
     required: ['operation'],
   },
+  // Born on the site default model with a generous ceiling — see
+  // DEFAULT_NODE_MAX_TOKENS.
   defaultConfig: {
     operation: 'chat_completion',
     model: '',
     systemPrompt: '',
     userPrompt: '',
     temperature: 0.7,
-    maxTokens: 1024,
+    maxTokens: DEFAULT_NODE_MAX_TOKENS,
   },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Result' }],
@@ -58,10 +61,10 @@ export const openrouterDef: NodeDefinition = {
     },
     {
       key: 'model', label: 'Model', type: 'dropdown',
-      description: 'Which LLM runs this step. Leave as default to use the admin-configured OpenRouter alt model. Full live OpenRouter catalogue available in the picker.',
+      description: 'Which LLM runs this step. Leave as "Default" to use the site-wide admin default (recommended). Full live OpenRouter catalogue available in the picker.',
       // Canvas renders via OpenRouterPanel.svelte (already uses fetcher mode).
       options: [
-        { value: '', label: 'Default (use admin alt OpenRouter model)' },
+        { value: '', label: 'Default (site setting)' },
       ],
       visibleWhen: { key: 'operation', equals: 'chat_completion' },
     },

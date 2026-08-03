@@ -1,4 +1,7 @@
 import type OpenAI from 'openai';
+import { sql } from 'drizzle-orm';
+import { db } from '$lib/db';
+import { openrouterModels } from '$lib/db/schema';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
@@ -124,10 +127,63 @@ function withReasoningHeadroom<T extends { model?: string; max_tokens?: number |
   return { ...params, max_tokens: REASONING_TOKEN_FLOOR };
 }
 
+/** Per-model completion ceilings from the OpenRouter catalogue, keyed by model
+ *  id. Loaded once per process and refreshed on a TTL (same shape as the
+ *  settings cache in server/models/settings.ts) — the catalogue only moves when
+ *  the nightly model sync runs. */
+const CAP_TTL_MS = 5 * 60_000;
+let capCache: { caps: Map<string, number>; expiresAt: number } | null = null;
+
+async function getProviderCaps(): Promise<Map<string, number>> {
+  if (capCache && capCache.expiresAt > Date.now()) return capCache.caps;
+
+  const caps = new Map<string, number>();
+  try {
+    const rows = await db
+      .select({
+        id: openrouterModels.id,
+        cap: sql<string | null>`${openrouterModels.raw} -> 'top_provider' ->> 'max_completion_tokens'`,
+      })
+      .from(openrouterModels);
+    for (const r of rows) {
+      const n = r.cap === null ? NaN : Number(r.cap);
+      if (Number.isFinite(n) && n >= 1) caps.set(r.id, Math.floor(n));
+    }
+  } catch (err) {
+    // No catalogue (fresh DB, migration, unit test) → no clamp. Cache the empty
+    // map for the TTL so a broken read doesn't run a query per LLM call.
+    console.warn('[usage-capture] could not read OpenRouter completion caps:', (err as Error).message);
+  }
+  capCache = { caps, expiresAt: Date.now() + CAP_TTL_MS };
+  return caps;
+}
+
+/** Counterpart to the reasoning floor above: 76 of the ~340 catalogued models
+ *  advertise a completion ceiling below the 25000 canvas LLM nodes now default
+ *  to (the lowest of those ceilings is 16384), and a request over a provider's
+ *  cap is rejected rather than trimmed. Clamp DOWN only, so a caller that asked
+ *  for less than the ceiling keeps its value. Belt-and-braces: no provider 400
+ *  of this kind has been observed here — the catalogue figure is what justifies
+ *  the guard, not a captured failure. */
+async function withProviderCap<T extends { model?: string; max_tokens?: number | null }>(
+  params: T,
+): Promise<T> {
+  const model = params.model ?? '';
+  const requested = params.max_tokens;
+  if (!model || typeof requested !== 'number') return params;
+  const cap = (await getProviderCaps()).get(model);
+  if (cap === undefined || requested <= cap) return params;
+  console.warn(
+    `[usage-capture] ${model} caps completions at ${cap}; clamping the requested max_tokens ${requested}.`,
+  );
+  return { ...params, max_tokens: cap };
+}
+
 /** Wrap a client's `chat.completions.create` so every call — streaming and
  *  non-streaming — captures usage into the workflow rollup AND the durable cost
- *  ledger, and every reasoning-model call gets enough headroom to actually
- *  answer. For streams we ensure the provider emits a final usage chunk
+ *  ledger, every reasoning-model call gets enough headroom to actually answer,
+ *  and no call asks for more output than its model's provider will allow.
+ *  For streams we ensure the provider emits a final usage chunk
  *  (stream_options.include_usage) and observe it transparently as the stream is
  *  consumed. Embeddings are not intercepted (only chat.completions). */
 export function installUsageCapture(client: OpenAI, provider: 'openrouter'): OpenAI {
@@ -140,13 +196,17 @@ export function installUsageCapture(client: OpenAI, provider: 'openrouter'): Ope
   // the overload set by hand.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   completions.create = (async function (this: unknown, ...args: unknown[]): Promise<unknown> {
-    const params = withReasoningHeadroom(
-      (args[0] ?? {}) as {
-        model?: string;
-        max_tokens?: number | null;
-        stream?: boolean;
-        stream_options?: Record<string, unknown> | null;
-      },
+    // Floor first (reasoning headroom), ceiling second — a model whose provider
+    // caps below the reasoning floor must end up at the cap, not the floor.
+    const params = await withProviderCap(
+      withReasoningHeadroom(
+        (args[0] ?? {}) as {
+          model?: string;
+          max_tokens?: number | null;
+          stream?: boolean;
+          stream_options?: Record<string, unknown> | null;
+        },
+      ),
     );
     args[0] = params;
     const model = params.model ?? '';

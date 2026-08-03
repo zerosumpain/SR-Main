@@ -82,6 +82,23 @@ export function isGlmModel(modelId: string): boolean {
 export const REASONING_TOKEN_FLOOR = 3000;
 
 /**
+ * Default output budget for a canvas LLM node (John, 2026-08-02: "token limit
+ * should be 25000").
+ *
+ * The old per-node defaults (1024/2048) were set before reasoning models were
+ * the norm: reasoning tokens are charged against this cap, so a node that asked
+ * for 2048 could spend the lot thinking and return an empty string with
+ * finish_reason=length. max_tokens is a CEILING, not a spend — a model that
+ * wants to answer in 40 tokens still does — so biasing it high costs nothing on
+ * the ordinary path and stops the truncation class of failure outright.
+ *
+ * 76 of the ~340 catalogued OpenRouter models advertise a completion cap below
+ * this (lowest ceiling 16384), which is why `withProviderCap` in
+ * $lib/jkai/usage-capture clamps the request back down per model.
+ */
+export const DEFAULT_NODE_MAX_TOKENS = 25_000;
+
+/**
  * True for models that emit reasoning tokens out of the max_tokens budget.
  *
  * Started as a GLM-only quirk (feedback_glm_reasoning_tokens); the same failure
