@@ -51,6 +51,27 @@ describe('classifyHermesStatusText', () => {
     expect(classifyHermesStatusText('⏱️ Agent inactive for 30 min — no tool calls or API responses.')?.kind).toBe('notice');
   });
 
+  it('catches the gateway restart/reload guards whatever the gerund', () => {
+    expect(
+      classifyHermesStatusText('⏳ Gateway restarting — queued for the next turn after it comes back.')?.kind,
+    ).toBe('notice');
+    expect(
+      classifyHermesStatusText('⏳ Gateway is reloading and is not accepting another turn right now.')?.kind,
+    ).toBe('notice');
+    expect(classifyHermesStatusText("⏳ Agent is running — `/model` can't run mid-turn.")?.kind).toBe('notice');
+  });
+
+  it('catches the provider rate-limit notice in either glyph form', () => {
+    const withSelector = classifyHermesStatusText(
+      '⏱️ The model provider is rate-limiting requests. Please wait a moment and try again.',
+    );
+    expect(withSelector?.kind).toBe('notice');
+    expect(
+      classifyHermesStatusText('⏱ The model provider is rate-limiting requests. Please wait a moment and try again.')
+        ?.kind,
+    ).toBe('notice');
+  });
+
   it('leaves ordinary replies that open with a glyph alone', () => {
     expect(classifyHermesStatusText('✅ Corrected: the figure is £4.2m, not £42m.')).toBeNull();
     expect(classifyHermesStatusText('🥇 WINNER: the second option.')).toBeNull();
@@ -117,6 +138,27 @@ describe('createHermesTextAccumulator', () => {
     expect(first.kind).toBe('status');
     expect(second.kind).toBe('status');
     expect(acc.text).toBe('Looking into it. ');
+  });
+
+  it('keeps a status id status even when a later delta reads as prose', () => {
+    const acc = createHermesTextAccumulator();
+    acc.accept(send('prose', 'The answer is 42.'));
+    // The adapter emits a monotonic edit as a `send` carrying only the DELTA,
+    // and the delta on its own starts with no status prefix at all.
+    expect(acc.accept(send('hb', '⏳ Working — 3 min')).kind).toBe('status');
+    expect(acc.accept(send('hb', ' — iteration 2/90, gmail_search')).kind).toBe('ignore');
+    expect(acc.text).toBe('The answer is 42.');
+    expect(acc.text).not.toContain('gmail_search');
+  });
+
+  it('does not let an unkeyed status frame condemn the unkeyed prose segment', () => {
+    const acc = createHermesTextAccumulator();
+    expect(acc.accept(send('', '⏳ Working — 3 min')).kind).toBe('status');
+    expect(acc.accept(send('', 'Real answer.'))).toEqual({
+      kind: 'append',
+      delta: 'Real answer.',
+      text: 'Real answer.',
+    });
   });
 
   it('ignores the home-channel onboarding notice', () => {

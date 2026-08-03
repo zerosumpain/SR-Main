@@ -158,17 +158,24 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
       if (job.activeDelegations === 0 && job.phase === 'subagent') job.phase = 'thinking';
     }
   } else if (event.type === 'tool_start') {
-    // Same treatment for an ordinary tool call: busy but silent.
+    // Same treatment for an ordinary tool call: busy but silent. A delegation
+    // outranks it though — a sub-agent's own tool calls arrive on the parent
+    // job, and letting them claim the phase means the FIRST of them to finish
+    // reports 'thinking' while the sub-agent is still working. The watchdog
+    // keys off the counters so it is unaffected, but the heartbeat the user
+    // sees and the reap message's phase label would both be wrong.
     const job = jobs.get(jobId);
     if (job) {
       job.activeTools += 1;
-      job.phase = 'tool_running';
+      if (job.activeDelegations === 0) job.phase = 'tool_running';
     }
   } else if (event.type === 'tool_result') {
     const job = jobs.get(jobId);
     if (job) {
       job.activeTools = Math.max(0, job.activeTools - 1);
-      if (job.activeTools === 0 && job.phase === 'tool_running') job.phase = 'thinking';
+      if (job.activeTools === 0 && job.phase === 'tool_running') {
+        job.phase = job.activeDelegations > 0 ? 'subagent' : 'thinking';
+      }
     }
   }
   for (const sub of stream.subscribers) {

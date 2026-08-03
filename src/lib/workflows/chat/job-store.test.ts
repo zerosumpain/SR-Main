@@ -210,4 +210,32 @@ describe('watchdog — delegations are busy, not idle', () => {
       vi.useRealTimers();
     }
   });
+
+  it("keeps reporting 'subagent' when an ordinary tool runs inside a delegation", () => {
+    const { jobId, job } = createJob('test');
+    publishJobEvent(jobId, { type: 'tool_start', tool: 'delegate_task', args: { goal: 'x' } });
+    expect(job.phase).toBe('subagent');
+    // A sub-agent's own tool calls arrive on the parent job. They must not
+    // claim the phase, or the first one to finish reports 'thinking' while the
+    // sub-agent is still working — wrong in the heartbeat and in the reap
+    // message's phase label.
+    publishJobEvent(jobId, { type: 'tool_start', tool: 'gmail_search', args: {} });
+    expect(job.phase).toBe('subagent');
+    publishJobEvent(jobId, { type: 'tool_result', tool: 'gmail_search', result: 'ok', status: 'done' });
+    expect(job.activeTools).toBe(0);
+    expect(job.phase).toBe('subagent');
+    publishJobEvent(jobId, { type: 'tool_result', tool: 'delegate_task', result: 'ok', status: 'done' });
+    expect(job.phase).toBe('thinking');
+  });
+
+  it("falls back to 'subagent' when a delegation starts mid tool call", () => {
+    const { jobId, job } = createJob('test');
+    publishJobEvent(jobId, { type: 'tool_start', tool: 'workflow_run', args: {} });
+    expect(job.phase).toBe('tool_running');
+    publishJobEvent(jobId, { type: 'tool_start', tool: 'delegate_task', args: { goal: 'x' } });
+    expect(job.phase).toBe('subagent');
+    publishJobEvent(jobId, { type: 'tool_result', tool: 'workflow_run', result: 'ok', status: 'done' });
+    // The delegation is still live, so the phase must not drop to 'thinking'.
+    expect(job.phase).toBe('subagent');
+  });
 });

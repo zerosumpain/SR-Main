@@ -73,8 +73,10 @@ export interface HermesStatusFrame {
  *
  * Sources, all in `~/hermes-agent/gateway/run.py`: the long-running notifier
  * (`⏳ Working`), the busy-ack (`⏳ Queued` / `⏳ Subagent working` /
- * `⏩ Steered` / `⚡ Interrupting`) and the inactivity reaper
- * (`⏱️ Agent inactive`).
+ * `⏩ Steered` / `⚡ Interrupting`), the inactivity reaper
+ * (`⏱️ Agent inactive`), the gateway-restart/reload guards (`⏳ Gateway …`,
+ * `⏳ Agent is running …`) and the provider rate-limit notice
+ * (`⏱️ The model provider is rate-limiting requests…`).
  */
 const STATUS_PREFIXES: ReadonlyArray<{ prefix: string; kind: HermesStatusFrame['kind'] }> = [
   { prefix: '⏳ Working — ', kind: 'progress' },
@@ -84,6 +86,15 @@ const STATUS_PREFIXES: ReadonlyArray<{ prefix: string; kind: HermesStatusFrame['
   { prefix: '⏩ Steered into current run', kind: 'notice' },
   { prefix: '⚡ Interrupting current task', kind: 'notice' },
   { prefix: '⏱ Agent inactive for ', kind: 'notice' },
+  // run.py:3117/:3119, :7363/:7365, :7678 — "⏳ Gateway restarting — queued for
+  // the next turn after it comes back." and "⏳ Gateway is reloading and is not
+  // accepting another turn right now." The gerund varies, so match the stem.
+  { prefix: '⏳ Gateway ', kind: 'notice' },
+  // run.py:7303 — "⏳ Agent is running — `/model` can't run mid-turn."
+  { prefix: '⏳ Agent is running', kind: 'notice' },
+  // run.py:243 — emitted with the ⏱️ presentation form; normaliseGlyphs makes
+  // that compare equal to the bare glyph written here.
+  { prefix: '⏱ The model provider is rate-limiting', kind: 'notice' },
 ];
 
 /** Drop emoji variation selectors so `⏱️` and `⏱` compare equal — Hermes emits
@@ -176,6 +187,13 @@ export interface HermesTextAccumulator {
  */
 export function createHermesTextAccumulator(): HermesTextAccumulator {
   const segments = new Map<string, string>();
+  // Message ids already known to be a gateway status bubble. Classification has
+  // to be sticky, not per-frame: the platform adapter emits an edit as a `send`
+  // carrying only the DELTA whenever the new text extends the old, and a delta
+  // like " — iteration 2/90, gmail_search" starts with no status prefix at all.
+  // Judged frame-by-frame that fragment opens a brand-new segment at the end of
+  // the reply and leaks machinery text straight into the bubble.
+  const statusIds = new Set<string>();
   // The segment currently at the END of the reply — set only when a new one is
   // opened, so a `replace` aimed at a mid-chain segment doesn't make later
   // appends to it look like they extend the body.
@@ -201,12 +219,21 @@ export function createHermesTextAccumulator(): HermesTextAccumulator {
       if (frame.content.startsWith(HERMES_HOME_CHANNEL_NOTICE_PREFIX)) return { kind: 'ignore' };
 
       const status = classifyHermesStatusText(frame.content);
-      if (status) return { kind: 'status', status };
+      if (status) {
+        // Only remember a REAL id. An unkeyed status frame must not condemn the
+        // shared unkeyed segment, which is where malformed prose also lands.
+        if (frame.message_id) statusIds.add(frame.message_id);
+        return { kind: 'status', status };
+      }
 
       // A frame with no id of its own still has to land somewhere; give it a
       // single shared segment rather than a new one per frame, so a malformed
       // stream degrades to the old append-only behaviour.
       const id = frame.message_id || '__unkeyed__';
+      // A later frame on a known status id is a continuation of that bubble
+      // however it reads on its own. Drop it rather than guess: losing a line
+      // of gateway filler is free, leaking it into the answer is not.
+      if (statusIds.has(id)) return { kind: 'ignore' };
       const isNew = !segments.has(id);
       const isNewest = isNew || lastId === id;
 

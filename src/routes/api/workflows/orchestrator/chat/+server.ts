@@ -136,6 +136,15 @@ type AssistantAttachment = {
  * the rest.
  */
 function publishStatusFrame(jobId: string, job: OrchestratorJob, status: HermesStatusFrame): void {
+  // A status frame is proof of life even though it never reaches the bubble.
+  // Rerouting the recurring filler off the text channel removed the only thing
+  // that was resetting the idle watchdog during a silent stretch that is NOT a
+  // tool call or a delegation — an OpenRouter 429 backoff loop, a long provider
+  // prefill on a huge context — so the job would be reaped at IDLE_TIMEOUT_MS
+  // and the real answer lost. Set it on the job directly: a `heartbeat`
+  // JobEvent would not do it, publishJobEvent deliberately skips lastEventAt
+  // for that type so an informational tick can't mask a genuinely stuck job.
+  job.lastEventAt = Date.now();
   if (status.kind === 'notice') {
     publishJobEvent(jobId, { type: 'status', text: status.text });
     return;
