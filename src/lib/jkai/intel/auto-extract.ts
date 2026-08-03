@@ -42,6 +42,16 @@ export interface AutoExtractInput {
   /** Extra provenance stored on the derived note. */
   metadata?: Record<string, unknown>;
   /**
+   * `intel_notes.source`, when it differs from `kind`.
+   *
+   * `AutoKind` is about which PIPELINE ingested something; `source` is about
+   * where it came from, and the graph's source filter reads the latter. Gmail
+   * threads ride the `file` pipeline but are email, and without this override
+   * twelve weeks of correspondence would be indistinguishable from Drive
+   * uploads in the source selector. Defaults to `kind`.
+   */
+  source?: string;
+  /**
    * Resolved ER category slugs for this source (see ./source-policy). Stored on
    * the note so the graph can filter by category without walking Drive paths
    * inside the cached analytics snapshot.
@@ -137,6 +147,9 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           status: 'processing',
           metadata,
           categories,
+          // Also set on update, so notes written before a source override
+          // existed are corrected the next time their thread is swept.
+          ...(input.source ? { source: input.source } : {}),
           updatedAt: new Date(),
         })
         .where(eq(intelNotes.id, noteId));
@@ -147,7 +160,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           title: input.title,
           rawContent: clipped,
           processedContent: clipped,
-          source: input.kind,
+          source: input.source ?? input.kind,
           format: 'summary',
           status: 'processing',
           metadata,

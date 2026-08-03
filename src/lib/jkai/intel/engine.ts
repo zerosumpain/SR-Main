@@ -28,10 +28,23 @@ export function isIntelEngineEnabled(): boolean {
   return process.env.INTEL_ENGINE !== '0';
 }
 
+/**
+ * The rolling Gmail sweep is separately switchable from the rest of the engine.
+ * It is the only stage that reaches a third-party API and the only one that
+ * spends money, so it needs its own off switch — turning the whole engine off
+ * to stop mail ingestion would also stop the watchlist and lens checks.
+ */
+export function isGmailRollingEnabled(): boolean {
+  return process.env.INTEL_GMAIL_ROLLING !== '0';
+}
+
 export interface IntelSweepResult {
   confidenceScored: number;
   watchChanges: number;
   lensChanges: number;
+  /** Threads swept from the rolling Gmail window, if enabled. */
+  gmailThreads: number;
+  gmailExtracted: number;
   errors: string[];
 }
 
@@ -45,8 +58,27 @@ export async function runIntelSweep(): Promise<IntelSweepResult> {
     confidenceScored: 0,
     watchChanges: 0,
     lensChanges: 0,
+    gmailThreads: 0,
+    gmailExtracted: 0,
     errors: [],
   };
+
+  // Mail FIRST, so everything downstream scores the graph the mail just added:
+  // confidence backfill, the watchlist diff and lens checks all read the graph,
+  // and running them before ingestion would leave a night's correspondence
+  // unscored and unwatched until the following day.
+  if (isGmailRollingEnabled()) {
+    try {
+      const { ingestGmailThreads } = await import('./gmail-ingest');
+      const sweep = await ingestGmailThreads({ mode: 'rolling' });
+      result.gmailThreads = sweep.threads;
+      result.gmailExtracted = sweep.extracted;
+    } catch (err) {
+      // No Gmail account connected is the normal state on a fresh install, and
+      // must not read as a broken engine.
+      result.errors.push(`gmail: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   // Each stage is isolated: one failing must not cost the others, since a
   // silent no-op is exactly the failure mode this engine exists to prevent.
@@ -73,7 +105,8 @@ export async function runIntelSweep(): Promise<IntelSweepResult> {
   }
 
   console.log(
-    `[intel:engine] sweep — ${result.confidenceScored} scored, ${result.watchChanges} watch changes, ` +
+    `[intel:engine] sweep — ${result.gmailThreads} gmail threads (${result.gmailExtracted} extracted), ` +
+      `${result.confidenceScored} scored, ${result.watchChanges} watch changes, ` +
       `${result.lensChanges} lens changes${result.errors.length ? `, ${result.errors.length} errors` : ''}`,
   );
   return result;

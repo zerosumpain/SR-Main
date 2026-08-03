@@ -10,6 +10,10 @@ import {
   structuralEdges,
   threadParticipants,
   threadToNoteText,
+  threadTimestamp,
+  queryForMode,
+  DEFAULT_GMAIL_INTEL_QUERY,
+  ROLLING_GMAIL_INTEL_QUERY,
   type ThreadInput,
   type ThreadMessageInput,
 } from './gmail-ingest';
@@ -456,5 +460,55 @@ describe('clampThreadLimit', () => {
 describe('refIdForThread', () => {
   it('namespaces the id so a thread cannot collide with a drive file', () => {
     expect(refIdForThread('18f2c')).toBe('gmail:18f2c');
+  });
+});
+
+describe('queryForMode', () => {
+  it('sweeps only marked threads in the curated mode', () => {
+    expect(queryForMode('marked')).toBe(DEFAULT_GMAIL_INTEL_QUERY);
+    expect(queryForMode('marked')).toMatch(/is:starred/);
+  });
+
+  it('sweeps a rolling 12 weeks, excluding bin and spam', () => {
+    const q = queryForMode('rolling');
+    expect(q).toBe(ROLLING_GMAIL_INTEL_QUERY);
+    expect(q).toContain('newer_than:84d');
+    expect(q).toContain('-in:trash');
+    expect(q).toContain('-in:spam');
+  });
+
+  it('does not exclude promotions — a promo-tab thread can still be evidence', () => {
+    expect(queryForMode('rolling')).not.toMatch(/category:/);
+  });
+});
+
+describe('threadTimestamp', () => {
+  const at = (internalDate: string, over: Partial<ThreadMessageInput> = {}): ThreadMessageInput =>
+    msg({ internalDate, ...over });
+
+  it('takes the newest message in the thread', () => {
+    const thread: ThreadInput = { id: 't1', messages: [at('1000'), at('5000'), at('3000')] };
+    expect(threadTimestamp(thread)).toBe(5000);
+  });
+
+  it('prefers internalDate over the Date header, which senders get wrong', () => {
+    const thread: ThreadInput = {
+      id: 't1',
+      messages: [at('1000', { headers: { date: 'Wed, 01 Jan 2031 00:00:00 +0000' } })],
+    };
+    expect(threadTimestamp(thread)).toBe(1000);
+  });
+
+  it('falls back to the Date header when internalDate is missing', () => {
+    const thread: ThreadInput = {
+      id: 't1',
+      messages: [{ headers: { date: 'Wed, 01 Jan 2020 00:00:00 +0000' } }],
+    };
+    expect(threadTimestamp(thread)).toBe(Date.UTC(2020, 0, 1));
+  });
+
+  it('returns null for a thread with no usable dates', () => {
+    expect(threadTimestamp({ id: 't1', messages: [{ headers: {} }] })).toBeNull();
+    expect(threadTimestamp({ id: 't1', messages: [] })).toBeNull();
   });
 });
