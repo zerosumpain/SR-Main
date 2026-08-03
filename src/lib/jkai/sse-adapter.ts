@@ -5,9 +5,10 @@
  * spinning up a SvelteKit request context.
  *
  * Frame semantics:
- *   - send:     a brand-new bubble. Treat content as a token delta.
- *   - replace:  an edit to an existing bubble — overwrite the in-flight
- *               content with the full new body.
+ *   - send/replace: NOT handled here. Text frames are segment-scoped by
+ *               message id in `$lib/jkai/hermes-frames` — mapping them
+ *               one-for-one onto the single in-flight bubble is what let a
+ *               re-edited side-channel message wipe the answer.
  *   - thinking: a reasoning-delta for the collapsible Reasoning panel
  *               (rendered beside the assistant bubble, not inside it).
  *   - finalize: terminal frame. Returns [] — the caller emits its own
@@ -205,9 +206,11 @@ export function adaptSubagentFrameToJobEvents(frame: SseFrame): JobEvent[] {
 export function adaptFrameToCanvasSse(frame: SseFrame): JobEvent[] {
   switch (frame.kind) {
     case 'send':
-      return [{ type: 'token', delta: frame.content }];
     case 'replace':
-      return [{ type: 'replace_bubble', content: frame.content }];
+      // Text frames belong to the segment accumulator in
+      // `$lib/jkai/hermes-frames`, which is the only thing that knows which of
+      // the reply's many message ids a `replace` is allowed to rewrite.
+      return [];
     case 'thinking':
       return [{
         type: 'thinking' as const,

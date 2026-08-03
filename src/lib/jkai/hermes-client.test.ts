@@ -125,7 +125,7 @@ describe('adaptFrameToCanvasSse — thinking frame', () => {
     ]);
   });
 
-  it('returns send frames as token deltas (regression: existing kinds still work)', () => {
+  it('returns text frames as empty — they belong to the segment accumulator', () => {
     const frame: SseFrame = {
       kind: 'send',
       chat_id: 'c1',
@@ -134,7 +134,8 @@ describe('adaptFrameToCanvasSse — thinking frame', () => {
       metadata: {},
       ts: 1,
     };
-    expect(adaptFrameToCanvasSse(frame)).toEqual([{ type: 'token', delta: 'hi' }]);
+    expect(adaptFrameToCanvasSse(frame)).toEqual([]);
+    expect(adaptFrameToCanvasSse({ ...frame, kind: 'replace' })).toEqual([]);
   });
 
   it('returns finalize frames as empty (caller emits its own done)', () => {

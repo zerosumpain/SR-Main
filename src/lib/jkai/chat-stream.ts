@@ -21,10 +21,17 @@ const MAX_RECONNECTS = 5;
  * dispatch parsed events to `cb.onEvent`. Watches for stale connections
  * (no event of any kind for SSE_GAP_LIMIT_MS, including 5s heartbeats) and
  * reconnects up to MAX_RECONNECTS times before giving up.
+ *
+ * Reconnects RESUME rather than replay: the server tags every frame with a
+ * sequence number, the browser hands it back as `Last-Event-ID` on its own
+ * auto-reconnect, and the manual reopen below passes the same number as
+ * `?after=`. Consumers append deltas, so a replay would silently double the
+ * bubble.
  */
 export function streamChatJob(jobId: string, cb: ChatStreamCallbacks): ChatStreamHandle {
   let es: EventSource | null = null;
   let lastSseEventAt = Date.now();
+  let lastEventId: string | null = null;
   let reconnectAttempts = 0;
   let finished = false;
 
@@ -41,11 +48,13 @@ export function streamChatJob(jobId: string, cb: ChatStreamCallbacks): ChatStrea
   };
 
   const openStream = () => {
-    const next = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
+    const after = lastEventId !== null ? `&after=${encodeURIComponent(lastEventId)}` : '';
+    const next = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}${after}`);
     es = next;
     lastSseEventAt = Date.now();
     next.onmessage = (event: MessageEvent) => {
       lastSseEventAt = Date.now();
+      if (event.lastEventId) lastEventId = event.lastEventId;
       cb.onWarning(null);
       let data: unknown;
       try { data = JSON.parse(event.data); } catch { return; }

@@ -733,6 +733,16 @@
       streamFlushHandle = setTimeout(flushStreamDeltas, STREAM_FLUSH_MS);
     }
   }
+  // A `replace_bubble` carries the whole recomputed reply (the server keeps the
+  // text per Hermes message id — see $lib/jkai/hermes-frames), so it supersedes
+  // both what's rendered and anything still queued. Without this the live panel
+  // silently diverged from the row that gets persisted.
+  function setStreamText(chatNodeId: string, content: string) {
+    pendingStreamDeltas.delete(chatNodeId);
+    bubblesWithFirstTokenRendered.add(chatNodeId);
+    streamingReplies = { ...streamingReplies, [chatNodeId]: content };
+    if (streamingFor[chatNodeId]) scrollChatToBottom(chatNodeId);
+  }
 
   // Merged view of each node: base canvas row + any live overlay
   type ViewNode = CanvasNode;
@@ -1273,10 +1283,12 @@
     const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
     chatEventSources.set(chatNodeId, es);
     es.onmessage = (evt) => {
-      let data: { type?: string; delta?: string } = {};
+      let data: { type?: string; delta?: string; content?: string } = {};
       try { data = JSON.parse(evt.data); } catch { return; }
       if (data.type === 'token' && typeof data.delta === 'string') {
         queueStreamDelta(chatNodeId, data.delta);
+      } else if (data.type === 'replace_bubble' && typeof data.content === 'string') {
+        setStreamText(chatNodeId, data.content);
       } else if (data.type === 'secret_request') {
         // Without this branch the credential form never appears on the canvas
         // and `request_credential` blocks invisibly for its full 180s — on the
@@ -1649,9 +1661,11 @@
       const kind = evt.data.kind as string | undefined;
       const chatNodeId = (evt.data.chatNodeId as string | undefined) ?? null;
       if (kind === 'chat_stream' && chatNodeId) {
-        const event = (evt.data.event as { type?: string; delta?: string }) ?? {};
+        const event = (evt.data.event as { type?: string; delta?: string; content?: string }) ?? {};
         if (event.type === 'token' && typeof event.delta === 'string') {
           queueStreamDelta(chatNodeId, event.delta);
+        } else if (event.type === 'replace_bubble' && typeof event.content === 'string') {
+          setStreamText(chatNodeId, event.content);
         }
       } else if (kind === 'chat_tool' && chatNodeId) {
         const step = evt.data.step as { tool?: string; toolCallId?: string; status?: string } | undefined;

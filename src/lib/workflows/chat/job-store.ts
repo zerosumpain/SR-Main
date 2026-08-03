@@ -109,7 +109,9 @@ export type JobEvent =
 
 interface JobStream {
   buffer: JobEvent[];
-  subscribers: Set<(event: JobEvent) => void>;
+  // `seq` is the event's index in `buffer` — the SSE endpoint publishes it as
+  // the frame's `id:` so a reconnect can resume rather than replay.
+  subscribers: Set<(event: JobEvent, seq: number) => void>;
   closed: boolean;
 }
 
@@ -132,6 +134,7 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
     streams.set(jobId, stream);
   }
   if (stream.closed) return;
+  const seq = stream.buffer.length;
   stream.buffer.push(event);
   // Reset idle watchdog on any non-heartbeat event. Heartbeats are
   // informational and must not mask a genuinely stuck job.
@@ -154,9 +157,22 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
       // Parent has the child summary and is reasoning over it again.
       if (job.activeDelegations === 0 && job.phase === 'subagent') job.phase = 'thinking';
     }
+  } else if (event.type === 'tool_start') {
+    // Same treatment for an ordinary tool call: busy but silent.
+    const job = jobs.get(jobId);
+    if (job) {
+      job.activeTools += 1;
+      job.phase = 'tool_running';
+    }
+  } else if (event.type === 'tool_result') {
+    const job = jobs.get(jobId);
+    if (job) {
+      job.activeTools = Math.max(0, job.activeTools - 1);
+      if (job.activeTools === 0 && job.phase === 'tool_running') job.phase = 'thinking';
+    }
   }
   for (const sub of stream.subscribers) {
-    try { sub(event); } catch { /* ignore broken subscriber */ }
+    try { sub(event, seq); } catch { /* ignore broken subscriber */ }
   }
   if (event.type === 'done' || event.type === 'error') {
     stream.closed = true;
@@ -185,17 +201,34 @@ export function publishJobEvent(jobId: string, event: JobEvent): void {
   }
 }
 
-export function subscribeJob(jobId: string, handler: (event: JobEvent) => void): () => void {
+/**
+ * Attach to a job's event stream.
+ *
+ * The handler is given each event's **sequence number** — its index in the
+ * job's buffer — as well as the event. That number is what the SSE endpoint
+ * publishes as the frame's `id:`, so a reconnecting client can say where it got
+ * to via `fromSeq` and be replayed only what it missed. Without it every
+ * reconnect replayed the whole buffer into a handler that appends, and the
+ * bubble silently doubled — invisible in the DB, because the server accumulates
+ * independently, which is why "a reload fixes it".
+ */
+export function subscribeJob(
+  jobId: string,
+  handler: (event: JobEvent, seq: number) => void,
+  fromSeq = 0,
+): () => void {
   let stream = streams.get(jobId);
   if (!stream) {
     stream = { buffer: [], subscribers: new Set(), closed: false };
     streams.set(jobId, stream);
   }
-  // Replay buffered events to new subscriber
-  for (const ev of stream.buffer) handler(ev);
-  stream.subscribers.add(handler);
+  // Replay the part of the buffer this subscriber has not seen.
+  const start = Math.max(0, Math.min(fromSeq, stream.buffer.length));
+  for (let i = start; i < stream.buffer.length; i++) handler(stream.buffer[i], i);
+  const sub = (event: JobEvent, seq: number) => handler(event, seq);
+  stream.subscribers.add(sub);
   return () => {
-    stream?.subscribers.delete(handler);
+    stream?.subscribers.delete(sub);
   };
 }
 
@@ -239,6 +272,16 @@ export interface OrchestratorJob {
   // healthy job mid-delegation ("likely stuck"). While >0 the watchdog applies
   // the delegation limits below instead of the normal idle limit.
   activeDelegations: number;
+  // Count of in-flight tool calls that are NOT delegations. Hermes emits
+  // nothing at all between `tool_start` and `tool_result`, so a single long
+  // tool call (a canvas `workflow_run`, a deep scrape, a slow MCP round-trip)
+  // looks exactly like a hung job. It used to be rescued by accident: the
+  // gateway's 3-minute "⏳ Working…" filler arrived as a text frame and reset
+  // the idle timer. That filler is now routed off the text channel (and
+  // switched off at the gateway), so the exemption has to be explicit — or a
+  // legitimate 16-minute tool call is reaped at 4 min while Hermes carries on
+  // producing the real answer into a dead stream.
+  activeTools: number;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -264,6 +307,12 @@ const WAITER_HARD_TIMEOUT_MS = 48 * 60 * 60_000; // 48 h total cap with waiter o
 // forever.
 const DELEGATION_IDLE_TIMEOUT_MS = 30 * 60_000; // 30 min of parent silence while delegating
 const DELEGATION_HARD_TIMEOUT_MS = 45 * 60_000; // 45 min total while a delegation is active
+// An ordinary tool call is silent for its whole duration too. Sized just under
+// Hermes' own `agent.gateway_timeout` (1800s in ~/.hermes-jkai/config.yaml) so
+// Hermes — which owns the turn and can still deliver the answer — gives up
+// first, rather than SvelteKit reaping a live stream out from under it.
+const TOOL_IDLE_TIMEOUT_MS = 20 * 60_000; // 20 min inside a single tool call
+const TOOL_HARD_TIMEOUT_MS = 29 * 60_000; // 29 min total while a tool is running
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {
   job.watchdog = setInterval(() => {
@@ -278,15 +327,18 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     const idle = now - job.lastEventAt;
     const elapsed = now - job.startedAt;
     // Precedence: an open user-input waiter (longest) > an active delegation >
-    // the normal idle limit. A delegation is busy-but-silent, so it must not be
-    // reaped at the 4-min idle mark.
+    // an active tool call > the normal idle limit. Both of the middle two are
+    // busy-but-silent, so neither must be reaped at the 4-min idle mark.
     const delegating = job.activeDelegations > 0;
+    const toolRunning = job.activeTools > 0;
     const idleLimit = job.waiterOpenedAt
       ? WAITER_IDLE_TIMEOUT_MS
-      : delegating ? DELEGATION_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
+      : delegating ? DELEGATION_IDLE_TIMEOUT_MS
+      : toolRunning ? TOOL_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
     const hardLimit = job.waiterOpenedAt
       ? WAITER_HARD_TIMEOUT_MS
-      : delegating ? DELEGATION_HARD_TIMEOUT_MS : HARD_TIMEOUT_MS;
+      : delegating ? DELEGATION_HARD_TIMEOUT_MS
+      : toolRunning ? TOOL_HARD_TIMEOUT_MS : HARD_TIMEOUT_MS;
     if (idle > idleLimit || elapsed > hardLimit) {
       const phaseLabel = `${job.phase}${job.currentStep ? `: ${job.currentStep}` : ''}`;
       const reason = elapsed > hardLimit
@@ -424,6 +476,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     partialResponse: '',
     waiterOpenedAt: null,
     activeDelegations: 0,
+    activeTools: 0,
   };
   jobs.set(jobId, job);
   recordPulse({ ts: now, jobId, kind: 'job_start', phase: 'starting', summary: message.slice(0, 140), elapsedMs: 0 });
