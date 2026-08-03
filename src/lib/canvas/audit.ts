@@ -5,6 +5,17 @@ import { emitObs } from '$lib/workflows/observability-bus';
 export type AuditEntity = 'workflow' | 'node' | 'edge' | 'trigger' | 'schedule';
 export type AuditAction = 'create' | 'delete' | 'rename' | 'config' | 'update';
 
+/**
+ * `details.actor` for a "clear this workflow's remembered state" audit row.
+ *
+ * The Workflow Doctor reads this table to decide whether a human has touched a
+ * canvas recently, and holds off its auto-fix if so. Clearing a memory key edits
+ * no config — and someone clearing a dedupe key to debug a canvas is exactly who
+ * wants the doctor to keep working — so the doctor excludes this actor from that
+ * check (see `humanEditedRecently` in `$lib/workflowdoctor/fix`).
+ */
+export const MEMORY_CLEAR_ACTOR = 'memory-clear';
+
 export interface AuditInput {
   workflowId: string;
   entity: AuditEntity;

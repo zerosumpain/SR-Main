@@ -13,7 +13,14 @@
 
 type MemoryNode = { type?: string; config?: Record<string, unknown> | null } | null | undefined;
 
-/** The WhatsApp node's duplicate-suppression ring buffer (whatsapp.ts:14). */
+/**
+ * The WhatsApp node's duplicate-suppression ring buffer.
+ *
+ * This is the ONE definition: `src/lib/workflows/nodes/whatsapp.ts` imports it
+ * as its `SENT_HASHES_KEY`. Keep it here rather than in the executor so the
+ * browser doesn't drag a server-only node module in to learn a string, and so a
+ * rename can't leave the inspector displaying and clearing a key nothing writes.
+ */
 export const WHATSAPP_SENT_HASHES_KEY = '_wa_sent_hashes';
 
 /**

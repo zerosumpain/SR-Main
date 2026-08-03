@@ -42,6 +42,7 @@ vi.mock('$lib/db', () => ({
 }));
 
 vi.mock('$lib/canvas/audit', () => ({
+  MEMORY_CLEAR_ACTOR: 'memory-clear',
   recordAudit: async (input: any) => {
     audits.push(input);
   },
@@ -133,7 +134,7 @@ describe('DELETE /api/workflows/[id]/data-store/[key] — clear one key', () => 
     expect(body.deleted).toBe(0);
   });
 
-  it('audits the clear against the workflow', async () => {
+  it('audits the clear against the workflow, tagged so the doctor can skip it', async () => {
     deletedRows = [{ key: '_wa_sent_hashes' }];
     await DELETE({ params: { id: 'wf-1', key: '_wa_sent_hashes' } } as any);
     expect(audits).toHaveLength(1);
@@ -141,7 +142,9 @@ describe('DELETE /api/workflows/[id]/data-store/[key] — clear one key', () => 
       workflowId: 'wf-1',
       entity: 'workflow',
       action: 'update',
-      details: { clearedMemoryKey: '_wa_sent_hashes', deleted: 1 },
+      // Literal on purpose: this string is the wire value the Workflow Doctor's
+      // quiet-window SQL matches on, and rows already in the table carry it.
+      details: { clearedMemoryKey: '_wa_sent_hashes', deleted: 1, actor: 'memory-clear' },
     });
   });
 

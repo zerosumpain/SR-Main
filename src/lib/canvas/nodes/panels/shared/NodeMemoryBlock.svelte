@@ -42,12 +42,20 @@
   let loading = $state(false);
   /** The key currently awaiting a "Confirm clear". */
   let confirmKey = $state<string | null>(null);
+  /** Outcome of the last clear, including the honest "there was nothing there". */
+  let status = $state<string | null>(null);
 
   const literalKeys = $derived(keys.filter((k) => k.trim() && !k.includes('{{')));
   const templatedKeys = $derived(keys.filter((k) => k.includes('{{')));
 
   async function load() {
-    if (!workflowId || loading || entries !== null) return;
+    // No key configured → the template says so and there is nothing to filter
+    // to, so don't spend a request whose result we'd throw away.
+    //
+    // `error !== null` is the belt-and-braces half: the $effect below depends on
+    // `loading`, so a failed load flipping it back to false re-enters here with
+    // `entries` still null. Retry is the ↻ button, not an unbounded loop.
+    if (!workflowId || keys.length === 0 || loading || entries !== null || error !== null) return;
     loading = true;
     error = null;
     try {
@@ -67,6 +75,7 @@
     entries = null;
     error = null;
     confirmKey = null;
+    status = null;
     void load();
   }
 
@@ -89,13 +98,23 @@
       return;
     }
     confirmKey = null;
+    status = null;
     if (!workflowId) return;
+    // Item count as it stood a moment ago — the endpoint reports rows removed,
+    // which is the honest "was there anything at all", not how much was in it.
+    const heldItems = rows.find((r) => r.key === key)?.entry?.itemCount ?? null;
     try {
       const res = await fetch(
         `/api/workflows/${workflowId}/data-store/${encodeURIComponent(key)}`,
         { method: 'DELETE' },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json().catch(() => ({}));
+      const deleted = typeof body?.deleted === 'number' ? body.deleted : null;
+      status =
+        deleted === 0
+          ? `Nothing to clear — ${key} held nothing.`
+          : `Cleared ${key}${heldItems !== null ? ` — ${heldItems} item${heldItems === 1 ? '' : 's'} gone` : ''}.`;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
       return;
@@ -166,6 +185,7 @@
     {#if rows.length === 0}
       <p class="nmb-empty">This workflow holds no memory yet — it appears after the first run.</p>
     {/if}
+    {#if status}<p class="nmb-status" role="status">{status}</p>{/if}
     <button type="button" class="nmb-mini" onclick={refresh} title="Refresh from server">↻ Refresh</button>
   {/if}
 </section>
@@ -212,6 +232,15 @@
     font-size: var(--fs-label);
     color: var(--status-error, #c0392b);
     line-height: 1.4;
+  }
+
+  .nmb-status {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    line-height: 1.4;
+    word-break: break-all;
   }
 
   .nmb-actions { display: flex; gap: 6px; flex-wrap: wrap; }
