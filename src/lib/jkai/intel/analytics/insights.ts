@@ -27,7 +27,15 @@ export type InsightKind =
   | 'type_outlier'
   | 'dominant_cluster';
 
-export type SuggestedAction = 'research' | 'ask' | 'workflow' | 'briefing' | 'review' | 'canvas';
+export type SuggestedAction =
+  | 'research'
+  | 'ask'
+  | 'workflow'
+  | 'briefing'
+  | 'review'
+  | 'canvas'
+  | 'confirm_link'
+  | 'reject_link';
 
 export interface Insight {
   id: string;
@@ -99,7 +107,7 @@ function detectUnlikelyRelations(a: GraphAnalysis): Insight[] {
 /** Pairs that ought to be linked and aren't. */
 function detectMissingLinks(a: GraphAnalysis): Insight[] {
   const preds = predictMissingLinks(
-    { index: a.index, membership: a.community.membership },
+    { index: a.index, membership: a.community.membership, suppressedPairs: a.suppressedPairs },
     { limit: 6, minScore: 0.9 },
   );
   return preds.map((p) => {
@@ -112,9 +120,12 @@ function detectMissingLinks(a: GraphAnalysis): Insight[] {
       detail: `${p.reason}. Either the extractor missed the relationship, or it is real and undocumented.`,
       score: Math.min(1, p.score / 3),
       entityIds: [p.a, p.b],
-      action: 'ask' as const,
+      // Records the relationship rather than asking jkai about it. This was
+      // 'ask', which meant the button labelled "Confirm the link" deep-linked
+      // to chat with a prefilled question and the graph learned nothing.
+      action: 'confirm_link' as const,
       actionLabel: 'Confirm the link',
-      actionPayload: `Is there a direct relationship between ${an} and ${bn}? They share ${p.sharedNeighbours.length} connections in my intel graph but no recorded link.`,
+      actionPayload: `Confirmed from a predicted link — ${an} and ${bn} share ${p.sharedNeighbours.length} connections`,
     };
   });
 }
@@ -283,7 +294,10 @@ function detectTypeOutliers(a: GraphAnalysis): Insight[] {
       entityIds: tiny.flatMap(([, ids]) => ids).slice(0, 12),
       action: 'review',
       actionLabel: 'Tidy entity types',
-      actionPayload: '/jkai/intel/types',
+      // /jkai/intel/types has never existed — this button 404'd. Type
+      // governance (proposed types, merging one type into another) lives on the
+      // quality page.
+      actionPayload: '/jkai/intel/quality#types',
     },
   ];
 }

@@ -16,7 +16,16 @@ import { researchSessions, intelCommissions } from '$lib/db/schema';
 import { desc, inArray } from 'drizzle-orm';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 
-export type CommissionKind = 'research' | 'ask' | 'monitor' | 'workflow' | 'canvas' | 'briefing' | 'review';
+export type CommissionKind =
+  | 'research'
+  | 'ask'
+  | 'monitor'
+  | 'workflow'
+  | 'canvas'
+  | 'briefing'
+  | 'review'
+  | 'confirm_link'
+  | 'reject_link';
 
 export interface CommissionResult {
   kind: CommissionKind;
@@ -143,13 +152,78 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
     case 'ask':
     case 'briefing': {
       // Interactive by nature — hand the user a prefilled composer.
+      //
+      // `new=1` starts a FRESH conversation. Without it the prompt was pushed
+      // into whatever thread happened to be open, so a question commissioned
+      // from the graph arrived mid-way through an unrelated one and inherited
+      // its context.
       const prompt = context ? `${payload}\n\n${context}` : payload;
       return json(
         await record({
           kind,
-          url: `/jkai?ask=${encodeURIComponent(prompt)}`,
+          url: `/jkai?new=1&ask=${encodeURIComponent(prompt)}`,
           label: kind === 'briefing' ? 'Briefing prompt ready' : 'Ask jkai',
           started: false,
+        }),
+      );
+    }
+
+    /**
+     * Record a predicted link as a real relationship.
+     *
+     * This is what "Confirm the link" always claimed to do. It was declared
+     * with `action: 'ask'`, so it fell into the branch above and deep-linked to
+     * jkai with a prefilled question — the graph never learned anything from
+     * the confirmation. The edge is written `manual`, which persistExtraction
+     * treats as the user's and never overwrites.
+     */
+    case 'confirm_link': {
+      if (entityIds.length < 2) throw error(400, 'confirm_link needs two entity ids');
+      const [sourceEntityId, targetEntityId] = entityIds;
+      if (sourceEntityId === targetEntityId) throw error(400, 'cannot link an entity to itself');
+
+      const { confirmRelationship } = await import('$lib/jkai/intel/confirm-link');
+      const outcome = await confirmRelationship({
+        sourceEntityId,
+        targetEntityId,
+        label: payload || null,
+      });
+
+      return json(
+        await record({
+          kind,
+          id: outcome.relationshipId,
+          url: `/jkai/intel?focus=${encodeURIComponent(sourceEntityId)}`,
+          label: outcome.created ? 'Link recorded' : 'Link already recorded',
+          started: true,
+        }),
+      );
+    }
+
+    /**
+     * The companion to confirming: say these two are NOT related.
+     *
+     * Suppression (not deletion) is what makes the answer stick — the columns
+     * existed and nothing wrote them, so a rejected prediction came back on
+     * every run and the same wrong pair had to be dismissed forever.
+     */
+    case 'reject_link': {
+      if (entityIds.length < 2) throw error(400, 'reject_link needs two entity ids');
+      const [sourceEntityId, targetEntityId] = entityIds;
+
+      const { rejectRelationship } = await import('$lib/jkai/intel/confirm-link');
+      const outcome = await rejectRelationship({
+        sourceEntityId,
+        targetEntityId,
+        reason: payload || 'Rejected from the intel dashboard',
+      });
+
+      return json(
+        await record({
+          kind,
+          url: '/jkai/intel',
+          label: outcome.suppressed ? 'Marked as unrelated' : 'Already marked',
+          started: true,
         }),
       );
     }

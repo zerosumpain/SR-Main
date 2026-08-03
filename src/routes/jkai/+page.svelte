@@ -41,20 +41,36 @@
   onMount(() => {
     try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { /* ignore */ }
     let resumed = false;
+    /**
+     * `?new=1` forces a fresh conversation, skipping BOTH resume paths below.
+     *
+     * The Intel dashboard hands over a prompt loaded with what the graph knows.
+     * Without this it landed in whatever thread happened to be open — so a
+     * question about two entities arrived halfway through an unrelated
+     * conversation and inherited its context, which is exactly the thing that
+     * makes the answer wrong.
+     */
+    let forceNew = false;
+    try {
+      forceNew = new URLSearchParams(window.location.search).get('new') === '1';
+    } catch {
+      // ignore URL parse failures
+    }
+
     // 1) Deep-link from a WhatsApp escalation: ?c=<convId>. If it matches a
     // known conversation we open it; otherwise we fall through to the
     // localStorage-based resume so the URL doesn't strand the user.
     try {
       const params = new URLSearchParams(window.location.search);
       const deepLinkId = params.get('c');
-      if (deepLinkId && conversationList.some((c) => c.id === deepLinkId)) {
+      if (!forceNew && deepLinkId && conversationList.some((c) => c.id === deepLinkId)) {
         selectConversation(deepLinkId);
         resumed = true;
       }
     } catch {
       // ignore URL parse failures
     }
-    if (!resumed) {
+    if (!resumed && !forceNew) {
       try {
         const lastVisitStr = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
         const lastConvId = localStorage.getItem(LAST_CONV_STORAGE_KEY);
@@ -70,6 +86,18 @@
     }
     if (!resumed) {
       createConversation();
+    }
+
+    // Drop `new` from the URL once it has been acted on. Left in place, a
+    // refresh would create yet another empty conversation every time.
+    if (forceNew) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('new');
+        history.replaceState(history.state, '', url);
+      } catch {
+        // ignore
+      }
     }
 
     try {

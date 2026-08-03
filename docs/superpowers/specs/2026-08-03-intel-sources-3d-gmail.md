@@ -1,7 +1,7 @@
 # Intel: source control, 3D graph, working insight actions, better resolution, Gmail at scale
 
 Date: 2026-08-03
-Status: in progress
+Status: shipped — PR #96 (data/backend) and #97 (graph/UI)
 Mode: autonomous (Full grade — no approval gates)
 
 Five asks against `/jkai/intel`, from John:

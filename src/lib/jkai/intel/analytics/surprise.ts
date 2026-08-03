@@ -20,6 +20,14 @@ export interface SurpriseContext {
   membership: Map<string, number>;
   /** node id → unit-normalised embedding. Optional; scoring degrades gracefully. */
   embeddings?: Map<string, number[]>;
+  /**
+   * Pairs the user has said are NOT related, as `pairKey` strings.
+   *
+   * Suppressed edges are deliberately absent from the index, so without this
+   * the predictor would re-propose every rejected pair on the next run and
+   * "not related" would mean nothing beyond the moment it was clicked.
+   */
+  suppressedPairs?: Set<string>;
 }
 
 export interface SurprisingLink {
@@ -302,6 +310,8 @@ export function predictMissingLinks(
       const key = pairKey(a, b);
       if (seen.has(key)) continue;
       seen.add(key);
+      // Already ruled out by the user — never propose it again.
+      if (ctx.suppressedPairs?.has(key)) continue;
 
       const score = adamicAdar(index, a, b);
       if (score < minScore) continue;

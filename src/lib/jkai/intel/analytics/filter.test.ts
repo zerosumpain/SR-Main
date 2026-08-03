@@ -30,6 +30,7 @@ function node(
     lastSeenAt: 0,
     aliases: [],
     categories: [],
+    sources: [],
     ...over,
   };
 }
@@ -43,6 +44,9 @@ function edge(a: string, b: string): GraphSnapshot['edges'][number] {
     confidence: 'high',
     strength: 'moderate',
     createdAt: 0,
+    weight: 0.5,
+    lastSeenAt: 0,
+    sourceKind: null,
   };
 }
 
@@ -162,5 +166,73 @@ describe('parseCsv', () => {
     expect(parseCsv(' a , b ,, a ')).toEqual(['a', 'b']);
     expect(parseCsv(null)).toEqual([]);
     expect(parseCsv('')).toEqual([]);
+  });
+});
+
+describe('source filter', () => {
+  /** ada/bob from email, cat from a file, dee from research, eve unsourced. */
+  function sourced() {
+    const snapshot: GraphSnapshot = {
+      nodes: [
+        node('ada', { sources: ['email'] }),
+        node('bob', { sources: ['email', 'file'] }),
+        node('cat', { sources: ['file'] }),
+        node('dee', { sources: ['research'] }),
+        node('eve', { sources: [] }),
+      ],
+      edges: [edge('ada', 'bob'), edge('bob', 'cat'), edge('dee', 'eve')],
+    };
+    return { index: buildIndex(snapshot), community: new Map<string, number>() };
+  }
+
+  it('keeps only entities asserted by the chosen source', () => {
+    const { index, community } = sourced();
+    const { keep } = applyGraphFilter(index, community, { sources: ['research'] });
+    expect(keep.has('dee')).toBe(true);
+    expect(keep.has('ada')).toBe(false);
+    expect(keep.has('cat')).toBe(false);
+  });
+
+  it('keeps an entity carrying ANY of several chosen sources', () => {
+    const { index, community } = sourced();
+    const { keep } = applyGraphFilter(index, community, { sources: ['email', 'research'] });
+    expect([...keep].sort()).toEqual(['ada', 'bob', 'dee', 'eve'].sort());
+  });
+
+  it('keeps a multi-source entity when only one of its sources is chosen', () => {
+    // bob is both email and file; picking file must not lose him.
+    const { index, community } = sourced();
+    const { keep } = applyGraphFilter(index, community, { sources: ['file'] });
+    expect(keep.has('bob')).toBe(true);
+    expect(keep.has('cat')).toBe(true);
+  });
+
+  it('keeps unsourced entities rather than deleting history', () => {
+    // Notes predating the source column, and anything hand-created, have none.
+    const { index, community } = sourced();
+    const { keep } = applyGraphFilter(index, community, { sources: ['email'] });
+    expect(keep.has('eve')).toBe(true);
+  });
+
+  it('applies no filter at all when the list is empty', () => {
+    const { index, community } = sourced();
+    expect(applyGraphFilter(index, community, { sources: [] }).keep.size).toBe(5);
+    expect(applyGraphFilter(index, community, {}).keep.size).toBe(5);
+  });
+
+  it('composes with the category filter rather than replacing it', () => {
+    const snapshot: GraphSnapshot = {
+      nodes: [
+        node('ada', { sources: ['email'], categories: ['work'] }),
+        node('bob', { sources: ['email'], categories: ['home'] }),
+      ],
+      edges: [edge('ada', 'bob')],
+    };
+    const index = buildIndex(snapshot);
+    const { keep } = applyGraphFilter(index, new Map(), {
+      sources: ['email'],
+      categories: ['work'],
+    });
+    expect([...keep]).toEqual(['ada']);
   });
 });

@@ -646,6 +646,51 @@ export function refIdForThread(threadId: string): string {
   return `${GMAIL_REF_PREFIX}${threadId}`;
 }
 
+/**
+ * Change-detection hash for a thread, from its MESSAGES ALONE.
+ *
+ * Deliberately excludes attachment content, even though attachment text ends up
+ * in the note. Gmail messages are immutable, so a thread's attachment set is
+ * fully determined by its message ids — nothing can change inside an attachment
+ * without a new message arriving, which changes this hash anyway.
+ *
+ * That matters for cost, not tidiness. The rolling sweep has to answer "has
+ * this thread changed?" BEFORE deciding to spend budget on it, and a hash that
+ * covered attachment bytes could only be computed by downloading and parsing
+ * every attachment first — on a nightly re-sweep of a large mailbox, thousands
+ * of downloads to discover that nothing changed.
+ */
+export function threadContentHash(thread: ThreadInput): string {
+  const parts: string[] = [];
+  for (const msg of thread?.messages ?? []) {
+    parts.push(
+      [
+        msg.id ?? '',
+        msg.internalDate ?? '',
+        msg.headers?.subject ?? '',
+        stripQuotedReply(msg.bodyText).slice(0, 4000),
+      ].join(' '),
+    );
+  }
+  return createHash('sha256').update(parts.join('')).digest('hex');
+}
+
+/** Stored content hashes for a set of thread refIds. */
+async function storedHashes(refIds: string[]): Promise<Map<string, string>> {
+  if (!refIds.length) return new Map();
+  const { db } = await import('$lib/db');
+  const { rows } = await db.execute(sql`
+    SELECT metadata->>'refId' AS ref_id, metadata->>'contentHash' AS content_hash
+    FROM intel_notes
+    WHERE metadata->>'refId' = ANY(${refIds}::text[])
+  `);
+  const out = new Map<string, string>();
+  for (const r of rows as Array<Record<string, unknown>>) {
+    if (r.ref_id && r.content_hash) out.set(String(r.ref_id), String(r.content_hash));
+  }
+  return out;
+}
+
 async function resolveAccount(accountId?: number): Promise<GmailAccount> {
   const { db } = await import('$lib/db');
   if (accountId) {
@@ -848,27 +893,35 @@ async function persistStructuralOnly(
   `);
   const existingId = (rows as Array<Record<string, unknown>>)[0]?.id;
 
-  let noteId: string;
   if (existingId) {
-    noteId = String(existingId);
-  } else {
-    const [created] = await db
-      .insert(intelNotes)
-      .values({
-        title: ctx.subject.slice(0, 200),
-        // Headers only — the body is deliberately not stored yet, so the later
-        // full extraction is not fooled into thinking it already has the text.
-        rawContent: `Email thread: ${ctx.subject}\nParticipants: ${ctx.participants.map((p) => p.email).join(', ')}`,
-        source: 'email',
-        format: 'summary',
-        status: 'pending',
-        metadata,
-      })
-      .returning({ id: intelNotes.id });
-    noteId = created.id;
+    // Its structural edges are already in the graph from a previous run, and
+    // persistExtraction treats a re-observed edge as CORROBORATION — it bumps
+    // `observationCount` and recomputes the weight from it. A thread can sit
+    // deferred for many nights waiting for budget, so re-persisting here would
+    // add a phantom observation per night and quietly inflate the weight and
+    // corroboration of every correspondence edge in the mailbox. Nothing new
+    // has been read, so there is nothing new to assert.
+    return { entityCount: 0, relationshipCount: 0 };
   }
 
-  return persistExtraction(noteId, structural, { recency: opts.recency, observedAt: opts.observedAt });
+  const [created] = await db
+    .insert(intelNotes)
+    .values({
+      title: ctx.subject.slice(0, 200),
+      // Headers only — the body is deliberately not stored yet, so the later
+      // full extraction is not fooled into thinking it already has the text.
+      rawContent: `Email thread: ${ctx.subject}\nParticipants: ${ctx.participants.map((p) => p.email).join(', ')}`,
+      source: 'email',
+      format: 'summary',
+      status: 'pending',
+      metadata,
+    })
+    .returning({ id: intelNotes.id });
+
+  return persistExtraction(created.id, structural, {
+    recency: opts.recency,
+    observedAt: opts.observedAt,
+  });
 }
 
 export interface GmailSweepPreview {
@@ -992,6 +1045,10 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
   const threadIds = rolling
     ? await listAllThreadIds(acct, query, limit)
     : await listThreadIds(acct, query, limit);
+
+  // One query for every thread's stored hash, so the per-thread "has this
+  // changed?" test below costs nothing.
+  const alreadyIngested = await storedHashes(threadIds.map(refIdForThread));
   const result: GmailIngestResult = {
     account: acct.email,
     query,
@@ -1041,15 +1098,22 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         recency: Number(recency.toFixed(3)),
       };
 
-      if (includeAttachments) {
-        const att = await threadAttachmentText(acct, thread);
-        if (att.text) noteText = `${noteText}\n\n${att.text}`;
-        item.attachmentsRead = att.read;
-        result.attachments += att.read;
-      }
-
       if (!noteText) {
         result.skipped++;
+        result.items.push(item);
+        continue;
+      }
+
+      // Already fully ingested and nothing new has arrived. Checked BEFORE the
+      // budget is touched: `extractIntoIntel` would also detect this and return
+      // 'unchanged', but only after the budget had been spent on it. Since
+      // Gmail lists newest-first, that meant every night re-spent the whole
+      // budget on the same newest threads and the backfill never advanced past
+      // the first page.
+      const hash = threadContentHash(thread);
+      if (alreadyIngested.get(refIdForThread(threadId)) === hash) {
+        item.status = 'unchanged';
+        result.unchanged++;
         result.items.push(item);
         continue;
       }
@@ -1057,6 +1121,12 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // Structural edges are free and land for EVERY thread, budget or not —
       // they are the higher-value half and the reason a partial run is still
       // worth having. Only the model call below is rationed.
+      //
+      // The budget check comes BEFORE attachments deliberately. Downloading and
+      // text-extracting a thread's documents is expensive — several API round
+      // trips plus a PDF/docx parse each — and for a deferred thread the result
+      // is thrown away, since only the body extraction consumes it. On a first
+      // backfill of a large mailbox that is thousands of pointless downloads.
       if (extractBudget <= 0) {
         if (structural.entities.length) {
           const stats = await persistStructuralOnly(
@@ -1076,6 +1146,16 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       }
 
       extractBudget--;
+
+      // Only now is it worth reading the attachments: this thread's body IS
+      // being extracted, so the document text has somewhere to go.
+      if (includeAttachments) {
+        const att = await threadAttachmentText(acct, thread);
+        if (att.text) noteText = `${noteText}\n\n${att.text}`;
+        item.attachmentsRead = att.read;
+        result.attachments += att.read;
+      }
+
       const outcome = await extractIntoIntel({
         kind: 'file',
         // Rides the `file` pipeline but is email, and the graph's source filter
@@ -1084,7 +1164,13 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         refId: refIdForThread(threadId),
         title: subject.slice(0, 200),
         text: noteText,
-        contentHash: createHash('sha256').update(noteText).digest('hex'),
+        // The MESSAGE-only hash computed above, not a hash of `noteText`.
+        // noteText now has attachment text appended, and hashing that would
+        // store a value the cheap pre-check can never reproduce without
+        // re-downloading every attachment — which is the whole thing it exists
+        // to avoid. Messages are immutable, so this still changes whenever the
+        // thread does.
+        contentHash: hash,
         metadata: {
           channel: 'gmail',
           gmailThreadId: threadId,

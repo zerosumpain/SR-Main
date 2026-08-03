@@ -99,6 +99,82 @@
     done = new Set([...done, key(d)]);
   }
 
+  // ── Bulk review ────────────────────────────────────────────────────────────
+  //
+  // Clearing this queue was one request and one confirmation per pair. That is
+  // the bulk of the burden the graph puts on a person, and it got worse with
+  // the mailbox: one person arrives as several entities depending on who typed
+  // the header, so a sweep can surface dozens of pairs that are all obviously
+  // the same decision. Selecting a batch and applying it in one call is the
+  // difference between a minute and twenty.
+
+  let selected = $state<Set<string>>(new Set());
+  let batching = $state(false);
+
+  const selectedRows = $derived(visible.filter((d) => selected.has(key(d))));
+  const allVisibleSelected = $derived(visible.length > 0 && selectedRows.length === visible.length);
+
+  function toggleSelected(d: DuplicateRow) {
+    const k = key(d);
+    const next = new Set(selected);
+    if (next.has(k)) next.delete(k);
+    else next.add(k);
+    selected = next;
+  }
+
+  function selectAllVisible() {
+    selected = allVisibleSelected ? new Set() : new Set(visible.map(key));
+  }
+
+  /** Select everything the matcher considers safe, so the obvious ones go in one go. */
+  function selectAutoMergeable() {
+    selected = new Set(visible.filter((d) => d.autoMergeable).map(key));
+  }
+
+  async function mergeSelected() {
+    if (batching || !selectedRows.length) return;
+    batching = true;
+    const rows = selectedRows;
+    try {
+      const res = await fetch('/api/jkai/intel/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'merge-batch',
+          pairs: rows.map((d) => ({ keepId: d.keep.id, mergeId: d.merge.id })),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const body = (await res.json()) as {
+        merged: number;
+        failed: Array<{ keepId: string; mergeId: string; reason: string }>;
+      };
+
+      // Only clear the ones that actually merged. A pair can fail because
+      // another tab — or the post-sweep auto-merge — already resolved one of
+      // its endpoints, and hiding those would misreport what happened.
+      const failedKeys = new Set((body.failed ?? []).map((f) => `${f.keepId}|${f.mergeId}`));
+      const cleared = rows.filter((d) => !failedKeys.has(key(d))).map(key);
+      done = new Set([...done, ...cleared]);
+      selected = new Set();
+
+      notify(
+        body.failed?.length
+          ? `Merged ${body.merged}; ${body.failed.length} could not be applied.`
+          : `Merged ${body.merged} pair${body.merged === 1 ? '' : 's'}.`,
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Batch merge failed');
+    } finally {
+      batching = false;
+    }
+  }
+
+  function dismissSelected() {
+    done = new Set([...done, ...selectedRows.map(key)]);
+    selected = new Set();
+  }
+
   async function sweep(dryRun: boolean) {
     if (sweeping) return;
     sweeping = true;
@@ -213,9 +289,36 @@
         apply without reading it; below that, judgement is needed.
       </p>
 
+      <div class="bulk">
+        <label class="pick">
+          <input type="checkbox" checked={allVisibleSelected} onchange={selectAllVisible} />
+          Select all {visible.length}
+        </label>
+        <button type="button" class="ghost" onclick={selectAutoMergeable}>
+          Select the {visible.filter((d) => d.autoMergeable).length} safe ones
+        </button>
+        {#if selectedRows.length}
+          <span class="picked">{selectedRows.length} selected</span>
+          <button type="button" class="primary" disabled={batching} onclick={mergeSelected}>
+            {batching ? 'Merging…' : `Merge ${selectedRows.length}`}
+          </button>
+          <button type="button" class="ghost" disabled={batching} onclick={dismissSelected}>
+            Not duplicates
+          </button>
+        {/if}
+      </div>
+
       <ul class="dups">
         {#each visible as d (key(d))}
-          <li class="dup" class:auto={d.autoMergeable}>
+          <li class="dup" class:auto={d.autoMergeable} class:is-selected={selected.has(key(d))}>
+            <label class="rowpick">
+              <input
+                type="checkbox"
+                checked={selected.has(key(d))}
+                onchange={() => toggleSelected(d)}
+                aria-label="Select {d.merge.name} to merge into {d.keep.name}"
+              />
+            </label>
             <div class="pair">
               <div class="side keep">
                 <span class="tag">keep</span>
@@ -290,7 +393,10 @@
     </section>
   {/if}
 
-  <section class="panel">
+  <!-- id="types" is the target of the "Tidy entity types" insight action, which
+       used to point at a /jkai/intel/types route that never existed. This is
+       the panel that insight is about: types holding one or two entities. -->
+  <section class="panel" id="types">
     <header><h2>Entity types</h2></header>
     <p class="muted">
       Types holding one or two entities fragment the taxonomy and make type filters useless. Fold them into a
@@ -479,6 +585,53 @@
   }
   .dup.auto {
     border-left-color: var(--accent);
+  }
+  /* NOT `.picked` — that is the "n selected" counter in the bulk bar, and it
+     carries `margin-left: auto`. Sharing the name pushed every selected row
+     to the right and shrank it to its content width. */
+  .dup.is-selected {
+    border-color: var(--accent-tint-35);
+    border-left-color: var(--accent);
+  }
+
+  /* The row checkbox sits above the pair rather than beside it, so selecting
+     does not squeeze the two names it is a decision about. */
+  .rowpick {
+    display: block;
+    margin-bottom: 6px;
+    cursor: pointer;
+  }
+  .rowpick input {
+    cursor: pointer;
+  }
+
+  .bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 11px;
+    margin-bottom: 10px;
+    background: var(--bg-section);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+  }
+  .pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .picked {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    margin-left: auto;
   }
 
   .pair {

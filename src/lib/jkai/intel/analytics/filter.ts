@@ -32,6 +32,12 @@ export interface GraphFilter {
   qHops?: number;
   /** ER category slugs; a node passes if it carries ANY of them. */
   categories?: string[];
+  /**
+   * Note sources ('email', 'file', 'research', …); a node passes if ANY of the
+   * notes asserting it came from one of them. Empty means no source filter —
+   * NOT "exclude everything" — so the default view is the whole graph.
+   */
+  sources?: string[];
   /** Restrict to these entity ids (before keyword expansion). */
   entityIds?: string[];
 }
@@ -59,6 +65,7 @@ export function applyGraphFilter(
   const minDegree = Math.max(filter.minDegree ?? 0, 0);
   const needle = (filter.q ?? '').trim().toLowerCase();
   const categories = (filter.categories ?? []).filter(Boolean);
+  const sources = (filter.sources ?? []).filter(Boolean);
 
   let keep = new Set(index.ids);
 
@@ -84,6 +91,18 @@ export function applyGraphFilter(
       [...keep].filter((id) => {
         const on = index.byId.get(id)?.categories ?? [];
         return categories.some((c) => on.includes(c));
+      }),
+    );
+  }
+  if (sources.length > 0) {
+    keep = new Set(
+      [...keep].filter((id) => {
+        const on = index.byId.get(id)?.sources ?? [];
+        // An entity with no recorded source is kept. Notes predating the source
+        // column, and anything hand-created, have none — dropping them would
+        // make the picker silently delete history rather than filter it.
+        if (!on.length) return true;
+        return sources.some((s) => on.includes(s));
       }),
     );
   }
