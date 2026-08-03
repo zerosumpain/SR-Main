@@ -5,6 +5,8 @@ const h = vi.hoisted(() => ({
   scheduleFlipped: [{ id: 's1' }] as Array<{ id: string }>,
   /** Rows the audit-log quiet-window SELECT returns. */
   auditRows: [] as Array<{ id: string }>,
+  /** Bound parameters of the audit-log quiet-window WHERE clause. */
+  auditWhereParams: [] as string[],
   /** Stored config per nodeId, as the node SELECT sees it. */
   nodeConfigs: {} as Record<string, Record<string, unknown> | undefined>,
   /** errorCount returned by each successive lintWorkflow() call. */
@@ -17,6 +19,12 @@ vi.mock('$lib/db', () => {
   /** Bound parameter values out of a drizzle clause. It is a cyclic graph, so
    *  descend only through queryChunks rather than stringifying it. */
   const paramValues = (node: unknown, out: string[] = []): string[] => {
+    // A value interpolated into a sql`` fragment stays a bare string in
+    // queryChunks; only eq()/gte() wrap theirs in a Param object.
+    if (typeof node === 'string') {
+      out.push(node);
+      return out;
+    }
     if (!node || typeof node !== 'object') return out;
     const o = node as { value?: unknown; queryChunks?: unknown[] };
     if (typeof o.value === 'string') out.push(o.value);
@@ -37,9 +45,11 @@ vi.mock('$lib/db', () => {
     };
     b.from = () => b;
     b.where = (clause: unknown) => {
+      const params = paramValues(clause);
       // Pull the node id out of the clause so one fake can serve several nodes.
-      const id = paramValues(clause).find((v) => /^n\d+$/.test(v));
+      const id = params.find((v) => /^n\d+$/.test(v));
       if (id) b.__nodeId = id;
+      if (!(cols && 'config' in cols)) h.auditWhereParams = params;
       return b;
     };
     b.limit = () => Promise.resolve(rows());
@@ -170,6 +180,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.scheduleFlipped = [{ id: 's1' }];
   h.auditRows = [];
+  h.auditWhereParams = [];
   h.nodeConfigs = { n1: { model: 'a', bogusKey: 'orphan' } };
   h.lintCounts = [];
   h.scheduleWrites = [];
@@ -403,6 +414,15 @@ describe('applyFixes — the rails', () => {
     const res = await applyFixes([candidate()], { enabled: true });
     expect(mutateNodeConfig).not.toHaveBeenCalled();
     expect(res.outcomes[0].reason).toMatch(/edited by hand in the last 24h/);
+  });
+
+  it('excludes its own writes and memory clears from the quiet-window check', async () => {
+    await applyFixes([candidate()], { enabled: true });
+    // Clearing a node's remembered state writes an audit row too. It edits no
+    // config, and it is exactly what someone debugging a canvas does, so it must
+    // not read as "a human touched this" and stall the auto-fix for 24h.
+    expect(h.auditWhereParams).toContain('system');
+    expect(h.auditWhereParams).toContain('memory-clear');
   });
 
   it('applies a fix that strictly reduces the error count', async () => {

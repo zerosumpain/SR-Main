@@ -32,6 +32,7 @@ import {
   VersionConflictError,
   type NodeBeforeImage,
 } from '$lib/canvas/mutate.server';
+import { MEMORY_CLEAR_ACTOR } from '$lib/canvas/audit';
 import { getSetting } from '$lib/server/models/settings';
 import type { VerificationIssue } from '$lib/workflows/orchestrator/verify';
 import { lintWorkflow } from './lint';
@@ -550,6 +551,11 @@ async function humanEditedRecently(
         // Our own writes land in the same table. Excluding them keeps a second
         // fix on the same canvas from being blocked by the first.
         sql`${workflowAuditLog.details}->>'actor' IS DISTINCT FROM ${actor}`,
+        // A memory clear is not a config edit — it wipes a row in
+        // workflow_data_store and leaves the canvas untouched. Someone clearing
+        // a dedupe key to debug a canvas is precisely who wants the doctor to
+        // carry on working, so it must not arm the quiet window either.
+        sql`${workflowAuditLog.details}->>'actor' IS DISTINCT FROM ${MEMORY_CLEAR_ACTOR}`,
       ),
     )
     .limit(1);

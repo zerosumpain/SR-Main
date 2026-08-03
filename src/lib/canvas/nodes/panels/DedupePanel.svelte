@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
+  import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import StoreKeyPicker from './shared/StoreKeyPicker.svelte';
   import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
@@ -89,6 +90,14 @@
     />
     <p class="dd-hint">data-store key holding the remembered ids (default <code>seen_ids</code>).</p>
   </section>
+
+  <!-- What's actually remembered right now, and a way to wipe it -->
+  <NodeMemoryBlock
+    {workflowId}
+    keys={[storeKey]}
+    label="Remembered ids"
+    hint="Clearing the seen set makes every item look new again on the next run."
+  />
 
   <!-- Max remembered -->
   <section class="dd-sec">

@@ -24,6 +24,13 @@ describe('memoryBadgeFor', () => {
     expect(memoryBadgeFor({ type: 'data-store', config: { key: '   ' } })).toBeNull();
   });
 
+  it('badges a whatsapp node only while duplicate suppression is on', () => {
+    expect(memoryBadgeFor({ type: 'whatsapp', config: { suppressDuplicateWindowMins: 1440 } })).toBe(
+      '⌘ remembers _wa_sent_hashes',
+    );
+    expect(memoryBadgeFor({ type: 'whatsapp', config: { suppressDuplicateWindowMins: 0 } })).toBeNull();
+  });
+
   it('returns null for non-memory node types and nullish input', () => {
     expect(memoryBadgeFor({ type: 'llm-call', config: { key: 'x' } })).toBeNull();
     expect(memoryBadgeFor({ type: 'tavily-search' })).toBeNull();
