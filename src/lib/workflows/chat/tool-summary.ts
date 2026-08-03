@@ -203,6 +203,10 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
     case 'workflow_update_node': return str('id') ? `updating node ${str('id')!.slice(0, 8)}… — applying a config change` : 'updating a node\'s config';
     case 'workflow_add_edge': return 'wiring an edge — connecting two nodes';
     case 'workflow_remove_edge': return 'removing an edge between two nodes';
+    case 'workflow_amend': {
+      const n = Array.isArray(a.ops) ? a.ops.length : 0;
+      return n > 0 ? `amending the canvas — ${n} change${n === 1 ? '' : 's'} in one transaction` : 'amending the canvas';
+    }
     case 'file_list': return str('prefix') ? `listing files under ${str('prefix')}` : 'listing files';
     case 'file_read': return str('name') ? `reading ${str('name')}` : (str('id') ? `reading file ${str('id')!.slice(0, 8)}…` : 'reading a file');
     case 'file_search': return str('query') ? `searching files for “${trim(str('query')!, 40)}”` : 'searching files';
@@ -321,6 +325,12 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       }
       if (g.text) return g.count > 1 ? `Delegated ${g.count} tasks — ${trim(g.text, 40)}` : `Delegated: ${trim(g.text, 56)}`;
       return 'Delegated task to a sub-agent';
+    }
+    case 'workflow_amend': {
+      const applied = typeof d.applied === 'number' ? d.applied : 0;
+      const first = Array.isArray(d.outcomes) ? (d.outcomes[0] as { summary?: string } | undefined) : undefined;
+      if (applied === 1 && first?.summary) return `Amended canvas — ${trim(first.summary, 56)}`;
+      return applied > 0 ? `Amended canvas — ${applied} changes applied` : 'Amended canvas';
     }
     case 'workflow_modify':
       return 'Updated canvas';

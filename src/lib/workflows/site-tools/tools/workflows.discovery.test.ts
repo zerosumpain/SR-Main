@@ -66,6 +66,79 @@ describe('workflow_list_node_types filtering', () => {
   });
 });
 
+/**
+ * `workflow_amend` validates every op against the live registry BEFORE it opens
+ * a transaction, so a typo costs one message naming the op rather than a
+ * rollback and a round-trip. None of these reach the database.
+ */
+describe('workflow_amend pre-flight validation', () => {
+  async function amend(args: Record<string, unknown>) {
+    return (await executeTool('workflow_amend', args)) as { success: boolean; error?: string };
+  }
+
+  it('rejects an empty op list', async () => {
+    const r = await amend({ workflowId: 'w1', ops: [] });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/at least one op/i);
+  });
+
+  it('fails the whole amend on an op kind it does not implement, instead of dropping it', async () => {
+    // The silent partial failure this tool exists to prevent. An op nobody
+    // implemented matched no case in the executor: no write, no error, and the
+    // result still said the amend succeeded. `set_schedule` is the realistic
+    // guess — it was in an earlier draft of this tool's op list.
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        { op: 'set_schedule', cron: '0 9 * * *' },
+        { op: 'add_node', type: 'delay', label: 'Wait' },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 1 (set_schedule)');
+    expect(r.error).toMatch(/unrecognised op/i);
+    // Says what IS allowed, so the retry is informed rather than another guess.
+    expect(r.error).toContain('insert_between');
+  });
+
+  it('rejects an op with no `op` key at all', async () => {
+    const r = await amend({ workflowId: 'w1', ops: [{ nodeId: 'n1', label: 'Renamed' }] });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('no "op" key');
+  });
+
+  it('names the offending op when a node type does not exist', async () => {
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        { op: 'add_edge', sourceNodeId: 'a', targetNodeId: 'b' },
+        { op: 'add_node', type: 'delayy', label: 'Wait' },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 2 (add_node)');
+    expect(r.error).toContain('Unknown node type "delayy"');
+  });
+
+  it('validates the config of a spliced node too', async () => {
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        {
+          op: 'insert_between',
+          sourceNodeId: 'a',
+          targetNodeId: 'b',
+          type: 'delay',
+          label: 'Wait',
+          config: { notARealKey: 1 },
+        },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 1 (insert_between)');
+  });
+});
+
 describe('workflow_describe_node batching', () => {
   it('describes several types in one call', async () => {
     const r = (await executeTool('workflow_describe_node', {

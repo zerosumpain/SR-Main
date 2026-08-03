@@ -3,11 +3,21 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { workflowDataStore } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
+import { MEMORY_CLEAR_ACTOR, recordAudit } from '$lib/canvas/audit';
 
 /**
  * Clear a single key from a workflow's data store — the per-key "Clear" action
- * in the canvas Memory panel (E3). Scoped to `(workflowId, key)` so it can only
- * touch this workflow's memory.
+ * in the canvas Memory panel (E3) and in each stateful node's inspector
+ * (`<NodeMemoryBlock>`). Scoped to `(workflowId, key)` so it can only touch
+ * this workflow's memory.
+ *
+ * Reports how many rows went, so the UI can say "nothing to clear" instead of
+ * falsely reporting success, and writes an audit entry — which means the
+ * pre-existing canvas Memory panel's Clear is now audited too.
+ *
+ * The audit row is tagged `actor: memory-clear` so the nightly Workflow Doctor
+ * doesn't mistake a memory clear for a human config edit and suppress its
+ * auto-fix for the quiet window.
  *
  * Auth: owner-only, enforced by the API owner-gate in hooks.server.ts (same as
  * the sibling `[id]` routes) — no in-handler ownership check.
@@ -18,8 +28,15 @@ export const DELETE: RequestHandler = async ({ params }) => {
   if (!workflowId || !key) {
     return json({ error: 'workflowId and key required' }, { status: 400 });
   }
-  await db
+  const deleted = await db
     .delete(workflowDataStore)
-    .where(and(eq(workflowDataStore.workflowId, workflowId), eq(workflowDataStore.key, key)));
-  return json({ success: true });
+    .where(and(eq(workflowDataStore.workflowId, workflowId), eq(workflowDataStore.key, key)))
+    .returning({ key: workflowDataStore.key });
+  await recordAudit({
+    workflowId,
+    entity: 'workflow',
+    action: 'update',
+    details: { clearedMemoryKey: key, deleted: deleted.length, actor: MEMORY_CLEAR_ACTOR },
+  });
+  return json({ success: true, deleted: deleted.length });
 };

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
+  import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import StoreKeyPicker from './shared/StoreKeyPicker.svelte';
   import UpstreamFieldPicker from './shared/UpstreamFieldPicker.svelte';
@@ -205,12 +206,13 @@
     </section>
   {/if}
 
-  <p class="ds-inspect-note">
-    Inspect stored entries on the
-    <code>workflow_data_store</code> table via pgweb
-    (<code>http://homeserv:8085/pgweb/</code>) — entries are scoped by
-    <code>(workflowId, key)</code>.
-  </p>
+  <!-- What's actually stored under this key right now, and a way to wipe it -->
+  <NodeMemoryBlock
+    {workflowId}
+    keys={key ? [key] : []}
+    label="Stored value"
+    hint="Entries are scoped by (workflowId, key), so another node bound to the same key loses it too."
+  />
 
   <OnErrorBlock
     value={config._onError as Record<string, unknown> | undefined}
@@ -314,16 +316,6 @@
     font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--status-error, #c0392b);
   }
-
-  .ds-inspect-note {
-    margin: 0;
-    font-size: var(--fs-label);
-    color: var(--text-ghost);
-    line-height: 1.5;
-    border-left: 2px solid var(--card-border);
-    padding: 4px 8px;
-  }
-  .ds-inspect-note code { font-size: var(--fs-label); color: var(--text-muted); }
 
   .ds-code {
     width: 100%;
