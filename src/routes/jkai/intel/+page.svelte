@@ -14,6 +14,7 @@
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
+  import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
@@ -489,6 +490,10 @@
         onToggleCategory={toggleCategory}
         onClear={clearSources}
       />
+
+      <!-- Sits under Sources because that is what it changes: it is how email
+           gets into the graph in the first place. -->
+      <GmailSweepPanel onDone={() => void Promise.all([reloadNetwork(), reloadInsights()])} />
 
       <div class="ctl">
         <span class="ctl-title">Pin to entities</span>
