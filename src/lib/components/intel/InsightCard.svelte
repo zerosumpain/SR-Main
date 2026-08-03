@@ -12,6 +12,7 @@
     onCommission,
     onFocus,
     onTriage,
+    onReject,
   }: {
     insight: InsightData;
     busy?: boolean;
@@ -19,6 +20,8 @@
     onFocus?: (id: string) => void;
     /** Dismiss or snooze this finding so it stops coming back. */
     onTriage?: (insight: InsightData, action: 'dismiss' | 'snooze') => void;
+    /** Record that a proposed link is wrong. Only offered for predictions. */
+    onReject?: (insight: InsightData) => void;
   } = $props();
 
   /** Readable label per detector, so the chip explains what kind of finding this is. */
@@ -40,6 +43,12 @@
 
   const label = $derived(KIND_LABEL[insight.kind] ?? insight.kind.replace(/_/g, ' '));
   const isQuality = $derived(QUALITY_KINDS.has(insight.kind));
+  /**
+   * A predicted link is the one finding with a meaningful NEGATIVE answer.
+   * Confirming it records an edge; saying it is wrong has to be recordable too,
+   * or the same wrong pair is proposed on every run forever.
+   */
+  const canReject = $derived(insight.action === 'confirm_link' && Boolean(onReject));
 </script>
 
 <article class="insight" class:quality={isQuality} style="--weight: {insight.score};">
@@ -70,6 +79,11 @@
     {#if onCommission}
       <button class="action" type="button" disabled={busy} onclick={() => onCommission(insight)}>
         {busy ? 'Working…' : insight.actionLabel}
+      </button>
+    {/if}
+    {#if canReject}
+      <button class="ghost" type="button" disabled={busy} onclick={() => onReject?.(insight)}>
+        Not related
       </button>
     {/if}
     {#if onTriage}

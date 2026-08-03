@@ -31,6 +31,15 @@ export interface GraphNode {
   aliases: string[];
   /** ER category slugs, unioned across every note asserting this entity. */
   categories: string[];
+  /**
+   * `intel_notes.source` values that asserted this entity, unioned — 'email',
+   * 'file', 'research', 'chat', 'web', 'whatsapp', 'workflow'.
+   *
+   * Unioned rather than singular for the same reason categories are: an entity
+   * named in both an email and a deep dive belongs to both, and filtering to
+   * one source should return everything that source ever told us about.
+   */
+  sources: string[];
 }
 
 export interface GraphEdge {
@@ -42,6 +51,18 @@ export interface GraphEdge {
   confidence: string;
   strength: string;
   createdAt: number;
+  /** Continuous 0..1 weight. `strength` is a display bucket derived from it. */
+  weight: number;
+  /** When this edge was last observed, epoch ms. Drives its staleness. */
+  lastSeenAt: number;
+  /**
+   * The note source that asserted this edge ('email', 'file', …), if known.
+   *
+   * Named `sourceKind`, not `source`: on an edge, `source` already means the
+   * SOURCE ENDPOINT of the relationship, and a second meaning on the same
+   * object would be a genuine trap for anyone reading it later.
+   */
+  sourceKind: string | null;
 }
 
 export interface GraphSnapshot {

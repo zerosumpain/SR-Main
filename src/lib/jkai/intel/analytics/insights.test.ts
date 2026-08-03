@@ -26,6 +26,7 @@ function node(id: string, over: Partial<GraphNode> = {}): GraphNode {
     lastSeenAt: NOW - 5 * DAY,
     aliases: [],
     categories: [],
+    sources: [],
     ...over,
   };
 }
@@ -39,6 +40,9 @@ function edge(a: string, b: string) {
     confidence: 'high',
     strength: 'moderate',
     createdAt: NOW - 100 * DAY,
+    weight: 0.5,
+    lastSeenAt: NOW - 100 * DAY,
+    sourceKind: null,
   };
 }
 
@@ -50,6 +54,7 @@ function analyse(snapshot: GraphSnapshot, embeddings = new Map<string, number[]>
     centrality: computeCentrality(index),
     community: detectCommunities(index),
     embeddings,
+    suppressedPairs: new Set<string>(),
     computedAt: NOW,
   };
 }

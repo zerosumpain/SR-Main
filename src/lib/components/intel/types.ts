@@ -45,6 +45,10 @@ export interface NetNode {
   categories: string[];
   /** Observed surface forms — searched alongside the name. */
   aliases: string[];
+  /** Note sources that asserted this entity ('email', 'file', 'research', …). */
+  sources: string[];
+  /** 0..1 staleness weight — 1 is current, the floor is old but not gone. */
+  recency: number;
 }
 
 export interface NetCategory {
@@ -63,6 +67,12 @@ export interface NetEdge {
   strength: string;
   confidence: string;
   crossCommunity: boolean;
+  /** Continuous 0..1 weight; `strength` is the display bucket derived from it. */
+  weight: number;
+  /** 0..1 staleness weight for this edge. */
+  recency: number;
+  /** The note source that asserted this edge, if known. Not an endpoint. */
+  sourceKind: string | null;
 }
 
 export interface NetworkPayload {
@@ -70,6 +80,10 @@ export interface NetworkPayload {
   edges: NetEdge[];
   types: Array<{ id: string; name: string; icon: string; color: string }>;
   categories: NetCategory[];
+  /** Every source present in the graph, with its entity count. Counted over the
+   *  whole graph, not the filtered view, so deselecting one does not remove the
+   *  control you would use to bring it back. */
+  sources: Array<{ id: string; count: number }>;
   /** Ids that literally matched the keyword filter (the rest is context). */
   matched: string[];
   trimmed: boolean;

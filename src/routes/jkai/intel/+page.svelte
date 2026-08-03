@@ -12,6 +12,8 @@
 
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
+  import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
+  import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
@@ -54,6 +56,8 @@
   let keywordApplied = $state('');
   let contextHops = $state(1);
   let activeCategories = $state<string[]>([]);
+  /** Note sources allowed to contribute. Empty = no filter, i.e. all of them. */
+  let activeSources = $state<string[]>([]);
   /** Entity ids the view is pinned to. Empty = the whole graph. */
   let pinnedIds = $state<string[]>([]);
   let entityPick = $state('');
@@ -78,6 +82,31 @@
       : [...activeCategories, slug];
   }
 
+  /** 3D is the default view; the choice persists so it is not re-made per visit. */
+  const VIEW_KEY = 'intel:graph3d';
+  let view3d = $state(true);
+
+  function setView(next: boolean) {
+    view3d = next;
+    try {
+      localStorage.setItem(VIEW_KEY, next ? '1' : '0');
+    } catch {
+      // Private browsing or a full quota. The toggle still works for this
+      // session; only remembering it fails.
+    }
+  }
+
+  function toggleSource(id: string) {
+    activeSources = activeSources.includes(id)
+      ? activeSources.filter((s) => s !== id)
+      : [...activeSources, id];
+  }
+
+  function clearSources() {
+    activeSources = [];
+    activeCategories = [];
+  }
+
   function pinEntity(id: string) {
     if (!id || pinnedIds.includes(id)) return;
     pinnedIds = [...pinnedIds, id];
@@ -92,6 +121,7 @@
     keyword = '';
     keywordApplied = '';
     activeCategories = [];
+    activeSources = [];
     pinnedIds = [];
     typeId = '';
     communityId = '';
@@ -102,6 +132,7 @@
   const filterCount = $derived(
     (keywordApplied ? 1 : 0) +
       activeCategories.length +
+      activeSources.length +
       (pinnedIds.length ? 1 : 0) +
       (typeId ? 1 : 0) +
       (communityId ? 1 : 0) +
@@ -141,6 +172,7 @@
       p.set('qHops', String(contextHops));
     }
     if (activeCategories.length) p.set('categories', activeCategories.join(','));
+    if (activeSources.length) p.set('sources', activeSources.join(','));
     if (pinnedIds.length) p.set('entities', pinnedIds.join(','));
     return p.toString();
   });
@@ -167,6 +199,15 @@
   });
 
   onMount(async () => {
+    // Restore the remembered 2D/3D choice. Read here rather than in the
+    // initialiser because localStorage does not exist during SSR.
+    try {
+      const saved = localStorage.getItem(VIEW_KEY);
+      if (saved !== null) view3d = saved === '1';
+    } catch {
+      // Unreadable storage just means the default stands.
+    }
+
     try {
       const [insRes, dupRes, comRes, watchRes] = await Promise.all([
         fetch('/api/jkai/intel/insights?limit=40'),
@@ -200,11 +241,30 @@
   const qualityInsights = $derived(insights.filter((i) => QUALITY_KINDS.includes(i.kind)));
   const worldInsights = $derived(insights.filter((i) => !QUALITY_KINDS.includes(i.kind)));
 
+  /**
+   * Actions that change the graph in place. Navigating away from these was the
+   * whole complaint about "Confirm the link": the answer belongs on this page,
+   * next to the finding it came from, not in a chat thread.
+   */
+  const IN_PLACE_KINDS = new Set(['confirm_link', 'reject_link']);
+
   async function runCommission(kind: string, payload: string, entityIds: string[], key: string) {
     if (busyId) return;
     busyId = key;
     try {
       const result = await commission(kind, payload, entityIds);
+
+      if (IN_PLACE_KINDS.has(kind)) {
+        toast = result.label;
+        setTimeout(() => (toast = null), 4000);
+        // Drop the finding that was just answered and re-read the graph, so the
+        // new edge appears and the prediction stops being offered.
+        insights = insights.filter((i) => i.id !== key);
+        predicted = [];
+        await Promise.all([reloadNetwork(), reloadInsights()]);
+        return;
+      }
+
       if (result.started) {
         toast = result.label;
         setTimeout(() => (toast = null), 4000);
@@ -215,6 +275,29 @@
       setTimeout(() => (toast = null), 5000);
     } finally {
       busyId = null;
+    }
+  }
+
+  /** Re-fetch the network for the current filters, outside the reactive effect. */
+  async function reloadNetwork() {
+    try {
+      const res = await fetch(`/api/jkai/intel/network?${query}`);
+      if (res.ok) network = await res.json();
+    } catch {
+      // Keep the stale graph rather than blanking the page.
+    }
+  }
+
+  async function reloadInsights() {
+    try {
+      const res = await fetch('/api/jkai/intel/insights?limit=40');
+      if (!res.ok) return;
+      const body = await res.json();
+      insights = body.insights ?? [];
+      unlikely = body.unlikelyRelations ?? [];
+      predicted = body.predictedLinks ?? [];
+    } catch {
+      // As above — an additive panel failing must not cost the page.
     }
   }
 
@@ -239,6 +322,15 @@
       toast = 'Could not update that finding';
       setTimeout(() => (toast = null), 4000);
     }
+  }
+
+  function rejectInsightLink(i: InsightData) {
+    void runCommission(
+      'reject_link',
+      `Rejected from the intel dashboard: ${i.title}`,
+      i.entities.map((e) => e.id),
+      i.id,
+    );
   }
 
   function commissionInsight(i: InsightData) {
@@ -388,23 +480,15 @@
         {/if}
       </div>
 
-      {#if (network?.categories ?? []).length}
-        <div class="ctl">
-          <span class="ctl-title">Category</span>
-          <div class="chips">
-            {#each network?.categories ?? [] as c (c.id)}
-              <button
-                type="button"
-                class="chip"
-                class:on={activeCategories.includes(c.slug)}
-                style="--chip: {c.color}"
-                onclick={() => toggleCategory(c.slug)}
-              >{c.name}</button>
-            {/each}
-          </div>
-          <p class="hint">Set on Drive folders — see /drive.</p>
-        </div>
-      {/if}
+      <SourcePicker
+        sources={network?.sources ?? []}
+        categories={network?.categories ?? []}
+        {activeSources}
+        {activeCategories}
+        onToggleSource={toggleSource}
+        onToggleCategory={toggleCategory}
+        onClear={clearSources}
+      />
 
       <div class="ctl">
         <span class="ctl-title">Pin to entities</span>
@@ -512,18 +596,35 @@
     </aside>
 
     <div class="canvas">
+      <div class="dims" role="group" aria-label="Graph dimension">
+        <button type="button" class:on={view3d} onclick={() => setView(true)} aria-pressed={view3d}>3D</button>
+        <button type="button" class:on={!view3d} onclick={() => setView(false)} aria-pressed={!view3d}>2D</button>
+      </div>
+
       {#if loadingNetwork && !network}
         <div class="loading">Analysing the graph…</div>
       {:else if network}
-        <NetworkGraph
-          nodes={network.nodes}
-          edges={network.edges}
-          {highlightPath}
-          matchedIds={network.matched ?? []}
-          {selectedId}
-          onSelect={(id) => (selectedId = id)}
-          onOpen={(id) => focus(id)}
-        />
+        {#if view3d}
+          <NetworkGraph3D
+            nodes={network.nodes}
+            edges={network.edges}
+            {highlightPath}
+            matchedIds={network.matched ?? []}
+            {selectedId}
+            onSelect={(id) => (selectedId = id)}
+            onOpen={(id) => focus(id)}
+          />
+        {:else}
+          <NetworkGraph
+            nodes={network.nodes}
+            edges={network.edges}
+            {highlightPath}
+            matchedIds={network.matched ?? []}
+            {selectedId}
+            onSelect={(id) => (selectedId = id)}
+            onOpen={(id) => focus(id)}
+          />
+        {/if}
       {/if}
     </div>
 
@@ -568,7 +669,7 @@
     {:else if tab === 'insights'}
       <div class="grid">
         {#each worldInsights as i (i.id)}
-          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} />
+          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} onReject={rejectInsightLink} />
         {:else}
           <p class="none">Nothing stands out yet. Add more notes or run a deep dive.</p>
         {/each}
@@ -660,7 +761,7 @@
       {/if}
       <div class="grid">
         {#each qualityInsights as i (i.id)}
-          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} />
+          <InsightCard insight={i} busy={busyId === i.id} onCommission={commissionInsight} onFocus={focus} onTriage={triageInsight} onReject={rejectInsightLink} />
         {:else}
           <p class="none">No data-quality problems detected.</p>
         {/each}
@@ -854,6 +955,48 @@
     border-radius: var(--radius-round);
     overflow: hidden;
     position: relative;
+  }
+
+  /* Sits over the canvas rather than in the rail: it is a property of the view,
+     not of the filters.
+
+     Colours are LITERAL, not tokens. This control floats over two different
+     backgrounds — the cream 2D canvas and the near-black 3D scene — and the
+     page tokens all assume the cream one, so `--text-ghost` on the inactive
+     button rendered invisible over the 3D view. Same trap as the modal tokens:
+     anything sitting over a surface it does not own needs its own palette. */
+  .dims {
+    position: absolute;
+    z-index: 4;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: rgba(28, 25, 23, 0.82);
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: var(--radius-pill);
+    backdrop-filter: blur(4px);
+  }
+  .dims button {
+    padding: 3px 11px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    color: rgba(237, 228, 212, 0.72);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease-out);
+  }
+  .dims button:hover:not(.on) {
+    color: #ede4d4;
+    background: rgba(237, 228, 212, 0.12);
+  }
+  .dims button.on {
+    background: var(--accent);
+    color: #fff;
   }
 
   .ctl {

@@ -72,7 +72,7 @@ export const GET: RequestHandler = async ({ url }) => {
   const keep = statusFilter(url.searchParams.get('status'));
 
   const analysis = await getGraphAnalysis();
-  const { index, community, embeddings } = analysis;
+  const { index, community, embeddings, suppressedPairs } = analysis;
 
   const decorate = (ids: string[]) =>
     ids
@@ -98,7 +98,8 @@ export const GET: RequestHandler = async ({ url }) => {
   );
 
   const predicted = predictMissingLinks(
-    { index, membership: community.membership },
+    // suppressedPairs, or every rejected prediction returns on the next run.
+    { index, membership: community.membership, suppressedPairs },
     { limit: 15, minScore: 0.8 },
   );
 

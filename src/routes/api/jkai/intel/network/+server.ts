@@ -9,6 +9,7 @@ import { applyGraphFilter, parseCsv } from '$lib/jkai/intel/analytics/filter';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
+import { recencyOf } from '$lib/jkai/intel/staleness';
 
 /**
  * Above this many nodes the payload is trimmed to the most central entities.
@@ -25,11 +26,15 @@ export const GET: RequestHandler = async ({ url }) => {
   const communityFilter = url.searchParams.get('community');
   const q = url.searchParams.get('q');
   const categoryFilter = parseCsv(url.searchParams.get('categories'));
+  const sourceFilter = parseCsv(url.searchParams.get('sources'));
   const entityFilter = parseCsv(url.searchParams.get('entities'));
   const qHopsParam = url.searchParams.get('qHops');
 
   const analysis = await getGraphAnalysis();
   const { index, centrality, community } = analysis;
+  // One clock for the whole response, so two nodes of identical age cannot come
+  // back with different recency because the loop took a millisecond.
+  const now = Date.now();
 
   const filtered = applyGraphFilter(index, community.membership, {
     typeId,
@@ -40,6 +45,7 @@ export const GET: RequestHandler = async ({ url }) => {
     q,
     qHops: qHopsParam === null ? 1 : Number(qHopsParam),
     categories: categoryFilter,
+    sources: sourceFilter,
     entityIds: entityFilter,
   });
 
@@ -77,7 +83,12 @@ export const GET: RequestHandler = async ({ url }) => {
       community: community.membership.get(id) ?? 0,
       hops: focusId ? (hopNeighbourhood(index, focusId, hops).get(id) ?? null) : null,
       categories: n.categories,
+      sources: n.sources,
       aliases: n.aliases,
+      // How current this entity's evidence is, so the renderers can fade stale
+      // material. Computed here rather than client-side so both the 2D and 3D
+      // views agree and neither needs to know the decay curve.
+      recency: Number(recencyOf(n.lastSeenAt, now).toFixed(3)),
     };
   });
 
@@ -91,6 +102,9 @@ export const GET: RequestHandler = async ({ url }) => {
       label: e.label,
       strength: e.strength,
       confidence: e.confidence,
+      weight: e.weight,
+      sourceKind: e.sourceKind,
+      recency: Number(recencyOf(e.lastSeenAt, now).toFixed(3)),
       // An edge whose ends sit in different clusters is the interesting kind.
       crossCommunity: community.membership.get(e.source) !== community.membership.get(e.target),
     }));
@@ -117,11 +131,28 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const comps = components(index);
 
+  // Every source present in the graph, with how many entities it accounts for.
+  //
+  // Counted over the WHOLE index rather than the filtered `keep` set: this
+  // populates the source picker, and a picker whose options vanish as you use
+  // it cannot be used to get back. Deselecting 'email' must still show 'email'
+  // with its count, or there is no way to re-enable it.
+  const sourceCounts = new Map<string, number>();
+  for (const id of index.ids) {
+    for (const s of index.byId.get(id)?.sources ?? []) {
+      sourceCounts.set(s, (sourceCounts.get(s) ?? 0) + 1);
+    }
+  }
+  const sources = [...sourceCounts.entries()]
+    .map(([id, count]) => ({ id, count }))
+    .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+
   return json({
     nodes,
     edges,
     types,
     categories,
+    sources,
     // The literal keyword hits, kept separate from `nodes` so the client can
     // highlight them rather than pretending the expanded neighbourhood matched.
     matched: filtered.matched.filter((id) => keep.has(id)),

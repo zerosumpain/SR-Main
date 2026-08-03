@@ -20,7 +20,22 @@ export interface GraphAnalysis {
   community: CommunityResult;
   /** node id → embedding, only for entities that have one. */
   embeddings: Map<string, number[]>;
+  /**
+   * Pairs the user has explicitly said are NOT related, as `min|max` id keys.
+   *
+   * Held apart from the graph rather than in it. A suppressed edge must not be
+   * drawn, counted in a degree, or walked by path finding — so it is excluded
+   * from the snapshot — but the missing-link predictor still has to know about
+   * it, or every rejected prediction is proposed again on the next run and
+   * rejecting one achieves nothing.
+   */
+  suppressedPairs: Set<string>;
   computedAt: number;
+}
+
+/** Stable order-independent key for an unordered pair of entity ids. */
+export function pairKeyFor(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
 /**
@@ -75,7 +90,11 @@ function parseVector(raw: unknown): number[] | null {
   return out.every((n) => Number.isFinite(n)) ? out : null;
 }
 
-async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Map<string, number[]> }> {
+async function loadSnapshot(): Promise<{
+  snapshot: GraphSnapshot;
+  embeddings: Map<string, number[]>;
+  suppressedPairs: Set<string>;
+}> {
   // Merged entities are excluded: they are aliases resolved into a survivor and
   // would otherwise show as duplicate nodes.
   const entityRes = await db.execute(sql`
@@ -95,7 +114,8 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       e.aliases                     AS aliases,
       COALESCE(ne.note_count, 0)    AS note_count,
       ne.last_seen_at,
-      COALESCE(ne.categories, ARRAY[]::text[]) AS categories
+      COALESCE(ne.categories, ARRAY[]::text[]) AS categories,
+      COALESCE(ne.sources, ARRAY[]::text[])    AS sources
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
     LEFT JOIN (
@@ -103,10 +123,16 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       -- categories of every note asserting it: filtering on 'work' returns
       -- everything work ever told us about. The lateral expansion multiplies
       -- rows, hence COUNT(DISTINCT note_id) rather than COUNT(*).
+      --
+      -- Sources are unioned for the same reason and aggregated here rather
+      -- than in a second query: the lateral join over categories already
+      -- multiplies rows, so a naive ARRAY_AGG(n.source) elsewhere would count
+      -- one note once per category it carries. DISTINCT covers that.
       SELECT ne.entity_id,
              COUNT(DISTINCT ne.note_id)::int AS note_count,
              MAX(n.created_at)               AS last_seen_at,
-             ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories
+             ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories,
+             ARRAY_AGG(DISTINCT n.source)   FILTER (WHERE n.source IS NOT NULL) AS sources
       FROM intel_note_entities ne
       JOIN intel_notes n ON n.id = ne.note_id
       LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(n.categories, '[]'::jsonb))
@@ -139,6 +165,7 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       lastSeenAt: r.last_seen_at ? new Date(String(r.last_seen_at)).getTime() : created,
       aliases: toStringArray(r.aliases),
       categories: toStringArray(r.categories),
+      sources: toStringArray(r.sources),
     };
   });
 
@@ -153,12 +180,19 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
       r.label,
       r.confidence,
       r.strength,
-      r.created_at
+      r.created_at,
+      r.weight,
+      r.last_seen_at,
+      n.source AS source_kind
     FROM intel_relationships r
     LEFT JOIN intel_entities s  ON s.id  = r.source_entity_id
     LEFT JOIN intel_entities sm ON sm.id = s.merged_into_id
     LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id
     LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id
+    LEFT JOIN intel_notes n     ON n.id  = r.source_note_id
+    -- A suppressed edge was deleted deliberately with a reason. It must not
+    -- reappear in the analysed graph, or "reject this link" would be cosmetic.
+    WHERE r.suppressed IS NOT TRUE
   `);
 
   const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>).map((r) => ({
@@ -170,9 +204,38 @@ async function loadSnapshot(): Promise<{ snapshot: GraphSnapshot; embeddings: Ma
     confidence: String(r.confidence ?? 'medium'),
     strength: String(r.strength ?? 'moderate'),
     createdAt: r.created_at ? new Date(String(r.created_at)).getTime() : 0,
+    weight: Number.isFinite(Number(r.weight)) ? Number(r.weight) : 0.5,
+    // Falls back to creation time: an edge written before `last_seen_at` was
+    // populated is as old as it looks, not infinitely stale.
+    lastSeenAt: r.last_seen_at
+      ? new Date(String(r.last_seen_at)).getTime()
+      : r.created_at
+        ? new Date(String(r.created_at)).getTime()
+        : 0,
+    sourceKind: r.source_kind == null ? null : String(r.source_kind),
   }));
 
-  return { snapshot: { nodes, edges }, embeddings };
+  // Suppressed pairs, remapped through merges the same way edges are — a
+  // rejection must survive one of its endpoints being merged into another
+  // entity, or merging would quietly resurrect a link the user ruled out.
+  const suppressedRes = await db.execute(sql`
+    SELECT
+      COALESCE(sm.id, r.source_entity_id) AS source,
+      COALESCE(tm.id, r.target_entity_id) AS target
+    FROM intel_relationships r
+    LEFT JOIN intel_entities s  ON s.id  = r.source_entity_id
+    LEFT JOIN intel_entities sm ON sm.id = s.merged_into_id
+    LEFT JOIN intel_entities t  ON t.id  = r.target_entity_id
+    LEFT JOIN intel_entities tm ON tm.id = t.merged_into_id
+    WHERE r.suppressed IS TRUE
+  `);
+  const suppressedPairs = new Set(
+    (suppressedRes.rows as Array<Record<string, unknown>>).map((r) =>
+      pairKeyFor(String(r.source), String(r.target)),
+    ),
+  );
+
+  return { snapshot: { nodes, edges }, embeddings, suppressedPairs };
 }
 
 /**
@@ -186,7 +249,7 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
 
   const startedAt = generation;
   inflight = (async () => {
-    const { snapshot, embeddings } = await loadSnapshot();
+    const { snapshot, embeddings, suppressedPairs } = await loadSnapshot();
     const index = buildIndex(snapshot);
     const analysis: GraphAnalysis = {
       snapshot,
@@ -194,6 +257,7 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
       centrality: computeCentrality(index),
       community: detectCommunities(index),
       embeddings,
+      suppressedPairs,
       computedAt: Date.now(),
     };
     // Only cache if nothing invalidated while we were reading. The caller still
