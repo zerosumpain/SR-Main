@@ -44,6 +44,12 @@
   };
 
   let integrations = $state<Integration[]>([]);
+  /**
+   * True only once the register has actually arrived. "Not in the register" is
+   * only a meaningful statement after the fetch lands — before it, the list is
+   * empty for the boring reason and every recorded key would read as missing.
+   */
+  let loaded = $state(false);
 
   /**
    * The picker owns the fetch (loading / retry / empty / custom-value fall out
@@ -54,6 +60,7 @@
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     integrations = (body.integrations ?? []) as Integration[];
+    loaded = true;
     return integrations.map((i) => ({
       value: i.key,
       label: i.name,
@@ -128,7 +135,7 @@
       placeholder="choose a registered integration"
       emptyHint="Nothing recorded yet — ask jkai in /jkai for the data you want, or add one at /admin/ai/apis. You can still type a key."
     />
-    {#if selectedKey && !selected}
+    {#if loaded && selectedKey && !selected}
       <p class="ai-hint">
         <code>{selectedKey}</code> isn't in the loaded register — it will be resolved at run time (or
         the call will fail if it isn't recorded).

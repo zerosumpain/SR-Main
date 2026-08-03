@@ -29,6 +29,14 @@
   };
 
   let apis = $state<ApiMeta[]>([]);
+  /**
+   * True only once the catalogue has actually arrived. Everything that reads
+   * "this key is not registered" out of an empty `apis` must wait for it —
+   * before the fetch lands, an empty list is indistinguishable from a catalogue
+   * that does not contain the key, and a perfectly valid API would flash up as
+   * unregistered on every panel open.
+   */
+  let loaded = $state(false);
 
   /**
    * The picker owns the fetch (it renders loading / retry / empty / custom-value
@@ -40,6 +48,7 @@
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     apis = (body.apis ?? []) as ApiMeta[];
+    loaded = true;
     return apis.map((a) => ({
       value: a.key,
       label: a.name,
@@ -114,7 +123,7 @@
       placeholder="choose a registered API"
       emptyHint="No APIs in the catalogue yet — add one at /admin/ai/apis, then pick it here. You can still type a key."
     />
-    {#if apiKey && !selected}
+    {#if loaded && apiKey && !selected}
       <p class="ac-hint">
         <code>{apiKey}</code> isn't in the loaded catalogue — it will be resolved at run time (or
         the call will fail if it isn't registered).

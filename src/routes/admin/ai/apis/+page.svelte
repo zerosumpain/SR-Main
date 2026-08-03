@@ -3,6 +3,11 @@
   import { getContext } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  // The SAME predicate the server binds with. `$lib/secrets/registry` is
+  // server-only, so the rule lives in a pure module both sides import — a
+  // hand-written copy here previously offered `*.example.com` credentials for
+  // the apex host, which the server then refused at call time.
+  import { hostAllowed } from '$lib/secrets/host-match';
 
   type Param = { name: string; in: string; required?: boolean; description?: string; example?: string; default?: string };
   type Output = { name: string; expr: string; unit?: string; description?: string };
@@ -311,21 +316,34 @@
   function boundSecrets(a: ApiRow): Secret[] {
     const host = hostOf(a.baseUrl);
     if (!host) return [];
-    return secrets.filter(
-      (s) => s.injection.kind !== 'none' && s.allowedHosts.some((h) => hostMatches(host, h)),
-    );
+    return secrets.filter((s) => s.injection.kind !== 'none' && hostAllowed(host, s.allowedHosts));
   }
 
-  /** Mirrors `hostAllowed` in $lib/secrets/registry — display only; the server re-checks. */
-  function hostMatches(host: string, pattern: string): boolean {
-    const p = pattern.trim().toLowerCase();
-    const h = host.toLowerCase();
-    if (!p) return false;
-    if (p.startsWith('*.')) return h === p.slice(2) || h.endsWith(p.slice(1));
-    return h === p;
+  /**
+   * The handle stored on the entry when no credential of that name is in the
+   * registry any more — deleting a credential does not unbind the services
+   * using it. Without this the `<select>` matches no option, the browser falls
+   * back to the first one, and a broken binding reads as "no credential".
+   */
+  function danglingHandle(a: ApiRow): string | null {
+    if (!a.secretHandle) return null;
+    return secrets.some((s) => s.handle === a.secretHandle) ? null : a.secretHandle;
   }
 
   async function bindCredential(a: ApiRow, handle: string, el: HTMLSelectElement) {
+    // Legacy `bearer-env` entries hold an env-var NAME that nothing in this UI
+    // can type back in, so unbinding one destroys it for good. Refuse rather
+    // than lose it; binding a real credential over it is still allowed, because
+    // that is the migration we want.
+    if (!handle && !a.secretHandle && a.auth !== 'none') {
+      el.value = '';
+      say(
+        `${a.name} uses a legacy ${a.auth} reference, not a registry credential. ` +
+          `Bind a credential to replace it — clearing it here would discard the env-var name with no way to restore it.`,
+        true,
+      );
+      return;
+    }
     busy = `bind:${a.key}`;
     try {
       const res = await fetch(qs('/api/admin/apis/catalog'), {
@@ -666,6 +684,7 @@
         {#each apis as a (a.key)}
           {@const bound = boundSecrets(a)}
           {@const boundHandles = new Set(bound.map((s) => s.handle))}
+          {@const dangling = danglingHandle(a)}
           <div class="arow">
             <span class="a-name">{a.name}</span>
             <span class="a-base"><code>{a.baseUrl}</code></span>
@@ -678,6 +697,12 @@
                 onchange={(e) => bindCredential(a, e.currentTarget.value, e.currentTarget)}
               >
                 <option value="">— no credential —</option>
+                {#if dangling}
+                  <!-- Keeps the stored binding selectable and visibly broken;
+                       without it the browser silently falls back to the first
+                       option and the row claims it has no credential. -->
+                  <option value={dangling}>⚠ {dangling} · missing from the registry</option>
+                {/if}
                 {#if bound.length}
                   <optgroup label={`bound to ${hostOf(a.baseUrl) || 'this host'}`}>
                     {#each bound as s (s.handle)}
