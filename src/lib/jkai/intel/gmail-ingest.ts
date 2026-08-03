@@ -893,27 +893,35 @@ async function persistStructuralOnly(
   `);
   const existingId = (rows as Array<Record<string, unknown>>)[0]?.id;
 
-  let noteId: string;
   if (existingId) {
-    noteId = String(existingId);
-  } else {
-    const [created] = await db
-      .insert(intelNotes)
-      .values({
-        title: ctx.subject.slice(0, 200),
-        // Headers only — the body is deliberately not stored yet, so the later
-        // full extraction is not fooled into thinking it already has the text.
-        rawContent: `Email thread: ${ctx.subject}\nParticipants: ${ctx.participants.map((p) => p.email).join(', ')}`,
-        source: 'email',
-        format: 'summary',
-        status: 'pending',
-        metadata,
-      })
-      .returning({ id: intelNotes.id });
-    noteId = created.id;
+    // Its structural edges are already in the graph from a previous run, and
+    // persistExtraction treats a re-observed edge as CORROBORATION — it bumps
+    // `observationCount` and recomputes the weight from it. A thread can sit
+    // deferred for many nights waiting for budget, so re-persisting here would
+    // add a phantom observation per night and quietly inflate the weight and
+    // corroboration of every correspondence edge in the mailbox. Nothing new
+    // has been read, so there is nothing new to assert.
+    return { entityCount: 0, relationshipCount: 0 };
   }
 
-  return persistExtraction(noteId, structural, { recency: opts.recency, observedAt: opts.observedAt });
+  const [created] = await db
+    .insert(intelNotes)
+    .values({
+      title: ctx.subject.slice(0, 200),
+      // Headers only — the body is deliberately not stored yet, so the later
+      // full extraction is not fooled into thinking it already has the text.
+      rawContent: `Email thread: ${ctx.subject}\nParticipants: ${ctx.participants.map((p) => p.email).join(', ')}`,
+      source: 'email',
+      format: 'summary',
+      status: 'pending',
+      metadata,
+    })
+    .returning({ id: intelNotes.id });
+
+  return persistExtraction(created.id, structural, {
+    recency: opts.recency,
+    observedAt: opts.observedAt,
+  });
 }
 
 export interface GmailSweepPreview {
