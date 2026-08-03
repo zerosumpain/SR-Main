@@ -29,6 +29,7 @@ import {
 } from '$lib/datastore';
 import { safeFunction } from '$lib/workflows/nodes/safe-eval';
 import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
+import { apiRegistryDisabled } from './registry-enabled';
 
 export const INTEGRATIONS_COLLECTION = 'api_integrations';
 const ACTOR = 'jkai';
@@ -90,6 +91,13 @@ export class IntegrationError extends Error {
 
 /** Idempotent — safe to call on every boot and before every read/write. */
 export async function ensureIntegrationsCollection(): Promise<void> {
+  // A host with no registry must not grow one. This runs at the top of every
+  // read AND write, so without this guard the collection reappears the moment
+  // anything so much as lists integrations. `listIntegrations` and
+  // `getIntegration` both map a missing collection to empty, so callers are
+  // unaffected. See $lib/apis/registry-enabled.
+  if (apiRegistryDisabled()) return;
+
   await ensureCollection(
     INTEGRATIONS_COLLECTION,
     {

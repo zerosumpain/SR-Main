@@ -5,8 +5,15 @@
 //   - ~12 known-good public APIs into `api_catalog` (only where the key is
 //     ABSENT — a self-registered entry with the same key is never overwritten).
 //
-// Seeding is host-agnostic (runs on every boot, homeserv AND VPS); only the
-// nightly CRON is prod-gated (see engine.ts).
+// Seeding runs on every boot, before the engine's own prod gate (see
+// engine.ts) — that is deliberate, the collections are needed whether or not
+// the nightly run ever fires.
+//
+// The ONE exception is the API catalogue. A host that sets
+// API_REGISTRY_DISABLED=1 holds no registry at all, and without a gate here
+// the ~12 seed entries and the collection shell come back on the next
+// restart, silently undoing a purge. See $lib/apis/registry-enabled for why
+// homeserv is such a host.
 
 import {
   DatastoreError,
@@ -15,6 +22,7 @@ import {
   upsertRecord,
 } from '$lib/datastore';
 import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
+import { apiRegistryDisabled } from '$lib/apis/registry-enabled';
 import { ensureToolPolicyCollection } from '$lib/toolpolicy/policy';
 import { COLLECTIONS, SYSTEM_ACTOR, SYSTEM_PERMISSIONS, errMsg, type SeedApiEntry } from './types';
 
@@ -181,16 +189,21 @@ export async function ensureSystemCollections(): Promise<void> {
   // path needs it whether or not the engine has ever run), so it seeds itself.
   await ensureToolPolicyCollection();
 
-  await ensureCollection(
-    COLLECTIONS.apiCatalog,
-    {
-      name: 'API Catalogue',
-      description: 'Catalogued external data sources for API-first answering (api_search / api_call / api_register).',
-      isSystem: true,
-      defaultPermissions: SYSTEM_PERMISSIONS.api_catalog,
-    },
-    SYSTEM_ACTOR,
-  );
+  // The catalogue is the only registry-owned collection in this list; the rest
+  // are engine bookkeeping and are wanted on every host. A host that holds no
+  // registry skips just this one. See $lib/apis/registry-enabled.
+  if (!apiRegistryDisabled()) {
+    await ensureCollection(
+      COLLECTIONS.apiCatalog,
+      {
+        name: 'API Catalogue',
+        description: 'Catalogued external data sources for API-first answering (api_search / api_call / api_register).',
+        isSystem: true,
+        defaultPermissions: SYSTEM_PERMISSIONS.api_catalog,
+      },
+      SYSTEM_ACTOR,
+    );
+  }
   await ensureCollection(
     COLLECTIONS.questionInsights,
     {
@@ -239,6 +252,10 @@ export async function ensureSystemCollections(): Promise<void> {
  * clobber a self-registered / verified entry. Returns counts for logging/tests.
  */
 export async function seedApiCatalog(): Promise<{ seeded: number; skipped: number }> {
+  // Nothing to seed on a host that holds no registry — and without this the
+  // ~12 seed entries reappear on the next boot, silently undoing a purge.
+  if (apiRegistryDisabled()) return { seeded: 0, skipped: 0 };
+
   let seeded = 0;
   let skipped = 0;
   for (const entry of SEEDED_APIS) {
