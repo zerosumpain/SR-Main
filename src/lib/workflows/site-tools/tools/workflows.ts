@@ -18,7 +18,20 @@ import { registry } from '$lib/workflows';
 import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
 import { findFanInCollisions, type FanInCollision } from '$lib/workflows/fan-in';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
-import { credentialFields } from '$lib/canvas/mutate.server';
+import {
+  createEdge,
+  createNode,
+  credentialFields,
+  deleteEdge,
+  deleteNode,
+  mutateNodeConfig,
+  updateEdge,
+  EdgeEndpointError,
+  EdgeNotFoundError,
+  NodeNotFoundError,
+  SensitiveRefusalError,
+} from '$lib/canvas/mutate.server';
+import { applyAmendOps, AmendOpError, WorkflowNotFoundError, type AmendOp } from '$lib/canvas/amend.server';
 
 /**
  * The recovery instruction that ships INSIDE the failure, not in a skill file.
@@ -1048,35 +1061,35 @@ register({
       if (err) return { success: false, error: err };
     }
 
-    const updates: Record<string, unknown> = {};
-    if (args.label) updates.label = args.label;
-    if (args.type) updates.type = args.type;
-
     const incomingConfig = (args.config as Record<string, unknown> | undefined) ?? null;
     const removeKeys = Array.isArray(args.removeConfigKeys)
-      ? (args.removeConfigKeys as string[])
+      ? [...(args.removeConfigKeys as string[])]
       : [];
-    if (incomingConfig || removeKeys.length > 0) {
-      const merged: Record<string, unknown> = {
-        ...(existing.config as Record<string, unknown>),
-        ...(incomingConfig ?? {}),
-      };
-      // Treat null as "delete this key" — most LLM-friendly way to remove a
-      // stale config field. Without this, `{ value: null }` left a `null`
-      // sentinel in the saved config and the lint kept flagging it.
-      if (incomingConfig) {
-        for (const k of Object.keys(incomingConfig)) {
-          if (incomingConfig[k] === null) delete merged[k];
+    const patch = incomingConfig ? { ...incomingConfig } : undefined;
+    // Treat null as "delete this key" — most LLM-friendly way to remove a
+    // stale config field. Without this, `{ value: null }` left a `null`
+    // sentinel in the saved config and the lint kept flagging it.
+    if (patch) {
+      for (const k of Object.keys(patch)) {
+        if (patch[k] === null) {
+          delete patch[k];
+          removeKeys.push(k);
         }
       }
-      for (const k of removeKeys) delete merged[k];
-      const offending = credentialFields(merged);
-      if (offending.length > 0) return refuseCredentialConfig(offending);
-      updates.config = merged;
     }
 
-    const [node] = await db.update(workflowNodes).set(updates).where(eq(workflowNodes.id, nodeId)).returning();
-    if (node) {
+    try {
+      const res = await mutateNodeConfig({
+        workflowId: existing.workflowId,
+        nodeId,
+        patch,
+        removeKeys: removeKeys.length > 0 ? removeKeys : undefined,
+        label: typeof args.label === 'string' ? args.label : undefined,
+        type: typeof args.type === 'string' ? args.type : undefined,
+        actor: 'chat',
+        reason: 'workflow_update_node',
+      });
+      const node = res.node;
       publishWorkflowUpdate({
         workflowId: node.workflowId,
         kind: 'node_updated',
@@ -1091,8 +1104,12 @@ register({
         },
         ts: Date.now(),
       });
+      return { success: true, data: node };
+    } catch (err) {
+      if (err instanceof SensitiveRefusalError) return refuseCredentialConfig(err.fields);
+      if (err instanceof NodeNotFoundError) return { success: false, error: 'Node not found' };
+      throw err;
     }
-    return { success: true, data: node };
   },
 });
 
@@ -1136,19 +1153,21 @@ register({
     const configErr = await validateNodeConfig(type, config);
     if (configErr) return { success: false, error: configErr };
 
-    const offending = credentialFields(config);
-    if (offending.length > 0) return refuseCredentialConfig(offending);
-
-    const explicitPosition = args.position as { x: number; y: number } | undefined;
-    const position = explicitPosition ?? (await nextNodePosition(workflowId));
-
-    const [node] = await db.insert(workflowNodes).values({
-      workflowId,
-      type,
-      label: args.label as string,
-      config,
-      position,
-    }).returning();
+    let node;
+    try {
+      node = await createNode({
+        workflowId,
+        type,
+        label: args.label as string,
+        config,
+        position: args.position as { x: number; y: number } | undefined,
+        actor: 'chat',
+        reason: 'workflow_add_node',
+      });
+    } catch (err) {
+      if (err instanceof SensitiveRefusalError) return refuseCredentialConfig(err.fields);
+      throw err;
+    }
     publishWorkflowUpdate({
       workflowId,
       kind: 'node_added',
@@ -1166,39 +1185,6 @@ register({
     return { success: true, data: node };
   },
 });
-
-/**
- * Pick a fresh canvas position for a brand-new node so individual
- * `workflow_add_node` calls don't pile up at (0, 0). Lays nodes out in a
- * 3-column grid below / to the right of whatever's already there, matching
- * the spacing `workflow_build_from_spec` uses for batch inserts.
- */
-async function nextNodePosition(workflowId: string): Promise<{ x: number; y: number }> {
-  const COL_W = 280;
-  const ROW_H = 160;
-  const COLS = 3;
-  const ORIGIN_X = 240;
-  const ORIGIN_Y = 20;
-  const existing = await db
-    .select({ position: workflowNodes.position })
-    .from(workflowNodes)
-    .where(eq(workflowNodes.workflowId, workflowId));
-  const used = new Set<string>();
-  for (const row of existing) {
-    const p = row.position as { x?: number; y?: number } | null;
-    if (!p || typeof p.x !== 'number' || typeof p.y !== 'number') continue;
-    used.add(`${Math.round(p.x)},${Math.round(p.y)}`);
-  }
-  for (let i = 0; i < 60; i++) {
-    const col = i % COLS;
-    const row = Math.floor(i / COLS);
-    const x = ORIGIN_X + col * COL_W;
-    const y = ORIGIN_Y + row * ROW_H;
-    if (!used.has(`${x},${y}`)) return { x, y };
-  }
-  // Past 60 slots — just stagger off the bottom so nothing exactly overlaps.
-  return { x: ORIGIN_X, y: ORIGIN_Y + (existing.length + 1) * ROW_H };
-}
 
 register({
   name: 'workflow_list_node_types',
@@ -1378,12 +1364,12 @@ register({
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
     if (!existing) return { success: false, error: 'Node not found' };
 
-    const connectedEdges = await db
-      .select()
-      .from(workflowEdges)
-      .where(or(eq(workflowEdges.sourceNodeId, nodeId), eq(workflowEdges.targetNodeId, nodeId)));
-
-    await db.delete(workflowNodes).where(eq(workflowNodes.id, nodeId));
+    const res = await deleteNode({
+      workflowId: existing.workflowId,
+      nodeId,
+      actor: 'chat',
+      reason: 'workflow_remove_node',
+    });
     publishWorkflowUpdate({
       workflowId: existing.workflowId,
       kind: 'node_removed',
@@ -1391,7 +1377,7 @@ register({
       summary: existing.label,
       ts: Date.now(),
     });
-    return { success: true, data: { deleted: true, label: existing.label, edgesRemoved: connectedEdges.length } };
+    return { success: true, data: { deleted: true, label: res.node.label, edgesRemoved: res.edges.length } };
   },
 });
 
@@ -1416,13 +1402,29 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const [edge] = await db.insert(workflowEdges).values({
-      workflowId: args.workflowId as string,
-      sourceNodeId: args.sourceNodeId as string,
-      targetNodeId: args.targetNodeId as string,
-      sourceHandle: (args.sourceHandle as string) || null,
-      targetHandle: (args.targetHandle as string) || null,
-    }).returning();
+    let edge;
+    try {
+      edge = await createEdge({
+        workflowId: args.workflowId as string,
+        sourceNodeId: args.sourceNodeId as string,
+        targetNodeId: args.targetNodeId as string,
+        sourceHandle: (args.sourceHandle as string) || null,
+        targetHandle: (args.targetHandle as string) || null,
+        actor: 'chat',
+        reason: 'workflow_add_edge',
+      });
+    } catch (err) {
+      if (err instanceof EdgeEndpointError) {
+        return {
+          success: false,
+          error:
+            `Cannot wire this edge: ${err.nodeIds.join(', ')} — not a connectable node of workflow ${args.workflowId}. ` +
+            `Node ids are per-canvas and a node cannot pipe to itself; display-only nodes (stats, post-its, annotations) take no edges. ` +
+            `Call workflow_inspect on this workflow and use the ids it returns — do not carry ids over from another canvas.`,
+        };
+      }
+      throw err;
+    }
     publishWorkflowUpdate({
       workflowId: edge.workflowId,
       kind: 'edge_added',
@@ -1459,7 +1461,12 @@ register({
   handler: async (args) => {
     const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string)).limit(1);
     if (!existing) return { success: false, error: 'Edge not found' };
-    await db.delete(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string));
+    await deleteEdge({
+      workflowId: existing.workflowId,
+      edgeId: existing.id,
+      actor: 'chat',
+      reason: 'workflow_remove_edge',
+    });
     publishWorkflowUpdate({
       workflowId: existing.workflowId,
       kind: 'edge_removed',
@@ -1488,28 +1495,174 @@ register({
   toolset: 'workflows',
   handler: async (args) => {
     const edgeId = args.edgeId as string;
-    const updates: Record<string, unknown> = {};
-    if (args.sourceNodeId) updates.sourceNodeId = args.sourceNodeId;
-    if (args.targetNodeId) updates.targetNodeId = args.targetNodeId;
-    if (args.sourceHandle !== undefined) updates.sourceHandle = args.sourceHandle || null;
-    if (args.targetHandle !== undefined) updates.targetHandle = args.targetHandle || null;
-    const [edge] = await db.update(workflowEdges).set(updates).where(eq(workflowEdges.id, edgeId)).returning();
-    if (edge) {
-      publishWorkflowUpdate({
-        workflowId: edge.workflowId,
-        kind: 'edge_added',
-        edgeId: edge.id,
-        edge: {
-          id: edge.id,
-          sourceNodeId: edge.sourceNodeId,
-          targetNodeId: edge.targetNodeId,
-          sourceHandle: edge.sourceHandle,
-          targetHandle: edge.targetHandle,
-        },
-        ts: Date.now(),
+    const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, edgeId)).limit(1);
+    if (!existing) return { success: false, error: 'Edge not found' };
+
+    let edge;
+    try {
+      edge = await updateEdge({
+        workflowId: existing.workflowId,
+        edgeId,
+        sourceNodeId: args.sourceNodeId as string | undefined,
+        targetNodeId: args.targetNodeId as string | undefined,
+        sourceHandle: args.sourceHandle !== undefined ? ((args.sourceHandle as string) || null) : undefined,
+        targetHandle: args.targetHandle !== undefined ? ((args.targetHandle as string) || null) : undefined,
+        actor: 'chat',
+        reason: 'workflow_update_edge',
       });
+    } catch (err) {
+      if (err instanceof EdgeEndpointError) {
+        return {
+          success: false,
+          error:
+            `Cannot re-route this edge onto ${err.nodeIds.join(', ')} — not a connectable node of workflow ${existing.workflowId}. ` +
+            `Call workflow_inspect on this workflow and use the ids it returns.`,
+        };
+      }
+      if (err instanceof EdgeNotFoundError) return { success: false, error: 'Edge not found' };
+      throw err;
     }
-    return edge ? { success: true, data: edge } : { success: false, error: 'Edge not found' };
+
+    publishWorkflowUpdate({
+      workflowId: edge.workflowId,
+      kind: 'edge_added',
+      edgeId: edge.id,
+      edge: {
+        id: edge.id,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+      },
+      ts: Date.now(),
+    });
+    return { success: true, data: edge };
+  },
+});
+
+// ==========================================
+// Update Tools — Atomic multi-step amend
+// ==========================================
+
+/**
+ * The op shapes, spelled out in the description rather than in JSON Schema.
+ *
+ * A discriminated union of six op objects expands to a schema several times the
+ * size of every other workflow tool's, and it is prefilled on every turn once
+ * the model knows the tool exists. Prose costs a fraction of that and the
+ * handler validates each op anyway — an invalid op comes back as a named
+ * failure, which is the slot the model actually reads.
+ */
+const AMEND_OPS_DESCRIPTION =
+  'Ordered list of edits, applied as ONE transaction. Each op is an object with an `op` key:\n' +
+  '• {op:"insert_between", sourceNodeId, targetNodeId, type, label, config?} — splice a new node into an EXISTING edge (the "put a delay before the WhatsApp send" case). Cuts the edge and rewires both halves.\n' +
+  '• {op:"add_node", type, label, config?, position?, ref?} — `ref:"delay"` names it so a later op can point at it as "#delay" before it has an id.\n' +
+  '• {op:"update_node", nodeId, config?, removeConfigKeys?, label?, type?} — config is MERGED; a null value drops the key.\n' +
+  '• {op:"remove_node", nodeId} — also removes every edge touching it.\n' +
+  '• {op:"add_edge", sourceNodeId, targetNodeId, sourceHandle?, targetHandle?}\n' +
+  '• {op:"remove_edge", edgeId}\n' +
+  'Node ids come from workflow_inspect. Any nodeId/sourceNodeId/targetNodeId may be "#ref" instead.';
+
+/** Every op that carries a node type, so the registry check happens before the transaction opens. */
+function amendOpNodeSpec(op: AmendOp): { type: string; config: Record<string, unknown> } | null {
+  if (op.op === 'add_node' || op.op === 'insert_between') {
+    return { type: op.type, config: (op.config ?? {}) as Record<string, unknown> };
+  }
+  return null;
+}
+
+register({
+  name: 'workflow_amend',
+  description:
+    'Apply several canvas edits as ONE atomic change — the tool to reach for when an amendment is more than a single node config tweak. ' +
+    'Rewiring a branch is add-node + remove-edge + add-edge + add-edge; run as separate tool calls a failure halfway leaves a dangling node and a severed branch on a canvas nobody is looking at. Here either all of it lands or none of it does. ' +
+    'Every write is version-checked, audited and visible in the canvas inspector history, and update ops return a before-image you can feed back to workflow_update_node to undo. ' +
+    'Prefer this over workflow_generate for changing an existing canvas: generate REPLACES the whole graph and loses node ids, run history and layout.',
+  parameters: {
+    type: 'object',
+    properties: {
+      workflowId: { type: 'string', description: 'Workflow ID to amend' },
+      ops: {
+        type: 'array',
+        items: { type: 'object' },
+        description: AMEND_OPS_DESCRIPTION,
+      },
+      reason: {
+        type: 'string',
+        description: "Why, in the user's own words. Stored on every audit row this amend writes.",
+      },
+    },
+    required: ['workflowId', 'ops'],
+  },
+  category: 'Workflows',
+  toolset: 'workflows',
+  handler: async (args) => {
+    const workflowId = args.workflowId as string;
+    const ops = (Array.isArray(args.ops) ? args.ops : []) as AmendOp[];
+    if (ops.length === 0) {
+      return { success: false, error: 'Pass at least one op. See the `ops` description for the six shapes.' };
+    }
+
+    // Validate node types and configs against the live registry FIRST. A bad
+    // type inside the transaction is a rollback and a round-trip; caught here
+    // it is one failure message naming the op that is wrong.
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const where = `op ${i + 1} (${op.op})`;
+      const spec = amendOpNodeSpec(op);
+      if (spec) {
+        const typeErr = await validateNodeType(spec.type);
+        if (typeErr) return { success: false, error: `${where}: ${typeErr}` };
+        const configErr = await validateNodeConfig(spec.type, spec.config);
+        if (configErr) return { success: false, error: `${where}: ${configErr}` };
+      }
+      if (op.op === 'update_node' && typeof op.type === 'string') {
+        const typeErr = await validateNodeType(op.type);
+        if (typeErr) return { success: false, error: `${where}: ${typeErr}` };
+      }
+    }
+
+    let result;
+    try {
+      result = await applyAmendOps({
+        workflowId,
+        ops,
+        actor: 'chat',
+        reason: typeof args.reason === 'string' && args.reason.trim() ? args.reason.trim() : 'workflow_amend',
+      });
+    } catch (err) {
+      if (err instanceof WorkflowNotFoundError) {
+        return { success: false, error: `Workflow ${workflowId} not found. Call workflow_list to find the right id.` };
+      }
+      const cause = err instanceof AmendOpError ? err.cause : err;
+      if (cause instanceof SensitiveRefusalError) return refuseCredentialConfig(cause.fields);
+      if (cause instanceof EdgeEndpointError) {
+        return {
+          success: false,
+          error:
+            `${err instanceof AmendOpError ? err.message : String(err)}. ` +
+            `${cause.nodeIds.join(', ')} is not a connectable node of this workflow — node ids are per-canvas. ` +
+            `Call workflow_inspect and use the ids it returns.`,
+        };
+      }
+      if (err instanceof AmendOpError) return { success: false, error: err.message };
+      throw err;
+    }
+
+    // Same warning workflow_add_edge gives, over the graph as it now stands: a
+    // splice can create a fan-in whose branches overwrite each other, and that
+    // is invisible until an unrelated run fails.
+    const collisions = await fanInWarnings(workflowId);
+
+    return {
+      success: true,
+      data: {
+        workflowId,
+        applied: result.outcomes.length,
+        outcomes: result.outcomes,
+        ...(collisions.length > 0 ? { warnings: collisions.map((c) => c.message) } : {}),
+      },
+    };
   },
 });
 

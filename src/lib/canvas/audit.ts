@@ -1,4 +1,4 @@
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { workflowAuditLog } from '$lib/db/schema';
 import { emitObs } from '$lib/workflows/observability-bus';
 
@@ -14,12 +14,21 @@ export interface AuditInput {
 }
 
 /**
- * Record a workflow audit event. Never throws — audit-log write failures
- * are logged and swallowed so mutation paths never break.
+ * Record a workflow audit event. Never throws when writing on the pool —
+ * audit-log write failures are logged and swallowed so mutation paths never
+ * break.
+ *
+ * Pass `tx` to write inside a caller's transaction. Then the failure DOES
+ * propagate, and deliberately: a failed INSERT aborts the whole Postgres
+ * transaction, so swallowing it would only defer the error to COMMIT, where it
+ * surfaces as "current transaction is aborted" with nothing pointing at the
+ * audit row. Rolling the caller back is the honest outcome — an edit that
+ * cannot be recorded should not land.
  */
-export async function recordAudit(input: AuditInput): Promise<void> {
+export async function recordAudit(input: AuditInput, tx?: DbExecutor): Promise<void> {
+  const conn = tx ?? db;
   try {
-    await db.insert(workflowAuditLog).values({
+    await conn.insert(workflowAuditLog).values({
       workflowId: input.workflowId,
       entity: input.entity,
       entityId: input.entityId ?? null,
@@ -33,15 +42,17 @@ export async function recordAudit(input: AuditInput): Promise<void> {
       at: new Date().toISOString(),
     });
   } catch (err) {
+    if (tx) throw err;
     console.error('[audit] failed to record', input, err);
   }
 }
 
-/** Convenience wrapper: record many in one insert. */
-export async function recordAuditBatch(entries: AuditInput[]): Promise<void> {
+/** Convenience wrapper: record many in one insert. `tx` behaves as above. */
+export async function recordAuditBatch(entries: AuditInput[], tx?: DbExecutor): Promise<void> {
   if (entries.length === 0) return;
+  const conn = tx ?? db;
   try {
-    await db.insert(workflowAuditLog).values(
+    await conn.insert(workflowAuditLog).values(
       entries.map((e) => ({
         workflowId: e.workflowId,
         entity: e.entity,
@@ -60,6 +71,7 @@ export async function recordAuditBatch(entries: AuditInput[]): Promise<void> {
       });
     }
   } catch (err) {
+    if (tx) throw err;
     console.error('[audit] failed to record batch', entries, err);
   }
 }

@@ -66,6 +66,54 @@ describe('workflow_list_node_types filtering', () => {
   });
 });
 
+/**
+ * `workflow_amend` validates every op against the live registry BEFORE it opens
+ * a transaction, so a typo costs one message naming the op rather than a
+ * rollback and a round-trip. None of these reach the database.
+ */
+describe('workflow_amend pre-flight validation', () => {
+  async function amend(args: Record<string, unknown>) {
+    return (await executeTool('workflow_amend', args)) as { success: boolean; error?: string };
+  }
+
+  it('rejects an empty op list', async () => {
+    const r = await amend({ workflowId: 'w1', ops: [] });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/at least one op/i);
+  });
+
+  it('names the offending op when a node type does not exist', async () => {
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        { op: 'add_edge', sourceNodeId: 'a', targetNodeId: 'b' },
+        { op: 'add_node', type: 'delayy', label: 'Wait' },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 2 (add_node)');
+    expect(r.error).toContain('Unknown node type "delayy"');
+  });
+
+  it('validates the config of a spliced node too', async () => {
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        {
+          op: 'insert_between',
+          sourceNodeId: 'a',
+          targetNodeId: 'b',
+          type: 'delay',
+          label: 'Wait',
+          config: { notARealKey: 1 },
+        },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 1 (insert_between)');
+  });
+});
+
 describe('workflow_describe_node batching', () => {
   it('describes several types in one call', async () => {
     const r = (await executeTool('workflow_describe_node', {

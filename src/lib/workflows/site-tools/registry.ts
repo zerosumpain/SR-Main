@@ -89,7 +89,7 @@ export function getToolsetManifest(): Array<{
     blog: 'Blog post management — list, create, update, publish/unpublish',
     builds: 'JKAI autonomous builder — create, monitor, control, inspect, publish builds',
     research: 'Deep dive research — start sessions, get reports, query findings, web search',
-    workflows: 'Workflow automation — create, inspect, edit nodes/edges/schedules',
+    workflows: 'Workflow automation — create, inspect, edit nodes/edges/schedules, and amend an existing canvas in one atomic, audited change (workflow_amend)',
     home: 'Home Assistant smart home — query state, control devices, history, templates',
     whatsapp: 'WhatsApp messaging — send messages and notifications',
     diagnostics: 'System diagnostics — scheduler status, run history, service logs',
