@@ -29,15 +29,26 @@
 //   MCP_GATEWAY_PORT   listen port                   (default 5199)
 //   MCP_GATEWAY_HOST   listen address                (default 127.0.0.1)
 //   MCP_UPSTREAM       upstream MCP URL              (default http://127.0.0.1:5173/api/mcp)
+//                      http: and https: are both supported — homeserv points this at
+//                      production so there is a single API secret registry.
 //   MCP_GATEWAY_HOLD_MS  how long to hold a request while upstream is down (default 180000)
 //   MCP_GATEWAY_CALL_TIMEOUT_MS  per-attempt upstream timeout (default 900000, matches Hermes)
 
 import http from 'node:http';
+import https from 'node:https';
 import { URL } from 'node:url';
 
 const PORT = Number(process.env.MCP_GATEWAY_PORT ?? 5199);
 const HOST = process.env.MCP_GATEWAY_HOST ?? '127.0.0.1';
 const UPSTREAM = new URL(process.env.MCP_UPSTREAM ?? 'http://127.0.0.1:5173/api/mcp');
+// The upstream is normally the local site over plain HTTP, but it can be pointed at
+// production (https://strangeramblings.com/api/mcp) so that Hermes — and therefore
+// WhatsApp — resolves API credentials against the SAME registry the website uses.
+// Without this, homeserv answered from its own dev database and reported live
+// credentials as missing. Pick the transport from the URL, not a hardcoded module.
+const UPSTREAM_IS_TLS = UPSTREAM.protocol === 'https:';
+const upstreamTransport = UPSTREAM_IS_TLS ? https : http;
+const UPSTREAM_PORT = UPSTREAM.port || (UPSTREAM_IS_TLS ? 443 : 80);
 const HOLD_MS = Number(process.env.MCP_GATEWAY_HOLD_MS ?? 180_000);
 const CALL_TIMEOUT_MS = Number(process.env.MCP_GATEWAY_CALL_TIMEOUT_MS ?? 900_000);
 const RETRY_BASE_MS = 250;
@@ -115,11 +126,11 @@ function readBody(req) {
 
 function forwardOnce(body, headers) {
   return new Promise((resolve, reject) => {
-    const upstreamReq = http.request(
+    const upstreamReq = upstreamTransport.request(
       {
         protocol: UPSTREAM.protocol,
         hostname: UPSTREAM.hostname,
-        port: UPSTREAM.port || 80,
+        port: UPSTREAM_PORT,
         path: UPSTREAM.pathname + UPSTREAM.search,
         method: 'POST',
         headers,
