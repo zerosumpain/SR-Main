@@ -51,9 +51,14 @@ export interface HermesToolLogEntry {
  * of glyph-then-word-then-colon shapes that must survive untouched. Real examples
  * from production replies: `✅ Corrected:`, `🥇 WINNER:`, `→ recommendation:`,
  * `— kicker:`. Matching any leading glyph would rewrite those into "Ran
- * Corrected". The same reasoning keeps Hermes' status glyphs out: `⏳ Working —
- * 12 min` and `⏱️ Agent inactive…` are already plain English and are deliberately
- * left alone.
+ * Corrected".
+ *
+ * Hermes' status glyphs (`⏳ Working — 12 min`, `⏱️ Agent inactive…`) are still
+ * out of this list, but no longer because they're harmless — they never reach
+ * the bubble at all now. `$lib/jkai/hermes-frames` recognises them on the frame
+ * stream and routes them off the text channel, because re-editing them was what
+ * wiped the answer out of the bubble and the persisted row. This module only
+ * ever sees the reply, so it only has to worry about the tool log.
  */
 const TOOL_GLYPHS = [
   '⚙', '⚡',                                             // fallbacks (all MCP tools, unregistered tools)

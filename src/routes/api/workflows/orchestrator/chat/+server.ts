@@ -18,6 +18,7 @@ import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabili
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
+import { createHermesTextAccumulator, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
 import {
   subscribeToolSteps,
   registerToolConfirmer,
@@ -122,6 +123,34 @@ type AssistantAttachment = {
 // adaptFrameToCanvasSse: see $lib/jkai/sse-adapter.ts. Extracted so
 // the frame→JobEvent mapping is unit-testable without standing up a
 // SvelteKit request context.
+
+/**
+ * Put a gateway status bubble somewhere other than the assistant bubble.
+ *
+ * One-shot notices (queued behind a running turn, interrupted, inactivity
+ * timeout) are worth a permanent line, so they take the `status` channel. The
+ * recurring elapsed-time filler is not: the job publishes its own heartbeat
+ * every 5s with a truer elapsed time, so the only new information in the
+ * gateway's version is what it says it is busy with — fold that into the
+ * heartbeat's summary (same idiom as the tool-step subscriber below) and drop
+ * the rest.
+ */
+function publishStatusFrame(jobId: string, job: OrchestratorJob, status: HermesStatusFrame): void {
+  // A status frame is proof of life even though it never reaches the bubble.
+  // Rerouting the recurring filler off the text channel removed the only thing
+  // that was resetting the idle watchdog during a silent stretch that is NOT a
+  // tool call or a delegation — an OpenRouter 429 backoff loop, a long provider
+  // prefill on a huge context — so the job would be reaped at IDLE_TIMEOUT_MS
+  // and the real answer lost. Set it on the job directly: a `heartbeat`
+  // JobEvent would not do it, publishJobEvent deliberately skips lastEventAt
+  // for that type so an informational tick can't mask a genuinely stuck job.
+  job.lastEventAt = Date.now();
+  if (status.kind === 'notice') {
+    publishJobEvent(jobId, { type: 'status', text: status.text });
+    return;
+  }
+  if (status.detail) job.currentStep = status.detail.slice(0, 140);
+}
 
 function extractAttachmentFromFrame(frame: SseFrame): AssistantAttachment | null {
   // Any frame that carries a media attachment row qualifies — gating on
@@ -616,16 +645,15 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // NOTE: turnAttachments is hoisted above (outer scope) so both the
       // tool-step subscriber and this stream pump can contribute to it.
 
-      // Hermes' framework injects a one-time "📬 No home channel is set
-      // for Jkai…" onboarding notice at the start of any chat whose
-      // platform isn't wired into the cron / cross-platform delivery map.
-      // It's a meta-notification, not an agent reply — but it arrives as a
-      // plain `send` frame and would otherwise (a) be streamed to the chat
-      // UI as a token bubble, (b) get concatenated into `partialResponse`
-      // and persisted as the *start* of the assistant row, and (c) drag any
-      // turn-emitted attachments onto that row instead of the actual reply.
-      // Suppress it.
-      const HERMES_HOME_CHANNEL_NOTICE_PREFIX = '📬 No home channel is set for Jkai';
+      // One assistant reply arrives as MANY Hermes message ids (the stream
+      // consumer opens a fresh one at every tool boundary), and the gateway
+      // interleaves its own status bubbles — the long-running notifier, the
+      // busy-ack, the home-channel onboarding notice — on the SAME text
+      // channel. The accumulator keeps the text per message id so a `replace`
+      // can only ever rewrite the segment it names; before it, a re-edited
+      // side-channel message replaced the whole answer on screen AND in the
+      // persisted row. See $lib/jkai/hermes-frames.
+      const textAcc = createHermesTextAccumulator();
 
       for await (const frame of client.openStream({
         chatId,
@@ -634,10 +662,22 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       }, { signal: abortController.signal })) {
         if (abortController.signal.aborted) break;
-        if (
-          (frame.kind === 'send' || frame.kind === 'replace') &&
-          frame.content.startsWith(HERMES_HOME_CHANNEL_NOTICE_PREFIX)
-        ) {
+        if (frame.kind === 'send' || frame.kind === 'replace') {
+          const update = textAcc.accept(frame);
+          if (update.kind === 'status') {
+            publishStatusFrame(jobId, job, update.status);
+          } else if (update.kind !== 'ignore') {
+            // `partialResponse` is the recomputed body, not a running `+=` —
+            // it is what gets persisted, so it has to match what the bubble
+            // shows exactly.
+            job.partialResponse = update.text;
+            publishJobEvent(
+              jobId,
+              update.kind === 'append'
+                ? { type: 'token', delta: update.delta }
+                : { type: 'replace_bubble', content: update.text },
+            );
+          }
           continue;
         }
         // Surface Hermes tool-call frames onto the tool-step panel. Hermes
@@ -687,22 +727,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           continue;
         }
         // Try every frame — `extractAttachmentFromFrame` returns null when
-        // `frame.attachment` is absent, so text-bubble frames (send / replace /
-        // finalize) are no-ops here, while image / audio / video / pdf /
-        // document frames contribute their attachment row to `turnAttachments`.
+        // `frame.attachment` is absent, so the `finalize` frame is a no-op
+        // here, while image / audio / video / pdf / document frames contribute
+        // their attachment row to `turnAttachments`. (send / replace never
+        // reach this far — the accumulator above handles them.)
         const att = extractAttachmentFromFrame(frame);
         if (att) turnAttachments.push(att);
-        for (const ev of adaptFrameToCanvasSse(frame)) {
-          if (ev.type === 'token' && typeof ev.delta === 'string') {
-            job.partialResponse += ev.delta;
-          } else if (ev.type === 'replace_bubble') {
-            // Hermes asked us to swap out the in-flight bubble. The previous
-            // `partialResponse` is now obsolete — reset to the new content so
-            // the eventual finalize doesn't carry stacked duplicates.
-            job.partialResponse = ev.content;
-          }
-          publishJobEvent(jobId, ev);
-        }
+        for (const ev of adaptFrameToCanvasSse(frame)) publishJobEvent(jobId, ev);
         if (frame.kind === 'finalize') {
           // Capture per-turn LLM usage from the adapter's synthetic finalize
           // frame so we can accrue it onto the conversation row below.

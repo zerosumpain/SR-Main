@@ -1,5 +1,6 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { HermesClient } from '$lib/jkai/hermes-client';
+import { createHermesTextAccumulator } from '$lib/jkai/hermes-frames';
 import { recordLLMCall } from '../execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { env } from '$env/dynamic/private';
@@ -45,8 +46,6 @@ const HERMES_URL = env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790';
 const HERMES_SECRET = env.HERMES_BRIDGE_SECRET ?? '';
 const HERMES_ORIGIN = (env.JKAI_HERMES_ORIGIN as 'vps' | 'homeserv') ?? 'homeserv';
 const HERMES_MCP_URL = env.JKAI_HERMES_MCP_URL ?? 'http://127.0.0.1:5173/api/mcp/local';
-
-const HERMES_HOME_CHANNEL_NOTICE_PREFIX = '📬 No home channel is set for Jkai';
 
 /** Pull a sensible prompt string out of the inbound input. Trigger-mode
  * runs put the user text on `message`; receiver / middle runs get whatever
@@ -134,7 +133,12 @@ export const chatExecutor: NodeExecutor = {
       : `sess_run_${context.runId}`;
     const kindId = chatId;
 
-    let response = '';
+    // One reply arrives as many Hermes message ids, and the gateway writes its
+    // own status bubbles onto the same channel. Segment-scoping the text is
+    // what stops a re-edited side-channel message replacing the whole reply —
+    // which here would also flow downstream on `{ response, reply }` and into
+    // node_executions. See $lib/jkai/hermes-frames.
+    const textAcc = createHermesTextAccumulator();
     let turnUsage: HermesTurnUsage | null = null;
 
     await client.sendMessage({
@@ -147,24 +151,20 @@ export const chatExecutor: NodeExecutor = {
 
     for await (const frame of client.openStream({ chatId, kind: 'manual', kindId, sessionId })) {
       if (context.abortSignal.aborted) break;
-      if (
-        (frame.kind === 'send' || frame.kind === 'replace') &&
-        frame.content.startsWith(HERMES_HOME_CHANNEL_NOTICE_PREFIX)
-      ) {
-        continue;
-      }
-      if (frame.kind === 'send') {
-        response += frame.content;
-        streamLog('chat_stream', { event: { type: 'token', delta: frame.content } });
-      } else if (frame.kind === 'replace') {
-        // Replace semantics: the new content supersedes whatever we'd
-        // accumulated for the in-flight bubble. Emit it as the full new
-        // body and reset the accumulator so the eventual return matches.
-        response = frame.content;
-        streamLog('chat_stream', { event: { type: 'replace_bubble', content: frame.content } });
+      if (frame.kind === 'send' || frame.kind === 'replace') {
+        const update = textAcc.accept(frame);
+        // Status bubbles ("⏳ Working — 12 min…", "⚡ Interrupting…") and the
+        // home-channel onboarding notice are not the reply, and the canvas run
+        // log has no home for them — drop them rather than let them reach a
+        // downstream node as `input.response`.
+        if (update.kind === 'append') {
+          streamLog('chat_stream', { event: { type: 'token', delta: update.delta } });
+        } else if (update.kind === 'rewrite') {
+          streamLog('chat_stream', { event: { type: 'replace_bubble', content: update.text } });
+        }
       } else if (frame.kind === 'finalize') {
         // adapter emits a synthetic empty finalize once handle_message
-        // completes — `response` already holds the streamed text. The
+        // completes — the accumulator already holds the streamed text. The
         // finalize frame also carries this turn's LLM usage under
         // `metadata.usage` (the Hermes-side call is out-of-process, so this
         // is the only channel for chat-node cost).
@@ -206,7 +206,7 @@ export const chatExecutor: NodeExecutor = {
     }
 
     return {
-      output: { ...input, response, reply: response },
+      output: { ...input, response: textAcc.text, reply: textAcc.text },
       metadata: { hermes: true, kind: 'manual', chatId },
       rowCount: 1,
     };

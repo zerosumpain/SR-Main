@@ -28,6 +28,8 @@
   import InteractiveStepModal from '$lib/canvas/InteractiveStepModal.svelte';
   import SecretRequestModal from '$lib/components/jkai/SecretRequestModal.svelte';
   import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
+  import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
+  import { onDestroy } from 'svelte';
   // Shared canvas-shell geometry (E1). These are the SAME formulas this surface
   // already shipped, extracted so the research desk shares one implementation.
   // The local wrappers below keep their names + signatures; only their bodies
@@ -407,9 +409,14 @@
   // Per-chat-node: orchestrator job id of the in-flight chat (so the
   // user-facing stop button can DELETE the right job).
   let chatJobs = $state<Record<string, string | null>>({});
-  // Active chat EventSource per chat node (so we can close it on cancel /
-  // navigation without leaking).
-  const chatEventSources = new Map<string, EventSource>();
+  // Active chat stream per chat node (so we can close it on cancel /
+  // navigation without leaking). Plain Map, never $state — it holds transport
+  // handles that close*/subscribe* functions both read and write, which inside
+  // an effect is the classic effect_update_depth_exceeded loop.
+  const chatStreams = new Map<string, ChatStreamHandle>();
+  // Per-chat-node transient connection warning from the stream client
+  // ("Reconnecting…" / "Lost connection…"). Read by the template, so $state.
+  let chatStreamWarnings = $state<Record<string, string | null>>({});
   let liveToolSteps = $state<Record<string, Array<{ tool: string; toolCallId: string; status: string }>>>(
     {},
   );
@@ -732,6 +739,16 @@
     if (streamFlushHandle === null) {
       streamFlushHandle = setTimeout(flushStreamDeltas, STREAM_FLUSH_MS);
     }
+  }
+  // A `replace_bubble` carries the whole recomputed reply (the server keeps the
+  // text per Hermes message id — see $lib/jkai/hermes-frames), so it supersedes
+  // both what's rendered and anything still queued. Without this the live panel
+  // silently diverged from the row that gets persisted.
+  function setStreamText(chatNodeId: string, content: string) {
+    pendingStreamDeltas.delete(chatNodeId);
+    bubblesWithFirstTokenRendered.add(chatNodeId);
+    streamingReplies = { ...streamingReplies, [chatNodeId]: content };
+    if (streamingFor[chatNodeId]) scrollChatToBottom(chatNodeId);
   }
 
   // Merged view of each node: base canvas row + any live overlay
@@ -1264,39 +1281,72 @@
     }
   }
 
+  // Canvas chat rides the same resilient client as the /jkai hub rather than a
+  // bare EventSource. Two reasons, both bugs this replaces:
+  //   - the old handler called finalizeChatStream from `onerror`, and onerror
+  //     fires on any transient drop. finalize reloads the persisted row, which
+  //     mid-run is empty, so a blip emptied the bubble while Hermes was still
+  //     answering. streamChatJob rides the drop out and RESUMES from the last
+  //     event id instead of replaying the buffer (a replay doubled the text).
+  //   - it never handled `replace_bubble`, so the live panel and the reloaded
+  //     row disagreed.
+  // The secret_request / secret_ack branches are re-implemented here on
+  // purpose: streamChatJob is transport-only and passes events through, and
+  // dropping them would mean the credential form never appears on the canvas
+  // while `request_credential` blocks invisibly for its full 180s.
   function subscribeToChat(jobId: string, chatNodeId: string) {
-    const existing = chatEventSources.get(chatNodeId);
+    const existing = chatStreams.get(chatNodeId);
     if (existing) {
-      try { existing.close(); } catch { /* no-op */ }
-      chatEventSources.delete(chatNodeId);
+      // Delete BEFORE closing: close() resolves the handle's `done`, and the
+      // guard in the completion handler below is "am I still the current
+      // stream?". Superseding must not finalize the node.
+      chatStreams.delete(chatNodeId);
+      existing.close();
     }
-    const es = new EventSource(`/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
-    chatEventSources.set(chatNodeId, es);
-    es.onmessage = (evt) => {
-      let data: { type?: string; delta?: string } = {};
-      try { data = JSON.parse(evt.data); } catch { return; }
-      if (data.type === 'token' && typeof data.delta === 'string') {
-        queueStreamDelta(chatNodeId, data.delta);
-      } else if (data.type === 'secret_request') {
-        // Without this branch the credential form never appears on the canvas
-        // and `request_credential` blocks invisibly for its full 180s — on the
-        // exact surface where the 2026-08-01 plaintext-credential leak happened.
-        pendingSecret = data as unknown as SecretRequestEvent | SecretUpdateEvent;
-        pendingSecretJobId = jobId;
-      } else if (data.type === 'secret_ack') {
-        pendingSecret = null;
-      } else if (data.type === 'done' || data.type === 'error') {
-        es.close();
-        if (chatEventSources.get(chatNodeId) === es) chatEventSources.delete(chatNodeId);
-        finalizeChatStream(chatNodeId);
-      }
-    };
-    es.onerror = () => {
-      es.close();
-      if (chatEventSources.get(chatNodeId) === es) chatEventSources.delete(chatNodeId);
+    const handle = streamChatJob(jobId, {
+      onEvent: (raw) => {
+        const data = (raw ?? {}) as { type?: string; delta?: string; content?: string };
+        if (data.type === 'token' && typeof data.delta === 'string') {
+          queueStreamDelta(chatNodeId, data.delta);
+        } else if (data.type === 'replace_bubble' && typeof data.content === 'string') {
+          setStreamText(chatNodeId, data.content);
+        } else if (data.type === 'secret_request') {
+          // Without this branch the credential form never appears on the canvas
+          // and `request_credential` blocks invisibly for its full 180s — on the
+          // exact surface where the 2026-08-01 plaintext-credential leak happened.
+          pendingSecret = data as unknown as SecretRequestEvent | SecretUpdateEvent;
+          pendingSecretJobId = jobId;
+        } else if (data.type === 'secret_ack') {
+          pendingSecret = null;
+        }
+      },
+      onWarning: (w) => {
+        chatStreamWarnings = { ...chatStreamWarnings, [chatNodeId]: w };
+      },
+    });
+    chatStreams.set(chatNodeId, handle);
+    // `done` resolves on the server's done/error frame, or on close(). Only the
+    // stream that is still the node's current one gets to finalize.
+    void handle.done.then(() => {
+      if (chatStreams.get(chatNodeId) !== handle) return;
+      chatStreams.delete(chatNodeId);
+      const next = { ...chatStreamWarnings };
+      delete next[chatNodeId];
+      chatStreamWarnings = next;
       finalizeChatStream(chatNodeId);
-    };
+    });
   }
+
+  // streamChatJob owns a reconnect timer, so an unclosed handle keeps polling
+  // after the page is gone. Delete first so the completion handler above bails
+  // rather than calling finalizeChatStream (and invalidateAll) on a dead
+  // component.
+  onDestroy(() => {
+    for (const [nodeId, handle] of [...chatStreams]) {
+      chatStreams.delete(nodeId);
+      handle.close();
+    }
+  });
 
   function finalizeChatStream(chatNodeId: string) {
     if (streamFlushHandle !== null) {
@@ -1328,8 +1378,10 @@
     } catch {
       /* SSE will still terminate via error; no-op */
     }
-    // The SSE 'error' event will trigger finalizeChatStream; if it doesn't
-    // arrive (e.g. network drop) the EventSource onerror handler does.
+    // The server's 'error' / 'done' frame resolves the stream handle, which is
+    // what triggers finalizeChatStream. A network drop no longer finalizes on
+    // its own — the client reconnects instead — so if the DELETE itself failed
+    // the stop button can simply be pressed again.
   }
 
   function formatChatTranscript(chatNodeId: string): string {
@@ -1649,9 +1701,11 @@
       const kind = evt.data.kind as string | undefined;
       const chatNodeId = (evt.data.chatNodeId as string | undefined) ?? null;
       if (kind === 'chat_stream' && chatNodeId) {
-        const event = (evt.data.event as { type?: string; delta?: string }) ?? {};
+        const event = (evt.data.event as { type?: string; delta?: string; content?: string }) ?? {};
         if (event.type === 'token' && typeof event.delta === 'string') {
           queueStreamDelta(chatNodeId, event.delta);
+        } else if (event.type === 'replace_bubble' && typeof event.content === 'string') {
+          setStreamText(chatNodeId, event.content);
         }
       } else if (kind === 'chat_tool' && chatNodeId) {
         const step = evt.data.step as { tool?: string; toolCallId?: string; status?: string } | undefined;
@@ -4439,6 +4493,11 @@
                     </div>
                   {:else if !(liveToolSteps[n.id] && liveToolSteps[n.id].length > 0)}
                     <div class="chat-msg-body ghost">⟳ thinking…</div>
+                  {/if}
+                  {#if chatStreamWarnings[n.id]}
+                    <div class="chat-stream-warning" role="status" aria-live="polite">
+                      {chatStreamWarnings[n.id]}
+                    </div>
                   {/if}
                 </div>
               {/if}
@@ -7481,6 +7540,12 @@
     50% {
       opacity: 0;
     }
+  }
+  .chat-stream-warning {
+    padding: 2px 10px 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-muted);
   }
   .chat-tool-trace {
     display: flex;

@@ -112,6 +112,9 @@
     result?: unknown;
     status: 'running' | 'done' | 'error';
     summary?: string;
+    // When the step started, so a running card can carry its own clock.
+    // Live-only: restored history is all finished, so it is absent there.
+    startedAt?: number;
     // Sub-agent rows for a `delegate_task` step (sub-agent visualizer).
     children?: DelegateChild[];
     expanded?: boolean;
@@ -227,12 +230,23 @@
   function stopHeartbeatTicker() {
     if (hbTicker) { clearInterval(hbTicker); hbTicker = null; }
   }
+  // True when any tool step on the in-flight bubble is still running — the
+  // tool step card already shows what's happening, so the heartbeat line
+  // would be a duplicate signal.
+  const anyToolRunning = $derived.by(() => {
+    for (const m of messages) {
+      if (!m.isProgress) continue;
+      if (m.toolSteps?.some((s) => s.status === 'running')) return true;
+    }
+    return false;
+  });
   $effect(() => {
     // Single source of truth for ticker lifecycle: heartbeat present → tick,
     // heartbeat cleared → stop. Every `heartbeat = null` site (plan/confirm/
     // clarify/done/error/subagent_start) flows through here without needing
-    // its own teardown call.
-    if (heartbeat) startHeartbeatTicker();
+    // its own teardown call. A running tool step keeps it alive too — its
+    // card carries its own clock, and `tool_start` clears the heartbeat.
+    if (heartbeat || anyToolRunning) startHeartbeatTicker();
     else stopHeartbeatTicker();
     return () => stopHeartbeatTicker();
   });
@@ -278,16 +292,19 @@
     return { state, reasoningActive };
   });
 
-  // True when any tool step on the in-flight bubble is still running — the
-  // tool step card already shows what's happening, so the heartbeat line
-  // would be a duplicate signal.
-  const anyToolRunning = $derived.by(() => {
-    for (const m of messages) {
-      if (!m.isProgress) continue;
-      if (m.toolSteps?.some((s) => s.status === 'running')) return true;
-    }
-    return false;
-  });
+  // A long silent tool call is the other half of the SSE de-sync: the
+  // heartbeat line is suppressed while a tool runs (it would duplicate the
+  // step card), and the card itself carried no clock — so a 16-minute
+  // `workflow_run` showed a pulsing dot and nothing else, and the only thing
+  // that ever broke the silence was Hermes' "iteration x/y" filler. The card
+  // now carries its own elapsed time off the same 250ms `hbNow` ticker, and
+  // offers a Cancel once the wait stops looking normal.
+  const TOOL_STEP_SLOW_MS = 120_000;
+  function formatStepElapsed(ms: number): string {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  }
 
   // Single decision for "render the heartbeat line" — used by both render
   // sites (with-tools and typing-only) so the suppression rules stay in
@@ -1026,6 +1043,7 @@
           args: data.args || {},
           status: 'running',
           summary: data.summary,
+          startedAt: Date.now(),
         };
         messages = messages.map((m) => {
           if (m.id !== progressId) return m;
@@ -2283,6 +2301,15 @@
                           </span>
                           <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
                           <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
+                          {#if step.status === 'running' && step.startedAt}
+                            {@const stepMs = hbNow - step.startedAt}
+                            <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
+                              {formatStepElapsed(stepMs)}
+                            </span>
+                            {#if stepMs >= TOOL_STEP_SLOW_MS}
+                              <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                            {/if}
+                          {/if}
                           {#if step.result !== undefined || Object.keys(step.args).length > 0}
                             <button
                               type="button"
@@ -3576,6 +3603,35 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .step-clock {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    color: var(--text-ghost);
+  }
+  .step-clock[data-slow='true'] {
+    color: var(--warn);
+    font-weight: 600;
+  }
+  .step-cancel {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    cursor: pointer;
+  }
+  .step-cancel:hover {
+    color: var(--status-error);
+    border-color: var(--status-error);
   }
   .step-toggle {
     background: transparent;

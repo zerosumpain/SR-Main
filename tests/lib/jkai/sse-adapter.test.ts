@@ -105,8 +105,18 @@ describe('adaptFrameToCanvasSse (tool frames)', () => {
     expect(adaptFrameToCanvasSse(frame({ kind: 'tool', tool: { phase: 'started', tool: 'x' } }))).toEqual([]);
   });
 
-  it('still maps a send frame to a token delta', () => {
-    expect(adaptFrameToCanvasSse(frame({ kind: 'send', content: 'hello' }))).toEqual([{ type: 'token', delta: 'hello' }]);
+  // Text frames used to map one-for-one onto the single in-flight bubble here,
+  // which is exactly what let a re-edited side-channel message (the "⏳ Working
+  // — N min — iteration 5/90" notifier) wipe the answer: one `replace` on an
+  // unrelated message id overwrote the whole reply, and the persisted copy with
+  // it. `send`/`replace` are now intercepted upstream by the segment
+  // accumulator in `$lib/jkai/hermes-frames`, which is the only thing that
+  // knows which of the reply's many message ids a `replace` may rewrite — see
+  // the pump in routes/api/workflows/orchestrator/chat/+server.ts, which
+  // `continue`s on both kinds before this adapter is ever reached.
+  it('returns [] for text frames — the segment accumulator owns them now', () => {
+    expect(adaptFrameToCanvasSse(frame({ kind: 'send', content: 'hello' }))).toEqual([]);
+    expect(adaptFrameToCanvasSse(frame({ kind: 'replace', content: 'hello' }))).toEqual([]);
   });
 });
 
