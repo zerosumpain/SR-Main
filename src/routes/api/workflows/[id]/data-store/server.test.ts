@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Fixtures + capture buffers the db mock reads/writes.
 let rows: any[] = [];
+let deletedRows: any[] = [];
 const deleteWheres: any[] = [];
 const eqCalls: Array<[unknown, unknown]> = [];
+const audits: any[] = [];
 
 vi.mock('$lib/db/schema', () => ({
   workflowDataStore: {
@@ -31,10 +33,17 @@ vi.mock('$lib/db', () => ({
       }),
     }),
     delete: (_t: any) => ({
-      where: async (cond: any) => {
+      where: (cond: any) => {
         deleteWheres.push(cond);
+        return { returning: async () => deletedRows };
       },
     }),
+  },
+}));
+
+vi.mock('$lib/canvas/audit', () => ({
+  recordAudit: async (input: any) => {
+    audits.push(input);
   },
 }));
 
@@ -43,8 +52,10 @@ import { DELETE } from './[key]/+server';
 
 beforeEach(() => {
   rows = [];
+  deletedRows = [];
   deleteWheres.length = 0;
   eqCalls.length = 0;
+  audits.length = 0;
 });
 
 describe('GET /api/workflows/[id]/data-store — memory listing', () => {
@@ -102,14 +113,40 @@ describe('DELETE /api/workflows/[id]/data-store/[key] — clear one key', () => 
     expect(deleteWheres).toHaveLength(0);
   });
 
-  it('deletes the row scoped to (workflowId, key)', async () => {
+  it('deletes the row scoped to (workflowId, key) and reports the count', async () => {
+    deletedRows = [{ key: 'seen_ids' }];
     const res = await DELETE({ params: { id: 'wf-1', key: 'seen_ids' } } as any);
     const body = await res.json();
     expect(body.success).toBe(true);
+    expect(body.deleted).toBe(1);
     expect(deleteWheres).toHaveLength(1);
     // Both the workflowId and the key must be part of the filter — proves the
     // clear is scoped and can't wipe another workflow's key.
     expect(eqCalls).toContainEqual(['col:workflowId', 'wf-1']);
     expect(eqCalls).toContainEqual(['col:key', 'seen_ids']);
+  });
+
+  it('reports deleted: 0 when the key was never stored', async () => {
+    const res = await DELETE({ params: { id: 'wf-1', key: 'never_written' } } as any);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.deleted).toBe(0);
+  });
+
+  it('audits the clear against the workflow', async () => {
+    deletedRows = [{ key: '_wa_sent_hashes' }];
+    await DELETE({ params: { id: 'wf-1', key: '_wa_sent_hashes' } } as any);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      workflowId: 'wf-1',
+      entity: 'workflow',
+      action: 'update',
+      details: { clearedMemoryKey: '_wa_sent_hashes', deleted: 1 },
+    });
+  });
+
+  it('does not audit a rejected request', async () => {
+    await DELETE({ params: { id: 'wf-1' } } as any);
+    expect(audits).toHaveLength(0);
   });
 });

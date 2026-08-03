@@ -1,16 +1,20 @@
 <script lang="ts">
   import type { NodeDefinition } from '$lib/workflows/types';
+  import NodeMemoryBlock from './shared/NodeMemoryBlock.svelte';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
   import PhoneField from './widgets/PhoneField.svelte';
+  import { WHATSAPP_SENT_HASHES_KEY } from '$lib/canvas/node-memory-keys';
 
   let {
     config,
     onChange,
     definition,
+    workflowId,
   }: {
     config: Record<string, unknown>;
     onChange: (config: Record<string, unknown>) => void;
     definition?: NodeDefinition;
+    workflowId?: string;
   } = $props();
 
   // ---------- Recipient mode (Static phone vs Template) -------------------
@@ -188,6 +192,17 @@
         <span class="wa-hint">Skip an identical send to the same number within N minutes. 0 = off.</span>
       </label>
     </div>
+    {#if suppressMins > 0}
+      <!-- The hashes behind the suppression window. Without this the window is
+           invisible: clearing an upstream dedupe key still won't produce a send
+           until it expires. -->
+      <NodeMemoryBlock
+        {workflowId}
+        keys={[WHATSAPP_SENT_HASHES_KEY]}
+        label="Duplicate-suppression hashes"
+        hint="Clearing this lets an identical message send again before the {suppressMins}-minute window expires."
+      />
+    {/if}
   </section>
 
   <!-- Media (optional) -->
