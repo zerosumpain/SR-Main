@@ -1563,6 +1563,25 @@ const AMEND_OPS_DESCRIPTION =
   '• {op:"remove_edge", edgeId}\n' +
   'Node ids come from workflow_inspect. Any nodeId/sourceNodeId/targetNodeId may be "#ref" instead.';
 
+/**
+ * The op kinds the executor implements — the screen an op has to pass before
+ * the transaction opens.
+ *
+ * `set_schedule` and `update_edge` are the obvious guesses (the first was in an
+ * earlier draft of this tool, the second is a standalone tool), and an op kind
+ * nobody implemented used to be dropped in silence and counted as applied. An
+ * amend either does everything asked or nothing, so an unrecognised op fails
+ * the whole call.
+ */
+const KNOWN_AMEND_OPS: ReadonlySet<string> = new Set<AmendOp['op']>([
+  'insert_between',
+  'add_node',
+  'update_node',
+  'remove_node',
+  'add_edge',
+  'remove_edge',
+]);
+
 /** Every op that carries a node type, so the registry check happens before the transaction opens. */
 function amendOpNodeSpec(op: AmendOp): { type: string; config: Record<string, unknown> } | null {
   if (op.op === 'add_node' || op.op === 'insert_between') {
@@ -1608,7 +1627,17 @@ register({
     // it is one failure message naming the op that is wrong.
     for (let i = 0; i < ops.length; i++) {
       const op = ops[i];
-      const where = `op ${i + 1} (${op.op})`;
+      const kind = (op as { op?: unknown } | null)?.op;
+      const where = `op ${i + 1} (${typeof kind === 'string' ? kind : 'no "op" key'})`;
+      if (typeof kind !== 'string' || !KNOWN_AMEND_OPS.has(kind)) {
+        return {
+          success: false,
+          error:
+            `${where}: unrecognised op. The only shapes are ${[...KNOWN_AMEND_OPS].join(', ')} — ` +
+            `see the \`ops\` description. Nothing was written; re-send the whole ops list with that op ` +
+            `expressed as one of those, or drop it.`,
+        };
+      }
       const spec = amendOpNodeSpec(op);
       if (spec) {
         const typeErr = await validateNodeType(spec.type);

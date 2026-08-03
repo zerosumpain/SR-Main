@@ -140,7 +140,7 @@ vi.mock('./mutate.server', () => {
 
 import { publishWorkflowUpdate } from '$lib/jkai/workflow-updates-bus';
 import { createEdge, createNode, deleteEdge, SensitiveRefusalError } from './mutate.server';
-import { applyAmendOps, AmendOpError, WorkflowNotFoundError } from './amend.server';
+import { applyAmendOps, AmendOpError, WorkflowNotFoundError, type AmendOp } from './amend.server';
 
 const base = { workflowId: 'w1', actor: 'chat', reason: 'John asked' };
 
@@ -222,6 +222,26 @@ describe('applyAmendOps', () => {
     expect(publishWorkflowUpdate).not.toHaveBeenCalled();
     // The third op never ran.
     expect(createEdge).not.toHaveBeenCalled();
+  });
+
+  it('fails the whole amend on an op kind it does not implement', async () => {
+    // The backstop behind the caller's op screen. An unhandled kind used to
+    // match no case, push no outcome and throw nothing, so the ops around it
+    // landed and the result reported a clean success. The amend now dies with
+    // the rest of the list, and the surviving ops roll back with it.
+    const err = await applyAmendOps({
+      ...base,
+      ops: [
+        { op: 'add_node', type: 'delay', label: 'Wait' },
+        { op: 'set_schedule', cron: '0 9 * * *' } as unknown as AmendOp,
+      ],
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(AmendOpError);
+    expect(err.index).toBe(1);
+    expect(err.message).toContain('unknown op "set_schedule"');
+    expect(err.message).toContain('nothing was written');
+    expect(publishWorkflowUpdate).not.toHaveBeenCalled();
   });
 
   it('surfaces a credential refusal as the cause, with the field names intact', async () => {

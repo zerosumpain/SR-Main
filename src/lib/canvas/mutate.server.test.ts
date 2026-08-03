@@ -582,6 +582,62 @@ describe('createEdge', () => {
     expect(h.inserted).toHaveLength(0);
     expect(recordAudit).not.toHaveBeenCalled();
   });
+
+  it('wires an error branch alongside the success edge between the same pair', async () => {
+    // Deduping on the pair alone handed back the existing handle-less edge and
+    // reported it as wired, so a condition node's error route was never
+    // connected and nothing said so. Handles are part of the identity.
+    h.nodeRows = endpoints;
+    h.edgeRows = [
+      {
+        id: 'e1',
+        workflowId: 'w1',
+        sourceNodeId: 'a',
+        targetNodeId: 'b',
+        sourceHandle: null,
+        targetHandle: null,
+      },
+    ];
+
+    const edge = await createEdge({
+      workflowId: 'w1',
+      sourceNodeId: 'a',
+      targetNodeId: 'b',
+      sourceHandle: 'error',
+      actor: 'chat',
+      reason: 'workflow_add_edge',
+    });
+
+    expect(edge.id).not.toBe('e1');
+    expect(h.inserted).toHaveLength(1);
+    expect(h.inserted[0].values).toMatchObject({ sourceHandle: 'error', targetHandle: null });
+  });
+
+  it('still dedupes when the handles match too', async () => {
+    h.nodeRows = endpoints;
+    h.edgeRows = [
+      {
+        id: 'e1',
+        workflowId: 'w1',
+        sourceNodeId: 'a',
+        targetNodeId: 'b',
+        sourceHandle: 'error',
+        targetHandle: null,
+      },
+    ];
+
+    const edge = await createEdge({
+      workflowId: 'w1',
+      sourceNodeId: 'a',
+      targetNodeId: 'b',
+      sourceHandle: 'error',
+      actor: 'chat',
+      reason: 'workflow_add_edge',
+    });
+
+    expect(edge.id).toBe('e1');
+    expect(h.inserted).toHaveLength(0);
+  });
 });
 
 describe('deleteEdge', () => {

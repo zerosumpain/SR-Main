@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
-import { db } from '$lib/db';
+import { db, type DbExecutor } from '$lib/db';
 import { workflowEdges, workflowNodes, workflows } from '$lib/db/schema';
+import { discardAuditObs, flushAuditObs } from './audit';
 import { publishWorkflowUpdate, type WorkflowUpdateEvent } from '$lib/jkai/workflow-updates-bus';
 import {
   createEdge,
@@ -134,8 +135,12 @@ export async function applyAmendOps(input: AmendInput): Promise<AmendResult> {
   // does not exist.
   const events: WorkflowUpdateEvent[] = [];
   const outcomes: AmendOutcome[] = [];
+  // Held so the audit rows' observability events can be released after COMMIT,
+  // for the same reason `events` is: an announcement cannot be rolled back.
+  const txRef: { current?: DbExecutor } = {};
 
   await db.transaction(async (tx) => {
+    txRef.current = tx;
     const refs = new Map<string, string>();
 
     for (let i = 0; i < ops.length; i++) {
@@ -406,13 +411,30 @@ export async function applyAmendOps(input: AmendInput): Promise<AmendResult> {
             });
             break;
           }
+
+          default: {
+            // Unreachable through the type, but ops arrive as JSON from a model
+            // and an op kind nobody implemented used to match no case, push no
+            // outcome and throw nothing — a silently dropped edit reported as a
+            // success. The caller screens ops against the same list first; this
+            // is the backstop that makes the drop impossible rather than
+            // unlikely.
+            const kind = (op as { op?: unknown }).op;
+            throw new Error(
+              `unknown op "${String(kind)}" — the six shapes are add_node, update_node, ` +
+                `remove_node, add_edge, remove_edge, insert_between`,
+            );
+          }
         }
       } catch (err) {
+        discardAuditObs(tx);
         throw new AmendOpError(i, op.op, err);
       }
     }
   });
 
+  // The audit rows are committed now, so the observability bus may hear of them.
+  if (txRef.current) flushAuditObs(txRef.current);
   for (const e of events) publishWorkflowUpdate(e);
 
   return { workflowId, outcomes };

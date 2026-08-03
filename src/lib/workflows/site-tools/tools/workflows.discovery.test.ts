@@ -82,6 +82,31 @@ describe('workflow_amend pre-flight validation', () => {
     expect(r.error).toMatch(/at least one op/i);
   });
 
+  it('fails the whole amend on an op kind it does not implement, instead of dropping it', async () => {
+    // The silent partial failure this tool exists to prevent. An op nobody
+    // implemented matched no case in the executor: no write, no error, and the
+    // result still said the amend succeeded. `set_schedule` is the realistic
+    // guess — it was in an earlier draft of this tool's op list.
+    const r = await amend({
+      workflowId: 'w1',
+      ops: [
+        { op: 'set_schedule', cron: '0 9 * * *' },
+        { op: 'add_node', type: 'delay', label: 'Wait' },
+      ],
+    });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('op 1 (set_schedule)');
+    expect(r.error).toMatch(/unrecognised op/i);
+    // Says what IS allowed, so the retry is informed rather than another guess.
+    expect(r.error).toContain('insert_between');
+  });
+
+  it('rejects an op with no `op` key at all', async () => {
+    const r = await amend({ workflowId: 'w1', ops: [{ nodeId: 'n1', label: 'Renamed' }] });
+    expect(r.success).toBe(false);
+    expect(r.error).toContain('no "op" key');
+  });
+
   it('names the offending op when a node type does not exist', async () => {
     const r = await amend({
       workflowId: 'w1',

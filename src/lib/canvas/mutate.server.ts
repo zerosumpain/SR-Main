@@ -479,6 +479,11 @@ export interface EdgeCreateInput {
  * table unchecked — the foreign key accepts any real node, from any graph.
  * Re-adding an edge that already exists returns the existing row rather than a
  * duplicate, matching the canvas POST route.
+ *
+ * "Already exists" means the same pair AND the same handles. A condition node's
+ * error branch and its success branch run between the same two nodes and differ
+ * only by `sourceHandle`, so deduping on the pair alone would quietly hand back
+ * the success edge and report the error route as wired when it never was.
  */
 export async function createEdge(input: EdgeCreateInput): Promise<WorkflowEdge> {
   const { workflowId, sourceNodeId, targetNodeId, actor, reason } = input;
@@ -504,7 +509,10 @@ export async function createEdge(input: EdgeCreateInput): Promise<WorkflowEdge> 
   const displayOnly = endpoints.filter((n) => isDisplayOnlyType(n.type));
   if (displayOnly.length > 0) throw new EdgeEndpointError(displayOnly.map((n) => n.id));
 
-  const [existing] = await conn
+  const sourceHandle = input.sourceHandle || null;
+  const targetHandle = input.targetHandle || null;
+
+  const between = await conn
     .select()
     .from(workflowEdges)
     .where(
@@ -514,6 +522,9 @@ export async function createEdge(input: EdgeCreateInput): Promise<WorkflowEdge> 
         eq(workflowEdges.targetNodeId, targetNodeId),
       ),
     );
+  const existing = between.find(
+    (e) => (e.sourceHandle ?? null) === sourceHandle && (e.targetHandle ?? null) === targetHandle,
+  );
   if (existing) return existing;
 
   const [edge] = await conn
@@ -522,8 +533,8 @@ export async function createEdge(input: EdgeCreateInput): Promise<WorkflowEdge> 
       workflowId,
       sourceNodeId,
       targetNodeId,
-      sourceHandle: input.sourceHandle || null,
-      targetHandle: input.targetHandle || null,
+      sourceHandle,
+      targetHandle,
     })
     .returning();
 
