@@ -715,20 +715,39 @@
               {/each}
             </div>
             <p class="rel-why">{p.reason}</p>
-            <button
-              class="action"
-              type="button"
-              disabled={busyId === `p${idx}`}
-              onclick={() =>
-                runCommission(
-                  'ask',
-                  `Is there a direct relationship between ${p.entities[0]?.name} and ${p.entities[1]?.name}? They share several connections in my intel graph but no recorded link.`,
-                  p.entities.map((e) => e.id),
-                  `p${idx}`,
-                )}
-            >
-              {busyId === `p${idx}` ? 'Working…' : 'Confirm link'}
-            </button>
+            <!-- Records the relationship. This was `runCommission('ask', …)`,
+                 which handed the question to jkai and left the graph unchanged —
+                 the button said "Confirm link" and confirmed nothing. -->
+            <div class="rel-acts">
+              <button
+                class="action"
+                type="button"
+                disabled={busyId === `p${idx}`}
+                onclick={() =>
+                  runCommission(
+                    'confirm_link',
+                    `Confirmed from a predicted link — ${p.entities[0]?.name} and ${p.entities[1]?.name}`,
+                    p.entities.map((e) => e.id),
+                    `p${idx}`,
+                  )}
+              >
+                {busyId === `p${idx}` ? 'Working…' : 'Confirm link'}
+              </button>
+              <button
+                class="ghost"
+                type="button"
+                disabled={busyId === `p${idx}`}
+                onclick={() =>
+                  runCommission(
+                    'reject_link',
+                    `Rejected from the intel dashboard — ${p.entities[0]?.name} and ${p.entities[1]?.name}`,
+                    p.entities.map((e) => e.id),
+                    `p${idx}`,
+                  )}
+              >
+                Not related
+              </button>
+            </div>
           </article>
         {:else}
           <p class="none">No missing links predicted.</p>
@@ -1265,6 +1284,35 @@
     font-size: var(--fs-label);
     color: var(--text-secondary);
     line-height: 1.45;
+  }
+
+  /* A prediction has two real answers, so the negative one sits beside the
+     positive rather than being a dead end. */
+  .rel-acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .rel-acts .ghost {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 5px 9px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sharp);
+    background: none;
+    color: var(--text-ghost);
+    cursor: pointer;
+  }
+  .rel-acts .ghost:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--card-border);
+  }
+  .rel-acts .ghost:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .action {
     align-self: flex-start;
