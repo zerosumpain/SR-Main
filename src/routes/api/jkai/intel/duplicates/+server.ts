@@ -61,6 +61,39 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
+  // Dispose of a reviewed batch in one request. The per-pair endpoint above
+  // meant clearing a review queue was one round trip per pair, which is the
+  // bulk of the burden in a mailbox-fed graph — a sweep can surface dozens of
+  // the same person. Each pair is applied independently so one stale pair
+  // (already merged by another tab, or by the post-sweep auto-merge) cannot
+  // fail the whole batch.
+  if (action === 'merge-batch') {
+    const raw = Array.isArray(body.pairs) ? body.pairs : [];
+    if (!raw.length) throw error(400, 'pairs is required');
+    if (raw.length > 200) throw error(400, 'at most 200 pairs per batch');
+
+    const merged: Array<{ keepId: string; mergeId: string }> = [];
+    const failed: Array<{ keepId: string; mergeId: string; reason: string }> = [];
+
+    for (const entry of raw) {
+      const pair = entry as Record<string, unknown>;
+      const keepId = String(pair?.keepId ?? '');
+      const mergeId = String(pair?.mergeId ?? '');
+      if (!keepId || !mergeId) {
+        failed.push({ keepId, mergeId, reason: 'keepId and mergeId are required' });
+        continue;
+      }
+      try {
+        await mergeEntities(keepId, mergeId);
+        merged.push({ keepId, mergeId });
+      } catch (err) {
+        failed.push({ keepId, mergeId, reason: err instanceof Error ? err.message : 'merge failed' });
+      }
+    }
+
+    return json({ ok: true, merged: merged.length, failed, pairs: merged });
+  }
+
   if (action === 'unmerge') {
     const entityId = String(body.entityId ?? '');
     if (!entityId) throw error(400, 'entityId is required');

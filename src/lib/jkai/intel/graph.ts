@@ -10,6 +10,7 @@ import {
 import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveExtractionModel } from '$lib/server/models/settings';
+import { decayWeight } from './staleness';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -436,10 +437,33 @@ export async function backfillEntitySummaries(limit = 100): Promise<{ processed:
   return { processed: rows.length, remaining };
 }
 
+/**
+ * Options that let a SOURCE say how much its evidence is worth.
+ *
+ * Added for the rolling Gmail sweep. Everything else the graph ingests is
+ * deliberately put in and effectively timeless — a document from March is not
+ * less true in August — but ordinary correspondence does go stale, and without
+ * this the graph would be led by whoever emailed most eleven weeks ago. Both
+ * fields are optional and default to today's full-weight behaviour, so no
+ * existing caller changes.
+ */
+export interface PersistOptions {
+  /** 0..1 from $lib/jkai/intel/staleness. Discounts edge weight by age. */
+  recency?: number;
+  /** When the evidence was actually observed, if not now. */
+  observedAt?: Date;
+}
+
 export async function persistExtraction(
   noteId: string,
   result: ExtractionResult,
+  opts: PersistOptions = {},
 ): Promise<{ entityCount: number; relationshipCount: number; timelineEventCount: number }> {
+  const recency = typeof opts.recency === 'number' ? opts.recency : 1;
+  const observedAt = opts.observedAt ?? new Date();
+  /** Edge weight after corroboration, then discounted for age. */
+  const aged = (observations: number, confidence: string) =>
+    decayWeight(weightFor(observations, confidence), recency);
   await createProposedTypes(result.proposedNewTypes);
 
   // Loaded once for excerpt capture — the evidence sentence behind each entity.
@@ -561,9 +585,9 @@ export async function persistExtraction(
         .update(intelRelationships)
         .set({
           observationCount: observations,
-          weight: weightFor(observations, upgrade ? 'high' : rel.confidence),
-          strength: strengthBucket(weightFor(observations, rel.confidence)),
-          lastSeenAt: new Date(),
+          weight: aged(observations, upgrade ? 'high' : rel.confidence),
+          strength: strengthBucket(aged(observations, rel.confidence)),
+          lastSeenAt: observedAt,
           ...(rel.label && !existing.manual ? { label: rel.label } : {}),
           ...(upgrade ? { confidence: 'high' } : {}),
         })
@@ -579,9 +603,9 @@ export async function persistExtraction(
       confidence: rel.confidence,
       sourceNoteId: noteId,
       observationCount: 1,
-      weight: weightFor(1, rel.confidence),
-      strength: strengthBucket(weightFor(1, rel.confidence)),
-      lastSeenAt: new Date(),
+      weight: aged(1, rel.confidence),
+      strength: strengthBucket(aged(1, rel.confidence)),
+      lastSeenAt: observedAt,
     });
     relationshipCount++;
   }

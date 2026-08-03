@@ -105,11 +105,104 @@ export function isTokenSubset(a: string, b: string): boolean {
   return small.every((t) => large.has(t));
 }
 
+// ---------------------------------------------------------------------------
+// Person names
+// ---------------------------------------------------------------------------
+
+/**
+ * Titles and suffixes that are not part of anybody's identity. Stripped before
+ * person-name comparison so "Dr Jane Okafor" and "Jane Okafor" meet.
+ */
+const NAME_AFFIXES = new Set([
+  'mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'prof', 'professor', 'sir', 'dame', 'lord', 'lady',
+  'rt', 'hon', 'jr', 'sr', 'ii', 'iii', 'iv', 'phd', 'obe', 'mbe', 'cbe',
+]);
+
+/** Person-name tokens: normalised, affixes removed. */
+export function personTokens(name: string): string[] {
+  return normaliseName(name)
+    .split(' ')
+    .filter((t) => t && !NAME_AFFIXES.has(t));
+}
+
+/**
+ * True when two person names differ only by initials — "J Kelly" vs "John
+ * Kelly", "John R Kelly" vs "John Kelly".
+ *
+ * Requires the FAMILY name (last token) to match exactly and at least one
+ * initial to line up. Without the family-name anchor this would marry every
+ * "J" in the graph to every "John".
+ */
+export function isInitialExpansion(a: string, b: string): boolean {
+  const ta = personTokens(a);
+  const tb = personTokens(b);
+  if (ta.length < 2 || tb.length < 2) return false;
+
+  const familyA = ta[ta.length - 1];
+  const familyB = tb[tb.length - 1];
+  if (familyA !== familyB) return false;
+
+  const givenA = ta.slice(0, -1);
+  const givenB = tb.slice(0, -1);
+  if (!givenA.length || !givenB.length) return false;
+  // Identical given names are `identical_name`'s business, not this rule's.
+  if (givenA.join(' ') === givenB.join(' ')) return false;
+
+  // Walk the shorter given-name list; every one of its parts must either match
+  // outright or be the initial of the corresponding part on the other side.
+  const [short, long] = givenA.length <= givenB.length ? [givenA, givenB] : [givenB, givenA];
+  for (let i = 0; i < short.length; i++) {
+    const s = short[i];
+    const l = long[i];
+    if (!l) return false;
+    if (s === l) continue;
+    if (s.length === 1 && l.startsWith(s)) continue;
+    if (l.length === 1 && s.startsWith(l)) continue;
+    return false;
+  }
+  return true;
+}
+
+/**
+ * True when two person names are the same words in a different order —
+ * "Kelly, John" (which arrives from address headers) vs "John Kelly".
+ *
+ * Requires at least two tokens on each side and the same multiset, so it cannot
+ * fire on a partial name.
+ */
+export function isNameReordering(a: string, b: string): boolean {
+  const ta = personTokens(a);
+  const tb = personTokens(b);
+  if (ta.length < 2 || tb.length !== ta.length) return false;
+  const sortedA = [...ta].sort().join(' ');
+  const sortedB = [...tb].sort().join(' ');
+  if (sortedA !== sortedB) return false;
+  // Same order is `identical_name`; this rule is only about reordering.
+  return ta.join(' ') !== tb.join(' ');
+}
+
+/**
+ * The email address recorded on an entity, lowercased.
+ *
+ * Gmail's structural pass writes `properties.email` on every person it creates,
+ * which makes this the highest-precision identity key in the whole graph — and
+ * until now nothing in the matcher read it.
+ */
+export function emailOf(entity: ResolvableEntity): string | null {
+  const raw = entity.properties?.email;
+  if (typeof raw !== 'string') return null;
+  const email = raw.trim().toLowerCase();
+  return email.includes('@') ? email : null;
+}
+
 export type MatchSignal =
   | 'identical_name'
+  | 'same_email'
   | 'acronym'
   | 'token_subset'
   | 'high_token_overlap'
+  | 'initial_expansion'
+  | 'name_reordering'
   | 'semantic';
 
 export interface MatchCandidate {
@@ -129,6 +222,22 @@ export interface ResolvableEntity {
   degree: number;
   noteCount: number;
   embedding?: number[] | null;
+  /** `intel_entities.properties`. Carries `email` for anyone Gmail created. */
+  properties?: Record<string, unknown> | null;
+}
+
+/**
+ * True when both sides are people, so the person-name rules may fire.
+ *
+ * Gated because those rules are wrong for organisations: "Kelly, John" logic
+ * applied to "Systems, Acme" or initials applied to "B Corp" vs "Bravo Corp"
+ * would merge unrelated bodies. A missing type on either side means "not
+ * proven", and the rules stay off.
+ */
+function isPersonPair(a: ResolvableEntity, b: ResolvableEntity): boolean {
+  const pa = (a.typeName || '').toLowerCase();
+  const pb = (b.typeName || '').toLowerCase();
+  return pa === 'person' && pb === 'person';
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -162,12 +271,32 @@ export function scorePair(a: ResolvableEntity, b: ResolvableEntity): MatchCandid
   const na = normaliseName(a.name);
   const nb = normaliseName(b.name);
 
-  if (na && na === nb) {
+  // An exact email match settles it. Two entities carrying the same address are
+  // the same person — that is what an address IS — so this outranks every name
+  // rule below and is scored above the auto-merge threshold on its own. It is
+  // also the one signal a display-name comparison can never reach: "J. Kelly"
+  // and "John Kelly (IBCA)" look unalike and are provably one person.
+  const emailA = emailOf(a);
+  const emailB = emailOf(b);
+  const sameEmail = Boolean(emailA && emailB && emailA === emailB);
+
+  if (sameEmail) {
+    signals.push('same_email');
+    confidence = 0.98;
+  } else if (na && na === nb) {
     signals.push('identical_name');
     confidence = 0.97;
   } else if (isAcronymPair(a.name, b.name)) {
     signals.push('acronym');
     confidence = 0.9;
+  } else if (isPersonPair(a, b) && isNameReordering(a.name, b.name)) {
+    // "Kelly, John" vs "John Kelly" — the same name, and address headers
+    // produce the reversed form constantly.
+    signals.push('name_reordering');
+    confidence = 0.93;
+  } else if (isPersonPair(a, b) && isInitialExpansion(a.name, b.name)) {
+    signals.push('initial_expansion');
+    confidence = 0.7;
   } else if (isTokenSubset(a.name, b.name)) {
     signals.push('token_subset');
     confidence = 0.55;
@@ -177,6 +306,18 @@ export function scorePair(a: ResolvableEntity, b: ResolvableEntity): MatchCandid
       signals.push('high_token_overlap');
       confidence = 0.5 + (overlap - 0.7) * 0.8;
     }
+  }
+
+  // Two DIFFERENT addresses on two entities is positive evidence they are not
+  // the same person, and it is strong enough to overrule a name similarity —
+  // two real people do share a name. Not applied when only one side has an
+  // address, which says nothing.
+  const conflictingEmail = Boolean(emailA && emailB && emailA !== emailB);
+
+  if (conflictingEmail) {
+    // Held below the auto-merge threshold rather than dropped: it may still be
+    // one person with two addresses, but that is a decision for a human.
+    confidence = Math.min(confidence * 0.4, 0.5);
   }
 
   // Semantic corroboration, when both sides have an embedding.
@@ -199,8 +340,10 @@ export function scorePair(a: ResolvableEntity, b: ResolvableEntity): MatchCandid
   if (!signals.length || confidence < 0.35) return null;
 
   // A type mismatch is a real objection: a person and an organisation sharing a
-  // name are usually two different things.
-  if (a.typeId !== b.typeId) confidence *= 0.7;
+  // name are usually two different things. An exact email match is exempt —
+  // there the disagreement is about the TYPE, not the identity, and penalising
+  // it would leave a provable duplicate sitting in the review queue forever.
+  if (a.typeId !== b.typeId && !sameEmail) confidence *= 0.7;
 
   if (confidence < 0.35) return null;
 
@@ -217,7 +360,10 @@ function describeSignals(
   similarity: number | null,
 ): string {
   const parts: string[] = [];
+  if (signals.includes('same_email')) parts.push(`both use ${emailOf(a) ?? 'the same address'}`);
   if (signals.includes('identical_name')) parts.push('identical names');
+  if (signals.includes('name_reordering')) parts.push('the same name in a different order');
+  if (signals.includes('initial_expansion')) parts.push('one name is the other with initials');
   if (signals.includes('acronym')) parts.push(`"${shorter(a, b).name}" is the acronym of "${longer(a, b).name}"`);
   if (signals.includes('token_subset')) parts.push('one name contains the other');
   if (signals.includes('high_token_overlap')) parts.push('names share most of their words');
@@ -271,6 +417,12 @@ export function findDuplicateCandidates(
   };
 
   for (const e of entities) {
+    // Block on the address as well as the name. Without this the `same_email`
+    // signal could never fire on the case it exists for: two entities for one
+    // person under unlike display names share no token to meet in.
+    const email = emailOf(e);
+    if (email) addTo(`email:${email}`, e);
+
     const tokens = significantTokens(e.name);
     // Block on every significant token: "IBCA Data Strategy" and "IBCA's Data
     // Strategy" meet in the `ibca`, `data` and `strategy` blocks.

@@ -343,6 +343,9 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       e.type_id,
       COALESCE(t.name, 'unknown') AS type_name,
       e.embedding::text           AS embedding,
+      -- Carries the email address for anyone the Gmail sweep created. Without
+      -- it the exact-address match signal can never fire.
+      e.properties                AS properties,
       COALESCE(d.degree, 0)       AS degree,
       COALESCE(n.note_count, 0)   AS note_count
     FROM intel_entities e
@@ -375,8 +378,24 @@ export async function loadResolvableEntities(): Promise<ResolvableEntity[]> {
       degree: Number(r.degree ?? 0),
       noteCount: Number(r.note_count ?? 0),
       embedding,
+      properties: asProperties(r.properties),
     };
   });
+}
+
+/** jsonb comes back either parsed or as a string, depending on the driver path. */
+function asProperties(raw: unknown): Record<string, unknown> | null {
+  if (!raw) return null;
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export interface DuplicateReport {

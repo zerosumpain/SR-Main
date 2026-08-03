@@ -35,6 +35,14 @@ import { desc, eq, sql } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import type { AutoExtractOutcome } from './auto-extract';
 import type { ExtractedEntity, ExtractedRelationship, ExtractionResult } from './extract';
+import { recencyOf, ROLLING_WINDOW_DAYS } from './staleness';
+import {
+  planAttachments,
+  attachmentSection,
+  skippedAttachmentsNote,
+  fetchAttachmentText,
+  type AttachmentRefInput,
+} from './gmail-attachments';
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -58,6 +66,8 @@ export interface ThreadMessageInput {
   bodyText?: string;
   /** Gmail epoch-ms as a string. Preferred over the `Date` header, which lies. */
   internalDate?: string;
+  /** Populated by the Gmail service's MIME walk; empty for a metadata fetch. */
+  attachments?: AttachmentRefInput[];
 }
 
 export interface ThreadInput {
@@ -516,8 +526,58 @@ export function structuralEdges(thread: ThreadInput): StructuralExtraction {
  */
 export const DEFAULT_GMAIL_INTEL_QUERY = 'is:starred OR label:intel';
 
+/**
+ * The rolling window: everything from the last 12 weeks except bin and spam.
+ *
+ * This is a deliberate reversal of the module header's argument above, asked
+ * for explicitly — the mailbox in full, not just what was marked. The cost
+ * objection is answered rather than ignored:
+ *
+ *   - the STRUCTURAL half (participants and correspondence edges from headers)
+ *     costs nothing and runs for every thread, so the connective tissue of the
+ *     mailbox lands regardless of budget;
+ *   - the BODY half is capped per run by `extractBudget`, so a first sweep of a
+ *     large mailbox spreads across several nights instead of arriving as one
+ *     enormous bill;
+ *   - the content hash means a thread only costs a call again when a new
+ *     message actually lands in it;
+ *   - and staleness (see ./staleness) stops twelve weeks of ordinary
+ *     correspondence from drowning out what was deliberately curated.
+ *
+ * `category:promotions` and friends are NOT excluded — the brief said bin and
+ * spam, and a promotions-tab thread from a real counterparty is still evidence.
+ */
+export const ROLLING_GMAIL_INTEL_QUERY = `newer_than:${ROLLING_WINDOW_DAYS}d -in:trash -in:spam`;
+
+export type GmailSweepMode = 'marked' | 'rolling';
+
+/** The query a mode sweeps, unless the caller overrides it outright. */
+export function queryForMode(mode: GmailSweepMode): string {
+  return mode === 'rolling' ? ROLLING_GMAIL_INTEL_QUERY : DEFAULT_GMAIL_INTEL_QUERY;
+}
+
 const DEFAULT_THREAD_LIMIT = 20;
 const MAX_THREAD_LIMIT = 100;
+
+/**
+ * Threads a ROLLING sweep may walk in one run.
+ *
+ * Much larger than `MAX_THREAD_LIMIT` because listing is cheap — ids and
+ * headers only — and the expensive step is separately budgeted below. This is
+ * the ceiling on how much mailbox one night can *look at*, not how much it
+ * pays for.
+ */
+const MAX_ROLLING_THREADS = 2_000;
+
+/** Gmail's own page size for threads.list. */
+const THREAD_PAGE_SIZE = 100;
+
+/**
+ * Body extractions (LLM calls) a single rolling run will pay for. Threads
+ * beyond it still get their free structural edges; their bodies are read on a
+ * later run, newest first, so the most relevant mail is always done first.
+ */
+const DEFAULT_EXTRACT_BUDGET = 150;
 
 /** Prefix on the auto-extract refId, so Gmail threads cannot collide with drive file ids. */
 export const GMAIL_REF_PREFIX = 'gmail:';
@@ -527,6 +587,12 @@ export interface GmailIngestOptions {
   limit?: number;
   /** Defaults to the most recently used active account. */
   accountId?: number;
+  /** 'marked' (the curated sweep) or 'rolling' (12 weeks of everything). */
+  mode?: GmailSweepMode;
+  /** Rolling only — LLM body extractions this run may pay for. */
+  extractBudget?: number;
+  /** Rolling only — decode and read attachments. Defaults on. */
+  includeAttachments?: boolean;
 }
 
 export interface GmailThreadOutcome {
@@ -539,11 +605,18 @@ export interface GmailThreadOutcome {
   /** New correspondence edges written (0 for an unchanged or broadcast thread). */
   edges: number;
   entityCount?: number;
+  /** 0..1 staleness weight applied to this thread's edges (rolling mode). */
+  recency?: number;
+  /** Attachments decoded and appended to the note text. */
+  attachmentsRead?: number;
+  /** Structural edges written but the body left for a later run (budget spent). */
+  deferred?: boolean;
 }
 
 export interface GmailIngestResult {
   account: string;
   query: string;
+  mode: GmailSweepMode;
   threads: number;
   extracted: number;
   unchanged: number;
@@ -551,6 +624,14 @@ export interface GmailIngestResult {
   failed: number;
   entities: number;
   edges: number;
+  /** Attachments decoded across the sweep. */
+  attachments: number;
+  /** Threads given their free structural edges, body deferred to a later run. */
+  deferred: number;
+  /** Model calls left when the run ended. 0 means there is more to do. */
+  budgetLeft: number;
+  /** Duplicate entities resolved automatically after the sweep. */
+  autoMerged: number;
   items: GmailThreadOutcome[];
 }
 
@@ -594,6 +675,58 @@ async function listThreadIds(acct: GmailAccount, query: string, limit: number): 
 }
 
 /**
+ * Every thread id matching a query, paging until exhausted or `limit` is hit.
+ *
+ * `threads.list` caps at 500 per page and a 12-week mailbox is many pages, so
+ * the single-request version above cannot see past the first hundred. Newest
+ * first throughout — Gmail's own ordering — which is what makes a partial run
+ * useful: it always got through the most recent mail.
+ */
+async function listAllThreadIds(acct: GmailAccount, query: string, limit: number): Promise<string[]> {
+  const { gmailService } = await import('$lib/workflows/gmail/service');
+  const oauth = await gmailService.getAuthenticatedClient(acct);
+  const gmail = gmailService.gmailClientFor(oauth);
+
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await gmail.users.threads.list({
+      userId: 'me',
+      q: query,
+      maxResults: Math.min(THREAD_PAGE_SIZE, limit - ids.length),
+      ...(pageToken ? { pageToken } : {}),
+    });
+    for (const t of res.data.threads ?? []) {
+      if (t.id) ids.push(t.id);
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken && ids.length < limit);
+
+  return ids.slice(0, limit);
+}
+
+/**
+ * The most recent message instant in a thread, as epoch ms.
+ *
+ * `internalDate` is Gmail's own receipt time and is preferred over the `Date`
+ * header, which is written by the sender and lies often enough to matter when
+ * it is driving a decay curve.
+ */
+export function threadTimestamp(thread: ThreadInput): number | null {
+  let newest = 0;
+  for (const msg of thread?.messages ?? []) {
+    const raw = Number(msg.internalDate);
+    if (Number.isFinite(raw) && raw > newest) newest = raw;
+    else if (!Number.isFinite(raw) && msg.headers?.date) {
+      const parsed = Date.parse(msg.headers.date);
+      if (Number.isFinite(parsed) && parsed > newest) newest = parsed;
+    }
+  }
+  return newest > 0 ? newest : null;
+}
+
+/**
  * Fetch a thread as parsed messages.
  *
  * `threads.get` with `format: 'metadata'` for the id list, then the service's
@@ -619,17 +752,171 @@ async function fetchThread(acct: GmailAccount, threadId: string): Promise<Thread
   return { id: threadId, messages };
 }
 
+/**
+ * Attachment text for a whole thread, as blocks appended to the note.
+ *
+ * Planned across the thread rather than per message, so the budget is spent on
+ * the five best documents in the conversation rather than five per message.
+ * A failure anywhere returns what it has — an unreadable attachment must never
+ * cost the thread its body.
+ */
+async function threadAttachmentText(
+  acct: GmailAccount,
+  thread: ThreadInput,
+): Promise<{ text: string; read: number; skipped: number }> {
+  // attachmentId → the message carrying it; `attachments.get` needs both ids.
+  // Local to the call: a module-level map would leak across sweeps and let two
+  // concurrent accounts read each other's message ids.
+  const messageIdFor = new Map<string, string>();
+  const all: AttachmentRefInput[] = [];
+  for (const msg of thread.messages ?? []) {
+    if (!msg.id) continue;
+    for (const att of msg.attachments ?? []) {
+      if (!att?.attachmentId) continue;
+      all.push(att);
+      messageIdFor.set(att.attachmentId, msg.id);
+    }
+  }
+  if (!all.length) return { text: '', read: 0, skipped: 0 };
+
+  const plan = planAttachments(all);
+  if (!plan.fetch.length) {
+    return { text: skippedAttachmentsNote(plan.skipped), read: 0, skipped: plan.skipped.length };
+  }
+
+  const { gmailService } = await import('$lib/workflows/gmail/service');
+  const oauth = await gmailService.getAuthenticatedClient(acct);
+  const gmail = gmailService.gmailClientFor(oauth);
+
+  const blocks: string[] = [];
+  let read = 0;
+  for (const att of plan.fetch) {
+    const messageId = messageIdFor.get(att.attachmentId);
+    if (!messageId) continue;
+    const text = await fetchAttachmentText(gmail, messageId, att);
+    if (!text) continue;
+    const block = attachmentSection(att.filename, text);
+    if (block) {
+      blocks.push(block);
+      read++;
+    }
+  }
+
+  const note = skippedAttachmentsNote(plan.skipped);
+  if (note) blocks.push(note);
+  return { text: blocks.join('\n\n'), read, skipped: plan.skipped.length };
+}
+
+/**
+ * Write a thread's FREE half when the model budget for this run is spent.
+ *
+ * Participants and correspondence edges come off the headers and cost nothing,
+ * so a budget-exhausted run still lands the connective tissue of the mailbox
+ * and only defers the reading of bodies.
+ *
+ * The note is created WITHOUT a `contentHash`, deliberately. `extractIntoIntel`
+ * short-circuits to `unchanged` when the stored hash matches the incoming one,
+ * so writing the hash here would mark the thread as fully ingested and its body
+ * would never be read on any later run — the deferral would become permanent
+ * silently. No hash means the next run with budget picks it up.
+ */
+async function persistStructuralOnly(
+  structural: StructuralExtraction,
+  ctx: { threadId: string; subject: string; account: string; participants: ParsedAddress[] },
+  opts: { recency: number; observedAt?: Date },
+): Promise<{ entityCount: number; relationshipCount: number }> {
+  const { db } = await import('$lib/db');
+  const { intelNotes } = await import('$lib/db/schema');
+  const { persistExtraction } = await import('./graph');
+
+  const refId = refIdForThread(ctx.threadId);
+  const metadata = {
+    channel: 'gmail',
+    gmailThreadId: ctx.threadId,
+    gmailAccount: ctx.account,
+    participants: ctx.participants.map((p) => p.email),
+    sourceUrl: `https://mail.google.com/mail/u/0/#all/${ctx.threadId}`,
+    autoKind: 'file',
+    refId,
+    sourceTag: 'file',
+    // No contentHash — see the note above.
+    structuralOnly: true,
+  };
+
+  const { rows } = await db.execute(sql`
+    SELECT id FROM intel_notes WHERE metadata->>'refId' = ${refId} LIMIT 1
+  `);
+  const existingId = (rows as Array<Record<string, unknown>>)[0]?.id;
+
+  let noteId: string;
+  if (existingId) {
+    noteId = String(existingId);
+  } else {
+    const [created] = await db
+      .insert(intelNotes)
+      .values({
+        title: ctx.subject.slice(0, 200),
+        // Headers only — the body is deliberately not stored yet, so the later
+        // full extraction is not fooled into thinking it already has the text.
+        rawContent: `Email thread: ${ctx.subject}\nParticipants: ${ctx.participants.map((p) => p.email).join(', ')}`,
+        source: 'email',
+        format: 'summary',
+        status: 'pending',
+        metadata,
+      })
+      .returning({ id: intelNotes.id });
+    noteId = created.id;
+  }
+
+  return persistExtraction(noteId, structural, { recency: opts.recency, observedAt: opts.observedAt });
+}
+
 export interface GmailSweepPreview {
   account: string;
   query: string;
+  mode: GmailSweepMode;
   threads: Array<{ threadId: string; subject: string; messages: number; participants: number; alreadyIngested: boolean }>;
   newThreads: number;
+  /** Rolling only — the window the count covers. */
+  windowDays?: number;
 }
 
 /** What a sweep WOULD touch, without extracting anything. No LLM calls. */
 export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<GmailSweepPreview> {
   const acct = await resolveAccount(opts.accountId);
-  const query = (opts.query ?? DEFAULT_GMAIL_INTEL_QUERY).trim() || DEFAULT_GMAIL_INTEL_QUERY;
+  const mode: GmailSweepMode = opts.mode === 'rolling' ? 'rolling' : 'marked';
+  const fallbackQuery = queryForMode(mode);
+  const query = (opts.query ?? fallbackQuery).trim() || fallbackQuery;
+
+  // A rolling preview must not fetch every thread in twelve weeks just to
+  // report a count — listing is cheap, per-thread fetching is not. It pages the
+  // ids for an honest total and details only the first page.
+  if (mode === 'rolling') {
+    const ids = await listAllThreadIds(acct, query, MAX_ROLLING_THREADS);
+    const { db } = await import('$lib/db');
+    const refIds = ids.map(refIdForThread);
+    const { rows } = await db.execute(sql`
+      SELECT metadata->>'refId' AS ref_id
+      FROM intel_notes
+      WHERE metadata->>'refId' = ANY(${refIds}::text[])
+    `);
+    const known = new Set((rows as Array<Record<string, unknown>>).map((r) => String(r.ref_id)));
+    return {
+      account: acct.email,
+      query,
+      mode,
+      threads: ids.map((threadId) => ({
+        threadId,
+        subject: '',
+        messages: 0,
+        participants: 0,
+        alreadyIngested: known.has(refIdForThread(threadId)),
+      })),
+      newThreads: ids.filter((id) => !known.has(refIdForThread(id))).length,
+      windowDays: ROLLING_WINDOW_DAYS,
+    };
+  }
+
   const limit = clampThreadLimit(opts.limit);
 
   const threadIds = await listThreadIds(acct, query, limit);
@@ -657,6 +944,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
   return {
     account: acct.email,
     query,
+    mode,
     threads,
     newThreads: threads.filter((t) => !t.alreadyIngested).length,
   };
@@ -680,16 +968,34 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     throw new Error(`Gmail account ${acct.email} needs re-authentication at /admin/connections/gmail.`);
   }
 
-  const query = (opts.query ?? DEFAULT_GMAIL_INTEL_QUERY).trim() || DEFAULT_GMAIL_INTEL_QUERY;
-  const limit = clampThreadLimit(opts.limit);
+  const mode: GmailSweepMode = opts.mode === 'rolling' ? 'rolling' : 'marked';
+  const fallbackQuery = queryForMode(mode);
+  const query = (opts.query ?? fallbackQuery).trim() || fallbackQuery;
+  const rolling = mode === 'rolling';
+  const includeAttachments = opts.includeAttachments !== false;
+
+  // A rolling sweep pages the whole window and rations the expensive half; the
+  // marked sweep keeps its original single-request, everything-extracted shape.
+  const limit = rolling
+    ? Math.min(Math.max(Number(opts.limit) || MAX_ROLLING_THREADS, 1), MAX_ROLLING_THREADS)
+    : clampThreadLimit(opts.limit);
+  const budgetRaw = Number(opts.extractBudget);
+  let extractBudget = rolling
+    ? Number.isFinite(budgetRaw) && budgetRaw >= 0
+      ? Math.floor(budgetRaw)
+      : DEFAULT_EXTRACT_BUDGET
+    : Number.POSITIVE_INFINITY;
 
   const { extractIntoIntel } = await import('./auto-extract');
   const { persistExtraction } = await import('./graph');
 
-  const threadIds = await listThreadIds(acct, query, limit);
+  const threadIds = rolling
+    ? await listAllThreadIds(acct, query, limit)
+    : await listThreadIds(acct, query, limit);
   const result: GmailIngestResult = {
     account: acct.email,
     query,
+    mode,
     threads: threadIds.length,
     extracted: 0,
     unchanged: 0,
@@ -697,6 +1003,10 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     failed: 0,
     entities: 0,
     edges: 0,
+    attachments: 0,
+    deferred: 0,
+    budgetLeft: 0,
+    autoMerged: 0,
     items: [],
   };
 
@@ -712,16 +1022,31 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
 
     try {
       const thread = await fetchThread(acct, threadId);
-      const noteText = threadToNoteText(thread);
+      let noteText = threadToNoteText(thread);
       const structural = structuralEdges(thread);
       const subject = threadSubject(thread) || `Gmail thread ${threadId}`;
+
+      // How much this thread's evidence is still worth. Header-derived edges
+      // decay too: a correspondence edge from eleven weeks ago is a weaker
+      // statement about who works with whom than one from yesterday.
+      const observedMs = threadTimestamp(thread);
+      const recency = rolling ? recencyOf(observedMs) : 1;
+      const observedAt = observedMs ? new Date(observedMs) : undefined;
 
       item = {
         ...item,
         subject,
         messages: thread.messages.length,
         participants: structural.participants.length,
+        recency: Number(recency.toFixed(3)),
       };
+
+      if (includeAttachments) {
+        const att = await threadAttachmentText(acct, thread);
+        if (att.text) noteText = `${noteText}\n\n${att.text}`;
+        item.attachmentsRead = att.read;
+        result.attachments += att.read;
+      }
 
       if (!noteText) {
         result.skipped++;
@@ -729,8 +1054,33 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         continue;
       }
 
+      // Structural edges are free and land for EVERY thread, budget or not —
+      // they are the higher-value half and the reason a partial run is still
+      // worth having. Only the model call below is rationed.
+      if (extractBudget <= 0) {
+        if (structural.entities.length) {
+          const stats = await persistStructuralOnly(
+            structural,
+            { threadId, subject, account: acct.email, participants: structural.participants },
+            { recency, observedAt },
+          );
+          item.edges = stats.relationshipCount;
+          result.edges += stats.relationshipCount;
+          result.entities += stats.entityCount;
+        }
+        item.status = 'skipped';
+        item.deferred = true;
+        result.deferred++;
+        result.items.push(item);
+        continue;
+      }
+
+      extractBudget--;
       const outcome = await extractIntoIntel({
         kind: 'file',
+        // Rides the `file` pipeline but is email, and the graph's source filter
+        // reads `source`, not `kind`.
+        source: 'email',
         refId: refIdForThread(threadId),
         title: subject.slice(0, 200),
         text: noteText,
@@ -762,7 +1112,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // changed — on an unchanged thread they are already in the graph, and
       // re-persisting them would inflate every observation count for free.
       if (outcome.status === 'extracted' && outcome.noteId && structural.entities.length) {
-        const stats = await persistExtraction(outcome.noteId, structural);
+        const stats = await persistExtraction(outcome.noteId, structural, { recency, observedAt });
         item.edges = stats.relationshipCount;
         result.edges += stats.relationshipCount;
       }
@@ -777,8 +1127,42 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     result.items.push(item);
   }
 
+  result.budgetLeft = Number.isFinite(extractBudget) ? Math.max(0, extractBudget) : 0;
+
+  // Resolve duplicates as they arrive rather than letting them queue up.
+  //
+  // A mailbox is the worst source for duplicate people — the same person
+  // appears as "John Kelly", "Kelly, John", "J. Kelly" and a bare address
+  // depending on who typed the header — so a 12-week sweep without this would
+  // hand over hundreds of pairs to review by hand. Only merges at or above the
+  // unchanged 0.85 threshold; nothing here lowers the bar.
+  if (result.extracted > 0 || result.edges > 0) {
+    try {
+      const { autoMergeDuplicates } = await import('./resolve/merge');
+      const sweep = await autoMergeDuplicates();
+      result.autoMerged = sweep.merged;
+      if (sweep.merged) {
+        console.log(`[intel:gmail] auto-merged ${sweep.merged} duplicate entities after the sweep`);
+      }
+    } catch (err) {
+      // Resolution is a tidy-up. Failing it must not fail the ingest that just
+      // succeeded, or a transient DB error would lose the whole sweep.
+      console.warn('[intel:gmail] post-sweep auto-merge failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   console.log(
-    `[intel:gmail] sweep "${query}" on ${acct.email} — ${result.threads} threads, ${result.extracted} extracted (${result.entities} entities, ${result.edges} edges), ${result.unchanged} unchanged, ${result.failed} failed`,
+    `[intel:gmail] ${mode} sweep "${query}" on ${acct.email} — ${result.threads} threads, ` +
+      `${result.extracted} extracted (${result.entities} entities, ${result.edges} edges, ${result.attachments} attachments), ` +
+      `${result.unchanged} unchanged, ${result.deferred} deferred, ${result.failed} failed`,
   );
+  if (rolling && result.deferred > 0) {
+    // Not a warning — a partial run is the designed behaviour — but it must be
+    // visible, or a mailbox that never finishes backfilling looks like success.
+    console.log(
+      `[intel:gmail] ${result.deferred} thread bodies deferred to a later run (budget exhausted); ` +
+        `structural edges for them are already in the graph`,
+    );
+  }
   return result;
 }
