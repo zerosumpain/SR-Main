@@ -11,6 +11,7 @@ import {
   threadParticipants,
   threadToNoteText,
   threadTimestamp,
+  threadContentHash,
   queryForMode,
   DEFAULT_GMAIL_INTEL_QUERY,
   ROLLING_GMAIL_INTEL_QUERY,
@@ -510,5 +511,60 @@ describe('threadTimestamp', () => {
   it('returns null for a thread with no usable dates', () => {
     expect(threadTimestamp({ id: 't1', messages: [{ headers: {} }] })).toBeNull();
     expect(threadTimestamp({ id: 't1', messages: [] })).toBeNull();
+  });
+});
+
+describe('threadContentHash', () => {
+  const thread = (msgs: ThreadMessageInput[]): ThreadInput => ({ id: 't1', messages: msgs });
+
+  it('is stable for the same thread', () => {
+    const t = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'hello' })]);
+    expect(threadContentHash(t)).toBe(threadContentHash(t));
+  });
+
+  it('changes when a new message arrives', () => {
+    const before = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'hello' })]);
+    const after = thread([
+      msg({ id: 'm1', internalDate: '1000', bodyText: 'hello' }),
+      msg({ id: 'm2', internalDate: '2000', bodyText: 'a reply' }),
+    ]);
+    expect(threadContentHash(after)).not.toBe(threadContentHash(before));
+  });
+
+  it('changes when a body changes', () => {
+    const a = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'hello' })]);
+    const b = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'goodbye' })]);
+    expect(threadContentHash(a)).not.toBe(threadContentHash(b));
+  });
+
+  it('ignores attachment metadata — messages are immutable, so ids already cover it', () => {
+    // The hash must be reproducible WITHOUT downloading attachments; that is
+    // what lets the sweep ask "changed?" before spending its budget.
+    const bare = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'see attached' })]);
+    const withAtt = thread([
+      msg({
+        id: 'm1',
+        internalDate: '1000',
+        bodyText: 'see attached',
+        attachments: [
+          { attachmentId: 'a1', filename: 'report.pdf', mimeType: 'application/pdf', sizeBytes: 900 },
+        ],
+      }),
+    ]);
+    expect(threadContentHash(withAtt)).toBe(threadContentHash(bare));
+  });
+
+  it('ignores quoted-reply churn, which repeats the same text every message', () => {
+    // Hashing the raw body would make a thread look changed every time someone
+    // replied under a differently-worded quote header.
+    const plain = thread([msg({ id: 'm1', internalDate: '1000', bodyText: 'the point' })]);
+    const quoted = thread([
+      msg({
+        id: 'm1',
+        internalDate: '1000',
+        bodyText: 'the point\n\nOn Mon, 3 Aug 2026 at 09:14, Alice <alice@y.com> wrote:\n> older text',
+      }),
+    ]);
+    expect(threadContentHash(quoted)).toBe(threadContentHash(plain));
   });
 });
