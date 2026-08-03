@@ -145,4 +145,31 @@ describe('setCatalogAuth', () => {
 
     await expect(setCatalogAuth('truelayer-data', { kind: 'secret', handle: 'truelayer' })).resolves.toBeTruthy();
   });
+
+  // `companies-house` is a real prod entry on {kind:'bearer-env'}. The env-var
+  // NAME lives only in that record — the register UI cannot type one in — so an
+  // unbind is unrecoverable from this page. Binding over it is the migration we
+  // want and must stay allowed.
+  it('refuses to clear a legacy env-var reference, which cannot be typed back in', async () => {
+    getRecordByKey.mockResolvedValue({
+      key: 'companies-house',
+      data: { ...TRUELAYER_ENTRY, key: 'companies-house', auth: { kind: 'bearer-env', envVar: 'COMPANIES_HOUSE_API_KEY' } },
+    });
+
+    await expect(setCatalogAuth('companies-house', { kind: 'none' })).rejects.toThrow(/legacy bearer-env reference/);
+    expect(updateRecord).not.toHaveBeenCalled();
+  });
+
+  it('still lets a registry credential replace a legacy env-var reference', async () => {
+    getRecordByKey.mockResolvedValue({
+      key: 'companies-house',
+      data: { ...TRUELAYER_ENTRY, key: 'companies-house', auth: { kind: 'bearer-env', envVar: 'COMPANIES_HOUSE_API_KEY' } },
+    });
+    getSecretMeta.mockResolvedValue(meta({ handle: 'companies-house', allowedHosts: ['api.truelayer.com'] }));
+
+    await expect(
+      setCatalogAuth('companies-house', { kind: 'secret', handle: 'companies-house' }),
+    ).resolves.toBeTruthy();
+    expect(updateRecord).toHaveBeenCalledTimes(1);
+  });
 });

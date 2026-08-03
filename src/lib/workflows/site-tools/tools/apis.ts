@@ -815,6 +815,20 @@ export async function setCatalogAuth(
   const found = await findApiEntry(key);
   if (!found) throw new Error(`no catalogued API "${key}".`);
 
+  // A legacy `*-env` entry stores an env-var NAME, and nothing in the register
+  // UI can type one back in — so unbinding one discards it for good. Binding a
+  // real registry credential OVER it is fine and is the migration we want; only
+  // the clear-to-nothing is refused. The admin page checks this too, but a
+  // client-side guard is not a guard: this route is the only thing between a
+  // stray POST and an irrecoverable value.
+  const prevKind = found.entry.auth?.kind;
+  if (auth.kind === 'none' && (prevKind === 'bearer-env' || prevKind === 'header-env')) {
+    throw new Error(
+      `API "${found.key}" uses a legacy ${prevKind} reference. Clearing it here would discard the ` +
+        `env-var name with no way to restore it from this page — bind a registry credential to replace it instead.`,
+    );
+  }
+
   let next: CatalogAuthChange = { kind: 'none' };
   if (auth.kind === 'secret') {
     const handle = String(auth.handle ?? '').trim();
