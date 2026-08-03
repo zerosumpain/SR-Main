@@ -7,11 +7,16 @@ import { join, basename } from 'node:path';
 import { interpolateTemplate } from './template';
 import { getWhatsAppService } from '../whatsapp/service';
 import { markdownToWhatsApp, chunkMessage } from '../whatsapp/format';
+// Single source of truth for the key name, shared with the canvas UI (the node
+// inspector displays and clears it). Defined in that pure, fetch-free module so
+// the browser never pulls this executor in just to learn the key's name — and
+// so a rename here can't leave the panel clearing a key nothing writes.
+import { WHATSAPP_SENT_HASHES_KEY } from '$lib/canvas/node-memory-keys';
 
 export { whatsappDef } from './whatsapp.def';
 
 /** Store key holding recently-sent message hashes for idempotency suppression. */
-const SENT_HASHES_KEY = '_wa_sent_hashes';
+const SENT_HASHES_KEY = WHATSAPP_SENT_HASHES_KEY;
 /** Cap on the remembered-hash ring buffer. */
 const SENT_HASHES_MAX = 200;
 /** Delay between sequential chunk sends so WhatsApp keeps them ordered. */
