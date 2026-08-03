@@ -17,6 +17,25 @@ describe('canvas palette ↔ registry parity', () => {
     expect(missing).toEqual([]);
   });
 
+  // Neither this file nor registry-parity compared CONFIG — they check the set
+  // of node types and the palette's handles — so a key added to a definition
+  // but not to the palette's defaultConfig (or the reverse) drifts silently,
+  // and verify.ts then rejects a freshly-dropped node's own default as an
+  // unknown config key. Scoped to the API nodes: a fleet-wide version of this
+  // assertion currently fails on ~25 pre-existing mismatches, which are their
+  // own piece of work.
+  it('the API nodes agree between palette defaultConfig and configSchema', () => {
+    for (const type of ['api-call', 'api-integration']) {
+      const def = nodeDefinitions.find((d) => d.type === type);
+      const entry = byType(type);
+      expect(def, `no definition for ${type}`).toBeTruthy();
+      expect(entry?.defaultConfig, `no palette defaultConfig for ${type}`).toBeTruthy();
+      const schemaKeys = Object.keys(def!.configSchema?.properties ?? {}).sort();
+      const paletteKeys = Object.keys(entry!.defaultConfig!).sort();
+      expect(paletteKeys, `${type} palette defaultConfig drifted from its configSchema`).toEqual(schemaKeys);
+    }
+  });
+
   it('previously-unreachable nodes are now in the palette and wireable', () => {
     for (const t of ['apple-calendar', 'approval']) {
       const entry = byType(t);

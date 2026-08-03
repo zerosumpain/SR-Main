@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
@@ -44,21 +44,29 @@
   };
 
   let integrations = $state<Integration[]>([]);
-  let loadError = $state<string | null>(null);
-  let loading = $state(true);
+  /**
+   * True only once the register has actually arrived. "Not in the register" is
+   * only a meaningful statement after the fetch lands — before it, the list is
+   * empty for the boring reason and every recorded key would read as missing.
+   */
+  let loaded = $state(false);
 
-  onMount(async () => {
-    try {
-      const res = await fetch('/api/workflows/api-integrations');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      integrations = (body.integrations ?? []) as Integration[];
-    } catch (e) {
-      loadError = e instanceof Error ? e.message : 'Failed to load the integration register';
-    } finally {
-      loading = false;
-    }
-  });
+  /**
+   * The picker owns the fetch (loading / retry / empty / custom-value fall out
+   * of it); the detail block below reads the same list out of `integrations`.
+   */
+  async function fetchIntegrations() {
+    const res = await fetch('/api/workflows/api-integrations');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    integrations = (body.integrations ?? []) as Integration[];
+    loaded = true;
+    return integrations.map((i) => ({
+      value: i.key,
+      label: i.name,
+      meta: `${i.method} ${i.host}${i.status !== 'verified' ? ` · ${i.status}` : ''}`,
+    }));
+  }
 
   const selectedKey = $derived(String(config.integration ?? ''));
   const selected = $derived(integrations.find((i) => i.key === selectedKey) ?? null);
@@ -75,12 +83,19 @@
   /**
    * Selecting an integration reseeds `params` with just that integration's
    * parameters (pre-filled with any defaults), so a leftover param from a
-   * previously-selected integration is never silently sent.
+   * previously-selected integration is never silently sent. A key that is not
+   * in the register (typed by hand, or a {{template}}) leaves `params` alone —
+   * there is nothing to reseed from, and wiping them would silently discard
+   * values the user typed for it.
    */
   function pick(key: string) {
     const next = integrations.find((i) => i.key === key);
+    if (!next) {
+      onChange({ ...config, integration: key });
+      return;
+    }
     const seeded: Record<string, string> = {};
-    for (const p of next?.params ?? []) seeded[p.name] = p.default || '';
+    for (const p of next.params) seeded[p.name] = p.default || '';
     onChange({ ...config, integration: key, params: seeded, confirmWrite: false });
   }
 
@@ -111,44 +126,37 @@
     <code>{'{{input.field}}'}</code> templates.
   </p>
 
-  {#if loadError}
-    <p class="ai-err">Could not load the register: {loadError}</p>
-  {/if}
-
   <section class="ai-sec">
     <header class="ai-sec-hdr"><span class="sr-label-tight">Integration</span></header>
-    {#if loading}
-      <p class="ai-hint">Loading register…</p>
-    {:else if integrations.length === 0 && !loadError}
+    <ResourcePicker
+      value={selectedKey}
+      fetcher={fetchIntegrations}
+      onChange={pick}
+      placeholder="choose a registered integration"
+      emptyHint="Nothing recorded yet — ask jkai in /jkai for the data you want, or add one at /admin/ai/apis. You can still type a key."
+    />
+    {#if loaded && selectedKey && !selected}
       <p class="ai-hint">
-        No integrations recorded yet. Ask jkai in <a href="/jkai">/jkai</a> for the data you want — it
-        researches the API, tests the call and records it here — or add one at
-        <a href="/admin/ai/apis">/admin/ai/apis</a>. You can still type a key below.
+        <code>{selectedKey}</code> isn't in the loaded register — it will be resolved at run time (or
+        the call will fail if it isn't recorded).
       </p>
-      <input
-        type="text"
-        class="ai-text"
-        placeholder="integration key (e.g. openrouter-credit-balance)"
-        value={selectedKey}
-        oninput={(e) => set('integration', (e.currentTarget as HTMLInputElement).value)}
-      />
-    {:else}
-      <select
-        class="ai-select"
-        value={selected?.key ?? ''}
-        onchange={(e) => pick((e.currentTarget as HTMLSelectElement).value)}
-      >
-        <option value="" disabled>— choose a registered integration —</option>
-        {#each integrations as i (i.key)}
-          <option value={i.key}>{i.name} · {i.method} {i.host}{i.status !== 'verified' ? ` · ${i.status}` : ''}</option>
-        {/each}
-      </select>
-      {#if selectedKey && !selected}
-        <p class="ai-hint">
-          <code>{selectedKey}</code> isn't in the loaded register — it will be resolved at run time (or
-          the call will fail if it isn't recorded).
-        </p>
-      {/if}
+    {/if}
+
+    <!-- Credential: read-only. It belongs to the API this integration sits on,
+         and is set in the register — one home for the binding, so a node can
+         never disagree with what /admin/ai/apis says it uses. -->
+    {#if selected}
+      <p class="ai-cred">
+        {#if selected.secretHandle}
+          <span class="ai-cred-lock">🔒</span> Uses credential <code>{selected.secretHandle}</code>,
+          injected server-side.
+        {:else if selected.authKind === 'none'}
+          No credential bound to <code>{selected.api}</code> — this call goes out unauthenticated.
+        {:else}
+          Legacy <code>{selected.authKind}</code> auth on <code>{selected.api}</code>.
+        {/if}
+        <a href="/admin/ai/apis" target="_blank" rel="noreferrer">change in the API register</a>
+      </p>
     {/if}
   </section>
 
@@ -252,8 +260,12 @@
   .ai { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
   .ai-lead { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.5; }
   .ai-lead strong { color: var(--text-primary); }
-  .ai-lead code, .ai-hint code, .ai-preview code, .ai-outs code { font-size: var(--fs-label); color: var(--text-muted); }
-  .ai-err { margin: 0; font-size: var(--fs-label); color: var(--status-error, #c0392b); }
+  .ai-lead code, .ai-hint code, .ai-preview code, .ai-outs code, .ai-cred code { font-size: var(--fs-label); color: var(--text-muted); }
+
+  .ai-cred { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.5; }
+  .ai-cred code { color: var(--text-primary); }
+  .ai-cred a { color: var(--text-muted); margin-left: 4px; }
+  .ai-cred-lock { margin-right: 2px; }
 
   .ai-sec { display: flex; flex-direction: column; gap: 8px; }
   .ai-sec-hdr {
@@ -262,7 +274,7 @@
     padding-bottom: 4px;
   }
 
-  .ai-text, .ai-select {
+  .ai-text {
     width: 100%;
     padding: 6px 8px;
     background: var(--bg);
@@ -272,7 +284,7 @@
     box-sizing: border-box;
     outline: none;
   }
-  .ai-text:focus, .ai-select:focus { border-color: var(--text-muted); }
+  .ai-text:focus { border-color: var(--text-muted); }
 
   .ai-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
   .ai-hint a { color: var(--text-muted); }

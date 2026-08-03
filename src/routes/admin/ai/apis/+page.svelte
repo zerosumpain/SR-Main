@@ -3,6 +3,11 @@
   import { getContext } from 'svelte';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  // The SAME predicate the server binds with. `$lib/secrets/registry` is
+  // server-only, so the rule lives in a pure module both sides import — a
+  // hand-written copy here previously offered `*.example.com` credentials for
+  // the apex host, which the server then refused at call time.
+  import { hostAllowed } from '$lib/secrets/host-match';
 
   type Param = { name: string; in: string; required?: boolean; description?: string; example?: string; default?: string };
   type Output = { name: string; expr: string; unit?: string; description?: string };
@@ -85,12 +90,16 @@
   }
 
   async function refresh() {
-    const [i, s] = await Promise.all([
+    const [i, s, a] = await Promise.all([
       fetch(qs('/api/admin/apis/integrations')).then((r) => r.json()).catch(() => null),
       fetch(qs('/api/admin/apis/secrets')).then((r) => r.json()).catch(() => null),
+      fetch(qs('/api/admin/apis/catalog')).then((r) => r.json()).catch(() => null),
     ]);
     if (i?.integrations) integrations = i.integrations;
     if (s?.secrets) secrets = s.secrets;
+    // Deleting or rebinding a credential changes which catalogue rows still
+    // resolve, so the catalogue is re-read alongside it rather than going stale.
+    if (a?.apis) apis = a.apis;
   }
 
   // ── Integrations ────────────────────────────────────────────────────────
@@ -284,6 +293,79 @@
         secrets = secrets.filter((x) => x.handle !== s.handle);
         say(`Deleted "${s.handle}"`);
       } else say((await res.json()).error ?? 'Delete failed', true);
+    } finally {
+      busy = null;
+    }
+  }
+
+  // ── Catalogue ↔ credential binding ──────────────────────────────────────
+  // The one place a service is joined to a credential. Until this existed the
+  // join was writable only by jkai's `api_register` tool, so every canvas node
+  // calling that API inherited a binding the owner could read but not change.
+  // Nodes deliberately have no say: they pick the service, the register decides
+  // the credential, and changing it here changes it for every node at once.
+  function hostOf(baseUrl: string): string {
+    try {
+      return new URL(baseUrl).hostname;
+    } catch {
+      return '';
+    }
+  }
+
+  /** Credentials that can actually authenticate this entry's host. */
+  function boundSecrets(a: ApiRow): Secret[] {
+    const host = hostOf(a.baseUrl);
+    if (!host) return [];
+    return secrets.filter((s) => s.injection.kind !== 'none' && hostAllowed(host, s.allowedHosts));
+  }
+
+  /**
+   * The handle stored on the entry when no credential of that name is in the
+   * registry any more — deleting a credential does not unbind the services
+   * using it. Without this the `<select>` matches no option, the browser falls
+   * back to the first one, and a broken binding reads as "no credential".
+   */
+  function danglingHandle(a: ApiRow): string | null {
+    if (!a.secretHandle) return null;
+    return secrets.some((s) => s.handle === a.secretHandle) ? null : a.secretHandle;
+  }
+
+  async function bindCredential(a: ApiRow, handle: string, el: HTMLSelectElement) {
+    // Legacy `bearer-env` entries hold an env-var NAME that nothing in this UI
+    // can type back in, so unbinding one destroys it for good. Refuse rather
+    // than lose it; binding a real credential over it is still allowed, because
+    // that is the migration we want.
+    if (!handle && !a.secretHandle && a.auth !== 'none') {
+      el.value = '';
+      say(
+        `${a.name} uses a legacy ${a.auth} reference, not a registry credential. ` +
+          `Bind a credential to replace it — clearing it here would discard the env-var name with no way to restore it.`,
+        true,
+      );
+      return;
+    }
+    busy = `bind:${a.key}`;
+    try {
+      const res = await fetch(qs('/api/admin/apis/catalog'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: a.key, handle }),
+      });
+      const body = await res.json();
+      if (res.ok) {
+        apis = apis.map((x) =>
+          x.key === a.key
+            ? { ...x, secretHandle: handle || undefined, auth: handle ? 'secret' : 'none' }
+            : x,
+        );
+        say(handle ? `${a.name} now uses "${handle}"` : `${a.name} now calls unauthenticated`);
+      } else {
+        // The server refused (usually: that credential is not bound to this
+        // host). Put the dropdown back to what is actually stored — otherwise it
+        // shows a binding that does not exist.
+        el.value = a.secretHandle ?? '';
+        say(body.error ?? 'Could not change the credential', true);
+      }
     } finally {
       busy = null;
     }
@@ -592,17 +674,54 @@
     <p class="sec-lede">
       The hosts jkai is allowed to call at all. Every request is kept within the entry's base URL and
       SSRF-guarded. Grown by the nightly improvement engine and by jkai itself (<code>api_register</code>).
+      <strong>Credential is set here and only here</strong> — canvas nodes pick the service and inherit
+      whatever this row says, so changing it changes every workflow using that API at once.
     </p>
     {#if apis.length === 0}
       <div class="nm-empty">Catalogue empty — it seeds on boot.</div>
     {:else}
       <div class="rows">
         {#each apis as a (a.key)}
+          {@const bound = boundSecrets(a)}
+          {@const boundHandles = new Set(bound.map((s) => s.handle))}
+          {@const dangling = danglingHandle(a)}
           <div class="arow">
             <span class="a-name">{a.name}</span>
             <span class="a-base"><code>{a.baseUrl}</code></span>
-            <span class="a-auth">
-              {#if a.secretHandle}🔒 {a.secretHandle}{:else}{a.auth}{/if}
+            <span class="a-cred">
+              <select
+                class="a-cred-sel"
+                aria-label={`Credential for ${a.name}`}
+                value={a.secretHandle ?? ''}
+                disabled={busy === `bind:${a.key}`}
+                onchange={(e) => bindCredential(a, e.currentTarget.value, e.currentTarget)}
+              >
+                <option value="">— no credential —</option>
+                {#if dangling}
+                  <!-- Keeps the stored binding selectable and visibly broken;
+                       without it the browser silently falls back to the first
+                       option and the row claims it has no credential. -->
+                  <option value={dangling}>⚠ {dangling} · missing from the registry</option>
+                {/if}
+                {#if bound.length}
+                  <optgroup label={`bound to ${hostOf(a.baseUrl) || 'this host'}`}>
+                    {#each bound as s (s.handle)}
+                      <option value={s.handle}>🔒 {s.handle}</option>
+                    {/each}
+                  </optgroup>
+                {/if}
+                <optgroup label="not bound to this host">
+                  {#each secrets.filter((s) => !boundHandles.has(s.handle)) as s (s.handle)}
+                    <option value={s.handle} disabled={s.injection.kind === 'none'}>
+                      {s.handle}
+                      {s.injection.kind === 'none' ? '· store-only' : `· ${s.allowedHosts.join(', ') || 'no hosts'}`}
+                    </option>
+                  {/each}
+                </optgroup>
+              </select>
+              {#if !a.secretHandle && a.auth !== 'none'}
+                <span class="a-legacy" title="Legacy env-var reference — replace it with a registry credential">{a.auth}</span>
+              {/if}
             </span>
             <span class="nm-pill" data-state={a.status === 'verified' ? 'ok' : a.status === 'broken' ? 'error' : 'info'}>{a.status}</span>
           </div>
@@ -658,10 +777,22 @@
     color: var(--text-muted);
   }
   .srow { grid-template-columns: 8rem minmax(0, 1fr) minmax(0, 1.3fr) 7rem 6rem auto minmax(0, 9rem) auto; }
-  .arow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 9rem auto; }
-  .s-hosts, .s-inj, .s-hint, .s-used, .a-base, .a-auth { font-family: var(--font-mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .arow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 13rem) auto; }
+  .s-hosts, .s-inj, .s-hint, .s-used, .a-base { font-family: var(--font-mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .s-label, .a-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .s-acts { display: flex; gap: 0.5rem; }
+
+  .a-cred { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+  .a-cred-sel {
+    flex: 1; min-width: 0;
+    padding: 0.25rem 0.3rem;
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--divider);
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .a-cred-sel:disabled { opacity: 0.5; }
+  .a-legacy { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); white-space: nowrap; }
 
   .sform { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px dashed var(--divider); display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -705,8 +836,8 @@
     .r-call, .r-outs, .r-by { display: none; }
     .srow { grid-template-columns: 1fr auto; }
     .s-hosts, .s-inj, .s-hint, .s-used, .s-label { display: none; }
-    .arow { grid-template-columns: 1fr auto; }
-    .a-base, .a-auth { display: none; }
+    .arow { grid-template-columns: 1fr minmax(0, 9rem) auto; }
+    .a-base { display: none; }
     .r-dl { grid-template-columns: 1fr; }
   }
 </style>

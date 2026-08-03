@@ -34,6 +34,7 @@ import { db } from '$lib/db';
 import { apiSecrets, type ApiSecretRow } from '$lib/db/schema';
 import { decryptPayload, encryptPayload } from '$lib/integrations/crypto';
 import { getOAuthAccessToken, OAUTH_PROVIDERS } from './oauth-refresh';
+import { normaliseHost, hostMatchesPattern, hostAllowed } from './host-match';
 
 export type SecretInjection =
   | { kind: 'bearer' }
@@ -149,32 +150,11 @@ export function listRefSources(): Array<{ key: string; label: string }> {
 // Host / path binding
 // ---------------------------------------------------------------------------
 
-/** Strip the FQDN trailing dot and lower-case. `new URL()` has already punycoded. */
-function normaliseHost(host: string): string {
-  return host.toLowerCase().replace(/\.+$/, '');
-}
-
-/**
- * Does `host` match an allow-list entry? Entries are either an exact host or a
- * `*.example.com` wildcard, which matches sub-domains ONLY (not the apex — an
- * owner who wants both lists both). A bare `*` is never accepted, so a secret
- * can never be host-unbound.
- */
-export function hostMatchesPattern(host: string, pattern: string): boolean {
-  const h = normaliseHost(host);
-  const p = normaliseHost(String(pattern ?? '').trim());
-  if (!h || !p || p === '*') return false;
-  if (p.startsWith('*.')) {
-    const suffix = p.slice(1); // '.example.com'
-    // Dot-boundary suffix match: 'api.example.com' yes, 'notexample.com' no.
-    return h.endsWith(suffix) && h.length > suffix.length;
-  }
-  return h === p;
-}
-
-export function hostAllowed(host: string, allowedHosts: string[]): boolean {
-  return (allowedHosts ?? []).some((p) => hostMatchesPattern(host, p));
-}
+// The predicate itself lives in `./host-match` — a pure module with no node or
+// DB imports — so the admin register can import the SAME rule instead of
+// keeping a hand-written copy that drifts. Re-exported here so every existing
+// server-side import path keeps working.
+export { normaliseHost, hostMatchesPattern, hostAllowed } from './host-match';
 
 /**
  * Path narrowing. Empty list = any path. A prefix matches at a segment
