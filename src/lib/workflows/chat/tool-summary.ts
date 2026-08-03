@@ -93,8 +93,25 @@ export function categorizeTool(tool: string): ToolCategory {
   return 'TOOL';
 }
 
-/** Unwrap the `{ success, data }` envelope site-tools return; passthrough otherwise. */
+/**
+ * Unwrap the `{ success, data }` envelope site-tools return; passthrough otherwise.
+ *
+ * Hermes built-ins return their result as a JSON *string* (`web_search` →
+ * `json.dumps({success, data:{web:[…]}})`), which arrives here verbatim. Parse
+ * that first, so a string result isn't silently flattened to `{}` — that was
+ * why every `web_search` card read "0 results". A frame the adapter truncated
+ * mid-JSON won't parse; it falls through to `{}` as before rather than throwing.
+ */
 function unwrap(result: unknown): Record<string, unknown> {
+  if (typeof result === 'string') {
+    const s = result.trim();
+    if (!s.startsWith('{') && !s.startsWith('[')) return {};
+    try {
+      return unwrap(JSON.parse(s));
+    } catch {
+      return {};
+    }
+  }
   if (!result || typeof result !== 'object') return {};
   const r = result as Record<string, unknown>;
   if ('data' in r && r.data && typeof r.data === 'object') return r.data as Record<string, unknown>;
@@ -103,13 +120,17 @@ function unwrap(result: unknown): Record<string, unknown> {
 
 /**
  * Best-effort item count from an unwrapped result. Handlers are inconsistent
- * about the array key (`results`, `hits`, `messages`, `threads`, `files`,
+ * about the array key (`results`, `hits`, `web`, `messages`, `threads`, `files`,
  * `memories`), and several also carry an explicit `count`. Try `count` first,
  * then the first array under a known key.
+ *
+ * `web` is Hermes' key for `web_search` (`data.web[]`, per its own
+ * `web_search_tool` docstring) — omitting it made every search card read
+ * "0 results" while the backend was returning five.
  */
 function countOf(d: Record<string, unknown>): number | undefined {
   if (typeof d.count === 'number') return d.count;
-  for (const k of ['results', 'hits', 'messages', 'threads', 'files', 'memories', 'items', 'rows']) {
+  for (const k of ['results', 'hits', 'web', 'messages', 'threads', 'files', 'memories', 'items', 'rows']) {
     if (Array.isArray(d[k])) return (d[k] as unknown[]).length;
   }
   return undefined;
@@ -117,7 +138,7 @@ function countOf(d: Record<string, unknown>): number | undefined {
 
 /** First result's URL across the inconsistent array keys, for a "top: host" tail. */
 function firstUrl(d: Record<string, unknown>): unknown {
-  for (const k of ['results', 'hits']) {
+  for (const k of ['results', 'hits', 'web']) {
     const arr = d[k];
     if (Array.isArray(arr) && arr[0] && typeof arr[0] === 'object') return (arr[0] as { url?: unknown }).url;
   }
