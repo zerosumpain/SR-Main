@@ -108,6 +108,21 @@ export async function ensureIntegrationsCollection(): Promise<void> {
   );
 }
 
+/**
+ * `status` is written by jkai as well as by the register, and it has written
+ * values outside the union before — `paypal-transactions` sat on "candidate"
+ * (the api_catalog word, not this one). An out-of-union status renders
+ * unstyled, never matches a "verified" filter and reads as a state the code
+ * does not have, so it is folded back to `draft` on the way out. One bad write
+ * then costs nothing downstream.
+ */
+const INTEGRATION_STATUSES = new Set<ApiIntegration['status']>(['draft', 'verified', 'broken']);
+
+function normaliseStatus(raw: unknown): ApiIntegration['status'] {
+  const s = raw as ApiIntegration['status'];
+  return INTEGRATION_STATUSES.has(s) ? s : 'draft';
+}
+
 function normaliseIntegration(key: string, data: Record<string, unknown>): ApiIntegration {
   const raw = data as Partial<ApiIntegration>;
   return {
@@ -120,7 +135,7 @@ function normaliseIntegration(key: string, data: Record<string, unknown>): ApiIn
     params: Array.isArray(raw.params) ? (raw.params as IntegrationParam[]) : [],
     outputs: Array.isArray(raw.outputs) ? (raw.outputs as IntegrationOutput[]) : [],
     docsUrl: raw.docsUrl,
-    status: (raw.status as ApiIntegration['status']) ?? 'draft',
+    status: normaliseStatus(raw.status),
     lastTestedAt: raw.lastTestedAt,
     lastTestStatus: raw.lastTestStatus,
     lastTestSummary: raw.lastTestSummary,

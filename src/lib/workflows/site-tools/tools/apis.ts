@@ -785,6 +785,78 @@ export async function handleApiRegister(args: Record<string, unknown>): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Owner-facing credential binding — the register editor's one write
+// ---------------------------------------------------------------------------
+
+/** The only thing the register editor may change on a catalogue entry. */
+export type CatalogAuthChange = { kind: 'secret'; handle: string } | { kind: 'none' };
+
+/**
+ * Bind (or unbind) a catalogue entry's credential and nothing else.
+ *
+ * Deliberately NOT `handleApiRegister`: that reassembles the whole entry from
+ * its arguments, so routing a credential change through it would silently wipe
+ * description/capabilities/exampleRequests and roll `status` back to
+ * "candidate". This is the same wide-vs-narrow split as `upsertSecret` vs
+ * `updateSecretBinding` in $lib/secrets/registry — "the owner asked to change
+ * one thing" needs a primitive that changes one thing.
+ *
+ * The checks below are NOT the security boundary — `resolveSecretForUrl`
+ * re-checks host, path prefix, method and store-only on every call and every
+ * redirect hop, however the entry reached the catalogue. They exist so binding
+ * the wrong credential fails here with a sentence the owner can act on instead
+ * of as a 401 inside a cron run three hours later.
+ */
+export async function setCatalogAuth(
+  key: string,
+  auth: CatalogAuthChange,
+  actor = 'owner',
+): Promise<{ key: string; auth: CatalogAuthChange }> {
+  const found = await findApiEntry(key);
+  if (!found) throw new Error(`no catalogued API "${key}".`);
+
+  let next: CatalogAuthChange = { kind: 'none' };
+  if (auth.kind === 'secret') {
+    const handle = String(auth.handle ?? '').trim();
+    if (!handle) throw new Error('a credential handle is required');
+
+    let host: string;
+    try {
+      host = new URL(found.entry.baseUrl).hostname;
+    } catch {
+      throw new Error(`API "${found.key}" has no usable baseUrl, so no credential can be bound to it.`);
+    }
+
+    const { getSecretMeta, hostAllowed } = await import('$lib/secrets/registry');
+    const meta = await getSecretMeta(handle);
+    if (!meta) {
+      throw new Error(
+        `no credential registered under the handle "${handle}". Add it in the credentials section first.`,
+      );
+    }
+    // A store-only row holds a credential SET for one server module to read (an
+    // OAuth client_secret, say); `assertBindingAllows` refuses to attach it to
+    // any request, so binding it here would only ever fail at call time.
+    if (meta.injection.kind === 'none') {
+      throw new Error(
+        `credential "${meta.handle}" is store-only — it is never attached to a request. ` +
+          `Bind the companion handle that mints tokens from it instead.`,
+      );
+    }
+    if (!hostAllowed(host, meta.allowedHosts)) {
+      throw new Error(
+        `credential "${meta.handle}" is bound to ${meta.allowedHosts.join(', ')} and cannot be used for ${host}. ` +
+          `Widen its allowed hosts in the credentials section, or pick one already bound to this host.`,
+      );
+    }
+    next = { kind: 'secret', handle };
+  }
+
+  await updateRecord(API_CATALOG, { key: found.key }, { patch: { auth: next } }, actor);
+  return { key: found.key, auth: next };
+}
+
+// ---------------------------------------------------------------------------
 // api_secrets_list — the registry jkai can call but never read
 // ---------------------------------------------------------------------------
 

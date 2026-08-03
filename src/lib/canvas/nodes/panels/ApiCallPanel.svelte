@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { NodeDefinition } from '$lib/workflows/types';
   import OnErrorBlock from './shared/OnErrorBlock.svelte';
+  import ResourcePicker from './shared/ResourcePicker.svelte';
 
   let {
     config,
@@ -22,26 +22,30 @@
     capabilities: string[];
     tags: string[];
     auth: string;
+    /** Registry handle when the register bound one — a NAME, never a value. */
+    secretHandle?: string;
     status: string;
     exampleRequests: Array<{ label?: string; method?: string; url: string; body?: unknown }>;
   };
 
   let apis = $state<ApiMeta[]>([]);
-  let loadError = $state<string | null>(null);
-  let loading = $state(true);
 
-  onMount(async () => {
-    try {
-      const res = await fetch('/api/workflows/apis');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      apis = (body.apis ?? []) as ApiMeta[];
-    } catch (e) {
-      loadError = e instanceof Error ? e.message : 'Failed to load the API catalogue';
-    } finally {
-      loading = false;
-    }
-  });
+  /**
+   * The picker owns the fetch (it renders loading / retry / empty / custom-value
+   * for free); the detail block below reads the same list out of `apis`. One
+   * request, one error surface.
+   */
+  async function fetchApis() {
+    const res = await fetch('/api/workflows/apis');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    apis = (body.apis ?? []) as ApiMeta[];
+    return apis.map((a) => ({
+      value: a.key,
+      label: a.name,
+      meta: a.secretHandle ? `🔒 ${a.secretHandle}` : a.status !== 'seeded' ? a.status : undefined,
+    }));
+  }
 
   const METHODS = [
     { value: 'GET', label: 'Read / pull (GET)', hint: 'Fetch data' },
@@ -76,10 +80,6 @@
     onChange({ ...config, [key]: value });
   }
 
-  function pickApi(key: string) {
-    set('api', key);
-  }
-
   function useExample(ex: { method?: string; url: string; body?: unknown }) {
     if (!selected) return;
     // Derive a path relative to the API's baseUrl from the example URL.
@@ -101,44 +101,42 @@
     within the API's base URL. Fields support <code>{'{{input.field}}'}</code> templates.
   </p>
 
-  {#if loadError}
-    <p class="ac-err">Could not load the catalogue: {loadError}</p>
-  {/if}
-
   <!-- API picker -->
   <section class="ac-sec">
     <header class="ac-sec-hdr"><span class="sr-label-tight">API</span></header>
-    {#if loading}
-      <p class="ac-hint">Loading catalogue…</p>
-    {:else if apis.length === 0 && !loadError}
+    <!-- `api` may be stored as the catalogue NAME (the executor accepts either),
+         so the picker is shown the resolved key — otherwise a perfectly valid
+         entry renders as an unrecognised custom value. -->
+    <ResourcePicker
+      value={selected?.key ?? apiKey}
+      fetcher={fetchApis}
+      onChange={(next) => set('api', next)}
+      placeholder="choose a registered API"
+      emptyHint="No APIs in the catalogue yet — add one at /admin/ai/apis, then pick it here. You can still type a key."
+    />
+    {#if apiKey && !selected}
       <p class="ac-hint">
-        No APIs in the catalogue yet. They are seeded on the self-improvement engine's first run, or
-        you can add one from /jkai / the API tools (api_register). You can still type a key below.
+        <code>{apiKey}</code> isn't in the loaded catalogue — it will be resolved at run time (or
+        the call will fail if it isn't registered).
       </p>
-      <input
-        type="text"
-        class="ac-text"
-        placeholder="api key or name (e.g. open-meteo)"
-        value={apiKey}
-        oninput={(e) => set('api', (e.currentTarget as HTMLInputElement).value)}
-      />
-    {:else}
-      <select
-        class="ac-select"
-        value={selected?.key ?? ''}
-        onchange={(e) => pickApi((e.currentTarget as HTMLSelectElement).value)}
-      >
-        <option value="" disabled>— choose a registered API —</option>
-        {#each apis as a (a.key)}
-          <option value={a.key}>{a.name}{a.status && a.status !== 'seeded' ? ` · ${a.status}` : ''}</option>
-        {/each}
-      </select>
-      {#if apiKey && !selected}
-        <p class="ac-hint">
-          <code>{apiKey}</code> isn't in the loaded catalogue — it will be resolved at run time (or
-          the call will fail if it isn't registered).
-        </p>
-      {/if}
+    {/if}
+
+    <!-- Credential: read-only. The service→credential binding has exactly one
+         home (the API register), so a node shows what it will inherit and
+         links there rather than offering an override that would put the same
+         decision in two places. -->
+    {#if selected}
+      <p class="ac-cred">
+        {#if selected.secretHandle}
+          <span class="ac-cred-lock">🔒</span> Uses credential <code>{selected.secretHandle}</code>,
+          injected server-side.
+        {:else if selected.auth === 'none'}
+          No credential bound — this API is called unauthenticated.
+        {:else}
+          Legacy <code>{selected.auth}</code> auth — replace it with a registry credential.
+        {/if}
+        <a href="/admin/ai/apis" target="_blank" rel="noreferrer">change in the API register</a>
+      </p>
     {/if}
   </section>
 
@@ -147,7 +145,7 @@
       <header class="ac-sec-hdr">
         <span class="sr-label-tight">{selected.name}</span>
         <span class="ac-badges">
-          <span class="ac-badge">auth: {selected.auth}</span>
+          <span class="ac-badge">{selected.secretHandle ? `🔒 ${selected.secretHandle}` : `auth: ${selected.auth}`}</span>
           <span class="ac-badge ac-status-{selected.status}">{selected.status}</span>
         </span>
       </header>
@@ -274,8 +272,12 @@
   .ac { display: flex; flex-direction: column; gap: 14px; padding: 4px 0; }
   .ac-lead { margin: 0; font-size: var(--fs-label); color: var(--text-muted); line-height: 1.5; }
   .ac-lead strong { color: var(--text-primary); }
-  .ac-lead code, .ac-hint code, .ac-preview code, .ac-base code { font-size: var(--fs-label); color: var(--text-muted); }
-  .ac-err { margin: 0; font-size: var(--fs-label); color: var(--status-error, #c0392b); }
+  .ac-lead code, .ac-hint code, .ac-preview code, .ac-base code, .ac-cred code { font-size: var(--fs-label); color: var(--text-muted); }
+
+  .ac-cred { margin: 0; font-size: var(--fs-label); color: var(--text-ghost); line-height: 1.5; }
+  .ac-cred code { color: var(--text-primary); }
+  .ac-cred a { color: var(--text-muted); margin-left: 4px; }
+  .ac-cred-lock { margin-right: 2px; }
 
   .ac-sec { display: flex; flex-direction: column; gap: 8px; }
   .ac-sec-hdr {
@@ -284,7 +286,7 @@
     padding-bottom: 4px;
   }
 
-  .ac-text, .ac-code, .ac-select {
+  .ac-code, .ac-select {
     width: 100%;
     padding: 6px 8px;
     background: var(--bg);
@@ -295,7 +297,7 @@
     outline: none;
   }
   .ac-code { font-size: var(--fs-label); padding: 8px; resize: vertical; }
-  .ac-text:focus, .ac-code:focus, .ac-select:focus { border-color: var(--text-muted); }
+  .ac-code:focus, .ac-select:focus { border-color: var(--text-muted); }
 
   .ac-hint { font-size: var(--fs-label); color: var(--text-ghost); margin: 0; line-height: 1.4; }
 
