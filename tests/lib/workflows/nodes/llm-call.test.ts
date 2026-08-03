@@ -29,7 +29,8 @@ const mockClient = {
   },
 };
 
-vi.mock('$lib/workflows/nodes/llm-helpers', () => ({
+vi.mock('$lib/workflows/nodes/llm-helpers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/workflows/nodes/llm-helpers')>()),
   resolveLLMClient: async () => ({ client: mockClient, model: 'openai/gpt-4o-mini' }),
 }));
 

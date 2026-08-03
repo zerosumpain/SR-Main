@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { byType } from './adapter';
-import { nodeDefinitions } from '$lib/workflows/registry-client';
+import { nodeDefinitions, getDefinition } from '$lib/workflows/registry-client';
 import { isDisplayOnlyType } from '$lib/workflows/types';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 // `switch` is intentionally excluded from the palette until the canvas renders
 // its per-config (switchHandles) output ports — mirror adapter.ts's skip set.
@@ -35,6 +36,47 @@ describe('canvas palette ↔ registry parity', () => {
       expect(entry!.group, `${t} should be in the Intelligence group`).toBe('Intelligence');
       expect(entry!.defaultWeight ?? 0, `${t} should have a positive default weight`).toBeGreaterThan(0);
     }
+  });
+
+  // The curated palette entries used to re-type their node's defaultConfig by
+  // hand and drifted from it: an LLM call was born at 1024 tokens against a def
+  // that said 2048, and an LLM router was born with a `prompt` key its executor
+  // never reads and no `routes` at all — so it failed on its first run. The
+  // adapter now merges each definition's defaults under the curated ones; this
+  // is what stops that drifting again.
+  it('drops a node onto the canvas with every default its definition declares', () => {
+    const drift: string[] = [];
+    for (const def of nodeDefinitions) {
+      const entry = byType(def.type);
+      if (!entry) continue;
+      for (const key of Object.keys(def.defaultConfig ?? {})) {
+        if (!(key in entry.defaultConfig)) drift.push(`${def.type}.${key}`);
+      }
+    }
+    expect(drift).toEqual([]);
+  });
+
+  // John, 2026-08-02: "Canvas nodes using LLM should be built defaulting to the
+  // site default selected in the LLM modal in jkai. token limit should be
+  // 25000." An empty model is what tracks the picker — resolveLLMClient turns
+  // it into the site default at run time, so the node follows the modal instead
+  // of freezing on whatever was default the day it was created.
+  it('builds every LLM node on the site default model with a 25000-token ceiling', () => {
+    for (const type of ['llm-call', 'llm-agent', 'think', 'openrouter']) {
+      const def = getDefinition(type)!;
+      expect(def.defaultConfig.model, `${type} def model`).toBe('');
+      expect(def.defaultConfig.maxTokens, `${type} def maxTokens`).toBe(DEFAULT_NODE_MAX_TOKENS);
+      const entry = byType(type)!;
+      expect(entry.defaultConfig.model, `${type} palette model`).toBe('');
+      expect(entry.defaultConfig.maxTokens, `${type} palette maxTokens`).toBe(DEFAULT_NODE_MAX_TOKENS);
+    }
+    // The router only ever emits a single route handle, so it carries no token
+    // budget of its own — but it must still be born on the site default, and
+    // with the routes its executor actually reads.
+    const router = byType('llm-router')!;
+    expect(router.defaultConfig.model).toBe('');
+    expect(router.defaultConfig.routes).toBeTruthy();
+    expect(router.defaultConfig).not.toHaveProperty('prompt');
   });
 
   it('exposes the webpage node for the research desk palette (E4 parity)', () => {

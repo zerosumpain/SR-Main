@@ -5,8 +5,8 @@
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
   import MaxTokensField from './widgets/MaxTokensField.svelte';
-  import { THINK_MODEL_OPTIONS, fetchAllChatModels } from './shared/vertex-models';
-  const fetchThinkModels = () => fetchAllChatModels(THINK_MODEL_OPTIONS);
+  import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
+  import { fetchAllChatModels } from './shared/vertex-models';
 
   let {
     config,
@@ -40,7 +40,7 @@
     const raw = config.maxTokens;
     const n = typeof raw === 'number' ? raw : Number(raw);
     if (Number.isFinite(n) && n >= 1) return Math.floor(n);
-    return 2048;
+    return DEFAULT_NODE_MAX_TOKENS;
   });
 
   // ---------- Raw JSON --------------------------------------------------
@@ -72,7 +72,7 @@
   <ModelSelect
     value={model}
     onChange={(v) => set('model', v)}
-    fetcher={fetchThinkModels}
+    fetcher={fetchAllChatModels}
     hint="Prefer full OpenRouter slugs (e.g. <code>z-ai/glm-5.2</code>, <code>openai/gpt-4o</code>) — the full live OpenRouter catalogue is in the picker. Bare IDs (e.g. <code>glm-5-turbo</code>) are legacy GLM ids, mapped to their <code>z-ai/*</code> slugs."
   />
 
@@ -85,8 +85,7 @@
   <MaxTokensField
     value={maxTokens}
     onChange={(v) => set('maxTokens', v)}
-    fallback={2048}
-    hint="Maximum length of the reasoning + conclusion combined (roughly 4 characters per token). Default 2048."
+    hint="Ceiling on the reasoning + conclusion combined (roughly 4 characters per token). Bias high — the reasoning is charged against this budget before a single word of the conclusion is written."
   />
 
   <!-- On failure -->

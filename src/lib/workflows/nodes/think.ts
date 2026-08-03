@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext } from '../types';
 import { interpolateTemplate } from './template';
 import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
+import { resolveMaxTokens } from './llm-helpers';
 
 export { thinkDef } from './think.def';
 
@@ -29,7 +30,7 @@ Be thorough in your reasoning. Consider edge cases.`;
           { role: 'user', content: `Input data:\n${JSON.stringify(input, null, 2)}\n\nTask: ${prompt}` },
         ],
         temperature,
-        max_tokens: (config.maxTokens as number) ?? 2048,
+        max_tokens: resolveMaxTokens(config.maxTokens),
       },
       { signal: context.abortSignal },
     );

@@ -1,13 +1,14 @@
 <script lang="ts">
   // Max-tokens integer input with sensible-default coercion.
+  import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
   let {
     value,
     onChange,
     label = 'Max Tokens',
     min = 1,
-    fallback = 1024,
-    hint = 'Maximum length of the AI response (roughly 4 characters per token).',
+    fallback = DEFAULT_NODE_MAX_TOKENS,
+    hint = 'Ceiling on the AI response (roughly 4 characters per token). Bias high — a model only generates what it needs, and reasoning models spend this budget thinking before they write anything.',
   }: {
     value: number;
     onChange: (v: number) => void;

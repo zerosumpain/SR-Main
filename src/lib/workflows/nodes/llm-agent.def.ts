@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '../types';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 export const llmAgentDef: NodeDefinition = {
   type: 'llm-agent',
@@ -19,7 +20,7 @@ export const llmAgentDef: NodeDefinition = {
         description: 'User prompt. Supports {{input.field}} templates.',
       },
       temperature: { type: 'number', description: 'Sampling temperature 0-2 (default 0.7)' },
-      maxTokens: { type: 'number', description: 'Max tokens per LLM call (default 2048)' },
+      maxTokens: { type: 'number', description: 'Max tokens per LLM call (default 25000). A ceiling, not a spend; requests over a model\'s advertised provider ceiling are clamped automatically. Use maxTotalTokens to bound the whole loop.' },
       maxIterations: {
         type: 'number',
         description: 'Max tool-use loop iterations (default 10)',
@@ -52,12 +53,14 @@ export const llmAgentDef: NodeDefinition = {
     },
     required: ['userPrompt'],
   },
+  // Born on the site default model with a generous per-call ceiling — see
+  // DEFAULT_NODE_MAX_TOKENS.
   defaultConfig: {
     model: '',
     systemPrompt: '',
     userPrompt: '',
     temperature: 0.7,
-    maxTokens: 2048,
+    maxTokens: DEFAULT_NODE_MAX_TOKENS,
     maxIterations: 10,
     maxTotalTokens: 0,
     toolSource: 'edges',

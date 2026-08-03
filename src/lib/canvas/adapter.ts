@@ -1,5 +1,5 @@
 import type { NodeHandles } from './handles';
-import { nodeDefinitions } from '$lib/workflows/registry-client';
+import { nodeDefinitions, getDefinition } from '$lib/workflows/registry-client';
 import { isDisplayOnlyType, type NodeDefinition } from '$lib/workflows/types';
 import type { WorkflowNotifications } from '$lib/db/schema';
 
@@ -216,11 +216,10 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     kind: 'llm',
     group: 'LLM & AI',
     description: 'Single LLM call with a prompt template.',
+    // Only the canvas-specific extras belong here — the model, temperature and
+    // token budget come from the node definition (see ALL_NODE_TYPES).
     defaultConfig: {
-      model: '',
       userPrompt: '{{input.message}}',
-      temperature: 0.7,
-      maxTokens: 1024,
     },
     handles: {
       inputs: [{ id: 'in', kinds: ['text', 'json'] }],
@@ -234,10 +233,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     group: 'LLM & AI',
     description: 'Agent loop. Downstream nodes are discovered as tools the model can call.',
     defaultConfig: {
-      model: '',
-      systemPrompt: '',
       userPrompt: '{{input.message}}',
-      maxIterations: 10,
     },
     handles: {
       inputs: [{ id: 'in', kinds: ['text', 'json'] }],
@@ -263,7 +259,11 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     kind: 'llm',
     group: 'LLM & AI',
     description: 'LLM classifies input and routes to a named downstream handle.',
-    defaultConfig: { model: '', prompt: '' },
+    // Empty on purpose: the router's real config (`routes`, `model`) comes from
+    // the node definition. This used to carry a `prompt` key the executor never
+    // reads, so a palette-dropped router had no routes and failed on its first
+    // run — and `prompt` is not in the schema, so it also blocked tool edits.
+    defaultConfig: {},
     handles: {
       inputs: [{ id: 'in', kinds: ['text', 'json'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
@@ -275,7 +275,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     kind: 'llm',
     group: 'LLM & AI',
     description: 'Hidden reasoning step — LLM plans but does not emit the reasoning.',
-    defaultConfig: { model: '', prompt: '' },
+    defaultConfig: {},
     handles: {
       inputs: [{ id: 'in', kinds: ['text'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
@@ -287,7 +287,10 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
     kind: 'llm',
     group: 'LLM & AI',
     description: 'Direct OpenRouter completion (explicit model id).',
-    defaultConfig: { model: 'openai/gpt-4o-mini' },
+    // Was hardcoded to openai/gpt-4o-mini, which meant dropping this node
+    // silently opted out of the site default. Blank now, like every other LLM
+    // node — pick a model in the panel to override.
+    defaultConfig: {},
     handles: {
       inputs: [{ id: 'in', kinds: ['text', 'json'] }],
       outputs: [{ id: 'out', kinds: ['text'] }],
@@ -1152,9 +1155,23 @@ const GENERATED_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze(
     .map(defToOption),
 );
 
-/** Curated entries first (they win on duplicate type), then registry-derived. */
+/**
+ * Curated entries first (they win on duplicate type), then registry-derived.
+ *
+ * A curated entry's `defaultConfig` is merged OVER its node definition's rather
+ * than replacing it, so a palette drop starts from the node's real defaults —
+ * the same ones the executor, the config panel and the workflow-generating LLM
+ * all work from. Curated keys still win, so canvas-specific extras like the
+ * `{{input.message}}` prompt survive. Hand-maintained copies of a def's
+ * defaults are what drifted (an LLM call born at 1024 tokens, an LLM router
+ * born with no routes at all); a curated entry should now only carry what it
+ * genuinely wants to differ on.
+ */
 const ALL_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
-  ...CANVAS_NODE_TYPES,
+  ...CANVAS_NODE_TYPES.map((t) => ({
+    ...t,
+    defaultConfig: { ...getDefinition(t.type)?.defaultConfig, ...t.defaultConfig },
+  })),
   ...GENERATED_NODE_TYPES,
 ]);
 

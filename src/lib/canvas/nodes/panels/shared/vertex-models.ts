@@ -39,20 +39,12 @@ export const VERTEX_MODEL_OPTIONS: ModelOption[] = [
   { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
 ];
 
-/**
- * Variant for the Think node — defaults to a concrete model rather than the
- * admin sentinel (the jkai default is `z-ai/glm-5-turbo`).
- */
-export const THINK_MODEL_OPTIONS: ModelOption[] = [
-  { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo (jkai default)' },
-  { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
-  { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
-  { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
-  { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
-  { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4 (smart)' },
-  { value: 'anthropic/claude-haiku-4', label: 'Claude Haiku 4 (very fast)' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-];
+// The Think panel used to have its own THINK_MODEL_OPTIONS list, which omitted
+// the "Default" sentinel and labelled `z-ai/glm-5-turbo` as the jkai default —
+// pushing every new Think node onto a model two generations stale. Once that was
+// fixed the list was byte-identical to VERTEX_MODEL_OPTIONS, i.e. a second copy
+// to keep in sync by hand. ThinkPanel now uses `fetchAllChatModels` directly,
+// like the other LLM panels. Don't reintroduce a per-panel list.
 
 /**
  * Fetcher for `<ModelSelect fetcher={...} />`. Returns the live OpenRouter
@@ -90,32 +82,56 @@ function costTier(completionPricePerToken: number | null): 1 | 2 | 3 | 4 | 5 | n
   return 5;
 }
 
-export async function fetchAllChatModels(staticPrefix: ModelOption[] = VERTEX_MODEL_OPTIONS): Promise<FetchedModel[]> {
-  const prefix: FetchedModel[] = staticPrefix.map((o) => ({ value: o.value, label: o.label }));
-  let live: FetchedModel[] = [];
+async function fetchLiveCatalogue(): Promise<FetchedModel[]> {
   try {
     const res = await fetch('/api/admin/models/openrouter?pageSize=500&sortBy=id&sortDir=asc');
-    if (res.ok) {
-      const data = (await res.json()) as {
-        rows?: Array<{
-          id: string;
-          name: string | null;
-          provider: string | null;
-          completionPrice: string | number | null;
-        }>;
-      };
-      live = (data.rows ?? []).map((r) => {
-        const price = r.completionPrice == null ? null : Number(r.completionPrice);
-        const tier = costTier(price);
-        const display = r.name && r.name !== r.id ? `${r.name} — ${r.id}` : r.id;
-        const label = tier ? `[${tier}/5] ${display}` : display;
-        return { value: r.id, label, meta: r.provider ?? undefined };
-      });
-    }
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      rows?: Array<{
+        id: string;
+        name: string | null;
+        provider: string | null;
+        completionPrice: string | number | null;
+      }>;
+    };
+    return (data.rows ?? []).map((r) => {
+      const price = r.completionPrice == null ? null : Number(r.completionPrice);
+      const tier = costTier(price);
+      const display = r.name && r.name !== r.id ? `${r.name} — ${r.id}` : r.id;
+      const label = tier ? `[${tier}/5] ${display}` : display;
+      return { value: r.id, label, meta: r.provider ?? undefined };
+    });
   } catch {
     // Network/auth failure → fall back to the static list silently. The
     // panel will still render usable options.
+    return [];
   }
+}
+
+/**
+ * What the "" sentinel actually resolves to right now — the same value the
+ * /jkai model picker's "site default" chip writes. Shown in the option label so
+ * a node left on "Default" says which model it will run, without freezing that
+ * id into the node's config (a stored snapshot would stop tracking the picker).
+ */
+async function fetchSiteDefaultModelId(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/jkai/routing/overrides');
+    if (!res.ok) return null;
+    const data = (await res.json()) as { siteDefaultModelId?: string };
+    return data.siteDefaultModelId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAllChatModels(staticPrefix: ModelOption[] = VERTEX_MODEL_OPTIONS): Promise<FetchedModel[]> {
+  const [live, siteDefaultModelId] = await Promise.all([fetchLiveCatalogue(), fetchSiteDefaultModelId()]);
+  const prefix: FetchedModel[] = staticPrefix.map((o) =>
+    o.value === '' && siteDefaultModelId
+      ? { value: o.value, label: `Default (site setting → ${siteDefaultModelId})` }
+      : { value: o.value, label: o.label },
+  );
   const seen = new Set(prefix.map((o) => o.value));
   return [...prefix, ...live.filter((o) => !seen.has(o.value))];
 }

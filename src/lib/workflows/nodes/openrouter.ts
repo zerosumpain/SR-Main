@@ -1,7 +1,8 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
-import { getOpenRouterClient, loadKeys } from '$lib/deepdive/keys';
+import { loadKeys } from '$lib/deepdive/keys';
 import { interpolateTemplateStrict } from './template';
-import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
+import { resilientChatCompletion } from '$lib/llm/workflow-gateway';
+import { resolveMaxTokens } from './llm-helpers';
 
 export { openrouterDef } from './openrouter.def';
 
@@ -13,20 +14,13 @@ export const openrouterExecutor: NodeExecutor = {
   async execute(
     input: Record<string, unknown>,
     config: Record<string, unknown>,
-    _context: ExecutionContext,
+    context: ExecutionContext,
   ): Promise<NodeResult> {
     const operation = (config.operation as string) || 'chat_completion';
 
     switch (operation) {
       case 'chat_completion': {
         const configuredModel = (config.model as string)?.trim();
-        // Fall back to the admin-configured OpenRouter alt model (same one the
-        // chat toggle uses). Only hardcoded last-resort: openai/gpt-4o-mini.
-        let model = configuredModel;
-        if (!model) {
-          const alt = await resolveChatAltOpenRouterModel();
-          model = alt?.modelId || 'openai/gpt-4o-mini';
-        }
         const { result: systemPrompt, missingPaths: sysMissing } = interpolateTemplateStrict((config.systemPrompt as string) || '', input);
         const { result: userPrompt, missingPaths: userMissing } = interpolateTemplateStrict((config.userPrompt as string) || '', input);
         const missing = [...sysMissing, ...userMissing];
@@ -34,21 +28,30 @@ export const openrouterExecutor: NodeExecutor = {
           throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
         }
         const temperature = (config.temperature as number) ?? 0.7;
-        const maxTokens = (config.maxTokens as number) ?? 1024;
+        const maxTokens = resolveMaxTokens(config.maxTokens);
 
-        const client = getOpenRouterClient();
-        const response = await client.chat.completions.create({
-          model,
-          messages: [
-            ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-            { role: 'user' as const, content: userPrompt },
-          ],
-          temperature,
-          max_tokens: maxTokens,
-        });
+        // Blank model → the SITE default, the same as every other LLM node
+        // (this used to fall to the chat's alt-OpenRouter setting and then a
+        // hardcoded openai/gpt-4o-mini, so a "default" here meant something
+        // different from a "default" on an LLM call). Going through the
+        // resilient gateway rather than a raw client also buys the per-call
+        // timeout, the concurrency limit and model failover.
+        const response = await resilientChatCompletion(
+          configuredModel,
+          {
+            messages: [
+              ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+              { role: 'user' as const, content: userPrompt },
+            ],
+            temperature,
+            max_tokens: maxTokens,
+          },
+          { signal: context.abortSignal },
+        );
 
         const content = response.choices[0]?.message?.content ?? '';
         const usage = response.usage;
+        const model = response.model || configuredModel || 'default';
         return {
           output: {
             response: content,

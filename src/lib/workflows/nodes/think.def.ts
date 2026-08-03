@@ -1,15 +1,18 @@
 import type { NodeDefinition } from '../types';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 
 export const thinkDef: NodeDefinition = {
   type: 'think', label: 'Think', category: 'agentic',
   description: 'Chain-of-thought reasoning. LLM reasons step-by-step, outputs reasoning + conclusion.',
   configSchema: { type: 'object', properties: {
     prompt: { type: 'string', description: 'What to reason about. Supports {{input.field}} templates.' },
-    model: { type: 'string', description: 'OpenRouter model ID' },
+    model: { type: 'string', description: 'LEAVE EMPTY to use the site default (configured in admin → model defaults). Only set a full OpenRouter slug to explicitly override.' },
     temperature: { type: 'number', description: 'Sampling temperature (default 0.3)' },
-    maxTokens: { type: 'number', description: 'Max tokens (default 2048)' },
+    maxTokens: { type: 'number', description: 'Max tokens (default 25000). A ceiling, not a spend; reasoning tokens are charged against it, and requests over a model\'s advertised provider ceiling are clamped automatically.' },
   }, required: ['prompt'] },
-  defaultConfig: { prompt: '', model: '', temperature: 0.3, maxTokens: 2048 },
+  // Born on the site default model with a generous ceiling — this node reasons
+  // at length by design, so it is the one most hurt by a tight budget.
+  defaultConfig: { prompt: '', model: '', temperature: 0.3, maxTokens: DEFAULT_NODE_MAX_TOKENS },
   inputs: [{ name: 'input', type: 'any', label: 'Input' }],
   outputs: [{ name: 'output', type: 'object', label: 'Reasoning' }],
   basicConfig: [
@@ -24,9 +27,10 @@ export const thinkDef: NodeDefinition = {
       key: 'model',
       label: 'Model',
       type: 'dropdown',
-      description: 'Which LLM runs this step. Prefer full OpenRouter slugs (e.g. z-ai/glm-5.2, openai/gpt-4o). Bare GLM ids are legacy and mapped to their z-ai/* slugs.',
+      description: 'Leave as "Default" to use the site-wide admin default (recommended). Only pick a specific model to override — prefer full OpenRouter slugs (e.g. z-ai/glm-5.2, openai/gpt-4o).',
       options: [
-        { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo (jkai default)' },
+        { value: '', label: 'Default (site setting)' },
+        { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
         { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
         { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
         { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },

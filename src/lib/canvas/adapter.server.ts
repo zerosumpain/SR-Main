@@ -113,12 +113,13 @@ const SEED_NODES: SeedNode[] = [
     label: 'GLM 5.2',
     x: COL[0],
     y: 40,
+    // maxTokens deliberately unset — a seeded node inherits the definition's
+    // default like any other newly built LLM node.
     config: {
       model: '',
       userPrompt:
         'Respond with VALID JSON only. Echo back the user message inside a {"echo": <message>} object. User message: {{input.message}}',
       temperature: 0,
-      maxTokens: 256,
     },
   },
   {
@@ -140,7 +141,6 @@ const SEED_NODES: SeedNode[] = [
       userPrompt:
         'You are a JSON repair engine. Return ONLY a valid JSON object. Upstream output: {{input.response}}',
       temperature: 0,
-      maxTokens: 256,
     },
   },
   {

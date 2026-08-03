@@ -5,6 +5,7 @@
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
   import MaxTokensField from './widgets/MaxTokensField.svelte';
+  import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
   import { fetchAllChatModels } from './shared/vertex-models';
 
   let {
@@ -42,7 +43,7 @@
     const raw = config.maxTokens;
     const n = typeof raw === 'number' ? raw : Number(raw);
     if (Number.isFinite(n) && n >= 1) return Math.floor(n);
-    return 1024;
+    return DEFAULT_NODE_MAX_TOKENS;
   });
 
   // ---------- Structured output ----------------------------------------
@@ -136,7 +137,6 @@
   <MaxTokensField
     value={maxTokens}
     onChange={(v) => set('maxTokens', v)}
-    hint="Maximum length of the AI response (roughly 4 characters per token). Default 1024."
   />
 
   <!-- Structured output (optional) -->

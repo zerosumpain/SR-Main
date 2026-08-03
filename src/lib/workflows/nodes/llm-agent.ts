@@ -5,7 +5,7 @@ import type {
   JsonSchema,
 } from '../types';
 import { interpolateTemplateStrict } from './template';
-import { resolveLLMClient } from './llm-helpers';
+import { resolveLLMClient, resolveMaxTokens } from './llm-helpers';
 import { isDenylistedTool } from './site-tool-denylist';
 import { withNodeTimeout, nodeTimeoutMs } from '../engine-runtime';
 import { executionContext, recordLLMCall, type LLMCallRecord } from '../execution-context';
@@ -229,7 +229,7 @@ export const llmAgentExecutor: NodeExecutor = {
       throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
     }
     const temperature = (config.temperature as number) ?? 0.7;
-    const maxTokens = (config.maxTokens as number) ?? 2048;
+    const maxTokens = resolveMaxTokens(config.maxTokens);
     const maxIterations = (config.maxIterations as number) || 10;
     const maxTotalTokens = (config.maxTotalTokens as number) || 0;
     const timeoutMs = (config.timeoutMs as number) || 0;

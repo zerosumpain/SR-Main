@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeResult, ExecutionContext, JsonSchema } from '../types';
 import { interpolateTemplateStrict } from './template';
 import { resilientChatCompletion, resilientChatStream } from '$lib/llm/workflow-gateway';
+import { resolveMaxTokens } from './llm-helpers';
 import { isGlmModel } from '$lib/constants/default-models';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
@@ -80,7 +81,7 @@ export const llmCallExecutor: NodeExecutor = {
       throw new Error(`Prompt template references unresolved: ${missing.join(', ')}. Check upstream node output.`);
     }
     const temperature = (config.temperature as number) ?? 0.7;
-    const maxTokens = (config.maxTokens as number) ?? 2048;
+    const maxTokens = resolveMaxTokens(config.maxTokens);
     const configuredModel = config.model as string | undefined;
     const outputSchema = parseOutputSchema(config.outputSchema);
 

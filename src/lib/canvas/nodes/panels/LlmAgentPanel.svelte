@@ -6,6 +6,7 @@
   import ModelSelect from './widgets/ModelSelect.svelte';
   import TemperatureField from './widgets/TemperatureField.svelte';
   import MaxTokensField from './widgets/MaxTokensField.svelte';
+  import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
   import { fetchAllChatModels } from './shared/vertex-models';
 
   let {
@@ -235,11 +236,10 @@
     <div class="la-sec la-sec-inner">
       <div class="la-row">
         <MaxTokensField
-          value={Number(config.maxTokens ?? 2048)}
+          value={Number(config.maxTokens ?? DEFAULT_NODE_MAX_TOKENS)}
           onChange={(v) => set('maxTokens', v)}
           label="Max tokens per call"
-          fallback={2048}
-          hint="Cap on each individual LLM response length."
+          hint="Ceiling on each individual LLM response. Bias high; use the total token budget below to bound the whole loop."
         />
         <label class="la-field">
           <span class="la-label">Max iterations</span>

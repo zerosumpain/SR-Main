@@ -1,18 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const mockCreate = vi.fn().mockResolvedValue({
+// chat_completion routes through the resilient workflow gateway (timeout,
+// concurrency, model failover) rather than a raw OpenRouter client, so that is
+// what the test intercepts. list_models / get_usage still call the REST API
+// directly with the key from deepdive/keys.
+const mockChatCompletion = vi.fn().mockResolvedValue({
   id: 'gen-123',
   choices: [{ message: { content: 'Hello world' } }],
   usage: { prompt_tokens: 10, completion_tokens: 20 },
   model: 'openai/gpt-4o-mini',
 });
 
-const mockClient = {
-  chat: { completions: { create: mockCreate } },
-};
+vi.mock('$lib/llm/workflow-gateway', () => ({
+  resilientChatCompletion: (...args: unknown[]) => mockChatCompletion(...args),
+}));
 
 vi.mock('$lib/deepdive/keys', () => ({
-  getOpenRouterClient: () => mockClient,
   loadKeys: () => ({ openrouterApiKey: 'test-key' }),
 }));
 
@@ -20,6 +23,7 @@ vi.mock('$lib/deepdive/keys', () => ({
 global.fetch = vi.fn();
 
 import { openrouterExecutor, openrouterDef } from '$lib/workflows/nodes/openrouter';
+import { DEFAULT_NODE_MAX_TOKENS } from '$lib/constants/default-models';
 import type { ExecutionContext } from '$lib/workflows/types';
 
 const mockContext: ExecutionContext = {
@@ -54,8 +58,8 @@ describe('openrouterExecutor', () => {
       { operation: 'chat_completion', model: 'openai/gpt-4o-mini', userPrompt: 'Hello {{input.name}}!' },
       mockContext,
     );
-    const callArgs = mockCreate.mock.calls.at(-1)![0];
-    const userMsg = callArgs.messages.find((m: { role: string }) => m.role === 'user');
+    const body = mockChatCompletion.mock.calls.at(-1)![1];
+    const userMsg = body.messages.find((m: { role: string }) => m.role === 'user');
     expect(userMsg.content).toBe('Hello Alice!');
   });
 
@@ -65,9 +69,31 @@ describe('openrouterExecutor', () => {
       { operation: 'chat_completion', model: 'openai/gpt-4o-mini', systemPrompt: 'Be concise.', userPrompt: 'Hi' },
       mockContext,
     );
-    const callArgs = mockCreate.mock.calls.at(-1)![0];
-    const sysMsg = callArgs.messages.find((m: { role: string }) => m.role === 'system');
+    const body = mockChatCompletion.mock.calls.at(-1)![1];
+    const sysMsg = body.messages.find((m: { role: string }) => m.role === 'system');
     expect(sysMsg?.content).toBe('Be concise.');
+  });
+
+  // This node used to fall back to the chat's alt-OpenRouter setting and then a
+  // hardcoded openai/gpt-4o-mini, so "default" here meant something different
+  // from "default" on every other LLM node. A blank model is now handed
+  // straight to the gateway, which resolves the site default.
+  it('chat_completion leaves a blank model for the site default to resolve', async () => {
+    await openrouterExecutor.execute(
+      {},
+      { operation: 'chat_completion', model: '', userPrompt: 'Hi' },
+      mockContext,
+    );
+    expect(mockChatCompletion.mock.calls.at(-1)![0]).toBe('');
+  });
+
+  it('chat_completion defaults the token ceiling to 25000', async () => {
+    await openrouterExecutor.execute(
+      {},
+      { operation: 'chat_completion', userPrompt: 'Hi' },
+      mockContext,
+    );
+    expect(mockChatCompletion.mock.calls.at(-1)![1].max_tokens).toBe(DEFAULT_NODE_MAX_TOKENS);
   });
 
   it('chat_completion includes model and completionTokens in output', async () => {
