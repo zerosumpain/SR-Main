@@ -294,7 +294,10 @@ function detectTypeOutliers(a: GraphAnalysis): Insight[] {
       entityIds: tiny.flatMap(([, ids]) => ids).slice(0, 12),
       action: 'review',
       actionLabel: 'Tidy entity types',
-      actionPayload: '/jkai/intel/types',
+      // /jkai/intel/types has never existed — this button 404'd. Type
+      // governance (proposed types, merging one type into another) lives on the
+      // quality page.
+      actionPayload: '/jkai/intel/quality#types',
     },
   ];
 }

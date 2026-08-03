@@ -393,7 +393,10 @@
     </section>
   {/if}
 
-  <section class="panel">
+  <!-- id="types" is the target of the "Tidy entity types" insight action, which
+       used to point at a /jkai/intel/types route that never existed. This is
+       the panel that insight is about: types holding one or two entities. -->
+  <section class="panel" id="types">
     <header><h2>Entity types</h2></header>
     <p class="muted">
       Types holding one or two entities fragment the taxonomy and make type filters useless. Fold them into a
