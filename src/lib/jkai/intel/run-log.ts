@@ -47,7 +47,7 @@ export function localDayOf(now = new Date()): string {
 
 /** One stage of the sweep, and what became of it. */
 export interface IntelStageResult {
-  stage: 'gmail' | 'confidence' | 'watchlist' | 'lenses';
+  stage: 'gmail' | 'resolve' | 'confidence' | 'watchlist' | 'lenses';
   ok: boolean;
   /** Stage-specific tallies, e.g. `{ threads: 412, extracted: 150 }`. */
   counts?: Record<string, number>;
