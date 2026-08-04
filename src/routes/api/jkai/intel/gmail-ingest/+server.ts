@@ -90,6 +90,12 @@ export const POST: RequestHandler = async ({ request }) => {
   const mode = readMode(body.mode);
   const startedAt = new Date();
 
+  // Recorded BEFORE the sweep, not just after it. A sweep killed mid-flight —
+  // which is exactly what the watchdog was doing — writes nothing on its way
+  // out, so recording only on completion left the run history silent in the one
+  // case it existed for. The nightly path already did this; this one did not.
+  await logSweep(startedAt, null);
+
   try {
     const result = await ingestGmailThreads({
       query: readQuery(body.query),
@@ -128,7 +134,7 @@ export const POST: RequestHandler = async ({ request }) => {
  */
 async function logSweep(
   startedAt: Date,
-  ok: boolean,
+  ok: boolean | null,
   counts?: Record<string, number>,
   error?: string,
 ): Promise<void> {
@@ -137,21 +143,24 @@ async function logSweep(
       '$lib/jkai/intel/run-log'
     );
     await ensureIntelRunCollection();
-    const finished = new Date();
+    const now = new Date();
+    const elapsed = now.getTime() - startedAt.getTime();
+    const running = ok === null;
     await recordIntelRun({
       startedAt: startedAt.toISOString(),
-      finishedAt: finished.toISOString(),
-      totalMs: finished.getTime() - startedAt.getTime(),
+      // A run still in flight has no finish time. Stamping one would make an
+      // interrupted sweep read as a completed one in the history.
+      ...(running ? {} : { finishedAt: now.toISOString(), totalMs: elapsed }),
       day: localDayOf(startedAt),
       trigger: 'manual',
-      status: ok ? 'ok' : 'failed',
+      status: running ? 'running' : ok ? 'ok' : 'failed',
       stages: [
         {
           stage: 'gmail',
-          ok,
+          ok: ok !== false,
           ...(counts ? { counts } : {}),
           ...(error ? { error } : {}),
-          ms: finished.getTime() - startedAt.getTime(),
+          ms: elapsed,
         },
       ],
     });

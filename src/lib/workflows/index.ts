@@ -101,7 +101,7 @@ import { syncPrompts } from './prompts/loader';
 import { loadCustomTools } from './site-tools/custom-tool-loader';
 import { startMemoryReview } from './chat/memory-review';
 import { startScheduler } from './scheduler';
-import { startReaper, initEventLoopMonitor } from './engine-runtime';
+import { startReaper, initEventLoopMonitor, startBlockReporter } from './engine-runtime';
 import { db } from '$lib/db';
 import { whatsappConfig, homeAssistantConfig } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -368,6 +368,9 @@ if (RUN_PLATFORM_SERVICES) {
   // /api/health/workflow-engine probe can report blockage.
   startReaper();
   initEventLoopMonitor();
+  // Names the phase running when the loop stalls, so the next blocker is a log
+  // line rather than a benchmarking exercise.
+  startBlockReporter();
 
   // #19 DURABLE RUN-WORKER (ADDITIVE, FEATURE-FLAGGED): only when
   // JKAI_RUN_WORKER === '1' AND the operator opted the web process into hosting

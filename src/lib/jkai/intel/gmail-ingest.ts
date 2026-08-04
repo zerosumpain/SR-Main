@@ -34,6 +34,7 @@ import { createHash } from 'node:crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { pgTextArray } from '$lib/db/sql-array';
+import { beginBatch } from '$lib/workflows/engine-runtime';
 import type { AutoExtractOutcome } from './auto-extract';
 import type { ExtractedEntity, ExtractedRelationship, ExtractionResult } from './extract';
 import { recencyOf, ROLLING_WINDOW_DAYS } from './staleness';
@@ -1072,7 +1073,15 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
     items: [],
   };
 
+  // Declared to the health probe as work-in-progress. Extraction is genuinely
+  // CPU-heavy in bursts, and without this the watchdog reads a stalled loop as
+  // a wedged process and restarts the service mid-sweep — which it did, twice,
+  // losing the run each time. A beat per thread is what keeps it excused; if
+  // the sweep truly hangs the beats stop and the restart happens as before.
+  const batch = beginBatch('intel:gmail-sweep', `0/${threadIds.length} threads`);
+  try {
   for (const threadId of threadIds) {
+    batch.beat(`${result.items.length}/${threadIds.length} threads`);
     let item: GmailThreadOutcome = {
       threadId,
       subject: '',
@@ -1229,6 +1238,7 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
   // unchanged 0.85 threshold; nothing here lowers the bar.
   if (result.extracted > 0 || result.edges > 0) {
     try {
+      batch.beat('resolving duplicates');
       const { autoMergeDuplicates } = await import('./resolve/merge');
       const sweep = await autoMergeDuplicates();
       result.autoMerged = sweep.merged;
@@ -1240,6 +1250,9 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       // succeeded, or a transient DB error would lose the whole sweep.
       console.warn('[intel:gmail] post-sweep auto-merge failed:', err instanceof Error ? err.message : err);
     }
+  }
+  } finally {
+    batch.end();
   }
 
   console.log(

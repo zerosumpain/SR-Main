@@ -99,11 +99,20 @@ export async function refreshConfidence(entityIds: string[]): Promise<number> {
 
 /** One-off / periodic sweep for entities that have never been scored. */
 export async function backfillConfidence(
-  opts: { onlyMissing?: boolean } = {},
+  opts: {
+    onlyMissing?: boolean;
+    /**
+     * Called every `PROGRESS_EVERY` entities. This pass writes one row at a
+     * time and takes minutes on a real graph, so without a progress signal a
+     * caller watching for liveness cannot tell it from a hang.
+     */
+    onProgress?: (done: number, total: number) => void;
+  } = {},
 ): Promise<{ scored: number; remaining: number }> {
   const rows = await loadScoreInputs();
   const targets = opts.onlyMissing === false ? rows : rows;
 
+  const PROGRESS_EVERY = 100;
   let scored = 0;
   for (const row of targets) {
     await db
@@ -111,6 +120,7 @@ export async function backfillConfidence(
       .set({ confidenceScore: scoreFor(row) })
       .where(eq(intelEntities.id, row.id));
     scored++;
+    if (scored % PROGRESS_EVERY === 0) opts.onProgress?.(scored, targets.length);
   }
 
   const [{ count: remaining } = { count: 0 }] = await db
