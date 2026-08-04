@@ -11,6 +11,7 @@ import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveExtractionModel } from '$lib/server/models/settings';
 import { decayWeight } from './staleness';
+import { canonicalName } from './resolve/match';
 import type {
   ExtractionResult,
   ExtractedEntity,
@@ -257,22 +258,55 @@ async function upsertEntity(
     )
     .limit(1);
 
-  if (sameName) {
+  // Canonical resolution — the deterministic half of what the extractor was
+  // being asked to do with `possibleMatchId`.
+  //
+  // Exact-name matching only catches a mention written EXACTLY as the entity
+  // already is. The canonical form additionally sees through a file extension,
+  // a namespace prefix and a legal suffix, so "z-ai/glm-5-turbo" binds onto
+  // "GLM-5 Turbo" as it arrives rather than waiting for a nightly sweep to
+  // notice. Same-type first, for the reason the name lookup does it.
+  //
+  // An empty canonical form — a name made entirely of noise words — is skipped
+  // rather than looked up, or every such entity would resolve onto the first
+  // one ever created.
+  const canonical = canonicalName(entity.name);
+  const [sameCanonical] = sameName || !canonical
+    ? []
+    : await db
+        .select({ id: intelEntities.id, properties: intelEntities.properties, typeId: intelEntities.typeId })
+        .from(intelEntities)
+        .where(
+          and(
+            eq(intelEntities.canonicalName, canonical),
+            isNull(intelEntities.mergedIntoId),
+          ),
+        )
+        .orderBy(
+          sql`(${intelEntities.typeId} = ${typeId}) DESC`,
+          desc(intelEntities.confirmed),
+          intelEntities.createdAt,
+        )
+        .limit(1);
+
+  const resolved = sameName ?? sameCanonical;
+
+  if (resolved) {
     // The one exception: an entity parked under the `concept` fallback should
     // adopt a real type as soon as one is offered.
     const fallbackId = await ensureFallbackType();
-    const retype = sameName.typeId === fallbackId && typeId !== fallbackId;
+    const retype = resolved.typeId === fallbackId && typeId !== fallbackId;
 
     await db
       .update(intelEntities)
       .set({
-        properties: { ...(sameName.properties as Record<string, unknown> ?? {}), ...entity.properties },
+        properties: { ...(resolved.properties as Record<string, unknown> ?? {}), ...entity.properties },
         updatedAt: new Date(),
         ...(retype ? { typeId } : {}),
         ...(entity.confidence === 'high' ? { confidence: 'high', confirmed: true } : {}),
       })
-      .where(eq(intelEntities.id, sameName.id));
-    return sameName.id;
+      .where(eq(intelEntities.id, resolved.id));
+    return resolved.id;
   }
 
   // A brand-new entity is embedded immediately, not merely when a summary
@@ -283,6 +317,7 @@ async function upsertEntity(
     .insert(intelEntities)
     .values({
       name: entity.name,
+      canonicalName: canonical || null,
       typeId,
       properties: entity.properties,
       confidence: entity.confidence,

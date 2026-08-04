@@ -1482,6 +1482,11 @@ export const intelEntities = pgTable(
     /** Every observed surface form. Later extractions bind onto these rather
      *  than forking a second node — "IBCA" lives here on the expanded row. */
     aliases: jsonb('aliases').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** `canonicalName(name)` — the name with file extensions, namespace
+     *  prefixes and legal suffixes removed. Stored rather than computed so
+     *  write-time resolution is one indexed lookup instead of a scan; it is
+     *  derived, so a bad value is fixed by recomputing it. */
+    canonicalName: text('canonical_name'),
 
     // ── Foreground ───────────────────────────────────────────────────────
     /** On the watchlist: structural changes to this entity raise an insight. */
@@ -1508,6 +1513,7 @@ export const intelEntities = pgTable(
     byMerged: index('intel_entities_merged_idx').on(t.mergedIntoId),
     byWatched: index('intel_entities_watched_idx').on(t.watched),
     byUpdated: index('intel_entities_updated_idx').on(t.updatedAt),
+    byCanonical: index('intel_entities_canonical_idx').on(t.canonicalName),
   }),
 );
 
