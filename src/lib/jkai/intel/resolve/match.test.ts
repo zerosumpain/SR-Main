@@ -13,6 +13,8 @@ import {
   countNameGroups,
   canonicalName,
   isCanonicalMatch,
+  looksLikeAcronym,
+  initialsOf,
   AUTO_MERGE_THRESHOLD,
   type ResolvableEntity,
 } from './match';
@@ -424,5 +426,65 @@ describe('canonical_name scoring', () => {
     const cand = scorePair(ent('1', 'M62/A1 corridor'), ent('2', 'A1 corridor'));
     expect(cand?.signals ?? []).not.toContain('canonical_name');
     expect(cand?.confidence ?? 0).toBeLessThan(AUTO_MERGE_THRESHOLD);
+  });
+});
+
+describe('acronym shape', () => {
+  it('accepts real initialisms, including mixed case', () => {
+    for (const s of ['IBCA', 'DfE', 'MoJ', 'NCSC', 'DPIA']) {
+      expect(looksLikeAcronym(s)).toBe(true);
+    }
+  });
+
+  it('rejects two-letter forms, which collide with everything', () => {
+    // "CI" had absorbed Compound Interest, client_id and Contact info.
+    for (const s of ['AI', 'CI', 'EE', 'UK']) expect(looksLikeAcronym(s)).toBe(false);
+  });
+
+  it('rejects ordinary words', () => {
+    for (const s of ['Piraeus', 'Morecambe', 'England', 'session']) {
+      expect(looksLikeAcronym(s)).toBe(false);
+    }
+  });
+
+  it('rejects anything with a space', () => {
+    expect(looksLikeAcronym('WAN status')).toBe(false);
+  });
+});
+
+describe('isAcronymPair — tightened', () => {
+  it('still resolves the initialisms that matter', () => {
+    expect(isAcronymPair('IBCA', 'Infected Blood Compensation Authority (IBCA)')).toBe(true);
+    expect(isAcronymPair('DfE', 'Department for Education')).toBe(true);
+    expect(isAcronymPair('MoJ', 'Ministry of Justice')).toBe(true);
+    expect(isAcronymPair('NAO', 'National Audit Office')).toBe(true);
+  });
+
+  it('no longer takes a bracketed word for an abbreviation', () => {
+    // A bracket means "a related thing" far more often than "my abbreviation".
+    expect(isAcronymPair('Piraeus', '7-Day Greek Isles from Athens (Piraeus) to Venice')).toBe(false);
+    expect(isAcronymPair('Morecambe', 'Independent Church (Morecambe)')).toBe(false);
+    expect(isAcronymPair('VPS', 'Build + deploy (VPS)')).toBe(false);
+    expect(isAcronymPair('EMEA', 'DataIQ 100 Brands 2024 (EMEA)')).toBe(false);
+  });
+
+  it('no longer reads an ordinary phrase as a two-letter acronym', () => {
+    expect(isAcronymPair('AI', 'Alexa integration')).toBe(false);
+    expect(isAcronymPair('CI', 'Competing Ideologies')).toBe(false);
+    expect(isAcronymPair('EE', 'Energy efficiency')).toBe(false);
+  });
+
+  it('keeps a genuine acronym below the auto-merge bar when unproven', () => {
+    // "ExCo" is syllabic, not initials — review, not automatic.
+    const cand = scorePair(ent('1', 'EXCO'), ent('2', 'Executive Committee'));
+    expect(cand?.confidence ?? 0).toBeLessThan(AUTO_MERGE_THRESHOLD);
+  });
+});
+
+describe('initialsOf', () => {
+  it('offers both the noise-word and noise-free forms', () => {
+    const acr = initialsOf('Department for Education');
+    expect(acr.has('dfe')).toBe(true);
+    expect(acr.has('de')).toBe(true);
   });
 });

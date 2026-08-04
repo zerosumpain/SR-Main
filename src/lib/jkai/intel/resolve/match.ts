@@ -42,7 +42,12 @@ export function significantTokens(name: string): string[] {
 }
 
 /**
- * Acronyms a name could be known by:
+ * Acronyms a name could be known by — used for BLOCKING only.
+ *
+ * Deliberately more generous than `isAcronymPair`, which decides matches:
+ * blocking only proposes pairs for scoring, so a loose parenthetical here costs
+ * a comparison, while the same looseness in the matcher cost real merges.
+ *
  *   - anything in parentheses that looks like an acronym
  *   - the initials of its significant words
  * "Infected Blood Compensation Authority (IBCA)" yields both "ibca" (explicit)
@@ -68,19 +73,76 @@ export function acronymsOf(name: string): Set<string> {
   return out;
 }
 
-/** True when `candidate` is a plausible acronym form of `full` (or vice versa). */
+/**
+ * True when a string is SHAPED like an acronym.
+ *
+ * Two conditions, both bought with damage:
+ *
+ *   - at least three letters. Two-letter forms collide with everything. In
+ *     production "CI" had absorbed Compound Interest, client_id, Contact info
+ *     and Competing Ideologies; "AI" had absorbed Apple ID, Academic
+ *     institutions and All-Inclusive. The price is that "UK" and "US" no longer
+ *     auto-merge with their expansions — they go to review instead, which is a
+ *     trade worth making at ten bad merges to two good ones.
+ *   - mostly capitals. "DfE" and "MoJ" qualify; "Piraeus" and "Morecambe" do
+ *     not, and both were merged into cruise itineraries that happened to name
+ *     them in brackets.
+ */
+export function looksLikeAcronym(candidate: string): boolean {
+  const trimmed = candidate.trim();
+  if (!trimmed || /\s/.test(trimmed)) return false;
+  const letters = trimmed.replace(/[^\p{L}]/gu, '');
+  if (letters.length < 3 || letters.length > 8) return false;
+  const upper = [...letters].filter((c) => c === c.toUpperCase() && c !== c.toLowerCase()).length;
+  return upper / letters.length >= 0.5;
+}
+
+/**
+ * The initialisms a name could legitimately be known by.
+ *
+ * Computed with AND without noise words, because real acronyms disagree about
+ * them: "Department for Education" is DfE (keeping "for") and "Ministry of
+ * Justice" is MoJ (keeping "of"), while "National Audit Office" is simply NAO.
+ */
+export function initialsOf(name: string): Set<string> {
+  const bare = name.replace(/\([^)]*\)/g, ' ');
+  const out = new Set<string>();
+  const all = normaliseName(bare).split(' ').filter(Boolean);
+  const significant = significantTokens(bare);
+  if (all.length >= 2 && all.length <= 10) out.add(all.map((t) => t[0]).join(''));
+  if (significant.length >= 2 && significant.length <= 10) {
+    out.add(significant.map((t) => t[0]).join(''));
+  }
+  return out;
+}
+
+/**
+ * True when `a` is a plausible acronym form of `b` (or vice versa).
+ *
+ * Matched on INITIALS only. A parenthetical used to count as an acronym on its
+ * own, which is why "7-Day Greek Isles from Athens (Piraeus) to Venice" ate the
+ * port of Piraeus, "Independent Church (Morecambe)" ate the town, and
+ * "Build + deploy (VPS)" ate the server. A bracket means "here is a related
+ * thing" far more often than it means "here is my abbreviation" — and when it
+ * genuinely is the abbreviation, the initials agree anyway, which is how IBCA,
+ * MoJ, NCSC, DPIA, AWS and NAO all still resolve.
+ *
+ * The cost is a syllabic abbreviation like ExCo, whose letters are not the
+ * initials of "Executive Committee". It drops to the review band rather than
+ * auto-merging.
+ */
 export function isAcronymPair(a: string, b: string): boolean {
-  const na = normaliseName(a).replace(/\s/g, '');
-  const nb = normaliseName(b).replace(/\s/g, '');
+  const na = normaliseName(a);
+  const nb = normaliseName(b);
   if (!na || !nb || na === nb) return false;
 
-  // An acronym is short and has no spaces; the expansion is multi-word.
-  const shortSide = na.length <= nb.length ? na : nb;
-  const longName = na.length <= nb.length ? b : a;
-  if (shortSide.length < 2 || shortSide.length > 12) return false;
-  if (significantTokens(longName).length < 2) return false;
+  // The acronym is the shorter side; the expansion is multi-word.
+  const [shortSide, longName] = a.trim().length <= b.trim().length ? [a, b] : [b, a];
+  if (!looksLikeAcronym(shortSide)) return false;
+  if (significantTokens(longName.replace(/\([^)]*\)/g, ' ')).length < 2) return false;
 
-  return acronymsOf(longName).has(shortSide);
+  const key = shortSide.trim().replace(/[^\p{L}]/gu, '').toLowerCase();
+  return initialsOf(longName).has(key);
 }
 
 /** Jaccard overlap of the two names' significant tokens. */
