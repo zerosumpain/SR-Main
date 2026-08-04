@@ -90,6 +90,27 @@
     partial: 'partly failed',
     failed: 'failed',
   };
+
+  /**
+   * A sweep that never wrote a finish time is either in flight or was killed.
+   * The watchdog used to do exactly that, so "running" from two hours ago must
+   * not read as healthy — it is the one state with no error text to explain
+   * itself, and saying nothing is what this panel exists to stop.
+   */
+  const STALE_RUNNING_MS = 30 * 60_000;
+
+  function labelFor(run: Run): string {
+    if (run.status === 'running' && !run.finishedAt) {
+      const age = Date.now() - new Date(run.startedAt).getTime();
+      if (age > STALE_RUNNING_MS) return 'interrupted';
+    }
+    return STATUS_LABEL[run.status];
+  }
+
+  /** Interrupted runs get the failure styling; genuinely-in-flight ones do not. */
+  function toneFor(run: Run): string {
+    return labelFor(run) === 'interrupted' ? 'failed' : run.status;
+  }
 </script>
 
 <div class="ctl">
@@ -107,11 +128,18 @@
     </p>
   {:else}
     <p class="hint">
-      <span class="chip {latest.status}">{STATUS_LABEL[latest.status]}</span>
+      <span class="chip {toneFor(latest)}">{labelFor(latest)}</span>
       {ago(latest.startedAt)}
       {#if latest.trigger === 'manual'}· by hand{/if}
       {#if latest.totalMs}· {duration(latest.totalMs)}{/if}
     </p>
+
+    {#if labelFor(latest) === 'interrupted'}
+      <p class="hint err">
+        Stopped before it finished — the process was restarted mid-sweep. Anything already read is
+        in the graph; the next run picks up where it stopped.
+      </p>
+    {/if}
 
     <ul class="stages">
       {#each latest.stages as stage (stage.stage)}
@@ -140,7 +168,7 @@
       <ul class="history">
         {#each older as run (run.startedAt + run.trigger)}
           <li>
-            <span class="chip {run.status}">{STATUS_LABEL[run.status]}</span>
+            <span class="chip {toneFor(run)}">{labelFor(run)}</span>
             <span class="detail">{run.day}{run.trigger === 'manual' ? ' · by hand' : ''}</span>
             {#each run.stages.filter((s) => !s.ok) as bad (bad.stage)}
               <span class="detail err">{bad.stage}: {bad.error}</span>

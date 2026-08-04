@@ -13,6 +13,7 @@ import { runWatchlistCheck } from './watchlist';
 import { runDueLensChecks } from './lenses.server';
 import { backfillConfidence } from './trust-refresh';
 import { invalidateGraphAnalysis } from './analytics/load';
+import { beginBatch } from '$lib/workflows/engine-runtime';
 import {
   ensureIntelRunCollection,
   recordIntelRun,
@@ -73,8 +74,10 @@ function messageOf(err: unknown): string {
 async function runStage(
   stage: IntelStageResult['stage'],
   fn: () => Promise<Record<string, number>>,
+  batch?: { beat(phase?: string): void },
 ): Promise<IntelStageResult> {
   const t0 = Date.now();
+  batch?.beat(stage);
   try {
     const counts = await fn();
     return { stage, ok: true, counts, ms: Date.now() - t0 };
@@ -121,6 +124,12 @@ export async function runIntelSweep(
   // behind instead of vanishing without trace.
   await persist('running');
 
+  // Tells the health probe this process is busy, not wedged. Without it a
+  // stage heavy enough to stall the loop gets the service restarted underneath
+  // it, and the sweep never completes on any night.
+  const batch = beginBatch('intel:sweep', 'starting');
+  try {
+
   // Mail FIRST, so everything downstream scores the graph the mail just added:
   // confidence backfill, the watchlist diff and lens checks all read the graph,
   // and running them before ingestion would leave a night's correspondence
@@ -145,24 +154,38 @@ export async function runIntelSweep(
           deferred: sweep.deferred,
           failed: sweep.failed,
         };
-      }),
+      }, batch),
     );
   }
 
   // Each stage is isolated: one failing must not cost the others, since a
   // silent no-op is exactly the failure mode this engine exists to prevent.
   stages.push(
-    await runStage('confidence', async () => ({ scored: (await backfillConfidence()).scored })),
+    await runStage(
+      'confidence',
+      async () => ({
+        scored: (
+          await backfillConfidence({
+            onProgress: (done, total) => batch.beat(`confidence ${done}/${total}`),
+          })
+        ).scored,
+      }),
+      batch,
+    ),
   );
   stages.push(
     await runStage('watchlist', async () => {
       invalidateGraphAnalysis();
       return { changes: (await runWatchlistCheck()).changes?.length ?? 0 };
-    }),
+    }, batch),
   );
   stages.push(
-    await runStage('lenses', async () => ({ changes: (await runDueLensChecks()).length })),
+    await runStage('lenses', async () => ({ changes: (await runDueLensChecks()).length }), batch),
   );
+
+  } finally {
+    batch.end();
+  }
 
   const finished = new Date();
   const status = statusFrom(stages);
