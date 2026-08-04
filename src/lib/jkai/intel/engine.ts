@@ -48,6 +48,25 @@ export function isGmailRollingEnabled(): boolean {
   return process.env.INTEL_GMAIL_ROLLING !== '0';
 }
 
+/**
+ * Duplicate resolution is separately switchable because it is the only stage
+ * that MUTATES entities other stages merely read.
+ */
+export function isAutoResolveEnabled(): boolean {
+  return process.env.INTEL_AUTO_RESOLVE !== '0';
+}
+
+/**
+ * Merges one night may apply.
+ *
+ * Not a performance limit — the whole pass costs one query and some
+ * arithmetic. It is a blast radius. If a future signal starts proposing
+ * nonsense, the cap is the difference between reading about it over breakfast
+ * and finding a week of it. Every merge is reversible through the ledger, but
+ * reversing twenty-five is an afternoon and reversing four hundred is not.
+ */
+const AUTO_RESOLVE_LIMIT = 25;
+
 export interface IntelSweepResult {
   confidenceScored: number;
   watchChanges: number;
@@ -55,6 +74,8 @@ export interface IntelSweepResult {
   /** Threads swept from the rolling Gmail window, if enabled. */
   gmailThreads: number;
   gmailExtracted: number;
+  /** Duplicates merged automatically, if enabled. */
+  duplicatesMerged: number;
   errors: string[];
   /** Per-stage outcome, persisted to `intel_runs` and shown on /jkai/intel. */
   stages: IntelStageResult[];
@@ -158,6 +179,34 @@ export async function runIntelSweep(
     );
   }
 
+  // Resolution BEFORE scoring, and after mail: the night's new entities are
+  // exactly the ones most likely to duplicate something, and confidence,
+  // watchlist and lenses should all run against the merged graph rather than
+  // score two halves of the same thing separately.
+  //
+  // Until now this existed and nothing called it — a resolver that runs only
+  // when somebody remembers to open a page is how forty-one people came to be
+  // filed as one and stayed that way.
+  if (isAutoResolveEnabled()) {
+    stages.push(
+      await runStage('resolve', async () => {
+        const { autoMergeDuplicates } = await import('./resolve/merge');
+        const swept = await autoMergeDuplicates(undefined, { limit: AUTO_RESOLVE_LIMIT });
+        for (const d of swept.details) {
+          // Named in the journal, because a merge nobody can see is a merge
+          // nobody can question.
+          console.log(`[intel:resolve] merged "${d.merge}" into "${d.keep}" (${d.confidence.toFixed(2)})`);
+        }
+        return {
+          candidates: swept.candidates,
+          merged: swept.merged,
+          skipped: swept.skipped,
+          chainsBroken: swept.chainsBroken,
+        };
+      }, batch),
+    );
+  }
+
   // Each stage is isolated: one failing must not cost the others, since a
   // silent no-op is exactly the failure mode this engine exists to prevent.
   stages.push(
@@ -195,6 +244,7 @@ export async function runIntelSweep(
   const result: IntelSweepResult = {
     gmailThreads: find('gmail')?.counts?.threads ?? 0,
     gmailExtracted: find('gmail')?.counts?.extracted ?? 0,
+    duplicatesMerged: find('resolve')?.counts?.merged ?? 0,
     confidenceScored: find('confidence')?.counts?.scored ?? 0,
     watchChanges: find('watchlist')?.counts?.changes ?? 0,
     lensChanges: find('lenses')?.counts?.changes ?? 0,
@@ -205,6 +255,7 @@ export async function runIntelSweep(
   console.log(
     `[intel:engine] sweep ${status} in ${finished.getTime() - startedAt.getTime()}ms — ` +
       `${result.gmailThreads} gmail threads (${result.gmailExtracted} extracted), ` +
+      `${result.duplicatesMerged} duplicates merged, ` +
       `${result.confidenceScored} scored, ${result.watchChanges} watch changes, ` +
       `${result.lensChanges} lens changes` +
       // The messages, not the count. This line is the whole reason the Gmail

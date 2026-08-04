@@ -499,16 +499,47 @@ export interface SweepResult {
   candidates: number;
   merged: number;
   skipped: number;
+  /** Merges refused because they would have joined two entities nothing matched. */
+  chainsBroken: number;
   details: Array<{ keep: string; merge: string; confidence: number }>;
+}
+
+/** Order-independent key for a pair of ids. */
+export function pairKey(x: string, y: string): string {
+  return x < y ? `${x}|${y}` : `${y}|${x}`;
+}
+
+/**
+ * Would merging `mergeId` into `keepId` join two entities nothing ever matched?
+ *
+ * Returns the offending id, or null when the merge is safe. Pure, because this
+ * is the rule that stops single-linkage chaining and it needs testing without
+ * a database: A~B and B~C must not silently produce A~C.
+ */
+export function chainedInto(
+  keepId: string,
+  mergeId: string,
+  absorbed: ReadonlyMap<string, readonly string[]>,
+  proposed: ReadonlySet<string>,
+): string | null {
+  const already = absorbed.get(keepId) ?? [];
+  return already.find((id) => !proposed.has(pairKey(id, mergeId))) ?? null;
 }
 
 /**
  * Merge every candidate at or above `threshold`.
  *
- * Chains cannot form: `mergeEntities` flattens any existing tombstone that
- * pointed at the loser onto the new survivor. The skip-set below only avoids
- * redundant work — it is NOT what keeps chains one hop deep, because a survivor
- * carries no marker and can legitimately become a loser later in the sweep.
+ * Chains cannot form in the DATA — `mergeEntities` flattens any tombstone that
+ * pointed at the loser onto the new survivor — but they could form in the
+ * DECISIONS, and that is the more dangerous kind. Merging pairwise down a
+ * confidence-ordered list is single-linkage clustering: A matches B and B
+ * matches C, so A and C end up as one entity even when nothing ever said they
+ * were the same. It is how "IBCA" could have acquired an organisation it shares
+ * no name with, through a bridge entity that resembles both.
+ *
+ * So a merge into a survivor that has already absorbed something is allowed
+ * only when the newcomer is ALSO a candidate against everything that survivor
+ * took. Anything else is held for review rather than guessed at.
  */
 export async function autoMergeDuplicates(
   threshold = AUTO_MERGE_THRESHOLD,
@@ -516,23 +547,40 @@ export async function autoMergeDuplicates(
 ): Promise<SweepResult> {
   const reports = (await findDuplicates(threshold)).filter((r) => r.candidate.confidence >= threshold);
   const limit = opts.limit ?? 200;
-  const result: SweepResult = { candidates: reports.length, merged: 0, skipped: 0, details: [] };
+  const result: SweepResult = { candidates: reports.length, merged: 0, skipped: 0, chainsBroken: 0, details: [] };
   const gone = new Set<string>();
+  // Every pair the matcher itself proposed, so a transitive merge can be tested
+  // against direct evidence rather than inherited from a neighbour.
+  const proposed = new Set(reports.map((r) => pairKey(r.keep.id, r.merge.id)));
+  const absorbed = new Map<string, string[]>();
 
   for (const r of reports.slice(0, limit)) {
     if (gone.has(r.keep.id) || gone.has(r.merge.id)) {
       result.skipped++;
       continue;
     }
+
+    const already = absorbed.get(r.keep.id) ?? [];
+    const unmatched = chainedInto(r.keep.id, r.merge.id, absorbed, proposed);
+    if (unmatched) {
+      console.log(
+        `[intel:resolve] holding "${r.merge.name}" — "${r.keep.name}" has already absorbed ` +
+          'an entity it does not match',
+      );
+      result.chainsBroken++;
+      continue;
+    }
     result.details.push({ keep: r.keep.name, merge: r.merge.name, confidence: r.candidate.confidence });
     if (opts.dryRun) {
       result.merged++;
       gone.add(r.merge.id);
+      absorbed.set(r.keep.id, [...already, r.merge.id]);
       continue;
     }
     try {
       await mergeEntities(r.keep.id, r.merge.id);
       gone.add(r.merge.id);
+      absorbed.set(r.keep.id, [...already, r.merge.id]);
       result.merged++;
     } catch (err) {
       console.error('[intel:resolve] merge failed:', err instanceof Error ? err.message : err);
