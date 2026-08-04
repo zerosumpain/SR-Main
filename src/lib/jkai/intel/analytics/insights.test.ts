@@ -46,12 +46,12 @@ function edge(a: string, b: string) {
   };
 }
 
-function analyse(snapshot: GraphSnapshot, embeddings = new Map<string, number[]>()): GraphAnalysis {
+async function analyse(snapshot: GraphSnapshot, embeddings = new Map<string, number[]>()): Promise<GraphAnalysis> {
   const index = buildIndex(snapshot);
   return {
     snapshot,
     index,
-    centrality: computeCentrality(index),
+    centrality: await computeCentrality(index),
     community: detectCommunities(index),
     embeddings,
     suppressedPairs: new Set<string>(),
@@ -72,15 +72,15 @@ function barbell(over: Record<string, Partial<GraphNode>> = {}): GraphSnapshot {
 }
 
 describe('generateInsights', () => {
-  it('returns findings sorted by score descending', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('returns findings sorted by score descending', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     for (let i = 1; i < insights.length; i++) {
       expect(insights[i - 1].score).toBeGreaterThanOrEqual(insights[i].score);
     }
   });
 
-  it('flags the broker joining two clusters', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('flags the broker joining two clusters', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     const broker = insights.find((i) => i.kind === 'broker');
     expect(broker).toBeDefined();
     expect(['b', 'c']).toContain(broker!.entityIds[0]);
@@ -88,34 +88,34 @@ describe('generateInsights', () => {
     expect(broker!.actionPayload).not.toBe('');
   });
 
-  it('flags the cross-cluster edge as an unlikely relation', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('flags the cross-cluster edge as an unlikely relation', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     const unlikely = insights.find((i) => i.kind === 'unlikely_relation');
     expect(unlikely).toBeDefined();
     expect(unlikely!.entityIds).toHaveLength(2);
     expect(unlikely!.action).toBe('ask');
   });
 
-  it('reports orphans once a few accumulate', () => {
+  it('reports orphans once a few accumulate', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(node('o1'), node('o2'), node('o3'));
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const orphan = insights.find((i) => i.kind === 'orphan');
     expect(orphan).toBeDefined();
     expect(orphan!.title).toContain('3 entities');
   });
 
-  it('stays quiet about one or two orphans', () => {
+  it('stays quiet about one or two orphans', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(node('o1'));
-    expect(generateInsights(analyse(snapshot), NOW).find((i) => i.kind === 'orphan')).toBeUndefined();
+    expect(generateInsights(await analyse(snapshot), NOW).find((i) => i.kind === 'orphan')).toBeUndefined();
   });
 
-  it('flags a disconnected island of three or more', () => {
+  it('flags a disconnected island of three or more', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(node('i1'), node('i2'), node('i3'));
     snapshot.edges.push(edge('i1', 'i2'), edge('i2', 'i3'));
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const isolated = insights.find((i) => i.kind === 'isolated_cluster');
     expect(isolated).toBeDefined();
     expect(isolated!.title).toContain('3-entity cluster');
@@ -135,63 +135,63 @@ describe('generateInsights', () => {
     return snapshot;
   }
 
-  it('flags a recently created, already well-connected entity', () => {
+  it('flags a recently created, already well-connected entity', async () => {
     const snapshot = populated();
     snapshot.nodes.push(node('new', { createdAt: NOW - 1 * DAY }));
     for (const n of ['a', 'b', 'x', 'c', 'd', 'y']) snapshot.edges.push(edge('new', n));
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const emerging = insights.find((i) => i.kind === 'emerging_hub');
     expect(emerging).toBeDefined();
     expect(emerging!.entityIds).toEqual(['new']);
     expect(emerging!.action).toBe('briefing');
   });
 
-  it('does not call the oldest entities emerging, however connected', () => {
+  it('does not call the oldest entities emerging, however connected', async () => {
     // Every node predates the newest fifth of the graph, so nothing qualifies.
-    const insights = generateInsights(analyse(populated()), NOW);
+    const insights = generateInsights(await analyse(populated()), NOW);
     expect(insights.find((i) => i.kind === 'emerging_hub')).toBeUndefined();
   });
 
-  it('stays silent on a graph too small for percentiles to mean anything', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('stays silent on a graph too small for percentiles to mean anything', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     expect(insights.find((i) => i.kind === 'emerging_hub')).toBeUndefined();
   });
 
-  it('flags a well-connected entity that has gone quiet', () => {
+  it('flags a well-connected entity that has gone quiet', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(node('quiet', { lastSeenAt: NOW - 200 * DAY }));
     for (const n of ['a', 'b', 'x', 'c', 'd']) snapshot.edges.push(edge('quiet', n));
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const stale = insights.find((i) => i.kind === 'stale_hub');
     expect(stale).toBeDefined();
     expect(stale!.entityIds).toEqual(['quiet']);
   });
 
-  it('flags an entity asserting many links off a single unconfirmed note', () => {
+  it('flags an entity asserting many links off a single unconfirmed note', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(node('thin', { noteCount: 1, confirmed: false }));
     for (const n of ['a', 'b', 'x', 'c']) snapshot.edges.push(edge('thin', n));
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const thin = insights.find((i) => i.kind === 'thin_evidence');
     expect(thin).toBeDefined();
     expect(thin!.detail).toContain('one note');
   });
 
-  it('flags a fragmented taxonomy', () => {
+  it('flags a fragmented taxonomy', async () => {
     const snapshot = barbell();
     snapshot.nodes.push(
       node('t1', { typeName: 'font', typeId: 'type-font' }),
       node('t2', { typeName: 'foot_type', typeId: 'type-foot' }),
       node('t3', { typeName: 'playbook', typeId: 'type-playbook' }),
     );
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     const outlier = insights.find((i) => i.kind === 'type_outlier');
     expect(outlier).toBeDefined();
     expect(outlier!.detail).toContain('font');
   });
 
-  it('gives every insight an id, a title and a commissionable action', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('gives every insight an id, a title and a commissionable action', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     expect(insights.length).toBeGreaterThan(0);
     for (const i of insights) {
       expect(i.id).toBeTruthy();
@@ -204,18 +204,18 @@ describe('generateInsights', () => {
     }
   });
 
-  it('never emits the same insight id twice', () => {
-    const insights = generateInsights(analyse(barbell()), NOW);
+  it('never emits the same insight id twice', async () => {
+    const insights = generateInsights(await analyse(barbell()), NOW);
     expect(new Set(insights.map((i) => i.id)).size).toBe(insights.length);
   });
 
-  it('survives an empty graph', () => {
-    expect(generateInsights(analyse({ nodes: [], edges: [] }), NOW)).toEqual([]);
+  it('survives an empty graph', async () => {
+    expect(generateInsights(await analyse({ nodes: [], edges: [] }), NOW)).toEqual([]);
   });
 
-  it('survives a graph with nodes but no edges', () => {
+  it('survives a graph with nodes but no edges', async () => {
     const snapshot = { nodes: ['a', 'b', 'c'].map((n) => node(n)), edges: [] };
-    const insights = generateInsights(analyse(snapshot), NOW);
+    const insights = generateInsights(await analyse(snapshot), NOW);
     expect(insights.find((i) => i.kind === 'orphan')).toBeDefined();
   });
 });

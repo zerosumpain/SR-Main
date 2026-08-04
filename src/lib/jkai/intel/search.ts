@@ -1,5 +1,6 @@
 import { db } from '$lib/db';
 import { sql } from 'drizzle-orm';
+import { pgTextArray } from '$lib/db/sql-array';
 import { generateEmbedding } from './embed';
 
 export type IntelItem = {
@@ -86,7 +87,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
       ${q ? sql`(n.title ILIKE ${`%${q}%`} OR COALESCE(n.processed_content, n.raw_content) ILIKE ${`%${q}%`})` : sql`TRUE`}
       ${fromTs ? sql`AND n.created_at >= ${fromTs}::timestamptz` : sql``}
       ${toTs ? sql`AND n.created_at < ${toTs}::timestamptz` : sql``}
-      ${tagFilter ? sql`AND n.metadata->>'sourceTag' = ANY(${tagFilter}::text[])` : sql``}
+      ${tagFilter ? sql`AND n.metadata->>'sourceTag' = ANY(${pgTextArray(tagFilter)}::text[])` : sql``}
     ORDER BY ${ordering === 'recent' ? sql`n.created_at DESC` : sql`distance ASC, n.created_at DESC`}
     LIMIT ${limit}
   `);
@@ -105,7 +106,7 @@ export async function searchIntel(query: string, facets: IntelFacets): Promise<S
     JOIN intel_entity_types et ON e.type_id = et.id
     WHERE e.merged_into_id IS NULL
       ${q ? sql`AND (e.name ILIKE ${`%${q}%`} OR e.summary ILIKE ${`%${q}%`})` : sql``}
-      ${entityTypeFilter ? sql`AND et.name = ANY(${entityTypeFilter}::text[])` : sql``}
+      ${entityTypeFilter ? sql`AND et.name = ANY(${pgTextArray(entityTypeFilter)}::text[])` : sql``}
       ${fromTs ? sql`AND e.updated_at >= ${fromTs}::timestamptz` : sql``}
       ${toTs ? sql`AND e.updated_at < ${toTs}::timestamptz` : sql``}
     ORDER BY ${ordering === 'recent' ? sql`e.updated_at DESC` : sql`distance ASC, e.updated_at DESC`}

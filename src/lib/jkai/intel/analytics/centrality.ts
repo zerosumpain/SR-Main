@@ -9,9 +9,38 @@
 //   pagerank    — importance weighted by the importance of what points at it.
 //                 Robust to a node inflating its degree with trivial links.
 //
-// Betweenness uses Brandes' algorithm (O(V·E)); at ~500 nodes / ~460 edges that
-// is a few milliseconds, and it stays usable to ~20k nodes.
+// Betweenness uses Brandes' algorithm (O(V·E)). The "stays usable to ~20k
+// nodes" claim that used to sit here was never measured and is wrong by orders
+// of magnitude. Measured on this host, single-threaded:
+//
+//     500 nodes /   460 edges →    0.16 s
+//   3,105 nodes / 3,028 edges →    7.4  s     ← the live graph, 2026-08-04
+//   6,000 nodes / 6,000 edges →   34.5  s
+//
+// That mattered for more than patience. The whole computation was synchronous,
+// so at live scale it pinned the event loop for 7.4 s; /api/health/workflow-engine
+// 503s past 5 s; systemd's watchdog restarts the service on a 503. The nightly
+// intel sweep was therefore restarting production every ~6 minutes for the
+// length of its run window, and each restart began the sweep again.
+//
+// So the outer loop now yields to the event loop periodically. The result is
+// bit-for-bit identical — this is not an approximation — it just stops one
+// analytics pass from taking the site down with it. The cost is still
+// super-linear, and a graph that grows much past ~6k nodes needs sampled-source
+// (Brandes–Pich) betweenness rather than a bigger yield budget; `computeCentrality`
+// warns when a pass runs long so that arrives as a log line and not as an outage.
 import type { AdjacencyIndex } from './model';
+
+/**
+ * Source nodes processed between yields. Each iteration is roughly
+ * O(E + V) — a couple of milliseconds at live scale — so 64 keeps any single
+ * blocking span comfortably under the 5 s health threshold while adding only a
+ * few hundred yields to a full pass.
+ */
+const YIELD_EVERY = 64;
+
+/** Hand the event loop back, so pending I/O and health probes get served. */
+const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 export interface CentralityScores {
   degree: Map<string, number>;
@@ -24,11 +53,16 @@ export interface CentralityScores {
  * Values are normalised to 0..1 against the theoretical maximum so they can be
  * compared across graphs of different sizes.
  */
-export function betweenness(index: AdjacencyIndex): Map<string, number> {
+export async function betweenness(index: AdjacencyIndex): Promise<Map<string, number>> {
   const scores = new Map<string, number>();
   for (const id of index.ids) scores.set(id, 0);
 
+  let sinceYield = 0;
   for (const s of index.ids) {
+    if (++sinceYield >= YIELD_EVERY) {
+      sinceYield = 0;
+      await breathe();
+    }
     const stack: string[] = [];
     const preds = new Map<string, string[]>();
     const sigma = new Map<string, number>();
@@ -119,12 +153,29 @@ export function pagerank(index: AdjacencyIndex, iterations = 40, damping = 0.85)
   return rank;
 }
 
-export function computeCentrality(index: AdjacencyIndex): CentralityScores {
-  return {
+/**
+ * Slow-pass warning threshold. Well under the point where the graph is in
+ * trouble, but high enough that a healthy pass never logs.
+ */
+const SLOW_PASS_MS = 10_000;
+
+export async function computeCentrality(index: AdjacencyIndex): Promise<CentralityScores> {
+  const t0 = Date.now();
+  const scores: CentralityScores = {
     degree: new Map(index.degree),
-    betweenness: betweenness(index),
+    betweenness: await betweenness(index),
     pagerank: pagerank(index),
   };
+  const ms = Date.now() - t0;
+  if (ms > SLOW_PASS_MS) {
+    // Announce the scaling wall before it becomes a mystery. See the module
+    // header: past roughly 6k nodes this wants sampled-source betweenness.
+    console.warn(
+      `[intel:centrality] pass took ${ms}ms for ${index.ids.length} nodes — ` +
+        'betweenness is super-linear; consider sampled-source (Brandes–Pich).',
+    );
+  }
+  return scores;
 }
 
 /**
