@@ -15,6 +15,9 @@ import {
   isCanonicalMatch,
   looksLikeAcronym,
   initialsOf,
+  emailTrust,
+  countIdentitiesByAddress,
+  sharedNeighbourCount,
   AUTO_MERGE_THRESHOLD,
   type ResolvableEntity,
 } from './match';
@@ -340,14 +343,14 @@ describe('shared sender addresses', () => {
 
     // Without the guard this is the graph's strongest signal, at 0.98.
     expect(scorePair(a, b)?.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
-    expect(scorePair(a, b, { sharedSenders: shared })).toBeNull();
+    expect(scorePair(a, b, { addressIdentities: shared })).toBeNull();
   });
 
   it('still resolves one person under two display names on a personal address', () => {
     const shared = new Set(['invitations@linkedin.com']);
     const a = person('1', 'J. Kelly', 'john@example.com');
     const b = person('2', 'John Kelly (IBCA)', 'john@example.com');
-    const cand = scorePair(a, b, { sharedSenders: shared });
+    const cand = scorePair(a, b, { addressIdentities: shared });
     expect(cand?.signals).toContain('same_email');
     expect(cand!.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
   });
@@ -360,7 +363,7 @@ describe('shared sender addresses', () => {
         person('2', 'Stacey Keen', 'invitations@linkedin.com'),
         person('3', 'Dave Balderstone', 'invitations@linkedin.com'),
       ],
-      { sharedSenders: shared },
+      { addressIdentities: shared },
     );
     expect(cands).toEqual([]);
   });
@@ -486,5 +489,85 @@ describe('initialsOf', () => {
     const acr = initialsOf('Department for Education');
     expect(acr.has('dfe')).toBe(true);
     expect(acr.has('de')).toBe(true);
+  });
+});
+
+describe('graduated email trust', () => {
+  const person = (id: string, name: string, email: string) =>
+    ent(id, name, { typeId: 'type-person', typeName: 'person', properties: { email } });
+
+  it('grades an address by how many identities have used it', () => {
+    const counts = countIdentitiesByAddress(
+      new Map([
+        ['solo@example.com', ['John Kelly']],
+        ['aliases@example.com', ['John Kelly', 'J Kelly', 'Kelly, John']],
+        ['two@example.com', ['EA', 'EdTech Architect']],
+        ['channel@example.com', ['Anna Bainbridge', 'Stacey Keen', 'Dave Balderstone']],
+      ]),
+    );
+    expect(emailTrust('solo@example.com', counts)).toBe('proof');
+    expect(emailTrust('aliases@example.com', counts)).toBe('proof'); // one identity, three spellings
+    expect(emailTrust('two@example.com', counts)).toBe('weak');
+    expect(emailTrust('channel@example.com', counts)).toBe('none');
+  });
+
+  it('will not fuse two unrelated names on a two-identity address', () => {
+    // ea@e.ea.com carries a games publisher and a job title that borrowed its mail.
+    const counts = new Map([['ea@e.ea.com', 2]]);
+    const cand = scorePair(
+      person('1', 'EA', 'ea@e.ea.com'),
+      person('2', 'EdTech Architect', 'ea@e.ea.com'),
+      { addressIdentities: counts },
+    );
+    expect(cand?.signals ?? []).not.toContain('same_email');
+    expect(cand?.confidence ?? 0).toBeLessThan(AUTO_MERGE_THRESHOLD);
+  });
+
+  it('still merges one person under two spellings on their own address', () => {
+    const counts = new Map([['john@example.com', 2]]);
+    const cand = scorePair(
+      person('1', 'John Kelly', 'john@example.com'),
+      person('2', 'johnkelly'.toUpperCase(), 'john@example.com'),
+      { addressIdentities: counts },
+    );
+    expect(cand?.signals).toContain('same_email');
+    expect(cand!.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
+  });
+});
+
+describe('shared neighbours', () => {
+  const neighbours = new Map<string, Set<string>>([
+    ['1', new Set(['n1', 'n2', 'n3'])],
+    ['2', new Set(['n1', 'n2', '9'])],
+    ['3', new Set(['n1'])],
+    ['4', new Set(['n1', 'x'])],
+  ]);
+
+  it('counts the entities both sides connect to', () => {
+    expect(sharedNeighbourCount('1', '2', neighbours)).toBe(2);
+    expect(sharedNeighbourCount('3', '4', neighbours)).toBe(1);
+    expect(sharedNeighbourCount('1', 'missing', neighbours)).toBe(0);
+  });
+
+  it('strengthens a pair the names already proposed', () => {
+    const bare = scorePair(ent('1', 'Trend Engine'), ent('2', 'Trend engine v4'));
+    const withGraph = scorePair(ent('1', 'Trend Engine'), ent('2', 'Trend engine v4'), { neighbours });
+    expect(withGraph!.confidence).toBeGreaterThan(bare!.confidence);
+    expect(withGraph!.signals).toContain('shared_neighbours');
+  });
+
+  it('never proposes a pair on its own', () => {
+    // Two entities with nothing in common but a shared neighbour are not a match.
+    expect(scorePair(ent('1', 'Alpha'), ent('2', 'Omega'), { neighbours })).toBeNull();
+  });
+
+  it('overrides the low-similarity penalty, which was burying real duplicates', () => {
+    const unlike = [1, 0, 0, 0];
+    const alsoUnlike = [0, 1, 0, 0];
+    const a = ent('1', 'Card ending 6878', { embedding: unlike });
+    const b = ent('2', 'Card 6878 ending', { embedding: alsoUnlike });
+    const penalised = scorePair(a, b)!;
+    const rescued = scorePair(a, b, { neighbours })!;
+    expect(rescued.confidence).toBeGreaterThan(penalised.confidence);
   });
 });
