@@ -25,6 +25,7 @@ import {
 } from '$lib/db/schema';
 import {
   findDuplicateCandidates,
+  findSharedSenderAddresses,
   pickSurvivor,
   AUTO_MERGE_THRESHOLD,
   type MatchCandidate,
@@ -406,12 +407,48 @@ export interface DuplicateReport {
   autoMergeable: boolean;
 }
 
+/**
+ * Every display name ever recorded against an email address.
+ *
+ * Tombstones are INCLUDED on purpose. This is the evidence that an address
+ * belongs to a notification service rather than a person, and merging destroys
+ * it: fold two names into one and the survivor carries a single name again, so
+ * a count over live rows alone can never reach the threshold that would have
+ * stopped the merge. The tombstones remember.
+ */
+export async function loadAddressNames(): Promise<Map<string, string[]>> {
+  const res = await db.execute(sql`
+    SELECT lower(properties->>'email') AS email, name
+    FROM intel_entities
+    WHERE properties->>'email' IS NOT NULL AND name IS NOT NULL
+  `);
+
+  const out = new Map<string, string[]>();
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    const email = String(row.email ?? '').trim();
+    const name = String(row.name ?? '').trim();
+    if (!email.includes('@') || !name) continue;
+    const list = out.get(email);
+    if (list) list.push(name);
+    else out.set(email, [name]);
+  }
+  return out;
+}
+
+/** Addresses that write as many different people, so cannot prove identity. */
+export async function loadSharedSenderAddresses(): Promise<Set<string>> {
+  return findSharedSenderAddresses(await loadAddressNames());
+}
+
 /** Duplicate candidates across the whole graph, strongest first. */
 export async function findDuplicates(minConfidence = 0.35): Promise<DuplicateReport[]> {
-  const entities = await loadResolvableEntities();
+  const [entities, sharedSenders] = await Promise.all([
+    loadResolvableEntities(),
+    loadSharedSenderAddresses(),
+  ]);
   const byId = new Map(entities.map((e) => [e.id, e]));
 
-  return findDuplicateCandidates(entities, { minConfidence })
+  return findDuplicateCandidates(entities, { minConfidence, sharedSenders })
     .map((candidate) => {
       const a = byId.get(candidate.aId);
       const b = byId.get(candidate.bId);

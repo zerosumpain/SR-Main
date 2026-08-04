@@ -188,11 +188,117 @@ export function isNameReordering(a: string, b: string): boolean {
  * which makes this the highest-precision identity key in the whole graph — and
  * until now nothing in the matcher read it.
  */
-export function emailOf(entity: ResolvableEntity): string | null {
+export function emailOf(
+  entity: ResolvableEntity,
+  sharedSenders?: ReadonlySet<string>,
+): string | null {
   const raw = entity.properties?.email;
   if (typeof raw !== 'string') return null;
   const email = raw.trim().toLowerCase();
-  return email.includes('@') ? email : null;
+  if (!email.includes('@')) return null;
+  // An address that sends on behalf of many different people is a CHANNEL, not
+  // an identity. See findSharedSenderAddresses.
+  return sharedSenders?.has(email) ? null : email;
+}
+
+// ---------------------------------------------------------------------------
+// Shared sender addresses
+// ---------------------------------------------------------------------------
+
+/**
+ * Squashed to letters and digits, so "John Kelly", "john.kelly" and
+ * "JohnKelly" all reduce to the same string.
+ */
+function squashName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * True when two display names plausibly belong to the SAME person — the same
+ * name written differently, rather than two different people.
+ *
+ * Deliberately generous: this decides whether a set of names is EVIDENCE of a
+ * shared mailbox, so over-grouping merely leaves an address trusted, while
+ * under-grouping would strip the address signal from a real person who happens
+ * to appear under a couple of spellings.
+ */
+export function isNameVariant(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (normaliseName(a) === normaliseName(b)) return true;
+
+  const tokensA = new Set(significantTokens(a));
+  for (const t of significantTokens(b)) if (tokensA.has(t)) return true;
+
+  // "johnkellymain" vs "Johnkelly Main" share no token — one is the other with
+  // the spaces taken out, which is what mail clients do to addresses.
+  const sa = squashName(a);
+  const sb = squashName(b);
+  if (sa.length >= 6 && sb.length >= 6 && (sa.includes(sb) || sb.includes(sa))) return true;
+
+  return isInitialExpansion(a, b) || isNameReordering(a, b);
+}
+
+/** How many distinct people the display names under one address suggest. */
+export function countNameGroups(names: Iterable<string>): number {
+  const list = [...new Set([...names].map((n) => n.trim()).filter(Boolean))];
+  if (list.length < 2) return list.length;
+
+  // Union-find over "is a variant of", so "J Kelly", "John Kelly" and
+  // "johnkelly" collapse to one group however they pair up.
+  const parent = list.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (isNameVariant(list[i], list[j])) parent[find(i)] = find(j);
+    }
+  }
+  return new Set(list.map((_, i) => find(i))).size;
+}
+
+/**
+ * The number of unrelated identities an address must appear under before it
+ * stops counting as one.
+ *
+ * Three, from the production distribution: the owner's own address carried ten
+ * display names that collapse to TWO groups (their own aliases), while
+ * `invitations@linkedin.com` carried thirty-eight names in TWENTY-FIVE groups.
+ * Two would have punished the owner for having aliases; three separates a
+ * person with spelling variants from a mailbox that writes as everybody.
+ */
+export const SHARED_SENDER_MIN_GROUPS = 3;
+
+/**
+ * Addresses that behave like a SENDER rather than a person.
+ *
+ * An email address is normally the strongest identity evidence there is, which
+ * is why `same_email` outranks every name rule. That reasoning holds for a
+ * personal mailbox and fails completely for a notification service:
+ * `invitations@linkedin.com` appears in the From line of every invitation
+ * LinkedIn has ever sent, whoever it is about. Trusting it fused forty-one
+ * unrelated people into one entity in production.
+ *
+ * Detected from the data rather than from a list of known offenders, so the
+ * next `notifications@some-service.io` is caught the first time it misbehaves
+ * and nothing has to be maintained.
+ *
+ * IMPORTANT: feed this every name ever recorded against an address, INCLUDING
+ * entities already merged away. Counting only survivors destroys the evidence
+ * one merge at a time — two names merge to one, the third arrives and again
+ * sees only two, and the count never reaches the threshold that would have
+ * stopped it.
+ */
+export function findSharedSenderAddresses(
+  namesByAddress: Map<string, Iterable<string>>,
+  opts: { minGroups?: number } = {},
+): Set<string> {
+  const minGroups = opts.minGroups ?? SHARED_SENDER_MIN_GROUPS;
+  const shared = new Set<string>();
+  for (const [address, names] of namesByAddress) {
+    const email = address.trim().toLowerCase();
+    if (!email.includes('@')) continue;
+    if (countNameGroups(names) >= minGroups) shared.add(email);
+  }
+  return shared;
 }
 
 export type MatchSignal =
@@ -262,7 +368,11 @@ function cosine(a: number[], b: number[]): number {
  * similarity before it reaches the auto-merge threshold — otherwise "IBCA Data
  * Strategy" and "IBCA AI Strategy" would collapse into one.
  */
-export function scorePair(a: ResolvableEntity, b: ResolvableEntity): MatchCandidate | null {
+export function scorePair(
+  a: ResolvableEntity,
+  b: ResolvableEntity,
+  opts: { sharedSenders?: ReadonlySet<string> } = {},
+): MatchCandidate | null {
   if (a.id === b.id) return null;
 
   const signals: MatchSignal[] = [];
@@ -276,8 +386,8 @@ export function scorePair(a: ResolvableEntity, b: ResolvableEntity): MatchCandid
   // rule below and is scored above the auto-merge threshold on its own. It is
   // also the one signal a display-name comparison can never reach: "J. Kelly"
   // and "John Kelly (IBCA)" look unalike and are provably one person.
-  const emailA = emailOf(a);
-  const emailB = emailOf(b);
+  const emailA = emailOf(a, opts.sharedSenders);
+  const emailB = emailOf(b, opts.sharedSenders);
   const sameEmail = Boolean(emailA && emailB && emailA === emailB);
 
   if (sameEmail) {
@@ -404,9 +514,10 @@ export function pickSurvivor(a: ResolvableEntity, b: ResolvableEntity): { keep: 
  */
 export function findDuplicateCandidates(
   entities: ResolvableEntity[],
-  opts: { minConfidence?: number } = {},
+  opts: { minConfidence?: number; sharedSenders?: ReadonlySet<string> } = {},
 ): MatchCandidate[] {
   const minConfidence = opts.minConfidence ?? 0.35;
+  const sharedSenders = opts.sharedSenders;
   const blocks = new Map<string, ResolvableEntity[]>();
 
   const addTo = (key: string, e: ResolvableEntity) => {
@@ -420,7 +531,9 @@ export function findDuplicateCandidates(
     // Block on the address as well as the name. Without this the `same_email`
     // signal could never fire on the case it exists for: two entities for one
     // person under unlike display names share no token to meet in.
-    const email = emailOf(e);
+    // Guarded, so the hundreds of people a notification service writes as do
+    // not meet in a block at all.
+    const email = emailOf(e, sharedSenders);
     if (email) addTo(`email:${email}`, e);
 
     const tokens = significantTokens(e.name);
@@ -438,7 +551,7 @@ export function findDuplicateCandidates(
     if (group.length < 2 || group.length > 60) continue;
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < group.length; j++) {
-        const cand = scorePair(group[i], group[j]);
+        const cand = scorePair(group[i], group[j], { sharedSenders });
         if (!cand || cand.confidence < minConfidence) continue;
         const key = `${cand.aId}|${cand.bId}`;
         const prev = best.get(key);

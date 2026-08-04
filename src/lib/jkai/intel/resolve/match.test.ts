@@ -9,6 +9,8 @@ import {
   scorePair,
   pickSurvivor,
   findDuplicateCandidates,
+  findSharedSenderAddresses,
+  countNameGroups,
   AUTO_MERGE_THRESHOLD,
   type ResolvableEntity,
 } from './match';
@@ -292,5 +294,70 @@ describe('findDuplicateCandidates', () => {
     for (let i = 1; i < cands.length; i++) {
       expect(cands[i - 1].confidence).toBeGreaterThanOrEqual(cands[i].confidence);
     }
+  });
+});
+
+describe('shared sender addresses', () => {
+  const person = (id: string, name: string, email?: string) =>
+    ent(id, name, {
+      typeId: 'type-person',
+      typeName: 'person',
+      properties: email ? { email } : {},
+    });
+
+  it('groups the spellings of one name into a single identity', () => {
+    expect(countNameGroups(['John Kelly', 'john.kelly', 'JohnKelly', 'J Kelly'])).toBe(1);
+  });
+
+  it('counts unrelated people separately', () => {
+    expect(countNameGroups(['Anna Bainbridge', 'Stacey Keen', 'Dave Balderstone'])).toBe(3);
+  });
+
+  it('treats a name in a different order as the same person', () => {
+    expect(countNameGroups(['Kelly, John', 'John Kelly'])).toBe(1);
+  });
+
+  it('flags an address that writes as several unrelated people', () => {
+    const shared = findSharedSenderAddresses(
+      new Map([
+        ['invitations@linkedin.com', ['Anna Bainbridge', 'Stacey Keen', 'Dave Balderstone']],
+        ['john@example.com', ['John Kelly', 'J Kelly', 'johnkelly']],
+      ]),
+    );
+    expect(shared.has('invitations@linkedin.com')).toBe(true);
+    // Aliases of one person are not a shared mailbox, however many there are.
+    expect(shared.has('john@example.com')).toBe(false);
+  });
+
+  it('does not merge two strangers who share a notification address', () => {
+    const shared = new Set(['invitations@linkedin.com']);
+    const a = person('1', 'Anna Bainbridge', 'invitations@linkedin.com');
+    const b = person('2', 'Dave Balderstone', 'invitations@linkedin.com');
+
+    // Without the guard this is the graph's strongest signal, at 0.98.
+    expect(scorePair(a, b)?.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
+    expect(scorePair(a, b, { sharedSenders: shared })).toBeNull();
+  });
+
+  it('still resolves one person under two display names on a personal address', () => {
+    const shared = new Set(['invitations@linkedin.com']);
+    const a = person('1', 'J. Kelly', 'john@example.com');
+    const b = person('2', 'John Kelly (IBCA)', 'john@example.com');
+    const cand = scorePair(a, b, { sharedSenders: shared });
+    expect(cand?.signals).toContain('same_email');
+    expect(cand!.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
+  });
+
+  it('keeps a shared-sender address out of the candidate blocks entirely', () => {
+    const shared = new Set(['invitations@linkedin.com']);
+    const cands = findDuplicateCandidates(
+      [
+        person('1', 'Anna Bainbridge', 'invitations@linkedin.com'),
+        person('2', 'Stacey Keen', 'invitations@linkedin.com'),
+        person('3', 'Dave Balderstone', 'invitations@linkedin.com'),
+      ],
+      { sharedSenders: shared },
+    );
+    expect(cands).toEqual([]);
   });
 });
