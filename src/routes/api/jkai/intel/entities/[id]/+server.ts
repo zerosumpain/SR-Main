@@ -4,6 +4,7 @@ import { getEntityDetail } from '$lib/jkai/intel/queries';
 import { db } from '$lib/db';
 import { intelEntities } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { canonicalName } from '$lib/jkai/intel/resolve/match';
 
 export const GET: RequestHandler = async ({ params }) => {
   const detail = await getEntityDetail(params.id);
@@ -14,7 +15,13 @@ export const GET: RequestHandler = async ({ params }) => {
 export const PUT: RequestHandler = async ({ params, request }) => {
   const body = await request.json();
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.name !== undefined) updates.name = body.name;
+  if (body.name !== undefined) {
+    updates.name = body.name;
+    // Derived from the name, so it has to move WITH the name. A stale canonical
+    // form is worse than none: write-time resolution would keep binding new
+    // mentions of the old name onto this entity.
+    updates.canonicalName = canonicalName(String(body.name)) || null;
+  }
   if (body.confirmed !== undefined) updates.confirmed = body.confirmed;
   if (body.properties !== undefined) updates.properties = body.properties;
   if (body.summary !== undefined) updates.summary = body.summary;
