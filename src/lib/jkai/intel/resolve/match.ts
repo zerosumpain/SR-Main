@@ -106,6 +106,103 @@ export function isTokenSubset(a: string, b: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Canonical form
+// ---------------------------------------------------------------------------
+
+/**
+ * Noise for CANONICAL comparison, which is stricter than NOISE_WORDS.
+ *
+ * `group` and `team` are absent on purpose. They are noise when weighing how
+ * much two names overlap, and identity-bearing when asking whether two names
+ * are the same thing: "Security" and "Security Team" are a concept and an
+ * organisation, and canonical equality auto-merges, so it must not fire there.
+ */
+const CANONICAL_NOISE = new Set([
+  'the', 'a', 'an', 'of', 'and', 'for', 'to', 'in', 'on', 'at', 'by', 'with',
+  'ltd', 'limited', 'plc', 'inc', 'llc', 'llp', 'gmbh', 'bv', 'nv', 'ag', 'co',
+]);
+
+/**
+ * Extensions a name carries when it arrived as a FILE rather than a title.
+ *
+ * A closed list rather than "anything after the last dot", because that rule
+ * turns "Node.js" into "node" and every version string into a truncation.
+ */
+const FILE_EXTENSIONS = new Set([
+  'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'pdf', 'csv', 'tsv', 'txt', 'rtf',
+  'md', 'json', 'yaml', 'yml', 'sql', 'ts', 'tsx', 'js', 'mjs', 'cjs', 'py', 'sh',
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'zip',
+]);
+
+/**
+ * Strip a namespace prefix: `z-ai/glm-5-turbo`, `zerosumpain/SR-Main`,
+ * `canvas:morning-briefing`.
+ *
+ * Two conditions, both learned from names this got wrong:
+ *
+ *   - the WHOLE name carries no whitespace. "M62/A1 corridor" is two roads and
+ *     a noun, not a namespace and a name, and stripping it merged the entity
+ *     into "A1 corridor". "Church Lane / Preston Park area" is the same shape.
+ *   - what remains is slug-shaped (contains `-` or `_`). "Web/Dashboard" has no
+ *     whitespace either, and "Dashboard" is not a slug — it is the second half
+ *     of a phrase.
+ *
+ * The cost is recall: `Z.AI/zai provider` no longer unwraps, because its
+ * remainder is prose. Precision is the priority — this signal auto-merges.
+ */
+function stripNamespace(name: string): string {
+  const trimmed = name.trim();
+  if (/\s/.test(trimmed)) return name;
+  const m = /^([\p{L}\p{N}._-]+)[/:](.+)$/u.exec(trimmed);
+  if (!m) return name;
+  const rest = m[2].trim();
+  if (!rest || rest.startsWith('/')) return name;
+  if (!/[-_]/.test(rest)) return name;
+  return rest;
+}
+
+/** Strip a known file extension, provided something nameable is left. */
+function stripFileExtension(name: string): string {
+  const m = /^(.*)\.([\p{L}\p{N}]{1,5})$/u.exec(name.trim());
+  if (!m) return name;
+  if (!FILE_EXTENSIONS.has(m[2].toLowerCase())) return name;
+  // "Node.js" would otherwise become "Node" and match a concept of that name.
+  // A real filename has more than one word left once the extension goes.
+  const base = m[1].trim();
+  return significantTokens(base).length >= 2 ? base : name;
+}
+
+/**
+ * The form of a name to test for EQUALITY, once the packaging is removed.
+ *
+ * Names reach the graph wearing three kinds of packaging that say nothing about
+ * identity: a file extension (`…Data Strategy.docx`), a namespace prefix
+ * (`z-ai/glm-5-turbo`), and a legal suffix (`Google LLC`). `normaliseName`
+ * already handles case and separators, so `sr-design-system` and
+ * `SR design system` meet without help — these three do not.
+ *
+ * Word ORDER is preserved. Sorting would make "Data Strategy" and "Strategy
+ * Data" equal, and nothing in the corpus needs that; person-name reordering is
+ * `isNameReordering`'s job and is gated to people.
+ */
+export function canonicalName(name: string): string {
+  const stripped = stripFileExtension(stripNamespace(name));
+  return normaliseName(stripped)
+    .split(' ')
+    .filter((t) => t && !CANONICAL_NOISE.has(t))
+    .join(' ');
+}
+
+/** True when two names are the same once packaging is removed. */
+export function isCanonicalMatch(a: string, b: string): boolean {
+  // Identical names are `identical_name`'s business; this rule is for the ones
+  // that only meet after unwrapping.
+  if (normaliseName(a) === normaliseName(b)) return false;
+  const ca = canonicalName(a);
+  return Boolean(ca) && ca === canonicalName(b);
+}
+
+// ---------------------------------------------------------------------------
 // Person names
 // ---------------------------------------------------------------------------
 
@@ -304,6 +401,7 @@ export function findSharedSenderAddresses(
 export type MatchSignal =
   | 'identical_name'
   | 'same_email'
+  | 'canonical_name'
   | 'acronym'
   | 'token_subset'
   | 'high_token_overlap'
@@ -396,6 +494,12 @@ export function scorePair(
   } else if (na && na === nb) {
     signals.push('identical_name');
     confidence = 0.97;
+  } else if (isCanonicalMatch(a.name, b.name)) {
+    // Same name in different packaging — a filename, a slug with its namespace,
+    // a company with its legal suffix. Scored just below identical, because the
+    // packaging is the only thing that differed.
+    signals.push('canonical_name');
+    confidence = 0.93;
   } else if (isAcronymPair(a.name, b.name)) {
     signals.push('acronym');
     confidence = 0.9;
@@ -453,7 +557,15 @@ export function scorePair(
   // name are usually two different things. An exact email match is exempt —
   // there the disagreement is about the TYPE, not the identity, and penalising
   // it would leave a provable duplicate sitting in the review queue forever.
-  if (a.typeId !== b.typeId && !sameEmail) confidence *= 0.7;
+  //
+  // Canonical equality is exempt for the same reason, and `upsertEntity` has
+  // always taken that view at write time: one name is one thing, and a
+  // disagreement about its type is a typing question rather than grounds for a
+  // second node. Without the exemption, `canvas:broads-speed-reporter-2` and
+  // `broads-speed-reporter-2` stay apart forever because the extractor called
+  // one a project and the other a process step.
+  const exemptFromTypePenalty = sameEmail || signals.includes('canonical_name');
+  if (a.typeId !== b.typeId && !exemptFromTypePenalty) confidence *= 0.7;
 
   if (confidence < 0.35) return null;
 
@@ -472,6 +584,7 @@ function describeSignals(
   const parts: string[] = [];
   if (signals.includes('same_email')) parts.push(`both use ${emailOf(a) ?? 'the same address'}`);
   if (signals.includes('identical_name')) parts.push('identical names');
+  if (signals.includes('canonical_name')) parts.push(`the same name once "${shorter(a, b).name}" is unwrapped`);
   if (signals.includes('name_reordering')) parts.push('the same name in a different order');
   if (signals.includes('initial_expansion')) parts.push('one name is the other with initials');
   if (signals.includes('acronym')) parts.push(`"${shorter(a, b).name}" is the acronym of "${longer(a, b).name}"`);
