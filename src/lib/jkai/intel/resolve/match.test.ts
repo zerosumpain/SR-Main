@@ -11,6 +11,8 @@ import {
   findDuplicateCandidates,
   findSharedSenderAddresses,
   countNameGroups,
+  canonicalName,
+  isCanonicalMatch,
   AUTO_MERGE_THRESHOLD,
   type ResolvableEntity,
 } from './match';
@@ -359,5 +361,68 @@ describe('shared sender addresses', () => {
       { sharedSenders: shared },
     );
     expect(cands).toEqual([]);
+  });
+});
+
+describe('canonicalName', () => {
+  it('drops a file extension', () => {
+    expect(canonicalName('IBCA ExCo Paper 5a Data Strategy.docx')).toBe(canonicalName('IBCA ExCo Paper 5a Data Strategy'));
+  });
+
+  it('keeps an extension-like ending when nothing nameable is left', () => {
+    // "Node.js" is a name, not a file — stripping it would meet a concept
+    // called "Node".
+    expect(canonicalName('Node.js')).not.toBe(canonicalName('Node'));
+  });
+
+  it('drops a namespace from a slug', () => {
+    expect(canonicalName('z-ai/glm-5-turbo')).toBe(canonicalName('GLM-5 Turbo'));
+    expect(canonicalName('canvas:tv-whats-playing')).toBe(canonicalName('tv-whats-playing'));
+    expect(canonicalName('zerosumpain/SR-Main')).toBe(canonicalName('SR-Main'));
+  });
+
+  it('leaves a slash between two phrases alone', () => {
+    // "M62/A1 corridor" is two roads, not a namespace and a name.
+    expect(canonicalName('M62/A1 corridor')).not.toBe(canonicalName('A1 corridor'));
+    expect(canonicalName('Church Lane / Preston Park area')).not.toBe(canonicalName('Preston Park area'));
+  });
+
+  it('leaves a slash before a bare word alone', () => {
+    expect(canonicalName('Web/Dashboard')).not.toBe(canonicalName('Dashboard'));
+  });
+
+  it('drops a legal suffix', () => {
+    expect(canonicalName('Google LLC')).toBe(canonicalName('Google'));
+  });
+
+  it('does not treat an identity-bearing word as noise', () => {
+    // "team" and "group" are noise for overlap scoring and identity for this.
+    expect(canonicalName('Security Team')).not.toBe(canonicalName('Security'));
+  });
+
+  it('leaves identical names to the identical_name signal', () => {
+    expect(isCanonicalMatch('Data Strategy', 'data  strategy')).toBe(false);
+  });
+});
+
+describe('canonical_name scoring', () => {
+  it('reaches the auto-merge bar', () => {
+    const cand = scorePair(ent('1', 'z-ai/glm-5-turbo'), ent('2', 'GLM-5 Turbo'));
+    expect(cand?.signals).toContain('canonical_name');
+    expect(cand!.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
+  });
+
+  it('survives a type disagreement, which is a typing question not a second thing', () => {
+    const cand = scorePair(
+      ent('1', 'canvas:broads-speed-reporter-2', { typeId: 'type-project', typeName: 'project' }),
+      ent('2', 'broads-speed-reporter-2', { typeId: 'type-step', typeName: 'process_step' }),
+    );
+    expect(cand!.confidence).toBeGreaterThanOrEqual(AUTO_MERGE_THRESHOLD);
+  });
+
+  it('still refuses two roads that share a corridor', () => {
+    const cand = scorePair(ent('1', 'M62/A1 corridor'), ent('2', 'A1 corridor'));
+    expect(cand?.signals ?? []).not.toContain('canonical_name');
+    expect(cand?.confidence ?? 0).toBeLessThan(AUTO_MERGE_THRESHOLD);
   });
 });
