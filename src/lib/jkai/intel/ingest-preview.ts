@@ -19,6 +19,7 @@
 // `GraphLookup`, so the classification rules are unit-tested without a database
 // and can never drift from what the API route reports.
 import type { ExtractionResult } from './extract';
+import { pgTextArray } from '$lib/db/sql-array';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -464,11 +465,11 @@ async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLook
       LEFT JOIN intel_entity_types t ON t.id = e.type_id
       WHERE e.merged_into_id IS NULL
         AND (
-          lower(e.name) = ANY(${names}::text[])
-          OR e.id = ANY(${ids}::text[])
+          lower(e.name) = ANY(${pgTextArray(names)}::text[])
+          OR e.id = ANY(${pgTextArray(ids)}::text[])
           OR EXISTS (
             SELECT 1 FROM jsonb_array_elements_text(coalesce(e.aliases, '[]'::jsonb)) AS a(v)
-            WHERE lower(a.v) = ANY(${names}::text[])
+            WHERE lower(a.v) = ANY(${pgTextArray(names)}::text[])
           )
         )
       LIMIT 500
@@ -494,8 +495,8 @@ async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLook
     const { rows } = await db.execute(sql`
       SELECT id, source_entity_id, target_entity_id, type, label, manual, suppressed, suppressed_reason
       FROM intel_relationships
-      WHERE source_entity_id = ANY(${entityIds}::text[])
-        AND target_entity_id = ANY(${entityIds}::text[])
+      WHERE source_entity_id = ANY(${pgTextArray(entityIds)}::text[])
+        AND target_entity_id = ANY(${pgTextArray(entityIds)}::text[])
       LIMIT 2000
     `);
     for (const raw of rows as Array<Record<string, unknown>>) {
@@ -528,7 +529,7 @@ async function buildGraphLookup(extraction: ExtractionResult): Promise<GraphLook
   if (eventDates.length && eventTitles.length) {
     const { rows } = await db.execute(sql`
       SELECT date, title FROM intel_timeline_events
-      WHERE date = ANY(${eventDates}::text[]) AND title = ANY(${eventTitles}::text[])
+      WHERE date = ANY(${pgTextArray(eventDates)}::text[]) AND title = ANY(${pgTextArray(eventTitles)}::text[])
       LIMIT 500
     `);
     for (const raw of rows as Array<Record<string, unknown>>) {

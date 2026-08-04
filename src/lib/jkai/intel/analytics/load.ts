@@ -254,7 +254,7 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
     const analysis: GraphAnalysis = {
       snapshot,
       index,
-      centrality: computeCentrality(index),
+      centrality: await computeCentrality(index),
       community: detectCommunities(index),
       embeddings,
       suppressedPairs,

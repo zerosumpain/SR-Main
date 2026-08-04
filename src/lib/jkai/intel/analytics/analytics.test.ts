@@ -115,21 +115,21 @@ describe('model', () => {
 });
 
 describe('centrality', () => {
-  it('ranks the bridge nodes highest on betweenness', () => {
+  it('ranks the bridge nodes highest on betweenness', async () => {
     const index = buildIndex(barbell());
-    const btw = betweenness(index);
+    const btw = await betweenness(index);
     // b and c are the only route between the two triangles.
     expect(btw.get('b')!).toBeGreaterThan(btw.get('a')!);
     expect(btw.get('c')!).toBeGreaterThan(btw.get('d')!);
     expect(btw.get('b')!).toBeCloseTo(btw.get('c')!, 6);
   });
 
-  it('gives a leaf node zero betweenness', () => {
+  it('gives a leaf node zero betweenness', async () => {
     const index = buildIndex({
       nodes: ['hub', 'l1', 'l2'].map((n) => node(n)),
       edges: [edge('hub', 'l1'), edge('hub', 'l2')],
     });
-    const btw = betweenness(index);
+    const btw = await betweenness(index);
     expect(btw.get('l1')).toBe(0);
     expect(btw.get('hub')!).toBeGreaterThan(0);
   });
@@ -150,22 +150,22 @@ describe('centrality', () => {
     expect(pr.get('hub')!).toBeGreaterThan(pr.get('l1')!);
   });
 
-  it('handles an empty graph without throwing', () => {
+  it('handles an empty graph without throwing', async () => {
     const index = buildIndex({ nodes: [], edges: [] });
-    expect(computeCentrality(index).pagerank.size).toBe(0);
+    expect((await computeCentrality(index)).pagerank.size).toBe(0);
   });
 
-  it('scores a low-degree broker above a high-degree hub', () => {
+  it('scores a low-degree broker above a high-degree hub', async () => {
     // A star hub has high betweenness but no brokerage merit; the barbell
     // bridge earns its position with only three links.
     const index = buildIndex(barbell());
-    const scores = computeCentrality(index);
+    const scores = await computeCentrality(index);
     expect(brokerageScore('b', scores, index)).toBeGreaterThan(brokerageScore('a', scores, index));
   });
 
-  it('gives a node with fewer than two links no brokerage score', () => {
+  it('gives a node with fewer than two links no brokerage score', async () => {
     const index = buildIndex({ nodes: [node('a'), node('b')], edges: [edge('a', 'b')] });
-    const scores = computeCentrality(index);
+    const scores = await computeCentrality(index);
     expect(brokerageScore('a', scores, index)).toBe(0);
   });
 });

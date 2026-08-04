@@ -88,6 +88,7 @@ export const POST: RequestHandler = async ({ request }) => {
   };
 
   const mode = readMode(body.mode);
+  const startedAt = new Date();
 
   try {
     const result = await ingestGmailThreads({
@@ -100,9 +101,61 @@ export const POST: RequestHandler = async ({ request }) => {
       extractBudget: readBudget(body.extractBudget),
       includeAttachments: body.includeAttachments !== false,
     });
+    await logSweep(startedAt, true, {
+      threads: result.threads,
+      extracted: result.extracted,
+      entities: result.entities,
+      links: result.edges,
+      deferred: result.deferred,
+      failed: result.failed,
+    });
     return json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    await logSweep(startedAt, false, undefined, message);
     return json({ error: message }, { status: statusFor(message) });
   }
 };
+
+/**
+ * Record a hand-run sweep alongside the nightly ones.
+ *
+ * The same failure hits both paths — they share `ingestGmailThreads` — so a
+ * history that only covered the scheduled run would leave the button's
+ * failures nowhere, and would show nothing at all until the next 04:15.
+ * Best-effort throughout: bookkeeping must never turn a completed sweep into
+ * an error response.
+ */
+async function logSweep(
+  startedAt: Date,
+  ok: boolean,
+  counts?: Record<string, number>,
+  error?: string,
+): Promise<void> {
+  try {
+    const { ensureIntelRunCollection, recordIntelRun, localDayOf } = await import(
+      '$lib/jkai/intel/run-log'
+    );
+    await ensureIntelRunCollection();
+    const finished = new Date();
+    await recordIntelRun({
+      startedAt: startedAt.toISOString(),
+      finishedAt: finished.toISOString(),
+      totalMs: finished.getTime() - startedAt.getTime(),
+      day: localDayOf(startedAt),
+      trigger: 'manual',
+      status: ok ? 'ok' : 'failed',
+      stages: [
+        {
+          stage: 'gmail',
+          ok,
+          ...(counts ? { counts } : {}),
+          ...(error ? { error } : {}),
+          ms: finished.getTime() - startedAt.getTime(),
+        },
+      ],
+    });
+  } catch (err) {
+    console.error('[intel:gmail-ingest] could not record manual sweep:', err);
+  }
+}

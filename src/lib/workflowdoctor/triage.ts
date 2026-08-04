@@ -14,6 +14,7 @@
 import { and, desc, eq, gte, inArray, isNotNull, ne, notLike, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { db } from '$lib/db';
+import { pgTextArray } from '$lib/db/sql-array';
 import {
   nodeExecutions,
   workflowNodes,
@@ -692,7 +693,7 @@ export async function detectRunawaySchedules(opts: TriageOptions = {}): Promise<
              r.error,
              row_number() OVER (PARTITION BY r.workflow_id ORDER BY r.started_at DESC) AS rn
       FROM workflow_runs r
-      WHERE r.workflow_id = ANY(${ids}::text[])
+      WHERE r.workflow_id = ANY(${pgTextArray(ids)}::text[])
         AND r.started_at IS NOT NULL
         AND r.id NOT LIKE ${`${SUB_RUN_PREFIX}%`}
     ) t

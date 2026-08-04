@@ -33,6 +33,7 @@
 import { createHash } from 'node:crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
+import { pgTextArray } from '$lib/db/sql-array';
 import type { AutoExtractOutcome } from './auto-extract';
 import type { ExtractedEntity, ExtractedRelationship, ExtractionResult } from './extract';
 import { recencyOf, ROLLING_WINDOW_DAYS } from './staleness';
@@ -679,10 +680,14 @@ export function threadContentHash(thread: ThreadInput): string {
 async function storedHashes(refIds: string[]): Promise<Map<string, string>> {
   if (!refIds.length) return new Map();
   const { db } = await import('$lib/db');
+  // `pgTextArray`, not the array itself: interpolating a JS array here binds a
+  // parameter LIST, which Postgres reads as a row constructor and refuses to
+  // cast ("cannot cast type record to text[]"). That threw on every rolling
+  // sweep that found at least one thread — see $lib/db/sql-array.
   const { rows } = await db.execute(sql`
     SELECT metadata->>'refId' AS ref_id, metadata->>'contentHash' AS content_hash
     FROM intel_notes
-    WHERE metadata->>'refId' = ANY(${refIds}::text[])
+    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
   `);
   const out = new Map<string, string>();
   for (const r of rows as Array<Record<string, unknown>>) {
@@ -951,7 +956,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
     const { rows } = await db.execute(sql`
       SELECT metadata->>'refId' AS ref_id
       FROM intel_notes
-      WHERE metadata->>'refId' = ANY(${refIds}::text[])
+      WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
     `);
     const known = new Set((rows as Array<Record<string, unknown>>).map((r) => String(r.ref_id)));
     return {
@@ -978,7 +983,7 @@ export async function previewGmailSweep(opts: GmailIngestOptions = {}): Promise<
   const { rows } = await db.execute(sql`
     SELECT metadata->>'refId' AS ref_id
     FROM intel_notes
-    WHERE metadata->>'refId' = ANY(${refIds}::text[])
+    WHERE metadata->>'refId' = ANY(${pgTextArray(refIds)}::text[])
   `);
   const known = new Set((rows as Array<Record<string, unknown>>).map((r) => String(r.ref_id)));
 

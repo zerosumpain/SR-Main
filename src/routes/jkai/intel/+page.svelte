@@ -15,6 +15,7 @@
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
   import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
+  import SweepHistoryPanel from '$lib/components/intel/SweepHistoryPanel.svelte';
   import EntityCard from '$lib/components/intel/EntityCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
@@ -36,6 +37,9 @@
   let unlikely = $state<UnlikelyRelation[]>([]);
   let predicted = $state<PredictedLink[]>([]);
   let duplicates = $state<{ total: number; autoMergeable: number } | null>(null);
+
+  // Component handle, not reactive data — never $state (svelte5-pitfalls §1).
+  let sweepHistory: { refresh: () => Promise<void> } | null = null;
 
   let loadingNetwork = $state(true);
   let loadingInsights = $state(true);
@@ -493,7 +497,18 @@
 
       <!-- Sits under Sources because that is what it changes: it is how email
            gets into the graph in the first place. -->
-      <GmailSweepPanel onDone={() => void Promise.all([reloadNetwork(), reloadInsights()])} />
+      <GmailSweepPanel
+        onDone={() => {
+          void Promise.all([reloadNetwork(), reloadInsights()]);
+          // A hand-run sweep is recorded too, so the history directly below is
+          // stale the moment this returns — including when it just failed.
+          void sweepHistory?.refresh();
+        }}
+      />
+
+      <!-- Directly under the sweep control: when mail stops arriving in the
+           graph, this is the answer to "did it run, and what did it say?" -->
+      <SweepHistoryPanel bind:this={sweepHistory} />
 
       <div class="ctl">
         <span class="ctl-title">Pin to entities</span>

@@ -6,6 +6,7 @@
 // path operators (`#>>`, `#>`, `@>`) can be used without any injection surface.
 
 import { sql, type SQL } from 'drizzle-orm';
+import { pgTextArray } from '$lib/db/sql-array';
 import { DatastoreError } from './types';
 import type { QueryFilter, QuerySort } from './types';
 
@@ -44,17 +45,9 @@ function parsePath(path: unknown): string[] {
   return segments;
 }
 
-/** Postgres array-literal string for a set of text elements (fully escaped). */
-function toPgArrayLiteral(elements: string[]): string {
-  const quoted = elements.map(
-    (e) => `"${String(e).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`,
-  );
-  return `{${quoted.join(',')}}`;
-}
-
 /** Path literal bound as a `::text[]` parameter (the value, not raw SQL). */
 function pathParam(segments: string[]): string {
-  return toPgArrayLiteral(segments);
+  return pgTextArray(segments);
 }
 
 /**
@@ -62,7 +55,7 @@ function pathParam(segments: string[]): string {
  * with records.ts (aggregates) so path parsing/escaping lives in one place.
  */
 export function pathLiteral(path: string): string {
-  return toPgArrayLiteral(parsePath(path));
+  return pgTextArray(parsePath(path));
 }
 
 /**
@@ -99,7 +92,7 @@ function compileOne(filter: QueryFilter): SQL {
     if (!Array.isArray(filter.value)) {
       throw new DatastoreError('validation', 'the "in" operator requires an array value');
     }
-    const literal = toPgArrayLiteral(filter.value.map((v) => String(v)));
+    const literal = pgTextArray(filter.value.map((v) => String(v)));
     return sql`(data #>> ${pl}::text[]) = ANY(${literal}::text[])`;
   }
 
