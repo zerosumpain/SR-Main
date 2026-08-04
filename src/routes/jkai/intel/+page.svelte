@@ -999,11 +999,11 @@
   /* Sits over the canvas rather than in the rail: it is a property of the view,
      not of the filters.
 
-     Colours are LITERAL, not tokens. This control floats over two different
-     backgrounds — the cream 2D canvas and the near-black 3D scene — and the
-     page tokens all assume the cream one, so `--text-ghost` on the inactive
-     button rendered invisible over the 3D view. Same trap as the modal tokens:
-     anything sitting over a surface it does not own needs its own palette. */
+     Colours are LITERAL, not tokens. Both views draw on the cream page, and a
+     control floating over a graph needs to stay legible whatever happens to
+     land under it — `--text-ghost` on the inactive button disappeared against a
+     pale cluster. Same trap as the modal tokens: anything sitting over a
+     surface it does not own needs its own palette. */
   .dims {
     position: absolute;
     z-index: 4;

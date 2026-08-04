@@ -1,44 +1,46 @@
 <script lang="ts">
-  // The intel network as a 3D spatial graph, in the shape Obsidian popularised.
+  // The intel network as a 3D spatial graph.
   //
-  // Same data and the same encodings as the 2D NetworkGraph — this is a second
-  // VIEW, not a second model, and the two must never disagree about what the
-  // graph says:
+  // This is the SAME VIEW as NetworkGraph.svelte with a third axis — not a
+  // second design. Every encoding, colour, threshold and interaction below is
+  // lifted from the 2D component deliberately, and the two must never disagree
+  // about what the graph says:
   //
-  //   size    PageRank importance (sqrt, so a mega-hub does not flatten the rest)
-  //   colour  detected community
-  //   opacity staleness — old evidence fades rather than disappearing
-  //   edges   width and alpha from the continuous `weight`; accent for the
-  //           cross-community ones, because those are the interesting links
+  //   size    PageRank importance, sqrt curve  (identical radius())
+  //   colour  detected community               (identical palette)
+  //   alpha   confirmed 0.85 / unconfirmed 0.4 / dimmed-by-keyword 0.14
+  //   edges   0.16 ink, accent when they cross communities, solid accent on a
+  //           traced path; width from the strength bucket (2 / 1.2 / 0.7)
+  //   labels  importance big enough to earn one, plus path and keyword hits
+  //   page    the cream --bg, because this is still a panel on this site
   //
-  // Why a third dimension is worth the complexity: a force layout in 2D has to
-  // resolve every cluster onto one plane, so dense graphs settle into a hairball
-  // where unrelated communities overlap simply because there is nowhere else to
-  // put them. In 3D they separate, and rotating the view disambiguates depth in
-  // a way no amount of 2D panning can.
+  // WHY A LIBRARY. The 2D view's behaviour — a simulation that keeps running,
+  // that you can drag a node in and watch the rest of the graph answer — comes
+  // from d3-force being live. The previous 3D view ticked a d3-force-3d layout
+  // to completion in a `for` loop and then froze it, so it looked force-directed
+  // without behaving that way, and nothing could be dragged. `3d-force-graph`
+  // is d3-force-3d driven per frame with node dragging, raycasting and camera
+  // framing already solved; hand-rolling those is re-implementing it. Its forces
+  // are injected below so the physics is configured exactly as the 2D view's is.
   //
-  // PERFORMANCE. Nodes are ONE InstancedMesh and edges ONE LineSegments, so a
-  // 600-node graph is two draw calls rather than twelve hundred. Labels are the
-  // expensive part (a canvas texture each) and are therefore limited to the most
-  // important handful plus whatever is hovered or on a path.
-  //
-  // REACTIVITY. Every three.js and d3 handle below is a plain `let`, never
-  // $state. Nothing reactive reads them, and a render loop that both reads and
-  // writes reactive state is the documented route to effect_update_depth_exceeded
-  // (see the svelte5-pitfalls skill). Only `hovered` and `tooltip` — which the
-  // template reads — are reactive.
+  // REACTIVITY. Every three.js and graph handle is a plain `let`, never $state:
+  // nothing reactive reads them, and a render loop that both reads and writes
+  // reactive state is the documented route to effect_update_depth_exceeded (see
+  // the svelte5-pitfalls skill). Only `hovered` and `tooltip` are reactive.
 
   import * as THREE from 'three';
-  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
   import {
-    forceSimulation,
     forceLink,
     forceManyBody,
     forceCenter,
     forceCollide,
+    forceX,
+    forceY,
+    forceZ,
   } from 'd3-force-3d';
   import { untrack, onDestroy } from 'svelte';
 
+  import type { ForceGraph3DInstance } from '3d-force-graph';
   import type { NetNode, NetEdge } from './types';
 
   let {
@@ -52,67 +54,127 @@
   }: {
     nodes: NetNode[];
     edges: NetEdge[];
+    /** Ordered entity ids to draw as a highlighted route. */
     highlightPath?: string[] | null;
+    /**
+     * Literal hits from the keyword filter. The rest of what is drawn is the
+     * neighbourhood around them — context, not answer — so it is dimmed rather
+     * than removed, exactly as in the 2D view.
+     */
     matchedIds?: string[];
     selectedId?: string | null;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
 
+  /**
+   * The panel, and the element the scene is handed.
+   *
+   * They have to be different nodes: ForceGraph3D starts by clearing the
+   * innerHTML of whatever it is given. Pointed at the panel it wiped the
+   * anchors Svelte uses to place the tooltip and the empty state, and hovering
+   * a node silently rendered its tooltip into detached DOM.
+   */
+  let host = $state<HTMLDivElement | null>(null);
   let container = $state<HTMLDivElement | null>(null);
   let hovered = $state<NetNode | null>(null);
   let tooltip = $state({ x: 0, y: 0 });
 
   // ── Non-reactive handles ───────────────────────────────────────────────────
   interface Sim3DNode extends NetNode {
-    x?: number; y?: number; z?: number;
-    fx?: number | null; fy?: number | null; fz?: number | null;
+    x?: number;
+    y?: number;
+    z?: number;
+    fx?: number;
+    fy?: number;
+    fz?: number;
   }
-
-  let renderer: THREE.WebGLRenderer | null = null;
-  let scene: THREE.Scene | null = null;
-  let camera: THREE.PerspectiveCamera | null = null;
-  let controls: OrbitControls | null = null;
-  let nodeMesh: THREE.InstancedMesh | null = null;
-  let edgeLines: THREE.LineSegments | null = null;
-  let ringMesh: THREE.InstancedMesh | null = null;
-  let labelGroup: THREE.Group | null = null;
-  let simulation: ReturnType<typeof forceSimulation> | null = null;
-  let raycaster: THREE.Raycaster | null = null;
-  let frameId: number | null = null;
-  let resizeObserver: ResizeObserver | null = null;
-  let simNodes: Sim3DNode[] = [];
   /**
    * `forceLink().id()` REPLACES `source`/`target` with the node objects once the
    * simulation is built, so after that point they are no longer the id strings
-   * `NetEdge` declares. Omitted and re-declared rather than cast at each use, so
-   * the two forms are visible in the type instead of being a surprise.
+   * `NetEdge` declares. Re-declared rather than cast at each use, so both forms
+   * are visible in the type instead of being a surprise.
    */
   type Sim3DEdge = Omit<NetEdge, 'source' | 'target'> & {
     source: string | Sim3DNode;
     target: string | Sim3DNode;
   };
-  let simEdges: Sim3DEdge[] = [];
-  /** instance index → node, for raycast hit resolution. */
-  let indexToNode: Sim3DNode[] = [];
-  /** Positions survive a filter change so the layout does not jump. */
-  const positions = new Map<string, { x: number; y: number; z: number }>();
-  const pointer = new THREE.Vector2();
-  let hoveredInstance = -1;
-  /** Set while the pointer is down, so a drag-to-orbit is not read as a click. */
-  let dragged = false;
 
-  /** Matches the 2D view's palette exactly — the same cluster must be the same
-   *  colour in both, or switching views looks like switching graphs. */
+  type IntelGraph = ForceGraph3DInstance<Sim3DNode, Sim3DEdge>;
+
+  let graph: IntelGraph | null = null;
+  let simNodes: Sim3DNode[] = [];
+  let simEdges: Sim3DEdge[] = [];
+  let resizeObserver: ResizeObserver | null = null;
+  /** Node id → the extras group parented to that node's sphere. */
+  const extrasById = new Map<string, THREE.Group>();
+  /** Materials and geometries we own, so they can be disposed on teardown. */
+  const owned: Array<{ dispose: () => void }> = [];
+  /** Restores the shared material a node had before it was hover-brightened. */
+  let hoverRestore: { mesh: THREE.Mesh; material: THREE.Material } | null = null;
+  /** Node positions survive a filter change so the layout does not jump. */
+  const positions = new Map<string, { x: number; y: number; z: number }>();
+  /** Bumped on every (re)build so a slow dynamic import cannot revive a dead scene. */
+  let buildToken = 0;
+  /** Set once per build, so the early camera fit happens exactly once. */
+  let fitted = false;
+  /** Set once per build, so the settle fit happens exactly once. */
+  let settledOnce = false;
+  let lastClick = { id: '', at: 0 };
+
+  /**
+   * Matches the 2D view's palette exactly — the same cluster must be the same
+   * colour in both, or switching views looks like switching graphs.
+   */
   const CLUSTER_COLOURS = [
     '#0e5b66', '#c4570a', '#2d7a3a', '#7a3a8a', '#b0892a',
     '#3a6ea5', '#a53a3a', '#4a7a6a', '#8a5a2a', '#5a4a8a',
   ];
   const clusterColour = (c: number) => CLUSTER_COLOURS[c % CLUSTER_COLOURS.length];
 
+  /**
+   * Design tokens, resolved to literals.
+   *
+   * WebGL cannot read `var(--bg)`, so the values are read off the live element
+   * rather than hardcoded — the scene then follows the design system instead of
+   * drifting from it the first time a token is retuned.
+   */
+  let palette = {
+    bg: '#ede4d4',
+    accent: '#c4570a',
+    label: '#3d2e1a',
+    font: 'system-ui, sans-serif',
+  };
+
+  function readPalette(el: HTMLElement) {
+    const cs = getComputedStyle(el);
+    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    palette = {
+      bg: v('--bg', '#ede4d4'),
+      accent: v('--accent', '#c4570a'),
+      label: v('--text-secondary', '#3d2e1a'),
+      font: v('--font-body', 'system-ui, sans-serif'),
+    };
+  }
+
+  /** `#rrggbb` + alpha → the `rgba()` string the graph's colour accessors parse. */
+  function rgba(hex: string, alpha: number): string {
+    const h = hex.replace('#', '').trim();
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    const n = Number.parseInt(full, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+
   const pathSet = $derived(new Set(highlightPath ?? []));
   const matchSet = $derived(new Set(matchedIds ?? []));
+  /** Only dim when there is something to dim AGAINST. */
   const dimming = $derived(matchSet.size > 0);
+  /**
+   * Stable dependency keys. The parent hands fresh arrays on every render, so
+   * depending on the arrays themselves would restyle the scene continuously.
+   */
+  const pathKey = $derived((highlightPath ?? []).join('|'));
+  const matchKey = $derived((matchedIds ?? []).join('|'));
 
   const pathEdgeKeys = $derived.by(() => {
     const set = new Set<string>();
@@ -122,135 +184,273 @@
   });
 
   /**
-   * Same sqrt curve as the 2D view, in the normalised world (see WORLD_EXTENT).
-   *
-   * The floor matters more here than in 2D: importance is PageRank divided by
-   * the graph's maximum, so on a graph with one dominant hub almost every other
-   * node scores near zero. A floor proportional to the world keeps the long
-   * tail visible instead of rendering it sub-pixel.
+   * Identical to the 2D view's radius, and deliberately in the same units: the
+   * forces below are the 2D configuration unchanged, so the layout settles at
+   * the same scale and one node-size curve serves both views.
    */
   function radius(n: NetNode): number {
-    return 1.1 + Math.sqrt(Math.max(0, n.importance)) * 6.5;
+    // sqrt so a 10× importance difference is a ~3× size difference.
+    return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
+  }
+
+  /** The 2D view's fill-opacity rules, unchanged. */
+  function nodeAlpha(n: NetNode): number {
+    if (dimming && !matchSet.has(n.id)) return 0.14;
+    return n.confirmed ? 0.85 : 0.4;
   }
 
   /**
-   * How solid a node is drawn.
-   *
-   * Staleness is folded in here rather than into size: shrinking an old node
-   * would misreport its importance, which is a claim about structure, not age.
-   * Fading says "still there, less current", which is what decay actually means.
+   * An edge endpoint's id. `forceLink` mutates `source`/`target` from the id
+   * string into the node object once the simulation is built, so anything
+   * reading them afterwards has to handle both forms.
    */
-  function nodeAlpha(n: NetNode): number {
-    if (dimming && !matchSet.has(n.id)) return 0.14;
-    const base = n.confirmed ? 1 : 0.78;
-    const recency = Number.isFinite(n.recency) ? n.recency : 1;
-    // Floored well above zero: this drives a lerp toward the near-black
-    // background, so a low value does not dim a node, it erases it.
-    return Math.max(0.45, base * (0.7 + 0.3 * recency));
-  }
-
   function endpointId(v: unknown): string {
     return typeof v === 'string' ? v : ((v as { id?: string })?.id ?? '');
   }
 
-  function disposeScene() {
-    if (frameId !== null) cancelAnimationFrame(frameId);
-    frameId = null;
-    simulation?.stop();
-    simulation = null;
-    controls?.dispose();
-    controls = null;
-
-    // three.js holds GPU resources that garbage collection does not reclaim.
-    // Without this, every filter change leaks a full set of buffers and
-    // textures and the tab's memory climbs until the context is lost.
-    scene?.traverse((obj) => {
-      const mesh = obj as THREE.Mesh;
-      mesh.geometry?.dispose?.();
-      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else mat?.dispose?.();
-      const sprite = obj as THREE.Sprite;
-      if (sprite.isSprite) sprite.material?.map?.dispose();
-    });
-    scene = null;
-    nodeMesh = null;
-    ringMesh = null;
-    edgeLines = null;
-    labelGroup = null;
-    camera = null;
-
-    renderer?.dispose();
-    if (renderer?.domElement?.parentNode) {
-      renderer.domElement.parentNode.removeChild(renderer.domElement);
-    }
-    renderer = null;
+  /**
+   * The 2D view's labelling rule, unchanged: anything big enough to earn one,
+   * plus whatever is on a traced path or literally matched the keyword.
+   * Selection deliberately does NOT label — matching 2D, and it keeps a plain
+   * click from having to rebuild every node's label texture.
+   */
+  function earnsLabel(n: NetNode): boolean {
+    return radius(n) > 10 || pathSet.has(n.id) || matchSet.has(n.id);
   }
 
-  /** A text label as a camera-facing sprite. */
-  function makeLabel(text: string, colour: string): THREE.Sprite | null {
+  // ── Scene pieces ───────────────────────────────────────────────────────────
+
+  /**
+   * Label sprites, keyed by entity and dimmed state.
+   *
+   * Every label is its own canvas texture, and the extras are rebuilt whenever a
+   * path or keyword changes which nodes carry one. Without the cache, tracing a
+   * few routes in a session would leave a set of orphaned textures behind each
+   * time — GPU memory three.js does not reclaim on its own.
+   */
+  const labelCache = new Map<string, THREE.Sprite>();
+
+  /** A text label as a camera-facing sprite, styled like the 2D view's <text>. */
+  function makeLabel(text: string): THREE.Sprite | null {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
+    // Same truncation as the 2D view, so a name reads identically in both.
     const label = text.length > 26 ? `${text.slice(0, 24)}…` : text;
-    const fontSize = 44;
-    ctx.font = `500 ${fontSize}px system-ui, sans-serif`;
-    const width = Math.ceil(ctx.measureText(label).width) + 24;
-    canvas.width = width;
-    canvas.height = fontSize + 20;
+    const fontSize = 48;
+    const font = `500 ${fontSize}px ${palette.font}`;
+    ctx.font = font;
+    canvas.width = Math.ceil(ctx.measureText(label).width) + 28;
+    canvas.height = Math.round(fontSize * 1.5);
 
-    // Re-set after resizing the canvas — changing width/height resets context state.
-    ctx.font = `500 ${fontSize}px system-ui, sans-serif`;
+    // Re-set after resizing — changing width/height resets all context state.
+    ctx.font = font;
     ctx.textBaseline = 'middle';
-    // Outlined so a label stays readable over both a bright node and the void.
-    ctx.strokeStyle = 'rgba(12, 10, 9, 0.85)';
-    ctx.lineWidth = 6;
-    ctx.strokeText(label, 12, canvas.height / 2);
-    ctx.fillStyle = colour;
-    ctx.fillText(label, 12, canvas.height / 2);
+    // The 2D view paints its labels with a --bg stroke under the fill so they
+    // stay readable over a node. Same trick, same colours.
+    ctx.strokeStyle = palette.bg;
+    ctx.lineWidth = 10;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(label, 14, canvas.height / 2);
+    ctx.fillStyle = palette.label;
+    ctx.fillText(label, 14, canvas.height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
-    );
-    sprite.scale.set((canvas.width / canvas.height) * 4.5, 4.5, 1);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      // Fixed on screen rather than in the world. The 2D view's labels ride its
+      // zoom transform, but a scene with depth has no single zoom: world-scaled
+      // text renders as unreadable specks on the far side of a big graph and as
+      // headlines on a small one — a keyword filter turned the panel into a wall
+      // of overlapping names. A constant ~14px is what the 2D view actually
+      // reads at, at every distance.
+      sizeAttenuation: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    // With sizeAttenuation off, scale is a fraction of the frustum height:
+    // screen height ≈ scale / tan(fov/2) / 2, which puts 0.021 at about 14px on
+    // this panel.
+    const height = 0.021;
+    sprite.scale.set((canvas.width / canvas.height) * height, height, 1);
+    // Anchored at its bottom edge, so it grows upward from above the node.
+    sprite.center.set(0.5, 0);
+    // Labels must not enlarge the click target — only the sphere is clickable,
+    // exactly as in 2D where the <text> has pointer-events: none.
+    sprite.raycast = () => {};
+    owned.push(texture, material);
     return sprite;
   }
 
-  function build() {
+  let cageGeometry: THREE.SphereGeometry | null = null;
+  let cageMaterial: THREE.MeshBasicMaterial | null = null;
+  let haloGeometry: THREE.SphereGeometry | null = null;
+  let haloMaterial: THREE.MeshBasicMaterial | null = null;
+
+  /** The 3D reading of the 2D view's dashed accent ring around a broker. */
+  function makeBrokerCage(r: number): THREE.Mesh {
+    // Few segments and low opacity on purpose: the 2D equivalent is a thin
+    // dashed outline, and a dense wireframe ball reads as a solid object rather
+    // than as a marker on the node inside it.
+    cageGeometry ??= new THREE.SphereGeometry(1, 8, 5);
+    cageMaterial ??= new THREE.MeshBasicMaterial({
+      color: new THREE.Color(palette.accent),
+      wireframe: true,
+      transparent: true,
+      opacity: 0.38,
+    });
+    const mesh = new THREE.Mesh(cageGeometry, cageMaterial);
+    mesh.scale.setScalar(r + 3.5);
+    mesh.raycast = () => {};
+    return mesh;
+  }
+
+  /** The 3D reading of the 2D view's 3px accent stroke on a selected node. */
+  function makeHalo(r: number): THREE.Mesh {
+    haloGeometry ??= new THREE.SphereGeometry(1, 16, 12);
+    haloMaterial ??= new THREE.MeshBasicMaterial({
+      color: new THREE.Color(palette.accent),
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(haloGeometry, haloMaterial);
+    mesh.scale.setScalar(r + 4);
+    mesh.raycast = () => {};
+    return mesh;
+  }
+
+  /**
+   * Everything hung off a node's sphere. Returned for every node, including the
+   * plain ones: the empty group is how the sphere itself is found again later
+   * (`group.parent`), which is what hover brightening and the selection halo
+   * need and the library does not otherwise expose.
+   */
+  function nodeExtras(node: Sim3DNode): THREE.Group {
+    const group = new THREE.Group();
+    const r = radius(node);
+
+    if (node.brokerage > 0.02) group.add(makeBrokerCage(r));
+    if (pathSet.has(node.id) || node.id === selectedId) group.add(makeHalo(r));
+
+    if (earnsLabel(node)) {
+      // Keyword-dimmed nodes get a dimmed label, matching the 2D view's
+      // treatment of the context around a hit. Part of the cache key, since it
+      // is baked into the sprite's material.
+      const dim = dimming && !matchSet.has(node.id);
+      const key = `${node.id}|${dim ? 1 : 0}`;
+      let sprite = labelCache.get(key);
+      if (!sprite) {
+        sprite = makeLabel(node.name) ?? undefined;
+        if (sprite) {
+          if (dim) sprite.material.opacity = 0.3;
+          labelCache.set(key, sprite);
+        }
+      }
+      if (sprite) {
+        sprite.position.set(0, r + 2, 0);
+        group.add(sprite);
+      }
+    }
+
+    extrasById.set(node.id, group);
+    return group;
+  }
+
+  // ── Accessors ──────────────────────────────────────────────────────────────
+
+  /**
+   * Cluster colour, always — selection and a traced path do NOT repaint the
+   * node. The 2D view keeps the fill and rings the node in accent, so the
+   * cluster stays readable while it is highlighted, and the halo below carries
+   * the highlight. It also means a click never has to touch a material.
+   */
+  function nodeColour(node: Sim3DNode): string {
+    return rgba(clusterColour(node.community), nodeAlpha(node));
+  }
+
+  function linkColour(edge: Sim3DEdge): string {
+    const key = [endpointId(edge.source), endpointId(edge.target)].sort().join('|');
+    if (pathEdgeKeys.has(key)) return palette.accent;
+    // The literals the 2D view uses, so the same link is the same colour in both.
+    return edge.crossCommunity ? 'rgba(196, 87, 10, 0.42)' : 'rgba(26, 16, 8, 0.16)';
+  }
+
+  function linkWidth(edge: Sim3DEdge): number {
+    return edge.strength === 'strong' ? 2 : edge.strength === 'weak' ? 0.7 : 1.2;
+  }
+
+  /**
+   * Sphere radius, as the volume the library wants.
+   *
+   * Quantised because the geometry cache is keyed on this value: 500 distinct
+   * importances would otherwise mean 500 distinct sphere geometries.
+   */
+  function nodeVolume(node: Sim3DNode): number {
+    return Math.round(radius(node) * 4) ** 3 / 64;
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  /**
+   * The 2D view's force configuration, unchanged.
+   *
+   * Its distances and strengths are in the same units as `radius()`, so keeping
+   * the numbers keeps the character of the layout: well-connected pairs sit
+   * close, peripheral ones get room, and communities pull apart into separate
+   * regions rather than resolving into one ball. `SPAN` stands in for the 2D
+   * view's canvas width, which is what its x/y forces were expressed against.
+   */
+  const SPAN = 900;
+
+  function applyForces(fg: IntelGraph) {
+    // Installed BEFORE the graph data, and with no links of its own.
+    //
+    // d3 initialises a force the moment it is installed, and `forceLink` throws
+    // `node not found: <id>` if it holds a link whose endpoints are not among
+    // the simulation's nodes. The library feeds it the nodes and links itself
+    // during its own digest, which runs a frame later — so handing this force
+    // the edges up front threw, and the throw took every force after it in this
+    // function with it. The layout then ran on the library's defaults while
+    // looking, from the outside, like it had been configured.
+    fg.d3Force(
+      'link',
+      forceLink()
+        .id((d: Sim3DNode) => d.id)
+        .distance((l: { source: Sim3DNode }) => 40 + 60 / (1 + Math.min(l.source.degree ?? 1, 6)))
+        .strength(0.35),
+    );
+    fg.d3Force('charge', forceManyBody().strength((d: Sim3DNode) => -120 - radius(d) * 12));
+    fg.d3Force('center', forceCenter(0, 0, 0));
+    fg.d3Force('collide', forceCollide().radius((d: Sim3DNode) => radius(d) + 4));
+    // Pull clusters apart along x so communities read as separate regions — the
+    // 2D view does the same, offset around the canvas centre instead of origin.
+    fg.d3Force('x', forceX((d: Sim3DNode) => ((d.community % 5) - 2) * (SPAN / 7)).strength(0.045));
+    fg.d3Force('y', forceY(0).strength(0.045));
+    fg.d3Force('z', forceZ(0).strength(0.045));
+  }
+
+  async function build() {
     if (!container) return;
-    disposeScene();
+    const token = ++buildToken;
+    teardown();
+
+    readPalette(host ?? container);
+
+    // Browser-only: the library builds a WebGL renderer at construction, so it
+    // cannot be imported at module scope on a server-rendered page.
+    const { default: ForceGraph3D } = await import('3d-force-graph');
+    if (token !== buildToken || !container) return;
 
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 600;
 
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(58, width / height, 0.5, 6000);
-    camera.position.set(0, 0, 320);
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(width, height);
-    renderer.domElement.style.display = 'block';
-    renderer.domElement.style.outline = 'none';
-    container.appendChild(renderer.domElement);
-
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.rotateSpeed = 0.55;
-    controls.minDistance = 20;
-    controls.maxDistance = 2200;
-
-    scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const key = new THREE.DirectionalLight(0xffffff, 1.1);
-    key.position.set(1, 1, 1);
-    scene.add(key);
-
-    // Copies — the force layout mutates what it is given, and the props belong
-    // to the parent.
+    // Copies, because the force layout mutates the data it is given and the
+    // props belong to the parent.
     simNodes = nodes.map((n) => {
       const prev = positions.get(n.id);
       return { ...n, x: prev?.x, y: prev?.y, z: prev?.z };
@@ -260,389 +460,423 @@
       .filter((e) => byId.has(e.source) && byId.has(e.target))
       .map((e) => ({ ...e }));
 
-    if (!simNodes.length) {
-      // Nothing to lay out, but the renderer still needs to paint the empty
-      // scene or the canvas keeps whatever was on it before the filter.
-      renderer.render(scene, camera);
-      return;
-    }
+    extrasById.clear();
+    fitted = false;
+    settledOnce = false;
+    tickCount = 0;
 
-    simulation = forceSimulation(simNodes, 3)
-      .force(
-        'link',
-        forceLink(simEdges)
-          .id((d: Sim3DNode) => d.id)
-          .distance((l: { source: Sim3DNode }) => 26 + 34 / (1 + Math.min(l.source.degree ?? 1, 6)))
-          .strength(0.32),
-      )
-      .force('charge', forceManyBody().strength((d: Sim3DNode) => -95 - radius(d) * 9))
-      .force('center', forceCenter(0, 0, 0))
-      .force('collide', forceCollide().radius((d: Sim3DNode) => radius(d) + 2.5))
-      .stop();
-
-    // Run the layout to completion up front rather than animating it.
+    // Trackball rather than orbit. Orbit's controller tracks live pointers in a
+    // map, and the library ends a node drag by dispatching a synthetic pointerup
+    // that carries no pointer id; three's OrbitControls then looks that id up
+    // and throws, on every single drag. Dragging is the whole point of the live
+    // layout, so the controller that survives it wins.
     //
-    // A visibly settling 3D layout reads as the page being broken — nodes fly
-    // through each other for several seconds — and the camera cannot be framed
-    // until the extent is known. Ticking synchronously costs a fraction of a
-    // second at these sizes and the graph appears already composed.
-    const ticks = Math.min(300, Math.max(90, Math.round(1400 / Math.sqrt(simNodes.length))));
-    for (let i = 0; i < ticks; i++) simulation.tick();
+    // The library's instance type is generic but its constructor is not, so the
+    // node/link shapes have to be reattached here. One cast, at the boundary —
+    // everything downstream of it is typed against our own NetNode/NetEdge.
+    const fg = new ForceGraph3D(container, { controlType: 'trackball' }) as unknown as IntelGraph;
+    graph = fg;
 
-    normaliseLayout();
+    // Ambient-heavy so a sphere reads as close to the 2D view's flat fill as a
+    // lit surface can, with just enough directional to keep it a sphere.
+    fg.lights([
+      new THREE.AmbientLight(0xffffff, 0.95 * Math.PI),
+      new THREE.DirectionalLight(0xffffff, 0.35 * Math.PI),
+    ]);
 
+    fg
+      .width(width)
+      .height(height)
+      // Transparent, so the wrapper's `background: var(--bg)` is what shows
+      // through and the scene stays on the cream page like the 2D view.
+      .backgroundColor('rgba(0,0,0,0)')
+      .showNavInfo(false)
+      // Our own tooltip, styled like the 2D one — not the library's.
+      .nodeLabel(() => '')
+      .linkLabel(() => '')
+      .nodeRelSize(1)
+      .nodeResolution(14)
+      .nodeOpacity(1)
+      .nodeVal(nodeVolume)
+      .nodeColor(nodeColour)
+      .nodeThreeObjectExtend(true)
+      .nodeThreeObject(nodeExtras)
+      .linkOpacity(1)
+      .linkResolution(4)
+      .linkColor(linkColour)
+      .linkWidth(linkWidth)
+      // d3's own stopping rule rather than a tick or time budget, so the layout
+      // settles exactly as far as the 2D one does.
+      .d3AlphaMin(0.001)
+      .cooldownTicks(Infinity)
+      .cooldownTime(Infinity)
+      // A handful of ticks before the first frame. The 2D view starts from zero
+      // too, but a 3D layout's opening moments — every node in one place, then
+      // exploding outward — read as the page being broken rather than as
+      // physics. This skips that and leaves the settle visible.
+      .warmupTicks(simNodes.length && positions.size ? 0 : 25)
+      .onNodeClick(onNodeClick)
+      .onBackgroundClick(() => onSelect?.(null))
+      .onNodeHover(onNodeHover)
+      .onEngineTick(onTick)
+      .onEngineStop(onSettled);
+
+    applyForces(fg);
+    fg.graphData({ nodes: simNodes, links: simEdges });
+
+    // A layout at rest needs no camera move; a fresh one is framed as it settles.
+    if (positions.size) {
+      frameCamera(0);
+      fitted = true;
+    } else {
+      // Off-axis on all three, so the first frame reads as a 3D scene rather
+      // than a flat one seen head-on.
+      fg.cameraPosition({ x: SPAN * 0.3, y: SPAN * 0.22, z: SPAN * 0.85 });
+    }
+  }
+
+  /**
+   * Fit once early, then again when the layout settles.
+   *
+   * A large graph takes seconds to come to rest and until it does it can spread
+   * well outside the frustum, so the first thing anyone would see is an empty
+   * scene with the graph off-camera. The 2D view fits at alpha 0.35 for the same
+   * reason; with d3's default decay that is around the 45th tick, which is what
+   * this counts. Halos and labels are children of their node's sphere, so they
+   * follow it without any per-tick work.
+   */
+  const EARLY_FIT_TICK = 45;
+  let tickCount = 0;
+
+  function onTick() {
+    if (!fitted && ++tickCount >= EARLY_FIT_TICK) {
+      fitted = true;
+      frameCamera(600);
+    }
+  }
+
+  function onSettled() {
     for (const n of simNodes) {
       if (n.x != null && n.y != null && n.z != null) {
         positions.set(n.id, { x: n.x, y: n.y, z: n.z });
       }
     }
-
-    buildNodes();
-    buildEdges();
-    buildLabels();
-    frameCamera(width, height);
-    animate();
+    // Frame ONCE per build. The engine also stops after every restyle and after
+    // every node drag, and re-framing then would snatch away the camera the
+    // user had just positioned.
+    if (settledOnce) return;
+    settledOnce = true;
+    fitted = true;
+    frameCamera(600);
   }
-
-  /** The world-space size the graph body is scaled to fill. */
-  const WORLD_EXTENT = 220;
 
   /**
-   * Rescale the settled layout to a FIXED world size.
+   * Move the camera so the BULK of the graph fills the view.
    *
-   * Without this the layout's extent depends on node count and connectivity —
-   * a 500-node graph settles across many hundreds of units, a 20-node one
-   * across a few dozen. Node radii are in absolute units, so on the large graph
-   * every sphere was sub-pixel and the first render showed edges floating in an
-   * empty void. Normalising means one node-size curve and one camera distance
-   * work for every graph.
+   * Deliberately frames a percentile band of node positions rather than the
+   * extremes, for the reason the 2D view gives: the real graph has ~184
+   * disconnected fragments and ~162 isolated nodes that the layout flings to
+   * the edges, and framing those shrinks the part anyone wants to read to a
+   * cluster of dots. Outliers stay reachable by zooming out.
    *
-   * Scaled on the 5th–95th percentile rather than the extremes: with 184
-   * components and 162 isolated nodes, the layout flings fragments a long way
-   * out, and fitting those compresses the part worth reading into a dot.
+   * Trimmed at 6–94% rather than the 2D view's 4–96%. That debris spreads over
+   * a sphere here instead of a disc, so the same percentile buys a much larger
+   * box; the tighter band is what makes the body fill the frame as it does in
+   * 2D.
+   *
+   * Framed by hand rather than with the library's `zoomToFit`, which always
+   * re-aims at the world origin and pads generously enough that this graph
+   * ended up at roughly half the size the 2D view gives it.
    */
-  function normaliseLayout() {
-    if (!simNodes.length) return;
+  /**
+   * The nodes of the biggest connected component, or all of them if nothing is
+   * joined up. Union-find over the edges — cheap at these sizes and recomputed
+   * only when the camera is re-framed, which is twice per build.
+   */
+  function largestComponent(): Sim3DNode[] {
+    if (!simEdges.length) return simNodes;
 
-    const spread = (get: (n: Sim3DNode) => number) => {
-      const vals = simNodes.map(get).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-      if (vals.length < 3) return 1;
-      const lo = vals[Math.floor(vals.length * 0.05)];
-      const hi = vals[Math.min(vals.length - 1, Math.ceil(vals.length * 0.95))];
-      return Math.max(1e-6, hi - lo);
+    const parent = new Map<string, string>(simNodes.map((n) => [n.id, n.id]));
+    const find = (a: string): string => {
+      // An endpoint we do not hold would spin the walk below forever.
+      if (!parent.has(a)) return a;
+      let root = a;
+      while (parent.get(root) !== root) root = parent.get(root)!;
+      // Path compression, so a long chain of fragments does not make this
+      // quadratic on the next lookup.
+      let walk = a;
+      while (parent.get(walk) !== root) {
+        const next = parent.get(walk)!;
+        parent.set(walk, root);
+        walk = next;
+      }
+      return root;
     };
 
-    const extent = Math.max(
-      spread((n) => n.x ?? 0),
-      spread((n) => n.y ?? 0),
-      spread((n) => n.z ?? 0),
-    );
-    const scale = WORLD_EXTENT / extent;
+    for (const e of simEdges) {
+      const a = find(endpointId(e.source));
+      const b = find(endpointId(e.target));
+      if (parent.has(a) && parent.has(b) && a !== b) parent.set(a, b);
+    }
 
-    // Centre on the MEDIAN, not the mean: a handful of far-flung fragments drag
-    // a mean well outside the body of the graph.
-    const mid = (get: (n: Sim3DNode) => number) => {
-      const vals = simNodes.map(get).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+    const groups = new Map<string, Sim3DNode[]>();
+    for (const n of simNodes) {
+      const root = find(n.id);
+      const group = groups.get(root);
+      if (group) group.push(n);
+      else groups.set(root, [n]);
+    }
+
+    let best: Sim3DNode[] = [];
+    for (const group of groups.values()) if (group.length > best.length) best = group;
+    return best.length ? best : simNodes;
+  }
+
+  function frameCamera(durationMs: number) {
+    const fg = graph;
+    if (!fg || !simNodes.length) return;
+
+    const camera = fg.camera() as THREE.PerspectiveCamera;
+    if (!camera?.isPerspectiveCamera) return;
+
+    // Frame the BODY: the largest connected component, not the whole point
+    // cloud. This graph is ~184 fragments and ~162 isolated entities around one
+    // dominant component, and every measure taken over ALL the nodes — a
+    // bounding box, a per-axis percentile band, a radius holding 88% of them —
+    // ends up measuring the debris rather than the thing worth reading. The 2D
+    // view trims percentiles for the same reason; asking which entities are
+    // actually joined to each other says it without a magic number, and keeps
+    // holding when a filter cuts the graph to a fifth of its size. Fragments
+    // stay reachable by zooming out.
+    const body = largestComponent();
+
+    const median = (get: (n: Sim3DNode) => number) => {
+      const vals = body.map(get).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
       return vals.length ? vals[Math.floor(vals.length / 2)] : 0;
     };
-    const cx = mid((n) => n.x ?? 0);
-    const cy = mid((n) => n.y ?? 0);
-    const cz = mid((n) => n.z ?? 0);
-
-    for (const n of simNodes) {
-      n.x = ((n.x ?? 0) - cx) * scale;
-      n.y = ((n.y ?? 0) - cy) * scale;
-      n.z = ((n.z ?? 0) - cz) * scale;
-    }
-  }
-
-  function buildNodes() {
-    if (!scene) return;
-    const geometry = new THREE.SphereGeometry(1, 16, 12);
-    const material = new THREE.MeshLambertMaterial({ transparent: true, opacity: 1 });
-
-    nodeMesh = new THREE.InstancedMesh(geometry, material, simNodes.length);
-    nodeMesh.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(simNodes.length * 3),
-      3,
+    const centre = new THREE.Vector3(
+      median((n) => n.x ?? 0),
+      median((n) => n.y ?? 0),
+      median((n) => n.z ?? 0),
     );
 
-    const matrix = new THREE.Matrix4();
-    const colour = new THREE.Color();
-    indexToNode = [];
+    // The 80th percentile within that body, not its full extent. Even the
+    // connected part has long sparse arms — on the real graph its outermost
+    // tenth reaches twice as far as the other nine — and framing their tips
+    // shrinks the dense middle, which is the part anyone is reading, back to a
+    // dot.
+    const radii = body
+      .map((n) => centre.distanceTo(new THREE.Vector3(n.x ?? 0, n.y ?? 0, n.z ?? 0)))
+      .sort((a, b) => a - b);
+    // Floored against the biggest node rather than a bare constant. Pinning the
+    // view to a single entity leaves a body with no spread at all, and fitting
+    // THAT put the camera inside the sphere: the panel filled with flat colour
+    // and the node stopped being clickable, because a ray cast from inside only
+    // meets back faces. The 2D view has the same guard as its maximum zoom.
+    const biggest = body.reduce((m, n) => Math.max(m, radius(n)), 0);
+    const reach = Math.max(radii[Math.floor(radii.length * 0.8)] ?? 0, biggest * 5, 10);
 
-    simNodes.forEach((n, i) => {
-      const r = radius(n);
-      matrix.makeScale(r, r, r);
-      matrix.setPosition(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-      nodeMesh!.setMatrixAt(i, matrix);
+    const halfFov = (camera.fov * Math.PI) / 360;
+    // Whichever of the two apertures is narrower is the one that has to contain
+    // the graph — on a wide canvas that is the vertical one.
+    const half = Math.min(halfFov, Math.atan(Math.tan(halfFov) * (camera.aspect || 1)));
+    // Margin covers the largest node's radius and leaves the body a little air.
+    const distance = (reach / Math.sin(half)) * 1.15;
 
-      // Per-instance alpha is not available on a shared material, so staleness
-      // and dimming are baked into the COLOUR — mixed toward the background
-      // rather than made transparent. Visually equivalent here and it keeps the
-      // whole graph in one draw call.
-      colour.set(clusterColour(n.community));
-      colour.lerp(new THREE.Color('#12100e'), 1 - nodeAlpha(n));
-      nodeMesh!.setColorAt(i, colour);
-      indexToNode[i] = n;
-    });
+    // Keep whatever direction the camera is already looking from, so a re-fit
+    // after a filter change does not also spin the scene.
+    const target = (fg.controls() as { target?: THREE.Vector3 })?.target;
+    const direction = camera.position.clone().sub(target ?? new THREE.Vector3());
+    if (direction.lengthSq() < 1e-6) direction.set(0.35, 0.25, 1);
+    direction.normalize().multiplyScalar(distance);
 
-    nodeMesh.instanceMatrix.needsUpdate = true;
-    if (nodeMesh.instanceColor) nodeMesh.instanceColor.needsUpdate = true;
-    scene.add(nodeMesh);
-
-    // Brokers — entities holding otherwise separate clusters together — get a
-    // halo, the 3D equivalent of the 2D dashed ring.
-    const brokers = simNodes.filter((n) => n.brokerage > 0.02);
-    if (brokers.length) {
-      ringMesh = new THREE.InstancedMesh(
-        new THREE.SphereGeometry(1, 14, 10),
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color('#c4570a'),
-          transparent: true,
-          opacity: 0.16,
-          side: THREE.BackSide,
-        }),
-        brokers.length,
-      );
-      brokers.forEach((n, i) => {
-        const r = radius(n) * 1.6;
-        matrix.makeScale(r, r, r);
-        matrix.setPosition(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-        ringMesh!.setMatrixAt(i, matrix);
-      });
-      ringMesh.instanceMatrix.needsUpdate = true;
-      scene.add(ringMesh);
-    }
-  }
-
-  function buildEdges() {
-    if (!scene || !simEdges.length) return;
-
-    const positionsArr = new Float32Array(simEdges.length * 6);
-    const colours = new Float32Array(simEdges.length * 6);
-    const colour = new THREE.Color();
-    const base = new THREE.Color('#12100e');
-
-    simEdges.forEach((e, i) => {
-      // Node objects by now — the simulation has been built and ticked.
-      const a = e.source as Sim3DNode;
-      const b = e.target as Sim3DNode;
-      if (!a || typeof a === 'string' || !b || typeof b === 'string') return;
-      const o = i * 6;
-      positionsArr[o] = a.x ?? 0;
-      positionsArr[o + 1] = a.y ?? 0;
-      positionsArr[o + 2] = a.z ?? 0;
-      positionsArr[o + 3] = b.x ?? 0;
-      positionsArr[o + 4] = b.y ?? 0;
-      positionsArr[o + 5] = b.z ?? 0;
-
-      const onPath = pathEdgeKeys.has([endpointId(e.source), endpointId(e.target)].sort().join('|'));
-      colour.set(onPath ? '#e07a1f' : e.crossCommunity ? '#c4570a' : '#8a9199');
-
-      // Weight and staleness both read as how strongly the line is drawn — the
-      // same two things the 2D view encodes as stroke width and opacity.
-      const weight = Number.isFinite(e.weight) ? e.weight : 0.5;
-      const recency = Number.isFinite(e.recency) ? e.recency : 1;
-      const strength = onPath ? 1 : Math.max(0.08, weight * (0.4 + 0.6 * recency)) * (dimming ? 0.35 : 1);
-      colour.lerp(base, 1 - strength);
-
-      for (let v = 0; v < 2; v++) {
-        colours[o + v * 3] = colour.r;
-        colours[o + v * 3 + 1] = colour.g;
-        colours[o + v * 3 + 2] = colour.b;
-      }
-    });
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positionsArr, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-    edgeLines = new THREE.LineSegments(
-      geometry,
-      new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.75 }),
+    fg.cameraPosition(
+      { x: centre.x + direction.x, y: centre.y + direction.y, z: centre.z + direction.z },
+      centre,
+      durationMs,
     );
-    scene.add(edgeLines);
-  }
-
-  function buildLabels() {
-    if (!scene) return;
-    labelGroup = new THREE.Group();
-
-    // Only what has earned a label. Every sprite is its own texture and draw
-    // call, so labelling 600 nodes would cost more than the rest of the scene
-    // and be unreadable anyway.
-    const ranked = [...simNodes].sort((a, b) => b.importance - a.importance);
-    const wanted = new Set(ranked.slice(0, 28).map((n) => n.id));
-    for (const n of simNodes) {
-      if (pathSet.has(n.id) || matchSet.has(n.id) || n.id === selectedId) wanted.add(n.id);
-    }
-
-    for (const n of simNodes) {
-      if (!wanted.has(n.id)) continue;
-      const sprite = makeLabel(n.name, dimming && !matchSet.has(n.id) ? '#6b6560' : '#ede4d4');
-      if (!sprite) continue;
-      sprite.position.set(n.x ?? 0, (n.y ?? 0) + radius(n) + 3.4, n.z ?? 0);
-      labelGroup.add(sprite);
-    }
-    scene.add(labelGroup);
-  }
-
-  /** Point the camera so the bulk of the graph fills the view. */
-  function frameCamera(width: number, height: number) {
-    if (!camera || !controls || !simNodes.length) return;
-
-    // The 4th–96th percentile, matching the 2D view: the layout flings
-    // disconnected fragments far out, and framing those shrinks the part anyone
-    // wants to read into a dot in the middle.
-    const axis = (get: (n: Sim3DNode) => number) => {
-      const vals = simNodes.map(get).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-      if (!vals.length) return { lo: -1, hi: 1 };
-      // Tighter than the 2D view's 4–96%. A graph with 180-odd components and
-      // 160-odd isolated nodes has a long tail of debris in every direction,
-      // and framing even the 4th percentile of it leaves the main body a
-      // cluster of dots in the middle of an empty scene.
-      return {
-        lo: vals[Math.floor(vals.length * 0.06)],
-        hi: vals[Math.min(vals.length - 1, Math.ceil(vals.length * 0.94))],
-      };
-    };
-
-    const xs = axis((n) => n.x ?? 0);
-    const ys = axis((n) => n.y ?? 0);
-    const zs = axis((n) => n.z ?? 0);
-
-    const centre = new THREE.Vector3((xs.lo + xs.hi) / 2, (ys.lo + ys.hi) / 2, (zs.lo + zs.hi) / 2);
-    const extent = Math.max(xs.hi - xs.lo, ys.hi - ys.lo, zs.hi - zs.lo, 10);
-    const fov = (camera.fov * Math.PI) / 180;
-    // The layout is already normalised to a known extent and the percentile
-    // trim has removed the outliers, so this margin only has to clear the
-    // largest node and leave the body a little air.
-    const distance = (extent / 2 / Math.tan(fov / 2)) * 1.3;
-
-    controls.target.copy(centre);
-    // Offset on all three axes so the first frame reads as a 3D scene rather
-    // than a flat one seen head-on.
-    camera.position.set(centre.x + distance * 0.35, centre.y + distance * 0.25, centre.z + distance);
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    controls.update();
-  }
-
-  function animate() {
-    frameId = requestAnimationFrame(animate);
-    if (!renderer || !scene || !camera) return;
-    controls?.update();
-    // Sprites are camera-facing by nature; nothing else needs per-frame work,
-    // so this is a cheap loop that exists for orbit damping.
-    renderer.render(scene, camera);
   }
 
   // ── Interaction ────────────────────────────────────────────────────────────
 
-  function nodeAtPointer(event: PointerEvent | MouseEvent): { node: Sim3DNode; index: number } | null {
-    if (!renderer || !camera || !nodeMesh) return null;
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycaster ??= new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObject(nodeMesh, false);
-    const hit = hits.find((h) => h.instanceId != null);
-    if (!hit || hit.instanceId == null) return null;
-    const node = indexToNode[hit.instanceId];
-    return node ? { node, index: hit.instanceId } : null;
+  function onNodeClick(node: Sim3DNode) {
+    const now = Date.now();
+    // The library has no double-click hook, and the 2D view's click-to-inspect
+    // plus double-click-to-open has to survive the port.
+    if (lastClick.id === node.id && now - lastClick.at < 320) {
+      lastClick = { id: '', at: 0 };
+      onOpen?.(node.id);
+      return;
+    }
+    lastClick = { id: node.id, at: now };
+    onSelect?.(node.id);
   }
+
+  function onNodeHover(node: Sim3DNode | null) {
+    // The 2D view brightens a hovered node to full opacity via CSS. Materials
+    // here are shared across every node of the same colour, so the hovered one
+    // is given its own rather than mutating the shared instance.
+    if (hoverRestore) {
+      hoverRestore.mesh.material = hoverRestore.material;
+      hoverRestore = null;
+    }
+    hovered = node ?? null;
+    if (!node) return;
+    tooltip = pointerAt;
+
+    const mesh = extrasById.get(node.id)?.parent as THREE.Mesh | undefined;
+    const current = mesh?.material as THREE.MeshLambertMaterial | undefined;
+    if (!mesh || !current?.isMaterial) return;
+    // Cached by the material being brightened, not cloned per hover: there are
+    // only ten cluster colours × three opacities, and cloning on every pointer
+    // move would strand a material on the GPU each time.
+    let bright = brightCache.get(current.uuid);
+    if (!bright) {
+      bright = current.clone();
+      bright.opacity = 1;
+      brightCache.set(current.uuid, bright);
+      owned.push(bright);
+    }
+    hoverRestore = { mesh, material: current };
+    mesh.material = bright;
+  }
+
+  const brightCache = new Map<string, THREE.MeshLambertMaterial>();
+
+  /**
+   * Where the pointer is, tracked whether or not anything is hovered.
+   *
+   * A plain `let`, never $state — nothing reactive reads it, and writing $state
+   * on every pointermove would be a reactive update per frame for a value the
+   * template only needs at the moment a tooltip opens.
+   *
+   * It has to be tracked continuously because the library's hover callback
+   * carries no event: without a position already on hand, the first tooltip of
+   * a session opened in the panel's top-left corner instead of by the cursor.
+   */
+  let pointerAt = { x: 0, y: 0 };
 
   function onPointerMove(event: PointerEvent) {
-    const hit = nodeAtPointer(event);
-    if (hit) {
-      hoveredInstance = hit.index;
-      hovered = hit.node;
-      const rect = container?.getBoundingClientRect();
-      tooltip = {
-        x: event.clientX - (rect?.left ?? 0) + 14,
-        y: event.clientY - (rect?.top ?? 0) + 14,
-      };
-    } else if (hoveredInstance !== -1) {
-      hoveredInstance = -1;
-      hovered = null;
+    const rect = host?.getBoundingClientRect();
+    pointerAt = {
+      x: event.clientX - (rect?.left ?? 0) + 14,
+      y: event.clientY - (rect?.top ?? 0) + 14,
+    };
+    if (hovered) tooltip = pointerAt;
+  }
+
+  /**
+   * Add and remove selection halos in place.
+   *
+   * A plain click must not rebuild anything: the 2D view restyles its existing
+   * circles rather than tearing down the SVG, and in 3D a rebuild would also
+   * throw away the camera angle the user had just chosen and restart the layout
+   * under them. Halos are children of their node's sphere, so once attached
+   * they follow it with no further work.
+   */
+  let haloedIds = new Set<string>();
+
+  function reconcileHalos() {
+    const wanted = new Set<string>(pathSet);
+    if (selectedId) wanted.add(selectedId);
+
+    for (const id of haloedIds) {
+      if (wanted.has(id)) continue;
+      const group = extrasById.get(id);
+      const halo = group?.children.find((c) => (c as THREE.Mesh).geometry === haloGeometry);
+      if (halo && group) group.remove(halo);
     }
+    const byId = new Map(simNodes.map((n) => [n.id, n]));
+    for (const id of wanted) {
+      const group = extrasById.get(id);
+      const node = byId.get(id);
+      if (!group || !node) continue;
+      if (group.children.some((c) => (c as THREE.Mesh).geometry === haloGeometry)) continue;
+      group.add(makeHalo(radius(node)));
+    }
+    haloedIds = wanted;
   }
 
-  function onPointerDown() {
-    dragged = false;
-  }
+  // ── Teardown ───────────────────────────────────────────────────────────────
 
-  /** Orbiting moves the pointer a long way; only a still pointer is a click. */
-  function onPointerMoveDrag(event: PointerEvent) {
-    if (event.buttons !== 0) dragged = true;
-    onPointerMove(event);
-  }
-
-  function onClick(event: MouseEvent) {
-    if (dragged) return;
-    const hit = nodeAtPointer(event);
-    onSelect?.(hit ? hit.node.id : null);
-  }
-
-  function onDoubleClick(event: MouseEvent) {
-    const hit = nodeAtPointer(event);
-    if (hit) onOpen?.(hit.node.id);
+  function teardown() {
+    hoverRestore = null;
+    hovered = null;
+    tickCount = 0;
+    haloedIds = new Set();
+    if (graph) {
+      // three.js holds GPU resources garbage collection does not reclaim. The
+      // library disposes its own scene here; the geometries, materials and
+      // textures WE made are ours to release.
+      graph._destructor();
+      graph = null;
+    }
+    for (const res of owned.splice(0)) res.dispose();
+    cageGeometry?.dispose();
+    cageMaterial?.dispose();
+    haloGeometry?.dispose();
+    haloMaterial?.dispose();
+    cageGeometry = cageMaterial = null;
+    haloGeometry = haloMaterial = null;
+    extrasById.clear();
+    labelCache.clear();
+    brightCache.clear();
   }
 
   // ── Effects ────────────────────────────────────────────────────────────────
 
-  // Rebuild only when the DATA or the highlighting changes. Everything build()
-  // touches is untracked, so the pointer handlers writing `hovered`/`tooltip`
-  // can never feed back into this effect.
-  //
-  // `selectedId` is deliberately absent: a click would otherwise tear down the
-  // scene and re-run the whole layout to move one highlight, which in 3D also
-  // resets the camera the user had just positioned. Selection repaints below.
+  // Rebuild only when the DATA changes. Everything build() does is untracked, so
+  // the pointer handlers writing `hovered`/`tooltip` can never feed back here.
   $effect(() => {
     nodes;
     edges;
-    highlightPath;
-    matchedIds;
     container;
-    untrack(() => build());
+    untrack(() => void build());
   });
 
-  // Selection repaint: recolour in place rather than rebuilding.
+  // A traced path or a new keyword changes which nodes carry a label, so the
+  // per-node extras have to be rebuilt. Colours change with them. The LAYOUT is
+  // left alone: the library only re-heats the simulation when the graph data
+  // itself changes, which is why the 2D view's full teardown is not needed here.
+  //
+  // Fresh function identities on purpose — passing the same reference back would
+  // read as "no change" and skip the digest entirely.
   $effect(() => {
-    const id = selectedId;
-    if (!nodeMesh) return;
+    pathKey;
+    matchKey;
+    const fg = graph;
+    if (!fg) return;
     untrack(() => {
-      const colour = new THREE.Color();
-      const dark = new THREE.Color('#12100e');
-      const accent = new THREE.Color('#e07a1f');
-      simNodes.forEach((n, i) => {
-        if (n.id === id || pathSet.has(n.id)) {
-          colour.copy(accent);
-        } else {
-          colour.set(clusterColour(n.community));
-          colour.lerp(dark, 1 - nodeAlpha(n));
-        }
-        nodeMesh!.setColorAt(i, colour);
-      });
-      if (nodeMesh!.instanceColor) nodeMesh!.instanceColor.needsUpdate = true;
+      // The digest hands every node a fresh material, so a material stashed by
+      // the hover brightener is about to be stale — restoring it on the next
+      // unhover would silently undo this restyle.
+      hoverRestore = null;
+      fg.nodeThreeObject((n: Sim3DNode) => nodeExtras(n));
+      fg.nodeColor((n: Sim3DNode) => nodeColour(n));
+      fg.linkColor((e: Sim3DEdge) => linkColour(e));
+      haloedIds = new Set([...pathSet, ...(selectedId ? [selectedId] : [])]);
     });
+  });
+
+  // Selection: move the halo, and nothing else. No material is touched and no
+  // digest is asked for — the 2D view restyles its circles in place for exactly
+  // the same reason, and in 3D a rebuild would also throw away the camera angle
+  // the user had just chosen.
+  $effect(() => {
+    selectedId;
+    if (!graph) return;
+    untrack(() => reconcileHalos());
   });
 
   $effect(() => {
     const el = container;
     if (!el || typeof ResizeObserver === 'undefined') return;
 
-    // Resizing only needs the camera and drawing buffer updated — not a
-    // relayout — so unlike the 2D view this is cheap and needs no debounce.
+    // Resizing only needs the renderer and camera updated, not a relayout, so
+    // unlike the 2D view this is cheap and needs no debounce.
     resizeObserver = new ResizeObserver(() => {
-      if (!renderer || !camera || !el) return;
-      const w = el.clientWidth || 800;
-      const h = el.clientHeight || 600;
-      renderer.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      if (!graph || !el) return;
+      graph.width(el.clientWidth || 800).height(el.clientHeight || 600);
     });
     resizeObserver.observe(el);
     return () => {
@@ -651,90 +885,66 @@
     };
   });
 
-  onDestroy(() => disposeScene());
+  onDestroy(() => teardown());
+
+  /** Matches the 2D view's export, so the parent can reset either the same way. */
+  export function resetZoom() {
+    frameCamera(400);
+  }
 </script>
 
 <div
-  class="wrap"
-  bind:this={container}
-  onpointerdown={onPointerDown}
-  onpointermove={onPointerMoveDrag}
-  onclick={onClick}
-  ondblclick={onDoubleClick}
+  class="graph-host"
+  bind:this={host}
+  onpointermove={onPointerMove}
   role="application"
   aria-label="Intel network, {nodes.length} entities, three-dimensional view"
 >
-  {#if hovered}
-    <div class="tip" style="left: {tooltip.x}px; top: {tooltip.y}px;">
-      <strong>{hovered.name}</strong>
-      <span class="meta">{hovered.type} · {hovered.degree} links · {hovered.noteCount} sources</span>
-      {#if hovered.sources?.length}
-        <span class="meta">from {hovered.sources.join(', ')}</span>
-      {/if}
-      {#if hovered.recency < 0.5}
-        <span class="stale">going stale</span>
-      {/if}
-      {#if hovered.summary}<span class="sum">{hovered.summary}</span>{/if}
-    </div>
+  <div class="scene" bind:this={container}></div>
+
+  {#if nodes.length === 0}
+    <div class="empty">Nothing matches these filters.</div>
   {/if}
 
-  {#if !nodes.length}
-    <p class="empty">Nothing to draw with these filters.</p>
+  {#if hovered}
+    <div class="tip" style="left: {tooltip.x}px; top: {tooltip.y}px;">
+      <div class="tip-head">
+        <span>{hovered.icon}</span>
+        <strong>{hovered.name}</strong>
+      </div>
+      <div class="tip-meta">{hovered.type} · {hovered.degree} links</div>
+      {#if hovered.summary}
+        <p>{hovered.summary.slice(0, 160)}{hovered.summary.length > 160 ? '…' : ''}</p>
+      {/if}
+      {#if hovered.brokerage > 0.02}
+        <div class="tip-flag">Connects separate clusters</div>
+      {/if}
+      <div class="tip-hint">Click to inspect · double-click to open · drag a node to disturb it</div>
+    </div>
   {/if}
 </div>
 
 <style>
-  .wrap {
+  /* Identical to the 2D view's host: this is the same panel on the same cream
+     page, seen along one more axis. */
+  .graph-host {
     position: relative;
     width: 100%;
     height: 100%;
-    /* Dark, because a 3D scene reads as a volume rather than a page. The 2D
-       view keeps the cream page background; this one is deliberately a window
-       into something else. */
-    background: radial-gradient(circle at 50% 40%, #1c1917 0%, #0c0a09 100%);
-    border-radius: var(--radius-round);
+    min-height: 420px;
     overflow: hidden;
+    background: var(--bg);
     cursor: grab;
     touch-action: none;
   }
-  .wrap:active {
+  .graph-host:active {
     cursor: grabbing;
   }
 
-  .tip {
+  /* The scene owns this element outright — see the note on `host` above. */
+  .scene {
     position: absolute;
-    z-index: 5;
-    pointer-events: none;
-    max-width: 280px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 8px 10px;
-    background: rgba(12, 10, 9, 0.94);
-    border: 1px solid rgba(237, 228, 212, 0.18);
-    border-radius: var(--radius-sharp);
-    color: #ede4d4;
-    font-size: var(--fs-label);
-    line-height: 1.35;
-  }
-  .tip strong {
-    font-family: var(--font-body);
-    font-weight: 600;
-  }
-  .meta {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: rgba(237, 228, 212, 0.6);
-  }
-  .stale {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: #c4570a;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-  .sum {
-    color: rgba(237, 228, 212, 0.82);
+    inset: 0;
   }
 
   .empty {
@@ -742,8 +952,56 @@
     inset: 0;
     display: grid;
     place-items: center;
-    margin: 0;
-    color: rgba(237, 228, 212, 0.5);
-    font-size: var(--fs-body-sm);
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+
+  .tip {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+    max-width: 280px;
+    /* Opaque — it floats over the graph. */
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+    padding: 8px 10px;
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+  .tip-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .tip-head strong {
+    font-weight: 600;
+  }
+  .tip-meta {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    text-transform: lowercase;
+  }
+  .tip p {
+    margin: 5px 0 0;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+  .tip-flag {
+    margin-top: 5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tip-hint {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
   }
 </style>
