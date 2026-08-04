@@ -26,6 +26,7 @@ import {
 import {
   findDuplicateCandidates,
   findSharedSenderAddresses,
+  countIdentitiesByAddress,
   pickSurvivor,
   AUTO_MERGE_THRESHOLD,
   type MatchCandidate,
@@ -440,15 +441,50 @@ export async function loadSharedSenderAddresses(): Promise<Set<string>> {
   return findSharedSenderAddresses(await loadAddressNames());
 }
 
+/** Address → how many distinct identities have written under it. */
+export async function loadAddressIdentities(): Promise<Map<string, number>> {
+  return countIdentitiesByAddress(await loadAddressNames());
+}
+
+/**
+ * Entity id → the ids it shares an edge with.
+ *
+ * Direction is dropped: for "are these the same thing?" it does not matter
+ * which way an edge points, only that both sides sit beside the same entities.
+ * Suppressed edges are included — a human rejecting a LINK says nothing about
+ * whether two other entities are one, and excluding them would quietly weaken
+ * the signal every time someone tidied the graph.
+ */
+export async function loadNeighbourIndex(): Promise<Map<string, Set<string>>> {
+  const res = await db.execute(sql`
+    SELECT source_entity_id AS a, target_entity_id AS b FROM intel_relationships
+  `);
+  const out = new Map<string, Set<string>>();
+  const add = (x: string, y: string) => {
+    if (!x || !y || x === y) return;
+    const set = out.get(x);
+    if (set) set.add(y);
+    else out.set(x, new Set([y]));
+  };
+  for (const row of res.rows as Array<Record<string, unknown>>) {
+    const a = String(row.a ?? '');
+    const b = String(row.b ?? '');
+    add(a, b);
+    add(b, a);
+  }
+  return out;
+}
+
 /** Duplicate candidates across the whole graph, strongest first. */
 export async function findDuplicates(minConfidence = 0.35): Promise<DuplicateReport[]> {
-  const [entities, sharedSenders] = await Promise.all([
+  const [entities, addressIdentities, neighbours] = await Promise.all([
     loadResolvableEntities(),
-    loadSharedSenderAddresses(),
+    loadAddressIdentities(),
+    loadNeighbourIndex(),
   ]);
   const byId = new Map(entities.map((e) => [e.id, e]));
 
-  return findDuplicateCandidates(entities, { minConfidence, sharedSenders })
+  return findDuplicateCandidates(entities, { minConfidence, addressIdentities, neighbours })
     .map((candidate) => {
       const a = byId.get(candidate.aId);
       const b = byId.get(candidate.bId);

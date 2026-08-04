@@ -349,15 +349,56 @@ export function isNameReordering(a: string, b: string): boolean {
  */
 export function emailOf(
   entity: ResolvableEntity,
-  sharedSenders?: ReadonlySet<string>,
+  addressIdentities?: ReadonlySet<string> | ReadonlyMap<string, number>,
 ): string | null {
   const raw = entity.properties?.email;
   if (typeof raw !== 'string') return null;
   const email = raw.trim().toLowerCase();
   if (!email.includes('@')) return null;
-  // An address that sends on behalf of many different people is a CHANNEL, not
-  // an identity. See findSharedSenderAddresses.
-  return sharedSenders?.has(email) ? null : email;
+  // An address that writes as many different people is a CHANNEL, not an
+  // identity. See emailTrust.
+  return emailTrust(email, addressIdentities) === 'none' ? null : email;
+}
+
+/**
+ * How much an address is allowed to prove.
+ *
+ *   proof — one identity has ever used it. Two records carrying it are the
+ *           same person; that is what an address IS.
+ *   weak  — two identities. Could be one person under two spellings, could be
+ *           a small service writing as two people. The NAMES have to agree
+ *           before it counts.
+ *   none  — three or more. A channel, and it proves nothing about anybody.
+ *
+ * The middle band exists because a plain threshold cannot separate the two:
+ * the owner's own address carries two identity groups (aliases of one person)
+ * and `ea@e.ea.com` carries two (a games publisher and a job title that
+ * borrowed its mail). Counting alone says they are the same case; asking
+ * whether the names are variants of each other says they are not.
+ */
+export type EmailTrust = 'proof' | 'weak' | 'none';
+
+/** `ReadonlySet` and `ReadonlyMap` do not discriminate on `instanceof`. */
+function isIdentityCount(
+  value: ReadonlySet<string> | ReadonlyMap<string, number>,
+): value is ReadonlyMap<string, number> {
+  return typeof (value as ReadonlyMap<string, number>).get === 'function';
+}
+
+export function emailTrust(
+  email: string,
+  addressIdentities?: ReadonlySet<string> | ReadonlyMap<string, number>,
+): EmailTrust {
+  if (!addressIdentities) return 'proof';
+  // A bare set is the older, coarser shape: membership means "channel". Kept
+  // because it is the natural thing for a caller that only knows which
+  // addresses are disqualified.
+  if (!isIdentityCount(addressIdentities)) {
+    return addressIdentities.has(email) ? 'none' : 'proof';
+  }
+  const identities = addressIdentities.get(email) ?? 1;
+  if (identities >= SHARED_SENDER_MIN_GROUPS) return 'none';
+  return identities >= 2 ? 'weak' : 'proof';
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +487,18 @@ export const SHARED_SENDER_MIN_GROUPS = 3;
  * sees only two, and the count never reaches the threshold that would have
  * stopped it.
  */
+export function countIdentitiesByAddress(
+  namesByAddress: Map<string, Iterable<string>>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [address, names] of namesByAddress) {
+    const email = address.trim().toLowerCase();
+    if (!email.includes('@')) continue;
+    out.set(email, countNameGroups(names));
+  }
+  return out;
+}
+
 export function findSharedSenderAddresses(
   namesByAddress: Map<string, Iterable<string>>,
   opts: { minGroups?: number } = {},
@@ -469,6 +522,7 @@ export type MatchSignal =
   | 'high_token_overlap'
   | 'initial_expansion'
   | 'name_reordering'
+  | 'shared_neighbours'
   | 'semantic';
 
 export interface MatchCandidate {
@@ -506,6 +560,35 @@ function isPersonPair(a: ResolvableEntity, b: ResolvableEntity): boolean {
   return pa === 'person' && pb === 'person';
 }
 
+/**
+ * Shared neighbours below which structural agreement means nothing.
+ *
+ * One is common — two entities extracted from the same note routinely both link
+ * to it — so one shared neighbour is a coincidence of provenance rather than
+ * evidence of identity.
+ */
+export const MIN_SHARED_NEIGHBOURS = 2;
+
+/** How many entities both sides are connected to, excluding each other. */
+export function sharedNeighbourCount(
+  aId: string,
+  bId: string,
+  neighbours?: ReadonlyMap<string, ReadonlySet<string>>,
+): number {
+  if (!neighbours) return 0;
+  const na = neighbours.get(aId);
+  const nb = neighbours.get(bId);
+  if (!na || !nb) return 0;
+  // Walk the smaller side.
+  const [small, large] = na.size <= nb.size ? [na, nb] : [nb, na];
+  let count = 0;
+  for (const id of small) {
+    if (id === aId || id === bId) continue;
+    if (large.has(id)) count++;
+  }
+  return count;
+}
+
 function cosine(a: number[], b: number[]): number {
   if (a.length !== b.length || !a.length) return 0;
   let dot = 0;
@@ -528,10 +611,17 @@ function cosine(a: number[], b: number[]): number {
  * similarity before it reaches the auto-merge threshold — otherwise "IBCA Data
  * Strategy" and "IBCA AI Strategy" would collapse into one.
  */
+export interface ScoreOptions {
+  /** address → how many distinct identities have written under it. */
+  addressIdentities?: ReadonlySet<string> | ReadonlyMap<string, number>;
+  /** entity id → the ids it shares an edge with. */
+  neighbours?: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
 export function scorePair(
   a: ResolvableEntity,
   b: ResolvableEntity,
-  opts: { sharedSenders?: ReadonlySet<string> } = {},
+  opts: ScoreOptions = {},
 ): MatchCandidate | null {
   if (a.id === b.id) return null;
 
@@ -546,9 +636,13 @@ export function scorePair(
   // rule below and is scored above the auto-merge threshold on its own. It is
   // also the one signal a display-name comparison can never reach: "J. Kelly"
   // and "John Kelly (IBCA)" look unalike and are provably one person.
-  const emailA = emailOf(a, opts.sharedSenders);
-  const emailB = emailOf(b, opts.sharedSenders);
-  const sameEmail = Boolean(emailA && emailB && emailA === emailB);
+  const emailA = emailOf(a, opts.addressIdentities);
+  const emailB = emailOf(b, opts.addressIdentities);
+  // A shared address only settles it when the address belongs to ONE identity,
+  // or when it belongs to two and the two names are variants of each other.
+  const sameEmail =
+    Boolean(emailA && emailB && emailA === emailB) &&
+    (emailTrust(emailA!, opts.addressIdentities) === 'proof' || isNameVariant(a.name, b.name));
 
   if (sameEmail) {
     signals.push('same_email');
@@ -596,6 +690,21 @@ export function scorePair(
     confidence = Math.min(confidence * 0.4, 0.5);
   }
 
+  // Structural corroboration: how much of the graph the two already share.
+  //
+  // This is evidence neither the names nor the embeddings can reach. "Card
+  // ending 6878" and "Card *6878" describe the same card, read as 53% similar,
+  // and share four neighbours; "Church of England" and "Free Church of England"
+  // read as similar and share none. Two is the floor because one shared
+  // neighbour is common in a graph this dense and says almost nothing.
+  const shared = sharedNeighbourCount(a.id, b.id, opts.neighbours);
+  const structurallyCorroborated = shared >= MIN_SHARED_NEIGHBOURS;
+
+  if (structurallyCorroborated && signals.length) {
+    signals.push('shared_neighbours');
+    confidence = Math.min(0.95, confidence + 0.15);
+  }
+
   // Semantic corroboration, when both sides have an embedding.
   let similarity: number | null = null;
   if (a.embedding && b.embedding) {
@@ -607,8 +716,11 @@ export function scorePair(
       // Near-identical meaning with unlike names — worth review, never automatic.
       signals.push('semantic');
       confidence = 0.45;
-    } else if (similarity < 0.55 && signals.length && confidence < 0.9) {
-      // Names look alike but the entities mean different things. Back off.
+    } else if (similarity < 0.55 && signals.length && confidence < 0.9 && !structurallyCorroborated) {
+      // Names look alike but the entities mean different things. Back off —
+      // unless the graph says otherwise. A summary is a description and can be
+      // written two ways; a shared neighbour is a fact. This penalty was
+      // burying real duplicates: "Google LLC" and "Google" read as 31% similar.
       confidence *= 0.5;
     }
   }
@@ -652,6 +764,7 @@ function describeSignals(
   if (signals.includes('acronym')) parts.push(`"${shorter(a, b).name}" is the acronym of "${longer(a, b).name}"`);
   if (signals.includes('token_subset')) parts.push('one name contains the other');
   if (signals.includes('high_token_overlap')) parts.push('names share most of their words');
+  if (signals.includes('shared_neighbours')) parts.push('they share connections in the graph');
   if (signals.includes('semantic') && similarity !== null) {
     parts.push(`summaries are ${Math.round(similarity * 100)}% similar`);
   }
@@ -689,10 +802,10 @@ export function pickSurvivor(a: ResolvableEntity, b: ResolvableEntity): { keep: 
  */
 export function findDuplicateCandidates(
   entities: ResolvableEntity[],
-  opts: { minConfidence?: number; sharedSenders?: ReadonlySet<string> } = {},
+  opts: { minConfidence?: number } & ScoreOptions = {},
 ): MatchCandidate[] {
   const minConfidence = opts.minConfidence ?? 0.35;
-  const sharedSenders = opts.sharedSenders;
+  const { addressIdentities, neighbours } = opts;
   const blocks = new Map<string, ResolvableEntity[]>();
 
   const addTo = (key: string, e: ResolvableEntity) => {
@@ -708,7 +821,7 @@ export function findDuplicateCandidates(
     // person under unlike display names share no token to meet in.
     // Guarded, so the hundreds of people a notification service writes as do
     // not meet in a block at all.
-    const email = emailOf(e, sharedSenders);
+    const email = emailOf(e, addressIdentities);
     if (email) addTo(`email:${email}`, e);
 
     const tokens = significantTokens(e.name);
@@ -726,7 +839,7 @@ export function findDuplicateCandidates(
     if (group.length < 2 || group.length > 60) continue;
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < group.length; j++) {
-        const cand = scorePair(group[i], group[j], { sharedSenders });
+        const cand = scorePair(group[i], group[j], { addressIdentities, neighbours });
         if (!cand || cand.confidence < minConfidence) continue;
         const key = `${cand.aId}|${cand.bId}`;
         const prev = best.get(key);
