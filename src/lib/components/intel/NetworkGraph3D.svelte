@@ -42,7 +42,7 @@
 
   import type { ForceGraph3DInstance } from '3d-force-graph';
   import type { NetNode, NetEdge } from './types';
-  import { recencyFade } from './graph-visual';
+  import { recencyFade, clusterColour } from './graph-visual';
 
   let {
     nodes = [],
@@ -50,6 +50,10 @@
     highlightPath = null,
     matchedIds = [],
     selectedId = null,
+    focusCommunity = null,
+    explode = 1,
+    communities = [],
+    showShells = true,
     onSelect,
     onOpen,
   }: {
@@ -64,6 +68,25 @@
      */
     matchedIds?: string[];
     selectedId?: string | null;
+    /**
+     * The cluster to bring forward, or null for all of them.
+     *
+     * Focus is a VIEW state, not a filter: everything stays on screen and keeps
+     * its position, the rest simply recedes. Where clusters interpenetrate —
+     * which is the whole problem in 3D — removing the others would answer a
+     * different question ("what is in this cluster") from the one being asked
+     * ("where does this cluster sit among the rest").
+     */
+    focusCommunity?: number | null;
+    /**
+     * How far apart to push the communities. 1 is the natural layout; above
+     * that they separate along their own directions.
+     */
+    explode?: number;
+    /** Cluster ids with their names, so a shell can be labelled. */
+    communities?: Array<{ id: number; size: number; label: string }>;
+    /** Draw the translucent cluster shells. */
+    showShells?: boolean;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
@@ -116,9 +139,25 @@
   let graph: IntelGraph | null = null;
   let simNodes: Sim3DNode[] = [];
   let simEdges: Sim3DEdge[] = [];
+  /** id → sim node, so an edge can ask about its endpoints' clusters. */
+  let simById = new Map<string, Sim3DNode>();
   let resizeObserver: ResizeObserver | null = null;
   /** Node id → the extras group parented to that node's sphere. */
   const extrasById = new Map<string, THREE.Group>();
+  /**
+   * Cluster shells and their name labels, added to the SCENE rather than to a
+   * node.
+   *
+   * Safe, and checked against the library: `three-render-objects` raycasts only
+   * `[forceGraph]`, so scene children are never hit-tested and need no
+   * `raycast` stub, and its teardown empties the whole scene and disposes what
+   * it finds — so these are cleaned up with everything else.
+   */
+  const shells: THREE.Object3D[] = [];
+  /** Which cluster each shell belongs to, so focus can dim the others. */
+  const shellCommunity = new Map<THREE.Object3D, number>();
+  /** Loaded with the graph library; three's addons cannot be imported on the server. */
+  let ConvexGeometryCtor: (typeof import('three/addons/geometries/ConvexGeometry.js'))['ConvexGeometry'] | null = null;
   /** Materials and geometries we own, so they can be disposed on teardown. */
   const owned: Array<{ dispose: () => void }> = [];
   /** Restores the shared material a node had before it was hover-brightened. */
@@ -134,16 +173,6 @@
   let lastClick = { id: '', at: 0 };
 
   /**
-   * Matches the 2D view's palette exactly — the same cluster must be the same
-   * colour in both, or switching views looks like switching graphs.
-   */
-  const CLUSTER_COLOURS = [
-    '#0e5b66', '#c4570a', '#2d7a3a', '#7a3a8a', '#b0892a',
-    '#3a6ea5', '#a53a3a', '#4a7a6a', '#8a5a2a', '#5a4a8a',
-  ];
-  const clusterColour = (c: number) => CLUSTER_COLOURS[c % CLUSTER_COLOURS.length];
-
-  /**
    * Design tokens, resolved to literals.
    *
    * WebGL cannot read `var(--bg)`, so the values are read off the live element
@@ -155,6 +184,7 @@
     accent: '#c4570a',
     label: '#3d2e1a',
     font: 'system-ui, sans-serif',
+    mono: 'ui-monospace, monospace',
   };
 
   function readPalette(el: HTMLElement) {
@@ -165,6 +195,9 @@
       accent: v('--accent', '#c4570a'),
       label: v('--text-secondary', '#3d2e1a'),
       font: v('--font-body', 'system-ui, sans-serif'),
+      // Cluster names are a LABEL, so they take the mono face the design system
+      // reserves for labels rather than the body face entity names use.
+      mono: v('--font-mono', 'ui-monospace, monospace'),
     };
   }
 
@@ -176,6 +209,7 @@
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
   }
 
+  const communityLabels = $derived(new Map(communities.map((c) => [c.id, c.label])));
   const pathSet = $derived(new Set(highlightPath ?? []));
   const matchSet = $derived(new Set(matchedIds ?? []));
   /** Only dim when there is something to dim AGAINST. */
@@ -201,13 +235,22 @@
    */
   function radius(n: NetNode): number {
     // sqrt so a 10× importance difference is a ~3× size difference.
-    return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
+    const base = 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
+    // Focused clusters keep their size; the rest shrink towards the background.
+    // Shrinking as well as fading matters in 3D specifically: a distant node is
+    // already small, so opacity alone leaves the context reading as foreground.
+    return outOfFocus(n) ? base * 0.55 : base;
+  }
+
+  /** True when a focus is set and this node is not part of it. */
+  function outOfFocus(n: NetNode): boolean {
+    return focusCommunity !== null && n.community !== focusCommunity;
   }
 
   /** The 2D view's fill-opacity rules, unchanged — including its age fade. */
   function nodeAlpha(n: NetNode): number {
     const base = dimming && !matchSet.has(n.id) ? 0.14 : n.confirmed ? 0.85 : 0.4;
-    return base * recencyFade(n.recency);
+    return base * recencyFade(n.recency) * (outOfFocus(n) ? 0.18 : 1);
   }
 
   /**
@@ -242,7 +285,11 @@
   const labelCache = new Map<string, THREE.Sprite>();
 
   /** A text label as a camera-facing sprite, styled like the 2D view's <text>. */
-  function makeLabel(text: string): THREE.Sprite | null {
+  function makeLabel(
+    text: string,
+    face: string = palette.font,
+    height: number = 0.021,
+  ): THREE.Sprite | null {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
@@ -250,7 +297,7 @@
     // Same truncation as the 2D view, so a name reads identically in both.
     const label = text.length > 26 ? `${text.slice(0, 24)}…` : text;
     const fontSize = 48;
-    const font = `500 ${fontSize}px ${palette.font}`;
+    const font = `500 ${fontSize}px ${face}`;
     ctx.font = font;
     canvas.width = Math.ceil(ctx.measureText(label).width) + 28;
     canvas.height = Math.round(fontSize * 1.5);
@@ -284,8 +331,9 @@
     const sprite = new THREE.Sprite(material);
     // With sizeAttenuation off, scale is a fraction of the frustum height:
     // screen height ≈ scale / tan(fov/2) / 2, which puts 0.021 at about 14px on
-    // this panel.
-    const height = 0.021;
+    // this panel. Cluster names pass a larger one: they name a region rather
+    // than a node, so they should be readable when zoomed out far enough that
+    // the entity labels are not.
     sprite.scale.set((canvas.width / canvas.height) * height, height, 1);
     // Anchored at its bottom edge, so it grows upward from above the node.
     sprite.center.set(0.5, 0);
@@ -389,7 +437,13 @@
     if (pathEdgeKeys.has(key)) return palette.accent;
     // The literals the 2D view uses, so the same link is the same colour in both,
     // with the same age fade multiplied into their alpha.
-    const fade = recencyFade(edge.recency);
+    const a = simById.get(endpointId(edge.source));
+    const b = simById.get(endpointId(edge.target));
+    // An edge recedes unless BOTH ends are in focus — a half-faded edge leaving
+    // the focused cluster is exactly the thing worth seeing, so it is drawn at
+    // the context level rather than removed.
+    const focusFade = (a && outOfFocus(a)) || (b && outOfFocus(b)) ? 0.2 : 1;
+    const fade = recencyFade(edge.recency) * focusFade;
     return edge.crossCommunity
       ? `rgba(196, 87, 10, ${(0.42 * fade).toFixed(3)})`
       : `rgba(26, 16, 8, ${(0.16 * fade).toFixed(3)})`;
@@ -442,11 +496,212 @@
     fg.d3Force('charge', forceManyBody().strength((d: Sim3DNode) => -120 - radius(d) * 12));
     fg.d3Force('center', forceCenter(0, 0, 0));
     fg.d3Force('collide', forceCollide().radius((d: Sim3DNode) => radius(d) + 4));
-    // Pull clusters apart along x so communities read as separate regions — the
-    // 2D view does the same, offset around the canvas centre instead of origin.
-    fg.d3Force('x', forceX((d: Sim3DNode) => ((d.community % 5) - 2) * (SPAN / 7)).strength(0.045));
-    fg.d3Force('y', forceY(0).strength(0.045));
-    fg.d3Force('z', forceZ(0).strength(0.045));
+    applySeparation(fg);
+  }
+
+  /**
+   * Where each community sits relative to the middle, as a unit vector.
+   *
+   * Golden-angle spiral over the sphere, so any number of communities spreads
+   * evenly and — this is the part that matters — a given community index always
+   * gets the SAME direction. A random or hash-ordered arrangement would send
+   * clusters somewhere new every time the graph reloaded, and the layout would
+   * stop being somewhere you can learn your way around.
+   *
+   * The 2D view spreads communities along x alone. Doing that in 3D wastes two
+   * of the three axes, which is a large part of why clusters ended up meshed.
+   */
+  function communityDirection(c: number): { x: number; y: number; z: number } {
+    const i = Math.abs(Math.floor(c));
+    // Deterministic point on a Fibonacci sphere. The half-step offset keeps
+    // index 0 off the pole, where neighbouring directions crowd together.
+    //
+    // The clamp is load-bearing, not defensive: with a whole-step offset the
+    // last index drives the acos argument just past -1, which returns NaN — and
+    // a NaN force target propagates into the node positions, out to the convex
+    // hulls built from them, and surfaces as "computed radius is NaN" from
+    // three's bounding-sphere maths, a long way from the cause.
+    const n = 24;
+    const k = (i % n) + 0.5;
+    const phi = Math.acos(Math.max(-1, Math.min(1, 1 - (2 * k) / n)));
+    const theta = Math.PI * (1 + Math.sqrt(5)) * k;
+    return {
+      x: Math.cos(theta) * Math.sin(phi),
+      y: Math.sin(theta) * Math.sin(phi),
+      z: Math.cos(phi),
+    };
+  }
+
+  /**
+   * The three positional forces that hold communities apart, scaled by
+   * `explode`. Re-installable on its own: `forceX/Y/Z` resolve no ids, so unlike
+   * `forceLink` they can be replaced after `graphData()` without throwing.
+   */
+  /**
+   * Draw a translucent shell around each community, with its name floating at
+   * the centroid.
+   *
+   * Rebuilt on demand, never per tick: twenty convex hulls at 60fps is ~120ms of
+   * main thread per second plus a geometry upload per hull per frame, which is
+   * the way to make this technique unusable. The layout is visibly moving while
+   * the engine runs, so shells appear when it stops.
+   */
+  /**
+   * The extent of a cluster, drawn as a translucent shell with its name on it.
+   *
+   * Two things this deliberately does NOT do, both learned by drawing it the
+   * obvious way first and looking at the result:
+   *
+   *  1. It does not shell every cluster at once. Twenty-four translucent hulls
+   *     over one another is not a legibility aid, it is a fog — it hid the graph
+   *     more effectively than the meshing it was meant to solve. A shell answers
+   *     "how far does THIS cluster reach", which is a question about one
+   *     cluster, so it is drawn for the focused one only.
+   *  2. It does not hull every member. A community owns outliers flung to the
+   *     edge of the layout, and their convex hull is a huge spiky polygon that
+   *     describes the debris rather than the body. Points are trimmed to those
+   *     within the 80th percentile of distance from the centre, the same
+   *     reasoning (and roughly the same percentile) as `frameCamera`.
+   *
+   * Cluster NAMES are cheap and useful everywhere, so those are drawn for every
+   * cluster big enough to be worth naming, focused or not.
+   */
+  function rebuildShells() {
+    const fg = graph;
+    if (!fg) return;
+    clearShells();
+    if (!showShells) return;
+
+    const byCommunity = new Map<number, Sim3DNode[]>();
+    for (const n of simNodes) {
+      if (n.x == null || n.y == null || n.z == null) continue;
+      const list = byCommunity.get(n.community);
+      if (list) list.push(n);
+      else byCommunity.set(n.community, [n]);
+    }
+
+    // The clusters big enough to orient by when nothing is focused.
+    const namedClusters = new Set(
+      [...communities].sort((a, b) => b.size - a.size).slice(0, 8).map((c) => c.id),
+    );
+
+    const scene = fg.scene();
+    for (const [community, members] of byCommunity) {
+      const points = members.map((n) => new THREE.Vector3(n.x!, n.y!, n.z!));
+      const centre = points
+        .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+        .multiplyScalar(1 / points.length);
+
+      // Named only where a name earns its space. Every cluster labelled at once
+      // put two dozen names on top of each other in the middle of the scene,
+      // because that is where most centroids are — the labels obscured the graph
+      // they were annotating. With a cluster focused, its name is the only one
+      // that is being asked about; otherwise the biggest few orient you and the
+      // rest are a click away in the picker.
+      //
+      // Placed on the BODY rather than on the mean of body plus outliers, so the
+      // name sits where the cluster looks like it is.
+      const name = communityLabels.get(community);
+      const worthNaming =
+        focusCommunity !== null ? community === focusCommunity : namedClusters.has(community);
+      if (name && worthNaming && members.length >= 4) {
+        const core = trimmed(points, centre);
+        const coreCentre = core
+          .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+          .multiplyScalar(1 / core.length);
+        const sprite = makeLabel(name, palette.mono, 0.03);
+        if (sprite) {
+          sprite.center.set(0.5, 0.5);
+          sprite.position.copy(coreCentre);
+          scene.add(sprite);
+          shells.push(sprite);
+          shellCommunity.set(sprite, community);
+        }
+      }
+
+      if (community !== focusCommunity) continue;
+      if (members.length < 3) continue;
+
+      const core = trimmed(points, centre);
+      const coreCentre = core
+        .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+        .multiplyScalar(1 / core.length);
+
+      let geometry: THREE.BufferGeometry | null = null;
+      // ConvexHull needs four points and silently produces an EMPTY hull below
+      // that — and also for four or more coplanar ones, which a small cluster
+      // laid out flat can easily be. An invisible mesh with a zero-radius
+      // bounding sphere is much harder to diagnose than a sphere that is
+      // obviously a fallback, so the degenerate cases get one deliberately.
+      if (core.length >= 4 && ConvexGeometryCtor) {
+        try {
+          const hull = new ConvexGeometryCtor(core);
+          const pos = hull.getAttribute('position');
+          if (pos && pos.count > 0 && Number.isFinite(pos.array[0])) geometry = hull;
+          else hull.dispose();
+        } catch {
+          geometry = null;
+        }
+      }
+      if (!geometry) {
+        const spread = Math.max(...core.map((p) => p.distanceTo(coreCentre)), 12);
+        geometry = new THREE.SphereGeometry(spread * 1.1, 12, 8);
+      }
+
+      const material = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(clusterColour(community)),
+        transparent: true,
+        opacity: 0.1,
+        // BackSide + no depth write, copying the selection halo: the shell has to
+        // sit BEHIND the nodes it contains, and a front-facing translucent hull
+        // over ~600 already-transparent node materials flickers as the camera
+        // orbits and the depth sort flips.
+        side: THREE.BackSide,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.renderOrder = -1;
+      scene.add(mesh);
+      shells.push(mesh);
+      shellCommunity.set(mesh, community);
+    }
+  }
+
+  /**
+   * The dense part of a point cloud — everything inside the 80th percentile of
+   * distance from its centre.
+   */
+  function trimmed(points: THREE.Vector3[], centre: THREE.Vector3): THREE.Vector3[] {
+    if (points.length < 6) return points;
+    const withDist = points
+      .map((p) => ({ p, d: p.distanceTo(centre) }))
+      .sort((a, b) => a.d - b.d);
+    const keep = Math.max(4, Math.floor(withDist.length * 0.8));
+    return withDist.slice(0, keep).map((x) => x.p);
+  }
+
+  function clearShells() {
+    const fg = graph;
+    for (const o of shells) {
+      o.parent?.remove(o);
+      const mesh = o as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = (mesh as unknown as { material?: THREE.Material & { map?: THREE.Texture } }).material;
+      if (mat) {
+        mat.map?.dispose();
+        mat.dispose();
+      }
+    }
+    shells.length = 0;
+    shellCommunity.clear();
+    void fg;
+  }
+
+  function applySeparation(fg: IntelGraph) {
+    const reach = (SPAN / 7) * Math.max(0, explode);
+    fg.d3Force('x', forceX((d: Sim3DNode) => communityDirection(d.community).x * reach).strength(0.045));
+    fg.d3Force('y', forceY((d: Sim3DNode) => communityDirection(d.community).y * reach).strength(0.045));
+    fg.d3Force('z', forceZ((d: Sim3DNode) => communityDirection(d.community).z * reach).strength(0.045));
   }
 
   async function build() {
@@ -472,7 +727,13 @@
 
     // Browser-only: the library builds a WebGL renderer at construction, so it
     // cannot be imported at module scope on a server-rendered page.
-    const { default: ForceGraph3D } = await import('3d-force-graph');
+    const [{ default: ForceGraph3D }, { ConvexGeometry }] = await Promise.all([
+      import('3d-force-graph'),
+      // three's addons are browser-only for the same reason the graph is, and
+      // the repo already imports them by this path (see $lib/sim/federation).
+      import('three/addons/geometries/ConvexGeometry.js'),
+    ]);
+    ConvexGeometryCtor = ConvexGeometry;
     if (token !== buildToken || !container) return;
 
     const width = container.clientWidth || 800;
@@ -485,6 +746,7 @@
       return { ...n, x: prev?.x, y: prev?.y, z: prev?.z };
     });
     const byId = new Map(simNodes.map((n) => [n.id, n]));
+    simById = byId;
     simEdges = edges
       .filter((e) => byId.has(e.source) && byId.has(e.target))
       .map((e) => ({ ...e }));
@@ -575,6 +837,10 @@
    * follow it without any per-tick work.
    */
   const EARLY_FIT_TICK = 45;
+  /** d3's own default. Restored after an exploded-view reheat borrows a faster one. */
+  const DEFAULT_ALPHA_DECAY = 0.0228;
+  /** Cools in ~50 ticks instead of ~300, so the slider feels like a control. */
+  const EXPLODE_ALPHA_DECAY = 0.08;
   let tickCount = 0;
 
   function onTick() {
@@ -585,6 +851,12 @@
   }
 
   function onSettled() {
+    // The layout is at rest, so the hulls drawn now will still fit in a moment.
+    // Rebuilding them while the engine runs would mean twenty convex hulls per
+    // frame, which is what makes this technique unusable if wired naively.
+    rebuildShells();
+    // Restore the settling speed the exploded-view slider borrowed.
+    graph?.d3AlphaDecay(DEFAULT_ALPHA_DECAY);
     for (const n of simNodes) {
       if (n.x != null && n.y != null && n.z != null) {
         positions.set(n.id, { x: n.x, y: n.y, z: n.z });
@@ -829,6 +1101,7 @@
   // ── Teardown ───────────────────────────────────────────────────────────────
 
   function teardown() {
+    clearShells();
     hoverRestore = null;
     hovered = null;
     tickCount = 0;
@@ -895,6 +1168,63 @@
     selectedId;
     if (!graph) return;
     untrack(() => reconcileHalos());
+  });
+
+  /**
+   * Bring a cluster forward, or let them all back.
+   *
+   * Deliberately re-sets ONLY the colour and size accessors. `nodeThreeObject`
+   * is left alone because changing it makes the library clear its node object
+   * cache and rebuild all six hundred groups — every label sprite, halo and
+   * broker cage — where a colour change swaps materials it already has. Fresh
+   * function identities on purpose: kapsule compares accessors by reference and
+   * an identical one is a no-op.
+   *
+   * The cluster shell is rebuilt here because focus decides which cluster has
+   * one at all — see rebuildShells.
+   */
+  $effect(() => {
+    focusCommunity;
+    const fg = graph;
+    if (!fg) return;
+    untrack(() => {
+      hoverRestore = null;
+      fg.nodeColor((n: Sim3DNode) => nodeColour(n));
+      fg.nodeVal((n: Sim3DNode) => nodeVolume(n));
+      fg.linkColor((e: Sim3DEdge) => linkColour(e));
+      // The shell belongs to whichever cluster is focused, so this is a rebuild
+      // rather than a restyle. It is cheap: one hull, not one per cluster.
+      rebuildShells();
+    });
+  });
+
+  /**
+   * Push the communities apart, or let them settle back together.
+   *
+   * The separation is the layout's own x/y/z forces with a scalar on them, so
+   * this is a physics change rather than a second arrangement of the same graph
+   * — nodes travel to the new positions instead of jumping. The engine has to be
+   * reheated for a force change to take effect at all (a settled simulation
+   * never ticks), and the decay is raised first so it comes to rest in about a
+   * second rather than the five a full reheat would take.
+   */
+  $effect(() => {
+    explode;
+    const fg = graph;
+    if (!fg || !simNodes.length) return;
+    untrack(() => {
+      // The hulls are about to be wrong; drop them until the layout rests.
+      clearShells();
+      applySeparation(fg);
+      fg.d3AlphaDecay(EXPLODE_ALPHA_DECAY);
+      fg.d3ReheatSimulation();
+    });
+  });
+
+  $effect(() => {
+    showShells;
+    if (!graph) return;
+    untrack(() => rebuildShells());
   });
 
   $effect(() => {

@@ -34,3 +34,20 @@ export function recencyFade(recency: number | null | undefined): number {
   const t = (r - RECENCY_FLOOR) / (1 - RECENCY_FLOOR);
   return STALE_FLOOR + (1 - STALE_FLOOR) * t;
 }
+
+/**
+ * Cluster palette. The same cluster must be the same colour in the 2D view, the
+ * 3D view and the cluster picker, or switching between them looks like
+ * switching graphs.
+ *
+ * Both graph components held their own identical copy of this and kept them in
+ * step by hand; a third copy in the picker was the point at which that stopped
+ * being reasonable.
+ */
+export const CLUSTER_COLOURS = [
+  '#0e5b66', '#c4570a', '#2d7a3a', '#7a3a8a', '#b0892a',
+  '#3a6ea5', '#a53a3a', '#4a7a6a', '#8a5a2a', '#5a4a8a',
+];
+
+export const clusterColour = (c: number): string =>
+  CLUSTER_COLOURS[((c % CLUSTER_COLOURS.length) + CLUSTER_COLOURS.length) % CLUSTER_COLOURS.length];

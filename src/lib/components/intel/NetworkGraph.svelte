@@ -22,7 +22,7 @@
   import { untrack } from 'svelte';
 
   import type { NetNode, NetEdge } from './types';
-  import { recencyFade } from './graph-visual';
+  import { recencyFade, clusterColour } from './graph-visual';
 
   let {
     nodes = [],
@@ -30,6 +30,7 @@
     highlightPath = null,
     matchedIds = [],
     selectedId = null,
+    focusCommunity = null,
     onSelect,
     onOpen,
   }: {
@@ -44,6 +45,8 @@
      */
     matchedIds?: string[];
     selectedId?: string | null;
+    /** Cluster to bring forward; the rest recede. Matches the 3D view. */
+    focusCommunity?: number | null;
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
@@ -63,16 +66,6 @@
   let resizeObserver: ResizeObserver | null = null;
   /** Node positions survive a filter change so the layout does not jump. */
   const positions = new Map<string, { x: number; y: number }>();
-
-  /**
-   * Cluster colours. Distinct enough to tell apart, muted enough to sit on the
-   * cream background without shouting. Communities beyond this cycle.
-   */
-  const CLUSTER_COLOURS = [
-    '#0e5b66', '#c4570a', '#2d7a3a', '#7a3a8a', '#b0892a',
-    '#3a6ea5', '#a53a3a', '#4a7a6a', '#8a5a2a', '#5a4a8a',
-  ];
-  const clusterColour = (c: number) => CLUSTER_COLOURS[c % CLUSTER_COLOURS.length];
 
   const pathSet = $derived(new Set(highlightPath ?? []));
   const matchSet = $derived(new Set(matchedIds ?? []));
@@ -222,10 +215,12 @@
       .attr('r', (d) => radius(d))
       .attr('fill', (d) => clusterColour(d.community))
       .attr('fill-opacity', (d) =>
-        // Keyword dimming first, then age. A node that is both off-keyword and
-        // stale must not vanish, so the age term is floored — see recencyFade.
+        // Keyword dimming first, then age, then cluster focus. A node that is
+        // all three must not vanish, so the age term is floored — see
+        // recencyFade — and focus is a view state rather than a filter.
         (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
-        recencyFade(d.recency),
+        recencyFade(d.recency) *
+        (focusCommunity !== null && d.community !== focusCommunity ? 0.18 : 1),
       )
       .attr('stroke', (d) =>
         d.id === selectedId ? 'var(--accent)' : pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',
