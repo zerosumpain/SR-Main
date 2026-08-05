@@ -93,3 +93,30 @@ server.on('upgrade', (req, clientSocket, head) => {
 server.listen(PORT, HOST, () => {
   console.log(`Listening on http://${HOST}:${PORT} (with /ws proxy → ${BUILDER_SOCKET})`);
 });
+
+/**
+ * Stop accepting work on the way down.
+ *
+ * hooks.server.ts drains the workflow engine on SIGTERM and then calls
+ * process.exit(0), but it holds no handle on this server — so nothing ever
+ * closed the listening socket, and every restart severed whatever requests and
+ * SSE streams were open. cloudflared sees that as the origin resetting the
+ * connection and returns 502, which is why restarts showed up as gateway errors
+ * rather than as a brief blip.
+ *
+ * Closing the listener refuses new connections immediately, so the supervisor
+ * can bring the replacement up, while requests already being served run to
+ * completion inside the drain window. `closeIdleConnections` is the other half:
+ * without it, a pooled keep-alive connection that cloudflared is about to reuse
+ * stays open just long enough to be picked, then dies mid-request.
+ */
+let closing = false;
+function closeServer() {
+  if (closing) return;
+  closing = true;
+  server.close(() => console.log('[server] listener closed'));
+  server.closeIdleConnections?.();
+}
+
+process.on('SIGTERM', closeServer);
+process.on('SIGINT', closeServer);

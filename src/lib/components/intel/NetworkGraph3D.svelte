@@ -79,6 +79,16 @@
   let container = $state<HTMLDivElement | null>(null);
   let hovered = $state<NetNode | null>(null);
   let tooltip = $state({ x: 0, y: 0 });
+  /**
+   * Why the scene failed to start, or null.
+   *
+   * `build()` is fire-and-forget from an effect, so before this every way it
+   * could fail — the dynamic import not arriving, WebGL refusing a context, a
+   * driver-level three.js error — became an unhandled rejection and left a
+   * blank panel with nothing to read. A 3D view that cannot start has to say
+   * so and point at the 2D one, which always works.
+   */
+  let buildError = $state<string | null>(null);
 
   // ── Non-reactive handles ───────────────────────────────────────────────────
   interface Sim3DNode extends NetNode {
@@ -435,6 +445,20 @@
   }
 
   async function build() {
+    if (!container) return;
+    // Cleared on every attempt, or one transient failure would pin the banner
+    // over a graph that has since built fine — this effect re-runs on every
+    // filter change.
+    buildError = null;
+    try {
+      await buildScene();
+    } catch (err) {
+      buildError = err instanceof Error ? err.message : 'the 3D view could not start';
+      console.error('[intel:3d] build failed', err);
+    }
+  }
+
+  async function buildScene() {
     if (!container) return;
     const token = ++buildToken;
     teardown();
@@ -902,7 +926,9 @@
 >
   <div class="scene" bind:this={container}></div>
 
-  {#if nodes.length === 0}
+  {#if buildError}
+    <div class="empty">The 3D view could not start ({buildError}). Switch to 2D.</div>
+  {:else if nodes.length === 0}
     <div class="empty">Nothing matches these filters.</div>
   {/if}
 
