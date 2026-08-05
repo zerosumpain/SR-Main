@@ -24,6 +24,7 @@ function node(id: string, over: Partial<GraphNode> = {}): GraphNode {
     updatedAt: NOW - 400 * DAY,
     noteCount: 3,
     lastSeenAt: NOW - 5 * DAY,
+    evidenceAt: NOW - 5 * DAY,
     aliases: [],
     categories: [],
     sources: [],

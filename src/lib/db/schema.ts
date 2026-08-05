@@ -1455,6 +1455,21 @@ export const intelNotes = pgTable('intel_notes', {
    *  without walking file paths inside the cached analytics snapshot; re-synced
    *  when folder settings change. */
   categories: jsonb('categories').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /**
+   * When the thing this note describes actually HAPPENED, as distinct from when
+   * the row was written. Null means "no better answer than createdAt".
+   *
+   * `createdAt` is the ingest clock and is useless for ranking correspondence:
+   * every email note lands on the day its sweep ran, so on 2026-08-05 all 1,038
+   * of them shared a single day while the mail they describe spanned the twelve
+   * week rolling window. Anything time-weighted — relevance, the graph's
+   * staleness fade, the card's evidence timeline — has to read this instead, or
+   * an eleven-week-old thread scores exactly as fresh as this morning's.
+   *
+   * For Gmail this is the thread's `internalDate`, which is Gmail's own receipt
+   * time rather than the sender-written `Date` header.
+   */
+  observedAt: timestamp('observed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

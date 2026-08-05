@@ -28,6 +28,7 @@ function node(
     updatedAt: 0,
     noteCount: 1,
     lastSeenAt: 0,
+    evidenceAt: 0,
     aliases: [],
     categories: [],
     sources: [],

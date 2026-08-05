@@ -42,6 +42,7 @@
 
   import type { ForceGraph3DInstance } from '3d-force-graph';
   import type { NetNode, NetEdge } from './types';
+  import { recencyFade } from './graph-visual';
 
   let {
     nodes = [],
@@ -203,10 +204,10 @@
     return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
   }
 
-  /** The 2D view's fill-opacity rules, unchanged. */
+  /** The 2D view's fill-opacity rules, unchanged — including its age fade. */
   function nodeAlpha(n: NetNode): number {
-    if (dimming && !matchSet.has(n.id)) return 0.14;
-    return n.confirmed ? 0.85 : 0.4;
+    const base = dimming && !matchSet.has(n.id) ? 0.14 : n.confirmed ? 0.85 : 0.4;
+    return base * recencyFade(n.recency);
   }
 
   /**
@@ -386,8 +387,12 @@
   function linkColour(edge: Sim3DEdge): string {
     const key = [endpointId(edge.source), endpointId(edge.target)].sort().join('|');
     if (pathEdgeKeys.has(key)) return palette.accent;
-    // The literals the 2D view uses, so the same link is the same colour in both.
-    return edge.crossCommunity ? 'rgba(196, 87, 10, 0.42)' : 'rgba(26, 16, 8, 0.16)';
+    // The literals the 2D view uses, so the same link is the same colour in both,
+    // with the same age fade multiplied into their alpha.
+    const fade = recencyFade(edge.recency);
+    return edge.crossCommunity
+      ? `rgba(196, 87, 10, ${(0.42 * fade).toFixed(3)})`
+      : `rgba(26, 16, 8, ${(0.16 * fade).toFixed(3)})`;
   }
 
   function linkWidth(edge: Sim3DEdge): number {

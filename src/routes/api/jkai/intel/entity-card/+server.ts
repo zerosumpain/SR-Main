@@ -20,6 +20,8 @@ import {
 } from '$lib/db/schema';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
+import { entityRelevance } from '$lib/jkai/intel/staleness';
+import { UNASSESSED_SCORE } from '$lib/jkai/intel/trust';
 import { acronymsOf } from '$lib/jkai/intel/resolve/match';
 
 /** Cap on names shipped to the client for mention matching. */
@@ -69,6 +71,7 @@ export const GET: RequestHandler = async ({ url }) => {
       properties: intelEntities.properties,
       confidence: intelEntities.confidence,
       confirmed: intelEntities.confirmed,
+      confidenceScore: intelEntities.confidenceScore,
       createdAt: intelEntities.createdAt,
       updatedAt: intelEntities.updatedAt,
       firstSeenIn: intelEntities.firstSeenIn,
@@ -121,12 +124,38 @@ export const GET: RequestHandler = async ({ url }) => {
       relevance: intelNoteEntities.relevance,
       excerpt: intelNoteEntities.excerpt,
       metadata: intelNotes.metadata,
+      // When the thing in this note was actually OBSERVED, as opposed to when
+      // the row was written. `intel_notes.created_at` is the ingest clock: every
+      // email note lands on the day its sweep ran, so ordering or dating
+      // evidence by it puts an eleven-week-old thread and this morning's on the
+      // same day. The edges derived from a note carry the observed time, so it
+      // is read back from there. Null where a note produced no edges.
+      observedAt: sql<Date | null>`(
+        SELECT MAX(r.last_seen_at) FROM intel_relationships r
+        WHERE r.source_note_id = ${intelNotes.id} AND r.suppressed IS NOT TRUE
+      )`.as('observed_at'),
     })
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
     .where(eq(intelNoteEntities.entityId, id))
     .orderBy(desc(intelNotes.createdAt))
     .limit(10);
+
+  // Evidence per month across ALL of this entity's notes, not the ten fetched
+  // for display — the sparkline is meant to show the shape of the whole record.
+  // Dated by observation where the note produced edges, ingest otherwise.
+  const histogramRows = await db.execute(sql`
+    SELECT to_char(date_trunc('month', COALESCE(obs.observed_at, n.created_at)), 'YYYY-MM') AS month,
+           count(*)::int AS count
+    FROM intel_note_entities ne
+    JOIN intel_notes n ON n.id = ne.note_id
+    LEFT JOIN LATERAL (
+      SELECT MAX(r.last_seen_at) AS observed_at FROM intel_relationships r
+      WHERE r.source_note_id = n.id AND r.suppressed IS NOT TRUE
+    ) obs ON TRUE
+    WHERE ne.entity_id = ${id}
+    GROUP BY 1 ORDER BY 1
+  `);
 
   // The note this entity was first extracted from, fetched only when it is not
   // already among the linked notes above.
@@ -177,6 +206,12 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const maxPagerank = Math.max(1e-9, ...[...centrality.pagerank.values()]);
 
+  const node = index.byId.get(id);
+  const relevance = entityRelevance({
+    confidence: row.confidenceScore ?? UNASSESSED_SCORE,
+    evidenceAt: node?.evidenceAt ?? null,
+  });
+
   return json({
     entity: {
       id: row.id,
@@ -193,6 +228,11 @@ export const GET: RequestHandler = async ({ url }) => {
       },
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      // The numeric confidence every other surface already reads — lenses,
+      // briefs and the watchlist all use `confidence_score`. The three-value
+      // `confidence` text column has no numeric mapping anywhere in the codebase
+      // and inventing one here would be a second, disagreeing definition.
+      confidenceScore: row.confidenceScore,
     },
     metrics: {
       degree: index.degree.get(id) ?? 0,
@@ -201,7 +241,16 @@ export const GET: RequestHandler = async ({ url }) => {
       brokerage: brokerageScore(id, centrality, index),
       community: community.membership.get(id) ?? null,
       noteCount: noteTotal,
+      // The single age anchor for this card. Three different ones disagreed
+      // before: the card read notes[0].createdAt, /trust read
+      // lastCorroboratedAt, and trust-refresh read something else again.
+      evidenceAt: node?.evidenceAt ? new Date(node.evidenceAt).toISOString() : null,
+      relevance,
     },
+    histogram: (histogramRows.rows as Array<Record<string, unknown>>).map((r) => ({
+      month: String(r.month),
+      count: Number(r.count ?? 0),
+    })),
     neighbours,
     notes: [
       ...notes.map((n) => ({
@@ -211,6 +260,7 @@ export const GET: RequestHandler = async ({ url }) => {
         createdAt: n.createdAt,
         relevance: n.relevance,
         excerpt: n.excerpt,
+        observedAt: n.observedAt ?? null,
         href: sourceHref(n.id, n.source, n.metadata),
         firstSeen: n.id === firstSeenId,
       })),
@@ -225,6 +275,7 @@ export const GET: RequestHandler = async ({ url }) => {
               createdAt: firstSeen.createdAt,
               relevance: null,
               excerpt: null,
+              observedAt: null,
               href: sourceHref(firstSeen.id, firstSeen.source, firstSeen.metadata),
               firstSeen: true,
             },

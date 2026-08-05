@@ -155,23 +155,45 @@
   .hover-card {
     position: fixed;
     z-index: 90;
-    /* Opaque background lives on EntityCard; this only positions and frames. */
-    border-radius: var(--radius-round);
+    /* Positions only. The surface is on `.scroll` — see below. */
     animation: card-in var(--t-fast) var(--ease-out);
   }
   .hover-card.pinned {
     z-index: 95;
   }
 
+  /*
+   * THE SCROLLER IS THE CARD.
+   *
+   * These were two elements: `.scroll` owned the overflow, and the opaque
+   * background, border and radius lived on EntityCard INSIDE it. So the
+   * scrollbar was painted on a transparent parent — it appeared in a gutter
+   * beside the card rather than within it, and the card's own border scrolled
+   * away with the content. It read as a scrollbar detached from the modal,
+   * because it was.
+   *
+   * Giving the surface to the element that actually scrolls puts the scrollbar
+   * inside the opaque, bordered box and pins the border in place. The inner
+   * card then drops its own surface, or there would be two nested frames.
+   */
   .scroll {
     overflow-y: auto;
-    /* Radius has to be repeated here: the scroller is what actually clips the
-       card's content, so without it EntityCard's corners square off. */
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
     border-radius: var(--radius-round);
     /* Stop a flick at the end of the card scrolling the chat behind it — which
        would then fire the page-scroll handler and dismiss the card. */
     overscroll-behavior: contain;
     scrollbar-width: thin;
+    scrollbar-color: var(--card-border) transparent;
+  }
+  .scroll :global(.entity-card) {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    /* The shell is already CARD_W wide and the card's own 420px cap would fight
+       it, leaving the surface wider than the content it frames. */
+    max-width: none;
   }
   .scroll::-webkit-scrollbar {
     width: 6px;

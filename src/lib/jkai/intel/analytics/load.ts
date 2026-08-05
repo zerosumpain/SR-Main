@@ -147,7 +147,12 @@ async function loadSnapshot(): Promise<{
       -- one note once per category it carries. DISTINCT covers that.
       SELECT ne.entity_id,
              COUNT(DISTINCT ne.note_id)::int AS note_count,
-             MAX(n.created_at)               AS last_seen_at,
+             -- observed_at where the note knows when the thing it describes
+             -- actually happened, created_at only as a fallback. The two are
+             -- very different for correspondence: every email note is written on
+             -- the night its sweep runs, so dating evidence by created_at makes
+             -- an eleven-week-old thread exactly as fresh as this morning's.
+             MAX(COALESCE(n.observed_at, n.created_at)) AS last_seen_at,
              ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories,
              ARRAY_AGG(DISTINCT n.source)   FILTER (WHERE n.source IS NOT NULL) AS sources
       FROM intel_note_entities ne
@@ -190,6 +195,9 @@ async function loadSnapshot(): Promise<{
       lastSeenAt: r.last_seen_at
         ? new Date(String(r.last_seen_at)).getTime()
         : firstSeenAt || created,
+      // Provisional: raised to the newest incident edge observation once the
+      // edges are loaded, below.
+      evidenceAt: 0,
       aliases: toStringArray(r.aliases),
       categories: toStringArray(r.categories),
       sources,
@@ -261,6 +269,28 @@ async function loadSnapshot(): Promise<{
       pairKeyFor(String(r.source), String(r.target)),
     ),
   );
+
+  // Resolve each entity's observation clock now that both halves are in hand.
+  //
+  // The later of the two observation clocks, which is now a fair comparison:
+  // `lastSeenAt` reads `observed_at` (when the mail landed) rather than
+  // `created_at` (when the sweep ran), so neither clock is systematically newer
+  // than the other any more. Taking the max therefore means "when did we last
+  // see this entity", and it is monotone — a new observation can only move an
+  // entity forward, which matters because the watchlist alerts on the change.
+  //
+  // Before `observed_at` existed this had to prefer the edge clock outright:
+  // the note clock was the ingest time and would have won nearly every
+  // comparison, burying the observed date it was meant to correct.
+  const newestEdge = new Map<string, number>();
+  for (const e of edges) {
+    if (!e.lastSeenAt) continue;
+    if ((newestEdge.get(e.source) ?? 0) < e.lastSeenAt) newestEdge.set(e.source, e.lastSeenAt);
+    if ((newestEdge.get(e.target) ?? 0) < e.lastSeenAt) newestEdge.set(e.target, e.lastSeenAt);
+  }
+  for (const n of nodes) {
+    n.evidenceAt = Math.max(n.lastSeenAt, newestEdge.get(n.id) ?? 0);
+  }
 
   return { snapshot: { nodes, edges }, suppressedPairs };
 }
