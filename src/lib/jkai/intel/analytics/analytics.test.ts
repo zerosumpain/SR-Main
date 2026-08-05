@@ -66,7 +66,7 @@ function barbell(): GraphSnapshot {
 }
 
 describe('model', () => {
-  it('builds undirected adjacency and degrees', () => {
+  it('builds undirected adjacency and degrees', async () => {
     const index = buildIndex(barbell());
     expect(index.degree.get('b')).toBe(3); // a, x, c
     expect(index.degree.get('a')).toBe(2);
@@ -74,7 +74,7 @@ describe('model', () => {
     expect(index.neighbours.get('b')!.has('c')).toBe(true);
   });
 
-  it('ignores edges pointing outside the snapshot and self-loops', () => {
+  it('ignores edges pointing outside the snapshot and self-loops', async () => {
     const index = buildIndex({
       nodes: [node('a'), node('b')],
       edges: [edge('a', 'b'), edge('a', 'ghost'), edge('a', 'a')],
@@ -83,7 +83,7 @@ describe('model', () => {
     expect(index.byId.has('ghost')).toBe(false);
   });
 
-  it('measures hop distance outward from a node', () => {
+  it('measures hop distance outward from a node', async () => {
     const index = buildIndex(barbell());
     const reach = hopNeighbourhood(index, 'a', 3);
     expect(reach.get('a')).toBe(0);
@@ -92,14 +92,14 @@ describe('model', () => {
     expect(reach.get('d')).toBe(3);
   });
 
-  it('respects the hop ceiling', () => {
+  it('respects the hop ceiling', async () => {
     const index = buildIndex(barbell());
     const reach = hopNeighbourhood(index, 'a', 2);
     expect(reach.has('c')).toBe(true);
     expect(reach.has('d')).toBe(false);
   });
 
-  it('separates disconnected components, largest first', () => {
+  it('separates disconnected components, largest first', async () => {
     const index = buildIndex({
       nodes: ['a', 'b', 'c', 'lonely'].map((n) => node(n)),
       edges: [edge('a', 'b'), edge('b', 'c')],
@@ -110,7 +110,7 @@ describe('model', () => {
     expect(comps[1]).toEqual(['lonely']);
   });
 
-  it('produces a stable key regardless of pair order', () => {
+  it('produces a stable key regardless of pair order', async () => {
     expect(pairKey('z', 'a')).toBe(pairKey('a', 'z'));
   });
 });
@@ -135,14 +135,14 @@ describe('centrality', () => {
     expect(btw.get('hub')!).toBeGreaterThan(0);
   });
 
-  it('produces a pagerank vector that sums to one', () => {
+  it('produces a pagerank vector that sums to one', async () => {
     const index = buildIndex(barbell());
     const pr = pagerank(index);
     const total = [...pr.values()].reduce((a, b) => a + b, 0);
     expect(total).toBeCloseTo(1, 5);
   });
 
-  it('ranks a hub above its leaves on pagerank', () => {
+  it('ranks a hub above its leaves on pagerank', async () => {
     const index = buildIndex({
       nodes: ['hub', 'l1', 'l2', 'l3'].map((n) => node(n)),
       edges: [edge('hub', 'l1'), edge('hub', 'l2'), edge('hub', 'l3')],
@@ -172,7 +172,7 @@ describe('centrality', () => {
 });
 
 describe('community detection', () => {
-  it('finds the two triangles of a barbell', () => {
+  it('finds the two triangles of a barbell', async () => {
     const index = buildIndex(barbell());
     const result = detectCommunities(index);
     expect(result.communities.size).toBe(2);
@@ -182,12 +182,12 @@ describe('community detection', () => {
     expect(result.membership.get('a')).not.toBe(result.membership.get('d'));
   });
 
-  it('reports positive modularity for a genuinely clustered graph', () => {
+  it('reports positive modularity for a genuinely clustered graph', async () => {
     const result = detectCommunities(buildIndex(barbell()));
     expect(result.modularity).toBeGreaterThan(0.2);
   });
 
-  it('numbers communities by size, largest first', () => {
+  it('numbers communities by size, largest first', async () => {
     const snapshot: GraphSnapshot = {
       nodes: ['a', 'b', 'c', 'd', 'p', 'q'].map((n) => node(n)),
       edges: [
@@ -199,21 +199,21 @@ describe('community detection', () => {
     expect(result.communities.get(0)!.length).toBeGreaterThanOrEqual(result.communities.get(1)!.length);
   });
 
-  it('is deterministic across runs', () => {
+  it('is deterministic across runs', async () => {
     const index = buildIndex(barbell());
     const a = detectCommunities(index);
     const b = detectCommunities(index);
     expect([...a.membership.entries()].sort()).toEqual([...b.membership.entries()].sort());
   });
 
-  it('survives an edgeless graph', () => {
+  it('survives an edgeless graph', async () => {
     const index = buildIndex({ nodes: [node('a'), node('b')], edges: [] });
     const result = detectCommunities(index);
     expect(result.modularity).toBe(0);
     expect(result.membership.size).toBe(2);
   });
 
-  it('scores a random-ish partition below the detected one', () => {
+  it('scores a random-ish partition below the detected one', async () => {
     const index = buildIndex(barbell());
     const detected = detectCommunities(index);
     const bad = new Map(index.ids.map((id, i) => [id, i % 2]));
@@ -222,7 +222,7 @@ describe('community detection', () => {
 });
 
 describe('paths', () => {
-  it('finds the shortest route across the bridge', () => {
+  it('finds the shortest route across the bridge', async () => {
     const index = buildIndex(barbell());
     const path = shortestPath(index, 'a', 'd');
     expect(path).not.toBeNull();
@@ -231,7 +231,7 @@ describe('paths', () => {
     expect(path!.hops).toBe(3); // a-b-c-d
   });
 
-  it('attaches the real edges to each step', () => {
+  it('attaches the real edges to each step', async () => {
     const index = buildIndex(barbell());
     const path = shortestPath(index, 'a', 'c')!;
     expect(path.steps).toHaveLength(2);
@@ -239,7 +239,7 @@ describe('paths', () => {
     expect(path.steps[0].edges[0].type).toBe('knows');
   });
 
-  it('returns null when there is no route', () => {
+  it('returns null when there is no route', async () => {
     const index = buildIndex({
       nodes: [node('a'), node('b')],
       edges: [],
@@ -247,18 +247,18 @@ describe('paths', () => {
     expect(shortestPath(index, 'a', 'b')).toBeNull();
   });
 
-  it('returns nothing for a node paired with itself', () => {
+  it('returns nothing for a node paired with itself', async () => {
     const index = buildIndex(barbell());
     expect(findPaths(index, 'a', 'a')).toEqual([]);
   });
 
-  it('respects the hop ceiling', () => {
+  it('respects the hop ceiling', async () => {
     const index = buildIndex(barbell());
     expect(shortestPath(index, 'a', 'd', 2)).toBeNull();
     expect(shortestPath(index, 'a', 'd', 3)).not.toBeNull();
   });
 
-  it('returns a directly-connected pair exactly once', () => {
+  it('returns a directly-connected pair exactly once', async () => {
     // Regression: a direct edge has no intermediates to penalise, so the
     // alternative-route loop re-found it every iteration and callers got
     // `limit` identical copies of the same one-hop path.
@@ -268,14 +268,14 @@ describe('paths', () => {
     expect(paths[0].nodes).toEqual(['a', 'b']);
   });
 
-  it('never returns the same route twice', () => {
+  it('never returns the same route twice', async () => {
     const index = buildIndex(barbell());
     const paths = findPaths(index, 'a', 'd', { limit: 4, maxHops: 5 });
     const signatures = paths.map((p) => p.nodes.join('>'));
     expect(new Set(signatures).size).toBe(signatures.length);
   });
 
-  it('finds genuinely different alternative routes', () => {
+  it('finds genuinely different alternative routes', async () => {
     // Two parallel routes from s to t: via m1 and via m2.
     const index = buildIndex({
       nodes: ['s', 'm1', 'm2', 't'].map((n) => node(n)),
@@ -286,13 +286,13 @@ describe('paths', () => {
     expect(paths[0].nodes[1]).not.toBe(paths[1].nodes[1]);
   });
 
-  it('counts common neighbours symmetrically', () => {
+  it('counts common neighbours symmetrically', async () => {
     const index = buildIndex(barbell());
     expect(commonNeighbours(index, 'a', 'b')).toEqual(['x']);
     expect(commonNeighbours(index, 'b', 'a')).toEqual(['x']);
   });
 
-  it('weights a niche shared connection above a hub one in Adamic-Adar', () => {
+  it('weights a niche shared connection above a hub one in Adamic-Adar', async () => {
     // a and b share the niche node `n` (degree 2); c and d share hub (degree 20).
     const hubLeaves = Array.from({ length: 18 }, (_, i) => `leaf${i}`);
     const index = buildIndex({
@@ -313,8 +313,8 @@ describe('surprise scoring', () => {
     return { index, membership: detectCommunities(index).membership };
   };
 
-  it('ranks the cross-cluster bridge as the most surprising link', () => {
-    const links = scoreSurprisingLinks(ctx(), { maxHops: 2 });
+  it('ranks the cross-cluster bridge as the most surprising link', async () => {
+    const links = await scoreSurprisingLinks(ctx(), { maxHops: 2 });
     expect(links.length).toBeGreaterThan(0);
     const top = links[0];
     expect(pairKey(top.a, top.b)).toBe(pairKey('b', 'c'));
@@ -322,39 +322,39 @@ describe('surprise scoring', () => {
     expect(top.hops).toBe(1);
   });
 
-  it('explains itself in readable reasons', () => {
-    const links = scoreSurprisingLinks(ctx(), { maxHops: 2 });
+  it('explains itself in readable reasons', async () => {
+    const links = await scoreSurprisingLinks(ctx(), { maxHops: 2 });
     expect(links[0].reasons).toContain('joins two separate clusters');
     expect(links[0].reasons.join(' ')).toMatch(/directly connected|hops apart/);
   });
 
-  it('treats a pair inside one triangle as unremarkable', () => {
-    const links = scoreSurprisingLinks(ctx(), { maxHops: 2, minScore: 0 });
+  it('treats a pair inside one triangle as unremarkable', async () => {
+    const links = await scoreSurprisingLinks(ctx(), { maxHops: 2, minScore: 0 });
     const ax = links.find((l) => pairKey(l.a, l.b) === pairKey('a', 'x'))!;
     const bc = links.find((l) => pairKey(l.a, l.b) === pairKey('b', 'c'))!;
     expect(ax.score).toBeLessThan(bc.score);
   });
 
-  it('uses embeddings to raise semantically distant pairs', () => {
+  it('uses embeddings to raise semantically distant pairs', async () => {
     const index = buildIndex(barbell());
     const membership = detectCommunities(index).membership;
     const near = new Map([['b', [1, 0]], ['c', [1, 0]]]);
     const far = new Map([['b', [1, 0]], ['c', [-1, 0]]]);
 
-    const scoreWith = (embeddings: Map<string, number[]>) =>
-      scoreSurprisingLinks({ index, membership, embeddings }, { maxHops: 1, minScore: 0 })
+    const scoreWith = async (embeddings: Map<string, number[]>) =>
+      (await scoreSurprisingLinks({ index, membership, embeddings }, { maxHops: 1, minScore: 0 }))
         .find((l) => pairKey(l.a, l.b) === pairKey('b', 'c'))!.score;
 
-    expect(scoreWith(far)).toBeGreaterThan(scoreWith(near));
+    expect(await scoreWith(far)).toBeGreaterThan(await scoreWith(near));
   });
 
-  it('never lets an unknown embedding count as evidence either way', () => {
-    const links = scoreSurprisingLinks(ctx(), { maxHops: 1, minScore: 0 });
+  it('never lets an unknown embedding count as evidence either way', async () => {
+    const links = await scoreSurprisingLinks(ctx(), { maxHops: 1, minScore: 0 });
     expect(links.every((l) => l.semanticDistance === null)).toBe(true);
   });
 
 
-  it('discounts links to a hub as expected rather than surprising', () => {
+  it('discounts links to a hub as expected rather than surprising', async () => {
     // `hub` touches everything; `p`–`q` is an isolated pair. Under the
     // configuration model a hub link is the LEAST surprising thing here.
     const leaves = Array.from({ length: 20 }, (_, i) => `leaf${i}`);
@@ -363,13 +363,13 @@ describe('surprise scoring', () => {
       edges: [...leaves.map((l) => edge('hub', l)), edge('p', 'q')],
     });
     const membership = detectCommunities(index).membership;
-    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 1, minScore: 0 });
+    const links = await scoreSurprisingLinks({ index, membership }, { maxHops: 1, minScore: 0 });
     const pq = links.find((l) => pairKey(l.a, l.b) === pairKey('p', 'q'))!;
     const hubLink = links.find((l) => l.a === 'hub' || l.b === 'hub')!;
     expect(pq.score).toBeGreaterThan(hubLink.score);
   });
 
-  it('says so when neither endpoint is a hub', () => {
+  it('says so when neither endpoint is a hub', async () => {
     // Expectedness is deg(a)·deg(b)/2m, so the pair must be peripheral in a
     // graph with enough edges for "hub" to mean anything.
     const leaves = Array.from({ length: 20 }, (_, i) => `leaf${i}`);
@@ -378,7 +378,7 @@ describe('surprise scoring', () => {
       edges: [...leaves.map((l) => edge('hub', l)), edge('p', 'q')],
     });
     const membership = detectCommunities(index).membership;
-    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 1, minScore: 0 });
+    const links = await scoreSurprisingLinks({ index, membership }, { maxHops: 1, minScore: 0 });
     const pq = links.find((l) => pairKey(l.a, l.b) === pairKey('p', 'q'))!;
     expect(pq.reasons).toContain('neither is a hub');
 
@@ -386,7 +386,7 @@ describe('surprise scoring', () => {
     expect(hubLink.reasons).not.toContain('neither is a hub');
   });
 
-  it('does not gate out a pair that is also joined through a non-hub', () => {
+  it('does not gate out a pair that is also joined through a non-hub', async () => {
     // p and q are joined BOTH through a hub and through an obscure node. The
     // hub gate must not fire, because a genuinely specific route exists — this
     // used to depend on whichever route BFS reached first.
@@ -402,29 +402,29 @@ describe('surprise scoring', () => {
     const membership = detectCommunities(index).membership;
     // High limit: this graph produces many low-scoring pairs and the point here
     // is presence, not rank.
-    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
+    const links = await scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
     const pq = links.find((l) => pairKey(l.a, l.b) === pairKey('p', 'q'));
     expect(pq).toBeDefined();
     expect(pq!.reasons.join(' ').toLowerCase()).toContain('niche');
   });
 
-  it('still gates out a pair joined ONLY through hubs', () => {
+  it('still gates out a pair joined ONLY through hubs', async () => {
     const leaves = Array.from({ length: 20 }, (_, i) => `leaf${i}`);
     const index = buildIndex({
       nodes: ['hub', 'p', 'q', ...leaves].map((n) => node(n)),
       edges: [...leaves.map((l) => edge('hub', l)), edge('p', 'hub'), edge('q', 'hub')],
     });
     const membership = detectCommunities(index).membership;
-    const links = scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
+    const links = await scoreSurprisingLinks({ index, membership }, { maxHops: 2, minScore: 0, limit: 500 });
     expect(links.some((l) => pairKey(l.a, l.b) === pairKey('p', 'q'))).toBe(false);
   });
 
-  it('honours the result limit', () => {
-    const links = scoreSurprisingLinks(ctx(), { maxHops: 3, minScore: 0, limit: 2 });
+  it('honours the result limit', async () => {
+    const links = await scoreSurprisingLinks(ctx(), { maxHops: 3, minScore: 0, limit: 2 });
     expect(links).toHaveLength(2);
   });
 
-  it('predicts the link between two nodes that share a neighbour', () => {
+  it('predicts the link between two nodes that share a neighbour', async () => {
     const index = buildIndex({
       nodes: ['a', 'b', 'n1', 'n2', 'n3'].map((n) => node(n)),
       edges: [
@@ -439,7 +439,7 @@ describe('surprise scoring', () => {
     expect(ab!.reason).toMatch(/Share 3 connections/);
   });
 
-  it('never predicts a link that already exists', () => {
+  it('never predicts a link that already exists', async () => {
     const index = buildIndex(barbell());
     const preds = predictMissingLinks({ index, membership: new Map() }, { minScore: 0 });
     for (const p of preds) {
@@ -447,7 +447,7 @@ describe('surprise scoring', () => {
     }
   });
 
-  it('identifies the nodes joining two communities', () => {
+  it('identifies the nodes joining two communities', async () => {
     const c = ctx();
     const bridges = findBridges(c);
     const ids = bridges.map((b) => b.id);
@@ -456,13 +456,13 @@ describe('surprise scoring', () => {
     expect(ids).not.toContain('x');
   });
 
-  it('computes cosine distance over the full range', () => {
+  it('computes cosine distance over the full range', async () => {
     expect(cosineDistance([1, 0], [1, 0])).toBeCloseTo(0, 6);
     expect(cosineDistance([1, 0], [-1, 0])).toBeCloseTo(1, 6);
     expect(cosineDistance([1, 0], [0, 1])).toBeCloseTo(0.5, 6);
   });
 
-  it('falls back to neutral on mismatched or empty vectors', () => {
+  it('falls back to neutral on mismatched or empty vectors', async () => {
     expect(cosineDistance([1, 0], [1, 0, 0])).toBe(0.5);
     expect(cosineDistance([], [])).toBe(0.5);
     expect(cosineDistance([0, 0], [1, 0])).toBe(0.5);

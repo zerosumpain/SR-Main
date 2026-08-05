@@ -315,9 +315,16 @@ export async function ensureEmbeddings(analysis: GraphAnalysis): Promise<Map<str
       FROM intel_entities
       WHERE merged_into_id IS NULL AND embedding IS NOT NULL
     `);
-    for (const r of res.rows as Array<Record<string, unknown>>) {
-      const vec = parseVector(r.embedding);
-      if (vec) analysis.embeddings.set(String(r.id), vec);
+    // Parsed in chunks with a yield between them. Several thousand 1,536-value
+    // vectors is ~1.1s of unbroken string splitting, and that lands in the same
+    // request as the surprise sweep — together they blocked the event loop past
+    // the 5s the health probe 503s at, which the watchdog restarts the service
+    // for. Same reasoning as the yields in ./centrality.
+    const rows = res.rows as Array<Record<string, unknown>>;
+    for (let i = 0; i < rows.length; i++) {
+      const vec = parseVector(rows[i].embedding);
+      if (vec) analysis.embeddings.set(String(rows[i].id), vec);
+      if ((i & 255) === 255) await new Promise<void>((resolve) => setImmediate(resolve));
     }
     return analysis.embeddings;
   })();
