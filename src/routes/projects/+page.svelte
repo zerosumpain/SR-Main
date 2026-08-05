@@ -270,6 +270,47 @@
     </div>
     {/if}
 
+    {#if showCard('engine-room')}
+    <div class="project-card group">
+      <a href="/projects/engine-room" class="absolute inset-0 z-0" aria-label="Open The Engine Room"></a>
+      <div class="flex items-start justify-between mb-3">
+        <p
+          class="text-[10px] uppercase tracking-[0.25em]"
+          style="color: var(--accent); font-family: var(--font-mono);"
+        >
+          Field study
+        </p>
+        <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
+          Interactive · This site, explained
+        </span>
+      </div>
+      <h2
+        class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
+        style="color: var(--text-primary);"
+      >
+        The Engine Room — how this site works
+      </h2>
+      <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
+        This site looks like a blog. Underneath it is a personal knowledge engine: an assistant that acts on mail,
+        files and calendar; a workflow engine with 88 node types; retrieval over documents; a knowledge graph that
+        resolves entities overnight; and a system that reads its own failures each night and writes its own
+        improvements. Ten sections and a flagship instrument that follows one message through six stages and six
+        layers with a live clock and a running bill — plus the interactives: pick a model seller and watch what it
+        costs you, try to get generated code past the safety scan, and see why the obvious fix for a workflow
+        collision is not a fix. Mechanisms and mistakes, no secrets.
+      </p>
+      <div class="flex items-center gap-3 flex-wrap relative z-10">
+        <span
+          class="text-[9px] uppercase tracking-[0.15em] px-2 py-0.5"
+          style="font-family: var(--font-mono); background: var(--bg-section); color: var(--text-ghost);"
+        >
+          models · caching · RAG · entity resolution · self-improvement · measured
+        </span>
+        {@render visToggle('engine-room', '/projects/engine-room', 'The Engine Room')}
+      </div>
+    </div>
+    {/if}
+
     {#if showCard('data-spine')}
     <div class="project-card group">
       <a href="/projects/data-spine" class="absolute inset-0 z-0" aria-label="Open The Data Spine"></a>
