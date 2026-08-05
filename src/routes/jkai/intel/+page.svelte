@@ -42,6 +42,10 @@
   let sweepHistory: { refresh: () => Promise<void> } | null = null;
 
   let loadingNetwork = $state(true);
+  /** Why the last graph request failed, or null. Drives the retry panel. */
+  let networkError = $state<string | null>(null);
+  /** Bumped by the retry button to re-run the loader with the same filters. */
+  let networkAttempt = $state(0);
   let loadingInsights = $state(true);
   let busyId = $state<string | null>(null);
   let toast = $state<string | null>(null);
@@ -184,22 +188,57 @@
 
   // Refetch when the filter query changes. Only `query` is read reactively;
   // everything the loader touches it writes, so there is no read-own-write loop.
+  /**
+   * Settle time before a filter change is sent.
+   *
+   * The three range sliders are bound straight to the query, so dragging one
+   * from 0 to 10 used to fire eleven full graph analyses — and nothing cancelled
+   * the ten that were already obsolete, so they all ran to completion on the
+   * server. Short enough to feel immediate, long enough that a drag is one
+   * request.
+   */
+  const FILTER_DEBOUNCE_MS = 200;
+
   $effect(() => {
     const q = query;
+    // Read so the retry button re-runs this with the filters unchanged.
+    networkAttempt;
     let cancelled = false;
+    // Aborts the in-flight request as well as ignoring it: an abandoned
+    // analysis is work the server should stop doing, not just work we discard.
+    const controller = new AbortController();
     loadingNetwork = true;
-    fetch(`/api/jkai/intel/network?${q}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        if (cancelled) return;
-        if (body) network = body;
-        loadingNetwork = false;
-      })
-      .catch(() => {
-        if (!cancelled) loadingNetwork = false;
-      });
+    networkError = null;
+
+    const timer = setTimeout(() => {
+      fetch(`/api/jkai/intel/network?${q}`, { signal: controller.signal })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`the analysis request came back ${res.status}`);
+          return res.json();
+        })
+        .then((body) => {
+          if (cancelled) return;
+          if (body) network = body;
+          loadingNetwork = false;
+        })
+        .catch((err) => {
+          // A superseded request is not a failure; leave the spinner to the
+          // newer one rather than flashing an error the user cannot act on.
+          if (cancelled || (err as Error)?.name === 'AbortError') return;
+          // A real failure has to SAY so. When this silently cleared the
+          // spinner, a failed request left the panel completely blank — no
+          // graph, no message, no retry — which reads as "the 3D view is
+          // broken" rather than as "the request failed", and is exactly how a
+          // slow analysis timing out at the proxy presented.
+          networkError = err instanceof Error ? err.message : 'the analysis request failed';
+          loadingNetwork = false;
+        });
+    }, FILTER_DEBOUNCE_MS);
+
     return () => {
       cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
   });
 
@@ -623,6 +662,12 @@
 
       {#if loadingNetwork && !network}
         <div class="loading">Analysing the graph…</div>
+      {:else if networkError && !network}
+        <div class="graph-error">
+          <p class="ge-head">The graph could not be analysed.</p>
+          <p class="ge-detail">{networkError}</p>
+          <button type="button" class="ge-retry" onclick={() => networkAttempt++}>Try again</button>
+        </div>
       {:else if network}
         {#if view3d}
           <NetworkGraph3D
@@ -1223,6 +1268,47 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     color: var(--text-ghost);
+  }
+
+  .graph-error {
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.5rem;
+    height: 100%;
+    min-height: 160px;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .ge-head {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+
+  .ge-detail {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-ghost);
+    max-width: 42ch;
+  }
+
+  .ge-retry {
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--accent-ink);
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .ge-retry:hover {
+    background: var(--accent);
+    color: var(--bg);
   }
 
   /* ── Findings ──────────────────────────────────────────────────────────── */

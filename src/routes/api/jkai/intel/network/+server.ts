@@ -62,6 +62,12 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const maxPagerank = Math.max(1e-9, ...[...keep].map((id) => centrality.pagerank.get(id) ?? 0));
 
+  // Hop distances from the focused entity, computed ONCE. This used to sit
+  // inside the node loop, where it ran a full-graph BFS per node — 600 identical
+  // traversals of a 5,000-node graph every time anyone double-clicked an entity
+  // to centre the view on it.
+  const hopsFrom = focusId ? hopNeighbourhood(index, focusId, hops) : null;
+
   const nodes = [...keep].map((id) => {
     const n = index.byId.get(id)!;
     return {
@@ -81,7 +87,7 @@ export const GET: RequestHandler = async ({ url }) => {
       betweenness: centrality.betweenness.get(id) ?? 0,
       brokerage: brokerageScore(id, centrality, index),
       community: community.membership.get(id) ?? 0,
-      hops: focusId ? (hopNeighbourhood(index, focusId, hops).get(id) ?? null) : null,
+      hops: hopsFrom?.get(id) ?? null,
       categories: n.categories,
       sources: n.sources,
       aliases: n.aliases,

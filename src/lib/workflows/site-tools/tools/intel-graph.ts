@@ -281,9 +281,12 @@ register({
     const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 30);
     const kind = typeof args.kind === 'string' ? args.kind : null;
 
-    const { getGraphAnalysis } = await loadAnalytics();
+    const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
     const { generateInsights } = await loadInsights();
     const analysis = await getGraphAnalysis();
+    // generateInsights scores semantic distance, which needs the embeddings the
+    // analysis no longer loads eagerly.
+    await ensureEmbeddings(analysis);
     let found = generateInsights(analysis);
     if (kind) found = found.filter((i) => i.kind === kind);
 
@@ -328,9 +331,10 @@ register({
     const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 25);
     const maxHops = Math.min(Math.max(Number(args.maxHops ?? 3), 2), 4);
 
-    const { getGraphAnalysis } = await loadAnalytics();
+    const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
     const { scoreSurprisingLinks } = await loadSurprise();
     const analysis = await getGraphAnalysis();
+    await ensureEmbeddings(analysis);
     const links = scoreSurprisingLinks(
       { index: analysis.index, membership: analysis.community.membership, embeddings: analysis.embeddings },
       { maxHops, limit, minScore: 0.05 },

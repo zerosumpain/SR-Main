@@ -18,7 +18,16 @@ export interface GraphAnalysis {
   index: AdjacencyIndex;
   centrality: CentralityScores;
   community: CommunityResult;
-  /** node id → embedding, only for entities that have one. */
+  /**
+   * node id → embedding, only for entities that have one.
+   *
+   * EMPTY until `ensureEmbeddings(analysis)` has been awaited. Only the surprise
+   * scorer reads these, and loading them is not cheap: 5,338 entities is ~87 MB
+   * of `vector::text` and ~1.9 s of query plus float parsing, which every cold
+   * analysis was paying — including the graph request, which never looks at
+   * them. Filled in on demand and kept on the cached analysis, so the insights
+   * panel pays it once per snapshot and the graph never pays it at all.
+   */
   embeddings: Map<string, number[]>;
   /**
    * Pairs the user has explicitly said are NOT related, as `min|max` id keys.
@@ -92,7 +101,6 @@ function parseVector(raw: unknown): number[] | null {
 
 async function loadSnapshot(): Promise<{
   snapshot: GraphSnapshot;
-  embeddings: Map<string, number[]>;
   suppressedPairs: Set<string>;
 }> {
   // Merged entities are excluded: they are aliases resolved into a survivor and
@@ -110,7 +118,6 @@ async function loadSnapshot(): Promise<{
       e.confirmed,
       e.created_at,
       e.updated_at,
-      e.embedding::text             AS embedding,
       e.aliases                     AS aliases,
       COALESCE(ne.note_count, 0)    AS note_count,
       ne.last_seen_at,
@@ -142,11 +149,8 @@ async function loadSnapshot(): Promise<{
     WHERE e.merged_into_id IS NULL
   `);
 
-  const embeddings = new Map<string, number[]>();
   const nodes: GraphNode[] = (entityRes.rows as Array<Record<string, unknown>>).map((r) => {
     const id = String(r.id);
-    const vec = parseVector(r.embedding);
-    if (vec) embeddings.set(id, vec);
     const created = r.created_at ? new Date(String(r.created_at)).getTime() : 0;
     const updated = r.updated_at ? new Date(String(r.updated_at)).getTime() : created;
     return {
@@ -235,7 +239,46 @@ async function loadSnapshot(): Promise<{
     ),
   );
 
-  return { snapshot: { nodes, edges }, embeddings, suppressedPairs };
+  return { snapshot: { nodes, edges }, suppressedPairs };
+}
+
+/** In-flight embedding loads, so concurrent callers share one query. */
+const embeddingLoads = new WeakMap<GraphAnalysis, Promise<Map<string, number[]>>>();
+
+/**
+ * Populate `analysis.embeddings`, once per analysis.
+ *
+ * Anything that scores semantic distance must await this first; everything else
+ * should not call it at all. Fills the analysis's own map in place so the
+ * synchronous detectors that read `analysis.embeddings` keep working unchanged.
+ */
+export async function ensureEmbeddings(analysis: GraphAnalysis): Promise<Map<string, number[]>> {
+  const started = embeddingLoads.get(analysis);
+  if (started) return started;
+
+  const load = (async () => {
+    const res = await db.execute(sql`
+      SELECT id, embedding::text AS embedding
+      FROM intel_entities
+      WHERE merged_into_id IS NULL AND embedding IS NOT NULL
+    `);
+    for (const r of res.rows as Array<Record<string, unknown>>) {
+      const vec = parseVector(r.embedding);
+      if (vec) analysis.embeddings.set(String(r.id), vec);
+    }
+    return analysis.embeddings;
+  })();
+
+  embeddingLoads.set(analysis, load);
+  try {
+    return await load;
+  } catch (err) {
+    // A failed load must not be remembered as done — the next caller should be
+    // able to try again rather than scoring every pair as semantically unknown
+    // for the life of the snapshot.
+    embeddingLoads.delete(analysis);
+    throw err;
+  }
 }
 
 /**
@@ -249,14 +292,15 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
 
   const startedAt = generation;
   inflight = (async () => {
-    const { snapshot, embeddings, suppressedPairs } = await loadSnapshot();
+    const { snapshot, suppressedPairs } = await loadSnapshot();
     const index = buildIndex(snapshot);
     const analysis: GraphAnalysis = {
       snapshot,
       index,
       centrality: await computeCentrality(index),
       community: detectCommunities(index),
-      embeddings,
+      // Filled in by `ensureEmbeddings` on first use — see the field's comment.
+      embeddings: new Map<string, number[]>(),
       suppressedPairs,
       computedAt: Date.now(),
     };

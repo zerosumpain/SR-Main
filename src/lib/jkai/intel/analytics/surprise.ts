@@ -131,31 +131,69 @@ function bridgeSpecificity(index: AdjacencyIndex, mids: string[]): number {
   return Math.min(1, sum / mids.length / 0.6);
 }
 
-/** One shortest route between two nodes, for inspecting its intermediates. */
-function routeBetween(index: AdjacencyIndex, from: string, to: string, maxHops: number): string[] | null {
-  const prev = new Map<string, string | null>([[from, null]]);
-  let frontier = [from];
-  for (let hop = 0; hop < maxHops && frontier.length; hop++) {
+/**
+ * `hopNeighbourhood` plus the BFS tree that produced it: for every node reached,
+ * the neighbour it was first reached FROM.
+ *
+ * This exists so a route can be read back for every node in one sweep instead of
+ * re-running a BFS per destination. That was the single most expensive thing in
+ * this module: at three hops the pair loop below reached ~690k pairs whose route
+ * had to be inspected, and a fresh O(V+E) BFS for each of them cost 53 s on the
+ * live graph (`scripts/bench-intel-insights.ts`) — long enough to trip the
+ * event-loop watchdog and take the site down with it.
+ *
+ * Walking the parents is EXACTLY equivalent to the per-pair BFS it replaces, not
+ * an approximation: both explore frontier by frontier in the same order and set
+ * a node's parent the first time it is seen, so they agree on every route. The
+ * per-pair walk stopped early once its destination was found, which changes when
+ * the walk ends but never which parent a node was given.
+ */
+function bfsTree(
+  index: AdjacencyIndex,
+  start: string,
+  maxHops: number,
+): { dist: Map<string, number>; parent: Map<string, string | null> } {
+  const dist = new Map<string, number>();
+  const parent = new Map<string, string | null>();
+  if (!index.neighbours.has(start)) return { dist, parent };
+  dist.set(start, 0);
+  parent.set(start, null);
+  let frontier = [start];
+
+  for (let hop = 1; hop <= maxHops && frontier.length; hop++) {
     const next: string[] = [];
     for (const id of frontier) {
       for (const nb of index.neighbours.get(id) ?? []) {
-        if (prev.has(nb)) continue;
-        prev.set(nb, id);
-        if (nb === to) {
-          const route: string[] = [];
-          let cur: string | null = to;
-          while (cur !== null) {
-            route.push(cur);
-            cur = prev.get(cur) ?? null;
-          }
-          return route.reverse();
-        }
+        if (dist.has(nb)) continue;
+        dist.set(nb, hop);
+        parent.set(nb, id);
         next.push(nb);
       }
     }
     frontier = next;
   }
-  return null;
+  return { dist, parent };
+}
+
+/**
+ * The intermediates on the route the BFS tree recorded — BOTH endpoints
+ * excluded, matching the `route.slice(1, -1)` this replaces.
+ *
+ * Starting from `to`'s parent drops the destination; stopping while the current
+ * node still has a parent drops the start, whose parent is null. Getting that
+ * second half wrong is not a subtle failure — including the start node makes
+ * every route look like it runs through whichever entity the sweep happened to
+ * be scoring from, which both mis-scores `bridgeSpecificity` and defeats the hub
+ * gate that keeps the results readable.
+ */
+function midsFromTree(parent: Map<string, string | null>, to: string): string[] {
+  const route: string[] = [];
+  let cur: string | null | undefined = parent.get(to);
+  while (cur != null && parent.get(cur) != null) {
+    route.push(cur);
+    cur = parent.get(cur);
+  }
+  return route.reverse();
 }
 
 /**
@@ -188,7 +226,9 @@ export function scoreSurprisingLinks(
     // A node connected to nothing has no relations to be surprised by.
     if ((index.degree.get(a) ?? 0) === 0) continue;
 
-    const reach = hopNeighbourhood(index, a, maxHops);
+    // One BFS per source, reused for both the reachable set and every route
+    // read off it below.
+    const { dist: reach, parent } = bfsTree(index, a, maxHops);
     for (const [b, hops] of reach) {
       if (hops === 0) continue;
       const key = pairKey(a, b);
@@ -202,7 +242,6 @@ export function scoreSurprisingLinks(
       const shared = sharedIds.length;
       const crossCommunity = membership.get(a) !== membership.get(b);
       const crossType = nodeA.typeId !== nodeB.typeId;
-      const dist = semanticDistance(ctx, a, b);
       const expected = expectedness(index, a, b, edgeCount);
 
       // The intermediates the pair is actually connected through.
@@ -218,7 +257,7 @@ export function scoreSurprisingLinks(
           ? []
           : hops === 2
             ? sharedIds
-            : (routeBetween(index, a, b, hops) ?? []).slice(1, -1);
+            : midsFromTree(parent, b);
 
       // HARD GATE. A route whose every intermediate is a hub is the single
       // biggest source of false positives: with one degree-119 entity in a
@@ -235,8 +274,6 @@ export function scoreSurprisingLinks(
       const novelty = 1 / (1 + shared);
       const communityFactor = crossCommunity ? 1 : 0.3;
       const typeFactor = crossType ? 1 : 0.6;
-      // Unknown semantic distance is treated as neutral, never as evidence.
-      const semanticFactor = dist === null ? 0.6 : 0.25 + 0.75 * dist;
       // Configuration-model correction: how expected this pairing is by degree.
       const rarity = 1 / (1 + expected);
       // Adamic-Adar over shared neighbours — rare connectors count for more.
@@ -244,8 +281,24 @@ export function scoreSurprisingLinks(
       // How specific the intermediates on the route are.
       const bridge = mids.length ? 0.35 + 0.65 * bridgeSpecificity(index, mids) : 1;
 
-      const score =
-        proximity * novelty * communityFactor * typeFactor * semanticFactor * rarity * connectorRarity * bridge;
+      // Every factor except the semantic one, which is the only expensive term:
+      // it needs a cosine over two 1536-dimension embeddings, and at three hops
+      // this loop reaches ~830k pairs.
+      //
+      // `cosineDistance` is clamped to 0..1, so `semanticFactor` can never
+      // exceed 1 — which makes this an EXACT early exit rather than a heuristic:
+      // a pair whose structural product already sits below `minScore` cannot be
+      // lifted over it by any embedding, so its cosine is never worth computing.
+      // Roughly nineteen in twenty pairs leave here.
+      const structural =
+        proximity * novelty * communityFactor * typeFactor * rarity * connectorRarity * bridge;
+      if (structural < minScore) continue;
+
+      const dist = semanticDistance(ctx, a, b);
+      // Unknown semantic distance is treated as neutral, never as evidence.
+      const semanticFactor = dist === null ? 0.6 : 0.25 + 0.75 * dist;
+
+      const score = structural * semanticFactor;
       if (score < minScore) continue;
 
       const reasons: string[] = [];
