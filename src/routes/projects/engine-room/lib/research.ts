@@ -49,6 +49,34 @@ export const RESEARCH_FACTS = [
   { k: 'Citations survive to the answer', why: 'The composed answer carries markers back to the passages, so a reader can check any sentence rather than trusting the whole.' },
 ];
 
+/** The Research Desk — the table you actually work in once a run has finished. */
+export const DESK = [
+  {
+    k: 'A table of facts, not a document',
+    why: 'A finished run is not an essay. It is a few hundred individually-scored claims, each with its source, its date and its confidence, in a table you can sort, filter and argue with.',
+  },
+  {
+    k: 'Similar facts cluster together',
+    why: 'Claims that say the same thing in different words are grouped by meaning rather than by wording, so agreement between independent sources is visible instead of reading as repetition.',
+  },
+  {
+    k: 'Confidence is a blend, not a vote',
+    why: 'How sure the extractor was, weighted against how credible the source is. A confident extraction from a weak source does not outrank a hedged one from a strong source.',
+  },
+  {
+    k: 'Corroboration only counts across sources',
+    why: 'The same claim appearing three times in one document is one claim. Agreement is only interesting when it comes from somewhere else.',
+  },
+  {
+    k: 'A red-team pass argues back',
+    why: 'A separate stage actively looks for counter-evidence to the facts already gathered, and moves confidence down on contradiction and up on support — by small amounts, and never to certainty.',
+  },
+  {
+    k: 'It stops when it stops learning',
+    why: 'Phases end on novelty rather than on a fixed count: when a batch of new sources yields almost nothing new, that is the signal to stop, not an exhausted budget.',
+  },
+];
+
 export const CONNECTOR_LESSON = {
   title: 'Never trust a stored status column',
   body: 'A dashboard showing whether each connected service is healthy is very easy to build wrongly: write a status when something succeeds or fails, then display that column. It is then perfectly possible for a connection to have died six weeks ago while the dashboard cheerfully reports the last thing that happened to work.',

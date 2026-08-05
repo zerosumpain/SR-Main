@@ -1,6 +1,6 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
-  import { RAILS, PRINCIPLE, type Kind } from '../lib/guardrails';
+  import { RAILS, PRINCIPLE, FAILURE_MODES, type Kind } from '../lib/guardrails';
 
   let filter = $state<'all' | Kind | 'scar'>('all');
 
@@ -61,6 +61,16 @@
           </div>
         {/if}
       </div>
+    {/each}
+  </div>
+
+  <h2 class="pe-h2">Three ways a guardrail fails without changing</h2>
+  <p class="pe-prose" style="max-width:82ch">
+    The controls that failed here mostly did not have bugs. They were correct, and something around them moved.
+  </p>
+  <div class="ds-grid">
+    {#each FAILURE_MODES as f}
+      <div class="ds-card"><h3>{f.title}</h3><p class="ds-body">{f.body}</p></div>
     {/each}
   </div>
 

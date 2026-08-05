@@ -17,11 +17,11 @@ import { RESOLUTION, SELLER_FACTS, POLICY, CATALOGUE, CACHE_STORY, REASONING_ROW
 import { WATCHDOG, STREAM_CONSTANTS } from './chat';
 import { MANIFEST, TIERS, LESSONS, MCP_FACTS, WATERFALL } from './tools';
 import { SIGNALS, PAIRS, RETRIEVAL, DATASTORE, GRAPH_FACTS, AUTO_MERGE } from './memory';
-import { RESEARCH_FACTS, CONNECTOR_LESSON, SEARCH_LESSON, MERGED, GAPS } from './research';
+import { RESEARCH_FACTS, CONNECTOR_LESSON, SEARCH_LESSON, MERGED, GAPS, DESK } from './research';
 import { CATEGORIES, ENGINE_FACTS, FANIN_STORY, DOCTOR, NODE_COUNT } from './automation';
 import { PHASES, FORBIDDEN, CANDIDATES, BUILDER_FACTS } from './building';
 import { PIPELINE, SAFETY, RISK_PATHS } from './shipping';
-import { RAILS, PRINCIPLE } from './guardrails';
+import { RAILS, PRINCIPLE, FAILURE_MODES } from './guardrails';
 
 export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
@@ -139,6 +139,8 @@ function buildChunks(): Chunk[] {
     text: `Merging several sources into one narrative destroys the record of which source said what, and once that is gone an invented claim is indistinguishable from a supported one. In the worked example the merged answer produced: ${MERGED.map((m) => `"${m.text}" (${m.note})`).join(' ')} No fact is invented from nothing — two adjacent true facts are fused into a causal claim neither supports, which is both more plausible and harder to catch. The fix is structural: extract facts individually with their sources, then state explicitly what no source covers. ${GAPS.map((g) => `Gap: ${g}`).join(' ')} An instruction not to overstate is a request fighting the shape of the task, because bridging a gap IS what writing a flowing summary means. Giving the model somewhere else to put the gap changes what the task is.` });
   for (const r of RESEARCH_FACTS)
     add({ id: `res-${r.k.slice(0, 14)}`, sourceKey: 'research-run', sourceType: 'research', title: `Research runs: ${r.k}`, url: `${B}/research`, text: r.why });
+  add({ id: 'desk', sourceKey: 'research-desk', sourceType: 'research', title: 'The Research Desk — a table of facts, not a document', url: `${B}/research`,
+    text: `A finished run produces a corpus, not an essay. ${DESK.map((d) => `${d.k}: ${d.why}`).join(' ')} Composing prose is done FROM the table at the moment it is needed, and because the table survives, prose can always be regenerated with its provenance intact.` });
   add({ id: 'connector', sourceKey: 'dashboards', sourceType: 'research', title: CONNECTOR_LESSON.title, url: `${B}/research`,
     text: `${CONNECTOR_LESSON.body} ${CONNECTOR_LESSON.fix}` });
   add({ id: 'websearch', sourceKey: 'dashboards', sourceType: 'research', title: SEARCH_LESSON.title, url: `${B}/research`,
@@ -182,6 +184,9 @@ function buildChunks(): Chunk[] {
   // ---- guardrails ----
   add({ id: 'principle', sourceKey: 'guardrails', sourceType: 'guardrails', title: PRINCIPLE.title, url: `${B}/guardrails`,
     text: `${PRINCIPLE.body} ${PRINCIPLE.tally}` });
+  for (const f of FAILURE_MODES)
+    add({ id: `fail-${f.title.slice(0, 14)}`, sourceKey: 'failure-modes', sourceType: 'guardrails', title: `How a guardrail fails without changing: ${f.title}`, url: `${B}/guardrails`,
+      text: f.body });
   for (const r of RAILS)
     add({ id: `rail-${r.id}`, sourceKey: `rail-${r.id}`, sourceType: 'guardrails', title: `${r.rail} (${r.kind})`, url: `${B}/guardrails`,
       text: `Risk: ${r.risk}. ${r.detail}${r.scar ? ` HOW IT WAS GOT WRONG: ${r.scar}` : ''}` });

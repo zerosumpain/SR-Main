@@ -1,7 +1,7 @@
 <script lang="ts">
   import StoryMasthead from '../components/StoryMasthead.svelte';
   import ProvenanceDemo from './components/ProvenanceDemo.svelte';
-  import { RESEARCH_FACTS, CONNECTOR_LESSON, SEARCH_LESSON } from '../lib/research';
+  import { RESEARCH_FACTS, CONNECTOR_LESSON, SEARCH_LESSON, DESK } from '../lib/research';
   import { app } from '../lib/appState.svelte';
 
   const eli = $derived(app.narrative === 'eli5');
@@ -52,6 +52,23 @@
   <div class="grid">
     {#each RESEARCH_FACTS as r}
       <div class="cell"><b>{r.k}</b><span>{r.why}</span></div>
+    {/each}
+  </div>
+
+  <h2 class="pe-h2">The desk you work at afterwards</h2>
+  <p class="pe-prose" style="max-width:82ch">
+    {#if eli}
+      When a research run finishes you do not get an essay. You get a table of individual facts, each with its source
+      and how confident it is, that you can sort and filter and disagree with.
+    {:else}
+      The output of a run is deliberately a corpus, not a document. Composing prose is something you do <i>from</i>
+      the table, at the moment you need it — and because the table survives, the prose can always be regenerated with
+      its provenance intact.
+    {/if}
+  </p>
+  <div class="grid">
+    {#each DESK as d}
+      <div class="cell"><b>{d.k}</b><span>{d.why}</span></div>
     {/each}
   </div>
 

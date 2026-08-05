@@ -33,15 +33,43 @@ export const RAILS: Rail[] = [
     id: 'destructive', risk: 'A tool deletes something on a whim',
     rail: 'A confirmation gate at the protocol boundary',
     kind: 'boundary',
-    detail: 'Destructive operations are gated where every route to a tool must pass, rather than inside any one caller — so a new caller cannot arrive without the check.',
-    scar: 'Because a dispatcher hides most tools behind one call, the gate has to resolve the INNER tool name first. Gating the outer name would have let every destructive call through untouched, while looking entirely correct.',
+    detail: 'Destructive operations are gated where every route to a tool must pass, rather than inside any one caller — so a new caller cannot arrive without the check. It also refuses outright when there is nobody present to confirm.',
+    scar: 'For a period this check lived only inside a legacy chat handler that the live path no longer went through, so on the real production route nothing stood between the agent and “send this email” but the agent’s own good behaviour. A guardrail placed in the wrong layer is indistinguishable from no guardrail, and this one looked healthy for weeks. Separately: because a dispatcher hides most tools behind one call, the gate has to resolve the INNER tool name — gating the outer one would let every destructive call through while looking entirely correct.',
   },
   {
     id: 'ssrf', risk: 'The agent is talked into fetching an internal address',
     rail: 'Outbound requests are filtered against private ranges',
     kind: 'boundary',
     detail: 'A tool that fetches a URL will happily fetch an internal one if asked nicely enough by a poisoned web page. Addresses in private ranges are refused before the request is made.',
-    scar: 'The first version blocked the ordinary form of a private address but not the newer notation for the same address — a documented, well-known bypass. Filter by what an address RESOLVES TO, never by how it is spelled.',
+    scar: 'The first version handled the form a human would type but not the form every caller actually passes, because the URL parser normalises the address on the way through. Loopback was reachable via a URL that reads as obviously blocked. Validate the string your callers actually produce, not the one you had in mind.',
+  },
+  {
+    id: 'rebind', risk: 'The address changes between the check and the request',
+    rail: 'Validate, then pin the socket to the address you validated',
+    kind: 'boundary',
+    detail: 'Checking a hostname and then fetching that URL resolves it twice, and the two answers need not agree. An attacker controlling a DNS record can answer with a public address for the check and an internal one for the fetch. The guard therefore returns the specific address it approved, and the connection is pinned to it.',
+    scar: 'This is the gap that makes most hand-rolled outbound filters decorative. They are not wrong about anything they check — they simply do not control what happens after they finish checking.',
+  },
+  {
+    id: 'apisurface', risk: 'A prompt-injected model re-points a credential at a host it controls',
+    rail: 'The tool has no parameter for that',
+    kind: 'boundary',
+    detail: 'The tool an agent uses to request a credential has no field for the host binding at all. It cannot re-point anything, because there is nowhere in the call to say so. Widening a credential’s reach is a separate operation, and it requires the owner to type the hostname out by hand — a suggestion from the model is worth nothing on its own.',
+    scar: 'This is what it looks like when a vulnerability determines an API surface. A policy — “the model should not do that” — became a type signature: the model cannot express it. That survives the model getting cleverer, which a validation rule may not.',
+  },
+  {
+    id: 'argscan', risk: 'A secret is leaked by the act of asking about it',
+    rail: 'Arguments are scanned before the handler runs',
+    kind: 'boundary',
+    detail: 'The transport publishes a tool’s arguments to the live event stream before the handler executes. So a model that put a key into a free-text field of a credential tool would already have leaked it, whatever the handler did next. Those tools scan their own arguments and refuse outright — refuse, not sanitise, because by then continuing is the wrong move.',
+    scar: 'The difference between a control that is theoretically right and one that has actually been probed. The exemption is documented with the exact string that broke it.',
+  },
+  {
+    id: 'redact', risk: 'A credential appears in a log or an error message',
+    rail: 'Redaction covers the URL and its encoded form',
+    kind: 'boundary',
+    detail: 'When a credential is injected as a query parameter it becomes part of the URL — so the scrubber runs over the composed URL and every error message quoting it, not just the response body. It also replaces the percent-encoded form, because that is how the value looks once a URL builder has been near it.',
+    scar: 'Most redaction helpers scrub the response body and miss the two places the value actually appears in this design: the URL it was injected into, and the error that quotes that URL.',
   },
   {
     id: 'sandbox', risk: 'Generated code runs on the host',
@@ -109,6 +137,22 @@ export const RAILS: Rail[] = [
 
 export const PRINCIPLE = {
   title: 'A request is not a boundary',
-  body: 'A sentence in a prompt asking a model not to do something is a request. It will usually be honoured, and "usually" is not a security property. A container with no route to the host, a job that cannot start until another job is green, a scan that runs before code is compiled, a credential the agent can use but cannot read — those hold regardless of what anything intends.',
+  body: 'A sentence in a prompt asking a model not to do something is a request. It will usually be honoured, and "usually" is not a security property. A container with no route to the host, a job that cannot start until another job is green, a scan that runs before code is compiled, a credential the agent can use but cannot read, a tool with no parameter for the dangerous thing — those hold regardless of what anything intends.',
   tally: 'Of the guardrails on this page, all but one are boundaries. The one that is not says so.',
 };
+
+/** Three ways a guardrail fails without changing. */
+export const FAILURE_MODES = [
+  {
+    title: 'It is in the wrong layer',
+    body: 'A check that sits inside one caller protects that caller. When a second route to the same operation appears — a new engine, a new client, a protocol endpoint — it simply does not run. Nothing errors, nothing looks different, and the dashboard is still green. The right home for a control is the narrowest place that all traffic must pass through.',
+  },
+  {
+    title: 'It was correct somewhere else',
+    body: 'Controls encode assumptions about where they run. A rule that trusts requests appearing to come from the local machine is sound reasoning on a laptop and unsound the moment the same code sits behind something that terminates connections on its behalf. The code did not change; the ground under it did. This is the most common shape of a security regression, and code review cannot see it because the diff is empty.',
+  },
+  {
+    title: 'There are three of it',
+    body: 'A rule copied into a second place will drift from the first, and every copy is somewhere the fix does not land. Where the rule is pure logic, extract it. Where it genuinely cannot be shared — a standalone script that cannot import from the application — the honest move is a comment in each copy naming its twin, so the next person to change one knows there is another.',
+  },
+];
