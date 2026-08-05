@@ -98,10 +98,17 @@ export function applyGraphFilter(
     keep = new Set(
       [...keep].filter((id) => {
         const on = index.byId.get(id)?.sources ?? [];
-        // An entity with no recorded source is kept. Notes predating the source
-        // column, and anything hand-created, have none — dropping them would
-        // make the picker silently delete history rather than filter it.
-        if (!on.length) return true;
+        // A source filter now filters, with no exemption.
+        //
+        // This used to keep any entity with no recorded source, so that the
+        // picker could not silently delete history — reasonable when an entity's
+        // sources came only from its note links, which 561 of 4,737 entities did
+        // not have. The effect was that those 561 appeared under EVERY source:
+        // asking for 'email' returned entities whose only footprint was a deep
+        // dive. `loadSnapshot` now falls back to `first_seen_in`, so every entity
+        // carries the source it actually came from and the exemption protects
+        // nothing. An entity reaching here with no source at all is a data
+        // defect, and hiding it from a filtered view is the honest answer.
         return sources.some((s) => on.includes(s));
       }),
     );
