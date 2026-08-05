@@ -1683,10 +1683,13 @@
     hermesEnabled && !!routedInfo && routingVote === null && !loading && assistantReplyCount === 1,
   );
 
-  async function applyRouting(text: string): Promise<void> {
+  async function applyRouting(text: string, isFirstMessage: boolean): Promise<void> {
     // Only route the FIRST message of a conversation (model locks after it) and
     // only on the Hermes engine (the switchModel /model path needs it).
-    if (!hermesEnabled || !conversationId || messages.length > 0) return;
+    // `isFirstMessage` is snapshotted by the caller BEFORE it appends the
+    // optimistic user bubble — reading `messages.length` here now would see that
+    // bubble and silently disable routing for every conversation.
+    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
     // A hand-picked model wins over the router — overriding it would make the
     // picker feel broken.
     if (modelPickedByUser) return;
@@ -1712,7 +1715,7 @@
         }
         routedInfo = { profileLabel: r.profileLabel, modelId: r.modelId, reason: r.reason };
         if (r.modelId !== currentModel.modelId) {
-          await switchModel('openrouter', r.modelId);
+          await switchModel('openrouter', r.modelId, { force: true });
         }
       }
     } catch {
@@ -1747,9 +1750,14 @@
     }
   }
 
-  async function switchModel(provider: ModelContext['provider'], modelId: string) {
+  async function switchModel(provider: ModelContext['provider'], modelId: string, opts?: { force?: boolean }) {
     modelPickerOpen = false;
-    if (!conversationId || loading) return;
+    // `force` is the send() path. send() now claims `loading` up front so the
+    // composer disables the instant you hit submit, which would otherwise make
+    // the guard below a no-op and silently kill query-adaptive routing. When
+    // forced, send() owns `loading` for the whole turn — this must not clear it.
+    const force = opts?.force === true;
+    if (!conversationId || (loading && !force)) return;
     if (currentModel.provider === provider && currentModel.modelId === modelId) return;
 
     // 1) Persist for cost accuracy + lock the conversation's model. The PATCH
@@ -1775,7 +1783,7 @@
     //    silently (no user bubble) and its confirmation reply is drained without
     //    rendering. `loading` keeps the composer disabled until the switch turn
     //    settles so the user's first real message can't race ahead of it.
-    loading = true;
+    if (!force) loading = true;
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -1795,7 +1803,7 @@
       // The switch is already persisted; if the /model turn failed Hermes keeps
       // its session default and pricing may be off until the next turn.
     } finally {
-      loading = false;
+      if (!force) loading = false;
     }
   }
 
@@ -1803,10 +1811,10 @@
     const text = input.trim();
     if (!text || loading || !conversationId) return;
 
-    // Query-adaptive model pick — runs before `loading` so it can reuse
-    // switchModel (which no-ops while loading). First message only.
-    await applyRouting(text);
-    if (loading) return; // a concurrent send won the race during routing
+    // Snapshot before `messages` is mutated below — routing applies to the first
+    // message of a conversation only, and the optimistic bubble we now append
+    // BEFORE routing would otherwise make every conversation look started.
+    const isFirstMessage = messages.length === 0;
 
     input = '';
     loading = true;
@@ -1855,8 +1863,10 @@
     }
 
     const progressId = crypto.randomUUID();
+    // The TTFT clock starts at submit, ahead of routing. It used to start after
+    // routing had already resolved, so the number it logged was never the wait
+    // the user actually sat through on a first message.
     pendingTtft.set(progressId, startTtftMark(progressId));
-    beginTurn();
     // Start with a subtle typing indicator — no progress box yet
     messages = [...messages, {
       id: progressId,
@@ -1868,6 +1878,17 @@
       createdAt: new Date().toISOString(),
     }];
     scrollToBottom();
+
+    // Query-adaptive model pick. Deliberately AFTER the bubble and the typing
+    // indicator are on screen: it costs a round trip, and when it switches model
+    // it costs an entire silent /model turn on top (up to 15s). Running it first
+    // meant submit left the composer full and the screen unchanged for all of
+    // that — the send read as dropped. First message of a conversation only.
+    await applyRouting(text, isFirstMessage);
+
+    // Throughput clock starts once the model work actually begins — routing is
+    // not generation, and billing it here would drag the tok/s meter down.
+    beginTurn();
 
     // An "@files" mention routes this turn to the Files skill so the orchestrator
     // reaches for the file_search tool (semantic search over /drive content); an
