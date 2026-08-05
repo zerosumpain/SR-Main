@@ -94,7 +94,13 @@ export const GET: RequestHandler = async ({ url }) => {
       // How current this entity's evidence is, so the renderers can fade stale
       // material. Computed here rather than client-side so both the 2D and 3D
       // views agree and neither needs to know the decay curve.
-      recency: Number(recencyOf(n.lastSeenAt, now).toFixed(3)),
+      //
+      // From `evidenceAt`, not `lastSeenAt`. `lastSeenAt` is the note clock,
+      // which for email is the moment the sweep wrote the row — every Gmail
+      // entity therefore scored a flat 1.000 and this field, added so the
+      // renderers could fade stale material, was shipping a constant for most of
+      // the graph. `evidenceAt` carries the observed time. See GraphNode.
+      recency: Number(recencyOf(n.evidenceAt || n.lastSeenAt, now).toFixed(3)),
     };
   });
 

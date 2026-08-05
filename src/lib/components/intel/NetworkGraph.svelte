@@ -22,6 +22,7 @@
   import { untrack } from 'svelte';
 
   import type { NetNode, NetEdge } from './types';
+  import { recencyFade } from './graph-visual';
 
   let {
     nodes = [],
@@ -185,7 +186,10 @@
             ? 'rgba(196, 87, 10, 0.42)'
             : 'rgba(26, 16, 8, 0.16)',
       )
-      .attr('stroke-width', (d) => (d.strength === 'strong' ? 2 : d.strength === 'weak' ? 0.7 : 1.2));
+      .attr('stroke-width', (d) => (d.strength === 'strong' ? 2 : d.strength === 'weak' ? 0.7 : 1.2))
+      // Older evidence recedes. The colours above already carry their own alpha,
+      // so this multiplies on top rather than replacing it.
+      .attr('stroke-opacity', (d) => recencyFade(d.recency));
 
     const node = g
       .append('g')
@@ -218,7 +222,10 @@
       .attr('r', (d) => radius(d))
       .attr('fill', (d) => clusterColour(d.community))
       .attr('fill-opacity', (d) =>
-        dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4,
+        // Keyword dimming first, then age. A node that is both off-keyword and
+        // stale must not vanish, so the age term is floored — see recencyFade.
+        (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
+        recencyFade(d.recency),
       )
       .attr('stroke', (d) =>
         d.id === selectedId ? 'var(--accent)' : pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',

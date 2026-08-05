@@ -78,6 +78,74 @@ export function decayWeight(weight: number, recency: number, pull = 0.5): number
   return Math.max(0, Math.min(1, w * (1 - p + p * r)));
 }
 
+/**
+ * How much of relevance is exposed to age.
+ *
+ * Same 0.5 as `decayWeight`'s default, and for the same reason: half the score
+ * is earned by how well established the entity is and cannot be taken away by
+ * the calendar. An entity confirmed by twenty sources in June outranks a
+ * single-mention guess from this morning, which is the answer a person would
+ * give.
+ */
+export const RELEVANCE_PULL = 0.5;
+
+export interface RelevanceInput {
+  /** 0..1. `intel_entities.confidence_score` — NOT the three-value text column. */
+  confidence: number | null | undefined;
+  /** When this entity was last observed, epoch ms. `GraphNode.evidenceAt`. */
+  evidenceAt: number | null | undefined;
+}
+
+export interface Relevance {
+  /** 0..1 — how much this entity should count right now. */
+  score: number;
+  /** 0..1 — the confidence term, echoed so the card can show its working. */
+  confidence: number;
+  /** RECENCY_FLOOR..1 — the time term. */
+  freshness: number;
+  /** Days since the entity was last observed; null when nothing dated it. */
+  ageDays: number | null;
+}
+
+/**
+ * Relevance — confidence discounted by age.
+ *
+ * Deliberately NOT `confidence * freshness`. That is the obvious formula and it
+ * is wrong here for the reason `decayWeight` gives above: multiplying a
+ * well-corroborated old entity by a floor-level recency drops it below a fresh
+ * guess, and the whole point of tracking confidence is that it should survive
+ * the passage of time. `RELEVANCE_PULL` is how much of the score age is allowed
+ * to touch.
+ *
+ * Confidence comes from `intel_entities.confidence_score`, which is populated
+ * for every entity and is already what the lenses, briefs and watchlist read.
+ * There is no text-to-number mapping for `intel_entities.confidence` anywhere in
+ * the codebase and inventing one here would create a second, disagreeing
+ * definition of the same word — pass `UNASSESSED_SCORE` for an unscored entity
+ * instead.
+ */
+export function entityRelevance(
+  input: RelevanceInput,
+  nowMs: number = Date.now(),
+  pull: number = RELEVANCE_PULL,
+): Relevance {
+  const confidence = Number.isFinite(input.confidence as number)
+    ? Math.max(0, Math.min(1, input.confidence as number))
+    : 0;
+  const dated = input.evidenceAt != null && Number.isFinite(input.evidenceAt) && input.evidenceAt > 0;
+  const ageDays = dated ? ageInDays(input.evidenceAt as number, nowMs) : null;
+  // An entity nothing has dated is treated as maximally stale rather than
+  // maximally fresh. The opposite default would let every undated row sit at the
+  // top of anything sorted by relevance.
+  const freshness = dated ? recencyWeight(ageDays as number) : RECENCY_FLOOR;
+  return {
+    score: decayWeight(confidence, freshness, pull),
+    confidence,
+    freshness,
+    ageDays,
+  };
+}
+
 /** True when a timestamp falls inside the rolling window. */
 export function withinRollingWindow(
   timestampMs: number | null | undefined,

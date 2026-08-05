@@ -16,6 +16,8 @@ export interface EntityCardData {
     type: { id: string; name: string; icon: string; color: string };
     createdAt: string;
     updatedAt: string;
+    /** 0..1. The numeric confidence every other surface reads; see staleness.ts. */
+    confidenceScore: number | null;
   };
   metrics: {
     degree: number;
@@ -24,6 +26,9 @@ export interface EntityCardData {
     brokerage: number;
     community: number | null;
     noteCount: number;
+    /** When this entity was last OBSERVED (not when its row was written), ISO. */
+    evidenceAt: string | null;
+    relevance: { score: number; confidence: number; freshness: number; ageDays: number | null };
   };
   neighbours: Array<{
     id: string;
@@ -40,10 +45,16 @@ export interface EntityCardData {
     title: string;
     source: string;
     createdAt: string;
-    relevance: string;
+    relevance: string | null;
     excerpt: string | null;
+    /** When the note's subject matter happened; null when nothing dated it. */
+    observedAt: string | null;
     href: string;
+    /** True for the note this entity was first extracted from. */
+    firstSeen?: boolean;
   }>;
+  /** Evidence per month across ALL sources, for the volume sparkline. */
+  histogram: Array<{ month: string; count: number }>;
   timeline: Array<{
     id: string;
     date: string;

@@ -7,6 +7,7 @@
 
   import { fetchEntityCard, type EntityCardData } from '$lib/jkai/intel/entity-card-store';
   import EvidenceList from './EvidenceList.svelte';
+  import EvidenceTimeline from './EvidenceTimeline.svelte';
   import {
     ageInDays,
     bestGrade,
@@ -111,8 +112,17 @@
       corroboration,
       sourceGrade: bestGrade(data.notes.map((n) => n.source)),
       credibility: credibilityFromCorroboration(corroboration),
-      // Notes come back newest-first, so [0] is the last time anything said this.
-      ageDays: ageInDays(data.notes[0]?.createdAt ?? data.entity.updatedAt),
+      // ONE age anchor for this card, and it is an observation clock.
+      //
+      // This used to read notes[0].createdAt, which is when the sweep WROTE the
+      // note — every email note carries the same day — so an eleven-week-old
+      // thread aged the same as this morning's. `metrics.evidenceAt` is when the
+      // entity was last actually seen. (/api/jkai/intel/trust and trust-refresh
+      // still anchor on lastCorroboratedAt and disagree with each other; that is
+      // worth unifying, but it is a scoring change, not a display one.)
+      ageDays: data.metrics.evidenceAt
+        ? ageInDays(new Date(data.metrics.evidenceAt).getTime())
+        : ageInDays(data.entity.updatedAt),
       confirmed: data.entity.confirmed,
     });
   });
@@ -281,10 +291,19 @@
           >
             {trust.resolved.sourceGrade}{trust.resolved.credibility}
           </span>
-          {#if trust.decay < 0.99}
-            <span title="Evidence weakened by age">{pct(trust.decay)} recency</span>
-          {/if}
         </div>
+
+        <!-- How old this entity is, what that costs it, and the shape of the
+             evidence behind it. Replaces the bare recency chip that used to sit
+             in the row above: same number, but you can see where it came from
+             and click through to any of it. -->
+        <EvidenceTimeline
+          notes={data.notes}
+          histogram={data.histogram ?? []}
+          evidenceAt={data.metrics.evidenceAt}
+          relevance={data.metrics.relevance}
+          {compact}
+        />
 
         {#if showBreakdown}
           <!-- The prose comes first because "why" is a question about evidence,

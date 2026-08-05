@@ -921,6 +921,7 @@ async function persistStructuralOnly(
       format: 'summary',
       status: 'pending',
       metadata,
+      observedAt: opts.observedAt,
     })
     .returning({ id: intelNotes.id });
 
@@ -1171,6 +1172,9 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
       }
 
       const outcome = await extractIntoIntel({
+    // The note gets the thread's own receipt time, not the sweep's clock — the
+    // same `observedAt` the structural edges below are already asserted with.
+    observedAt,
         kind: 'file',
         // Rides the `file` pipeline but is email, and the graph's source filter
         // reads `source`, not `kind`.

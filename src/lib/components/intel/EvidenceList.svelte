@@ -21,7 +21,7 @@
       createdAt: string | Date;
       excerpt: string | null;
       href: string;
-      relevance?: string;
+      relevance?: string | null;
     }>;
     /** Entity name, highlighted inside each excerpt. */
     term?: string;

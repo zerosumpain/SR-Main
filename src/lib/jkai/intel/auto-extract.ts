@@ -58,6 +58,15 @@ export interface AutoExtractInput {
    */
   categories?: string[];
   /**
+   * When the thing being extracted actually happened, if known.
+   *
+   * Stored on the note as `observed_at`. Without it the only clock a note has is
+   * `created_at`, which is when the sweep ran — so twelve weeks of mail all date
+   * from the night it was read. The Gmail path already computes this for the
+   * edges it writes; it just never reached the note.
+   */
+  observedAt?: Date;
+  /**
    * Re-extract even when the content hash matches.
    *
    * The hash gate assumes the only reason to redo an item is that its text
@@ -150,6 +159,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           // Also set on update, so notes written before a source override
           // existed are corrected the next time their thread is swept.
           ...(input.source ? { source: input.source } : {}),
+          ...(input.observedAt ? { observedAt: input.observedAt } : {}),
           updatedAt: new Date(),
         })
         .where(eq(intelNotes.id, noteId));
@@ -165,6 +175,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
           status: 'processing',
           metadata,
           categories,
+          observedAt: input.observedAt,
         })
         .returning({ id: intelNotes.id });
       noteId = created.id;

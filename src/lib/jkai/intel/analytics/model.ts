@@ -26,6 +26,28 @@ export interface GraphNode {
   noteCount: number;
   /** Most recent note timestamp this entity was seen in, epoch ms. */
   lastSeenAt: number;
+  /**
+   * When this entity was last actually OBSERVED, epoch ms — as opposed to when
+   * the row about it was written.
+   *
+   * These are not the same thing and the difference is the whole ballgame for
+   * anything time-weighted. `intel_notes.created_at` is the INGEST clock: all
+   * 1,038 email notes on 2026-08-05 share a single `created_at` day, because
+   * that is when the sweep wrote them, not when the mail was sent. Ranking on
+   * that gives every Gmail-derived entity maximum freshness regardless of
+   * whether its thread is from yesterday or eleven weeks ago.
+   *
+   * `intel_relationships.last_seen_at` is the real thing — the Gmail ingest
+   * passes each thread's `internalDate` through as `observedAt` — and spans 34
+   * distinct days over the same data. So the newest incident edge observation
+   * WINS, and the note clock is used only for an entity with no edges at all
+   * (33% of them, every one isolated).
+   *
+   * Deliberately not the later of the two: the ingest clock is almost always the
+   * more recent, so combining them lets it bury the value it was meant to
+   * correct.
+   */
+  evidenceAt: number;
   /** Observed surface forms. Searched alongside the name so "IBCA" finds the
    *  node stored under its expanded title. */
   aliases: string[];
