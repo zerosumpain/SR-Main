@@ -466,13 +466,15 @@
 </div>
 
 <style>
+  /* No max-height, no overflow. The card is itself inside a scroller (see
+     EntityHoverCard), and a scroll region nested in a scroll region means the
+     wheel does something different depending on which few pixels the pointer
+     happens to be over. One scroller per surface. */
   .pin-list {
     margin-top: 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    max-height: 180px;
-    overflow-y: auto;
     border: 1px solid var(--card-border);
     border-radius: var(--radius-sharp);
     padding: 4px;
@@ -836,12 +838,12 @@
     padding: 0;
   }
 
+  /* As .pin-list: no nested scroller. The list is already capped by how many
+     neighbours the card asks for. */
   .neighbours {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    max-height: 190px;
-    overflow-y: auto;
   }
   .neighbour {
     display: flex;

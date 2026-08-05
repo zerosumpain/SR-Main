@@ -23,6 +23,7 @@ function node(
     color: '#fff',
     summary: null,
     confidence: 'high',
+    confidenceScore: 0.7,
     confirmed: true,
     createdAt: 0,
     updatedAt: 0,

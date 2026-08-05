@@ -30,6 +30,16 @@
   // Menu state is shared with the phone tab bar's `≡ more` tab.
   const menuOpen = $derived(hub.menuOpen);
 
+  /**
+   * A surface's own menu, when it has published one.
+   *
+   * Intel has nine pages of its own and used to render them as a second nav
+   * strip under this header — two navigations stacked before the page started.
+   * When a surface publishes a menu it takes over this dropdown: same button,
+   * same position, its rows instead of the hub's, with a way back beside it.
+   */
+  const pageMenu = $derived(hub.pageMenu);
+
   // Live runs: the layout load snapshotted a count at navigation time; the chat
   // page publishes a fresher one as jobs start and finish.
   const runs = $derived(hub.liveRuns ?? activeRuns);
@@ -162,6 +172,16 @@
         ⌘K
       </button>
 
+      {#if pageMenu?.back}
+        <!-- The way out, always visible rather than a row inside the dropdown:
+             leaving a surface is the one navigation that should never need a
+             menu opened first. -->
+        <a class="chip back-chip" href={pageMenu.back.href} title="Back to {pageMenu.back.label}">
+          <span aria-hidden="true">←</span>
+          <span class="back-word">{pageMenu.back.label}</span>
+        </a>
+      {/if}
+
       <div class="menu-wrap">
         <button
           type="button"
@@ -171,40 +191,61 @@
           aria-haspopup="menu"
           onclick={toggleHubMenu}
         >
-          <span class="menu-word">menu</span>
+          <span class="menu-word">{pageMenu?.label ?? 'menu'}</span>
           <span class="menu-glyph" aria-hidden="true">{menuOpen ? '▴' : '▾'}</span>
           <span class="menu-burger" aria-hidden="true">≡</span>
         </button>
 
         {#if menuOpen}
           <div class="menu" role="menu">
-            <div class="menu-group">
-              <div class="menu-heading">Surfaces</div>
-              {#each surfaces as row (row.href + row.label)}
-                <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
-                  <span class="menu-label">{row.label}</span>
-                  <span class="menu-meta">{row.meta}</span>
-                </a>
+            {#if pageMenu}
+              {#each pageMenu.groups as group, gi (group.heading)}
+                <div class="menu-group" class:last={gi === pageMenu.groups.length - 1}>
+                  <div class="menu-heading">{group.heading}</div>
+                  {#each group.rows as row (row.href + row.label)}
+                    <a
+                      class="menu-row"
+                      class:current={isCurrent(row.href)}
+                      href={row.href}
+                      title={row.title}
+                      onclick={closeHubMenu}
+                      role="menuitem"
+                    >
+                      <span class="menu-label">{row.label}</span>
+                      {#if row.meta}<span class="menu-meta" class:warn={row.warn}>{row.meta}</span>{/if}
+                    </a>
+                  {/each}
+                </div>
               {/each}
-            </div>
-            <div class="menu-group">
-              <div class="menu-heading">Library</div>
-              {#each library as row (row.href + row.label)}
-                <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
-                  <span class="menu-label">{row.label}</span>
-                  <span class="menu-meta">{row.meta}</span>
-                </a>
-              {/each}
-            </div>
-            <div class="menu-group last">
-              <div class="menu-heading">System</div>
-              {#each system as row (row.href + row.label)}
-                <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
-                  <span class="menu-label">{row.label}</span>
-                  <span class="menu-meta">{row.meta}</span>
-                </a>
-              {/each}
-            </div>
+            {:else}
+              <div class="menu-group">
+                <div class="menu-heading">Surfaces</div>
+                {#each surfaces as row (row.href + row.label)}
+                  <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
+                    <span class="menu-label">{row.label}</span>
+                    <span class="menu-meta">{row.meta}</span>
+                  </a>
+                {/each}
+              </div>
+              <div class="menu-group">
+                <div class="menu-heading">Library</div>
+                {#each library as row (row.href + row.label)}
+                  <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
+                    <span class="menu-label">{row.label}</span>
+                    <span class="menu-meta">{row.meta}</span>
+                  </a>
+                {/each}
+              </div>
+              <div class="menu-group last">
+                <div class="menu-heading">System</div>
+                {#each system as row (row.href + row.label)}
+                  <a class="menu-row" class:current={isCurrent(row.href)} href={row.href} onclick={closeHubMenu} role="menuitem">
+                    <span class="menu-label">{row.label}</span>
+                    <span class="menu-meta">{row.meta}</span>
+                  </a>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -366,6 +407,17 @@
     color: var(--text-ghost);
     white-space: nowrap;
   }
+  .menu-meta.warn {
+    color: var(--warn);
+  }
+
+  .back-chip {
+    text-decoration: none;
+    gap: 5px;
+  }
+  .back-chip:hover {
+    color: var(--accent);
+  }
 
   .spend-pill,
   .mobile-strip {
@@ -410,6 +462,20 @@
     }
     .menu-word,
     .menu-glyph {
+      display: none;
+    }
+    /* The arrow alone, at a thumb-sized target. The word is what costs width on
+       a phone, and "←" beside a surface header is not ambiguous. */
+    .back-chip {
+      width: 44px;
+      height: 44px;
+      justify-content: center;
+      padding: 0;
+      border-color: transparent;
+      font-size: var(--fs-body);
+      color: var(--text-primary);
+    }
+    .back-word {
       display: none;
     }
     .menu-burger {

@@ -176,8 +176,16 @@
   {#if relevance}
     <p class="verdict">
       <b>{pct(relevance.score)}</b> relevant
+      <!-- "discounted by", not "×". The two are not the same and the numbers on
+           screen prove it: 52% confidence and 85% freshness multiply to 44%, but
+           the score reads 48%. Relevance is `decayWeight`, a PARTIAL discount —
+           half the score is earned by corroboration and cannot be taken away by
+           the calendar (see staleness.ts). A caption asserting a multiplication
+           the code deliberately does not do is a wrong explanation of a right
+           number, which is worse than no explanation. -->
       <span class="working">
-        · {pct(relevance.confidence)} confidence × {pct(relevance.freshness)} freshness · {fmtAge(relevance.ageDays)}
+        · {pct(relevance.confidence)} confidence discounted by age
+        ({pct(relevance.freshness)} fresh) · {fmtAge(relevance.ageDays)}
       </span>
     </p>
   {/if}

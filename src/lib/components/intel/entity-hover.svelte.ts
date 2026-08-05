@@ -59,13 +59,21 @@ class EntityHoverState {
 
   /** Clicked or keyboard-activated — stays until dismissed. */
   pin(entityId: string, el: HTMLElement) {
-    this.clearTimers();
     const r = el.getBoundingClientRect();
-    this.current = {
-      entityId,
-      rect: { top: r.top, left: r.left, bottom: r.bottom, right: r.right },
-      pinned: true,
-    };
+    this.pinAt(entityId, { top: r.top, left: r.left, bottom: r.bottom, right: r.right });
+  }
+
+  /**
+   * Same, from a rect rather than an element.
+   *
+   * The graph views have no element to anchor to — a node is a circle in an SVG
+   * or a sphere in a WebGL canvas, neither of which has a DOM box — so they pass
+   * the point the click happened at. Everything downstream already works in
+   * viewport coordinates, so nothing else has to know the difference.
+   */
+  pinAt(entityId: string, rect: HoverAnchor['rect']) {
+    this.clearTimers();
+    this.current = { entityId, rect, pinned: true };
   }
 
   /** Pointer left the mention or the card. */

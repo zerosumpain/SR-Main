@@ -116,6 +116,3 @@ export const SURFACES: IntelSurface[] = [
     count: 'alerts',
   },
 ];
-
-/** The loop, in order, for the landing-page explainer. */
-export const STAGES = ['01 capture', '02 triage', '03 repair', '04 explore', '05 collect', '06 act'];

@@ -22,7 +22,18 @@
   import { untrack } from 'svelte';
 
   import type { NetNode, NetEdge } from './types';
-  import { recencyFade, clusterColour } from './graph-visual';
+  import {
+    recencyFade,
+    clusterColour,
+    nodeRelevance,
+    relevanceScale,
+    washOut,
+    edgeWidth,
+    edgeEmphasis,
+    edgeDistanceScale,
+    edgeForceStrength,
+    relevancePhrase,
+  } from './graph-visual';
 
   let {
     nodes = [],
@@ -30,7 +41,7 @@
     highlightPath = null,
     matchedIds = [],
     selectedId = null,
-    focusCommunity = null,
+    focusCommunities = [],
     onSelect,
     onOpen,
   }: {
@@ -45,8 +56,14 @@
      */
     matchedIds?: string[];
     selectedId?: string | null;
-    /** Cluster to bring forward; the rest recede. Matches the 3D view. */
-    focusCommunity?: number | null;
+    /**
+     * Clusters brought forward; the rest recede. Matches the 3D view.
+     *
+     * A LIST rather than one id: comparing two clusters is the common question
+     * ("do these overlap, and where do they touch"), and it cannot be asked of a
+     * control that can only hold one answer at a time.
+     */
+    focusCommunities?: number[];
     onSelect?: (id: string | null) => void;
     onOpen?: (id: string) => void;
   } = $props();
@@ -66,9 +83,15 @@
   let resizeObserver: ResizeObserver | null = null;
   /** Node positions survive a filter change so the layout does not jump. */
   const positions = new Map<string, { x: number; y: number }>();
+  /** The outlined cluster blobs, redrawn per tick while a cluster is selected. */
+  let hullGroup: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
+  /** The live simulation nodes, so a focus change can restyle and re-outline
+   *  without waiting for a tick — a settled layout never ticks again. */
+  let liveNodes: SimNode[] = [];
 
   const pathSet = $derived(new Set(highlightPath ?? []));
   const matchSet = $derived(new Set(matchedIds ?? []));
+  const focusSet = $derived(new Set(focusCommunities ?? []));
   /** Only dim when there is something to dim AGAINST. */
   const dimming = $derived(matchSet.size > 0);
   const pathEdgeKeys = $derived.by(() => {
@@ -80,9 +103,52 @@
     return set;
   });
 
+  /**
+   * Node size — structural importance, modulated by how much the entity still
+   * counts. Identical to the 3D view's.
+   *
+   * Two channels rather than one because there are two things to say. Importance
+   * answers "does this hold the graph together"; relevance answers "is it still
+   * live". Age used to live only in opacity, which was already carrying
+   * `confirmed`, the keyword dimming and cluster focus — four meanings on one
+   * channel is no meaning at all.
+   */
   function radius(n: NetNode): number {
+    // Floored at 4 so the least relevant dot is still something you can aim at.
+    const base = Math.max(4, structuralRadius(n) * relevanceScale(nodeRelevance(n)));
+    // Focused clusters keep their size; the rest shrink towards the background,
+    // exactly as in 3D.
+    return outOfFocus(n) ? base * 0.55 : base;
+  }
+
+  /**
+   * Size from importance ALONE — what the node would be if nothing had aged.
+   *
+   * Kept separate because it is what decides which nodes are NAMED. Relevance
+   * changes how big a node is drawn; letting it also decide labelling meant the
+   * new size curve silently un-named most of the graph (600 nodes down to two on
+   * the real data), which is a different change from the one intended and a
+   * worse view.
+   */
+  function structuralRadius(n: NetNode): number {
     // sqrt so a 10× importance difference is a ~3× size difference.
     return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
+  }
+
+  /**
+   * The labelling rule, unchanged from before relevance existed: anything
+   * important enough to earn a name, plus whatever is on a traced path or
+   * literally matched the keyword. Focus is the one thing that removes a label,
+   * because that is the point of focusing.
+   */
+  function earnsLabel(n: NetNode): boolean {
+    if (pathSet.has(n.id) || matchSet.has(n.id)) return true;
+    return !outOfFocus(n) && structuralRadius(n) > 10;
+  }
+
+  /** True when a focus is set and this node is not part of it. */
+  function outOfFocus(n: NetNode): boolean {
+    return focusSet.size > 0 && !focusSet.has(n.community);
   }
 
   /**
@@ -116,6 +182,7 @@
       const prev = positions.get(n.id);
       return { ...n, x: prev?.x, y: prev?.y };
     });
+    liveNodes = simNodes;
     const byId = new Map(simNodes.map((n) => [n.id, n]));
     const simEdges: SimEdge[] = edges
       .filter((e) => byId.has(e.source) && byId.has(e.target))
@@ -152,8 +219,14 @@
           .forceLink<SimNode, SimEdge>(simEdges)
           .id((d) => d.id)
           // Well-connected pairs sit closer; peripheral ones get room to breathe.
-          .distance((l) => 40 + 60 / (1 + Math.min((l.source as SimNode).degree ?? 1, 6)))
-          .strength(0.35),
+          // Scaled by edge weight so distance in the layout also reads as how
+          // well corroborated the relationship is, not merely that one exists.
+          .distance(
+            (l) =>
+              (40 + 60 / (1 + Math.min((l.source as SimNode).degree ?? 1, 6))) *
+              edgeDistanceScale(l.weight),
+          )
+          .strength((l) => edgeForceStrength(l.weight)),
       )
       .force('charge', d3.forceManyBody<SimNode>().strength((d) => -120 - radius(d) * 12))
       .force('center', d3.forceCenter(width / 2, height / 2))
@@ -161,6 +234,11 @@
       // Pull clusters apart along x so communities read as separate regions.
       .force('x', d3.forceX<SimNode>((d) => width / 2 + (((d.community % 5) - 2) * width) / 7).strength(0.045))
       .force('y', d3.forceY(height / 2).strength(0.045));
+
+    // Behind everything: the outlined extent of each selected cluster. Appended
+    // first so the blobs sit under the links and nodes they contain rather than
+    // over them.
+    hullGroup = g.append('g').attr('class', 'hulls');
 
     const link = g
       .append('g')
@@ -179,10 +257,13 @@
             ? 'rgba(196, 87, 10, 0.42)'
             : 'rgba(26, 16, 8, 0.16)',
       )
-      .attr('stroke-width', (d) => (d.strength === 'strong' ? 2 : d.strength === 'weak' ? 0.7 : 1.2))
-      // Older evidence recedes. The colours above already carry their own alpha,
-      // so this multiplies on top rather than replacing it.
-      .attr('stroke-opacity', (d) => recencyFade(d.recency));
+      // Continuous in the edge's weight rather than its three-value bucket —
+      // 96% of the real graph is 'moderate', so the bucket drew almost every
+      // link at the same width while the number under it spans 0.25 to 0.99.
+      .attr('stroke-width', (d) => edgeWidth(d.weight))
+      // Older and thinner evidence both recede. The colours above already carry
+      // their own alpha, so these multiply on top rather than replacing it.
+      .attr('stroke-opacity', (d) => recencyFade(d.recency) * edgeEmphasis(d.weight));
 
     const node = g
       .append('g')
@@ -213,14 +294,16 @@
     node
       .append('circle')
       .attr('r', (d) => radius(d))
-      .attr('fill', (d) => clusterColour(d.community))
+      // Hue is the cluster, washed towards the page by how stale the entity is.
+      // Age was moved OFF opacity for this: opacity is shared with three other
+      // meanings, and a colour receding towards the surface it sits on is what
+      // "no longer current" actually looks like.
+      .attr('fill', (d) => washOut(clusterColour(d.community), nodeRelevance(d)))
       .attr('fill-opacity', (d) =>
-        // Keyword dimming first, then age, then cluster focus. A node that is
-        // all three must not vanish, so the age term is floored — see
-        // recencyFade — and focus is a view state rather than a filter.
+        // Keyword dimming first, then cluster focus. Focus is a view state
+        // rather than a filter, so it dims rather than removes.
         (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
-        recencyFade(d.recency) *
-        (focusCommunity !== null && d.community !== focusCommunity ? 0.18 : 1),
+        (outOfFocus(d) ? 0.18 : 1),
       )
       .attr('stroke', (d) =>
         d.id === selectedId ? 'var(--accent)' : pathSet.has(d.id) ? 'var(--accent)' : 'rgba(237,228,212,0.9)',
@@ -240,9 +323,14 @@
 
     // Labels only for entities big enough to earn one, plus anything on a
     // highlighted path or matching the keyword. Everything else labels on hover.
+    // Appended for anything that STRUCTURALLY earns a name, then hidden below if
+    // focus says otherwise — rather than not appended at all. Skipping them
+    // while a cluster was focused left nothing to bring back when the focus was
+    // cleared.
     node
-      .filter((d) => radius(d) > 10 || pathSet.has(d.id) || matchSet.has(d.id))
+      .filter((d) => structuralRadius(d) > 10 || pathSet.has(d.id) || matchSet.has(d.id))
       .append('text')
+      .attr('display', (d) => (earnsLabel(d) ? null : 'none'))
       .text((d) => (d.name.length > 26 ? `${d.name.slice(0, 24)}…` : d.name))
       .attr('x', (d) => radius(d) + 5)
       .attr('y', 4)
@@ -292,6 +380,7 @@
         .attr('x2', (d) => (d.target as SimNode).x ?? 0)
         .attr('y2', (d) => (d.target as SimNode).y ?? 0);
       node.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+      drawHulls(simNodes);
     });
 
     simulation.on('end', () => {
@@ -311,6 +400,109 @@
       fitted = true;
       fitToView(simNodes, width, height);
     });
+  }
+
+  /**
+   * The outlined extent of every selected cluster.
+   *
+   * Drawn for SELECTED clusters only, and nothing else. Outlining all two dozen
+   * at once is the mistake the 3D view already made and had to undo: overlapping
+   * translucent regions are a fog that hides the graph more effectively than the
+   * meshing they were meant to explain. Selection is the signal that says which
+   * region someone is actually asking about.
+   *
+   * A bold outline rather than a fill, for the same reason: where two selected
+   * clusters interpenetrate — the case that prompted this — two solid washes
+   * blend into a third colour and the boundary disappears. Two crossing lines
+   * stay two crossing lines.
+   */
+  const HULL_PAD = 22;
+
+  function drawHulls(simNodes: SimNode[]) {
+    if (!hullGroup) return;
+    type Blob = { community: number; path: string };
+    const blobs: Blob[] = [];
+
+    if (focusSet.size) {
+      const byCommunity = new Map<number, Array<[number, number]>>();
+      for (const n of simNodes) {
+        if (!focusSet.has(n.community) || n.x == null || n.y == null) continue;
+        const list = byCommunity.get(n.community);
+        if (list) list.push([n.x, n.y]);
+        else byCommunity.set(n.community, [[n.x, n.y]]);
+      }
+
+      for (const [community, points] of byCommunity) {
+        const path = blobPath(points);
+        if (path) blobs.push({ community, path });
+      }
+    }
+
+    hullGroup
+      .selectAll<SVGPathElement, Blob>('path')
+      .data(blobs, (d) => String(d.community))
+      .join('path')
+      .attr('d', (d) => d.path)
+      .attr('fill', (d) => clusterColour(d.community))
+      // Barely there: the fill says "this region", the stroke says where it ends.
+      .attr('fill-opacity', 0.07)
+      .attr('stroke', (d) => clusterColour(d.community))
+      .attr('stroke-width', 2.5)
+      .attr('stroke-opacity', 0.85)
+      .attr('stroke-linejoin', 'round')
+      .style('pointer-events', 'none');
+  }
+
+  /**
+   * A padded, rounded outline around a set of points.
+   *
+   * Trimmed to the dense 85% before hulling. A cluster owns outliers that the
+   * layout flings to the edge, and their convex hull describes the debris rather
+   * than the body — the same lesson, and roughly the same percentile, as the 3D
+   * view's shells and both views' camera fits.
+   */
+  function blobPath(points: Array<[number, number]>): string | null {
+    if (!points.length) return null;
+
+    const cx = points.reduce((s, p) => s + p[0], 0) / points.length;
+    const cy = points.reduce((s, p) => s + p[1], 0) / points.length;
+
+    let core = points;
+    if (points.length > 6) {
+      core = points
+        .map((p) => ({ p, d: Math.hypot(p[0] - cx, p[1] - cy) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, Math.max(4, Math.floor(points.length * 0.85)))
+        .map((x) => x.p);
+    }
+
+    // Under three points there is no polygon to take, and d3.polygonHull returns
+    // null — a lone entity in a cluster still has an extent worth showing, so it
+    // gets a circle instead of disappearing.
+    const hull = core.length >= 3 ? d3.polygonHull(core) : null;
+    if (!hull) {
+      const r = Math.max(...core.map((p) => Math.hypot(p[0] - cx, p[1] - cy)), 0) + HULL_PAD;
+      return `M ${cx - r},${cy} a ${r},${r} 0 1,0 ${r * 2},0 a ${r},${r} 0 1,0 ${-r * 2},0`;
+    }
+
+    // Push each vertex outward from the centre so the outline clears the nodes
+    // rather than cutting through the ones that define it.
+    const hx = hull.reduce((s, p) => s + p[0], 0) / hull.length;
+    const hy = hull.reduce((s, p) => s + p[1], 0) / hull.length;
+    const padded = hull.map(([x, y]) => {
+      const dx = x - hx;
+      const dy = y - hy;
+      const len = Math.hypot(dx, dy) || 1;
+      return [x + (dx / len) * HULL_PAD, y + (dy / len) * HULL_PAD] as [number, number];
+    });
+
+    return (
+      d3
+        .line<[number, number]>()
+        .x((p) => p[0])
+        .y((p) => p[1])
+        .curve(d3.curveCatmullRomClosed.alpha(0.5))(padded) ?? null
+    );
   }
 
   /**
@@ -372,6 +564,38 @@
     untrack(() => render());
   });
 
+  /**
+   * Focus repaint: dim what is not selected, and outline what is.
+   *
+   * In place, never a rebuild — the 3D view restyles for focus for the same
+   * reason. This effect is also what makes focus WORK at all in this view: the
+   * fill-opacity accessor has always read `focusCommunity`, but nothing depended
+   * on it reactively, so picking a cluster in 2D changed nothing until some
+   * other filter happened to force a full re-render.
+   */
+  $effect(() => {
+    // Read as a stable key: the parent hands a fresh array each render, so
+    // depending on the array itself would restyle continuously.
+    const key = (focusCommunities ?? []).join(',');
+    if (!rootGroup) return;
+    untrack(() => {
+      void key;
+      rootGroup!
+        .selectAll<SVGCircleElement, SimNode>('g.node > circle:first-of-type')
+        .attr('r', (d) => radius(d))
+        .attr('fill-opacity', (d) =>
+          (dimming && !matchSet.has(d.id) ? 0.14 : d.confirmed ? 0.85 : 0.4) *
+          (outOfFocus(d) ? 0.18 : 1),
+        );
+      // Labels were placed at render time, so focus has to hide them here or a
+      // dimmed cluster would keep shouting its names over the focused one.
+      rootGroup!
+        .selectAll<SVGTextElement, SimNode>('g.node > text')
+        .attr('display', (d) => (earnsLabel(d) ? null : 'none'));
+      drawHulls(liveNodes);
+    });
+  });
+
   // Selection repaint: restyle the existing circles rather than rebuilding.
   $effect(() => {
     const id = selectedId;
@@ -428,7 +652,9 @@
         <span>{hovered.icon}</span>
         <strong>{hovered.name}</strong>
       </div>
-      <div class="tip-meta">{hovered.type} · {hovered.degree} links</div>
+      <div class="tip-meta">
+        {hovered.type} · {hovered.degree} links · {relevancePhrase(nodeRelevance(hovered))}
+      </div>
       {#if hovered.summary}
         <p>{hovered.summary.slice(0, 160)}{hovered.summary.length > 160 ? '…' : ''}</p>
       {/if}

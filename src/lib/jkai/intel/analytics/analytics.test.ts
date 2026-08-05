@@ -16,6 +16,7 @@ function node(id: string, typeName = 'person'): GraphSnapshot['nodes'][number] {
     color: '#fff',
     summary: null,
     confidence: 'high',
+    confidenceScore: 0.7,
     confirmed: true,
     createdAt: 0,
     updatedAt: 0,
