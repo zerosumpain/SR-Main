@@ -287,7 +287,7 @@ register({
     // generateInsights scores semantic distance, which needs the embeddings the
     // analysis no longer loads eagerly.
     await ensureEmbeddings(analysis);
-    let found = generateInsights(analysis);
+    let found = await generateInsights(analysis);
     if (kind) found = found.filter((i) => i.kind === kind);
 
     return {
@@ -335,7 +335,7 @@ register({
     const { scoreSurprisingLinks } = await loadSurprise();
     const analysis = await getGraphAnalysis();
     await ensureEmbeddings(analysis);
-    const links = scoreSurprisingLinks(
+    const links = await scoreSurprisingLinks(
       { index: analysis.index, membership: analysis.community.membership, embeddings: analysis.embeddings },
       { maxHops, limit, minScore: 0.05 },
     );

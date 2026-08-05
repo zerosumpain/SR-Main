@@ -14,6 +14,12 @@ import type { AdjacencyIndex, GraphNode } from './model';
 import { pairKey, hopNeighbourhood } from './model';
 import { commonNeighbours, adamicAdar } from './paths';
 
+/** Time between yields, in ms. Well inside the 5s the health probe 503s past. */
+const YIELD_EVERY_MS = 40;
+
+/** Hand the event loop back, so pending I/O and health probes get served. */
+const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 export interface SurpriseContext {
   index: AdjacencyIndex;
   /** node id → community index, from detectCommunities. */
@@ -204,10 +210,10 @@ function midsFromTree(parent: Map<string, string | null>, to: string): string[] 
  * cannot carry a pair to the top. Each factor is bounded below so a single zero
  * doesn't annihilate an otherwise interesting pair.
  */
-export function scoreSurprisingLinks(
+export async function scoreSurprisingLinks(
   ctx: SurpriseContext,
   opts: { maxHops?: number; limit?: number; minScore?: number } = {},
-): SurprisingLink[] {
+): Promise<SurprisingLink[]> {
   const maxHops = Math.min(opts.maxHops ?? 3, 4);
   const limit = opts.limit ?? 25;
   const minScore = opts.minScore ?? 0.05;
@@ -220,7 +226,20 @@ export function scoreSurprisingLinks(
   // that only passes through hubs is not evidence of anything.
   const hubDegree = Math.max(4, degreeAtPercentile(index, 0.9));
 
+  let lastYield = Date.now();
   for (const a of index.ids) {
+    // Hand the event loop back periodically.
+    //
+    // This sweep is ~2.5s on the live graph even after the BFS-tree rewrite, and
+    // the insights request that runs it also parses several thousand embeddings.
+    // Together they blocked the loop for 5-7s — and /api/health/workflow-engine
+    // 503s past 5s, which the systemd watchdog restarts the service for, which
+    // kills whatever request was in flight and presents to the browser as a 502.
+    // The same reasoning, and the same fix, as betweenness in ./centrality.
+    if (Date.now() - lastYield >= YIELD_EVERY_MS) {
+      await breathe();
+      lastYield = Date.now();
+    }
     const nodeA = index.byId.get(a);
     if (!nodeA) continue;
     // A node connected to nothing has no relations to be surprised by.

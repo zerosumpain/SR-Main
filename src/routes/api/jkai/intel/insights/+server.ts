@@ -55,8 +55,8 @@ let lastPersistedAnalysis = 0;
  */
 let derived: {
   computedAt: number;
-  all: ReturnType<typeof generateInsights>;
-  surprising: ReturnType<typeof scoreSurprisingLinks>;
+  all: Awaited<ReturnType<typeof generateInsights>>;
+  surprising: Awaited<ReturnType<typeof scoreSurprisingLinks>>;
   predicted: ReturnType<typeof predictMissingLinks>;
 } | null = null;
 
@@ -114,8 +114,8 @@ export const GET: RequestHandler = async ({ url }) => {
       computedAt: analysis.computedAt,
       // Persist the FULL set, not the filtered one: a `?kind=` view must not
       // stop findings of other kinds from being recorded.
-      all: generateInsights(analysis),
-      surprising: scoreSurprisingLinks(
+      all: await generateInsights(analysis),
+      surprising: await scoreSurprisingLinks(
         { index, membership: community.membership, embeddings },
         { maxHops: 3, limit: 20, minScore: 0.08 },
       ),

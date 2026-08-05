@@ -82,8 +82,8 @@ function detectBrokers(a: GraphAnalysis): Insight[] {
 }
 
 /** Connections that exist but look like they shouldn't. */
-function detectUnlikelyRelations(a: GraphAnalysis): Insight[] {
-  const links = scoreSurprisingLinks(
+async function detectUnlikelyRelations(a: GraphAnalysis): Promise<Insight[]> {
+  const links = await scoreSurprisingLinks(
     { index: a.index, membership: a.community.membership, embeddings: a.embeddings },
     { maxHops: 2, limit: 8, minScore: 0.12 },
   );
@@ -330,10 +330,10 @@ function detectDominantCluster(a: GraphAnalysis): Insight[] {
  *
  * `now` is injected so the time-sensitive detectors are testable.
  */
-export function generateInsights(a: GraphAnalysis, now = Date.now()): Insight[] {
+export async function generateInsights(a: GraphAnalysis, now = Date.now()): Promise<Insight[]> {
   const all = [
     ...detectBrokers(a),
-    ...detectUnlikelyRelations(a),
+    ...(await detectUnlikelyRelations(a)),
     ...detectMissingLinks(a),
     ...detectOrphans(a),
     ...detectIsolatedClusters(a),
