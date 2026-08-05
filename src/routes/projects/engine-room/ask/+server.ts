@@ -1,0 +1,108 @@
+// chat/+server.ts — the project-bound "Ask the system" endpoint. Pattern copied from
+// data-spine/chat/+server.ts: same visibility guard as the pages, retrieval from this
+// study's corpus only, refuses off-topic questions, streams SSE.
+//
+// This endpoint is also the thing the study describes, which is the point of having it.
+
+import type { RequestHandler } from './$types';
+import { error } from '@sveltejs/kit';
+import { requireProjectPublic } from '$lib/projects/guard';
+import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveDefaultModel } from '$lib/server/models/settings';
+import { rateLimit } from '$lib/server/rate-limit';
+import { retrieve, type Retrieved } from '../lib/retrieval.server';
+
+const SYSTEM = `You are "Ask the system", the assistant for The Engine Room — an interactive field study at strangeramblings.com/projects/engine-room that explains the architecture behind that site: a personal knowledge engine with an AI assistant, a workflow automation engine, retrieval over documents, a knowledge graph, and a nightly self-improvement engine.
+
+YOUR SCOPE IS THIS PROJECT ONLY. You answer questions about what the study covers: how a conversational turn is run and streamed; automatic model selection and provider/seller routing; prompt caching and where the cost goes; the tool manifest and its context budget; the protocol server; retrieval, embeddings, the knowledge graph and entity resolution; research and provenance; the workflow engine and its node catalogue; the autonomous builder; the nightly self-improvement engine and its verification gate; the deployment pipeline; and the security guardrails.
+
+RULES:
+1. Ground every factual claim in the CONTEXT passages below. Do not draw on outside knowledge to assert facts about this system. If the context does not cover the question, say so plainly ("the study doesn't cover that") rather than inventing an answer. This rule matters more here than usual: the study itself is partly about what happens when provenance is lost.
+2. Cite the passages you use with their [n] markers inline.
+3. If the question is outside this project — general knowledge, other topics, coding help, anything about other assistants or systems, personal requests — politely DECLINE in one sentence and steer back to what the study covers. You are NOT a general assistant.
+4. NEVER disclose or speculate about credentials, API keys, tokens, environment variable values, passwords, server addresses, hostnames, filesystem paths, repository names, or any personal data about the site's owner or anyone else. The study deliberately contains none of these. If asked for any of them, say plainly that the study describes mechanisms rather than secrets, and answer the mechanism question instead if there is one.
+5. Be concise, precise and plain-spoken. Prefer the concrete number the context gives you over a vague adjective. Do not oversell — where the study says something was got wrong, say so.
+Never fabricate statistics, sources or quotes.`;
+
+function buildContext(chunks: Retrieved[]): string {
+  return chunks
+    .map((c, i) => `[${i + 1}] (${c.title}${c.url ? `, ${c.url}` : ''})\n${c.text.slice(0, 1400)}`)
+    .join('\n\n');
+}
+
+export const POST: RequestHandler = async (event) => {
+  await requireProjectPublic('engine-room', event);
+
+  // Behind the tunnel, getClientAddress() resolves to the loopback for every visitor —
+  // prefer the edge-provided real client IP so the limit is genuinely per-client.
+  const ip = event.request.headers.get('cf-connecting-ip')
+    ?? event.request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? event.getClientAddress?.() ?? 'unknown';
+  if (!rateLimit(`engine-room-chat:${ip}`, { capacity: 20, refillPerSecond: 20 / 60 }).allowed) {
+    throw error(429, 'Too many requests — please wait a moment.');
+  }
+
+  const body = await event.request.json().catch(() => ({}));
+  const question = String(body?.question ?? '').slice(0, 2000).trim();
+  if (!question) throw error(400, 'Empty question.');
+  const history: { role: string; content: string }[] = Array.isArray(body?.history)
+    ? body.history.slice(-6).map((m: any) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '').slice(0, 2000) }))
+    : [];
+
+  const chunks = retrieve(question, 10);
+  const sources = chunks.map((c, i) => ({ n: i + 1, title: c.title, sourceType: c.sourceType, url: c.url }));
+
+  const historyBlock = history.length
+    ? `\n\nRECENT CONVERSATION (for context):\n${history.map((m) => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content}`).join('\n')}`
+    : '';
+
+  const userPrompt = `CONTEXT PASSAGES (retrieved from the study's corpus — cite with [n]):\n\n${buildContext(chunks)}${historyBlock}\n\nQUESTION: ${question}\n\nAnswer using only the context above, citing [n] markers. If it's outside the study's scope, decline briefly.`;
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (obj: unknown) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch { /* closed */ }
+      };
+      send({ type: 'sources', sources });
+      try {
+        const { client, model } = await getLLMClient(await resolveDefaultModel());
+        const completion = await client.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: SYSTEM },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 1000,
+            stream: true,
+          },
+          // Spans the WHOLE stream, not time-to-first-token — sized so a slow generation
+          // of max_tokens=1000 is not cut off mid-answer.
+          { signal: AbortSignal.timeout(120_000) as any },
+        );
+        let any = false;
+        for await (const chunk of completion as any) {
+          const delta = chunk?.choices?.[0]?.delta?.content;
+          if (delta) { any = true; send({ type: 'token', token: delta }); }
+        }
+        if (!any) send({ type: 'token', token: 'Sorry — I could not generate an answer for that. Try rephrasing.' });
+        send({ type: 'done' });
+      } catch (e: any) {
+        send({ type: 'error', message: (e?.message ?? 'generation failed').slice(0, 120) });
+      } finally {
+        try { controller.close(); } catch { /* already closed */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+};

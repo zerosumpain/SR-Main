@@ -11,6 +11,7 @@ import { isNotNull } from 'drizzle-orm';
 // key → the page reverts optimistically). src/lib/projects/registry-cards.test.ts
 // guards this parity so a new card can't ship un-toggleable.
 export const STATIC_PROJECT_KEYS = [
+  'engine-room',
   'scs-earnings',
   'broads-pilot',
   'terminal-descent',
