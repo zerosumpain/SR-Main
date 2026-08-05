@@ -10,7 +10,7 @@
 //   POST { id, action }            dismiss / snooze / mark seen or actioned
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
+import { getGraphAnalysis, ensureEmbeddings } from '$lib/jkai/intel/analytics/load';
 import { generateInsights } from '$lib/jkai/intel/analytics/insights';
 import { scoreSurprisingLinks, predictMissingLinks } from '$lib/jkai/intel/analytics/surprise';
 import {
@@ -34,6 +34,31 @@ import type { IntelInsight } from '$lib/db/schema';
  * route at runtime.
  */
 let lastPersistedAnalysis = 0;
+
+/**
+ * The detectors, memoised against the analysis snapshot they ran on.
+ *
+ * The header above says recomputing per request is cheap because the analysis
+ * is cached. That was true of the detectors themselves; it was never true of
+ * the three-hop surprise sweep, which reaches ~830k pairs on the live graph and
+ * cost 53 s per request until it was rewritten (`scripts/bench-intel-insights.ts`).
+ * It is ~2.5 s now, which is still far too much to pay on every poll of a
+ * dashboard that polls.
+ *
+ * Keyed on `computedAt` for the same reason `lastPersistedAnalysis` is: the
+ * findings are a pure function of the snapshot, so while the snapshot holds
+ * there is nothing to recompute. `getGraphAnalysis` bumps `computedAt` whenever
+ * the graph changes, so this can never serve findings from a stale graph.
+ *
+ * Deliberately NOT exported — a non-handler export from a +server.ts breaks the
+ * route at runtime.
+ */
+let derived: {
+  computedAt: number;
+  all: ReturnType<typeof generateInsights>;
+  surprising: ReturnType<typeof scoreSurprisingLinks>;
+  predicted: ReturnType<typeof predictMissingLinks>;
+} | null = null;
 
 async function persistOnce(computedAt: number, insights: StorableInsight[]): Promise<void> {
   if (computedAt === lastPersistedAnalysis) return;
@@ -80,9 +105,29 @@ export const GET: RequestHandler = async ({ url }) => {
       .filter((n): n is NonNullable<typeof n> => Boolean(n))
       .map((n) => ({ id: n.id, name: n.name, type: n.typeName, icon: n.icon, color: n.color }));
 
-  // Persist the FULL set, not the filtered one: a `?kind=` view must not stop
-  // findings of other kinds from being recorded.
-  const all = generateInsights(analysis);
+  if (derived?.computedAt !== analysis.computedAt) {
+    // Semantic distance is one of the surprise factors, so the embeddings have
+    // to be in place before either detector runs. Awaited only on a recompute:
+    // this is the one surface that needs them.
+    await ensureEmbeddings(analysis);
+    derived = {
+      computedAt: analysis.computedAt,
+      // Persist the FULL set, not the filtered one: a `?kind=` view must not
+      // stop findings of other kinds from being recorded.
+      all: generateInsights(analysis),
+      surprising: scoreSurprisingLinks(
+        { index, membership: community.membership, embeddings },
+        { maxHops: 3, limit: 20, minScore: 0.08 },
+      ),
+      predicted: predictMissingLinks(
+        // suppressedPairs, or every rejected prediction returns on the next run.
+        { index, membership: community.membership, suppressedPairs },
+        { limit: 15, minScore: 0.8 },
+      ),
+    };
+  }
+  const { all, surprising, predicted } = derived;
+
   await persistOnce(analysis.computedAt, all);
   const stored = await insightsByDedupeKey(all.map((i) => dedupeKeyFor(i))).catch(
     () => new Map<string, IntelInsight>(),
@@ -91,17 +136,6 @@ export const GET: RequestHandler = async ({ url }) => {
   let insights = all;
   if (kind) insights = insights.filter((i) => i.kind === kind);
   insights = insights.filter((i) => keep(stored.get(dedupeKeyFor(i))?.status ?? IMPLICIT_STATUS));
-
-  const surprising = scoreSurprisingLinks(
-    { index, membership: community.membership, embeddings },
-    { maxHops: 3, limit: 20, minScore: 0.08 },
-  );
-
-  const predicted = predictMissingLinks(
-    // suppressedPairs, or every rejected prediction returns on the next run.
-    { index, membership: community.membership, suppressedPairs },
-    { limit: 15, minScore: 0.8 },
-  );
 
   return json({
     insights: insights.slice(0, limit).map((i) => {
