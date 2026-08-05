@@ -13,6 +13,7 @@
   import JkaiPageTitle from '$lib/components/jkai/JkaiPageTitle.svelte';
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
+  import ClusterPicker from '$lib/components/intel/ClusterPicker.svelte';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
   import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
   import SweepHistoryPanel from '$lib/components/intel/SweepHistoryPanel.svelte';
@@ -94,6 +95,17 @@
   /** 3D is the default view; the choice persists so it is not re-made per visit. */
   const VIEW_KEY = 'intel:graph3d';
   let view3d = $state(true);
+  /**
+   * Cluster brought to the front, or null.
+   *
+   * Distinct from `communityId`, which FILTERS the graph down to one cluster and
+   * goes to the server. This keeps everything on screen and only changes how it
+   * is drawn — the question "where does this cluster sit among the rest" cannot
+   * be answered by a view with the rest removed.
+   */
+  let focusCommunity = $state<number | null>(null);
+  /** How far apart the clusters are pushed. 1 is the natural layout. */
+  let explode = $state(1);
 
   function setView(next: boolean) {
     view3d = next;
@@ -589,15 +601,13 @@
         </select>
       </div>
 
-      <div class="ctl">
-        <label for="f-cluster">Cluster</label>
-        <select id="f-cluster" bind:value={communityId}>
-          <option value="">All clusters</option>
-          {#each network?.communities ?? [] as c (c.id)}
-            <option value={String(c.id)}>{c.label} ({c.size})</option>
-          {/each}
-        </select>
-      </div>
+      <ClusterPicker
+        communities={network?.communities ?? []}
+        focused={focusCommunity}
+        filtered={communityId === '' ? null : Number(communityId)}
+        onFocus={(id) => (focusCommunity = id)}
+        onFilter={(id) => (communityId = id === null ? '' : String(id))}
+      />
 
       <div class="ctl">
         <label for="f-degree">Min connections: {minDegree}</label>
@@ -660,6 +670,16 @@
         <button type="button" class:on={!view3d} onclick={() => setView(false)} aria-pressed={!view3d}>2D</button>
       </div>
 
+      {#if view3d && network}
+        <!-- With the 3D/2D toggle rather than in the filter rail: this changes
+             how the graph is DRAWN, it does not change which graph you are
+             looking at. Same distinction the toggle itself draws. -->
+        <div class="spread">
+          <label for="f-explode">Spread</label>
+          <input id="f-explode" type="range" min="1" max="4" step="0.25" bind:value={explode} />
+        </div>
+      {/if}
+
       {#if loadingNetwork && !network}
         <div class="loading">Analysing the graph…</div>
       {:else if networkError && !network}
@@ -676,6 +696,9 @@
             {highlightPath}
             matchedIds={network.matched ?? []}
             {selectedId}
+            {focusCommunity}
+            {explode}
+            communities={network.communities ?? []}
             onSelect={(id) => (selectedId = id)}
             onOpen={(id) => focus(id)}
           />
@@ -686,6 +709,7 @@
             {highlightPath}
             matchedIds={network.matched ?? []}
             {selectedId}
+            {focusCommunity}
             onSelect={(id) => (selectedId = id)}
             onOpen={(id) => focus(id)}
           />
@@ -1258,6 +1282,30 @@
   }
   .detail-empty p + p {
     margin-top: 10px;
+  }
+
+  .spread {
+    position: absolute;
+    top: 10px;
+    right: 96px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-round);
+  }
+  .spread label {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+  }
+  .spread input {
+    width: 90px;
   }
 
   .loading {

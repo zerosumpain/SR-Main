@@ -95,8 +95,7 @@
         Everything is contributing — {total} entity mention{total === 1 ? '' : 's'} across
         {sources.length} source{sources.length === 1 ? '' : 's'}. Pick one or more to narrow it.
       {:else}
-        Showing what {activeSources.map(labelFor).join(' and ')} contributed. Entities with no
-        recorded source are always kept.
+        Showing what {activeSources.map(labelFor).join(' and ')} contributed.
       {/if}
     </p>
   {/if}
