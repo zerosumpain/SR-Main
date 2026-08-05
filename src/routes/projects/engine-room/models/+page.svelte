@@ -28,7 +28,7 @@
     ]}
   />
 
-  <h2 class="pe-h2">Four layers, first match wins</h2>
+  <h2 class="pe-h2">Four ways a model gets chosen</h2>
   <p class="pe-prose" style="max-width:82ch">
     {#if eli}
       When something needs an AI, it asks four questions in order and stops at the first answer.
