@@ -19,6 +19,7 @@ function node(id: string, over: Partial<GraphNode> = {}): GraphNode {
     color: '#fff',
     summary: null,
     confidence: 'high',
+    confidenceScore: 0.7,
     confirmed: true,
     createdAt: NOW - 400 * DAY,
     updatedAt: NOW - 400 * DAY,

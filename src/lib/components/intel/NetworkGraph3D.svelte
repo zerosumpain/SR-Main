@@ -42,7 +42,18 @@
 
   import type { ForceGraph3DInstance } from '3d-force-graph';
   import type { NetNode, NetEdge } from './types';
-  import { recencyFade, clusterColour } from './graph-visual';
+  import {
+    recencyFade,
+    clusterColour,
+    nodeRelevance,
+    relevanceScale,
+    washOut,
+    edgeWidth,
+    edgeEmphasis,
+    edgeDistanceScale,
+    edgeForceStrength,
+    relevancePhrase,
+  } from './graph-visual';
 
   let {
     nodes = [],
@@ -50,7 +61,7 @@
     highlightPath = null,
     matchedIds = [],
     selectedId = null,
-    focusCommunity = null,
+    focusCommunities = [],
     explode = 1,
     communities = [],
     showShells = true,
@@ -69,15 +80,19 @@
     matchedIds?: string[];
     selectedId?: string | null;
     /**
-     * The cluster to bring forward, or null for all of them.
+     * The clusters to bring forward. Empty means all of them.
      *
      * Focus is a VIEW state, not a filter: everything stays on screen and keeps
      * its position, the rest simply recedes. Where clusters interpenetrate —
      * which is the whole problem in 3D — removing the others would answer a
      * different question ("what is in this cluster") from the one being asked
      * ("where does this cluster sit among the rest").
+     *
+     * A LIST rather than one id because the question that survives focusing a
+     * single cluster is almost always about a second one: which of these two
+     * regions does the overlap belong to, and what sits in it.
      */
-    focusCommunity?: number | null;
+    focusCommunities?: number[];
     /**
      * How far apart to push the communities. 1 is the natural layout; above
      * that they separate along their own directions.
@@ -212,6 +227,7 @@
   const communityLabels = $derived(new Map(communities.map((c) => [c.id, c.label])));
   const pathSet = $derived(new Set(highlightPath ?? []));
   const matchSet = $derived(new Set(matchedIds ?? []));
+  const focusSet = $derived(new Set(focusCommunities ?? []));
   /** Only dim when there is something to dim AGAINST. */
   const dimming = $derived(matchSet.size > 0);
   /**
@@ -220,6 +236,7 @@
    */
   const pathKey = $derived((highlightPath ?? []).join('|'));
   const matchKey = $derived((matchedIds ?? []).join('|'));
+  const focusKey = $derived((focusCommunities ?? []).join(','));
 
   const pathEdgeKeys = $derived.by(() => {
     const set = new Set<string>();
@@ -234,23 +251,38 @@
    * the same scale and one node-size curve serves both views.
    */
   function radius(n: NetNode): number {
-    // sqrt so a 10× importance difference is a ~3× size difference.
-    const base = 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
+    // Modulated by how much the entity still counts, and floored so the least
+    // relevant dot is still something you can aim at. Identical to the 2D view's.
+    const base = Math.max(4, structuralRadius(n) * relevanceScale(nodeRelevance(n)));
     // Focused clusters keep their size; the rest shrink towards the background.
     // Shrinking as well as fading matters in 3D specifically: a distant node is
     // already small, so opacity alone leaves the context reading as foreground.
     return outOfFocus(n) ? base * 0.55 : base;
   }
 
-  /** True when a focus is set and this node is not part of it. */
-  function outOfFocus(n: NetNode): boolean {
-    return focusCommunity !== null && n.community !== focusCommunity;
+  /** Size from importance alone — what decides which nodes are NAMED. See the
+   *  2D view, which carries the reasoning. */
+  function structuralRadius(n: NetNode): number {
+    // sqrt so a 10× importance difference is a ~3× size difference.
+    return 5 + Math.sqrt(Math.max(0, n.importance)) * 20;
   }
 
-  /** The 2D view's fill-opacity rules, unchanged — including its age fade. */
+  /** True when a focus is set and this node is not part of it. */
+  function outOfFocus(n: NetNode): boolean {
+    return focusSet.size > 0 && !focusSet.has(n.community);
+  }
+
+  /**
+   * The 2D view's fill-opacity rules, unchanged.
+   *
+   * Age is deliberately NOT here any more — it is carried by size and by the
+   * colour wash in `nodeColour`, in both views. Opacity was already holding
+   * `confirmed`, the keyword dimming and cluster focus, and a fourth meaning on
+   * the same channel made all four unreadable.
+   */
   function nodeAlpha(n: NetNode): number {
     const base = dimming && !matchSet.has(n.id) ? 0.14 : n.confirmed ? 0.85 : 0.4;
-    return base * recencyFade(n.recency) * (outOfFocus(n) ? 0.18 : 1);
+    return base * (outOfFocus(n) ? 0.18 : 1);
   }
 
   /**
@@ -269,7 +301,8 @@
    * click from having to rebuild every node's label texture.
    */
   function earnsLabel(n: NetNode): boolean {
-    return radius(n) > 10 || pathSet.has(n.id) || matchSet.has(n.id);
+    if (pathSet.has(n.id) || matchSet.has(n.id)) return true;
+    return !outOfFocus(n) && structuralRadius(n) > 10;
   }
 
   // ── Scene pieces ───────────────────────────────────────────────────────────
@@ -396,7 +429,12 @@
     if (node.brokerage > 0.02) group.add(makeBrokerCage(r));
     if (pathSet.has(node.id) || node.id === selectedId) group.add(makeHalo(r));
 
-    if (earnsLabel(node)) {
+    // Built for anything that STRUCTURALLY earns a name, then hidden if focus
+    // says otherwise — rather than not built at all. Skipping construction while
+    // a cluster was focused left those nodes with no sprite to bring back when
+    // the focus was cleared, so a filter change mid-focus permanently un-named
+    // most of the graph until the next rebuild.
+    if (structuralRadius(node) > 10 || pathSet.has(node.id) || matchSet.has(node.id)) {
       // Keyword-dimmed nodes get a dimmed label, matching the 2D view's
       // treatment of the context around a hit. Part of the cache key, since it
       // is baked into the sprite's material.
@@ -412,6 +450,8 @@
       }
       if (sprite) {
         sprite.position.set(0, r + 2, 0);
+        // Explicit, because a cached sprite carries the flag it was last given.
+        sprite.visible = earnsLabel(node);
         group.add(sprite);
       }
     }
@@ -429,7 +469,10 @@
    * the highlight. It also means a click never has to touch a material.
    */
   function nodeColour(node: Sim3DNode): string {
-    return rgba(clusterColour(node.community), nodeAlpha(node));
+    // Washed towards the page by staleness, using the LIVE background token
+    // rather than the literal the 2D view can fall back to — the scene reads its
+    // palette off the element so it follows the design system.
+    return rgba(washOut(clusterColour(node.community), nodeRelevance(node), palette.bg), nodeAlpha(node));
   }
 
   function linkColour(edge: Sim3DEdge): string {
@@ -443,14 +486,15 @@
     // the focused cluster is exactly the thing worth seeing, so it is drawn at
     // the context level rather than removed.
     const focusFade = (a && outOfFocus(a)) || (b && outOfFocus(b)) ? 0.2 : 1;
-    const fade = recencyFade(edge.recency) * focusFade;
+    const fade = recencyFade(edge.recency) * focusFade * edgeEmphasis(edge.weight);
     return edge.crossCommunity
       ? `rgba(196, 87, 10, ${(0.42 * fade).toFixed(3)})`
       : `rgba(26, 16, 8, ${(0.16 * fade).toFixed(3)})`;
   }
 
+  /** Continuous in weight, not the three-value bucket — see graph-visual. */
   function linkWidth(edge: Sim3DEdge): number {
-    return edge.strength === 'strong' ? 2 : edge.strength === 'weak' ? 0.7 : 1.2;
+    return edgeWidth(edge.weight);
   }
 
   /**
@@ -490,8 +534,13 @@
       'link',
       forceLink()
         .id((d: Sim3DNode) => d.id)
-        .distance((l: { source: Sim3DNode }) => 40 + 60 / (1 + Math.min(l.source.degree ?? 1, 6)))
-        .strength(0.35),
+        // Weight-scaled exactly as in 2D, so proximity means how well
+        // corroborated a relationship is and not merely that one exists.
+        .distance(
+          (l: { source: Sim3DNode; weight?: number }) =>
+            (40 + 60 / (1 + Math.min(l.source.degree ?? 1, 6))) * edgeDistanceScale(l.weight),
+        )
+        .strength((l: { weight?: number }) => edgeForceStrength(l.weight)),
     );
     fg.d3Force('charge', forceManyBody().strength((d: Sim3DNode) => -120 - radius(d) * 12));
     fg.d3Force('center', forceCenter(0, 0, 0));
@@ -556,7 +605,10 @@
    *     over one another is not a legibility aid, it is a fog — it hid the graph
    *     more effectively than the meshing it was meant to solve. A shell answers
    *     "how far does THIS cluster reach", which is a question about one
-   *     cluster, so it is drawn for the focused one only.
+   *     cluster, so it is drawn for the SELECTED ones only. Selecting several is
+   *     supported and is the point: the hard question is where two clusters
+   *     overlap, and that needs both outlines on screen at once. What is bounded
+   *     is how many are drawn WITHOUT being asked for — which is none.
    *  2. It does not hull every member. A community owns outliers flung to the
    *     edge of the layout, and their convex hull is a huge spiky polygon that
    *     describes the debris rather than the body. Points are trimmed to those
@@ -602,8 +654,7 @@
       // Placed on the BODY rather than on the mean of body plus outliers, so the
       // name sits where the cluster looks like it is.
       const name = communityLabels.get(community);
-      const worthNaming =
-        focusCommunity !== null ? community === focusCommunity : namedClusters.has(community);
+      const worthNaming = focusSet.size ? focusSet.has(community) : namedClusters.has(community);
       if (name && worthNaming && members.length >= 4) {
         const core = trimmed(points, centre);
         const coreCentre = core
@@ -619,7 +670,7 @@
         }
       }
 
-      if (community !== focusCommunity) continue;
+      if (!focusSet.has(community)) continue;
       if (members.length < 3) continue;
 
       const core = trimmed(points, centre);
@@ -664,6 +715,31 @@
       scene.add(mesh);
       shells.push(mesh);
       shellCommunity.set(mesh, community);
+
+      // The BORDER, which is what actually makes two selected clusters legible.
+      //
+      // A translucent fill alone cannot answer "where does this one end and that
+      // one begin": two washes over the same region blend into a third colour
+      // and the boundary between them is exactly the information that
+      // disappears. An edge is a line whether or not something else crosses it.
+      //
+      // `EdgesGeometry` at a 18° threshold merges the hull's coplanar triangles
+      // back into its actual polygon faces — without it this is the wireframe of
+      // a triangulation, which is noise. The 2D view draws the same outline as a
+      // stroked polygon for the same reason.
+      const outline = new THREE.EdgesGeometry(geometry, 18);
+      const outlineMaterial = new THREE.LineBasicMaterial({
+        color: new THREE.Color(clusterColour(community)),
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+      });
+      const lines = new THREE.LineSegments(outline, outlineMaterial);
+      lines.renderOrder = -1;
+      lines.raycast = () => {};
+      scene.add(lines);
+      shells.push(lines);
+      shellCommunity.set(lines, community);
     }
   }
 
@@ -1184,7 +1260,9 @@
    * one at all — see rebuildShells.
    */
   $effect(() => {
-    focusCommunity;
+    // A stable key: the parent hands a fresh array each render, so depending on
+    // the array itself would restyle the scene continuously.
+    focusKey;
     const fg = graph;
     if (!fg) return;
     untrack(() => {
@@ -1192,11 +1270,36 @@
       fg.nodeColor((n: Sim3DNode) => nodeColour(n));
       fg.nodeVal((n: Sim3DNode) => nodeVolume(n));
       fg.linkColor((e: Sim3DEdge) => linkColour(e));
-      // The shell belongs to whichever cluster is focused, so this is a rebuild
-      // rather than a restyle. It is cheap: one hull, not one per cluster.
+      // The shells belong to whichever clusters are selected, so this is a
+      // rebuild rather than a restyle. It is cheap: one hull per SELECTED
+      // cluster, and nothing is selected by default.
       rebuildShells();
+      reconcileLabels();
     });
   });
+
+  /**
+   * Show or hide the name sprites for the current focus.
+   *
+   * By TOGGLING rather than rebuilding: `nodeThreeObject` is deliberately left
+   * alone here, because re-setting it makes the library drop its node-object
+   * cache and rebuild all six hundred groups. Every sprite already exists and is
+   * parented to its node, so this is a visibility flag per label.
+   *
+   * The 2D view hides its <text> on focus for the same reason: a dimmed cluster
+   * that keeps shouting its names over the focused one defeats the focusing.
+   */
+  function reconcileLabels() {
+    const byId = new Map(simNodes.map((n) => [n.id, n]));
+    for (const [id, group] of extrasById) {
+      const node = byId.get(id);
+      if (!node) continue;
+      const wanted = earnsLabel(node);
+      for (const child of group.children) {
+        if ((child as THREE.Sprite).isSprite) child.visible = wanted;
+      }
+    }
+  }
 
   /**
    * Push the communities apart, or let them settle back together.
@@ -1273,7 +1376,9 @@
         <span>{hovered.icon}</span>
         <strong>{hovered.name}</strong>
       </div>
-      <div class="tip-meta">{hovered.type} · {hovered.degree} links</div>
+      <div class="tip-meta">
+        {hovered.type} · {hovered.degree} links · {relevancePhrase(nodeRelevance(hovered))}
+      </div>
       {#if hovered.summary}
         <p>{hovered.summary.slice(0, 160)}{hovered.summary.length > 160 ? '…' : ''}</p>
       {/if}

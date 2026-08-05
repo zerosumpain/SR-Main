@@ -21,6 +21,39 @@ export interface ThreadLedger {
   modelId: string | null;
 }
 
+/**
+ * A surface-specific replacement for the header's `menu` dropdown.
+ *
+ * Surfaces like Intel carry a nav of their own — nine pages with their own
+ * ordering — and rendering it as a horizontal strip under the header meant two
+ * navigations stacked on top of each other before the page began. A surface
+ * publishes its menu here and the header shows THAT instead, in the same place,
+ * with a way back to chat beside it. Nothing new appears on screen.
+ */
+export interface PageMenuRow {
+  label: string;
+  href: string;
+  /** Right-hand column: a count, a stage, a status word. */
+  meta?: string;
+  /** Hover text — what this destination is FOR. */
+  title?: string;
+  /** Reads as a backlog rather than a statistic; renders in the warn colour. */
+  warn?: boolean;
+}
+
+export interface PageMenuGroup {
+  heading: string;
+  rows: PageMenuRow[];
+}
+
+export interface PageMenu {
+  /** The chip's word — 'intel', 'canvas'. Lower case; the chip uppercases it. */
+  label: string;
+  groups: PageMenuGroup[];
+  /** The way back out, rendered as its own chip beside the menu. */
+  back?: { label: string; href: string };
+}
+
 const EMPTY: ThreadLedger = {
   contextTokens: null,
   contextFraction: null,
@@ -36,6 +69,8 @@ export const hub = $state<
     /** Header dropdown / phone sheet. Driven by both the header's `menu ▾`
      *  button and the phone tab bar's `≡ more` tab, hence shared state. */
     menuOpen: boolean;
+    /** Set by a surface's layout to replace the header's menu. Null = the hub's. */
+    pageMenu: PageMenu | null;
     /** Phone knowledge-graph bottom sheet (screen 2b): closed / peek / full. */
     graphSheet: 'closed' | 'peek' | 'full';
     /** Bumped whenever the active thread gains a completed turn. The knowledge-
@@ -51,6 +86,7 @@ export const hub = $state<
   liveRuns: null,
   bpm: null,
   menuOpen: false,
+  pageMenu: null,
   graphSheet: 'closed',
   graphRevision: 0,
 });
@@ -72,6 +108,21 @@ export function setLiveRuns(n: number | null): void {
 
 export function setBpm(n: number | null): void {
   hub.bpm = n;
+}
+
+/**
+ * Publish a surface menu. Also closes the dropdown: whatever was open belonged
+ * to the previous surface, and leaving it open would show the new menu's rows
+ * without the user having asked for them.
+ */
+export function setPageMenu(menu: PageMenu): void {
+  hub.pageMenu = menu;
+  hub.menuOpen = false;
+}
+
+export function clearPageMenu(): void {
+  hub.pageMenu = null;
+  hub.menuOpen = false;
 }
 
 export function toggleHubMenu(): void {

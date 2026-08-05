@@ -19,6 +19,18 @@ export interface GraphNode {
   color: string;
   summary: string | null;
   confidence: string;
+  /**
+   * `intel_entities.confidence_score`, 0..1 — the NUMERIC one, and null where
+   * nothing has scored the entity.
+   *
+   * Deliberately alongside `confidence` rather than derived from it. The text
+   * column is a three-value label with no mapping to a number anywhere in the
+   * codebase, and `staleness.ts` says plainly that inventing one would create a
+   * second, disagreeing definition of the same word. This is the column the
+   * lenses, the watchlist and the entity card already read, so carrying it here
+   * is what lets the graph size a node by the same relevance the card shows.
+   */
+  confidenceScore: number | null;
   confirmed: boolean;
   createdAt: number;
   updatedAt: number;

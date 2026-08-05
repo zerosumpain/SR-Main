@@ -60,12 +60,15 @@
 </script>
 
 <div class="ctl">
-  <span class="ctl-title">
-    Sources
-    {#if filtering}
+  <!-- No heading of its own: the rail section it sits in already says
+       "Sources", and two identical labels one above the other is exactly the
+       kind of doubling that made the rail read as noise. Only `reset` survives,
+       because it has nowhere else to live. -->
+  {#if filtering}
+    <div class="ctl-actions">
       <button type="button" class="clear" onclick={onClear}>reset</button>
-    {/if}
-  </span>
+    </div>
+  {/if}
 
   {#if !sources.length}
     <p class="hint">No sources recorded yet.</p>
@@ -125,16 +128,9 @@
     flex-direction: column;
     gap: 7px;
   }
-  .ctl-title {
+  .ctl-actions {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--text-ghost);
+    justify-content: flex-end;
   }
   .clear {
     border: none;

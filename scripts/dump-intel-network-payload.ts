@@ -11,6 +11,7 @@ import { Pool } from 'pg';
 import { buildIndex, components, type GraphSnapshot, type GraphNode, type GraphEdge } from '../src/lib/jkai/intel/analytics/model';
 import { computeCentrality, brokerageScore } from '../src/lib/jkai/intel/analytics/centrality';
 import { detectCommunities } from '../src/lib/jkai/intel/analytics/community';
+import { recencyOf, entityRelevance } from '../src/lib/jkai/intel/staleness';
 
 const url = process.env.INTEL_DB_URL;
 if (!url) throw new Error('set INTEL_DB_URL');
@@ -28,17 +29,19 @@ const entityRes = await pool.query(`
          COALESCE(t.name,'unknown') AS type_name,
          COALESCE(t.icon,'🔷') AS icon,
          COALESCE(t.color,'#7dd3fc') AS color,
-         e.summary, e.confidence, e.confirmed, e.created_at, e.updated_at,
+         e.summary, e.confidence, e.confidence_score, e.confirmed, e.created_at, e.updated_at,
          e.aliases,
          COALESCE(ne.note_count,0) AS note_count, ne.last_seen_at,
          COALESCE(ne.categories, ARRAY[]::text[]) AS categories,
-         COALESCE(ne.sources,    ARRAY[]::text[]) AS sources
+         COALESCE(ne.sources,    ARRAY[]::text[]) AS sources,
+         fsn.source AS first_seen_source, fsn.created_at AS first_seen_at
   FROM intel_entities e
   LEFT JOIN intel_entity_types t ON t.id = e.type_id
+  LEFT JOIN intel_notes fsn ON fsn.id = e.first_seen_in
   LEFT JOIN (
     SELECT ne.entity_id,
            COUNT(DISTINCT ne.note_id)::int AS note_count,
-           MAX(n.created_at) AS last_seen_at,
+           MAX(COALESCE(n.observed_at, n.created_at)) AS last_seen_at,
            ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories,
            ARRAY_AGG(DISTINCT n.source)  FILTER (WHERE n.source IS NOT NULL)  AS sources
     FROM intel_note_entities ne
@@ -49,7 +52,13 @@ const entityRes = await pool.query(`
   WHERE e.merged_into_id IS NULL
 `);
 
-const nodes: GraphNode[] = entityRes.rows.map((r) => ({
+const nodes: GraphNode[] = entityRes.rows.map((r) => {
+  const firstSeenSource = r.first_seen_source == null ? null : String(r.first_seen_source);
+  const sources = toStringArray(r.sources);
+  if (firstSeenSource && !sources.includes(firstSeenSource)) sources.push(firstSeenSource);
+  const firstSeenAt = r.first_seen_at ? new Date(r.first_seen_at).getTime() : 0;
+  const created = r.created_at ? new Date(r.created_at).getTime() : 0;
+  return {
   id: String(r.id),
   name: String(r.name ?? ''),
   typeId: String(r.type_id ?? ''),
@@ -58,15 +67,19 @@ const nodes: GraphNode[] = entityRes.rows.map((r) => ({
   color: String(r.color ?? '#7dd3fc'),
   summary: r.summary == null ? null : String(r.summary),
   confidence: String(r.confidence ?? 'medium'),
+  confidenceScore: r.confidence_score == null ? null : Number(r.confidence_score),
   confirmed: Boolean(r.confirmed),
-  createdAt: r.created_at ? new Date(r.created_at).getTime() : 0,
+  createdAt: created,
   updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : 0,
   noteCount: Number(r.note_count ?? 0),
-  lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).getTime() : 0,
+  lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).getTime() : firstSeenAt || created,
+  // Raised to the newest incident edge observation below, as the loader does.
+  evidenceAt: 0,
   aliases: toStringArray(r.aliases),
   categories: toStringArray(r.categories),
-  sources: toStringArray(r.sources),
-}));
+  sources,
+  };
+});
 
 const edgeRes = await pool.query(`
   SELECT r.id,
@@ -97,6 +110,16 @@ const edges: GraphEdge[] = edgeRes.rows.map((r) => ({
   sourceKind: r.source_kind == null ? null : String(r.source_kind),
 }));
 
+// The observation clock, exactly as load.ts derives it: an incident edge's
+// last_seen_at where there is one, the note clock only for an entity with none.
+const newestEdge = new Map<string, number>();
+for (const e of edges) {
+  for (const id of [e.source, e.target]) {
+    if (e.lastSeenAt > (newestEdge.get(id) ?? 0)) newestEdge.set(id, e.lastSeenAt);
+  }
+}
+for (const n of nodes) n.evidenceAt = newestEdge.get(n.id) ?? n.lastSeenAt;
+
 const snapshot: GraphSnapshot = { nodes, edges };
 const index = buildIndex(snapshot);
 
@@ -116,7 +139,7 @@ if (keep.size > MAX_NODES) {
 }
 
 const maxPagerank = Math.max(1e-9, ...[...keep].map((id) => centrality.pagerank.get(id) ?? 0));
-const recency = () => 1;
+const now = Date.now();
 
 const payloadNodes = [...keep].map((id) => {
   const n = index.byId.get(id)!;
@@ -130,7 +153,11 @@ const payloadNodes = [...keep].map((id) => {
     community: community.membership.get(id) ?? 0,
     hops: null,
     categories: n.categories, sources: n.sources, aliases: n.aliases,
-    recency: recency(),
+    recency: Number(recencyOf(n.evidenceAt || n.lastSeenAt, now).toFixed(3)),
+    relevance: Number(
+      entityRelevance({ confidence: n.confidenceScore, evidenceAt: n.evidenceAt || n.lastSeenAt }, now)
+        .score.toFixed(3),
+    ),
   };
 });
 
@@ -139,7 +166,7 @@ const payloadEdges = edges
   .map((e) => ({
     id: e.id, source: e.source, target: e.target, type: e.type, label: e.label,
     strength: e.strength, confidence: e.confidence, weight: e.weight,
-    sourceKind: e.sourceKind, recency: recency(),
+    sourceKind: e.sourceKind, recency: Number(recencyOf(e.lastSeenAt, now).toFixed(3)),
     crossCommunity: community.membership.get(e.source) !== community.membership.get(e.target),
   }));
 
@@ -147,7 +174,17 @@ const comps = components(index);
 const payload = {
   nodes: payloadNodes,
   edges: payloadEdges,
-  types: [], categories: [], sources: [],
+  types: [],
+  categories: [],
+  sources: (() => {
+    const counts = new Map<string, number>();
+    for (const id of index.ids) {
+      for (const s of index.byId.get(id)?.sources ?? []) counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+  })(),
   matched: [],
   trimmed,
   stats: {
@@ -163,7 +200,16 @@ const payload = {
   communities: [...community.communities.entries()]
     .filter(([, ids]) => ids.length > 1)
     .slice(0, 24)
-    .map(([id, ids]) => ({ id, size: ids.length, label: `Cluster ${id}` })),
+    .map(([id, ids]) => ({
+      id,
+      size: ids.length,
+      label:
+        ids
+          .slice()
+          .sort((a, b) => (centrality.pagerank.get(b) ?? 0) - (centrality.pagerank.get(a) ?? 0))
+          .map((i) => index.byId.get(i)?.name)
+          .find(Boolean) ?? `Cluster ${id}`,
+    })),
 };
 
 const { writeFileSync } = await import('node:fs');

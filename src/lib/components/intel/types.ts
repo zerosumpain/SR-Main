@@ -49,6 +49,13 @@ export interface NetNode {
   sources: string[];
   /** 0..1 staleness weight — 1 is current, the floor is old but not gone. */
   recency: number;
+  /**
+   * 0..1 — confidence discounted by age, from `entityRelevance`. The same
+   * number the entity card shows, computed server-side so the two views and the
+   * card cannot disagree. Older payloads (a cached tab) may not carry it, hence
+   * optional; `nodeRelevance` in graph-visual falls back to recency.
+   */
+  relevance?: number;
 }
 
 export interface NetCategory {

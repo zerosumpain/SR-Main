@@ -9,7 +9,7 @@ import { applyGraphFilter, parseCsv } from '$lib/jkai/intel/analytics/filter';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
-import { recencyOf } from '$lib/jkai/intel/staleness';
+import { recencyOf, entityRelevance } from '$lib/jkai/intel/staleness';
 
 /**
  * Above this many nodes the payload is trimmed to the most central entities.
@@ -101,6 +101,19 @@ export const GET: RequestHandler = async ({ url }) => {
       // renderers could fade stale material, was shipping a constant for most of
       // the graph. `evidenceAt` carries the observed time. See GraphNode.
       recency: Number(recencyOf(n.evidenceAt || n.lastSeenAt, now).toFixed(3)),
+      // How much this entity should count RIGHT NOW — confidence discounted by
+      // age, on the same curve and with the same pull as the entity card.
+      //
+      // Computed here rather than in the renderers so the 2D view, the 3D view
+      // and the card cannot drift into three answers, and so the client never
+      // has to guess a number from the three-value `confidence` text column —
+      // which has no numeric mapping anywhere, deliberately (see staleness.ts).
+      relevance: Number(
+        entityRelevance(
+          { confidence: n.confidenceScore, evidenceAt: n.evidenceAt || n.lastSeenAt },
+          now,
+        ).score.toFixed(3),
+      ),
     };
   });
 
