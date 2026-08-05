@@ -122,9 +122,19 @@ async function loadSnapshot(): Promise<{
       COALESCE(ne.note_count, 0)    AS note_count,
       ne.last_seen_at,
       COALESCE(ne.categories, ARRAY[]::text[]) AS categories,
-      COALESCE(ne.sources, ARRAY[]::text[])    AS sources
+      COALESCE(ne.sources, ARRAY[]::text[])    AS sources,
+      -- Where the entity was FIRST seen, which is provenance the join below
+      -- cannot see. An entity extracted from a deep dive or a chat thread often
+      -- has no intel_note_entities row at all — 561 of 4,737 on 2026-08-05 —
+      -- and was therefore reported as having no source whatsoever. Since the
+      -- source filter keeps sourceless entities (so the picker cannot silently
+      -- delete history), every one of them surfaced under EVERY source: asking
+      -- for 'email' returned entities whose only footprint was a research note.
+      fsn.source                    AS first_seen_source,
+      fsn.created_at                AS first_seen_at
     FROM intel_entities e
     LEFT JOIN intel_entity_types t ON t.id = e.type_id
+    LEFT JOIN intel_notes fsn ON fsn.id = e.first_seen_in
     LEFT JOIN (
       -- ER categories are set per SOURCE, so an entity carries the union of the
       -- categories of every note asserting it: filtering on 'work' returns
@@ -153,6 +163,17 @@ async function loadSnapshot(): Promise<{
     const id = String(r.id);
     const created = r.created_at ? new Date(String(r.created_at)).getTime() : 0;
     const updated = r.updated_at ? new Date(String(r.updated_at)).getTime() : created;
+    // Unioned, not substituted: an entity first seen in a deep dive and since
+    // corroborated by email belongs to BOTH, and the source picker should find
+    // it under either. Only entities with no note links at all gain a source
+    // they did not have before.
+    const firstSeenSource = r.first_seen_source == null ? null : String(r.first_seen_source);
+    const sources = toStringArray(r.sources);
+    if (firstSeenSource && !sources.includes(firstSeenSource)) sources.push(firstSeenSource);
+    // Same reasoning for the clock: an entity whose only evidence is the note it
+    // was extracted from is as old as that note, not as old as `created_at`
+    // happens to be. Staleness and anything ranking on age read this.
+    const firstSeenAt = r.first_seen_at ? new Date(String(r.first_seen_at)).getTime() : 0;
     return {
       id,
       name: String(r.name ?? ''),
@@ -166,10 +187,12 @@ async function loadSnapshot(): Promise<{
       createdAt: created,
       updatedAt: updated,
       noteCount: Number(r.note_count ?? 0),
-      lastSeenAt: r.last_seen_at ? new Date(String(r.last_seen_at)).getTime() : created,
+      lastSeenAt: r.last_seen_at
+        ? new Date(String(r.last_seen_at)).getTime()
+        : firstSeenAt || created,
       aliases: toStringArray(r.aliases),
       categories: toStringArray(r.categories),
-      sources: toStringArray(r.sources),
+      sources,
     };
   });
 

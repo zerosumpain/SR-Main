@@ -196,7 +196,7 @@ describe('source filter', () => {
   it('keeps an entity carrying ANY of several chosen sources', () => {
     const { index, community } = sourced();
     const { keep } = applyGraphFilter(index, community, { sources: ['email', 'research'] });
-    expect([...keep].sort()).toEqual(['ada', 'bob', 'dee', 'eve'].sort());
+    expect([...keep].sort()).toEqual(['ada', 'bob', 'dee'].sort());
   });
 
   it('keeps a multi-source entity when only one of its sources is chosen', () => {
@@ -207,11 +207,16 @@ describe('source filter', () => {
     expect(keep.has('cat')).toBe(true);
   });
 
-  it('keeps unsourced entities rather than deleting history', () => {
-    // Notes predating the source column, and anything hand-created, have none.
+  it('drops an entity with no source rather than showing it under every source', () => {
+    // The regression this exists for: an entity with no recorded source used to
+    // be exempt from the filter, so asking for 'email' returned entities whose
+    // only footprint was a deep dive or a chat thread. `loadSnapshot` now falls
+    // back to `first_seen_in`, so an entity reaching here with nothing is a data
+    // defect and must not be presented as email.
     const { index, community } = sourced();
     const { keep } = applyGraphFilter(index, community, { sources: ['email'] });
-    expect(keep.has('eve')).toBe(true);
+    expect(keep.has('eve')).toBe(false);
+    expect(keep.has('ada')).toBe(true);
   });
 
   it('applies no filter at all when the list is empty', () => {

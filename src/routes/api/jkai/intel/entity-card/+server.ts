@@ -25,6 +25,36 @@ import { acronymsOf } from '$lib/jkai/intel/resolve/match';
 /** Cap on names shipped to the client for mention matching. */
 const MAX_MENTIONS = 1200;
 
+/**
+ * Where a note came from, as something clickable.
+ *
+ * Measured coverage of `intel_notes.metadata` on 2026-08-05, and the three cases
+ * are genuinely different — a `sourceUrl` is not by itself a usable link:
+ *
+ *   email    (1,038)  a real Gmail permalink to the thread. Use it.
+ *   research (17)     `/deepdive/<id>`. Use it.
+ *   file     (38)     the bare string `/drive` — the ROOT, with no file id, and
+ *                     `/drive` has no deep-link parameter. Following it lands
+ *                     you in a file browser with no idea which document was
+ *                     meant, so the note's own page, which quotes the extracted
+ *                     content, is more use.
+ *   chat     (192)    `refId` only, and there is no route that opens a thread by
+ *                     id. Same fallback.
+ *   web      (2)      neither. Same fallback.
+ *
+ * The rule is therefore "link out only where the URL identifies the actual
+ * item". A plausible-looking link that lands somewhere useless is worse than an
+ * honest one to the note.
+ */
+const ROOT_ONLY_URLS = new Set(['/drive', '/jkai', '/']);
+
+function sourceHref(noteId: string, _source: string, metadata: unknown): string {
+  const meta = (metadata ?? {}) as Record<string, unknown>;
+  const url = meta.sourceUrl == null ? '' : String(meta.sourceUrl).trim();
+  if (url && !ROOT_ONLY_URLS.has(url.replace(/\/+$/, '') || '/')) return url;
+  return `/jkai/intel/notes/${noteId}`;
+}
+
 export const GET: RequestHandler = async ({ url }) => {
   if (url.searchParams.get('mentions')) return mentionsIndex();
 
@@ -41,6 +71,7 @@ export const GET: RequestHandler = async ({ url }) => {
       confirmed: intelEntities.confirmed,
       createdAt: intelEntities.createdAt,
       updatedAt: intelEntities.updatedAt,
+      firstSeenIn: intelEntities.firstSeenIn,
       typeId: intelEntityTypes.id,
       typeName: intelEntityTypes.name,
       typeIcon: intelEntityTypes.icon,
@@ -97,6 +128,31 @@ export const GET: RequestHandler = async ({ url }) => {
     .orderBy(desc(intelNotes.createdAt))
     .limit(10);
 
+  // The note this entity was first extracted from, fetched only when it is not
+  // already among the linked notes above.
+  //
+  // 561 of 4,737 entities on 2026-08-05 have no intel_note_entities row at all —
+  // typically extracted from a deep dive or a chat thread — so before this their
+  // card showed no evidence and no way back to where they came from, even though
+  // `first_seen_in` recorded it the whole time.
+  const firstSeenId = row.firstSeenIn;
+  const firstSeen =
+    firstSeenId && !notes.some((n) => n.id === firstSeenId)
+      ? (
+          await db
+            .select({
+              id: intelNotes.id,
+              title: intelNotes.title,
+              source: intelNotes.source,
+              createdAt: intelNotes.createdAt,
+              metadata: intelNotes.metadata,
+            })
+            .from(intelNotes)
+            .where(eq(intelNotes.id, firstSeenId))
+            .limit(1)
+        )[0] ?? null
+      : null;
+
   const timeline = await db
     .select({
       id: intelTimelineEvents.id,
@@ -147,19 +203,34 @@ export const GET: RequestHandler = async ({ url }) => {
       noteCount: noteTotal,
     },
     neighbours,
-    notes: notes.map((n) => ({
-      id: n.id,
-      title: n.title ?? 'Untitled',
-      source: n.source,
-      createdAt: n.createdAt,
-      relevance: n.relevance,
-      excerpt: n.excerpt,
-      // Derived notes point back at the thing they came from.
-      href:
-        (n.metadata as Record<string, unknown> | null)?.sourceUrl != null
-          ? String((n.metadata as Record<string, unknown>).sourceUrl)
-          : `/jkai/intel/notes/${n.id}`,
-    })),
+    notes: [
+      ...notes.map((n) => ({
+        id: n.id,
+        title: n.title ?? 'Untitled',
+        source: n.source,
+        createdAt: n.createdAt,
+        relevance: n.relevance,
+        excerpt: n.excerpt,
+        href: sourceHref(n.id, n.source, n.metadata),
+        firstSeen: n.id === firstSeenId,
+      })),
+      // Appended, so an entity whose only provenance is where it was extracted
+      // still has one row to click through.
+      ...(firstSeen
+        ? [
+            {
+              id: firstSeen.id,
+              title: firstSeen.title ?? 'Untitled',
+              source: firstSeen.source,
+              createdAt: firstSeen.createdAt,
+              relevance: null,
+              excerpt: null,
+              href: sourceHref(firstSeen.id, firstSeen.source, firstSeen.metadata),
+              firstSeen: true,
+            },
+          ]
+        : []),
+    ],
     timeline,
   });
 };
