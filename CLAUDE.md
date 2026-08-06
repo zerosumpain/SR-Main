@@ -36,7 +36,7 @@ on `master`.
 - `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
 - `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`). Dashboard: `/admin/ai/improvement`.
 
-  Phases: `gather → learn → discover → build → repair → propose → report`. All LLM calls are pinned to
+  Phases: `gather → learn → discover → build → repair → optimise → propose → report`. All LLM calls are pinned to
   `SELFIMPROVE_MODEL` (`deepseek/deepseek-v4-flash`), not the chat default.
 
   **Tools it builds are auto-enabled and registered live** — no restart, no approval step. That is only

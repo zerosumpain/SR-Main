@@ -291,13 +291,13 @@
         The Engine Room — how this site works
       </h2>
       <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-        This site looks like a blog. Underneath it is a personal knowledge engine: an assistant that acts on mail,
-        files and calendar; a workflow engine with 88 node types; retrieval over documents; a knowledge graph that
-        resolves entities overnight; and a system that reads its own failures each night and writes its own
-        improvements. Ten sections and a flagship instrument that follows one message through six stages and six
-        layers with a live clock and a running bill — plus the interactives: pick a model seller and watch what it
-        costs you, try to get generated code past the safety scan, and see why the obvious fix for a workflow
-        collision is not a fix. Mechanisms and mistakes, no secrets.
+        This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into
+        mail, files and home, a workflow engine with 88 node types, retrieval over documents, a knowledge graph that
+        resolves entities overnight, and a system that rewrites itself while nobody is watching. Four parts,
+        twenty-one pages, and twenty instruments you can operate rather than read: follow one message through six
+        stages and six layers with a live clock and a running bill, pick a model seller and watch what it costs you,
+        try to get machine-written code past the safety scan, or push a change down the deploy pipeline and watch it
+        stop. Mechanisms and mistakes, no secrets.
       </p>
       <div class="flex items-center gap-3 flex-wrap relative z-10">
         <span
