@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { buildAlert } from '$lib/connectors/monitor';
-import { sortReports, brokenOf, type ConnectorReport } from '$lib/connectors/types';
+import { sortReports, brokenOf, needsResync, type ConnectorReport } from '$lib/connectors/types';
 
 const r = (over: Partial<ConnectorReport>): ConnectorReport => ({
   key: 'k',
   label: 'Thing',
   group: 'G',
+  tier: 'service',
   status: 'ok',
   detail: 'fine',
   live: true,
@@ -71,5 +72,29 @@ describe('report ordering', () => {
   it('brokenOf excludes unconfigured — absent is not the same as failing', () => {
     const reports = [r({ key: '1', status: 'unconfigured' }), r({ key: '2', status: 'broken' })];
     expect(brokenOf(reports).map((x) => x.key)).toEqual(['2']);
+  });
+});
+
+describe('what the landing banner counts', () => {
+  it('counts accounts that are broken or stalled', () => {
+    const reports = [
+      r({ key: 'gmail:1', tier: 'account', status: 'broken' }),
+      r({ key: 'strava', tier: 'account', status: 'degraded' }),
+      r({ key: 'whoop', tier: 'account', status: 'ok' }),
+    ];
+    expect(needsResync(reports).map((x) => x.key)).toEqual(['gmail:1', 'strava']);
+  });
+
+  it('ignores infrastructure — a dead LLM key is not an account to resync', () => {
+    const reports = [
+      r({ key: 'openrouter', tier: 'service', status: 'broken' }),
+      r({ key: 'whatsapp', tier: 'service', status: 'broken' }),
+    ];
+    expect(needsResync(reports)).toEqual([]);
+  });
+
+  it('ignores integrations that were never connected — daily nagging trains you to ignore it', () => {
+    const reports = [r({ key: 'integration:apple-calendar', tier: 'account', status: 'unconfigured' })];
+    expect(needsResync(reports)).toEqual([]);
   });
 });

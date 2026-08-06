@@ -43,9 +43,10 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   {
     id: 'connections',
     label: 'Connections',
-    href: '/admin/connections/health',
+    href: '/admin/connections',
     match: (p) => p.startsWith('/admin/connections'),
     items: [
+      { label: 'Accounts', href: '/admin/connections' },
       { label: 'Health', href: '/admin/connections/health' },
       { label: 'Gmail', href: '/admin/connections/gmail' },
       { label: 'Scraper', href: '/admin/connections/scraper' },
