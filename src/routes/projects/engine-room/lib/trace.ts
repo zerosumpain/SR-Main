@@ -284,7 +284,7 @@ export const MATRIX: Record<StageId, Record<LayerId, Cell>> = {
       label: 'Not the reply',
       detail: 'The runtime interleaves its own progress notices on the same channel as the answer. Those are recognised and routed off the text channel, so a status line can never overwrite a reply.',
       eli5: 'Progress messages and the real answer travel down the same wire; they are told apart so a "still working" note cannot wipe out your answer.',
-      hazard: 'This exact failure happened: a recurring status line was not a prefix of its predecessor, the update was downgraded to a replace, and it overwrote the finished answer both on screen and in the database. The fix keeps text per message segment so a replace can only rewrite the segment it names.',
+      hazard: 'This failure happened: a status line that was not a prefix of its predecessor arrived as a replace, and overwrote the finished answer — on screen and in the database. The fix scopes text per segment, so a replace rewrites only the segment it names.',
     },
   },
   act: {
@@ -426,7 +426,7 @@ export const SCENARIOS: Scenario[] = [
     id: 'night',
     label: 'Nobody is watching',
     prompt: 'The nightly self-improvement run — no human involved',
-    note: 'The same pipeline with the top layer empty. It reads how it has been doing, decides what to try, writes a tool, and refuses to install it unless it passes a static scan and every smoke case. Anything larger becomes a draft pull request for a human.',
+    note: 'The same pipeline with the top layer empty. It reads how it has been doing, decides what to try, writes a tool, and refuses to install it unless a static scan and every smoke case pass. Anything larger becomes a draft pull request.',
     watch: 'guard',
     stages: [
       { ms: 0, say: 'No surface at all. A schedule fires; there is nobody to show a spinner to.', tokens: 0, cents: 0 },

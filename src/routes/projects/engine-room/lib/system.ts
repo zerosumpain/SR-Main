@@ -53,25 +53,25 @@ export interface MapNode {
 export const NODES: MapNode[] = [
   // ---- surfaces ----
   { id: 'site', band: 'surface', col: 0, label: 'The site', what: 'Blog, projects and field studies — the public face. 144 page routes.' },
-  { id: 'chat', band: 'surface', col: 1, label: 'Chat', what: 'The assistant hub. Threads, tools, costs per turn.', section: 'chat', key: true },
-  { id: 'canvas', band: 'surface', col: 2, label: 'Canvas', what: 'The visual workflow builder — drag nodes, wire them, schedule them.', section: 'automation' },
+  { id: 'chat', band: 'surface', col: 1, label: 'Chat', what: 'The assistant hub. Threads, tools, costs per turn.', section: 'turn/stream', key: true },
+  { id: 'canvas', band: 'surface', col: 2, label: 'Canvas', what: 'The visual workflow builder — drag nodes, wire them, schedule them.', section: 'reach/workflows' },
   { id: 'drive', band: 'surface', col: 3, label: 'Drive', what: 'Documents, with retrieval over them and a network-drive mount.', section: 'memory' },
   { id: 'intel', band: 'surface', col: 4, label: 'Intel', what: 'The knowledge graph — people, organisations, threads and how they connect.', section: 'memory' },
-  { id: 'admin', band: 'surface', col: 5, label: 'Admin', what: 'Operations: models, connectors, secrets, health, the improvement log.', section: 'guardrails' },
-  { id: 'wa', band: 'surface', col: 6, label: 'Messaging', what: 'The same assistant, reachable from a phone with no app installed.', section: 'chat' },
-  { id: 'mcp', band: 'surface', col: 7, label: 'MCP', what: 'An open protocol endpoint so an external assistant can drive this system directly.', section: 'tools', key: true },
+  { id: 'admin', band: 'surface', col: 5, label: 'Admin', what: 'Operations: models, connectors, secrets, health, the improvement log.', section: 'change/limits' },
+  { id: 'wa', band: 'surface', col: 6, label: 'Messaging', what: 'The same assistant, reachable from a phone with no app installed.', section: 'turn/stream' },
+  { id: 'mcp', band: 'surface', col: 7, label: 'MCP', what: 'An open protocol endpoint so an external assistant can drive this system directly.', section: 'reach/tools', key: true },
 
   // ---- engines ----
-  { id: 'agent', band: 'engine', col: 0, span: 2, label: 'Agent runtime', what: 'Owns a conversation turn: assembles context, calls the model, dispatches tools, streams back.', section: 'chat', key: true },
-  { id: 'wfengine', band: 'engine', col: 2, span: 2, label: 'Workflow engine', what: '88 node types, triggers, branching, fan-in, retries — the automation substrate.', section: 'automation', key: true },
-  { id: 'builder', band: 'engine', col: 4, span: 2, label: 'Builder', what: 'Writes whole applications, runs them in a container, iterates on the failures, publishes them.', section: 'building' },
-  { id: 'selfimp', band: 'engine', col: 6, span: 2, label: 'Self-improvement', what: 'Nightly. Reads how it has been doing, writes new tools, and refuses to install any that fail the gate.', section: 'building', key: true },
+  { id: 'agent', band: 'engine', col: 0, span: 2, label: 'Agent runtime', what: 'Owns a conversation turn: assembles context, calls the model, dispatches tools, streams back.', section: 'turn/stream', key: true },
+  { id: 'wfengine', band: 'engine', col: 2, span: 2, label: 'Workflow engine', what: '88 node types, triggers, branching, fan-in, retries — the automation substrate.', section: 'reach/workflows', key: true },
+  { id: 'builder', band: 'engine', col: 4, span: 2, label: 'Builder', what: 'Writes whole applications, runs them in a container, iterates on the failures, publishes them.', section: 'change/nights' },
+  { id: 'selfimp', band: 'engine', col: 6, span: 2, label: 'Self-improvement', what: 'Nightly. Reads how it has been doing, writes new tools, and refuses to install any that fail the gate.', section: 'change/nights', key: true },
 
   // ---- reasoning ----
-  { id: 'gateway', band: 'reason', col: 0, span: 2, label: 'Model gateway', what: 'One account, every provider. Also the single point of failure — knowingly.', section: 'models', key: true },
-  { id: 'router', band: 'reason', col: 2, span: 2, label: 'Model routing', what: 'Which model for which task, refreshed nightly against price and capability.', section: 'models', key: true },
-  { id: 'cache', band: 'reason', col: 4, span: 2, label: 'Prompt cache', what: 'Marks the long unchanging prefix as cacheable. The largest single cost lever in the system.', section: 'models', key: true },
-  { id: 'toolkit', band: 'reason', col: 6, span: 2, label: 'Toolkit', what: 'The tools the model may call — generated, not hand-written, so the inventory cannot drift.', section: 'tools', key: true },
+  { id: 'gateway', band: 'reason', col: 0, span: 2, label: 'Model gateway', what: 'One account, every provider. Also the single point of failure — knowingly.', section: 'turn/routing', key: true },
+  { id: 'router', band: 'reason', col: 2, span: 2, label: 'Model routing', what: 'Which model for which task, refreshed nightly against price and capability.', section: 'turn/routing', key: true },
+  { id: 'cache', band: 'reason', col: 4, span: 2, label: 'Prompt cache', what: 'Marks the long unchanging prefix as cacheable. The largest single cost lever in the system.', section: 'turn/routing', key: true },
+  { id: 'toolkit', band: 'reason', col: 6, span: 2, label: 'Toolkit', what: 'The tools the model may call — generated, not hand-written, so the inventory cannot drift.', section: 'reach/tools', key: true },
 
   // ---- memory ----
   { id: 'pg', band: 'memory', col: 0, span: 2, label: 'Postgres', what: '117 tables. One database for everything — no second store to keep in sync.', section: 'memory', key: true },
@@ -81,18 +81,18 @@ export const NODES: MapNode[] = [
   { id: 'files', band: 'memory', col: 7, label: 'Files', what: 'Documents on disk and in object storage, addressable by the assistant.', section: 'memory' },
 
   // ---- world ----
-  { id: 'mail', band: 'world', col: 0, label: 'Mail', what: 'Watched inboxes that can start a workflow, and an assistant that can reply.', section: 'automation' },
-  { id: 'cal', band: 'world', col: 1, label: 'Calendar', what: 'Read and write, across accounts.', section: 'automation' },
-  { id: 'home', band: 'world', col: 2, label: 'Home', what: 'Home automation, browsable as areas and devices rather than a flat entity list.', section: 'automation' },
-  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics, normalised — after learning the hard way that stored scaling lies.', section: 'automation' },
-  { id: 'web', band: 'world', col: 4, span: 2, label: 'The web', what: 'Search, extraction, and a stealth browser for pages that will not be read any other way.', section: 'research' },
-  { id: 'git', band: 'world', col: 6, span: 2, label: 'Code host', what: 'Where the system opens pull requests against itself — as drafts, never merged by machine.', section: 'shipping', key: true },
+  { id: 'mail', band: 'world', col: 0, label: 'Mail', what: 'Watched inboxes that can start a workflow, and an assistant that can reply.', section: 'reach/workflows' },
+  { id: 'cal', band: 'world', col: 1, label: 'Calendar', what: 'Read and write, across accounts.', section: 'reach/workflows' },
+  { id: 'home', band: 'world', col: 2, label: 'Home', what: 'Home automation, browsable as areas and devices rather than a flat entity list.', section: 'reach/workflows' },
+  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics, normalised — after learning the hard way that stored scaling lies.', section: 'reach/workflows' },
+  { id: 'web', band: 'world', col: 4, span: 2, label: 'The web', what: 'Search, extraction, and a stealth browser for pages that will not be read any other way.', section: 'memory/research' },
+  { id: 'git', band: 'world', col: 6, span: 2, label: 'Code host', what: 'Where the system opens pull requests against itself — as drafts, never merged by machine.', section: 'change/shipping', key: true },
 
   // ---- ground ----
-  { id: 'origin', band: 'ground', col: 0, span: 2, label: 'Origin', what: 'A small server running the built application. No inbound port is open on it.', section: 'shipping' },
-  { id: 'tunnel', band: 'ground', col: 2, span: 2, label: 'Tunnel + edge', what: 'Outbound-only tunnel to the edge, which caches, and is purged when a project goes private.', section: 'shipping' },
-  { id: 'ci', band: 'ground', col: 4, span: 2, label: 'The pipeline', what: 'The only route to production. Gate first, deploy second, and the deploy cannot run if the gate is red.', section: 'shipping', key: true },
-  { id: 'backup', band: 'ground', col: 6, span: 2, label: 'Backups', what: 'Encrypted, deduplicated, off-site, nightly — plus a separate escrow for the things that cannot be regenerated.', section: 'shipping' },
+  { id: 'origin', band: 'ground', col: 0, span: 2, label: 'Origin', what: 'A small server running the built application. No inbound port is open on it.', section: 'change/shipping' },
+  { id: 'tunnel', band: 'ground', col: 2, span: 2, label: 'Tunnel + edge', what: 'Outbound-only tunnel to the edge, which caches, and is purged when a project goes private.', section: 'change/shipping' },
+  { id: 'ci', band: 'ground', col: 4, span: 2, label: 'The pipeline', what: 'The only route to production. Gate first, deploy second, and the deploy cannot run if the gate is red.', section: 'change/shipping', key: true },
+  { id: 'backup', band: 'ground', col: 6, span: 2, label: 'Backups', what: 'Encrypted, deduplicated, off-site, nightly — plus a separate escrow for the things that cannot be regenerated.', section: 'change/shipping' },
 ];
 
 /** Directed flows worth drawing. Kept sparse on purpose — a map with every edge drawn is a hairball. */
@@ -135,22 +135,22 @@ export const STATS: Stat[] = [
 /** The claims the study has to earn. Shown on the index as the argument. */
 export const CLAIMS: Array<{ n: string; title: string; body: string; eli5: string; section: string }> = [
   {
-    n: '01', title: 'It is one system, not a pile of features', section: 'chat',
+    n: '01', title: 'It is one system, not a pile of features', section: 'turn/stream',
     body: 'A tool written for the assistant is automatically available to a workflow, to the builder, and to an external client over an open protocol. Nothing is wired twice. That is the whole reason the surface area can be this large and still be maintained by one person.',
     eli5: 'Everything shares the same parts. Teach it one new trick and every part of the system can use it immediately.',
   },
   {
-    n: '02', title: 'The expensive thing is context, not compute', section: 'models',
+    n: '02', title: 'The expensive thing is context, not compute', section: 'turn/cost',
     body: 'Almost every performance and cost problem in a system like this turns out to be prompt size, not code speed. Measured end to end, the site’s own code is a small fraction of the wait. The work that pays is deciding what not to send.',
     eli5: 'The slow, expensive part is how much you tell the AI — not how fast your own software is.',
   },
   {
-    n: '03', title: 'It improves itself, but it cannot merge', section: 'building',
+    n: '03', title: 'It improves itself, but it cannot merge', section: 'change/nights',
     body: 'Every night it reads its own failures and writes improvements. Small self-contained tools it installs itself, after a static scan and a smoke test where every case must pass. Anything larger becomes a draft pull request. There is no code path by which it can merge one.',
     eli5: 'It fixes itself overnight — but only small, safe things. Anything bigger has to be approved by a human.',
   },
   {
-    n: '04', title: 'Every guardrail here is a scar', section: 'guardrails',
+    n: '04', title: 'Every guardrail here is a scar', section: 'change/limits',
     body: 'The interesting parts of the security model are not the ones from a checklist. They are the ones added after something went wrong: an outbound filter that missed an address format, a status message that overwrote an answer, a deploy that replaced production configuration with a laptop’s.',
     eli5: 'Most of the safety features exist because something broke once. Each one has a story.',
   },

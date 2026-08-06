@@ -110,27 +110,6 @@
   :global(.pe-prose b) { color: var(--ink); }
   :global(.pe-prose a) { color: var(--accent-ink); }
   :global(.pe-prose code) { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--ink); }
-  :global(.pe-next) { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--paper); background: var(--ink); padding: 8px 15px; border-radius: var(--radius-round); text-decoration: none; border: none; cursor: pointer; }
-  :global(.pe-next:hover) { background: #000; }
-
-  /* card grid used across sections */
-  :global(.ds-grid) { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin: 14px 0; }
-  :global(.ds-grid.two) { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }
-  :global(.ds-card) { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; min-width: 0; }
-  :global(.ds-card h3) { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; margin: 0 0 6px; color: var(--ink); }
-  :global(.ds-kicker) { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
-  :global(.ds-body) { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); margin: 6px 0 0; }
-  :global(.ds-body b) { color: var(--ink); }
-  :global(.ds-body code) { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: var(--radius-sharp); }
-
-  /* "the lesson" call-out — used wherever a mistake shaped the design */
-  :global(.er-lesson) { border-left: 3px solid var(--accent); background: var(--accent-tint-10, rgba(196,87,10,0.09));
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; padding: 11px 15px; margin: 14px 0; max-width: 92ch; }
-  :global(.er-lesson .el-lab) { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.13em;
-    text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
-  :global(.er-lesson p) { margin: 0; font-size: 13.5px; line-height: 1.58; color: rgba(28,22,17,0.78); }
-  :global(.er-lesson p + p) { margin-top: 7px; }
-  :global(.er-lesson b) { color: var(--ink); }
 
   .foot { position: relative; z-index: 1; padding: 18px 28px 26px; border-top: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.5); margin-top: 24px; }
   .foot code { background: rgba(28,22,17,0.06); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--ink-soft); font-family: 'JetBrains Mono', monospace; }

@@ -21,6 +21,9 @@ export const MANIFEST = {
   hidden: 135,
   medianPrompt: 35_786,
   destructive: 16,
+  /** Share of dispatcher calls that go straight to invoke rather than browsing the catalogue.
+   *  This is what makes the indirection pay: the extra hop is almost never actually taken. */
+  invokeShare: 86,
 };
 
 /** The measured send path. Three slivers of site code, then the wait. */
