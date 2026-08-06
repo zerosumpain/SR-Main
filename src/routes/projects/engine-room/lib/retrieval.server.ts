@@ -203,29 +203,49 @@ function tokenize(s: string): string[] {
 }
 
 // Bridges between what a reader asks and what the study calls the thing.
-const SYNONYMS: Record<string, string[]> = {
-  cost: ['price', 'money', 'billed', 'spend', 'cheap', 'expensive', 'token'],
-  cache: ['caching', 'prefix', 'breakpoint', 'prompt cache', 'cached'],
-  slow: ['latency', 'ttft', 'first token', 'wait', 'speed', 'fast'],
-  model: ['llm', 'ai', 'gateway', 'openrouter', 'provider', 'seller'],
-  security: ['guardrail', 'safety', 'boundary', 'gate', 'protect', 'secure'],
-  secret: ['credential', 'key', 'token', 'password', 'registry', 'vault'],
-  memory: ['remember', 'storage', 'database', 'postgres', 'recall'],
-  search: ['retrieval', 'rag', 'embedding', 'vector', 'index', 'lookup'],
-  graph: ['entity', 'knowledge graph', 'intel', 'relationship', 'node'],
-  merge: ['duplicate', 'resolution', 'match', 'same person', 'dedupe'],
-  deploy: ['ship', 'production', 'release', 'pipeline', 'ci', 'gate'],
-  workflow: ['automation', 'canvas', 'node', 'pipeline', 'cron', 'schedule'],
-  tool: ['toolkit', 'manifest', 'function', 'capability', 'mcp'],
-  build: ['builder', 'sandbox', 'container', 'publish', 'app'],
-  improve: ['self improvement', 'nightly', 'overnight', 'autonomous', 'repair'],
-  chat: ['conversation', 'assistant', 'turn', 'message', 'reply', 'stream'],
-  bug: ['failure', 'incident', 'broke', 'wrong', 'mistake', 'hazard', 'scar'],
-  fabricate: ['hallucinate', 'invent', 'made up', 'provenance', 'source'],
-  prompt: ['context', 'instructions', 'system prompt', 'prefill'],
-  reasoning: ['thinking', 'max tokens', 'budget', 'empty'],
-  research: ['sources', 'facts', 'gaps', 'citation'],
-};
+//
+// Expansion is one-directional: only a term that appears as a KEY expands. So every word a
+// reader is likely to type needs its own entry, not just the word the study happens to use.
+// Live-testing the deployed dock is what surfaced this — "where does the money go" expanded
+// to nothing, because `money` was only ever a value under `cost`. The concept groups below
+// are therefore written out per-term rather than once per concept.
+const GROUPS: string[][] = [
+  ['cost', 'costs', 'price', 'pricing', 'money', 'spend', 'spending', 'bill', 'billed', 'cheap', 'cheaper', 'expensive', 'afford', 'budget', 'token', 'tokens'],
+  ['cache', 'caching', 'cached', 'prefix', 'breakpoint', 'reuse', 'discount'],
+  ['slow', 'fast', 'speed', 'latency', 'ttft', 'wait', 'waiting', 'delay', 'quick', 'performance'],
+  ['model', 'models', 'llm', 'ai', 'gateway', 'openrouter', 'provider', 'seller', 'brain', 'choose', 'choosing', 'selection', 'routing', 'route'],
+  ['security', 'secure', 'safety', 'safe', 'guardrail', 'guardrails', 'boundary', 'protect', 'protection', 'risk', 'dangerous', 'attack', 'abuse'],
+  ['secret', 'secrets', 'credential', 'credentials', 'key', 'keys', 'password', 'vault', 'registry', 'auth', 'permission', 'permissions', 'access'],
+  ['memory', 'remember', 'remembers', 'storage', 'store', 'database', 'postgres', 'recall', 'knows', 'know'],
+  ['search', 'retrieval', 'retrieve', 'rag', 'embedding', 'embeddings', 'vector', 'index', 'lookup', 'find', 'finds', 'semantic'],
+  ['graph', 'entity', 'entities', 'relationship', 'relationships', 'connection', 'connections', 'network', 'intel'],
+  ['merge', 'merges', 'duplicate', 'duplicates', 'resolution', 'match', 'matching', 'dedupe', 'same', 'person', 'people'],
+  ['deploy', 'deploys', 'deployment', 'ship', 'shipping', 'production', 'release', 'live', 'pipeline', 'ci', 'gate', 'merge', 'git'],
+  ['workflow', 'workflows', 'automation', 'automate', 'canvas', 'node', 'nodes', 'cron', 'schedule', 'scheduled', 'trigger'],
+  ['tool', 'tools', 'toolkit', 'manifest', 'function', 'capability', 'capabilities', 'mcp', 'protocol'],
+  ['build', 'builder', 'builds', 'sandbox', 'container', 'publish', 'app', 'application', 'code', 'writes'],
+  ['improve', 'improvement', 'nightly', 'overnight', 'night', 'autonomous', 'autonomy', 'itself', 'repair', 'self'],
+  ['chat', 'conversation', 'assistant', 'turn', 'message', 'reply', 'stream', 'streaming', 'hermes', 'agent'],
+  ['bug', 'bugs', 'failure', 'failures', 'incident', 'broke', 'broken', 'wrong', 'mistake', 'mistakes', 'hazard', 'scar', 'fail', 'failed'],
+  ['fabricate', 'fabrication', 'hallucinate', 'hallucination', 'invent', 'invented', 'provenance', 'source', 'sources', 'citation', 'cite', 'trust'],
+  ['prompt', 'prompts', 'context', 'instruction', 'instructions', 'prefill', 'window'],
+  ['reasoning', 'thinking', 'thinks', 'think', 'empty', 'truncated', 'cut'],
+  ['research', 'researching', 'facts', 'fact', 'gaps', 'gap', 'desk', 'report'],
+  ['size', 'big', 'large', 'scale', 'how many', 'count', 'lines', 'number'],
+  ['why', 'reason', 'because', 'decision', 'chose', 'trade', 'tradeoff'],
+];
+
+// Every term in a group expands to every other term in that group.
+const SYNONYMS: Record<string, string[]> = (() => {
+  const out: Record<string, string[]> = {};
+  for (const g of GROUPS) {
+    for (const term of g) {
+      const others = g.filter((t) => t !== term);
+      out[term] = out[term] ? [...new Set([...out[term], ...others])] : others;
+    }
+  }
+  return out;
+})();
 
 const K1 = 1.5, BB = 0.75;
 const docTokens: string[][] = CHUNKS.map((c) => tokenize(`${c.title} ${c.text}`));
