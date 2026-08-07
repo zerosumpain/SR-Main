@@ -100,7 +100,12 @@ jobs:
   deploy:
     name: Build + deploy (VPS)
     needs: gate
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/master')
+    # The ref guard is on BOTH arms, deliberately. It used to sit only on the push arm, which
+    # meant `gh workflow run CI --ref <any-branch>` deployed that branch straight to
+    # production — the same class of unsanctioned deploy path that once replaced production
+    # configuration with a laptop's and cost 33 hours. Dispatch stays available as the manual
+    # re-trigger for when GitHub does not fire the push event, but it can only ever ship master.
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
