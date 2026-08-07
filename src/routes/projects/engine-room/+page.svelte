@@ -43,7 +43,7 @@
   <Instrument
     title="The whole system, one frame"
     kicker="Six bands"
-    reading="Every part of the machine, grouped by what it is for. Hover a box to see what it does; the lit lines are what it talks to. Click to open the page that explains it."
+    reading="Every part of the machine, grouped by what it is for."
     flush
   >
     <SystemMap />
@@ -67,7 +67,7 @@
   <Instrument
     title="Four claims this study has to earn"
     kicker="The argument"
-    reading="Press one to see the claim in full, then follow it to the page that has to back it up."
+    reading="Press one for the claim in full."
   >
     <div class="claims">
       {#each CLAIMS as c}
@@ -92,16 +92,15 @@
   <Instrument
     title="The size of it"
     kicker="Counted, not estimated"
-    reading="Every tile carries the command that produced it. None of these are the point — they establish the scale the rest of the study has to account for."
+    reading="Every tile carries the command that produced it."
     tone="var(--accent)"
   >
     <StatWall />
   </Instrument>
 
   <p class="idx-note">
-    <b>What is deliberately not here.</b> No credentials, keys, addresses, personal data or configuration values
-    appear anywhere in this study — not obscured, simply never written. Where something would be unsafe to publish,
-    the study describes its shape and stops.
+    <b>What is deliberately not here.</b> No credentials, keys, addresses or personal data appear anywhere in this
+    study — not obscured, never written. Where something would be unsafe to publish, it is described by shape.
   </p>
 </section>
 

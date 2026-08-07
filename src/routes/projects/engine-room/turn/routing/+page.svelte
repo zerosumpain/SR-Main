@@ -65,15 +65,15 @@
   <LeafHead
     part="turn"
     title="Picking a model"
-    line="Naming a model settles less than you think: four things choose it, many sellers serve it."
+    line="Naming a model settles less than you think."
     lineEli5="Asking for an AI by name decides little. Four things pick it, and many companies run it." />
 
   <Instrument
     kicker="The chooser"
     title="Four ways a model gets chosen"
     tone={TONE}
-    reading="Four layers, in precedence order. Pick one."
-    takeaway="First match wins. Only the auction moves on its own.">
+    reading="Four layers, in precedence order."
+    takeaway="First match wins; only the auction moves itself.">
     <ResolutionTrack tone={TONE} />
   </Instrument>
 
@@ -91,7 +91,7 @@
     title="What is allowed to win"
     tone={TONE}
     reading="Narrowed by rule, then split by profile."
-    takeaway="Cost is capped so it cannot dominate; two rules are hard stops.">
+    takeaway="Cost is capped; two rules are hard stops.">
     <Bars items={NARROWING} tone={TONE} />
 
     <p class="sub">Per-profile shortlist</p>

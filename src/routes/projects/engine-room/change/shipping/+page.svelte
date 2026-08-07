@@ -45,15 +45,15 @@
   <LeafHead
     part="change"
     title="Getting it live"
-    line="Six stages sit between a change and production. Which a machine may clear alone is decided by file path, not judgement."
+    line="Six stages sit between a change and production. File path decides which a machine may clear alone."
     lineEli5="Six steps sit between a change and the live site. Whether the computer can finish them alone depends on which files it touched." />
 
   <Instrument
     kicker="The instrument"
     title="Push a change to production"
     tone={TONE}
-    reading="Say who wrote it, whether the gate passed, and what it touches. Then push."
-    takeaway="A routine machine-written change with a green gate merges itself. One protected path and it waits for a person.">
+    reading="Say who wrote it, whether the gate passed, and what it touches."
+    takeaway="A routine machine-written change with a green gate merges itself. A protected path waits for a person.">
     <PipelineRun tone={TONE} />
   </Instrument>
 
