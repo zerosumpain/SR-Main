@@ -65,9 +65,9 @@ export const HOUSE_REASONS = [
 ];
 
 export const HOUSE_COST = {
-  title: 'And the bill for it',
+  title: 'And what it costs',
   body:
-    'Domestic broadband, one power cut, and a machine that is memory-bound enough that a single large file read into memory can take the whole always-on service down with it. Every capability listed above is worth those three. Nothing else that could run here does.',
+    'Domestic broadband, a mains supply nobody is on call for, and a memory ceiling that shapes what may run here — which is why the document indexer refuses anything over 25 MB. Those three are the price of the three capabilities above, and nothing else that could run here does.',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -146,9 +146,9 @@ export const SUBSYSTEMS: Subsystem[] = [
 ];
 
 export const ONE_REGISTER = {
-  title: 'Two copies of a credential store is worse than one',
+  title: 'Exactly one credential register, by design',
   body:
-    'The second copy was not redundancy. The two machines encrypted with different keys, so neither was a usable backup of the other and the divergence was silent. Worse, one provider rotates its refresh token on every exchange — so merely OPENING the register on the wrong machine performed an exchange and invalidated the other machine’s credential. The fix was for one host to hold no register at all.',
+    'Only the origin holds one; the machine at home is configured to hold none at all. Two would not be redundancy: each host encrypts under its own key, so neither could restore the other, and some providers rotate a refresh token on every exchange — meaning a second reader is a second writer, and reading a credential in one place would retire it in the other. Singularity is the property that makes the register safe to automate against.',
 } as const;
 
 export const FLAG_NOT_HOSTNAME = {

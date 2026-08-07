@@ -84,7 +84,7 @@ export const NODES: MapNode[] = [
   { id: 'mail', band: 'world', col: 0, label: 'Mail', what: 'Watched inboxes that can start a workflow, and an assistant that can reply.', section: 'reach/workflows' },
   { id: 'cal', band: 'world', col: 1, label: 'Calendar', what: 'Read and write, across accounts.', section: 'reach/workflows' },
   { id: 'home', band: 'world', col: 2, label: 'Home', what: 'Home automation, browsable as areas and devices rather than a flat entity list.', section: 'reach/workflows' },
-  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics, normalised — after learning the hard way that stored scaling lies.', section: 'reach/feeds' },
+  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics from a strap, a phone and an activity log, normalised on read into one set of units.', section: 'reach/feeds' },
   { id: 'web', band: 'world', col: 4, span: 2, label: 'The web', what: 'Search, extraction, and a stealth browser for pages that will not be read any other way.', section: 'memory/research' },
   { id: 'git', band: 'world', col: 6, span: 2, label: 'Code host', what: 'Where the system opens pull requests against itself — as drafts, never merged by machine.', section: 'change/shipping', key: true },
 
@@ -155,8 +155,8 @@ export const CLAIMS: Array<{ n: string; title: string; body: string; eli5: strin
     eli5: 'Everything it thinks it knows has a confidence rating — and the rating can always be broken down into the reasons behind it, so you can disagree with any one of them.',
   },
   {
-    n: '05', title: 'Every guardrail here is a scar', section: 'change/limits',
-    body: 'The interesting parts of the security model are not the ones from a checklist. They are the ones added after something went wrong: an outbound filter that missed an address format, a status message that overwrote an answer, a deploy that replaced production configuration with a laptop’s.',
-    eli5: 'Most of the safety features exist because something broke once. Each one has a story.',
+    n: '05', title: 'A boundary, not a request', section: 'change/limits',
+    body: 'A sentence in a prompt asking a model not to do something will usually be honoured, and “usually” is not a security property. Of the guardrails in this system all but one are boundaries — a container with no route out, a job that cannot start until another is green, a scan that runs before compilation, a credential the agent can use but cannot read, a tool with no parameter for the dangerous thing. Where the placement is what makes it hold, the page says where and why.',
+    eli5: 'Most of the safety features are things that simply cannot be done, rather than things it has been asked not to do.',
   },
 ];

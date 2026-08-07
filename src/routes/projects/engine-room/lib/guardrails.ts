@@ -13,7 +13,8 @@ export interface Rail {
   rail: string;
   kind: Kind;
   detail: string;
-  scar?: string;
+  /** The design note: WHY the control is placed and shaped the way it is. */
+  note?: string;
 }
 
 export const RAILS: Rail[] = [
@@ -34,42 +35,42 @@ export const RAILS: Rail[] = [
     rail: 'A confirmation gate at the protocol boundary',
     kind: 'boundary',
     detail: 'Destructive operations are gated where every route to a tool must pass, rather than inside any one caller — so a new caller cannot arrive without the check. It also refuses outright when there is nobody present to confirm.',
-    scar: 'For a period this check lived only inside a legacy chat handler that the live path no longer went through, so on the real production route nothing stood between the agent and “send this email” but the agent’s own good behaviour. A guardrail placed in the wrong layer is indistinguishable from no guardrail, and this one looked healthy for weeks. Separately: because a dispatcher hides most tools behind one call, the gate has to resolve the INNER tool name — gating the outer one would let every destructive call through while looking entirely correct.',
+    note: 'Two placement rules make this one hold. It sits at the protocol boundary that every route to a tool must pass, rather than inside any single caller, so a new caller cannot arrive without it. And it resolves the INNER tool name: a dispatcher hides most tools behind one call, so gating the outer name would pass every destructive call while looking entirely correct.',
   },
   {
     id: 'ssrf', risk: 'The agent is talked into fetching an internal address',
     rail: 'Outbound requests are filtered against private ranges',
     kind: 'boundary',
     detail: 'A tool that fetches a URL will happily fetch an internal one if asked nicely enough by a poisoned web page. Addresses in private ranges are refused before the request is made.',
-    scar: 'The first version handled the form a human would type but not the form every caller actually passes, because the URL parser normalises the address on the way through. Loopback was reachable via a URL that reads as obviously blocked. Validate the string your callers actually produce, not the one you had in mind.',
+    note: 'The check runs on the address a caller actually produces — after the URL parser has normalised it — rather than on the string a person would have typed. A loopback address has several spellings and the parser folds them into one, so that folded form is what the filter has to be looking at.',
   },
   {
     id: 'rebind', risk: 'The address changes between the check and the request',
     rail: 'Validate, then pin the socket to the address you validated',
     kind: 'boundary',
     detail: 'Checking a hostname and then fetching that URL resolves it twice, and the two answers need not agree. An attacker controlling a DNS record can answer with a public address for the check and an internal one for the fetch. The guard therefore returns the specific address it approved, and the connection is pinned to it.',
-    scar: 'This is the gap that makes most hand-rolled outbound filters decorative. They are not wrong about anything they check — they simply do not control what happens after they finish checking.',
+    note: 'This is the difference between a filter that decides and one that merely advises. Most hand-rolled outbound guards are right about everything they check and in control of nothing after they finish checking; pinning the socket is what closes that gap.',
   },
   {
     id: 'apisurface', risk: 'A prompt-injected model re-points a credential at a host it controls',
     rail: 'The tool has no parameter for that',
     kind: 'boundary',
     detail: 'The tool an agent uses to request a credential has no field for the host binding at all. It cannot re-point anything, because there is nowhere in the call to say so. Widening a credential’s reach is a separate operation, and it requires the owner to type the hostname out by hand — a suggestion from the model is worth nothing on its own.',
-    scar: 'This is what it looks like when a vulnerability determines an API surface. A policy — “the model should not do that” — became a type signature: the model cannot express it. That survives the model getting cleverer, which a validation rule may not.',
+    note: 'A policy expressed as a type signature rather than as a rule: there is no field in which the model can say the dangerous thing, so there is nothing to enforce at run time. A shape like that survives the model getting cleverer, which a validation rule may not.',
   },
   {
     id: 'argscan', risk: 'A secret is leaked by the act of asking about it',
     rail: 'Arguments are scanned before the handler runs',
     kind: 'boundary',
     detail: 'The transport publishes a tool’s arguments to the live event stream before the handler executes. So a model that put a key into a free-text field of a credential tool would already have leaked it, whatever the handler did next. Those tools scan their own arguments and refuse outright — refuse, not sanitise, because by then continuing is the wrong move.',
-    scar: 'The difference between a control that is theoretically right and one that has actually been probed. The exemption is documented with the exact string that broke it.',
+    note: 'The scan is exercised by its own tests with the literal strings it must refuse, so it is known to fire rather than assumed to, and every exemption is recorded alongside the exact input it covers.',
   },
   {
     id: 'redact', risk: 'A credential appears in a log or an error message',
     rail: 'Redaction covers the URL and its encoded form',
     kind: 'boundary',
     detail: 'When a credential is injected as a query parameter it becomes part of the URL — so the scrubber runs over the composed URL and every error message quoting it, not just the response body. It also replaces the percent-encoded form, because that is how the value looks once a URL builder has been near it.',
-    scar: 'Most redaction helpers scrub the response body and miss the two places the value actually appears in this design: the URL it was injected into, and the error that quotes that URL.',
+    note: 'Redaction is placed by where the value actually appears in this design, which is three places rather than one: the response body, the composed URL it was injected into, and any error that quotes that URL.',
   },
   {
     id: 'sandbox', risk: 'Generated code runs on the host',
@@ -100,7 +101,7 @@ export const RAILS: Rail[] = [
     rail: 'The anonymous surface is a checked-in lockfile',
     kind: 'boundary',
     detail: 'The set of routes reachable without a session is recorded in the repository. Any change to it fails the gate with a diff, and has to be acknowledged deliberately.',
-    scar: 'There are two allow-lists in this codebase for historical reasons, and only one matches by prefix. Adding a route family to the exact-match one silently fails to match — the symptom being anonymous users redirected to a login page for something meant to be open.',
+    note: 'The lockfile is generated by reading the allow-lists the running code actually consults, not written by hand — so it records prefix matches too, where a whole family of routes becomes reachable at once rather than one at a time.',
   },
   {
     id: 'login', risk: 'Anyone with an account signs in',
@@ -131,7 +132,7 @@ export const RAILS: Rail[] = [
     rail: 'A detector on the publishing path',
     kind: 'request',
     detail: 'Content bound for a public surface is checked for things that should not leave. This one is honestly a request rather than a boundary: it is heuristic, it can be wrong in both directions, and the real control is that a human reads machine-written text before it is published.',
-    scar: 'Copies of a detector like this drift apart. The one that matters is the one on the path that actually publishes — which is not always the one you find first.',
+    note: 'The check is placed on the path that actually publishes rather than the one that is easiest to find. A detector anywhere else is documentation, and this is the placement rule the whole page turns on.',
   },
 ];
 

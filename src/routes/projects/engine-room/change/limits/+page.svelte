@@ -27,14 +27,14 @@
   // Counted from RAILS, so the headline can never drift from the plot.
   const boundaries = RAILS.filter((r) => r.kind === 'boundary').length;
   const requests = RAILS.length - boundaries;
-  const scarred = RAILS.filter((r) => r.scar).length;
+  const noted = RAILS.filter((r) => r.note).length;
 
-  type Filter = 'all' | 'boundary' | 'request' | 'scar';
+  type Filter = 'all' | 'boundary' | 'request' | 'note';
   const FILTERS: { id: Filter; label: string; n: number }[] = [
     { id: 'all', label: 'All', n: RAILS.length },
     { id: 'boundary', label: 'Boundaries', n: boundaries },
     { id: 'request', label: 'Requests', n: requests },
-    { id: 'scar', label: 'Scars', n: scarred }
+    { id: 'note', label: 'Design notes', n: noted }
   ];
   let filter = $state<Filter>('all');
 </script>
@@ -43,15 +43,15 @@
   <title>What it cannot do · The Engine Room</title>
   <meta
     name="description"
-    content={`${RAILS.length} guardrails plotted by whether they hold regardless of intent, and how many were written by an incident.`} />
+    content={`${RAILS.length} guardrails plotted by whether they hold regardless of intent, and where each one is placed.`} />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="change"
     title="What it cannot do"
-    line={`${RAILS.length} guardrails, plotted by whether they hold regardless of intent — and how many were written by an incident.`}
-    lineEli5="Some rules are walls; some are polite requests. Which is which, and which were learnt the hard way." />
+    line={`${RAILS.length} guardrails, plotted by whether they hold regardless of intent — and by where each one had to be placed to hold.`}
+    lineEli5="Some rules are walls; some are polite requests. Which is which, and where each one sits." />
 
   <Instrument
     kicker="The instrument"

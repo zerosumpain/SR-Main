@@ -38,7 +38,7 @@
     <FailureLadder />
   </Instrument>
 
-  <aside class="note warn">
+  <aside class="note">
     <span class="n-kick">{ESCROW_NOTE.title}</span>
     <p>{ESCROW_NOTE.body}</p>
   </aside>
@@ -76,8 +76,6 @@
     padding: 10px 14px; border-left: 3px solid #5a6b7a;
     border-radius: 0 var(--radius-round) var(--radius-round) 0;
     background: rgba(90,107,122,0.09); }
-  .note.warn { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
-  .note.warn .n-kick { color: #8a2d3a; }
   .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
     text-transform: uppercase; color: #5a6b7a; }
   .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }

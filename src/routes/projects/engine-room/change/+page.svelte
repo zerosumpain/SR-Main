@@ -6,7 +6,7 @@
   import { PIPELINE } from '../lib/shipping';
   import { RAILS } from '../lib/guardrails';
 
-  const scars = RAILS.filter((r) => r.scar).length;
+  const boundaries = RAILS.filter((r) => r.kind === 'boundary').length;
 </script>
 
 <svelte:head>
@@ -23,8 +23,8 @@
             how="entries in the static deny-list" />
       <Stat value={PIPELINE.length} label="stages between a commit and production" tone="#8a2d3a"
             how="jobs in the deploy pipeline" />
-      <Stat value="{scars} of {RAILS.length}" label="guardrails written by an incident" tone="#8a2d3a"
-            how="rails carrying a recorded failure" />
+      <Stat value="{boundaries} of {RAILS.length}" label="guardrails that hold regardless of intent" tone="#8a2d3a"
+            how="rails classified as a boundary rather than a request" />
     </div>
   </PartHub>
   <PageFoot />

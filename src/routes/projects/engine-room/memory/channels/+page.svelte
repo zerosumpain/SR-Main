@@ -12,7 +12,7 @@
   import ChannelBoard from './components/ChannelBoard.svelte';
   import MailSweep from './components/MailSweep.svelte';
   import DecayCurve from './components/DecayCurve.svelte';
-  import { QUOTE_TRAP, DECAY_NOTE, CADENCE } from '../../lib/channels';
+  import { NEW_TEXT_ONLY, DECAY_NOTE, CADENCE } from '../../lib/channels';
 
   const TONE = 'var(--accent)';
 </script>
@@ -47,9 +47,9 @@
     <MailSweep />
   </Instrument>
 
-  <aside class="note warn">
-    <span class="n-kick">{QUOTE_TRAP.title}</span>
-    <p>{QUOTE_TRAP.body}</p>
+  <aside class="note">
+    <span class="n-kick">{NEW_TEXT_ONLY.title}</span>
+    <p>{NEW_TEXT_ONLY.body}</p>
   </aside>
 
   <Instrument
@@ -64,9 +64,9 @@
   <aside class="note">
     <span class="n-kick">A cadence, not a rule</span>
     <p>
-      The old cadence for re-reading a conversation — turn two, then every fourth — was a near-total loss:
-      the median thread runs {CADENCE.medianTurns} turns, shorter than the gap. It now reads every one of
-      the first {CADENCE.denseUntil} and thins out after.
+      A conversation is re-read on a ramp rather than a fixed interval: every one of the first
+      {CADENCE.denseUntil} turns, thinning out after. The median thread runs {CADENCE.medianTurns} turns,
+      so the dense end is where nearly every real conversation lives.
     </p>
   </aside>
 
@@ -78,8 +78,6 @@
     padding: 10px 14px; border-left: 3px solid var(--accent);
     border-radius: 0 var(--radius-round) var(--radius-round) 0;
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
-  .note.warn { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
-  .note.warn .n-kick { color: #8a2d3a; }
   .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--accent); }
   .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }

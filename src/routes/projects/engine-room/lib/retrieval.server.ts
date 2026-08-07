@@ -23,26 +23,37 @@ import { PHASES, FORBIDDEN, CANDIDATES, BUILDER_FACTS } from './building';
 import { PIPELINE, SAFETY, RISK_PATHS } from './shipping';
 import { RAILS, PRINCIPLE, FAILURE_MODES } from './guardrails';
 
-import { CHANNELS, SWEEP, HALVES, QUOTE_TRAP, DECAY, DECAY_NOTE, CHANNEL_LESSON, UNGRADED, CADENCE } from './channels';
+import { CHANNELS, SWEEP, HALVES, NEW_TEXT_ONLY, DECAY, DECAY_NOTE, CHANNEL_LESSON, UNGRADED, CADENCE } from './channels';
 import {
   WEIGHTS, NEUTRAL, CORROBORATION_K, HALF_LIFE_DAYS, DECAY_FLOOR, UNASSESSED, BANDS as TRUST_BANDS,
-  GRADE_LABEL, CREDIBILITY_LABEL, NEUTRAL_NOTE, SATURATION_NOTE, DECAY_NOTE as TRUST_DECAY, BEFORE,
+  GRADE_LABEL, CREDIBILITY_LABEL, NEUTRAL_NOTE, SATURATION_NOTE, DECAY_NOTE as TRUST_DECAY, WHY_A_SCORE,
 } from './trust';
 import { FILE_KINDS, INDEX, HASH_GATE, VIRTUAL_FOLDERS, POLICY_RULES, DRIVE_FACTS, DRIVE_LESSON } from './drive';
 import { STAGE, COUNTS, REGISTERS, OVERFLOW, CONSUMERS, REGISTRY_NOTE, COMPOSE_PATHS, FALLBACK_NOTE, SHARING, DECK_LESSON } from './decks';
 import {
-  FEEDS, ANALYTICS_COUNT, ANALYTICS_NOTE, SCALE, READINGS, SCALE_TRAP, PROBES, HONESTY,
+  FEEDS, ANALYTICS_COUNT, ANALYTICS_NOTE, SCALE, READINGS, FIXED_POINT, PROBES, HONESTY,
   CHEAP_BANNER, CATALOGUE as API_CATALOGUE, CATALOGUE_RULES, FEEDS_LESSON,
 } from './feeds';
 import {
   MACHINES, HOUSE_REASONS, HOUSE_COST, SUBSYSTEMS, ONE_REGISTER, FLAG_NOT_HOSTNAME, ESTATE_LESSON,
   STORES, BIG_INDEX, FAILURES, ESCROW_NOTE,
 } from './ground';
+import { CHECKS, CREDENTIALS, NEVER_READ, STORE_ONLY, EVERY_HOP, REQUEST_FLOW, NO_PARAMETER, FACTS as KEY_FACTS } from './keys';
+import {
+  ACTORS, WILDCARDS, PRECEDENCE, PER_ACTION, RECORDS as STORE_RECORDS, QUERY, QUERY_SAFETY,
+  EXPIRY, REAPER, LEDGER, LIMITS as STORE_LIMITS, STORE_LESSON,
+} from './store';
+import { ENTITIES as HOUSE_ENTITIES, OPERATIONS as HOUSE_OPS, TREE_NOTE, DRY_RUN, MULTI, HOUSE_FACTS, HOUSE_LESSON } from './house';
+import {
+  ALARMS, THRESHOLDS as WATCH_T, BOTH_KINDS, ANCHOR, SNAPSHOT,
+  LENS, LENS_RULES, LENS_FILTERS, STANDING, WATCH_LESSON,
+} from './watch';
 
 export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
   | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails'
-  | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground';
+  | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground'
+  | 'keys' | 'store' | 'house' | 'watch';
 
 export interface Chunk {
   id: string;
@@ -206,7 +217,7 @@ function buildChunks(): Chunk[] {
       text: f.body });
   for (const r of RAILS)
     add({ id: `rail-${r.id}`, sourceKey: `rail-${r.id}`, sourceType: 'guardrails', title: `${r.rail} (${r.kind})`, url: `${B}/change/limits`,
-      text: `Risk: ${r.risk}. ${r.detail}${r.scar ? ` HOW IT WAS GOT WRONG: ${r.scar}` : ''}` });
+      text: `Risk: ${r.risk}. ${r.detail}${r.note ? ` WHY IT IS PLACED THERE: ${r.note}` : ''}` });
 
   // ---- channels: where the graph's knowledge comes from ----
   for (const c of CHANNELS)
@@ -219,8 +230,8 @@ function buildChunks(): Chunk[] {
     text: UNGRADED.body });
   add({ id: 'chan-mail', sourceKey: 'mail-sweep', sourceType: 'channels', title: 'The mail sweep: a free half and a paid half', url: `${B}/memory/channels`,
     text: `The rolling window is ${SWEEP.windowDays} days — twelve weeks — of everything except bin and spam. ${HALVES.map((h) => `${h.label} (${h.cost}, ${h.confidence}): ${h.what} ${h.why}`).join(' ')} One run may list up to ${SWEEP.maxThreads.toLocaleString('en-GB')} threads, in pages of ${SWEEP.pageSize}, because listing is only ids and headers. It will pay for at most ${SWEEP.extractBudget} body extractions, newest first, so a first sweep of a large mailbox spreads over several nights instead of arriving as one enormous bill. A thread costs again only when a new message actually lands in it, because the content is hashed.` });
-  add({ id: 'chan-quote', sourceKey: 'mail-sweep', sourceType: 'channels', title: QUOTE_TRAP.title, url: `${B}/memory/channels`,
-    text: `${QUOTE_TRAP.body} The body is therefore cut at the first quote boundary and only new text survives, and a thread keeps at most ${SWEEP.maxMessages} messages. Beyond ${SWEEP.maxParticipants} participants a thread is treated as a broadcast rather than a conversation and no correspondence edges are drawn.` });
+  add({ id: 'chan-quote', sourceKey: 'mail-sweep', sourceType: 'channels', title: NEW_TEXT_ONLY.title, url: `${B}/memory/channels`,
+    text: `${NEW_TEXT_ONLY.body} The body is therefore cut at the first quote boundary and only new text survives, and a thread keeps at most ${SWEEP.maxMessages} messages. Beyond ${SWEEP.maxParticipants} participants a thread is treated as a broadcast rather than a conversation and no correspondence edges are drawn.` });
   add({ id: 'chan-decay', sourceKey: 'staleness', sourceType: 'channels', title: 'Staleness: evidence fades, and only halfway', url: `${B}/memory/channels`,
     text: `Edge weight decays exponentially with a ${DECAY.halfLifeDays}-day half-life to a floor of ${DECAY.floor}, never a cliff at the window edge — a cliff makes the graph lurch every night as threads age out. ${DECAY_NOTE.body} Only ${DECAY.pull * 100} per cent of a weight is exposed to age.` });
   add({ id: 'chan-cadence', sourceKey: 'chat-extraction', sourceType: 'channels', title: 'How often a conversation is re-read', url: `${B}/memory/channels`,
@@ -237,8 +248,8 @@ function buildChunks(): Chunk[] {
     text: `${SATURATION_NOTE.body} The curve is n / (n + ${CORROBORATION_K}): strictly increasing, asymptotic to one, so two independent notes buys half the axis and nothing buys all of it.` });
   add({ id: 'trust-decay', sourceKey: 'trust', sourceType: 'trust', title: TRUST_DECAY.title, url: `${B}/memory/trust`,
     text: `${TRUST_DECAY.body} The half-life is ${HALF_LIFE_DAYS} days with a floor of ${DECAY_FLOOR}, and the decay multiplies only the evidence-derived components — a human confirmation is held out of it entirely.` });
-  add({ id: 'trust-before', sourceKey: 'trust', sourceType: 'trust', title: BEFORE.title, url: `${B}/memory/trust`,
-    text: `${BEFORE.body} Bands: ${TRUST_BANDS.map((b) => `${b.label} from ${b.from.toFixed(2)} — ${b.what}`).join(' ')}` });
+  add({ id: 'trust-before', sourceKey: 'trust', sourceType: 'trust', title: WHY_A_SCORE.title, url: `${B}/memory/trust`,
+    text: `${WHY_A_SCORE.body} Bands: ${TRUST_BANDS.map((b) => `${b.label} from ${b.from.toFixed(2)} — ${b.what}`).join(' ')}` });
 
   // ---- drive ----
   for (const k of FILE_KINDS)
@@ -271,7 +282,7 @@ function buildChunks(): Chunk[] {
     text: `${HONESTY.body} Each probe does the cheapest thing that constitutes real evidence: ${PROBES.map((p) => `${p.label} — stored says "${p.stored}", a probe observes "${p.observed}" (${p.evidence})`).join('; ')}. Where a live probe would cost money the probe says it did not check rather than implying it verified something.` });
   add({ id: 'feed-banner', sourceKey: 'connector-health', sourceType: 'feeds', title: CHEAP_BANNER.title, url: `${B}/reach/feeds`, text: CHEAP_BANNER.body });
   add({ id: 'feed-scale', sourceKey: 'units', sourceType: 'feeds', title: 'Every measurement is an integer of hundredths', url: `${B}/reach/feeds`,
-    text: `Health measurements are stored multiplied by ${SCALE} so nothing is a float and nothing rounds on the way in; the cost is that the unit lives in a convention the type system cannot see. ${READINGS.map((r) => `${r.label}: the column holds ${r.stored}, which means ${r.real}; forget and you read ${r.wrong}`).join('. ')}. ${SCALE_TRAP.body}` });
+    text: `Health measurements are stored multiplied by ${SCALE}, so the number that comes out is the number that went in — no float, no drift, no rounding at ingest. ${READINGS.map((r) => `${r.label}: the column holds ${r.stored}, which means ${r.real}; forget and you read ${r.wrong}`).join('. ')}. ${FIXED_POINT.body}` });
   add({ id: 'feed-analytics', sourceKey: 'feeds', sourceType: 'feeds', title: ANALYTICS_NOTE.title, url: `${B}/reach/feeds`,
     text: `${ANALYTICS_NOTE.body} There are ${ANALYTICS_COUNT} of them.` });
   add({ id: 'feed-catalogue', sourceKey: 'api-catalogue', sourceType: 'feeds', title: 'Calling a data API nobody wrote code for', url: `${B}/reach/feeds`,
@@ -296,6 +307,47 @@ function buildChunks(): Chunk[] {
   add({ id: 'store-failures', sourceKey: 'recovery', sourceType: 'ground', title: 'What survives what', url: `${B}/ground/storage`,
     text: FAILURES.map((f) => `${f.label} — recovered by ${f.recovers.join(', then ')}. ${f.cost}`).join(' ') });
   add({ id: 'store-escrow', sourceKey: 'recovery', sourceType: 'ground', title: ESCROW_NOTE.title, url: `${B}/ground/storage`, text: ESCROW_NOTE.body });
+
+  // ---- credentials ----
+  add({ id: 'keys-binding', sourceKey: 'credentials', sourceType: 'keys', title: 'Credentials the assistant can use and cannot read', url: `${B}/reach/keys`,
+    text: `No caller ever receives a value. The only function returning plaintext returns it already attached to the outbound request, plus the list of what to scrub back out of the response — so no route, no tool and no log can ask for one. What a credential authenticates is decided by four gates in order: ${CHECKS.map((c) => `${c.label} — ${c.what}`).join(' ')}` });
+  add({ id: 'keys-hosts', sourceKey: 'credentials', sourceType: 'keys', title: 'Host binding is the boundary', url: `${B}/reach/keys`,
+    text: `A credential authenticates a request only if the request's host is on that credential's own owner-set list, and a wildcard covers ${KEY_FACTS.wildcardScope} — never the apex, and never a bare star, so a credential can never be host-unbound. This is what closes the exfiltration path: catalogue entries are writable by the model, so an entry pointing a known handle at an attacker's host is a perfectly well-formed record that simply fails to authenticate. Path narrowing scopes a key to particular endpoints of a host; method narrowing limits what it may do there, defaulting to ${KEY_FACTS.defaultMethods}. Worked bindings: ${CREDENTIALS.map((c) => `${c.label} — ${c.injection}, bound to ${c.hosts.join(', ')}${c.paths.length ? `, scoped to ${c.paths.join(', ')}` : ''}, ${c.methods.join('/') || 'never attached'}`).join('; ')}.` });
+  add({ id: 'keys-hop', sourceKey: 'credentials', sourceType: 'keys', title: EVERY_HOP.title, url: `${B}/reach/keys`, text: EVERY_HOP.body });
+  add({ id: 'keys-storeonly', sourceKey: 'credentials', sourceType: 'keys', title: STORE_ONLY.title, url: `${B}/reach/keys`, text: STORE_ONLY.body });
+  add({ id: 'keys-never', sourceKey: 'credentials', sourceType: 'keys', title: 'Why a value cannot be read back', url: `${B}/reach/keys`,
+    text: NEVER_READ.map((n) => `${n.k}: ${n.why}`).join(' ') });
+  add({ id: 'keys-request', sourceKey: 'credential-request', sourceType: 'keys', title: NO_PARAMETER.title, url: `${B}/reach/keys`,
+    text: `${NO_PARAMETER.body} The flow: ${REQUEST_FLOW.map((r) => `${r.actor} — ${r.what}`).join(' ')}` });
+
+  // ---- the flexible store ----
+  add({ id: 'store-what', sourceKey: 'datastore', sourceType: 'store', title: 'The flexible store, and its access layer', url: `${B}/memory/store`,
+    text: `A typed table is right when the shape is known and stable and costs more than it is worth for the long tail. ${STORE_LESSON.body} Every call names the principal it is made for: ${ACTORS.map((a) => `${a.label} — ${a.what}`).join(' ')}` });
+  add({ id: 'store-perms', sourceKey: 'datastore', sourceType: 'store', title: 'Row-level permissions and how they resolve', url: `${B}/memory/store`,
+    text: `${PRECEDENCE.map((p, i) => `${i + 1}. ${p.label}: ${p.what}`).join(' ')} ${PER_ACTION.body} Wildcards: ${WILDCARDS.map((w) => `${w.k} — ${w.why}`).join(' ')} Worked records: ${STORE_RECORDS.map((r) => `${r.label} — ${r.story}`).join(' ')}` });
+  add({ id: 'store-query', sourceKey: 'datastore-query', sourceType: 'store', title: 'The query language', url: `${B}/memory/store`,
+    text: `${QUERY.operators.length} comparison operators (${QUERY.operators.join(', ')}) and ${QUERY.aggregates.length} aggregates (${QUERY.aggregates.join(', ')}), ${QUERY.defaultLimit} rows a page and ${QUERY.maxLimit} at most. ${QUERY_SAFETY.map((q) => `${q.k}: ${q.why}`).join(' ')}` });
+  add({ id: 'store-expiry', sourceKey: 'datastore-expiry', sourceType: 'store', title: 'Expiry, limits and the ledger', url: `${B}/memory/store`,
+    text: `${EXPIRY.map((e) => `${e.label}: ${e.what} Use it for ${e.use}`).join(' ')} ${REAPER.body} Per-collection ceilings: ${STORE_LIMITS.map((l) => `${l.k} — ${l.why}`).join(' ')} ${LEDGER.body} Logged actions: ${LEDGER.actions.join(', ')}.` });
+
+  // ---- the house ----
+  add({ id: 'house-tree', sourceKey: 'home', sourceType: 'house', title: TREE_NOTE.title, url: `${B}/reach/house`,
+    text: `${TREE_NOTE.body} ${MULTI.body}` });
+  add({ id: 'house-ops', sourceKey: 'home', sourceType: 'house', title: 'What it can do with the house', url: `${B}/reach/house`,
+    text: `${HOUSE_OPS.length} operations, ${HOUSE_OPS.filter((o) => !o.writes).length} of which only read: ${HOUSE_OPS.map((o) => `${o.label} — ${o.what}`).join(' ')} The worked example on the page uses ${HOUSE_ENTITIES.length} illustrative entities; no real house is described.` });
+  add({ id: 'house-dry', sourceKey: 'home', sourceType: 'house', title: DRY_RUN.title, url: `${B}/reach/house`, text: DRY_RUN.body });
+  add({ id: 'house-facts', sourceKey: 'home', sourceType: 'house', title: 'Properties of the home integration', url: `${B}/reach/house`,
+    text: `${HOUSE_FACTS.map((f) => `${f.k} (${f.v}): ${f.why}`).join(' ')} ${HOUSE_LESSON.body}` });
+
+  // ---- watching for change ----
+  add({ id: 'watch-alarms', sourceKey: 'watchlist', sourceType: 'watch', title: 'Nine kinds of movement a watch run notices', url: `${B}/memory/watch`,
+    text: ALARMS.map((a) => `${a.label}: ${a.what} ${a.why}`).join(' ') });
+  add({ id: 'watch-thresholds', sourceKey: 'watchlist', sourceType: 'watch', title: BOTH_KINDS.title, url: `${B}/memory/watch`,
+    text: `${BOTH_KINDS.body} A gain must be at least ${WATCH_T.jumpRatio}× and at least ${WATCH_T.jumpMin} connections; a loss must take it below ${WATCH_T.collapseRatio}× and cost at least ${WATCH_T.collapseMin}. A new neighbour alarms only above ${WATCH_T.importantNeighbour} of top influence, confidence has to fall ${WATCH_T.confidenceDrop} before the evidence counts as weakening, and a bridge is the top ${Math.round((1 - WATCH_T.brokerPercentile) * 100)} per cent by brokerage. ${WATCH_T.snapshotNeighbours} neighbours are kept per snapshot.` });
+  add({ id: 'watch-anchor', sourceKey: 'watchlist', sourceType: 'watch', title: ANCHOR.title, url: `${B}/memory/watch`,
+    text: `${ANCHOR.body} ${SNAPSHOT.body}` });
+  add({ id: 'watch-lens', sourceKey: 'lenses', sourceType: 'watch', title: LENS.title, url: `${B}/memory/watch`,
+    text: `${LENS.body} ${LENS_RULES.map((r) => `${r.k}: ${r.why}`).join(' ')} A lens filters ${LENS_FILTERS.map((f) => `${f.k} (${f.v})`).join(', ')}. ${STANDING.body} ${WATCH_LESSON.body}` });
 
   return out;
 }
@@ -359,6 +411,13 @@ const GROUPS: string[][] = [
   ['backup', 'backups', 'restore', 'recovery', 'recover', 'snapshot', 'snapshots', 'escrow', 'disaster', 'lost', 'lose', 'losing', 'offsite'],
   ['tunnel', 'edge', 'network', 'mesh', 'private', 'port', 'ports', 'firewall', 'exposed', 'inbound', 'outbound'],
   ['scraper', 'scraping', 'scrape', 'browser', 'stealth', 'residential'],
+  ['binding', 'bound', 'allowlist', 'allowed', 'scope', 'scoped', 'narrow', 'narrowing', 'host', 'hosts', 'wildcard', 'redirect', 'hop'],
+  ['datastore', 'collection', 'collections', 'record', 'records', 'row', 'rows', 'jsonb', 'schemaless', 'flexible'],
+  ['actor', 'actors', 'principal', 'who', 'owner', 'audit', 'ledger', 'attributable', 'expiry', 'expire', 'ttl', 'lifetime'],
+  ['house', 'home', 'lights', 'light', 'heating', 'thermostat', 'sensor', 'sensors', 'room', 'rooms', 'area', 'areas', 'entity', 'entities', 'automation', 'dryrun'],
+  ['watchlist', 'watch', 'watched', 'alarm', 'alarms', 'alert', 'alerts', 'changed', 'change', 'moved', 'diff', 'snapshot', 'threshold', 'thresholds', 'insight', 'insights'],
+  ['lens', 'lenses', 'view', 'views', 'perspective', 'saved', 'filter', 'filters', 'professional', 'personal'],
+  ['broker', 'bridge', 'centrality', 'cluster', 'community', 'louvain', 'degree', 'neighbour', 'neighbours', 'influence'],
 ];
 
 // Every term in a group expands to every other term in that group.

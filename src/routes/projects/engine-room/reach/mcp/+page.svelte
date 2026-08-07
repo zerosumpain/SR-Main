@@ -13,7 +13,7 @@
 
   // Provenance for every hand-written string on this page, so nothing can drift into
   // invention. Captions are compressions of these constants and add no figure or claim:
-  //   · instrument 1 takeaway  → lib/guardrails.ts RAILS('destructive').scar
+  //   · instrument 1 takeaway  → lib/guardrails.ts RAILS('destructive').note
   //   · instrument 3 reading   → lib/tools.ts GATEWAY.problem + .fix + .evidence
   //   · instrument 3 takeaway  → lib/tools.ts GATEWAY.lesson
   //   · readout lines below    → lib/tools.ts MCP_FACTS[].why
@@ -55,7 +55,7 @@
     title="Four ways in, one check"
     tone={TONE}
     reading="Pick who is calling, what kind of call it is, and whether anyone is there to answer."
-    takeaway="Changing the caller never moves the verdict. It once did — the check lived inside one caller the live route no longer used, and looked healthy for weeks.">
+    takeaway="Changing the caller never moves the verdict, because the gate sits at the boundary every route must pass rather than inside any one of them — which is the only placement that a new caller cannot arrive without.">
     <CallGate />
   </Instrument>
 

@@ -71,7 +71,7 @@ export const CHANNELS: Channel[] = [
   {
     id: 'conversation', label: 'Conversation', author: 'A thread with the assistant, re-read as it grows',
     arrival: 'derived', grade: 'F', cost: 'one call per turn early, thinning out later',
-    why: 'The newest door, and the grading table has never been given an entry for it — so it scores neutrally rather than badly. That is the correct default and it is also a gap.',
+    why: 'The newest door, and one the grading table has no entry for — so it contributes the neutral midpoint, neither helping nor hurting. An unfamiliar source is an unassessed one, not a bad one.',
   },
 ];
 
@@ -136,14 +136,14 @@ export const HALVES = [
     what: 'What the conversation was about: entities, relationships and dates, read by a model.',
     cost: 'one model call per thread',
     confidence: 'a reading, not a record',
-    why: 'Only as good as its input, and raw mail is terrible input — a five-message thread carries the same paragraph five times inside nested quoting. The body is cut at the first quote boundary so only new text survives.',
+    why: 'Only as good as its input, and a five-message thread carries the same paragraph five times inside nested quoting. The body is cut at the first quote boundary, so what reaches the model is what was actually said this time.',
   },
 ] as const;
 
-export const QUOTE_TRAP = {
-  title: 'Re-reading a quote chain inflates the evidence',
+export const NEW_TEXT_ONLY = {
+  title: 'Only the new text counts',
   body:
-    'A twelve-deep reply chain fed in whole looks like twelve independent assertions of the same fact. Corroboration is the heaviest term in the confidence score, so the effect is not a bigger bill — it is a graph that believes one observation twelve times.',
+    'Each message is cut at the first quote boundary, so a twelve-deep reply chain contributes twelve messages and one copy of each paragraph. Corroboration is the heaviest term in the confidence score, so this is what keeps the graph counting one observation once rather than twelve times.',
 } as const;
 
 // ---------------------------------------------------------------------------
