@@ -8,7 +8,7 @@
 
 export const B = '/projects/engine-room';
 
-export type PartId = 'turn' | 'memory' | 'reach' | 'change';
+export type PartId = 'turn' | 'memory' | 'reach' | 'change' | 'ground';
 
 export interface Leaf {
   /** Path segment under the part. */
@@ -59,13 +59,17 @@ export const PARTS: Part[] = [
     no: 'II',
     name: 'Memory',
     strap: 'What it knows',
-    lede: 'Documents, entities and a graph — and the difference between storing something and being able to find it.',
+    lede: 'Eight doors in, documents, entities and a graph — and the difference between storing something and being able to believe it.',
     tone: 'var(--accent)',
     leaves: [
+      { slug: 'channels', label: 'Where it all comes from', instrument: 'Compare eight doors on author, arrival and cost',
+        blurb: 'Eight channels feed one graph, and they are not peers' },
       { slug: 'retrieval', label: 'Finding things', instrument: 'Watch a document become searchable chunks',
         blurb: 'Two deliberately separate indexes, and why not one' },
       { slug: 'entities', label: 'Is this the same person?', instrument: 'Toggle evidence, watch confidence cross the bar',
         blurb: 'Ten signals, one threshold, and what happens above it' },
+      { slug: 'trust', label: 'Deciding what to believe', instrument: 'Grade a claim on two axes and watch the score assemble',
+        blurb: 'Four components that must add up to the number shown' },
       { slug: 'graph', label: 'How things connect', instrument: 'Exact against sampled ranking, plotted',
         blurb: 'Why an exact answer was cached rather than approximated' },
       { slug: 'research', label: 'Reading the web', instrument: 'Same sources, two ways of composing them',
@@ -77,13 +81,19 @@ export const PARTS: Part[] = [
     no: 'III',
     name: 'Reach',
     strap: 'What it can touch',
-    lede: 'Mail, files, the house, the calendar. Every capability costs context before it does anything at all.',
+    lede: 'Mail, files, decks, the house, the body. Every capability costs context before it does anything at all.',
     tone: 'var(--success)',
     leaves: [
       { slug: 'tools', label: 'The cost of being able', instrument: 'Spend the tool budget 155 ways or 21',
         blurb: 'A catalogue too big to send, and the dispatcher that fixes it' },
       { slug: 'mcp', label: 'One doorway', instrument: 'Send a call through the gate and try to break it',
         blurb: 'How outside tools connect, and what stops the dangerous ones' },
+      { slug: 'drive', label: 'The filing cabinet', instrument: 'Drop six kinds of file in and watch where each one goes',
+        blurb: 'What a photograph has to become before it is searchable' },
+      { slug: 'decks', label: 'Making the case', instrument: 'Pour words onto a fixed page until they fall off it',
+        blurb: 'A slide deck where overflow is cut, not scrolled' },
+      { slug: 'feeds', label: 'Reading from the outside', instrument: 'Stored status against what a probe just observed',
+        blurb: 'Why a connector that says it is fine usually is not' },
       { slug: 'workflows', label: 'Wiring it together', instrument: 'Three wirings, two of which silently lose data',
         blurb: 'Eighty-eight node types, and the join that eats a branch' },
     ],
@@ -104,6 +114,20 @@ export const PARTS: Part[] = [
         blurb: 'Six stages between an idea and production' },
       { slug: 'limits', label: 'What it cannot do', instrument: 'Every guardrail, plotted by whether it actually holds',
         blurb: 'The difference between a wall and a polite request' },
+    ],
+  },
+  {
+    id: 'ground',
+    no: 'V',
+    name: 'Ground',
+    strap: 'Where it actually runs',
+    lede: 'One codebase on two machines that can do different things, and four places a byte can end up. The unglamorous layer everything else assumes.',
+    tone: '#5a6b7a',
+    leaves: [
+      { slug: 'estate', label: 'Three places, one codebase', instrument: 'Pick a machine, see which subsystems wake up on it',
+        blurb: 'What a process may do is decided by where it woke up' },
+      { slug: 'storage', label: 'Where the bytes live', instrument: 'Break something and see what actually recovers it',
+        blurb: 'Four stores, and the one failure no backup survives' },
     ],
   },
 ];

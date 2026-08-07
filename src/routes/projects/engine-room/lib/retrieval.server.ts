@@ -23,9 +23,26 @@ import { PHASES, FORBIDDEN, CANDIDATES, BUILDER_FACTS } from './building';
 import { PIPELINE, SAFETY, RISK_PATHS } from './shipping';
 import { RAILS, PRINCIPLE, FAILURE_MODES } from './guardrails';
 
+import { CHANNELS, SWEEP, HALVES, QUOTE_TRAP, DECAY, DECAY_NOTE, CHANNEL_LESSON, UNGRADED, CADENCE } from './channels';
+import {
+  WEIGHTS, NEUTRAL, CORROBORATION_K, HALF_LIFE_DAYS, DECAY_FLOOR, UNASSESSED, BANDS as TRUST_BANDS,
+  GRADE_LABEL, CREDIBILITY_LABEL, NEUTRAL_NOTE, SATURATION_NOTE, DECAY_NOTE as TRUST_DECAY, BEFORE,
+} from './trust';
+import { FILE_KINDS, INDEX, HASH_GATE, VIRTUAL_FOLDERS, POLICY_RULES, DRIVE_FACTS, DRIVE_LESSON } from './drive';
+import { STAGE, COUNTS, REGISTERS, OVERFLOW, CONSUMERS, REGISTRY_NOTE, COMPOSE_PATHS, FALLBACK_NOTE, SHARING, DECK_LESSON } from './decks';
+import {
+  FEEDS, ANALYTICS_COUNT, ANALYTICS_NOTE, SCALE, READINGS, SCALE_TRAP, PROBES, HONESTY,
+  CHEAP_BANNER, CATALOGUE as API_CATALOGUE, CATALOGUE_RULES, FEEDS_LESSON,
+} from './feeds';
+import {
+  MACHINES, HOUSE_REASONS, HOUSE_COST, SUBSYSTEMS, ONE_REGISTER, FLAG_NOT_HOSTNAME, ESTATE_LESSON,
+  STORES, BIG_INDEX, FAILURES, ESCROW_NOTE,
+} from './ground';
+
 export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
-  | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails';
+  | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails'
+  | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground';
 
 export interface Chunk {
   id: string;
@@ -191,6 +208,95 @@ function buildChunks(): Chunk[] {
     add({ id: `rail-${r.id}`, sourceKey: `rail-${r.id}`, sourceType: 'guardrails', title: `${r.rail} (${r.kind})`, url: `${B}/change/limits`,
       text: `Risk: ${r.risk}. ${r.detail}${r.scar ? ` HOW IT WAS GOT WRONG: ${r.scar}` : ''}` });
 
+  // ---- channels: where the graph's knowledge comes from ----
+  for (const c of CHANNELS)
+    add({ id: `chan-${c.id}`, sourceKey: 'channels', sourceType: 'channels',
+      title: `Intel channel: ${c.label} (graded ${c.grade})`, url: `${B}/memory/channels`,
+      text: `Words authored by: ${c.author}. It is ${c.arrival} — ${c.arrival === 'pushed' ? 'it arrives on its own' : c.arrival === 'pulled' ? 'something has to fetch it on a schedule' : 'it is a by-product of work done for another reason'}. Cost per item: ${c.cost}. Why it is graded ${c.grade}: ${c.why}` });
+  add({ id: 'chan-lesson', sourceKey: 'channels', sourceType: 'channels', title: CHANNEL_LESSON.title, url: `${B}/memory/channels`,
+    text: `${CHANNEL_LESSON.body} There are ${CHANNELS.length} channels feeding one knowledge graph: ${CHANNELS.map((c) => c.label.toLowerCase()).join(', ')}. All of them write into the same tables and are read by the same queries; what a channel gets to change is its grade, not its treatment.` });
+  add({ id: 'chan-ungraded', sourceKey: 'channels', sourceType: 'channels', title: UNGRADED.title, url: `${B}/memory/channels`,
+    text: UNGRADED.body });
+  add({ id: 'chan-mail', sourceKey: 'mail-sweep', sourceType: 'channels', title: 'The mail sweep: a free half and a paid half', url: `${B}/memory/channels`,
+    text: `The rolling window is ${SWEEP.windowDays} days — twelve weeks — of everything except bin and spam. ${HALVES.map((h) => `${h.label} (${h.cost}, ${h.confidence}): ${h.what} ${h.why}`).join(' ')} One run may list up to ${SWEEP.maxThreads.toLocaleString('en-GB')} threads, in pages of ${SWEEP.pageSize}, because listing is only ids and headers. It will pay for at most ${SWEEP.extractBudget} body extractions, newest first, so a first sweep of a large mailbox spreads over several nights instead of arriving as one enormous bill. A thread costs again only when a new message actually lands in it, because the content is hashed.` });
+  add({ id: 'chan-quote', sourceKey: 'mail-sweep', sourceType: 'channels', title: QUOTE_TRAP.title, url: `${B}/memory/channels`,
+    text: `${QUOTE_TRAP.body} The body is therefore cut at the first quote boundary and only new text survives, and a thread keeps at most ${SWEEP.maxMessages} messages. Beyond ${SWEEP.maxParticipants} participants a thread is treated as a broadcast rather than a conversation and no correspondence edges are drawn.` });
+  add({ id: 'chan-decay', sourceKey: 'staleness', sourceType: 'channels', title: 'Staleness: evidence fades, and only halfway', url: `${B}/memory/channels`,
+    text: `Edge weight decays exponentially with a ${DECAY.halfLifeDays}-day half-life to a floor of ${DECAY.floor}, never a cliff at the window edge — a cliff makes the graph lurch every night as threads age out. ${DECAY_NOTE.body} Only ${DECAY.pull * 100} per cent of a weight is exposed to age.` });
+  add({ id: 'chan-cadence', sourceKey: 'chat-extraction', sourceType: 'channels', title: 'How often a conversation is re-read', url: `${B}/memory/channels`,
+    text: `A thread is extracted into the graph as it grows. The old cadence — the second turn, then every fourth — was a near-total loss, because the median thread runs ${CADENCE.medianTurns} assistant turns, shorter than the gap: most threads extracted exactly once and everything said afterwards never reached the graph. It now extracts on every one of the first ${CADENCE.denseUntil} turns, every ${CADENCE.midEvery} up to turn ${CADENCE.midUntil}, and every ${CADENCE.lateEvery} after that — so a ${CADENCE.marathon}-turn marathon costs about ${CADENCE.newCost} extractions rather than ${CADENCE.oldCost}.` });
+
+  // ---- trust: ratifying a knowledge artefact ----
+  add({ id: 'trust-model', sourceKey: 'trust', sourceType: 'trust', title: 'The explainable confidence score', url: `${B}/memory/trust`,
+    text: `Every claim in the knowledge graph carries a score from 0 to 1, and the score is additive by construction so its parts sum to it exactly — reliability ${WEIGHTS.reliability}, credibility ${WEIGHTS.credibility}, corroboration ${WEIGHTS.corroboration}, human confirmation ${WEIGHTS.confirmation}, less what age took off. That is what lets a card show "0.62 = 0.21 + 0.11 + 0.18 + 0.20 − 0.08" instead of an unexplained 62 per cent. A number you cannot decompose is an assertion wearing a decimal point.` });
+  add({ id: 'trust-axes', sourceKey: 'trust', sourceType: 'trust', title: 'Two independent axes: Admiralty grading', url: `${B}/memory/trust`,
+    text: `The grading is Admiralty-style (NATO STANAG 2511): source reliability A to F, and information credibility 1 to 6, kept independent because "who told you" and "does the claim hold up" are different questions. Reliability: ${Object.entries(GRADE_LABEL).map(([g, l]) => `${g} ${l}`).join('; ')}. Credibility: ${Object.entries(CREDIBILITY_LABEL).map(([c, l]) => `${c} ${l}`).join('; ')}.` });
+  add({ id: 'trust-neutral', sourceKey: 'trust', sourceType: 'trust', title: NEUTRAL_NOTE.title, url: `${B}/memory/trust`,
+    text: `${NEUTRAL_NOTE.body} An unassessed axis contributes ${NEUTRAL}, the midpoint. An entity nothing is known about therefore scores exactly ${UNASSESSED.toFixed(2)}, and the floor of the "low" band sits just above that so "we have not established this" is never labelled low confidence.` });
+  add({ id: 'trust-corr', sourceKey: 'trust', sourceType: 'trust', title: SATURATION_NOTE.title, url: `${B}/memory/trust`,
+    text: `${SATURATION_NOTE.body} The curve is n / (n + ${CORROBORATION_K}): strictly increasing, asymptotic to one, so two independent notes buys half the axis and nothing buys all of it.` });
+  add({ id: 'trust-decay', sourceKey: 'trust', sourceType: 'trust', title: TRUST_DECAY.title, url: `${B}/memory/trust`,
+    text: `${TRUST_DECAY.body} The half-life is ${HALF_LIFE_DAYS} days with a floor of ${DECAY_FLOOR}, and the decay multiplies only the evidence-derived components — a human confirmation is held out of it entirely.` });
+  add({ id: 'trust-before', sourceKey: 'trust', sourceType: 'trust', title: BEFORE.title, url: `${B}/memory/trust`,
+    text: `${BEFORE.body} Bands: ${TRUST_BANDS.map((b) => `${b.label} from ${b.from.toFixed(2)} — ${b.what}`).join(' ')}` });
+
+  // ---- drive ----
+  for (const k of FILE_KINDS)
+    add({ id: `drive-${k.id}`, sourceKey: 'drive-kinds', sourceType: 'drive',
+      title: `What happens to ${k.label.toLowerCase()} in the document store`, url: `${B}/reach/drive`,
+      text: `For example ${k.example}. The path: ${k.path.join(' → ')}. ${k.note}` });
+  add({ id: 'drive-index', sourceKey: 'drive', sourceType: 'drive', title: 'One index over every kind of file', url: `${B}/reach/drive`,
+    text: `The always-on index is ${INDEX.globalDims} dimensions over every file; a collection you have chosen to talk to is built with a ${INDEX.collectionDims}-dimension embedding. ${INDEX.topK} passages are returned by default and anything below a similarity of ${INDEX.minSimilarity} is dropped rather than padding the list out; a passage carries at most ${INDEX.maxPassageChars} characters into a prompt. At most ${INDEX.maxIndexableMb} MB of a file is ever read into memory, because the always-on machine is memory-bound and one large file read whole would take the service down. ${DRIVE_LESSON.body}` });
+  add({ id: 'drive-hash', sourceKey: 'drive', sourceType: 'drive', title: HASH_GATE.title, url: `${B}/reach/drive`, text: HASH_GATE.body });
+  add({ id: 'drive-folders', sourceKey: 'drive-policy', sourceType: 'drive', title: VIRTUAL_FOLDERS.title, url: `${B}/reach/drive`,
+    text: `${VIRTUAL_FOLDERS.body} ${POLICY_RULES.map((r) => `${r.setting}: ${r.rule} — ${r.why}`).join(' ')}` });
+  add({ id: 'drive-facts', sourceKey: 'drive', sourceType: 'drive', title: 'What the document store provides', url: `${B}/reach/drive`,
+    text: DRIVE_FACTS.map((f) => `${f.k} (${f.v}): ${f.why}`).join(' ') });
+
+  // ---- decks ----
+  add({ id: 'decks-stage', sourceKey: 'decks', sourceType: 'decks', title: OVERFLOW.title, url: `${B}/reach/decks`,
+    text: `A slide is a fixed ${STAGE.w} by ${STAGE.h} canvas. ${OVERFLOW.body} Capacities the composer is given: ${REGISTERS.map((r) => `${r.label} about ${r.capacity} words — ${r.what} ${r.fix}`).join(' ')}` });
+  add({ id: 'decks-registry', sourceKey: 'decks', sourceType: 'decks', title: 'One block registry, four consumers', url: `${B}/reach/decks`,
+    text: `${CONSUMERS.map((c) => `${c.label}: ${c.what}`).join(' ')} ${REGISTRY_NOTE.body} There are ${COUNTS.layouts} page layouts, ${COUNTS.blocks} block types, ${COUNTS.proseStyles} prose registers and ${COUNTS.quoteStyles} quote registers, and ${COUNTS.effects} atmospheres and wipes (${COUNTS.backgroundEffects} backgrounds, ${COUNTS.transitionEffects} transitions).` });
+  add({ id: 'decks-fallback', sourceKey: 'decks', sourceType: 'decks', title: 'The art director and its understudy', url: `${B}/reach/decks`,
+    text: `${COMPOSE_PATHS.map((p) => `${p.label} (${p.when}): ${p.what}`).join(' ')} ${FALLBACK_NOTE.body}` });
+  add({ id: 'decks-share', sourceKey: 'decks', sourceType: 'decks', title: 'Sharing a deck', url: `${B}/reach/decks`,
+    text: `${SHARING.map((s) => `${s.k} (${s.v}): ${s.why}`).join(' ')} ${DECK_LESSON.body}` });
+
+  // ---- feeds ----
+  for (const f of FEEDS)
+    add({ id: `feed-${f.id}`, sourceKey: 'feeds', sourceType: 'feeds', title: `External feed: ${f.label} (${f.arrival})`, url: `${B}/reach/feeds`,
+      text: `Authorisation: ${f.auth}. Cadence: ${f.cadence}. What it carries: ${f.carries}. How it fails: ${f.fails}` });
+  add({ id: 'feed-honesty', sourceKey: 'connector-health', sourceType: 'feeds', title: HONESTY.title, url: `${B}/reach/feeds`,
+    text: `${HONESTY.body} Each probe does the cheapest thing that constitutes real evidence: ${PROBES.map((p) => `${p.label} — stored says "${p.stored}", a probe observes "${p.observed}" (${p.evidence})`).join('; ')}. Where a live probe would cost money the probe says it did not check rather than implying it verified something.` });
+  add({ id: 'feed-banner', sourceKey: 'connector-health', sourceType: 'feeds', title: CHEAP_BANNER.title, url: `${B}/reach/feeds`, text: CHEAP_BANNER.body });
+  add({ id: 'feed-scale', sourceKey: 'units', sourceType: 'feeds', title: 'Every measurement is an integer of hundredths', url: `${B}/reach/feeds`,
+    text: `Health measurements are stored multiplied by ${SCALE} so nothing is a float and nothing rounds on the way in; the cost is that the unit lives in a convention the type system cannot see. ${READINGS.map((r) => `${r.label}: the column holds ${r.stored}, which means ${r.real}; forget and you read ${r.wrong}`).join('. ')}. ${SCALE_TRAP.body}` });
+  add({ id: 'feed-analytics', sourceKey: 'feeds', sourceType: 'feeds', title: ANALYTICS_NOTE.title, url: `${B}/reach/feeds`,
+    text: `${ANALYTICS_NOTE.body} There are ${ANALYTICS_COUNT} of them.` });
+  add({ id: 'feed-catalogue', sourceKey: 'api-catalogue', sourceType: 'feeds', title: 'Calling a data API nobody wrote code for', url: `${B}/reach/feeds`,
+    text: `${API_CATALOGUE.seeded} public data sources are catalogued at boot and the model can search, call and register more. ${CATALOGUE_RULES.map((r) => `${r.k}: ${r.why}`).join(' ')} A call times out after ${API_CATALOGUE.timeoutSec} seconds and at most ${API_CATALOGUE.maxResponseKb} KB of a response is read, because a large body arrives as prompt tokens. ${FEEDS_LESSON.body}` });
+
+  // ---- ground: the estate ----
+  for (const m of MACHINES)
+    add({ id: `machine-${m.id}`, sourceKey: 'estate', sourceType: 'ground', title: `Where it runs: ${m.label}`, url: `${B}/ground/estate`,
+      text: `${m.strap} Why it exists: ${m.reason} What can reach it: ${m.exposure}` });
+  add({ id: 'estate-gates', sourceKey: 'estate', sourceType: 'ground', title: 'One codebase, and the machine decides', url: `${B}/ground/estate`,
+    text: `${ESTATE_LESSON.body} ${SUBSYSTEMS.map((s) => `${s.label} runs on ${s.runs.join(' and ')} (${s.gate} gate): ${s.why}`).join(' ')}` });
+  add({ id: 'estate-house', sourceKey: 'estate', sourceType: 'ground', title: 'Why anything runs on a machine at home', url: `${B}/ground/estate`,
+    text: `${HOUSE_REASONS.map((r) => `${r.k}: ${r.why}`).join(' ')} ${HOUSE_COST.body}` });
+  add({ id: 'estate-register', sourceKey: 'estate', sourceType: 'ground', title: ONE_REGISTER.title, url: `${B}/ground/estate`,
+    text: `${ONE_REGISTER.body} ${FLAG_NOT_HOSTNAME.body}` });
+
+  // ---- ground: storage ----
+  for (const s of STORES)
+    add({ id: `store-${s.id}`, sourceKey: 'storage', sourceType: 'ground', title: `Where the bytes live: ${s.label}`, url: `${B}/ground/storage`,
+      text: `Holds: ${s.holds} Why here: ${s.why} What losing it costs: ${s.loss}` });
+  add({ id: 'store-index', sourceKey: 'storage', sourceType: 'ground', title: BIG_INDEX.title, url: `${B}/ground/storage`, text: BIG_INDEX.body });
+  add({ id: 'store-failures', sourceKey: 'recovery', sourceType: 'ground', title: 'What survives what', url: `${B}/ground/storage`,
+    text: FAILURES.map((f) => `${f.label} — recovered by ${f.recovers.join(', then ')}. ${f.cost}`).join(' ') });
+  add({ id: 'store-escrow', sourceKey: 'recovery', sourceType: 'ground', title: ESCROW_NOTE.title, url: `${B}/ground/storage`, text: ESCROW_NOTE.body });
+
   return out;
 }
 
@@ -233,6 +339,26 @@ const GROUPS: string[][] = [
   ['research', 'researching', 'facts', 'fact', 'gaps', 'gap', 'desk', 'report'],
   ['size', 'big', 'large', 'scale', 'how many', 'count', 'lines', 'number'],
   ['why', 'reason', 'because', 'decision', 'chose', 'trade', 'tradeoff'],
+  // Added with the channels/trust/drive/decks/feeds/ground pages. Same rule as above: every
+  // word a reader is likely to type needs its own entry, because expansion is per-term.
+  ['channel', 'channels', 'ingest', 'ingestion', 'feeds', 'feed', 'inbound', 'arrives', 'arrive', 'door', 'doors'],
+  ['mail', 'email', 'emails', 'inbox', 'mailbox', 'thread', 'threads', 'gmail', 'correspondence', 'correspondent'],
+  ['whatsapp', 'phone', 'mobile', 'message', 'messaging', 'capture', 'note', 'notes', 'dictate'],
+  ['trust', 'trusted', 'believe', 'belief', 'confidence', 'confident', 'credible', 'credibility', 'reliability', 'reliable', 'grade', 'graded', 'grading', 'admiralty', 'ratify', 'ratified', 'verify', 'verified', 'unverified', 'corroboration', 'corroborated', 'score', 'scoring'],
+  ['stale', 'staleness', 'decay', 'decays', 'age', 'ageing', 'aging', 'old', 'older', 'recent', 'recency', 'freshness', 'fresh', 'halflife'],
+  ['drive', 'file', 'files', 'document', 'documents', 'upload', 'uploads', 'folder', 'folders', 'attachment', 'attachments', 'webdav', 'store'],
+  ['photo', 'photograph', 'image', 'images', 'picture', 'pictures', 'audio', 'voice', 'transcript', 'transcription', 'caption', 'ocr', 'multimodal', 'modality', 'video'],
+  ['deck', 'decks', 'slide', 'slides', 'presentation', 'presentations', 'talk', 'layout', 'layouts', 'block', 'blocks', 'compose', 'composer'],
+  ['share', 'shared', 'sharing', 'link', 'links', 'token', 'tokens', 'public', 'private', 'revoke', 'expire'],
+  ['health', 'fitness', 'body', 'wearable', 'strap', 'watch', 'sleep', 'strain', 'recovery', 'steps', 'heart', 'hrv', 'biometric', 'biometrics'],
+  ['connector', 'connectors', 'integration', 'integrations', 'probe', 'probes', 'status', 'stale', 'broken', 'connected', 'disconnected'],
+  ['unit', 'units', 'scaling', 'scaled', 'hundredths', 'rounding', 'conversion', 'metric', 'metrics', 'measurement', 'measurements'],
+  ['api', 'apis', 'catalogue', 'catalog', 'register', 'registry', 'endpoint', 'endpoints', 'external', 'outside', 'call', 'calls'],
+  ['host', 'hosts', 'hosting', 'machine', 'machines', 'server', 'servers', 'infrastructure', 'estate', 'topology', 'architecture', 'runs', 'running', 'origin', 'vps', 'home', 'cloud', 'datacentre', 'datacenter'],
+  ['storage', 'stored', 'bytes', 'disk', 'blob', 'bucket', 'object', 'azure', 'filesystem', 'volume'],
+  ['backup', 'backups', 'restore', 'recovery', 'recover', 'snapshot', 'snapshots', 'escrow', 'disaster', 'lost', 'lose', 'losing', 'offsite'],
+  ['tunnel', 'edge', 'network', 'mesh', 'private', 'port', 'ports', 'firewall', 'exposed', 'inbound', 'outbound'],
+  ['scraper', 'scraping', 'scrape', 'browser', 'stealth', 'residential'],
 ];
 
 // Every term in a group expands to every other term in that group.

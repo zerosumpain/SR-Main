@@ -25,4 +25,10 @@ export const REFERENCES: Reference[] = [
   { name: 'restic', url: 'https://restic.readthedocs.io/', what: 'encrypted, deduplicated off-site backup' },
   { name: 'd3-force', url: 'https://d3js.org/d3-force', what: 'the force simulation that lays out the knowledge graph in 2-D and 3-D' },
   { name: 'OWASP SSRF guidance', url: 'https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html', what: 'the class of attack the outbound-fetch guard defends against' },
+  { name: 'The Admiralty System', url: 'https://en.wikipedia.org/wiki/Admiralty_code', what: 'the two-axis source-and-claim grading (NATO STANAG 2511) the confidence score is built on' },
+  { name: 'OAuth 2.0 (RFC 6749)', url: 'https://datatracker.ietf.org/doc/html/rfc6749', what: 'delegated authorisation — how every pulled feed is granted, and how it lapses' },
+  { name: 'WireGuard', url: 'https://www.wireguard.com/', what: 'the encrypted mesh the two machines reach each other over, with nothing exposed publicly' },
+  { name: 'Okapi BM25 · Robertson & Zaragoza', url: 'https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf', what: 'why a saturating term-frequency curve beats a linear one — the same argument the corroboration axis makes' },
+  { name: 'Sleep Regularity Index · Phillips 2017', url: 'https://doi.org/10.1038/s41598-017-03171-4', what: 'one of the nine published analytics over the health feeds, cited on the page that computes it' },
+  { name: 'Acute:chronic workload · Gabbett 2016', url: 'https://doi.org/10.1136/bjsports-2015-095788', what: 'the training-load ratio, and the source of its thresholds' },
 ];

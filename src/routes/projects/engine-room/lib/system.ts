@@ -52,11 +52,11 @@ export interface MapNode {
 
 export const NODES: MapNode[] = [
   // ---- surfaces ----
-  { id: 'site', band: 'surface', col: 0, label: 'The site', what: 'Blog, projects and field studies — the public face. 144 page routes.' },
+  { id: 'site', band: 'surface', col: 0, label: 'The site', what: 'Blog, projects, field studies and decks — the public face. 144 page routes.' },
   { id: 'chat', band: 'surface', col: 1, label: 'Chat', what: 'The assistant hub. Threads, tools, costs per turn.', section: 'turn/stream', key: true },
   { id: 'canvas', band: 'surface', col: 2, label: 'Canvas', what: 'The visual workflow builder — drag nodes, wire them, schedule them.', section: 'reach/workflows' },
-  { id: 'drive', band: 'surface', col: 3, label: 'Drive', what: 'Documents, with retrieval over them and a network-drive mount.', section: 'memory' },
-  { id: 'intel', band: 'surface', col: 4, label: 'Intel', what: 'The knowledge graph — people, organisations, threads and how they connect.', section: 'memory' },
+  { id: 'drive', band: 'surface', col: 3, label: 'Drive', what: 'Documents, with retrieval over them and a network-drive mount.', section: 'reach/drive' },
+  { id: 'intel', band: 'surface', col: 4, label: 'Intel', what: 'The knowledge graph — people, organisations, threads and how they connect.', section: 'memory/channels' },
   { id: 'admin', band: 'surface', col: 5, label: 'Admin', what: 'Operations: models, connectors, secrets, health, the improvement log.', section: 'change/limits' },
   { id: 'wa', band: 'surface', col: 6, label: 'Messaging', what: 'The same assistant, reachable from a phone with no app installed.', section: 'turn/stream' },
   { id: 'mcp', band: 'surface', col: 7, label: 'MCP', what: 'An open protocol endpoint so an external assistant can drive this system directly.', section: 'reach/tools', key: true },
@@ -74,25 +74,25 @@ export const NODES: MapNode[] = [
   { id: 'toolkit', band: 'reason', col: 6, span: 2, label: 'Toolkit', what: 'The tools the model may call — generated, not hand-written, so the inventory cannot drift.', section: 'reach/tools', key: true },
 
   // ---- memory ----
-  { id: 'pg', band: 'memory', col: 0, span: 2, label: 'Postgres', what: '117 tables. One database for everything — no second store to keep in sync.', section: 'memory', key: true },
-  { id: 'datastore', band: 'memory', col: 2, label: 'Datastore', what: 'Schema-free collections for things not worth a migration, with row-level permissions and expiry.', section: 'memory' },
-  { id: 'vectors', band: 'memory', col: 3, span: 2, label: 'Vector index', what: 'Embeddings over documents, so retrieval works on meaning rather than exact words.', section: 'memory' },
-  { id: 'graph', band: 'memory', col: 5, span: 2, label: 'Knowledge graph', what: 'Entities and relationships, resolved and merged automatically overnight.', section: 'memory', key: true },
-  { id: 'files', band: 'memory', col: 7, label: 'Files', what: 'Documents on disk and in object storage, addressable by the assistant.', section: 'memory' },
+  { id: 'pg', band: 'memory', col: 0, span: 2, label: 'Postgres', what: '117 tables. One database for everything — no second store to keep in sync.', section: 'ground/storage', key: true },
+  { id: 'datastore', band: 'memory', col: 2, label: 'Datastore', what: 'Schema-free collections for things not worth a migration, with row-level permissions and expiry.', section: 'memory/graph' },
+  { id: 'vectors', band: 'memory', col: 3, span: 2, label: 'Vector index', what: 'Embeddings over documents, so retrieval works on meaning rather than exact words.', section: 'memory/retrieval' },
+  { id: 'graph', band: 'memory', col: 5, span: 2, label: 'Knowledge graph', what: 'Entities and relationships, resolved and merged automatically overnight — every claim scored and decomposable.', section: 'memory/trust', key: true },
+  { id: 'files', band: 'memory', col: 7, label: 'Files', what: 'Documents on disk and in object storage, addressable by the assistant.', section: 'ground/storage' },
 
   // ---- world ----
   { id: 'mail', band: 'world', col: 0, label: 'Mail', what: 'Watched inboxes that can start a workflow, and an assistant that can reply.', section: 'reach/workflows' },
   { id: 'cal', band: 'world', col: 1, label: 'Calendar', what: 'Read and write, across accounts.', section: 'reach/workflows' },
   { id: 'home', band: 'world', col: 2, label: 'Home', what: 'Home automation, browsable as areas and devices rather than a flat entity list.', section: 'reach/workflows' },
-  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics, normalised — after learning the hard way that stored scaling lies.', section: 'reach/workflows' },
+  { id: 'health', band: 'world', col: 3, label: 'Health', what: 'Wearable metrics, normalised — after learning the hard way that stored scaling lies.', section: 'reach/feeds' },
   { id: 'web', band: 'world', col: 4, span: 2, label: 'The web', what: 'Search, extraction, and a stealth browser for pages that will not be read any other way.', section: 'memory/research' },
   { id: 'git', band: 'world', col: 6, span: 2, label: 'Code host', what: 'Where the system opens pull requests against itself — as drafts, never merged by machine.', section: 'change/shipping', key: true },
 
   // ---- ground ----
-  { id: 'origin', band: 'ground', col: 0, span: 2, label: 'Origin', what: 'A small server running the built application. No inbound port is open on it.', section: 'change/shipping' },
-  { id: 'tunnel', band: 'ground', col: 2, span: 2, label: 'Tunnel + edge', what: 'Outbound-only tunnel to the edge, which caches, and is purged when a project goes private.', section: 'change/shipping' },
+  { id: 'origin', band: 'ground', col: 0, span: 2, label: 'Origin', what: 'A small server running the built application. No inbound port is open on it.', section: 'ground/estate' },
+  { id: 'tunnel', band: 'ground', col: 2, span: 2, label: 'Tunnel + edge', what: 'Outbound-only tunnel to the edge, which caches, and is purged when a project goes private.', section: 'ground/estate' },
   { id: 'ci', band: 'ground', col: 4, span: 2, label: 'The pipeline', what: 'The only route to production. Gate first, deploy second, and the deploy cannot run if the gate is red.', section: 'change/shipping', key: true },
-  { id: 'backup', band: 'ground', col: 6, span: 2, label: 'Backups', what: 'Encrypted, deduplicated, off-site, nightly — plus a separate escrow for the things that cannot be regenerated.', section: 'change/shipping' },
+  { id: 'backup', band: 'ground', col: 6, span: 2, label: 'Backups', what: 'Encrypted, deduplicated, off-site, nightly — plus a separate escrow for the things that cannot be regenerated.', section: 'ground/storage' },
 ];
 
 /** Directed flows worth drawing. Kept sparse on purpose — a map with every edge drawn is a hairball. */
@@ -150,7 +150,12 @@ export const CLAIMS: Array<{ n: string; title: string; body: string; eli5: strin
     eli5: 'It fixes itself overnight — but only small, safe things. Anything bigger has to be approved by a human.',
   },
   {
-    n: '04', title: 'Every guardrail here is a scar', section: 'change/limits',
+    n: '04', title: 'Nothing it knows is a bare assertion', section: 'memory/trust',
+    body: 'Eight channels feed one graph, and every claim in it carries a score that comes apart into who said it, how well it holds up, how many independent sources assert it, whether a person has signed it off, and what age has taken off. A number you cannot decompose is an opinion with a decimal point.',
+    eli5: 'Everything it thinks it knows has a confidence rating — and the rating can always be broken down into the reasons behind it, so you can disagree with any one of them.',
+  },
+  {
+    n: '05', title: 'Every guardrail here is a scar', section: 'change/limits',
     body: 'The interesting parts of the security model are not the ones from a checklist. They are the ones added after something went wrong: an outbound filter that missed an address format, a status message that overwrote an answer, a deploy that replaced production configuration with a laptop’s.',
     eli5: 'Most of the safety features exist because something broke once. Each one has a story.',
   },
