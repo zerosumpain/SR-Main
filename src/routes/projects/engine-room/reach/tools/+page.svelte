@@ -106,7 +106,7 @@
   <LeafHead
     part="reach"
     title="The cost of being able"
-    line="Every tool a model may call is described to it in full — name, prose, schema — on every turn, before you type."
+    line="Every tool a model may call is described to it in full, on every turn, before you type."
     lineEli5="The AI is told about every button it can press, every time you message it. That list is not free." />
 
   <Instrument
@@ -114,7 +114,7 @@
     title="Send all 155, or send 21"
     tone={TONE}
     reading="The fill is to scale against the full catalogue. Flip it."
-    takeaway="Same 155 capabilities either way. One version bills for all of them on every message, including “hi”.">
+    takeaway="Same capabilities either way. One bills for all of them on every message, including “hi”.">
     <ManifestBudget />
   </Instrument>
 
@@ -145,7 +145,7 @@
     title="What each tier costs"
     tone={TONE}
     reading="Length is the count. The note is the cost per turn."
-    takeaway="The longest bar is the free one. Nothing is deleted — only deferred until something asks.">
+    takeaway="The longest bar is the free one. Nothing is deleted, only deferred.">
     <Bars items={TIER_BARS} tone={TONE} grouped={false} height={24} />
     <p class="gap"><b>{MANIFEST.invokeShare}% of dispatcher calls</b> go straight to invoke; browsing is rare.</p>
   </Instrument>

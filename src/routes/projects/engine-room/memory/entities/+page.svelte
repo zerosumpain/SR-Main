@@ -60,8 +60,8 @@
     kicker="The instrument"
     title="Toggle the evidence"
     tone={TONE}
-    reading="Pick one of four worked cases, then pull the evidence out of it."
-    takeaway="Merging two people who are not the same destroys information no re-run recovers. So the rules decide; a model only ever suggests a possible match.">
+    reading="Pick a worked case, then pull the evidence out of it."
+    takeaway="Merging two people who are not the same destroys information no re-run recovers. The rules decide; a model only suggests.">
     <EntityResolver />
   </Instrument>
 

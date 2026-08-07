@@ -132,8 +132,8 @@
       <span class="sr-what">{hoveredNode.what}</span>
       {#if hoveredNode.section}<span class="sr-go">click to open →</span>{/if}
     {:else}
-      <span class="sr-idle">Six bands. Everything above the line is a way in; everything below it is what actually
-        happens. Hover anything to see what it is and what it talks to.</span>
+      <!-- The legend above already says how to drive it; this line only names the axis. -->
+      <span class="sr-idle">Above the line, ways in. Below it, what actually happens.</span>
     {/if}
   </div>
 </div>
