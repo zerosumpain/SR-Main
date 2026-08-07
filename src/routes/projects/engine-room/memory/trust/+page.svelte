@@ -15,7 +15,7 @@
   import {
     GRADES, CREDIBILITIES, GRADE_LABEL, CREDIBILITY_LABEL, UNASSESSED, HALF_LIFE_DAYS,
     reliabilityFraction, credibilityFraction, corroborationFraction,
-    NEUTRAL_NOTE, SATURATION_NOTE, BEFORE, BANDS,
+    NEUTRAL_NOTE, SATURATION_NOTE, WHY_A_SCORE, BANDS,
   } from '../../lib/trust';
 
   const TONE = 'var(--accent)';
@@ -63,8 +63,8 @@
   </Instrument>
 
   <aside class="note">
-    <span class="n-kick">{BEFORE.title}</span>
-    <p>{BEFORE.body}</p>
+    <span class="n-kick">{WHY_A_SCORE.title}</span>
+    <p>{WHY_A_SCORE.body}</p>
   </aside>
 
   <Instrument

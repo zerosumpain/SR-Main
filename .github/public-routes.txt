@@ -147,11 +147,15 @@
 /projects/engine-room/memory/graph
 /projects/engine-room/memory/research
 /projects/engine-room/memory/retrieval
+/projects/engine-room/memory/store
 /projects/engine-room/memory/trust
+/projects/engine-room/memory/watch
 /projects/engine-room/reach
 /projects/engine-room/reach/decks
 /projects/engine-room/reach/drive
 /projects/engine-room/reach/feeds
+/projects/engine-room/reach/house
+/projects/engine-room/reach/keys
 /projects/engine-room/reach/mcp
 /projects/engine-room/reach/tools
 /projects/engine-room/reach/workflows

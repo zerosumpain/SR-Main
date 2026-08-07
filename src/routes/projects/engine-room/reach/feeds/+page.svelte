@@ -11,7 +11,7 @@
   import ProbeBoard from './components/ProbeBoard.svelte';
   import UnitTrap from './components/UnitTrap.svelte';
   import {
-    FEEDS, ANALYTICS_COUNT, SCALE_TRAP, HONESTY, CHEAP_BANNER,
+    FEEDS, ANALYTICS_COUNT, FIXED_POINT, HONESTY, CHEAP_BANNER,
     CATALOGUE, CATALOGUE_RULES,
   } from '../../lib/feeds';
 
@@ -73,7 +73,7 @@
     title="Every measurement is an integer of hundredths"
     tone={TONE}
     reading="Pick a measurement and read the column three ways."
-    takeaway={SCALE_TRAP.body}>
+    takeaway={FIXED_POINT.body}>
     <UnitTrap />
   </Instrument>
 

@@ -45,7 +45,7 @@ export const FILE_KINDS: FileKind[] = [
   {
     id: 'audio', label: 'A voice memo', example: 'a recorded thought', modality: 'audio',
     path: ['hash the bytes', 'transcribe it', 'chunk', 'embed', 'index'],
-    note: 'Best-effort. A failed transcription leaves the file findable by its name rather than failing the upload — but it is silently thinner than it looks.',
+    note: 'Best-effort by design: if the transcript does not come back, the file stays findable by name and the upload still succeeds. Nothing depends on the model being available.',
   },
   {
     id: 'video', label: 'A video', example: 'a screen recording', modality: 'refused',
@@ -55,7 +55,7 @@ export const FILE_KINDS: FileKind[] = [
   {
     id: 'huge', label: 'Anything very large', example: 'a 400 MB archive', modality: 'refused',
     path: ['size checked', 'refused before the bytes are read'],
-    note: 'The cap exists because the always-on machine at home is memory-bound and loading one file whole would take the whole service down with it.',
+    note: 'The size is checked before a single byte is read, so one large file can never claim the whole of a memory-bound machine.',
   },
 ];
 
@@ -143,5 +143,5 @@ export const DRIVE_FACTS = [
 export const DRIVE_LESSON = {
   title: 'Searchable is a per-modality claim',
   body:
-    'One index, one query, one set of permissions — but a photograph only reaches it because a model wrote a description of it first, and a voice memo only because another one transcribed it. The uniform surface is real. The uniform capability behind it is not, and the page says which files are thinner than they look.',
+    'One index, one query, one set of permissions — but a photograph reaches it because a model wrote a description of it first, and a voice memo because another one transcribed it. The uniform surface is real, and the page names what each kind of file had to become to earn it.',
 } as const;

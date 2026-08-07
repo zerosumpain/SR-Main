@@ -91,10 +91,10 @@ export const READINGS: Reading[] = [
   { id: 'strain', label: 'Daily strain', stored: 1_450, unit: 'a 0–21 score', real: '14.5', wrong: '1,450 on a scale that stops at 21' },
 ];
 
-export const SCALE_TRAP = {
-  title: 'A heuristic where a unit should be',
+export const FIXED_POINT = {
+  title: 'Integers, because a float is a rounding decision',
   body:
-    'Strain is scored out of 21, and a legacy path once wrote it multiplied by a hundred like everything else. Both forms are now in the table, so the reader guesses: above 22, divide. It works, it is documented, and it is a unit conversion decided by a threshold — which is exactly the shape of thing that is correct until the scale changes underneath it.',
+    'Storing hundredths means the number that comes out is the number that went in — no float, no drift, no rounding at ingest. Where a metric has arrived on more than one convention over its life, the reader normalises on read against the metric’s own known range rather than trusting the column, so a value is interpreted the same way whichever era it was written in.',
 } as const;
 
 // ---------------------------------------------------------------------------

@@ -63,8 +63,8 @@ export const SAFETY = [
     body: 'The build runs under a hard memory ceiling set below what the machine has. A runaway build gets killed by that ceiling instead of the kernel choosing a victim — and the kernel’s choice would very plausibly be the production process that is currently serving traffic.',
   },
   {
-    title: 'Never deploy by hand',
-    body: 'A hand-rolled deploy once copied a development machine’s configuration over production’s. The site was wrong for more than a day, and settings that are perfectly safe on a laptop are not safe on a server — so the damage was not only downtime. The production configuration file is now marked immutable at the filesystem level, meaning changing it has to be a deliberate two-step act rather than a side effect of copying a directory. The broader rule: configuration is not code, and must never travel with it.',
+    title: 'Configuration never travels with code',
+    body: 'The pipeline copies the application and nothing else. Production configuration is marked immutable at the filesystem level, so changing it is a deliberate two-step act rather than something a directory copy can do on the way past — and the pipeline, which has no reason to touch it, cannot. The rule underneath: a setting that is perfectly safe on a laptop is not automatically safe on a public server, so the two must never be able to reach each other.',
   },
   {
     title: 'The anonymous surface is a lockfile',

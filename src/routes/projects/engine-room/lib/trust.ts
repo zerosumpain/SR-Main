@@ -151,10 +151,10 @@ export const DECAY_NOTE = {
     'Roles, affiliations and programme names churn on roughly a two-year cycle, so at a year an uncorroborated claim is about a coin flip — hence a one-year half-life on the evidence. It is floored, because “this was true in 2019” is genuine information. Confirmation is held out of the decay entirely: it stays true until you say otherwise.',
 } as const;
 
-export const BEFORE = {
-  title: 'What this replaced',
+export const WHY_A_SCORE = {
+  title: 'Why a score rather than a label',
   body:
-    'A three-valued text column — high, medium, low — written by the extractor’s own guesswork. Every claim on a card was a bare assertion with no provenance, nothing to falsify and no way to disagree with it. The point of a score is not the number; it is that the number decomposes into things you can argue with individually.',
+    'High, medium and low are cheap to compute and impossible to argue with: there is nothing inside them to point at. A weighted sum costs the same to store and carries its own reasons, so “why is this only 0.4?” has an answer with five parts, and each of them can be disagreed with on its own terms.',
 } as const;
 
 /** Worked cases the bench opens with. Neutral stand-ins, as everywhere in this study. */
