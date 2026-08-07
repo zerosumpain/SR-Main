@@ -27,10 +27,12 @@
     <p class="idx-line">
       {#if eli}
         This site looks like an ordinary blog. Behind it is an assistant that can read my email and control my
-        house, a machine that builds its own tools while I sleep, and a memory that joins everything together.
+        house, a machine that builds its own tools while I sleep, and a memory that joins everything together and
+        keeps track of how much of it to believe.
       {:else}
         This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into
-        mail, files and home, a workflow engine, a knowledge graph, and a system that rewrites itself overnight.
+        mail, files, decks and home, a workflow engine, a graded knowledge graph, and a system that rewrites itself
+        overnight across three machines.
       {/if}
     </p>
     <a class="idx-cta" href={href('turn', 'trace')}>
@@ -49,7 +51,7 @@
     <SystemMap />
   </Instrument>
 
-  <h2 class="pe-h2">Four parts</h2>
+  <h2 class="pe-h2">Five parts</h2>
   <nav class="parts" aria-label="Parts of the study">
     {#each PARTS as p}
       <a class="part" href={href(p.id)} style="--tone:{p.tone}">
@@ -65,7 +67,7 @@
   </nav>
 
   <Instrument
-    title="Four claims this study has to earn"
+    title="Five claims this study has to earn"
     kicker="The argument"
     reading="Press one for the claim in full."
   >
