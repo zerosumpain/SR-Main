@@ -64,5 +64,19 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
   // showing on the one page that has to work for strangers.
   const isOwner = await isOwnerRequest({ locals, getClientAddress }).catch(() => false);
 
-  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner };
+  // Owner-only nudge that an account has stopped syncing.
+  //
+  // Awaited rather than streamed, for the same reason as `releases` above:
+  // streamed promises are serialised at the end of the body, so a streamed
+  // banner would pop in after hydration instead of being there on first paint.
+  // The cost is bounded — a visitor never issues the query at all, and for the
+  // owner it is four indexed local reads with no third-party round-trips (see
+  // $lib/connectors/summary for why it reads stored state rather than probing).
+  const syncAttention = isOwner
+    ? await import('$lib/connectors/summary')
+        .then((m) => m.syncAttentionSummary())
+        .catch(() => null)
+    : null;
+
+  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention };
 };

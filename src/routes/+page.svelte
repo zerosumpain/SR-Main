@@ -12,6 +12,7 @@
 
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
+  import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
   import BiomeBackground from '$lib/components/BiomeBackground.svelte';
   import BackgroundToggle from '$lib/components/landing/BackgroundToggle.svelte';
   import LandingHero from '$lib/components/landing/LandingHero.svelte';
@@ -120,6 +121,10 @@
 </script>
 
 <PageHeader title="strange ramblings" titleHref="/" />
+
+<!-- Owner-only, and only when an account has actually stopped syncing. Null for
+     every visitor, in which case the component renders nothing at all. -->
+<AccountSyncBanner summary={data.syncAttention} />
 
 <!-- HERO — viewport minus nav -->
 <section

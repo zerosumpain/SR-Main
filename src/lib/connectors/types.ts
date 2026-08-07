@@ -18,16 +18,48 @@ export type ConnectorStatus =
   /** No credentials configured. Not a failure; just absent. */
   | 'unconfigured';
 
+/**
+ * `account` — something you signed into, whose authorisation can lapse: it can
+ * be reconnected and resynced, and it is what the homepage banner counts.
+ * `service` — infrastructure and API keys. Probed the same way, but "resync"
+ * is meaningless for them; they are fixed by editing config, not by re-consent.
+ */
+export type ConnectorTier = 'account' | 'service';
+
+/**
+ * A button on the dashboard row. `submit` posts the named form action on
+ * /admin/connections (owner-gated with the page, so no new API surface);
+ * `link` is a plain navigation, used for OAuth consent redirects which must be
+ * a full page load rather than a fetch.
+ */
+export interface ConnectorAction {
+  kind: 'submit' | 'link';
+  /** Form action name (`submit`) or href (`link`). */
+  target: string;
+  label: string;
+  /** Shown while the action is in flight. */
+  busyLabel?: string;
+  /** Renders as the primary action on the row. */
+  primary?: boolean;
+}
+
 export interface ConnectorReport {
   key: string;
   label: string;
   /** Grouping for the dashboard, e.g. 'Email', 'Home', 'Health', 'AI'. */
   group: string;
+  tier: ConnectorTier;
   status: ConnectorStatus;
   /** What the probe actually saw. Shown verbatim — no interpretation. */
   detail: string;
   /** True when the probe made a real network/API call rather than reading a row. */
   live: boolean;
+  /** What stops working while this is broken. Written for the person fixing it. */
+  impact?: string;
+  /** Last time this connector is known to have succeeded, ISO. */
+  lastOkAt?: string | null;
+  /** Reconnect / resync / test buttons for this row. */
+  actions?: ConnectorAction[];
   /** Where to go to fix it. */
   fixUrl?: string;
   /** What to do there. */
@@ -54,4 +86,17 @@ export function sortReports(reports: ConnectorReport[]): ConnectorReport[] {
 /** Connectors that are broken — the set worth waking someone for. */
 export function brokenOf(reports: ConnectorReport[]): ConnectorReport[] {
   return reports.filter((r) => r.status === 'broken');
+}
+
+/**
+ * Accounts whose authorisation has lapsed or whose sync has stalled — the set
+ * the homepage banner offers to take you to. `unconfigured` is excluded: an
+ * integration you never connected is not a thing that "needs resyncing", and
+ * nagging about it on the landing page every day would train the banner to be
+ * ignored.
+ */
+export function needsResync(reports: ConnectorReport[]): ConnectorReport[] {
+  return reports.filter(
+    (r) => r.tier === 'account' && (r.status === 'broken' || r.status === 'degraded'),
+  );
 }
