@@ -79,6 +79,11 @@ const HOOK_BYPASSES = [
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
+  // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
+  // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
+  // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
+  '/api/jkai/tools/manifest', // JKAI_BRIDGE_TOKEN
+  '/api/jkai/tools/invoke', // JKAI_BRIDGE_TOKEN
 ];
 
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection

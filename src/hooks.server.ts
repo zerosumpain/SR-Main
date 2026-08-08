@@ -342,6 +342,26 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // /api/jkai/tools/{manifest,invoke} are service-to-service: the autonomous
+  // builder's pi extension fetches its tool manifest and invokes site tools
+  // from inside the build sandbox, with no user session. Both handlers
+  // self-authenticate via `Authorization: Bearer <JKAI_BRIDGE_TOKEN>` — an
+  // HMAC over the build id, verified in `$lib/jkai/tool-bridge` — so they must
+  // bypass the Auth.js gate (mirrors /api/mcp above).
+  //
+  // Without this the gate 401s the bridge before the handler ever runs, and
+  // because `verifyBridgeToken` swallows its own errors the failure surfaces as
+  // "invalid token" rather than "blocked". That is why every production build
+  // ran with ZERO site tools while the same code worked on homeserv, where
+  // AUTH_BYPASS=1 hid it (found 2026-08-08 debugging builds #125/#126).
+  //
+  // Named exactly, NOT by prefix: the sibling `/api/jkai/tools/promote` has no
+  // auth of its own and must keep falling through to the owner gate, or
+  // promoting an ephemeral tool into the permanent registry becomes anonymous.
+  if (pathname === '/api/jkai/tools/manifest' || pathname === '/api/jkai/tools/invoke') {
+    return resolve(event);
+  }
+
   // /api/policy-engine/* (ingest + seed-workflows) are service-to-service: the
   // scheduled tracking workflows' http-request node has no user session. The
   // handlers self-authenticate via `Authorization: Bearer POLICY_INGEST_SECRET`,

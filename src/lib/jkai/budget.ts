@@ -17,13 +17,16 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
 
   const windowStart = new Date(Date.now() - 60 * 60 * 1000);
 
+  // Every iteration in the window, not just the completed ones. A failed
+  // iteration costs exactly as much as a successful one — build #126 spent
+  // 3.08M tokens across three iterations while this saw only the 490k from the
+  // one that completed, so the 1M/hour cap never engaged at all (2026-08-07).
   const recentIterations = await db
     .select()
     .from(jkaiIterations)
     .where(
       and(
         eq(jkaiIterations.buildId, build.id),
-        eq(jkaiIterations.status, 'completed'),
         gte(jkaiIterations.createdAt, windowStart),
       ),
     );

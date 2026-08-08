@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
-import type { ActionRecord, FailureEnvelope, FailureKind } from './types';
+import type { ActionRecord, BudgetConfig, FailureEnvelope, FailureKind } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
@@ -233,6 +233,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   let providerHttpStatus: number | undefined;
   let providerErrorCode: string | undefined;
   let wallClockHit = false;
+  let tokenCapHit = false;
+  const maxTokensPerIteration =
+    (build.budgetConfig as BudgetConfig | null)?.maxTokensPerIteration ?? 0;
   // toolCallId → {name, args} captured from the most recent assistant message
   const pendingCalls = new Map<string, { name: string; args: Record<string, unknown> | undefined }>();
 
@@ -392,6 +395,19 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     if (m.role === 'assistant') {
       if (m.usage) {
         tokensUsed += m.usage.totalTokens ?? 0;
+        if (maxTokensPerIteration > 0 && tokensUsed >= maxTokensPerIteration && !tokenCapHit) {
+          tokenCapHit = true;
+          try {
+            child.kill('SIGTERM');
+            await emitLog(
+              build.id,
+              'error',
+              `Iteration token cap hit (${tokensUsed}/${maxTokensPerIteration}). Killed. ` +
+                `Whatever the agent had written is preserved in the workspace — resume to continue.`,
+              iteration.id,
+            );
+          } catch {}
+        }
         await recordBuildUsage(
           build.id,
           {
@@ -492,6 +508,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     stalled,
     stalledAgeMs,
     wallClockHit,
+    tokenCapHit,
     exitCode,
     errorMessage,
     providerHttpStatus,
@@ -511,10 +528,11 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   };
 }
 
-interface ClassifyInput {
+export interface ClassifyInput {
   stalled: boolean;
   stalledAgeMs: number;
   wallClockHit: boolean;
+  tokenCapHit: boolean;
   exitCode: number;
   errorMessage: string | null;
   providerHttpStatus: number | undefined;
@@ -524,13 +542,75 @@ interface ClassifyInput {
   maxWallClockMs: number;
 }
 
-function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
-  const stderrLc = i.stderrTail.toLowerCase();
-  const errLc = (i.errorMessage ?? '').toLowerCase();
+/**
+ * Lines pi's own extensions write to stderr. They are not provider output, so
+ * an HTTP status inside one says nothing about our API key — matching them as
+ * auth failures relabelled two watchdog kills as `auth_failed` on 2026-08-07
+ * and sent the diagnosis off in the wrong direction for a day.
+ */
+const EXTENSION_LOG_LINE = /^\s*\[[\w-]+\]\s/;
 
-  // Auth failure — check first so 401/403 doesn't get misclassified as generic provider_error
-  if (i.providerHttpStatus === 401 || i.providerHttpStatus === 403 ||
-      /401|403|unauthorized|forbidden|invalid[\s-]*api[\s-]*key/.test(errLc)) {
+function stripExtensionLogs(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !EXTENSION_LOG_LINE.test(line))
+    .join('\n');
+}
+
+const BRIDGE_FAILURE = /\[jkai-tools\][^\n]*manifest fetch (failed|error)/i;
+
+export function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
+  const stderrLc = i.stderrTail.toLowerCase();
+  // Classify on what the PROVIDER said, not on everything that reached stderr.
+  const errLc = stripExtensionLogs(i.errorMessage ?? '').toLowerCase();
+
+  // Budget stops first. Both are deliberate, both preserve the work, and both
+  // are continuable — nothing below may steal them and turn a paused build into
+  // an aborted one.
+  if (i.tokenCapHit) {
+    return base('iteration_token_cap',
+      `Iteration hit its token ceiling (${i.tokensUsed}). Work so far is preserved in dev/ — the next iteration continues from it.`,
+      i);
+  }
+
+  if (i.wallClockHit) {
+    return base('wall_clock_timeout',
+      `Pi exceeded wall-clock cap (${Math.round(i.maxWallClockMs / 1000)}s).`, i);
+  }
+
+  // An explicit provider status beats everything below: it came from the API
+  // response itself, not from parsing text.
+  if (i.providerHttpStatus === 401 || i.providerHttpStatus === 403) {
+    return base('auth_failed', i.errorMessage ?? 'Provider rejected the API key.', i);
+  }
+
+  // The tool bridge failing is its own diagnosis, and a far more useful one
+  // than whatever killed the run afterwards: the agent had no site tools at
+  // all. Checked ahead of the text-matched auth guess and the stall, because a
+  // tool-less agent flails and flailing is what trips the watchdog.
+  //
+  // Guarded on there actually being a failure, though. The extension fetches
+  // the manifest ONCE at startup and then lets pi carry on regardless, so a
+  // single transient blip leaves that line sitting in stderrTail for the rest
+  // of the run. Unguarded, this would fail an iteration that went on to finish
+  // perfectly well on read/write/edit/bash alone.
+  const reallyFailed =
+    i.exitCode !== 0 || i.stalled || Boolean(i.errorMessage);
+  if (reallyFailed && BRIDGE_FAILURE.test(i.stderrTail)) {
+    return base(
+      'tooling_unavailable',
+      'The jkai tool bridge did not load — the agent ran with NO site tools. ' +
+        'Check JKAI_API_URL is reachable from the builder process (it is read once at start, ' +
+        'so restart the service after editing .env) and that /api/jkai/tools/manifest is ' +
+        'exempted from the auth gate in hooks.server.ts.',
+      i,
+    );
+  }
+
+  // Auth failure by text match — only on provider output, once extension
+  // chatter has been stripped out. Matching raw stderr here is what relabelled
+  // two watchdog kills as `auth_failed` on 2026-08-07.
+  if (/401|403|unauthorized|forbidden|invalid[\s-]*api[\s-]*key/.test(errLc)) {
     return base('auth_failed',
       i.errorMessage ?? 'Provider rejected the API key.', i);
   }
@@ -541,15 +621,10 @@ function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
       i.errorMessage ?? 'Provider rate limit hit.', i);
   }
 
-  if (i.wallClockHit) {
-    return base('wall_clock_timeout',
-      `Pi exceeded wall-clock cap (${Math.round(i.maxWallClockMs / 1000)}s).`, i);
-  }
-
   if (i.stalled) {
     return base('stalled',
       i.tokensUsed > 0
-        ? `Pi stream went quiet for ${Math.round(i.stalledAgeMs / 1000)}s mid-flight — upstream connection stalled.`
+        ? `Pi stream went quiet for ${Math.round(i.stalledAgeMs / 1000)}s mid-flight — the watchdog killed it. This names the watchdog, not the cause: read stderrTail.`
         : `Pi received no response from upstream within ${Math.round(i.stalledAgeMs / 1000)}s.`,
       i);
   }

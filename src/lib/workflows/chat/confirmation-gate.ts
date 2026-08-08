@@ -12,9 +12,39 @@ export function isDestructive(toolName: string): boolean {
   return getTool(toolName)?.destructive === true;
 }
 
+/**
+ * Render the arguments of an un-described tool into something a human can
+ * actually approve.
+ *
+ * The switch below is hand-maintained, so any destructive tool nobody added a
+ * case for used to fall through to a bare "Proceed with <name>?" — a consent
+ * prompt with no consent in it. `request_change` did exactly that: it asked
+ * permission to open a public GitHub issue and spend model budget while showing
+ * neither the title nor the request (reported 2026-08-07).
+ */
+function summariseArgs(args: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(args ?? {})) {
+    if (value === undefined || value === null || value === '') continue;
+    if (key === 'workflow_id' || key === 'workflowId') continue; // routing, not intent
+    let rendered: string;
+    if (typeof value === 'string') rendered = value;
+    else if (typeof value === 'number' || typeof value === 'boolean') rendered = String(value);
+    else if (Array.isArray(value)) rendered = value.map((v) => String(v)).join(', ');
+    else continue; // nested objects add noise, not clarity
+    rendered = rendered.replace(/\s+/g, ' ').trim();
+    if (!rendered) continue;
+    if (rendered.length > 160) rendered = `${rendered.slice(0, 159)}…`;
+    parts.push(`${key}: ${rendered}`);
+    if (parts.length === 4) break;
+  }
+  return parts.join('\n');
+}
+
 /** Short user-facing description of what the tool is about to do. */
 export function describeDestructiveAction(toolName: string, args: Record<string, unknown>): string {
   switch (toolName) {
+    case 'request_change':           return `Open a GitHub issue and start an autonomous build for "${(args.title as string) ?? 'untitled'}"? It will branch, implement, run the gate and open a PR.`;
     case 'workflow_delete':          return `Delete workflow "${(args.name as string) ?? args.workflowId ?? 'unknown'}"? This cannot be undone.`;
     case 'workflow_clear_data_store': return `Clear the data store for workflow "${args.workflowId ?? 'unknown'}"? Stored keys will be wiped.`;
     case 'datastore_delete':          return `Delete datastore record ${args.id ? `"${args.id}"` : `key "${args.key ?? 'unknown'}"`} from collection "${args.collection ?? 'unknown'}"? This cannot be undone.`;
@@ -27,7 +57,14 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'gmail_send':               return `Send email to ${(args.to as string) ?? 'unknown recipient'}?`;
     case 'gmail_reply':              return `Send reply on thread ${args.threadId ?? 'unknown'}?`;
     case 'whatsapp_send':            return `Send WhatsApp message to ${(args.to as string) ?? 'default contact'}?`;
-    default:                         return `Proceed with ${toolName}?`;
+    default: {
+      // No hand-written case: show the arguments rather than nothing, so the
+      // prompt still says what is about to happen.
+      const summary = summariseArgs(args);
+      return summary
+        ? `Proceed with ${toolName}?\n${summary}`
+        : `Proceed with ${toolName}? (no arguments)`;
+    }
   }
 }
 
