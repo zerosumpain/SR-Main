@@ -21,6 +21,10 @@ export interface MetaToolInput {
   operation: MetaOperation;
   query?: string;
   name?: string;
+  /** Batch schema fetch: array of tool names to describe in one call. */
+  names?: string[];
+  /** Compact list flag: return {name, truncated description} only. */
+  compact?: boolean;
   args?: Record<string, unknown>;
 }
 
@@ -61,9 +65,11 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     'schedule, home-assistant, render, document, image, audio, system ' +
     'domains). Use this when you need a capability beyond the essential ' +
     'tools you can see directly. Workflow: operation="list" to discover ' +
-    '(optionally with a substring "query" filter), operation="schema" with ' +
-    '"name" to fetch the exact argument schema, then operation="invoke" ' +
-    'with "name" and "args" to run it.',
+    '(optionally with a substring "query" filter, or compact=true for a cheap ' +
+    'name+truncated-description catalogue survey), operation="schema" with ' +
+    '"name" (or "names" to batch several schemas in one call) to fetch the ' +
+    'exact argument schema, then operation="invoke" with "name" and ' +
+    '"args" to run it.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -72,18 +78,29 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
         enum: ['list', 'schema', 'invoke'],
         description:
           '"list" returns matching tool names + descriptions; ' +
-          '"schema" returns the full input JSON Schema for one named tool; ' +
+          '"schema" returns the full input JSON Schema for one or more named tools; ' +
           '"invoke" executes a named tool with the provided args.',
       },
       query: {
         type: 'string',
         description:
-          'For operation="list" only. Optional case-insensitive substring filter on tool name or description.',
+          'For operation="list" only. Optional case-insensitive substring filter on tool name or description. Combine with compact=true for a lean filtered survey.',
       },
       name: {
         type: 'string',
         description:
-          'For operation="schema" and operation="invoke". The exact tool name (e.g. "gmail_search", "blog_create_post").',
+          'For operation="schema" and operation="invoke". The exact tool name (e.g. "gmail_search", "blog_create_post"). For "schema" you may pass either this single name or `names` to batch several in one call; either is sufficient.',
+      },
+      names: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'For operation="schema" only. Batch fetch: an array of tool names to describe in ONE call, e.g. ["gmail_search", "blog_list"]. Returns an array of schema entries (one per tool). Prefer this over many single-`name` calls to save round-trips. Any unknown name produces an error object listing them.',
+      },
+      compact: {
+        type: 'boolean',
+        description:
+          'For operation="list" only. When true, returns a leaner entry per tool — just {name, description} with the description truncated to ~120 chars and no destructive flag — so a full-catalogue survey costs far fewer tokens.',
       },
       args: {
         type: 'object',
@@ -95,6 +112,14 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     required: ['operation'],
   },
 };
+
+const MAX_COMPACT_DESC = 120;
+
+function truncateDescription(desc: string): string {
+  return desc.length > MAX_COMPACT_DESC
+    ? `${desc.slice(0, MAX_COMPACT_DESC - 1).trimEnd()}…`
+    : desc;
+}
 
 function getExtendedTools(policy: ToolPolicyVersion): ReturnType<typeof getTools> {
   const all = getTools();
@@ -124,6 +149,8 @@ export async function dispatchMetaTool(
   const operation = (input as MetaToolInput | undefined)?.operation;
   const query = (input as MetaToolInput | undefined)?.query;
   const name = (input as MetaToolInput | undefined)?.name;
+  const names = (input as MetaToolInput | undefined)?.names;
+  const compact = (input as MetaToolInput | undefined)?.compact;
   const args = (input as MetaToolInput | undefined)?.args;
 
   if (!operation) {
@@ -146,6 +173,12 @@ export async function dispatchMetaTool(
           );
         })
       : extended;
+    if (compact) {
+      return filtered.map((t) => ({
+        name: t.name,
+        description: truncateDescription(describeWithPolicy(policy, t.name, t.description ?? '')),
+      }));
+    }
     return filtered.map((t) => ({
       name: t.name,
       description: describeWithPolicy(policy, t.name, t.description ?? ''),
@@ -154,18 +187,51 @@ export async function dispatchMetaTool(
   }
 
   if (operation === 'schema') {
-    if (!name) return { error: 'jkai_extended: operation="schema" requires "name"' };
-    const tool = extended.find((t) => t.name === name);
-    if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
-    return {
-      name: tool.name,
-      description: describeWithPolicy(policy, tool.name, tool.description ?? ''),
-      inputSchema: (tool.parameters as unknown as Record<string, unknown>) ?? {
-        type: 'object',
-        properties: {},
-      },
-      ...(tool.destructive ? { destructive: true } : {}),
-    };
+    const hasNames = Array.isArray(names) && names.length > 0;
+    const requested = hasNames
+      ? [
+          ...new Set(
+            names
+              .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+              .map((n) => n.trim()),
+          ),
+        ]
+      : typeof name === 'string' && name.trim().length > 0
+        ? [name.trim()]
+        : [];
+
+    if (requested.length === 0) {
+      return { error: 'jkai_extended: operation="schema" requires "name" or "names"' };
+    }
+
+    const schemas: ExtendedToolSchemaEntry[] = [];
+    const unknown: string[] = [];
+    for (const n of requested) {
+      const tool = extended.find((t) => t.name === n);
+      if (!tool) {
+        unknown.push(n);
+        continue;
+      }
+      schemas.push({
+        name: tool.name,
+        description: describeWithPolicy(policy, tool.name, tool.description ?? ''),
+        inputSchema: (tool.parameters as unknown as Record<string, unknown>) ?? {
+          type: 'object',
+          properties: {},
+        },
+        ...(tool.destructive ? { destructive: true } : {}),
+      });
+    }
+
+    if (unknown.length > 0) {
+      return {
+        error: `jkai_extended: unknown tool(s): ${unknown.join(', ')} (not in extended catalogue)`,
+      };
+    }
+
+    // Single-`name` call keeps the original shape: one schema object, not an array.
+    if (!hasNames) return schemas[0];
+    return schemas;
   }
 
   if (operation === 'invoke') {

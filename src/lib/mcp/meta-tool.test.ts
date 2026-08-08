@@ -25,6 +25,49 @@ describe('jkai_extended meta-tool', () => {
     });
   });
 
+  describe('operation="list" (compact)', () => {
+    it('with compact:true returns lean {name, truncated description} entries and no destructive field', async () => {
+      const result = await dispatchMetaTool({ operation: 'list', compact: true }, fakeCtx);
+      expect(Array.isArray(result)).toBe(true);
+      const list = result as unknown as Array<Record<string, unknown>>;
+      expect(list.length).toBeGreaterThan(50);
+      for (const entry of list) {
+        expect(typeof entry.name).toBe('string');
+        expect(typeof entry.description).toBe('string');
+        expect('destructive' in entry).toBe(false);
+        expect((entry.description as string).length).toBeLessThanOrEqual(120);
+      }
+    });
+
+    it('with compact:true truncates long descriptions with an ellipsis', async () => {
+      const full = (await dispatchMetaTool({ operation: 'list' }, fakeCtx)) as Array<{
+        name: string;
+        description: string;
+      }>;
+      const longOne = full.find((t) => (t.description ?? '').length > 120);
+      const compact = (await dispatchMetaTool(
+        { operation: 'list', compact: true },
+        fakeCtx,
+      )) as Array<{ name: string; description: string }>;
+      const compactOne = compact.find((t) => t.name === longOne?.name);
+      if (longOne) {
+        expect(compactOne).toBeTruthy();
+        expect(compactOne!.description.length).toBeLessThan(full.find((t) => t.name === longOne.name)!.description.length);
+        expect(compactOne!.description).toMatch(/…$/);
+      }
+    });
+
+    it('compact combines with a query filter', async () => {
+      const result = await dispatchMetaTool(
+        { operation: 'list', query: 'gmail', compact: true },
+        fakeCtx,
+      );
+      const list = result as unknown as Array<Record<string, unknown>>;
+      expect(list.length).toBeGreaterThan(0);
+      expect(list.every((t) => 'destructive' in t === false)).toBe(true);
+    });
+  });
+
   describe('operation="list"', () => {
     it('returns the extended catalogue and excludes essentials', async () => {
       const result = await dispatchMetaTool({ operation: 'list' }, fakeCtx);
@@ -95,6 +138,60 @@ describe('jkai_extended meta-tool', () => {
         error?: string;
       };
       expect(result.error).toMatch(/requires "name"/);
+    });
+  });
+
+  describe('operation="schema" (batch via names)', () => {
+    it('returns an array of schema entries, one per requested tool', async () => {
+      const result = (await dispatchMetaTool(
+        { operation: 'schema', names: ['gmail_search', 'blog_list'] },
+        fakeCtx,
+      )) as unknown as Array<{ name: string; inputSchema: Record<string, unknown> }>;
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(2);
+      const names = result.map((e) => e.name);
+      expect(names).toEqual(expect.arrayContaining(['gmail_search', 'blog_list']));
+      for (const entry of result) {
+        expect(entry.inputSchema).toBeDefined();
+        expect((entry.inputSchema as { type?: string }).type).toBe('object');
+      }
+    });
+
+    it('returns a single-object error when names contains an unknown tool and reports it', async () => {
+      const result = (await dispatchMetaTool(
+        { operation: 'schema', names: ['gmail_search', 'does_not_exist_anywhere'] },
+        fakeCtx,
+      )) as { error?: string };
+      expect(Array.isArray(result)).toBe(false);
+      expect(result.error).toMatch(/unknown tool/i);
+      expect(result.error).toMatch(/does_not_exist_anywhere/);
+    });
+
+    it('lists multiple unknown names in the error', async () => {
+      const result = (await dispatchMetaTool(
+        { operation: 'schema', names: ['nope_one', 'nope_two'] },
+        fakeCtx,
+      )) as { error?: string };
+      expect(result.error).toMatch(/nope_one/);
+      expect(result.error).toMatch(/nope_two/);
+    });
+
+    it('dedupes repeated names in a batch', async () => {
+      const result = (await dispatchMetaTool(
+        { operation: 'schema', names: ['gmail_search', 'gmail_search'] },
+        fakeCtx,
+      )) as Array<{ name: string }>;
+      expect(result).toHaveLength(1);
+    });
+
+    it('single-`name` still returns a single object, not an array (no regression)', async () => {
+      const result = (await dispatchMetaTool(
+        { operation: 'schema', name: 'blog_list' },
+        fakeCtx,
+      )) as { name: string; inputSchema: Record<string, unknown> };
+      expect(Array.isArray(result)).toBe(false);
+      expect(result.name).toBe('blog_list');
+      expect(result.inputSchema).toBeDefined();
     });
   });
 

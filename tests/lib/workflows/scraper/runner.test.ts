@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
 const { execInSandbox, writeFileInSandbox, ensureSandboxRunning } = vi.hoisted(() => ({
   execInSandbox: vi.fn(),
@@ -37,6 +37,14 @@ vi.mock('drizzle-orm', () => ({ eq: (a: any, b: any) => ({ a, b }) }));
 import { runScrape } from '$lib/workflows/scraper/runner';
 
 describe('runScrape', () => {
+  beforeAll(() => {
+    // These tests exercise the LOCAL sandbox path (mocked sandbox calls). On a
+    // non-homeserv host with SCRAPER_SERVICE_URL set, runScrape() proxies to a
+    // real remote homeserv instead of using the mocked sandbox. Force local
+    // execution so the mock assertions are deterministic on any host.
+    vi.stubEnv('SCRAPER_ALLOW_NON_HOMESERV', '1');
+  });
+
   beforeEach(() => {
     execInSandbox.mockReset();
     writeFileInSandbox.mockReset();

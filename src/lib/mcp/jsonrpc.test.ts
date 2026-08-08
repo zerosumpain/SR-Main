@@ -1,8 +1,19 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { dispatchJsonRpc, parseJsonRpcBody } from './jsonrpc';
 import { subscribeToolSteps, _resetToolStepBusForTests, type ToolStepEvent } from '$lib/jkai/tool-step-bus';
 
 const SECRET = 'mcp-jsonrpc-test-secret-32-bytes-long-please-thanks';
+
+// The full-registry assertions below require JKAI_MCP_META_TOOL OFF. The
+// ambient environment may set it to '1' (collapsing tools/list to essentials +
+// the dispatcher), so pin it off and restore the prior value afterwards.
+const originalMetaFlag = process.env.JKAI_MCP_META_TOOL;
+delete process.env.JKAI_MCP_META_TOOL;
+
+afterAll(() => {
+  if (originalMetaFlag === undefined) delete process.env.JKAI_MCP_META_TOOL;
+  else process.env.JKAI_MCP_META_TOOL = originalMetaFlag;
+});
 
 beforeAll(() => {
   process.env.HERMES_BRIDGE_SECRET = SECRET;

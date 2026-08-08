@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 const { runScrape } = vi.hoisted(() => ({ runScrape: vi.fn() }));
 vi.mock('$lib/workflows/scraper/runner', () => ({ runScrape: (...a: any[]) => runScrape(...a) }));
@@ -8,6 +8,14 @@ import { stealthScrapeExecutor } from '$lib/workflows/nodes/stealth-scrape';
 const ctx: any = { runId: 'r', emit: vi.fn(), getNodeOutput: () => undefined };
 
 describe('stealthScrapeExecutor', () => {
+  beforeAll(() => {
+    // The executor has an outer homeserv guard that proxies to a real remote
+    // host on non-homeserv machines with SCRAPER_SERVICE_URL set. Force the
+    // local path so the mocked runScrape assertions are deterministic on any
+    // host.
+    vi.stubEnv('SCRAPER_ALLOW_NON_HOMESERV', '1');
+  });
+
   it('forwards config to runScrape and returns pages', async () => {
     runScrape.mockResolvedValue({
       success: true,
