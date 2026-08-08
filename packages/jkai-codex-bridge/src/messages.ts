@@ -13,6 +13,32 @@
 export interface ChatMessage {
   role: 'system' | 'developer' | 'user' | 'assistant' | 'tool';
   content: unknown;
+  /** Present on an assistant turn that asked for tools to be run. */
+  tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+  /** Present on a tool result, linking it to the call above. */
+  tool_call_id?: string;
+  /** Some callers name the tool on the result message. */
+  name?: string;
+}
+
+/**
+ * Render an assistant turn that requested tool calls.
+ *
+ * Codex has no native slot for "you previously asked to run these", because the
+ * bridge aborted that turn and started a fresh thread — so the only way the
+ * model knows what it asked for is to read it in the transcript. Without this
+ * the follow-up turn sees a tool result with no request attached and tends to
+ * re-ask for the same call, looping the caller forever.
+ */
+function renderToolCalls(m: ChatMessage): string {
+  const calls = (m.tool_calls ?? [])
+    .map((c) => {
+      const name = c.function?.name ?? 'unknown';
+      const args = c.function?.arguments ?? '{}';
+      return `- ${name}(${args})`;
+    })
+    .join('\n');
+  return calls ? `Assistant requested tool calls:\n${calls}` : '';
 }
 
 /** OpenAI allows content to be a string or an array of typed parts. Codex takes
@@ -59,12 +85,29 @@ export function messagesToPrompt(messages: ChatMessage[]): string {
 
   for (const m of messages) {
     const text = flattenContent(m.content).trim();
-    if (!text) continue;
+
     if (m.role === 'system' || m.role === 'developer') {
-      instructions.push(text);
-    } else {
-      turns.push(`${ROLE_LABEL[m.role] ?? m.role}:\n${text}`);
+      if (text) instructions.push(text);
+      continue;
     }
+
+    // An assistant turn that only requested tools has no content — skipping it
+    // for being empty would drop the request the next tool result answers.
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      const rendered = renderToolCalls(m);
+      turns.push(text ? `Assistant:\n${text}\n\n${rendered}` : rendered);
+      continue;
+    }
+
+    if (!text) continue;
+
+    if (m.role === 'tool') {
+      const named = m.name ? `Tool result (${m.name}):` : 'Tool result:';
+      turns.push(`${named}\n${text}`);
+      continue;
+    }
+
+    turns.push(`${ROLE_LABEL[m.role] ?? m.role}:\n${text}`);
   }
 
   const onlyOneUserTurn = messages.filter((m) => m.role !== 'system' && m.role !== 'developer').length === 1;

@@ -24,10 +24,13 @@ Rules worth knowing before touching this:
   is the single decider; persisted state often carries a bare model string with
   no provider at all. Never hardcode `provider: 'openrouter'` when writing a
   model setting — pass the id through `coerceModelContext`.
-- **Codex cannot do caller-supplied tools or embeddings.** Check
-  `getProviderFeatures()` before assuming a role can use it; the orchestrator
-  loop and all embedding paths stay on OpenRouter. It *can* stream and do
-  structured output.
+- **Codex does tool-calling** — the bridge publishes caller schemas as a
+  per-request MCP server and returns `tool_calls` (it never executes them).
+  **Embeddings are the one real gap**; those stay on OpenRouter. Check
+  `getProviderFeatures()` rather than assuming either way.
+- **Codex is slower per tool call** (~10 s first call, ~3 s follow-ups, vs
+  ~1–2 s on OpenRouter) because each turn starts a fresh Codex process. It is a
+  legitimate site default; just know a long builder chain will crawl.
 - **Codex is text-only.** Anything sending images/audio/PDF must check
   `getModelCapabilities()` first — the site default may now be a Codex model.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
