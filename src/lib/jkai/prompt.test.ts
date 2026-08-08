@@ -36,6 +36,14 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt('b1', 8123, 'repo');
     expect(p).toMatch(/do not commit or push/i);
   });
+
+  it('tells a repo build not to loop on the full gate', () => {
+    // The gate type-checks, runs every test and does a production build.
+    // Looping on it is the most expensive thing an iteration can do.
+    const p = buildSystemPrompt('b1', 8123, 'repo');
+    expect(p).toMatch(/DO NOT LOOP ON THE FULL GATE/);
+    expect(p).toMatch(/narrowest command/i);
+  });
 });
 
 describe('buildIterationContext', () => {
