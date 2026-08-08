@@ -782,12 +782,36 @@ register({
 
 register({
   name: 'workflow_list',
-  description: 'List existing workflows with their names, descriptions, and schedule status',
-  parameters: { type: 'object', properties: {}, required: [] },
+  description:
+    'List existing workflows with their names, descriptions, and schedule status. ' +
+    'Compact by default — returns only the identifying fields (id, name, description, trigger, updatedAt) to keep token usage low. ' +
+    'Pass verbose:true to return the full rows including heavy columns (notifications, createdAt).',
+  parameters: {
+    type: 'object',
+    properties: {
+      verbose: { type: 'boolean', description: 'Set true to return full rows including heavy columns; defaults to compact identifying fields only' },
+    },
+    required: [],
+  },
   category: 'Workflows',
   toolset: 'workflows',
-  handler: async () => {
-    const rows = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(50);
+  handler: async (args) => {
+    const verbose = (args?.verbose as boolean) === true;
+    if (verbose) {
+      const rows = await db.select().from(workflows).orderBy(desc(workflows.createdAt)).limit(50);
+      return { success: true, data: rows };
+    }
+    const rows = await db
+      .select({
+        id: workflows.id,
+        name: workflows.name,
+        description: workflows.description,
+        trigger: workflows.trigger,
+        updatedAt: workflows.updatedAt,
+      })
+      .from(workflows)
+      .orderBy(desc(workflows.createdAt))
+      .limit(50);
     return { success: true, data: rows };
   },
 });

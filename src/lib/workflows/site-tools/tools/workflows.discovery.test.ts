@@ -1,6 +1,47 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { executeTool } from '../registry';
 import '$lib/workflows';
+
+/**
+ * Fake db rows used by workflow_list tests. select() is projection-aware: when
+ * the handler passes a column projection (compact mode) it returns only the
+ * compact fields; when it passes none (verbose mode) it returns the full rows.
+ * This proves the projection is a real code path, not cosmetic.
+ */
+vi.mock('$lib/db', () => {
+  const fullRows = [
+    {
+      id: 'wf-1',
+      name: 'Daily Digest',
+      description: 'Summarise the day\'s activity',
+      trigger: { type: 'cron', cron: '0 9 * * *' },
+      notifications: { email: 'me@example.com' },
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-05T09:00:00.000Z',
+    },
+    {
+      id: 'wf-2',
+      name: 'Deploy',
+      description: null,
+      trigger: { type: 'manual' },
+      notifications: null,
+      createdAt: '2026-08-02T09:00:00.000Z',
+      updatedAt: '2026-08-06T09:00:00.000Z',
+    },
+  ];
+  const COMPACT = ['id', 'name', 'description', 'trigger', 'updatedAt'];
+  const compactRows = fullRows.map((r) => Object.fromEntries(COMPACT.map((k) => [k, (r as any)[k]])));
+  const makeQueryBuilder = (projected: unknown) => {
+    const q: any = {
+      from: () => q,
+      orderBy: () => q,
+      where: () => q,
+      limit: () => (projected ? compactRows : fullRows),
+    };
+    return q;
+  };
+  return { db: { select: vi.fn((proj: unknown) => makeQueryBuilder(proj)) } };
+});
 
 /**
  * Node discovery ergonomics.
@@ -182,5 +223,44 @@ describe('workflow_describe_node batching', () => {
     const r = (await executeTool('workflow_describe_node', {})) as { success: boolean; error: string };
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/Pass `types`/);
+  });
+});
+
+/**
+ * workflow_list token bloat — issue #126.
+ *
+ * The bare `db.select().from(workflows)` dumped every column of up to 50 rows
+ * (~12k tokens). Default is now the compact projection; verbose:true opts back
+ * into the full rows.
+ */
+describe('workflow_list compact vs verbose', () => {
+  it('returns compact rows by default (no heavy columns)', async () => {
+    const r = (await executeTool('workflow_list', {})) as { success: boolean; data: unknown[] };
+    expect(r.success).toBe(true);
+    expect(r.data).toHaveLength(2);
+    const first = r.data[0] as Record<string, unknown>;
+    // Identifying fields present.
+    expect(first.id).toBe('wf-1');
+    expect(first.name).toBe('Daily Digest');
+    expect(first.description).toBeDefined();
+    expect(first.trigger).toEqual({ type: 'cron', cron: '0 9 * * *' });
+    expect(first.updatedAt).toBeDefined();
+    // Heavy columns dropped from the compact projection.
+    expect('notifications' in first).toBe(false);
+    expect('createdAt' in first).toBe(false);
+  });
+
+  it('returns full rows when verbose:true', async () => {
+    const r = (await executeTool('workflow_list', { verbose: true })) as {
+      success: boolean;
+      data: Array<Record<string, unknown>>;
+    };
+    expect(r.success).toBe(true);
+    expect(r.data).toHaveLength(2);
+    const first = r.data[0];
+    expect(first.id).toBe('wf-1');
+    expect(first.notifications).toEqual({ email: 'me@example.com' });
+    expect(first.createdAt).toBeDefined();
+    expect(first.updatedAt).toBeDefined();
   });
 });

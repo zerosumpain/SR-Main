@@ -53,12 +53,36 @@ register({
 
 register({
   name: 'build_list',
-  description: 'List recent JKAI builds with status (pending/running/completed/failed)',
-  parameters: { type: 'object', properties: {}, required: [] },
+  description:
+    'List recent JKAI builds with status (pending/running/completed/failed). ' +
+    'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
+    'Pass verbose:true to return the full rows including heavy columns (prompt, config, serve_config, model fields).',
+  parameters: {
+    type: 'object',
+    properties: {
+      verbose: { type: 'boolean', description: 'Set true to return full rows including heavy columns; defaults to compact identifying fields only' },
+    },
+    required: [],
+  },
   category: 'JKAI Builder',
   toolset: 'builds',
-  handler: async () => {
-    const rows = await db.select().from(jkaiBuilds).orderBy(desc(jkaiBuilds.createdAt)).limit(50);
+  handler: async (args) => {
+    const verbose = (args?.verbose as boolean) === true;
+    if (verbose) {
+      const rows = await db.select().from(jkaiBuilds).orderBy(desc(jkaiBuilds.createdAt)).limit(50);
+      return { success: true, data: rows };
+    }
+    const rows = await db
+      .select({
+        id: jkaiBuilds.id,
+        title: jkaiBuilds.title,
+        status: jkaiBuilds.status,
+        publishedSlug: jkaiBuilds.publishedSlug,
+        createdAt: jkaiBuilds.createdAt,
+      })
+      .from(jkaiBuilds)
+      .orderBy(desc(jkaiBuilds.createdAt))
+      .limit(50);
     return { success: true, data: rows };
   },
 });
