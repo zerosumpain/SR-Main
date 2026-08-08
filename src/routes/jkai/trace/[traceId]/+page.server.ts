@@ -4,6 +4,26 @@ import { db } from '$lib/db';
 import { jkaiToolTraces, orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { ToolTrace } from '$lib/jkai/tool-trace';
+import { getToolErrorRates } from '$lib/server/tool-error-rates';
+
+/** Window the "usually fails" baseline is measured over. */
+const BASELINE_DAYS = 30;
+
+/**
+ * Below this many recorded calls, a percentage says more about the sample than
+ * about the tool — one failure out of two is not a 50% failure rate in any
+ * useful sense. The page renders those as "—" with the raw counts on hover
+ * rather than printing a number that invites a wrong conclusion.
+ */
+const MIN_BASELINE_CALLS = 5;
+
+export interface ToolBaseline {
+  calls: number;
+  errors: number;
+  errorRate: number;
+  /** False when the sample is too thin to quote a rate. */
+  meaningful: boolean;
+}
 
 // Owner-gated by hooks (the whole /jkai area is owner-only) — see
 // hooks.server.ts, which redirects a non-owner before any load runs.
@@ -51,8 +71,31 @@ export const load: PageServerLoad = async ({ params }) => {
     conversationTitle = conv?.title ?? null;
   }
 
+  // How often each tool in THIS chain fails across every recorded turn. A single
+  // turn cannot support a rate of its own — one call that failed is 100% and
+  // means nothing — so the useful question is whether this failure is normal for
+  // this tool. Narrowed to the tools actually present, so the page carries a
+  // handful of rows rather than the whole registry.
+  const trace = row.steps as ToolTrace;
+  const toolsInTrace = new Set((trace?.steps ?? []).map((s) => s.displayTool).filter(Boolean));
+  const baselines: Record<string, ToolBaseline> = {};
+  if (toolsInTrace.size > 0) {
+    const rates = await getToolErrorRates(BASELINE_DAYS).catch(() => null);
+    for (const t of rates?.tools ?? []) {
+      if (!toolsInTrace.has(t.tool)) continue;
+      baselines[t.tool] = {
+        calls: t.calls,
+        errors: t.errors,
+        errorRate: t.errorRate,
+        meaningful: t.calls >= MIN_BASELINE_CALLS,
+      };
+    }
+  }
+
   return {
-    trace: row.steps as ToolTrace,
+    trace,
+    baselines,
+    baselineDays: BASELINE_DAYS,
     meta: {
       id: row.id,
       conversationId: row.conversationId,

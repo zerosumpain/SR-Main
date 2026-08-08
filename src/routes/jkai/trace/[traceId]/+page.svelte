@@ -140,6 +140,23 @@
   /** Scale for the by-tool bars. */
   const slowestToolMs = $derived(Math.max(1, ...toolCounts.map(([, r]) => r.totalMs)));
 
+  /** Each tool's failure rate across all recorded turns — the "is this normal?"
+   *  context a single turn cannot supply. Absent for tools with too few calls. */
+  const baselines = $derived(data.baselines ?? {});
+
+  function pct(rate: number): string {
+    if (rate <= 0) return '0%';
+    if (rate < 0.01) return '<1%';
+    return `${Math.round(rate * 100)}%`;
+  }
+  /** Same bands as /admin/ops/tool-usage, so the two pages agree on what
+   *  "bad" means. */
+  function rateBand(rate: number): 'bad' | 'warn' | 'ok' {
+    if (rate >= 0.2) return 'bad';
+    if (rate >= 0.05) return 'warn';
+    return 'ok';
+  }
+
   function fmtMs(ms: number | null | undefined): string {
     if (ms === null || ms === undefined) return '—';
     if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -318,7 +335,7 @@
   {:else}
     <section class="nm-sec">
       <div class="nm-sec-hd">
-        <span class="sr-label-tight">By tool — where the time went</span>
+        <span class="sr-label-tight">By tool — time spent, and how often it fails</span>
         <span class="sec-meta">{toolCounts.length} distinct</span>
       </div>
       <!-- Bars are scaled by time, not call count: on a typical chain most tools
@@ -326,6 +343,7 @@
            is the figure that actually varies and the one worth looking at. -->
       <div class="tool-bars">
         {#each toolCounts as [tool, row] (tool)}
+          {@const base = baselines[tool]}
           <div class="tool-bar-row">
             <span class="tb-name mono" title={tool}>{tool}</span>
             <span class="tb-track">
@@ -337,10 +355,28 @@
               ></span>
             </span>
             <span class="tb-n mono" title="calls">×{row.calls}</span>
+            <span class="tb-fail mono" class:bad={row.errors > 0} title="failed in this turn">
+              {row.errors > 0 ? `${row.errors} failed` : ''}
+            </span>
+            <!-- The baseline is the point of this column: one call that failed is
+                 100% of this turn and tells you nothing on its own. -->
+            <span
+              class="tb-base mono"
+              data-band={base?.meaningful ? rateBand(base.errorRate) : 'ok'}
+              title={base
+                ? `${base.errors} of ${base.calls} recorded call${base.calls === 1 ? '' : 's'} failed in ${data.baselineDays}d`
+                : 'no other recorded calls'}
+            >
+              {base?.meaningful ? `${pct(base.errorRate)} usually` : '—'}
+            </span>
             <span class="tb-ms mono">{fmtMs(row.totalMs)}</span>
           </div>
         {/each}
       </div>
+      <p class="bar-note">
+        “Usually” is this tool’s failure rate across all recorded turns in the last {data.baselineDays} days —
+        shown only once there are enough calls to mean something. Recording began when the trace table shipped.
+      </p>
     </section>
 
     <section class="nm-sec">
@@ -813,9 +849,40 @@
   }
   .tool-bar-row {
     display: grid;
-    grid-template-columns: 190px 1fr 40px 60px;
+    grid-template-columns: 190px 1fr 40px 72px 92px 60px;
     align-items: center;
     gap: 0.5rem;
+  }
+  @media (max-width: 900px) {
+    /* Drop the baseline column before the bar becomes unreadable. */
+    .tool-bar-row {
+      grid-template-columns: 140px 1fr 36px 66px 56px;
+    }
+    .tb-base {
+      display: none;
+    }
+  }
+  .tb-fail,
+  .tb-base {
+    font-size: var(--fs-label-xs);
+    text-align: right;
+    color: var(--text-ghost);
+    white-space: nowrap;
+  }
+  .tb-fail.bad {
+    color: var(--error);
+  }
+  .tb-base[data-band='warn'] {
+    color: var(--warn);
+  }
+  .tb-base[data-band='bad'] {
+    color: var(--error);
+  }
+  .bar-note {
+    margin: 0.55rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-ghost);
   }
   .tb-name {
     font-size: var(--fs-label-xs);
