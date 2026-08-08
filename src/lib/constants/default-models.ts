@@ -60,12 +60,32 @@ export function mapLegacyModelId(modelId: string): string {
   return LEGACY_GLM_TO_OPENROUTER[modelId] ?? modelId;
 }
 
-/** Coerce any persisted model context (possibly legacy provider 'zai' with a
- *  bare GLM id) into a valid OpenRouter context. */
+/**
+ * Coerce any persisted model context into a valid one.
+ *
+ * Two jobs:
+ *  - legacy provider 'zai' + a bare GLM id → an OpenRouter context, and
+ *  - preserve a Codex pick rather than flattening it to OpenRouter.
+ *
+ * That second job is why this function is load-bearing for the Codex provider:
+ * EVERY `resolve*Model()` in $lib/server/models/settings runs its stored
+ * setting through here, so while this hardcoded `provider: 'openrouter'` a
+ * Codex model saved from the picker came back out as an OpenRouter one and was
+ * sent to OpenRouter as an unknown slug. Provider is recovered from the
+ * `codex/` id prefix, not from the stored `provider` field, because plenty of
+ * persisted state (workflow node configs, localStorage, older DB rows) carries
+ * a bare model string with no provider at all.
+ */
 export function coerceModelContext(ctx: { provider?: string; modelId: string }): {
-  provider: 'openrouter';
+  provider: 'openrouter' | 'codex';
   modelId: string;
 } {
+  if (ctx.modelId.startsWith('codex/') || ctx.provider === 'codex') {
+    // Normalise: a context that says provider 'codex' but carries a bare slug
+    // still gets the prefix, so downstream `isCodexModelId` checks agree.
+    const modelId = ctx.modelId.startsWith('codex/') ? ctx.modelId : `codex/${ctx.modelId}`;
+    return { provider: 'codex', modelId };
+  }
   return { provider: 'openrouter', modelId: mapLegacyModelId(ctx.modelId) };
 }
 

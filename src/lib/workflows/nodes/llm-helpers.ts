@@ -1,34 +1,44 @@
 import type OpenAI from 'openai';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { DEFAULT_NODE_MAX_TOKENS, LEGACY_GLM_TO_OPENROUTER } from '$lib/constants/default-models';
+import {
+  DEFAULT_NODE_MAX_TOKENS,
+  LEGACY_GLM_TO_OPENROUTER,
+  coerceModelContext,
+} from '$lib/constants/default-models';
+import type { ModelProvider } from '$lib/server/models/types';
 
 export { DEFAULT_NODE_MAX_TOKENS };
 
 /**
  * Resolve an LLM client + model ID from a node's `config.model` string.
  *
- * Routing rules (OpenRouter is the only provider):
+ * Routing rules:
  *   - empty / missing / "default" / "jkai-default" → admin site default
  *     (set from /admin/ai/models, key `jkai.chat.default_model`)
+ *   - starts with "codex/" → the Codex bridge (ChatGPT Pro subscription)
  *   - contains "/" (e.g. "openai/gpt-4o") → used verbatim as an OpenRouter slug
  *   - bare legacy GLM id (e.g. "glm-5-turbo", from configs saved in the
  *     direct-z.ai era) → mapped to its z-ai/* OpenRouter slug
  *   - any other bare id → IGNORE and fall back to the admin default. A bare id
  *     sent to OpenRouter is a 400 "Unknown Model"; warn so the bad config
  *     surfaces in logs instead of a runtime error.
+ *
+ * The returned `provider` is the one actually used, not a constant: callers
+ * record it against the run, and a Codex call logged as OpenRouter would put
+ * subscription work into the per-token cost charts.
  */
 export async function resolveLLMClient(
   configuredModel: string | undefined,
-): Promise<{ client: OpenAI; model: string; provider: 'openrouter' }> {
+): Promise<{ client: OpenAI; model: string; provider: ModelProvider }> {
   const m = (configuredModel ?? '').trim();
 
   if (m && m !== 'default' && m !== 'jkai-default') {
-    // OpenRouter-formatted model IDs always have a '/'. Route through the
-    // unified getLLMClient so the OpenRouter key is read from
-    // app_settings.openrouter.api_key (admin UI) AND keys.json/env.
+    // Both provider ids contain a '/', so let coerceModelContext decide which
+    // one this is rather than re-implementing the prefix rule here.
     if (m.includes('/')) {
-      return { ...(await getLLMClient({ provider: 'openrouter', modelId: m })), provider: 'openrouter' };
+      const ctx = coerceModelContext({ modelId: m });
+      return { ...(await getLLMClient(ctx)), provider: ctx.provider };
     }
     const mapped = LEGACY_GLM_TO_OPENROUTER[m];
     if (mapped) {
@@ -41,7 +51,7 @@ export async function resolveLLMClient(
   }
 
   const ctx = await resolveDefaultModel();
-  return { ...(await getLLMClient(ctx)), provider: 'openrouter' };
+  return { ...(await getLLMClient(ctx)), provider: ctx.provider };
 }
 
 /**

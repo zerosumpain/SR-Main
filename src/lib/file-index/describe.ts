@@ -17,6 +17,8 @@
 
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { getModelCapabilities } from '$lib/server/models/capabilities';
+import type { ModelContext } from '$lib/server/models/types';
 
 /** Pinned vision model for image captions (served by OpenRouter, cheap, reliable vision). */
 const VISION_MODEL = 'openai/gpt-4o-mini';
@@ -59,7 +61,7 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
   if (buf.byteLength > MAX_IMAGE_BYTES) return null;
   const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`;
 
-  const attempt = async (ctx: { provider: 'openrouter'; modelId: string }): Promise<string | null> => {
+  const attempt = async (ctx: ModelContext): Promise<string | null> => {
     const { client, model } = await getLLMClient(ctx);
     const response = await client.chat.completions.create({
       model,
@@ -84,7 +86,17 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
     console.warn(`[file-index] ${VISION_MODEL} caption failed (${(err as Error).message}); trying builder default`);
     try {
       const fallback = await resolveDefaultModel();
-      return await attempt({ provider: fallback.provider, modelId: fallback.modelId });
+      // The site default is now allowed to be a Codex model, and Codex is
+      // text-only — it would accept the request and answer about the prompt
+      // while ignoring the image, producing a confident caption of nothing.
+      // Skip rather than fabricate: a null here is a non-fatal "no caption".
+      if (!getModelCapabilities(fallback).image) {
+        console.warn(
+          `[file-index] site default ${fallback.modelId} cannot accept images — skipping caption fallback`,
+        );
+        return null;
+      }
+      return await attempt(fallback);
     } catch (err2) {
       console.warn(`[file-index] image caption fully failed: ${(err2 as Error).message}`);
       return null;

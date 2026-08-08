@@ -9,6 +9,8 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { setSetting, clearSettingsCache, resolveDefaultModel } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
+import { siteDefaultBlockReason } from '$lib/server/models/capabilities';
 import { describeProfiles, setOverride, isRoutingEnabled } from '$lib/routing/events';
 import { PROFILE_LABEL, PROFILES, type ModelProfile } from '$lib/routing/types';
 
@@ -39,7 +41,20 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!isValidOpenRouterId(body?.modelId)) {
       throw error(400, 'invalid modelId — must be a full OpenRouter slug (vendor/model)');
     }
-    await setSetting(SITE_DEFAULT_KEY, { provider: 'openrouter', modelId: body.modelId });
+    const ctx = coerceModelContext({ modelId: body.modelId });
+    // The SITE DEFAULT is the one model every role falls back to, including the
+    // orchestrator's tool-calling loop and the builder. Codex cannot accept
+    // caller-supplied tool schemas, so a Codex site default would leave those
+    // paths failing at call time with no obvious cause. Codex stays selectable
+    // per-conversation, per-node and per-profile, where the role is known.
+    const blocked = siteDefaultBlockReason(ctx.provider);
+    if (blocked) throw error(400, blocked);
+    // Store the provider the id actually implies. Hardcoding 'openrouter' here
+    // still "worked" for Codex picks — coerceModelContext recovers the provider
+    // from the id prefix on read — but it left a row that contradicted itself,
+    // which is the sort of thing that reads as truth the next time someone
+    // greps for how the default is stored.
+    await setSetting(SITE_DEFAULT_KEY, ctx);
     clearSettingsCache();
     return json({ ok: true, ...(await picture()) });
   }

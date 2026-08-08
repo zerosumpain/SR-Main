@@ -139,3 +139,32 @@ export async function getOpenRouterApiKey(): Promise<string | undefined> {
   if (v?.value) return v.value;
   return loadKeys().openrouterApiKey;
 }
+
+/**
+ * Base URL of the local Codex bridge (packages/jkai-codex-bridge), which puts
+ * an OpenAI-compatible face on the Codex CLI so the site's existing OpenAI SDK
+ * clients can reach John's ChatGPT Pro subscription.
+ *
+ * Loopback by default and NOT settable from the admin UI on purpose: this URL
+ * is where prompts (some containing user content) get sent, and an operator
+ * typo that pointed it off-box would exfiltrate them. Override with the
+ * CODEX_BRIDGE_URL env var, which only someone with shell access can set.
+ */
+export function getCodexBridgeUrl(): string {
+  return process.env.CODEX_BRIDGE_URL || 'http://127.0.0.1:5207';
+}
+
+/**
+ * Whether Codex models may be selected at all. Off unless explicitly enabled,
+ * so a host with no `codex login` doesn't offer models that will fail at call
+ * time. The admin panel at /admin/ai/models flips this after a successful
+ * health probe.
+ */
+export async function isCodexEnabled(): Promise<boolean> {
+  const v = await getSetting<{ enabled?: boolean } | null>('codex.enabled');
+  return v?.enabled === true;
+}
+
+export async function setCodexEnabled(enabled: boolean): Promise<void> {
+  await setSetting('codex.enabled', { enabled });
+}

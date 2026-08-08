@@ -1,4 +1,12 @@
-export type ModelProvider = 'openrouter';
+/**
+ * `openrouter` — per-token, billed to the OpenRouter key. The default for
+ * everything.
+ * `codex` — served by the local Codex bridge sidecar against John's ChatGPT
+ * Pro subscription (packages/jkai-codex-bridge). Zero marginal cost, finite
+ * quota, and a narrower feature set — see $lib/server/models/codex-catalogue
+ * and getProviderFeatures() in ./capabilities.
+ */
+export type ModelProvider = 'openrouter' | 'codex';
 
 export interface ModelContext {
   provider: ModelProvider;
