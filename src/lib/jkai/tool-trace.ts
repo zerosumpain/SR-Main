@@ -544,6 +544,24 @@ interface PendingStep extends TraceStep {
  * disagree: the MCP bus wraps a failure as `{ error }` (chat `+server.ts`), while
  * a site-tool handler returns the `{ success:false, error }` envelope.
  */
+/**
+ * The error text of a result that declares its own failure, or undefined if it
+ * does not declare one. Looks through a JSON-string payload, because Hermes'
+ * own tools return their envelope pre-serialised.
+ *
+ * Only an explicit `success: false` counts. A result that merely carries an
+ * `error` key is left alone: plenty of successful searches return
+ * `{ results: [...], error: null }`, and promoting those to failures would
+ * make the trace's error count useless in the other direction.
+ */
+function declaredFailure(result: unknown): string | undefined {
+  const value = coerceJsonString(result).value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const r = value as { success?: unknown };
+  if (r.success !== false) return undefined;
+  return errorTextOf(value) ?? 'the tool reported success: false';
+}
+
 function errorTextOf(result: unknown): string | undefined {
   if (!result || typeof result !== 'object') return typeof result === 'string' ? result : undefined;
   const r = result as { error?: unknown; message?: unknown };
@@ -625,14 +643,23 @@ export function createTraceRecorder(opts: { now?: () => number } = {}): TraceRec
       step = startStep(tool, {}, toolCallId, summary) ?? undefined;
       if (!step) return;
     }
-    step.status = status;
+    // A tool that reports its own failure inside the payload is a failure,
+    // whatever the transport said. Hermes' native tools (patch, write_file, …)
+    // hand back a JSON *string* carrying `{"success": false, "error": …}` on a
+    // successful round-trip, so the event arrives as `done`. On 2026-08-08 that
+    // recorded a `patch` that had matched nothing as "Done — patch", and the
+    // turn's error count read 1 when it should have read 2.
+    const declared = declaredFailure(result);
+    const effective = status === 'done' && declared ? 'error' : status;
+
+    step.status = effective;
     step._rawResult = result;
     step._hasResult = true;
     step.endedAt = t;
     step.durationMs = t - step.startedAt;
     if (summary) step.summary = summary;
     if (children?.length) step.children = children;
-    if (status === 'error') step.error = errorTextOf(result);
+    if (effective === 'error') step.error = declared ?? errorTextOf(result);
   }
 
   function ensureSubAgent(agentId: string, parentStepId: string | null, task: string): TraceSubAgent {

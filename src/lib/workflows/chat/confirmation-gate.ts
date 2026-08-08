@@ -48,8 +48,10 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'workflow_delete':          return `Delete workflow "${(args.name as string) ?? args.workflowId ?? 'unknown'}"? This cannot be undone.`;
     case 'workflow_clear_data_store': return `Clear the data store for workflow "${args.workflowId ?? 'unknown'}"? Stored keys will be wiped.`;
     case 'datastore_delete':          return `Delete datastore record ${args.id ? `"${args.id}"` : `key "${args.key ?? 'unknown'}"`} from collection "${args.collection ?? 'unknown'}"? This cannot be undone.`;
-    case 'build_delete':             return `Delete build "${args.buildId ?? 'unknown'}"? This cannot be undone.`;
-    case 'build_control':            return args.action === 'publish' ? `Publish build "${args.buildId ?? 'unknown'}" to a public /projects page?` : `Run ${String(args.action ?? 'action')} on build "${args.buildId ?? 'unknown'}"?`;
+    // `id` first: both tools take `id`, not `buildId`, so every one of these
+    // prompts used to read "unknown" — a consent prompt naming nothing.
+    case 'build_delete':             return `Delete build "${args.id ?? args.buildId ?? 'unknown'}"? This cannot be undone.`;
+    case 'build_control':            return args.action === 'publish' ? `Publish build "${args.id ?? args.buildId ?? 'unknown'}" to ${args.slug ? `/projects/${args.slug}/` : 'a public /projects page'}?` : `Run ${String(args.action ?? 'action')} on build "${args.id ?? args.buildId ?? 'unknown'}"?`;
     case 'scraper_script_delete':    return `Delete scraper script "${args.scriptId ?? args.name ?? 'unknown'}"?`;
     case 'scraper_script_save':      return `Save/overwrite scraper script "${args.name ?? args.scriptId ?? 'unknown'}"?`;
     case 'publish_page':             return `Publish page "${(args.slug as string) ?? 'unknown'}" to the public site?`;

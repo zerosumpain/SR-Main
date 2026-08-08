@@ -4,42 +4,54 @@ import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { publishBuild } from '$lib/jkai/sandbox';
+import { resolvePublishSlug } from '$lib/jkai/publish-slug';
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60);
-}
-
-export const POST: RequestHandler = async ({ params }) => {
+export const POST: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build) return json({ error: 'Build not found' }, { status: 404 });
 
-  // Generate slug from title or prompt
-  const base = slugify(build.title || build.prompt.slice(0, 60));
-  const slug = base || params.id.slice(0, 8);
+  // An explicit slug is how a rewritten app replaces the page it already owns.
+  // Optional: the Publish button sends no body and keeps the derived address.
+  const body = await request.json().catch(() => ({}) as Record<string, unknown>);
+  const requested = typeof body?.slug === 'string' ? body.slug.trim() : '';
 
-  // Check for slug collision (different build)
+  const resolved = resolvePublishSlug(build, requested);
+  if (!resolved.ok) return json({ error: resolved.error }, { status: 400 });
+  const slug = resolved.slug;
+
   const [existing] = await db
     .select()
     .from(jkaiBuilds)
     .where(eq(jkaiBuilds.publishedSlug, slug));
+  const collides = existing && existing.id !== build.id;
 
-  const finalSlug = existing && existing.id !== build.id
-    ? `${slug}-${params.id.slice(0, 6)}`
-    : slug;
+  // A derived slug that collides gets suffixed, as before — that is an
+  // accident of naming. A slug the caller typed is an instruction to replace,
+  // so it takes the address over and the old holder gives it up.
+  const finalSlug = collides && !requested ? `${slug}-${params.id.slice(0, 6)}` : slug;
 
   try {
     await publishBuild(params.id, finalSlug);
 
-    await db
-      .update(jkaiBuilds)
-      .set({ publishedSlug: finalSlug, updatedAt: new Date() })
-      .where(eq(jkaiBuilds.id, params.id));
+    await db.transaction(async (tx) => {
+      if (collides && requested) {
+        await tx
+          .update(jkaiBuilds)
+          .set({ publishedSlug: null, updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, existing.id));
+      }
+      await tx
+        .update(jkaiBuilds)
+        .set({ publishedSlug: finalSlug, updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, params.id));
+    });
 
-    return json({ ok: true, slug: finalSlug, url: `/projects/${finalSlug}/` });
+    return json({
+      ok: true,
+      slug: finalSlug,
+      url: `/projects/${finalSlug}/`,
+      replaced: collides && requested ? existing.id : undefined,
+    });
   } catch (err: any) {
     return json({ error: err.message }, { status: 500 });
   }
