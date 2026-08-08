@@ -108,6 +108,21 @@ export function getProviderFeatures(provider: ModelProvider): ProviderFeatures {
   return provider === 'codex' ? CODEX_FEATURES : OPENROUTER_FEATURES;
 }
 
+/**
+ * Why a provider can't be the SITE DEFAULT, or null if it can.
+ *
+ * The site default is the one model every unpinned role falls back to —
+ * including the orchestrator's tool-calling loop, the autonomous builder and
+ * every workflow LLM node with a blank model field. A provider that can't do
+ * tools would leave those failing at call time with no obvious cause, so the
+ * write is refused at save time instead. Narrower selections (a conversation,
+ * a node, a routing profile) know their role and stay free to pick Codex.
+ */
+export function siteDefaultBlockReason(provider: ModelProvider): string | null {
+  if (getProviderFeatures(provider).tools) return null;
+  return `${provider} cannot be the site default: it does not support tool-calling, which the orchestrator and builder require. Pick it per-conversation or per-node instead.`;
+}
+
 /** Human-readable reason a provider can't serve a role, or null if it can.
  *  Rendered as the disabled-option tooltip in the model pickers. */
 export function unsupportedReason(

@@ -8,7 +8,12 @@ import {
   findCodexModel,
 } from './codex-catalogue';
 import { coerceModelContext } from '$lib/constants/default-models';
-import { getModelCapabilities, getProviderFeatures, unsupportedReason } from './capabilities';
+import {
+  getModelCapabilities,
+  getProviderFeatures,
+  unsupportedReason,
+  siteDefaultBlockReason,
+} from './capabilities';
 import { priceFor, isSubscriptionProvider } from '$lib/jkai/llm-pricing';
 
 describe('codex model ids', () => {
@@ -81,6 +86,14 @@ describe('codex capabilities', () => {
       streaming: true,
       embeddings: false,
     });
+  });
+
+  it('refuses Codex as the site default, but allows OpenRouter', () => {
+    // The site default is the fallback for every unpinned role, including the
+    // orchestrator's tool-calling loop. Allowing Codex there would break the
+    // builder at call time with no obvious cause.
+    expect(siteDefaultBlockReason('codex')).toMatch(/cannot be the site default/);
+    expect(siteDefaultBlockReason('openrouter')).toBeNull();
   });
 
   it('explains why a role is unavailable', () => {
