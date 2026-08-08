@@ -52,6 +52,13 @@ rsync -a src/app.css "$VPS_DIR/src/" 2>/dev/null || true
 rsync -a src/lib/styles/ "$VPS_DIR/src/lib/styles/" 2>/dev/null || true
 rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/python/"
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
+# The build smoke harness. `runStaticSmoke` shells out to this by path, and it
+# must live inside the repo — `import('playwright')` resolves from the script's
+# own directory. Shipped in #144 without this line, so the check reported
+# "skipped — playwright is not available" on every production build while CI
+# stayed green: the feature degrades silently by design, which is right for a
+# missing browser and wrong for a missing file.
+rsync -a scripts/smoke-static-app.mjs "$VPS_DIR/scripts/"
 
 echo "==> Installing production deps..."
 ( cd "$VPS_DIR" && npm install --omit=dev --silent )
