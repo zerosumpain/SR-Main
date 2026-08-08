@@ -2,6 +2,84 @@ import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
+import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+
+/**
+ * Normalise the `files` argument of `register_hermes_build`.
+ *
+ * Hermes stringifies nested argument values on their way to a tool, so a
+ * perfectly well-formed `files` array arrives in any of four shapes: the real
+ * array, a JSON string holding the array, an array holding one JSON string, or
+ * an array of per-file JSON strings. Rejecting the encoded forms taught the
+ * model that the tool was broken rather than that its escaping was, and on
+ * 2026-08-08 it responded by abandoning the tool and hand-editing a scratch
+ * file in /tmp that had no connection to any build workspace.
+ *
+ * Parse what we can recognise; complain about the shape we actually got when
+ * we can't. Same underlying cause as `urlsFromArgs` in chat/tool-summary.ts.
+ */
+export function coerceFilesArg(
+  raw: unknown,
+): { ok: true; files: Array<{ path: string; content: string }> } | { ok: false; error: string } {
+  const parseMaybe = (v: unknown): unknown => {
+    if (typeof v !== 'string') return v;
+    const t = v.trim();
+    if (!t.startsWith('[') && !t.startsWith('{')) return v;
+    try {
+      return JSON.parse(t);
+    } catch {
+      return v;
+    }
+  };
+
+  let value = parseMaybe(raw);
+  // An array holding a single stringified array is still the array.
+  if (Array.isArray(value) && value.length === 1) {
+    const inner = parseMaybe(value[0]);
+    if (Array.isArray(inner)) value = inner;
+  }
+  if (!Array.isArray(value)) value = [value];
+
+  const files = (value as unknown[]).map(parseMaybe);
+  if (files.length === 0) return { ok: false, error: 'files[] is required and must be non-empty' };
+
+  const out: Array<{ path: string; content: string }> = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (!f || typeof f !== 'object' || Array.isArray(f)) {
+      return {
+        ok: false,
+        error:
+          `files[${i}] is ${describeShape(f)}, not an object. Each entry must be ` +
+          `{ path: "index.html", content: "<!doctype html>…" }.`,
+      };
+    }
+    const rec = f as Record<string, unknown>;
+    const path = rec.path ?? rec.name ?? rec.filename;
+    const content = rec.content ?? rec.body ?? rec.text;
+    if (typeof path !== 'string' || !path) {
+      return {
+        ok: false,
+        error: `files[${i}] has no "path". Got keys: ${Object.keys(rec).join(', ') || '(none)'}.`,
+      };
+    }
+    if (typeof content !== 'string') {
+      return {
+        ok: false,
+        error: `files[${i}] ("${path}") has content of type ${describeShape(content)}; it must be the file body as a string.`,
+      };
+    }
+    out.push({ path, content });
+  }
+  return { ok: true, files: out };
+}
+
+function describeShape(v: unknown): string {
+  if (v === null) return 'null';
+  if (v === undefined) return 'missing';
+  if (Array.isArray(v)) return 'an array';
+  return `a ${typeof v}`;
+}
 
 // ==========================================
 // Existing Tools (renamed)
@@ -89,13 +167,34 @@ register({
 
 register({
   name: 'build_control',
-  destructive: true,
-  description: 'Control a JKAI build: pause, resume, stop, or publish it',
+  // Deliberately NOT destructive (changed 2026-08-08). Publishing a static app
+  // to /projects/ is reversible (build_delete unpublishes, and the previous
+  // build row keeps its workspace), and gating it cost more than it protected:
+  // on 2026-08-08 two publishes of the same app died at this call — one timed
+  // out after 240s against a confirmer whose turn had already been persisted,
+  // one was denied outright because it came from a headless [heartbeat] turn.
+  // Both failures were invisible to the user, who was left looking at a
+  // calculator that returned 0 for every sum.
+  //
+  // `build_delete` stays gated — that one is not reversible. The takeover rule
+  // below is what replaces the prompt: an accidental publish can create a page,
+  // but it cannot silently overwrite somebody else's.
+  description:
+    'Control a JKAI build: pause, resume, stop, or publish it. ' +
+    'Publishing ships the build\'s live/ directory to https://strangeramblings.com/projects/<slug>/. ' +
+    'Pass `slug` to choose the address — this is how you REPLACE an existing project page ' +
+    '(e.g. improving the app at /projects/simple-calculator/ means publishing the new build with slug "simple-calculator"). ' +
+    'Without `slug` the address is derived from the build title, which creates a NEW page rather than updating one.',
   parameters: {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Build ID' },
       action: { type: 'string', description: 'Action: "pause", "resume", "stop", or "publish"' },
+      slug: {
+        type: 'string',
+        description:
+          'Publish only. The /projects/<slug>/ address to publish to. Required when taking over a slug that currently belongs to a different build — otherwise the publish is refused rather than silently overwriting it.',
+      },
     },
     required: ['id', 'action'],
   },
@@ -112,10 +211,54 @@ register({
       const { publishBuild } = await import('$lib/jkai/sandbox');
       const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id)).limit(1);
       if (!build) return { success: false, error: 'Build not found' };
-      const slug = build.publishedSlug || build.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50) || id.slice(0, 8);
+
+      const requested = typeof args.slug === 'string' ? args.slug.trim() : '';
+      const resolved = resolvePublishSlug(build, requested);
+      if (!resolved.ok) return { success: false, error: resolved.error };
+      const slug = resolved.slug;
+
+      // Refuse to take a slug off another build unless the caller named it.
+      // A derived slug that happens to collide is an accident; a typed one is
+      // an instruction. Without this, ungating publish would let a headless
+      // turn overwrite an unrelated project page.
+      const [owner] = await db
+        .select({ id: jkaiBuilds.id, title: jkaiBuilds.title })
+        .from(jkaiBuilds)
+        .where(eq(jkaiBuilds.publishedSlug, slug))
+        .limit(1);
+      if (owner && owner.id !== id && !requested) {
+        return {
+          success: false,
+          error:
+            `/projects/${slug}/ already belongs to build ${owner.id}` +
+            `${owner.title ? ` ("${owner.title}")` : ''}. ` +
+            `Pass slug:"${slug}" explicitly to replace it, or pick a different slug.`,
+        };
+      }
+
       await publishBuild(id, slug);
-      await db.update(jkaiBuilds).set({ publishedSlug: slug, updatedAt: new Date() }).where(eq(jkaiBuilds.id, id));
-      return { success: true, data: { slug, url: `https://strangeramblings.com/projects/${slug}/` } };
+      await db.transaction(async (tx) => {
+        // One slug, one owner: the previous holder loses the pointer, or the
+        // /jkai/builds list shows two cards both claiming the same URL.
+        if (owner && owner.id !== id) {
+          await tx
+            .update(jkaiBuilds)
+            .set({ publishedSlug: null, updatedAt: new Date() })
+            .where(eq(jkaiBuilds.id, owner.id));
+        }
+        await tx
+          .update(jkaiBuilds)
+          .set({ publishedSlug: slug, updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, id));
+      });
+      return {
+        success: true,
+        data: {
+          slug,
+          url: `https://strangeramblings.com/projects/${slug}/`,
+          replaced: owner && owner.id !== id ? owner.id : undefined,
+        },
+      };
     } else {
       return { success: false, error: `Unknown action: ${action}` };
     }
@@ -384,12 +527,22 @@ register({
     'You provide the source files; this tool writes them to the build workspace, creates a `jkai_builds` row marked origin=hermes, status=completed, and returns the build id + URL. ' +
     'After calling this, ask the user (in the same conversation) whether they want it conformed to the Strange Ramblings design system and published. ' +
     'If yes, call `build_tweak` with the build id and an instruction like "Apply the site design system, then publish to /projects/". ' +
-    'If no, leave it — the user can still hit "Publish" from the /jkai/builds card to ship the raw version.',
+    'If no, leave it — the user can still hit "Publish" from the /jkai/builds card to ship the raw version. ' +
+    'IMPROVING AN APP THAT IS ALREADY LIVE: pass `updateBuildId` so this replaces the existing build instead of creating another one, ' +
+    'then publish with `build_control` passing the SAME `slug` the app already uses — otherwise the old, broken page stays up at its old address. ' +
+    'EDITING: to revise a registered app, call this again with the full corrected file bodies, or use `build_write_file`. ' +
+    'Do NOT edit the app through your own local write_file/patch tools — those touch your scratch filesystem, which is not the build workspace, ' +
+    'and the change will never reach the build or the site.',
   parameters: {
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Short human-readable title (e.g. "Quick calculator", "Daily mood tracker"). Auto-generated from prompt if omitted.' },
       prompt: { type: 'string', description: 'The user request that led to this app — used as the "build prompt" for accounting and any future continuation pass. Free text, 1-2 sentences.' },
+      updateBuildId: {
+        type: 'string',
+        description:
+          'Optional. The id of an existing hermes-origin build to REPLACE (same row, same workspace, same published slug) rather than creating a new one. Use this for every revision of an app you already registered in this conversation.',
+      },
       files: {
         type: 'array',
         description: 'Static source files. The first file with name "index.html" becomes the entry point. Other files (style.css, app.js, sub-pages, assets) are written alongside it.',
@@ -411,15 +564,10 @@ register({
     const { ensureWorkspace, writeFileInSandbox, execInSandbox } = await import('$lib/jkai/sandbox');
     const { resolveDefaultModel } = await import('$lib/server/models/settings');
 
-    const filesRaw = args.files;
-    if (!Array.isArray(filesRaw) || filesRaw.length === 0) {
-      return { success: false, error: 'files[] is required and must be non-empty' };
-    }
-    const files = filesRaw as Array<{ path: string; content: string }>;
+    const coerced = coerceFilesArg(args.files);
+    if (!coerced.ok) return { success: false, error: coerced.error };
+    const files = coerced.files;
     for (const f of files) {
-      if (!f.path || typeof f.path !== 'string' || typeof f.content !== 'string') {
-        return { success: false, error: 'each file needs string path + string content' };
-      }
       // Reject path traversal — keep writes scoped to the workspace.
       if (f.path.startsWith('/') || f.path.includes('..')) {
         return { success: false, error: `invalid file path: ${f.path}` };
@@ -459,30 +607,53 @@ register({
 
     const ctx = await resolveDefaultModel();
 
-    // Pre-create the build row so we have the buildId for the workspace path.
-    const insertValues: Record<string, unknown> = {
-      title,
-      prompt,
-      status: 'completed',
-      origin: 'hermes',
-      planStatus: 'approved',
-      iterationsCompleted: 1,
-      budgetConfig: { maxIterations: 10, maxTotalMinutes: 60 },
-      modelProvider: ctx.provider,
-      modelId: ctx.modelId,
-      enforceDesignSystem: false, // Hermes-origin starts as-is; user opts in to conformance via build_tweak.
-      // Mark it servable — a static index.html is enough for publishBuild to copy.
-      serveConfig: {
-        port: 0,
-        startCommand: null,
-        healthCheck: '/',
-        description: title,
-        kind: 'static',
-      },
-    };
-    if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
-
-    const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
+    // Re-registering an app the model has just revised should REPLACE it, not
+    // mint a third row. Without this, one 2026-08-08 conversation produced
+    // three "calculator" builds for one app, two of them dead ends, and the
+    // published page pointed at the oldest and most broken of them.
+    const updateId = typeof args.updateBuildId === 'string' ? args.updateBuildId.trim() : '';
+    let build: typeof jkaiBuilds.$inferSelect;
+    if (updateId) {
+      const [existing] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, updateId)).limit(1);
+      if (!existing) return { success: false, error: `no build ${updateId} to update` };
+      if (existing.origin !== 'hermes') {
+        return {
+          success: false,
+          error: `build ${updateId} was made by the ${existing.origin} builder; this tool only replaces the files of a build it registered itself.`,
+        };
+      }
+      const [updated] = await db
+        .update(jkaiBuilds)
+        .set({ title, prompt, status: 'completed', updatedAt: new Date() })
+        .where(eq(jkaiBuilds.id, updateId))
+        .returning();
+      build = updated;
+    } else {
+      // Pre-create the build row so we have the buildId for the workspace path.
+      const insertValues: Record<string, unknown> = {
+        title,
+        prompt,
+        status: 'completed',
+        origin: 'hermes',
+        planStatus: 'approved',
+        iterationsCompleted: 1,
+        budgetConfig: { maxIterations: 10, maxTotalMinutes: 60 },
+        modelProvider: ctx.provider,
+        modelId: ctx.modelId,
+        enforceDesignSystem: false, // Hermes-origin starts as-is; user opts in to conformance via build_tweak.
+        // Mark it servable — a static index.html is enough for publishBuild to copy.
+        serveConfig: {
+          port: 0,
+          startCommand: null,
+          healthCheck: '/',
+          description: title,
+          kind: 'static',
+        },
+      };
+      if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
+      const [inserted] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
+      build = inserted;
+    }
     const buildId = build.id;
 
     // Materialise the workspace + write files to BOTH dev/ and live/ so the
@@ -511,9 +682,13 @@ register({
     await db.insert(jkaiLogs).values({
       buildId,
       type: 'system',
-      content: `Hermes registered ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or have Hermes call build_tweak to conform it to the site design system first.`,
+      content: `Hermes ${updateId ? 're-registered' : 'registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or have Hermes call build_tweak to conform it to the site design system first.`,
     });
 
+    // The address this build already answers on, if any. Handing it back means
+    // the model can republish over the SAME page instead of deriving a new
+    // slug from a new title and leaving the broken one live.
+    const publishedSlug = build.publishedSlug ?? null;
     return {
       success: true,
       data: {
@@ -521,8 +696,12 @@ register({
         title,
         origin: 'hermes',
         status: 'completed',
+        replacedExisting: updateId ? true : undefined,
+        publishedSlug,
         detailUrl: `/jkai/builds/${buildId}`,
-        publishHint: 'Call build_control with action="publish" to ship to /projects/<slug>/, or build_tweak to refine first.',
+        publishHint: publishedSlug
+          ? `This build is live at /projects/${publishedSlug}/. To update that page call build_control with action="publish", id="${buildId}" and slug="${publishedSlug}" — omitting the slug would publish to a different address and leave the old page up.`
+          : 'Call build_control with action="publish" to ship to /projects/<slug>/ (pass slug to choose the address), or build_tweak to refine first.',
       },
     };
   },

@@ -5,7 +5,6 @@ import { isDestructive } from '$lib/workflows/chat/confirmation-gate';
 describe('destructive flag (single source of truth)', () => {
   const shouldBeDestructive = [
     'publish_page',
-    'build_control',
     'build_delete',
     'node_builder_commit_and_deploy',
     'workflow_delete',
@@ -27,6 +26,19 @@ describe('destructive flag (single source of truth)', () => {
       expect(getTool(name)?.destructive).toBeFalsy();
       expect(isDestructive(name)).toBe(false);
     }
+  });
+
+  it('leaves build_control ungated, and build_delete gated', () => {
+    // Publishing a build is reversible and was gated until 2026-08-08, when two
+    // publishes of the same app died at the prompt — one timing out against a
+    // confirmer whose turn had already ended, one denied because it came from a
+    // headless heartbeat — leaving a broken calculator live and the user with
+    // no sign either had failed. What replaces the prompt is the slug-takeover
+    // rule in builds.ts: a publish can create a page, but it cannot silently
+    // overwrite one belonging to another build unless the slug is named.
+    expect(getTool('build_control')?.destructive).toBeFalsy();
+    expect(isDestructive('build_control')).toBe(false);
+    expect(isDestructive('build_delete')).toBe(true);
   });
 
   it('has no phantom gate entries', () => {

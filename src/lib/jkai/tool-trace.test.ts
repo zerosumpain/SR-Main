@@ -90,6 +90,55 @@ describe('createTraceRecorder', () => {
     expect(rec.snapshot().errorCount).toBe(1);
   });
 
+  it('treats a self-declared failure as an error even when the event says done', () => {
+    // Hermes' own tools return their envelope pre-serialised, so a `patch` that
+    // matched nothing still arrives as a completed round-trip. On 2026-08-08
+    // that logged as "Done — patch" and the turn under-reported its errors.
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'patch', args: { path: '/tmp/x.html' }, toolCallId: 'p1' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'patch',
+      result: '{"success": false, "error": "Could not find a match for old_string"}',
+      status: 'done',
+      toolCallId: 'p1',
+    });
+
+    const snap = rec.snapshot();
+    expect(snap.steps[0].status).toBe('error');
+    expect(snap.steps[0].error).toBe('Could not find a match for old_string');
+    expect(snap.errorCount).toBe(1);
+  });
+
+  it('treats an unserialised success:false envelope the same way', () => {
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'build_control', args: {}, toolCallId: 'b1' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'build_control',
+      result: { success: false, error: 'Build not found' },
+      status: 'done',
+      toolCallId: 'b1',
+    });
+    expect(rec.snapshot().steps[0]).toMatchObject({ status: 'error', error: 'Build not found' });
+  });
+
+  it('leaves a successful result carrying a null error alone', () => {
+    // The mirror-image mistake: promoting anything with an `error` key would
+    // make the error count useless in the other direction.
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'web_search', args: {}, toolCallId: 's1' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'web_search',
+      result: { success: true, results: [1, 2], error: null },
+      status: 'done',
+      toolCallId: 's1',
+    });
+    expect(rec.snapshot().steps[0].status).toBe('done');
+    expect(rec.snapshot().errorCount).toBe(0);
+  });
+
   it('unwraps the jkai_extended meta-tool into the real sub-tool for display', () => {
     const rec = createTraceRecorder({ now: fakeClock() });
     rec.observe({
