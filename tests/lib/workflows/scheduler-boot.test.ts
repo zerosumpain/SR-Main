@@ -1,4 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
+
+// `index.ts` deliberately skips startScheduler (and the other platform
+// services) when JKAI_BUILDER_PROCESS=1 — that flag is how the jkai-builder
+// sidecar avoids double-running the scheduler alongside the web app.
+//
+// The builder runs each change-request build's gate as its own child process,
+// so the gate inherits that flag and this test fails 100% of the time inside a
+// build while passing everywhere else. That single test failure has been enough
+// to stop every autonomous build opening a pull request (found 2026-08-08).
+//
+// The assertion is about module wiring, not about ambient environment, so pin
+// the flag off and restore whatever was there.
+const originalBuilderFlag = process.env.JKAI_BUILDER_PROCESS;
+delete process.env.JKAI_BUILDER_PROCESS;
+afterAll(() => {
+  if (originalBuilderFlag === undefined) delete process.env.JKAI_BUILDER_PROCESS;
+  else process.env.JKAI_BUILDER_PROCESS = originalBuilderFlag;
+});
 
 // Mock the DB and scheduler before importing index
 vi.mock('$lib/db', () => ({
