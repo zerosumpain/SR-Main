@@ -13,11 +13,19 @@
   import WatchPane from './WatchPane.svelte';
   import { reduceFeed, type FeedEvent } from './feed';
   import { buildFileTimeline } from './parse-actions';
+  import BuildCockpit from './BuildCockpit.svelte';
+  import { buildCockpitMetrics } from './cockpit-metrics';
 
   let { data }: { data: any } = $props();
 
   let build = $state(data.build);
   let iterations = $state<any[]>(data.iterations as any[]);
+  // The instrument panel reads from the same live state as the rest of the
+  // view, so it tracks the SSE refresh without any effect of its own.
+  const cockpitMetrics = $derived(
+    build ? buildCockpitMetrics(build, iterations ?? [], (data.logs ?? []) as any[]) : null,
+  );
+
   let events = $state<FeedEvent[]>(
     (data.logs as Array<{ id: number; type: string; content: string; iterationId: string | null }>).map(
       (l) => ({ kind: 'log', id: l.id, type: l.type, content: l.content, iterationId: l.iterationId }),
@@ -284,6 +292,13 @@
       <ModeSwitcher bind:mode />
     </div>
   </header>
+
+  <!-- Instrument panel. Derived, not stored: `build`/`iterations`/`logs` are
+       swapped wholesale by the page's cache+network refresh, and a $derived
+       recomputes with them. -->
+  {#if cockpitMetrics}
+    <BuildCockpit metrics={cockpitMetrics} />
+  {/if}
 
   <div class="actions-row">
     {#if build.status === 'running'}

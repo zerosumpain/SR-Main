@@ -32,6 +32,13 @@ const DEFAULT_BUDGET = {
   // to an existing repo; 400k is generous for that, and hitting it continues
   // into a fresh iteration rather than failing the build.
   maxTokensPerIteration: 400_000,
+  // A change request is one surgical edit. If it has cost more than this, the
+  // request was too big or the agent is stuck — either way a human should look
+  // before more is spent.
+  maxCostUsd: 2,
+  // Three iterations in a row that change nothing is a verification loop, not
+  // work. Stop and hand back.
+  maxIdleIterations: 3,
 };
 
 export interface ChangeRequestResult {

@@ -15,6 +15,17 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
     return { canProceed: false, shouldComplete: true, reason: `Reached total time cap (${config.maxTotalMinutes}m)` };
   }
 
+  if (config.maxCostUsd) {
+    const spent = Number.parseFloat(String(build.costUsd ?? '0'));
+    if (Number.isFinite(spent) && spent >= config.maxCostUsd) {
+      return {
+        canProceed: false,
+        shouldComplete: true,
+        reason: `Cost cap reached ($${spent.toFixed(4)} / $${config.maxCostUsd.toFixed(2)}).`,
+      };
+    }
+  }
+
   const windowStart = new Date(Date.now() - 60 * 60 * 1000);
 
   // Every iteration in the window, not just the completed ones. A failed
