@@ -5,7 +5,7 @@ import { generateWorkflow, modifyWorkflow, saveWorkflowFromGenerated } from '$li
 import { generalChat } from '$lib/workflows/chat/general-chat';
 import type { WorkflowNodeDef, WorkflowEdgeDef } from '$lib/workflows/types';
 import { db } from '$lib/db';
-import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments } from '$lib/db/schema';
+import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
 import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
@@ -33,6 +33,7 @@ import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
+import { createTraceRecorder } from '$lib/jkai/tool-trace';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -293,6 +294,20 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // final `done` event's `result.attachments` so MessageAttachments renders
   // them inline.
   const turnAttachments: AssistantAttachment[] = [];
+
+  // The turn's tool-call chain, recorded for /jkai/trace/<jobId>. Same lifecycle
+  // as turnAttachments below it: accumulated while the stream runs, written once
+  // when the turn ends. It exists because nothing else durably records the chain
+  // on this branch — see $lib/jkai/tool-trace for the full why.
+  const traceRecorder = createTraceRecorder();
+
+  /** Publish a JobEvent to the SSE stream AND record it in the turn's trace.
+   *  Used at the tool/sub-agent emission sites; plain `publishJobEvent` stays
+   *  correct everywhere else, since the recorder ignores non-tool events. */
+  const emitTraced = (ev: JobEvent) => {
+    traceRecorder.observe(ev);
+    publishJobEvent(jobId, ev);
+  };
   // @files (file_search) hits promoted onto this turn so the chat UI can render
   // clickable "sources" chips. Mirrors turnAttachments: collected from the
   // file_search tool result, emitted on `done`, and persisted in the assistant
@@ -392,6 +407,50 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     };
   }
 
+  /** True once the trace row exists, so the assistant metadata can point at it. */
+  let tracePersisted = false;
+
+  /**
+   * Write the turn's tool-call chain. Called immediately BEFORE `done` is
+   * published, never after: the client renders the "open trace" link the moment
+   * it sees `done`, so a row written afterwards would give it a window in which
+   * the link 404s.
+   *
+   * Idempotent (there are two `done` sites — a normal finalize and the
+   * stream-ended-without-finalize fallback) and never fatal: a trace is a
+   * diagnostic, and losing one must not cost the user their reply.
+   */
+  async function persistToolTrace(): Promise<string | null> {
+    if (tracePersisted) return jobId;
+    if (!traceRecorder.hasSteps()) return null;
+    if (!conversationId && !workflowId) return null;
+    tracePersisted = true;
+    try {
+      const trace = traceRecorder.snapshot();
+      await db
+        .insert(jkaiToolTraces)
+        .values({
+          id: jobId,
+          conversationId: conversationId ?? null,
+          workflowId: workflowId ?? null,
+          prompt: (message ?? '').slice(0, 500),
+          model: turnStamp?.model ?? null,
+          provider: turnStamp?.provider ?? null,
+          costUsd: turnStamp?.costUsd ?? null,
+          stepCount: trace.stepCount,
+          errorCount: trace.errorCount,
+          durationMs: trace.durationMs,
+          steps: trace,
+        })
+        .onConflictDoNothing();
+      return jobId;
+    } catch (err) {
+      console.error('[hermes-chat] failed to persist tool trace:', err instanceof Error ? err.message : err);
+      tracePersisted = false;
+      return null;
+    }
+  }
+
   // Subscribe to tool-step events for this chat. The MCP dispatcher publishes
   // a started/completed/failed event for every tools/call carrying a
   // matching workflow_id argument (= chatId for general /jkai chats, or the
@@ -432,7 +491,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
     if (abortController.signal.aborted) return;
     if (e.phase === 'started') {
-      publishJobEvent(jobId, {
+      emitTraced({
         type: 'tool_start',
         tool: e.tool,
         args: e.args ?? {},
@@ -452,7 +511,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       return;
     }
     // completed | failed → tool_result
-    publishJobEvent(jobId, {
+    emitTraced({
       type: 'tool_result',
       tool: e.tool,
       result: e.phase === 'failed' ? { error: e.error ?? 'unknown error' } : (e.result ?? e.resultPreview ?? null),
@@ -696,7 +755,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         // These also naturally reset the job's idle watchdog (defence in depth
         // alongside the activeDelegations tracking in job-store).
         if (frame.kind === 'subagent') {
-          for (const ev of adaptSubagentFrameToJobEvents(frame)) publishJobEvent(jobId, ev);
+          for (const ev of adaptSubagentFrameToJobEvents(frame)) emitTraced(ev);
           continue;
         }
         if (frame.kind === 'tool') {
@@ -722,7 +781,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
                 }
               }
             }
-            publishJobEvent(jobId, ev);
+            emitTraced(ev);
           }
           continue;
         }
@@ -775,6 +834,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
                 ? { outputTokens: turnUsage.output_tokens }
                 : undefined,
           };
+          // Before `done`, so the trace link the client renders on this event
+          // always resolves. See persistToolTrace.
+          const finalizeTraceId = await persistToolTrace();
+          if (finalizeTraceId) (job.result as Record<string, unknown>).traceId = finalizeTraceId;
           publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
           break;
         }
@@ -793,6 +856,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           researchRefs: turnResearchRefs.length > 0 ? turnResearchRefs : undefined,
           workflowRefs: turnWorkflowRefs.length > 0 ? turnWorkflowRefs : undefined,
         };
+        const fallbackTraceId = await persistToolTrace();
+        if (fallbackTraceId) (job.result as Record<string, unknown>).traceId = fallbackTraceId;
         publishJobEvent(jobId, { type: 'done', result: job.result as Record<string, unknown> });
       }
 
@@ -831,6 +896,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           if (turnWorkflowRefs.length > 0) {
             assistantMeta.workflowRefs = turnWorkflowRefs;
           }
+          // Pointer to the turn's tool-call chain in jkai_tool_traces. Just the
+          // id — the chain itself is deliberately NOT inlined here, because the
+          // conversation loader selects `metadata` for every message in the
+          // thread and a chain can run to hundreds of KB.
+          if (tracePersisted) assistantMeta.traceId = jobId;
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
           const [insertedAssistant] = await db.insert(orchestratorChats).values({
             conversationId: conversationId ?? null,
@@ -845,6 +915,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             await db.update(jkaiAttachments)
               .set({ messageId: insertedAssistant.id, conversationId: conversationId ?? null })
               .where(inArray(jkaiAttachments.id, turnAttachments.map((a) => a.id)));
+          }
+          // Same back-fill for the trace: it was written before `done` (so the
+          // link never 404s), which is necessarily before this row existed.
+          if (insertedAssistant && tracePersisted) {
+            await db.update(jkaiToolTraces)
+              .set({ messageId: insertedAssistant.id })
+              .where(eq(jkaiToolTraces.id, jobId));
           }
         } catch (persistErr) {
           console.error('[hermes-chat] failed to persist assistant message:', persistErr instanceof Error ? persistErr.message : persistErr);

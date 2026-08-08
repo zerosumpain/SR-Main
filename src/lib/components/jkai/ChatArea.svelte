@@ -162,6 +162,10 @@
     researchRefs?: ResearchSearchRef[];
     /** Canvases created/updated this turn — deep-link chips. Same lifecycle. */
     workflowRefs?: WorkflowChipRef[];
+    /** Id of this turn's recorded tool-call chain in `jkai_tool_traces`, when it
+     *  made any calls. Arrives on the `done` event for a live turn and from
+     *  `metadata.traceId` on reload; opens /jkai/trace/<id> in a new tab. */
+    traceId?: string;
     source?: string;
     /** ISO-8601 wall-clock time the bubble was created (DB createdAt for
      *  reloaded history, `new Date().toISOString()` stamped at the moment
@@ -814,7 +818,7 @@
   // Sync messages when initialMessages or conversationId changes
   $effect(() => {
     messages = initialMessages.map((m) => {
-      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[]; workflowRefs?: WorkflowChipRef[] } | undefined;
+      const meta = m.metadata as { toolSteps?: ToolStep[]; source?: string; fileRefs?: FileSearchRef[]; researchRefs?: ResearchSearchRef[]; workflowRefs?: WorkflowChipRef[]; traceId?: string } | undefined;
       const raw = m as Record<string, unknown>;
       return {
         id: m.id,
@@ -831,6 +835,11 @@
         researchRefs: meta?.researchRefs ?? undefined,
         // Hydrate workflow chips (created/updated canvases) across reloads
         workflowRefs: meta?.workflowRefs ?? undefined,
+        // The turn's recorded tool-call chain. This is the ONLY tool information
+        // that survives a reload on the Hermes engine — `metadata.toolSteps` is
+        // never written on that branch, so the inline step cards above are gone
+        // by now and the trace page is where the chain lives.
+        traceId: meta?.traceId ?? undefined,
         attachments: (raw.attachments as Message['attachments']) ?? undefined,
         // Per-bubble timestamp so ChatMessage.svelte can render a wall-clock
         // mark + an inter-bubble gap. Falls back to undefined for legacy
@@ -1258,6 +1267,7 @@
           researchRefs?: ResearchSearchRef[];
           workflowRefs?: WorkflowChipRef[];
           usage?: { outputTokens?: number | null; stamp?: TurnStamp };
+          traceId?: string;
         };
         // Settle the tok/s meter against the provider's own output-token count
         // (reasoning + tool-call tokens included) when the server reported one;
@@ -1280,6 +1290,9 @@
           researchRefs: result.researchRefs ?? undefined,
           workflowRefs: result.workflowRefs ?? undefined,
           attachments: result.attachments ?? undefined,
+          // Written server-side BEFORE `done` was published, so linking to it
+          // straight away can't race the insert.
+          traceId: result.traceId ?? undefined,
           createdAt: prior?.createdAt ?? new Date().toISOString(),
         };
         messages = messages.map((m) => (m.id === progressId ? finalMsg : m));
@@ -2440,6 +2453,21 @@
               {#each promoteMarkersForMessage(msg) as marker (marker.toolCallId)}
                 <PromoteToolBanner messageId={msg.id} {marker} />
               {/each}
+              {#if toolSteps.length === 0 && msg.traceId}
+                <!-- Reloaded history. `metadata.toolSteps` is never written on
+                     the Hermes branch, so there are no step cards to show — but
+                     the chain itself was recorded, and the trace page has it. -->
+                <a
+                  class="trace-standalone"
+                  href={`/jkai/trace/${msg.traceId}`}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <span class="ta-status">⛓</span>
+                  <span class="ta-count">tool call chain</span>
+                  <span class="trace-arrow" aria-hidden="true">↗</span>
+                </a>
+              {/if}
               {#if toolSteps.length > 0}
                 <!-- Tool activity, inline and permanent: a collapsed disclosure
                      of what the assistant did to produce this reply. Replaces
@@ -2451,6 +2479,18 @@
                     </span>
                     <span class="ta-count">{toolSteps.length} {toolSteps.length === 1 ? 'tool' : 'tools'}</span>
                     <span class="ta-names">{toolSteps.map((s) => friendlyToolName(resolveDisplayTool(s.tool, s.args).tool)).join(' · ')}</span>
+                    {#if msg.traceId}
+                      <!-- stopPropagation: an <a> inside <summary> would
+                           otherwise toggle the disclosure on its way out. -->
+                      <a
+                        class="trace-link"
+                        href={`/jkai/trace/${msg.traceId}`}
+                        target="_blank"
+                        rel="noopener"
+                        title="Open the full call chain in a new tab"
+                        onclick={(e) => e.stopPropagation()}
+                      >analyse ↗</a>
+                    {/if}
                     <span class="ta-chev" aria-hidden="true">▸</span>
                   </summary>
                   <ul class="step-cards ta-steps">
@@ -3732,6 +3772,39 @@
   .tool-activity[open] .ta-chev { transform: rotate(90deg); }
   .tool-activity[open] .ta-names { display: none; }
   .ta-steps { margin-top: 4px; }
+
+  /* Deep-link to the full call chain (/jkai/trace/<id>). The inline disclosure
+   * answers "what did it do"; the trace page answers "how did this turn run",
+   * which needs a table and more width than the chat column has. */
+  .trace-link {
+    flex-shrink: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    text-decoration: none;
+    padding: 1px 5px;
+    border: 1px solid color-mix(in srgb, var(--card-border) 70%, transparent);
+    border-radius: var(--radius-sharp);
+  }
+  .trace-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .trace-standalone {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+    padding: 3px 2px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-ghost);
+    text-decoration: none;
+  }
+  .trace-standalone:hover { color: var(--accent); }
+  .trace-arrow { flex-shrink: 0; }
 
   /* Progress bubble — outer box for tool step cards */
   .progress-bubble {

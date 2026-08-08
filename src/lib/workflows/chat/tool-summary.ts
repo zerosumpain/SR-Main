@@ -77,7 +77,10 @@ export function categorizeTool(tool: string): ToolCategory {
   if (startsAny('terminal', 'exec', 'bash', 'shell', 'run_command', 'python')) return 'RUN';
   if (
     startsAny(
-      'web_search', 'fetch_url', 'webpage_fetch', 'stealth_scrape',
+      // `web_extract` is one of Hermes' core native tools (it sits alongside
+      // web_search in the runtime's own tool log) and was falling through to
+      // the neutral TOOL bucket — a plainly WEB action labelled as unknown.
+      'web_search', 'web_extract', 'fetch_url', 'webpage_fetch', 'stealth_scrape',
       'scraper_', 'reverse_geocode', 'geocode', 'browse',
     )
   )
