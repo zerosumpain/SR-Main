@@ -8,6 +8,33 @@ SvelteKit personal site, live at `https://strangeramblings.com` (VPS port 4173).
 - **Auth:** Google OAuth via Auth.js
 - **LLM:** All AI calls via the gateway in `$lib/jkai/llm-client` (and its wrappers, e.g. `$lib/deepdive/ai.ts`) — never direct provider SDK calls
 
+### Two LLM providers
+
+`getLLMClient` is the only place provider selection happens. A model id decides
+which one:
+
+- **`openrouter`** (default) — everything without a `codex/` prefix, billed per token.
+- **`codex`** — ids prefixed `codex/` (e.g. `codex/gpt-5.6-terra`), served by the
+  `jkai-codex-bridge` sidecar against the ChatGPT Pro subscription. Zero cash
+  cost, finite weekly quota.
+
+Rules worth knowing before touching this:
+
+- **Provider comes from the id prefix, not a stored field.** `coerceModelContext`
+  is the single decider; persisted state often carries a bare model string with
+  no provider at all. Never hardcode `provider: 'openrouter'` when writing a
+  model setting — pass the id through `coerceModelContext`.
+- **Codex cannot do caller-supplied tools or embeddings.** Check
+  `getProviderFeatures()` before assuming a role can use it; the orchestrator
+  loop and all embedding paths stay on OpenRouter. It *can* stream and do
+  structured output.
+- **Codex is text-only.** Anything sending images/audio/PDF must check
+  `getModelCapabilities()` first — the site default may now be a Codex model.
+- **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
+- The bridge lives in `packages/jkai-codex-bridge` (see its README) and is
+  deployed by `scripts/deploy-codex-bridge.sh`, **not** by `ci-deploy.sh`, which
+  never syncs `packages/`. It needs `codex login --device-auth` once per host.
+
 ### Merging a PR — never use `gh pr merge --auto`
 
 SR-Main is **private on GitHub Free**, so required status checks do not exist
