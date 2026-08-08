@@ -20,6 +20,14 @@
  * header warns against, so `priceFor` returns null for these and the usage
  * charts label them "subscription" instead of £0.00.
  *
+ * QUOTA NOTE, measured 2026-08-08: every Codex call carries ~9,700 input tokens
+ * of Codex's own agent instructions before your prompt, and that floor is not
+ * reducible (disabling the built-in tools saved exactly zero; no prompt-cache
+ * relief either). So Codex suits calls whose prompt is already substantial —
+ * chat, research, document summarising — and badly suits high-frequency small
+ * ones like entity extraction or title generation, where the overhead dwarfs
+ * the work. See packages/jkai-codex-bridge/README.md for the measurements.
+ *
  * CONTEXT LENGTHS are null: OpenAI does not publish per-model context windows
  * for the subscription-served Codex variants, and a guess here would show up in
  * the picker as though it were measured. Null renders as "—".

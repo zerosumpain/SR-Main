@@ -128,6 +128,12 @@
 
   <p class="text-xs mt-4" style="color: var(--text-ghost);">
     Codex calls cost no cash but do spend a finite weekly quota — the same one the Codex CLI uses.
-    They cannot serve tool-calling or embedding roles, which stay on OpenRouter.
+    They cannot serve tool-calling or embedding roles, and cannot be the site default, so those
+    stay on OpenRouter.
+  </p>
+  <p class="text-xs mt-2" style="color: var(--text-ghost);">
+    Every call carries about 9,700 input tokens of Codex's own agent instructions before your
+    prompt, and that floor cannot be reduced. Worth it for chat, research and document work;
+    wasteful for small, frequent calls, where the overhead dwarfs the task.
   </p>
 </section>

@@ -112,3 +112,29 @@ same one the Codex CLI uses interactively. `priceFor()` returns `null` for the
 provider rather than `0`: a fabricated zero would read as "this work was free"
 when the true statement is "this work cost quota". `isSubscriptionProvider()`
 lets the cost UIs tell that null apart from an unknown-model null.
+
+### The ~9,700-token floor (measured 2026-08-08)
+
+**Every Codex call carries roughly 9,700 input tokens of overhead**, whatever
+you asked. A 9-token "capital of Norway?" prompt billed 9,531 input tokens; a
+20-token one billed 9,762. That is Codex's own agent instructions, prepended
+before your prompt on every turn.
+
+It is not reducible from here. Disabling the built-in tools
+(`include_apply_patch_tool`, `include_plan_tool`, `tools.web_search`) was
+measured at **exactly zero** saving — the bulk is base instructions, not tool
+schemas — and `cached_tokens` came back 0 across separate threads, so there is
+no prompt-cache relief either.
+
+What follows from that:
+
+- **Good fit:** chat turns, research, summarising a document, anything where the
+  real prompt is already substantial. The floor disappears into the noise.
+- **Bad fit:** high-frequency small calls — intel entity extraction, title
+  generation, connector probes. A 200-token classification costs the same 9,700
+  as a full document, so routing those to Codex would burn weekly quota on
+  overhead. They are already pinned to their own cheap OpenRouter models
+  (`DEFAULT_EXTRACTION_MODEL_ID`), and should stay there.
+
+This is a second, independent reason Codex is refused as the *site default* —
+the default is what every unpinned background task falls back to.
