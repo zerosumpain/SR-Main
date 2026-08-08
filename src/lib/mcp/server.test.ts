@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { listMcpTools } from './server';
+
+// These tests assert the FULL-registry behaviour, which requires the meta-tool
+// flag OFF. The ambient environment may set JKAI_MCP_META_TOOL=1 (which collapses
+// tools/list to essentials + the dispatcher), so force it off here and restore
+// whatever was set before so we don't leak state into other test files.
+const originalMetaFlag = process.env.JKAI_MCP_META_TOOL;
+delete process.env.JKAI_MCP_META_TOOL;
+afterAll(() => {
+  if (originalMetaFlag === undefined) delete process.env.JKAI_MCP_META_TOOL;
+  else process.env.JKAI_MCP_META_TOOL = originalMetaFlag;
+});
 
 // NOTE: The plan template referenced `create_node`, `add_edge`, and `search_nodes` as
 // canonical tool names. The actual workflows-domain tools in
