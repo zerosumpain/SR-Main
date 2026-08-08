@@ -1763,6 +1763,31 @@
     }
   }
 
+  /**
+   * The `/model` command that tells Hermes which model to use for this chat
+   * session. Hermes owns the actual chat turn — the site's own conversation
+   * record is for cost accounting — so this string is what genuinely switches
+   * the model the user talks to.
+   *
+   * Two things must be right, and this used to hardcode both wrongly for
+   * anything but OpenRouter:
+   *
+   *  - THE PROVIDER. Hermes reaches Codex through its own native
+   *    `openai-codex` profile (Responses API, OAuth from the Codex login),
+   *    NOT through our jkai-codex-bridge. That native path can pass tool
+   *    schemas, which the bridge cannot, and Hermes without tools is not
+   *    Hermes. So chat deliberately does not use the bridge the rest of the
+   *    site uses.
+   *  - THE MODEL ID. Our ids carry a `codex/` prefix so the provider is
+   *    recoverable from the id alone; Hermes wants the bare slug.
+   */
+  function hermesModelCommand(provider: ModelContext['provider'], modelId: string): string {
+    if (provider === 'codex') {
+      return `/model ${modelId.replace(/^codex\//, '')} --provider openai-codex`;
+    }
+    return `/model ${modelId} --provider openrouter`;
+  }
+
   async function switchModel(provider: ModelContext['provider'], modelId: string, opts?: { force?: boolean }) {
     modelPickerOpen = false;
     // `force` is the send() path. send() now claims `loading` up front so the
@@ -1801,7 +1826,7 @@
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `/model ${modelId} --provider openrouter`, conversationId, silent: true }),
+        body: JSON.stringify({ message: hermesModelCommand(provider, modelId), conversationId, silent: true }),
       });
       const data = await res.json().catch(() => null);
       const jobId = data?.jobId;

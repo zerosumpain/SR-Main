@@ -246,6 +246,12 @@
       // Show them only when the operator has enabled Codex AND the bridge can
       // serve a call — a model you can pick but that always fails is worse
       // than one that isn't offered.
+      //
+      // Slightly conservative for the `chat` target: chat turns go through
+      // Hermes' own native Codex provider, not this bridge, so chat could in
+      // principle work while the bridge is down. Erring toward hiding is the
+      // safe direction — the alternative is offering a model that fails for
+      // every other target — and in practice both are enabled together.
       if (data.enabled && data.health?.ok) codexRows = data.rows;
     } catch {
       // A dead bridge just means no Codex group; the picker still works.

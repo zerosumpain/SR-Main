@@ -56,8 +56,11 @@ sleep 3
 # /health returns 503 (not a connection error) when the process is up but
 # `codex login` hasn't been run — report that distinctly, it's the likely state
 # on a first deploy and the fix is a one-liner rather than a redeploy.
+# NB: curl's -w already prints 000 on a connection failure — do NOT add
+# `|| echo 000`, which appends a second 000 and yields "000000", matching none
+# of the cases below and reporting a healthy service as unreachable.
 STATUS=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" \
-  "curl -s -o /tmp/codex-health.json -w '%{http_code}' --max-time 10 http://127.0.0.1:5207/health || echo 000")
+  "curl -s -o /tmp/codex-health.json -w '%{http_code}' --max-time 10 http://127.0.0.1:5207/health" || true)
 BODY=$(ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "cat /tmp/codex-health.json 2>/dev/null || true")
 
 echo "    HTTP $STATUS — $BODY"

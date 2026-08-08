@@ -36,8 +36,14 @@ systemctl --user enable "$SERVICE.service" >/dev/null 2>&1 || true
 systemctl --user restart "$SERVICE.service"
 
 echo "==> Health check..."
-for _ in $(seq 1 10); do
-  STATUS=$(curl -s -o /tmp/codex-health-homeserv.json -w '%{http_code}' --max-time 10 http://127.0.0.1:5207/health || echo 000)
+# NB: curl's -w already prints 000 on a connection failure, so do NOT add
+# `|| echo 000` — that appends a second 000, giving "000000", which never
+# equals "000" and makes the retry loop exit on the first attempt before the
+# service has finished binding. (Cost one confusing "NOT responding" on a
+# service that was in fact up.) `|| true` keeps set -e happy without touching
+# the value.
+for _ in $(seq 1 15); do
+  STATUS=$(curl -s -o /tmp/codex-health-homeserv.json -w '%{http_code}' --max-time 10 http://127.0.0.1:5207/health) || true
   [ "$STATUS" != "000" ] && break
   sleep 1
 done
