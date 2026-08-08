@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { coerceFilesArg } from './builds';
+import { coerceFilesArg, coerceChecksArg } from './builds';
 import { resolvePublishSlug, slugifyTitle } from '$lib/jkai/publish-slug';
 
 // The module registers its tools at import time and pulls in the db client to
@@ -66,6 +66,43 @@ describe('coerceFilesArg', () => {
 
   it('rejects an empty list', () => {
     expect(coerceFilesArg([]).ok).toBe(false);
+  });
+});
+
+/**
+ * `checks` arrives stringified for exactly the same reason `files` does. Were
+ * it dropped on the floor, an app would register with no behavioural coverage
+ * while looking, from the outside, as though it had been tested — which is the
+ * precise failure this whole feature exists to prevent.
+ */
+describe('coerceChecksArg', () => {
+  const c = { description: '7 + 8 gives 15', script: 'return true;' };
+
+  it('takes a real array', () => {
+    expect(coerceChecksArg([c])).toEqual([c]);
+  });
+
+  it('takes the array as a JSON string', () => {
+    expect(coerceChecksArg(JSON.stringify([c]))).toEqual([c]);
+  });
+
+  it('takes an array holding one stringified array', () => {
+    expect(coerceChecksArg([JSON.stringify([c])])).toEqual([c]);
+  });
+
+  it('is empty when absent', () => {
+    expect(coerceChecksArg(undefined)).toEqual([]);
+    expect(coerceChecksArg(null)).toEqual([]);
+  });
+
+  it('drops malformed entries rather than failing the whole registration', () => {
+    expect(coerceChecksArg([c, { description: 'no script' }, 'nonsense', 7])).toEqual([c]);
+  });
+
+  it('names an unlabelled check rather than dropping it', () => {
+    expect(coerceChecksArg([{ script: 'return true;' }])).toEqual([
+      { description: 'unnamed check', script: 'return true;' },
+    ]);
   });
 });
 
