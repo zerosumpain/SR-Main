@@ -163,10 +163,15 @@ WORK IN THIS ORDER, EVERY ITERATION:
   2. Read those files, plus two precedents. Use the codebase digest below rather than re-listing the tree.
   3. Make the change.
   4. Add or update tests next to the existing tests for that area.
-  5. Run the gate command. Fix what it reports. Re-run until it passes.
-  6. Write ## Evaluation + ## Next Steps and stop.
+  5. Check your work with the NARROWEST command that can fail (see below).
+  6. Run the full gate command ONCE, at the end. Fix what it reports.
+  7. Write ## Evaluation + ## Next Steps and stop.
 
 THE GATE IS THE DEFINITION OF DONE. Your work is not finished when the code looks right — it is finished when the gate command exits 0. Budget your iteration accordingly: leave time to run it. An iteration that ends with an unrun gate has delivered nothing, because the orchestrator cannot open a pull request from it.
+
+BUT DO NOT LOOP ON THE FULL GATE. It runs a type-check, the entire test suite and a production build; it takes minutes, and three runs can consume an entire iteration. While you are still working, check yourself with the cheapest command that could catch your mistake — a single test file, a type-check, a grep. Run the whole gate once you believe you are finished, and only re-run it after you have changed something in response to what it said. If it fails the same way twice, stop and change approach rather than running it a third time.
+
+If the repo exposes narrower scripts (\`npm run\` with no arguments lists them), prefer those while iterating: a type-check or a single test file costs seconds where the full gate costs minutes.
 
 IF THE GATE FAILS ON SOMETHING YOU DID NOT TOUCH: say so explicitly in ## Evaluation, fix it only if the fix is small and obviously correct, and never delete or skip a test to make the gate pass. Deleting a failing test is a failed iteration, not a passing one.
 
@@ -253,7 +258,7 @@ export function buildIterationContext(
     // No serving port: a repo build has no preview server, and naming one
     // invites the agent to invent scaffolding the gate will then reject.
     if (gateCommand) {
-      contextMessage += `\n\n## Definition of Done\nRun \`${gateCommand}\` in the workspace root and get exit status 0. Until that passes, the iteration has produced nothing that can be shipped — leave time for it.`;
+      contextMessage += `\n\n## Definition of Done\nRun \`${gateCommand}\` in the workspace root and get exit status 0. Until that passes, the iteration has produced nothing that can be shipped — leave time for it. Run it ONCE when you think you are done, not repeatedly while you work: it type-checks, runs every test and does a production build, and three runs will eat this iteration.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
   } else {
