@@ -37,6 +37,46 @@
     return t.replace(/^mcp_jkai_/, '').replace(/^mcp_/, '');
   }
 
+  // ── Error rates (separate source: jkai_tool_traces in Postgres) ──
+  const errs = $derived(data.errorRates);
+  /** Only tools that actually failed lead the table; the rest are the tail. */
+  const failing = $derived((errs?.tools ?? []).filter((t) => t.errors > 0));
+  const clean = $derived((errs?.tools ?? []).filter((t) => t.errors === 0));
+
+  /**
+   * How much of the selected window the trace table can actually speak for.
+   * Recording began on deploy day, so a 90d window can be backed by hours of
+   * evidence — an unqualified "0% errors" would be a false all-clear.
+   */
+  const coverageNote = $derived.by(() => {
+    if (!errs) return null;
+    if (!errs.coverageFrom) return 'No turns recorded yet — recording starts with the next tool-using chat turn.';
+    const from = new Date(errs.coverageFrom);
+    const windowStart = Date.now() - errs.days * 86_400_000;
+    const shortfall = from.getTime() > windowStart;
+    const label = from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return shortfall
+      ? `Recording began ${label}, so this covers less than the ${errs.days}-day window.`
+      : `Covers the full ${errs.days}-day window.`;
+  });
+
+  function pct(rate: number): string {
+    if (rate <= 0) return '0%';
+    if (rate < 0.01) return '<1%';
+    return `${Math.round(rate * 100)}%`;
+  }
+  /** Banding drives the colour: a fifth of calls failing is a different problem
+   *  from the occasional transient. */
+  function rateBand(rate: number): 'bad' | 'warn' | 'ok' {
+    if (rate >= 0.2) return 'bad';
+    if (rate >= 0.05) return 'warn';
+    return 'ok';
+  }
+  function fmtWhen(iso: string | null): string {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   // ── AI suggestions ──
   let suggestions = $state<string | null>(null);
   let loadingSuggestions = $state(false);
@@ -184,6 +224,70 @@
       {#if suggestError}<p class="empty-note small err">{suggestError}</p>{/if}
     </section>
   {/if}
+
+  <!-- Error rates. OUTSIDE the audit branch on purpose: this comes from
+       jkai_tool_traces in the app's own Postgres, so it still answers when the
+       Hermes session store above is unreachable. -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Error rates</span>
+      <span class="nm-sec-meta">
+        {errs ? `${fmtNum(errs.traceCount)} recorded turn${errs.traceCount === 1 ? '' : 's'} · jkai chat` : 'unavailable'}
+      </span>
+    </div>
+
+    {#if !errs}
+      <p class="empty-note">Could not read the tool-trace table.</p>
+    {:else if errs.totalCalls === 0}
+      <p class="empty-note">{coverageNote}</p>
+      <p class="empty-note small">
+        Error rates are counted from recorded chat turns, not from the engine store above — tool
+        results there are tag-wrapped, so failure is not a field that can be tested.
+      </p>
+    {:else}
+      <div class="err-summary">
+        <span class="err-headline" data-band={rateBand(errs.errorRate)}>{pct(errs.errorRate)}</span>
+        <span class="err-headline-l">
+          {fmtNum(errs.totalErrors)} failed of {fmtNum(errs.totalCalls)} recorded calls
+        </span>
+      </div>
+      <p class="empty-note small">{coverageNote} Covers jkai chat turns only — a tool run by a workflow node outside a chat is not recorded here.</p>
+
+      {#if failing.length === 0}
+        <p class="empty-note">No failures recorded in this window.</p>
+      {:else}
+        <table class="nm-table">
+          <thead>
+            <tr><th>Tool</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Rate</th><th>Last failure</th><th class="when">When</th></tr>
+          </thead>
+          <tbody>
+            {#each failing as t (t.tool)}
+              <tr>
+                <td class="mono">{shortTool(t.tool)}</td>
+                <td class="num mono">{fmtNum(t.calls)}</td>
+                <td class="num mono">{fmtNum(t.errors)}</td>
+                <td class="num mono rate" data-band={rateBand(t.errorRate)}>{pct(t.errorRate)}</td>
+                <td class="err-msg" title={t.lastError ?? ''}>{t.lastError ?? '—'}</td>
+                <td class="when mono">{fmtWhen(t.lastErrorAt)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+
+      {#if clean.length > 0}
+        <details class="clean-toggle">
+          <summary class="sr-label-tight">{clean.length} tool{clean.length === 1 ? '' : 's'} with no failures</summary>
+          <div class="chips">
+            {#each clean.slice(0, 60) as t (t.tool)}
+              <span class="chip mono">{shortTool(t.tool)} <span class="chip-n">{t.calls}</span></span>
+            {/each}
+            {#if clean.length > 60}<span class="chip more">+{clean.length - 60} more</span>{/if}
+          </div>
+        </details>
+      {/if}
+    {/if}
+  </section>
 </PageWrap>
 
 {#snippet hbars(rows: Array<{ tool: string; calls: number }>, max: number)}
@@ -259,4 +363,30 @@
   .suggestions :global(li) { margin: 0.25em 0; }
   .suggestions :global(code) { font-family: var(--font-mono); font-size: 0.9em; background: var(--card-bg); padding: 0.05em 0.3em; border-radius: 2px; }
   .suggestions :global(strong) { font-weight: 700; }
+
+  /* Error rates. `.nm-table` comes from admin.css, which IS loaded under
+     /admin (unlike /jkai) — so the table needs no local base styling. */
+  .err-summary { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.15rem; }
+  .err-headline { font-family: var(--font-mono); font-size: 1.4rem; line-height: 1; color: var(--success); }
+  .err-headline[data-band='warn'] { color: var(--warn); }
+  .err-headline[data-band='bad'] { color: var(--error); }
+  .err-headline-l { font-size: 12.5px; color: var(--text-muted); }
+
+  .nm-table .num { text-align: right; white-space: nowrap; }
+  .nm-table .rate[data-band='ok'] { color: var(--text-secondary); }
+  .nm-table .rate[data-band='warn'] { color: var(--warn); }
+  .nm-table .rate[data-band='bad'] { color: var(--error); font-weight: 500; }
+  .nm-table .err-msg {
+    max-width: 380px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+  .nm-table .when { white-space: nowrap; color: var(--text-ghost); }
+
+  .clean-toggle { margin-top: 0.7rem; }
+  .clean-toggle summary { cursor: pointer; color: var(--text-ghost); }
+  .clean-toggle .chips { margin-top: 0.5rem; }
+  .chip-n { color: var(--text-ghost); }
 </style>
