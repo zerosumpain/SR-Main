@@ -624,6 +624,24 @@ register({
     const coerced = coerceFilesArg(args.files);
     if (!coerced.ok) return { success: false, error: coerced.error };
     const files = coerced.files;
+
+    // Support file:/// source URIs — for large builds, write the file to the
+    // local filesystem with write_file first, then pass source:"file:///path"
+    // instead of inline content. The content never enters LLM context this way.
+    const rawFiles = Array.isArray(args.files) ? args.files : [];
+    for (let i = 0; i < files.length; i++) {
+      const raw = rawFiles[i];
+      if (raw && typeof raw === 'object' && raw.source && typeof raw.source === 'string' && raw.source.startsWith('file:///')) {
+        const srcPath = raw.source.slice(7); // strip file://
+        const { readFileSync } = await import('fs');
+        try {
+          files[i].content = readFileSync(srcPath, 'utf8');
+        } catch (e: any) {
+          return { success: false, error: `files[${i}].source "${raw.source}": ${e.message}` };
+        }
+      }
+    }
+
     for (const f of files) {
       // Reject path traversal — keep writes scoped to the workspace.
       if (f.path.startsWith('/') || f.path.includes('..')) {

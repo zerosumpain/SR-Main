@@ -1,5 +1,8 @@
-// src/lib/workflows/site-tools/tools/memory.ts
-
+// DEPRECATED — use the native Hermes `memory` tool instead.
+// save_memory, recall_memories, and forget_memory are kept for backward
+// compatibility with existing skill instructions. New code should call the
+// `memory` tool (native Hermes tool, no jkai_extended wrapper needed).
+//
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiMemories } from '$lib/db/schema';

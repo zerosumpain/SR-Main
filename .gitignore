@@ -26,6 +26,9 @@ vite.config.ts.timestamp-*
 .superpowers/
 .worktrees/
 
+# Stale backup directories from toolchain experiments
+build.bak-*
+
 # Deep Dive API keys
 keys.json
 

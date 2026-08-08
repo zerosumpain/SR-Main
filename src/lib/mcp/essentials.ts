@@ -11,16 +11,16 @@
 // is exposed exactly as before. Flip on the VPS after a smoke test.
 
 export const ESSENTIAL_TOOL_NAMES = new Set<string>([
-  // Persistent memory — needed in nearly every turn.
-  'save_memory',
-  'recall_memories',
-  'forget_memory',
+  // (Deprecated — use the native `memory` tool instead.)
+  // 'save_memory',
+  // 'recall_memories',
+  // 'forget_memory',
   // Scheduling primitive — the user-visible "remind me / follow up at" path.
   'schedule_reply_at',
   // Heartbeat watcher registration — long-running task observability.
   'register_heartbeat_action',
-  // Primary outbound notification channel.
-  'whatsapp_send',
+  // (Deprecated — use `send_message` instead.)
+  // 'whatsapp_send',
   // Static-app creation path. jkai-general SKILL.md explicitly tells the
   // model to call this whenever it builds a self-contained HTML app in
   // chat. Routing it through jkai_extended.invoke is fragile (the model

@@ -15,7 +15,7 @@ import { isEssentialUnderPolicy } from './essentials';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
 
-export type MetaOperation = 'list' | 'schema' | 'invoke';
+export type MetaOperation = 'list' | 'schema' | 'invoke' | 'names';
 
 export interface MetaToolInput {
   operation: MetaOperation;
@@ -75,11 +75,12 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     properties: {
       operation: {
         type: 'string',
-        enum: ['list', 'schema', 'invoke'],
+        enum: ['list', 'schema', 'invoke', 'names'],
         description:
           '"list" returns matching tool names + descriptions; ' +
           '"schema" returns the full input JSON Schema for one or more named tools; ' +
-          '"invoke" executes a named tool with the provided args.',
+          '"invoke" executes a named tool with the provided args; ' +
+          '"names" returns only tool names (cheapest, no descriptions).',
       },
       query: {
         type: 'string',
@@ -186,6 +187,13 @@ export async function dispatchMetaTool(
     }));
   }
 
+  // names: cheapest possible survey — just tool names, no descriptions, no filtering.
+  // Use when all you need to check is "does a tool for X exist" without paying for
+  // 128 descriptions you won't read.
+  if (operation === 'names') {
+    return extended.map((t) => t.name);
+  }
+
   if (operation === 'schema') {
     const hasNames = Array.isArray(names) && names.length > 0;
     const requested = hasNames
@@ -245,5 +253,5 @@ export async function dispatchMetaTool(
     return await executeTool(name, args ?? {}, ctx);
   }
 
-  return { error: `jkai_extended: unknown operation "${String(operation)}" (expected: list, schema, invoke)` };
+  return { error: `jkai_extended: unknown operation "${String(operation)}" (expected: list, names, schema, invoke)` };
 }

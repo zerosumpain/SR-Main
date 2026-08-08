@@ -1,3 +1,8 @@
+// DEPRECATED — use `send_message` (native Hermes tool) instead.
+// whatsapp_send is kept for backward compatibility with existing skill
+// instructions. New code should use send_message(target="whatsapp:<number>", ...)
+// which supports WhatsApp + all other platforms in one tool.
+//
 import { register } from '../registry-internal';
 
 register({
