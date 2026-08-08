@@ -18,20 +18,53 @@ import { resolvePublishSlug } from '$lib/jkai/publish-slug';
  * Parse what we can recognise; complain about the shape we actually got when
  * we can't. Same underlying cause as `urlsFromArgs` in chat/tool-summary.ts.
  */
+function parseMaybe(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  const t = v.trim();
+  if (!t.startsWith('[') && !t.startsWith('{')) return v;
+  try {
+    return JSON.parse(t);
+  } catch {
+    return v;
+  }
+}
+
+/**
+ * An array argument, however deeply Hermes stringified it on the way in.
+ * Shared by `files` and `checks` — both arrive encoded, for the same reason,
+ * and silently dropping `checks` would leave an app registered with no
+ * behavioural coverage while appearing, from the outside, to have been tested.
+ */
+function coerceArrayArg(raw: unknown): unknown[] {
+  let value = parseMaybe(raw);
+  if (Array.isArray(value) && value.length === 1) {
+    const inner = parseMaybe(value[0]);
+    if (Array.isArray(inner)) value = inner;
+  }
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) value = [value];
+  return (value as unknown[]).map(parseMaybe);
+}
+
+/** The `checks` argument, normalised. A malformed entry is dropped rather than
+ *  fatal: a bad assertion must not cost the user an otherwise working app. */
+export function coerceChecksArg(raw: unknown): Array<{ description: string; script: string }> {
+  return coerceArrayArg(raw).flatMap((c) => {
+    if (!c || typeof c !== 'object' || Array.isArray(c)) return [];
+    const rec = c as Record<string, unknown>;
+    const script = rec.script ?? rec.code ?? rec.assertion;
+    if (typeof script !== 'string' || !script.trim()) return [];
+    const description =
+      typeof rec.description === 'string' && rec.description.trim()
+        ? rec.description.trim()
+        : 'unnamed check';
+    return [{ description, script }];
+  });
+}
+
 export function coerceFilesArg(
   raw: unknown,
 ): { ok: true; files: Array<{ path: string; content: string }> } | { ok: false; error: string } {
-  const parseMaybe = (v: unknown): unknown => {
-    if (typeof v !== 'string') return v;
-    const t = v.trim();
-    if (!t.startsWith('[') && !t.startsWith('{')) return v;
-    try {
-      return JSON.parse(t);
-    } catch {
-      return v;
-    }
-  };
-
   let value = parseMaybe(raw);
   // An array holding a single stringified array is still the array.
   if (Array.isArray(value) && value.length === 1) {
@@ -543,6 +576,30 @@ register({
         description:
           'Optional. The id of an existing hermes-origin build to REPLACE (same row, same workspace, same published slug) rather than creating a new one. Use this for every revision of an app you already registered in this conversation.',
       },
+      checks: {
+        type: 'array',
+        description:
+          'STRONGLY RECOMMENDED: 2-4 assertions proving the app actually does its job, run in a headless browser before this returns. ' +
+          'Write them for the thing the user asked for — a calculator should compute, a timer should count down, a form should validate. ' +
+          'Loading without an error is checked for you and is NOT enough: the calculator this was built for loaded cleanly, logged nothing, ' +
+          'rendered perfectly, and answered 0 to every sum. Registration still succeeds when checks fail — you get the failures back so you can fix them and re-register with updateBuildId.',
+        items: {
+          type: 'object',
+          properties: {
+            description: { type: 'string', description: 'What this proves, e.g. "7 + 8 gives 15".' },
+            script: {
+              type: 'string',
+              description:
+                'JS run inside the loaded page (async, may await). RETURN true to pass. ' +
+                'Return a short string describing what you actually saw when it fails — that text is what you will iterate on. ' +
+                'Example: const k=(l)=>[...document.querySelectorAll("button")].find(b=>b.textContent.trim()===l); ' +
+                'k("7").click(); k("+").click(); k("8").click(); k("=").click(); ' +
+                'const got=document.querySelector("#res").textContent.trim(); return got==="15" || `display showed ${got}`;',
+            },
+          },
+          required: ['description', 'script'],
+        },
+      },
       files: {
         type: 'array',
         description: 'Static source files. The first file with name "index.html" becomes the entry point. Other files (style.css, app.js, sub-pages, assets) are written alongside it.',
@@ -685,10 +742,20 @@ register({
       content: `Hermes ${updateId ? 're-registered' : 'registered'} ${files.length} file${files.length === 1 ? '' : 's'}:\n${fileList}\n\nThe app is ready in the workspace. Hit Publish on the /jkai/builds card to ship to /projects/, or have Hermes call build_tweak to conform it to the site design system first.`,
     });
 
+    // Run it before anyone calls it done. `status: completed` on this row only
+    // ever meant "the files reached disk" — on 2026-08-08 a heartbeat read that
+    // column and told the user "we've landed" about an app that computed
+    // nothing. The result goes in the build log so /jkai/builds shows it too.
+    const { runStaticSmoke, describeSmoke } = await import('$lib/jkai/static-smoke');
+    const smoke = await runStaticSmoke(liveRoot, coerceChecksArg(args.checks));
+    const smokeText = describeSmoke(smoke);
+    await db.insert(jkaiLogs).values({ buildId, type: 'system', content: smokeText });
+
     // The address this build already answers on, if any. Handing it back means
     // the model can republish over the SAME page instead of deriving a new
     // slug from a new title and leaving the broken one live.
     const publishedSlug = build.publishedSlug ?? null;
+    const smokeFailed = smoke.ran && !smoke.passed;
     return {
       success: true,
       data: {
@@ -699,9 +766,17 @@ register({
         replacedExisting: updateId ? true : undefined,
         publishedSlug,
         detailUrl: `/jkai/builds/${buildId}`,
-        publishHint: publishedSlug
-          ? `This build is live at /projects/${publishedSlug}/. To update that page call build_control with action="publish", id="${buildId}" and slug="${publishedSlug}" — omitting the slug would publish to a different address and leave the old page up.`
-          : 'Call build_control with action="publish" to ship to /projects/<slug>/ (pass slug to choose the address), or build_tweak to refine first.',
+        smoke: smoke.ran
+          ? { passed: smoke.passed, checks: smoke.checks.length, failures: smoke.failures }
+          : { skipped: smoke.reason },
+        // A failing app must not be reported as a finished one. The files are
+        // still worth keeping — a failed build is a rescue job, not a loss —
+        // but the next move is fixing it, not publishing it.
+        publishHint: smokeFailed
+          ? `DO NOT publish yet — the app is registered but it does not work:\n${smokeText}\nFix the code and call this tool again with updateBuildId="${buildId}".`
+          : publishedSlug
+            ? `This build is live at /projects/${publishedSlug}/. To update that page call build_control with action="publish", id="${buildId}" and slug="${publishedSlug}" — omitting the slug would publish to a different address and leave the old page up.`
+            : 'Call build_control with action="publish" to ship to /projects/<slug>/ (pass slug to choose the address), or build_tweak to refine first.',
       },
     };
   },
