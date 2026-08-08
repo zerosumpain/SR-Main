@@ -170,3 +170,115 @@ describe('summarizeRunningTool — web_extract', () => {
     expect(summarizeRunningTool('web_extract', {})).toBe('reading a page');
   });
 });
+
+/**
+ * Hermes' own tools were all rendering as "Done — <tool>".
+ *
+ * Two reasons, both structural rather than per-tool: the existing file cases are
+ * named for the SITE tools (`file_read`/`file_list`/`file_search`) and never
+ * matched Hermes' `read_file`/`write_file`/`search_files`; and every Hermes
+ * result is preview-capped at 600 chars, so there is nothing parseable to
+ * summarise from. These read the arguments instead — which reach a finished card
+ * only because the frame adapter carries them over from the `started` frame.
+ */
+const native = (tool: string, args: Record<string, unknown>, result: unknown = 'clipped output…') =>
+  summarizeToolResult({ tool, toolCallId: 'tc-n', args, result, status: 'done' });
+
+describe('summarizeToolResult — Hermes native tools', () => {
+  it('names the command a terminal call ran', () => {
+    expect(native('terminal', { command: 'npm run gate' })).toBe('Ran `npm run gate`');
+  });
+
+  it('collapses a multi-line command to its first real line', () => {
+    expect(native('terminal', { command: '# build it\ncd /srv && make all\nmake test' })).toBe('Ran `cd /srv && make all`');
+  });
+
+  it('names files by basename, not by absolute path', () => {
+    expect(native('read_file', { path: '/home/john/strange_rambling_svelte/src/lib/x.ts' })).toBe('Read x.ts');
+    expect(native('patch', { path: '/a/b/adapter.py', mode: 'replace' })).toBe('Patched adapter.py');
+  });
+
+  it('reports how much was written', () => {
+    expect(native('write_file', { path: '/tmp/page.html', content: 'x'.repeat(1234) })).toBe(
+      'Wrote page.html (1,234 chars)',
+    );
+  });
+
+  it('names a non-default patch mode', () => {
+    expect(native('patch', { path: '/a/b.ts', mode: 'append' })).toBe('Patched b.ts (append)');
+  });
+
+  it('quotes the pattern a file search looked for', () => {
+    expect(native('search_files', { pattern: 'summarizeToolResult', path: '/src' })).toBe(
+      'Searched for "summarizeToolResult" in src',
+    );
+  });
+
+  it('prefers a real match count when the result parsed', () => {
+    expect(native('search_files', { pattern: 'foo' }, { count: 3 })).toBe('3 matches for "foo"');
+  });
+
+  it('names the host a browser navigated to', () => {
+    expect(native('browser_navigate', { url: 'https://www.parliament.uk/lords/x' })).toBe('Opened parliament.uk');
+  });
+
+  it('describes browser interactions concretely', () => {
+    expect(native('browser_click', { ref: 'e81' })).toBe('Clicked e81');
+    expect(native('browser_press', { key: 'Enter' })).toBe('Pressed Enter');
+    expect(native('browser_scroll', { direction: 'down' })).toBe('Scrolled down');
+    expect(native('browser_type', { ref: 'e5', text: 'amflow PR carbon' })).toBe('Typed “amflow PR carbon”');
+    expect(native('browser_snapshot', { full: true })).toBe('Read the full page');
+  });
+
+  it('names the skill that was read or changed', () => {
+    expect(native('skill_view', { name: 'jkai-canvas' })).toBe('Read the jkai-canvas skill');
+    expect(native('skill_manage', { action: 'create', name: 'sr-design-system' })).toBe(
+      'Created the sr-design-system skill',
+    );
+  });
+
+  it('words memory and cron actions as outcomes', () => {
+    expect(native('memory', { action: 'add', target: 'memory' })).toBe('Saved to memory');
+    expect(native('cronjob', { action: 'create', name: 'PAC reminder' })).toBe('Scheduled “PAC reminder”');
+    expect(native('cronjob', { action: 'list' })).toBe('Listed scheduled jobs');
+    expect(native('process', { action: 'poll', session_id: 'proc_1' })).toBe('Checked a background process');
+  });
+
+  it('counts a todo list given as a real array', () => {
+    expect(native('todo', { todos: [{ id: '1' }, { id: '2' }] })).toBe('Updated the plan (2 items)');
+  });
+
+  it('refuses to invent a count from a Python-repr todos argument', () => {
+    // Single quotes — not JSON. A fabricated count would be worse than none.
+    expect(native('todo', { todos: "[{'id': '1', 'content': 'x'}]" })).toBe('Updated the plan');
+  });
+
+  it('degrades to a plain phrase when the arguments are missing entirely', () => {
+    for (const tool of ['terminal', 'read_file', 'write_file', 'patch', 'search_files', 'browser_navigate', 'skill_view']) {
+      const s = native(tool, {});
+      expect(s).not.toContain('Done —');
+      expect(s.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('never leaves a busy Hermes tool on the generic default', () => {
+    const busiest = [
+      'terminal', 'browser_navigate', 'browser_console', 'search_files', 'read_file',
+      'execute_code', 'browser_snapshot', 'browser_click', 'skill_view', 'session_search',
+      'patch', 'write_file', 'todo', 'browser_type', 'browser_press', 'memory',
+      'browser_scroll', 'kanban_show', 'cronjob', 'process', 'browser_vision', 'skill_manage',
+    ];
+    for (const tool of busiest) {
+      expect(native(tool, {}), tool).not.toContain('Done —');
+    }
+  });
+});
+
+describe('summarizeRunningTool — Hermes native tools', () => {
+  it('does not echo raw arguments into the running line', () => {
+    expect(summarizeRunningTool('terminal', { command: 'npm run gate', timeout: 60 })).toBe('running `npm run gate`');
+    expect(summarizeRunningTool('browser_click', { ref: 'e81' })).toBe('clicking e81');
+    expect(summarizeRunningTool('read_file', { path: '/a/b/c.ts' })).toBe('reading c.ts');
+    expect(summarizeRunningTool('browser_navigate', { url: 'https://gov.uk/x' })).toBe('opening gov.uk');
+  });
+});

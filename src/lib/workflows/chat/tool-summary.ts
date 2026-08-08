@@ -188,6 +188,43 @@ function host(u: unknown): string | undefined {
 
 const trim = (s: string, n = 60) => (s.length > n ? s.slice(0, n) + '…' : s);
 
+/** Last path segment — a card should say `adapter.py`, not seventy characters of
+ *  absolute path that push the outcome off the end of the line. */
+function basename(p: unknown): string | undefined {
+  if (typeof p !== 'string' || !p) return undefined;
+  const clean = p.replace(/[/\\]+$/, '');
+  const seg = clean.slice(Math.max(clean.lastIndexOf('/'), clean.lastIndexOf('\\')) + 1);
+  return seg || clean || undefined;
+}
+
+/**
+ * Parse an array argument that arrived as a string.
+ *
+ * Returns `[]` rather than guessing when it will not parse — `todo`'s `todos`
+ * sometimes arrives as a Python repr (`[{'id': '1', …}]`, single quotes), and a
+ * fabricated count is worse than no count.
+ */
+function safeJsonArray(s: string): unknown[] {
+  const t = s.trim();
+  if (!t.startsWith('[')) return [];
+  try {
+    const parsed = JSON.parse(t);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** First meaningful line of a command or code block, collapsed onto one line. */
+function firstLine(s: unknown): string | undefined {
+  if (typeof s !== 'string' || !s.trim()) return undefined;
+  const line = s
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+  return line ? line.replace(/\s+/g, ' ') : undefined;
+}
+
 /** A finite number from an unknown result field, or undefined. */
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined;
@@ -299,6 +336,35 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       if (hosts.length > 1) return `reading ${hosts.length} pages`;
       return 'reading a page';
     }
+    // ── Hermes native tools ──────────────────────────────────────────────
+    // Without these the generic fallback below grabs "the first short string
+    // arg", which for a shell call is a raw command and for a browser click is
+    // an opaque element ref like `e81`.
+    case 'terminal': {
+      const cmd = firstLine(a.command);
+      return cmd ? `running \`${trim(cmd, 46)}\`` : 'running a command';
+    }
+    case 'execute_code': return 'running code';
+    case 'read_file': return basename(a.path) ? `reading ${basename(a.path)}` : 'reading a file';
+    case 'write_file': return basename(a.path) ? `writing ${basename(a.path)}` : 'writing a file';
+    case 'patch': return basename(a.path) ? `patching ${basename(a.path)}` : 'patching a file';
+    case 'search_files': return str('pattern') ? `searching for “${trim(str('pattern')!, 36)}”` : 'searching files';
+    case 'session_search': return str('query') ? `searching sessions for “${trim(str('query')!, 36)}”` : 'searching past sessions';
+    case 'skill_view': return str('name') ? `reading the ${str('name')} skill` : 'reading a skill';
+    case 'skill_manage': return str('name') ? `editing the ${str('name')} skill` : 'editing a skill';
+    case 'browser_navigate': return str('url') ? `opening ${host(str('url')) ?? trim(str('url')!, 40)}` : 'opening a page';
+    case 'browser_console': return 'evaluating in the page';
+    case 'browser_snapshot': return 'reading the page';
+    case 'browser_click': return str('ref') ? `clicking ${str('ref')}` : 'clicking an element';
+    case 'browser_type': return str('text') ? `typing “${trim(str('text')!, 36)}”` : 'typing into the page';
+    case 'browser_press': return str('key') ? `pressing ${str('key')}` : 'pressing a key';
+    case 'browser_scroll': return str('direction') ? `scrolling ${str('direction')}` : 'scrolling the page';
+    case 'browser_vision': return 'looking at the page';
+    case 'todo': return 'updating the plan';
+    case 'memory': return 'updating memory';
+    case 'cronjob': return str('name') ? `scheduling “${trim(str('name')!, 36)}”` : 'managing scheduled jobs';
+    case 'process': return 'checking a background process';
+    case 'kanban_show': return 'opening the board';
     case 'stealth_scrape':
     case 'stealth_scrape_llm':
       return str('url') ? `scraping ${host(str('url')) ?? trim(str('url')!, 50)}` : (str('profile') ? `profile ${str('profile')}` : 'scraping a page');
@@ -469,6 +535,110 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       if (hosts.length > 1) return `Read ${hosts.length} pages — ${trim(hosts.join(', '), 50)}`;
       return n > 0 ? `Read ${n} page${n === 1 ? '' : 's'}` : 'Read webpage';
     }
+    // ── Hermes native tools ──────────────────────────────────────────────
+    // The engine's own tools, all of which used to fall through to the generic
+    // default. Mind the names: Hermes says `read_file` / `write_file` /
+    // `search_files`, while the SITE tools further down are `file_read` /
+    // `file_list` / `file_search` — so the existing cases never matched them and
+    // the busiest tools in the whole system rendered as "Done — read file".
+    //
+    // Every one is summarised from its ARGUMENTS, because a Hermes result is
+    // previewed at 600 chars and is usually unparseable. Args reach this point
+    // on a finished card only because the frame adapter remembers them from the
+    // `started` frame — see `takeToolArgs` in $lib/jkai/sse-adapter.
+    case 'terminal': {
+      const cmd = firstLine(args.command);
+      return cmd ? `Ran \`${trim(cmd, 56)}\`` : 'Ran a command';
+    }
+    case 'execute_code': {
+      const line = firstLine(args.code);
+      return line ? `Ran code — \`${trim(line, 46)}\`` : 'Ran code';
+    }
+    case 'read_file': {
+      const f = basename(args.path);
+      return f ? `Read ${f}` : 'Read a file';
+    }
+    case 'write_file': {
+      const f = basename(args.path);
+      const chars = typeof args.content === 'string' ? (args.content as string).length : undefined;
+      return f ? `Wrote ${f}${chars != null ? ` (${chars.toLocaleString()} chars)` : ''}` : 'Wrote a file';
+    }
+    case 'patch': {
+      const f = basename(args.path);
+      const mode = typeof args.mode === 'string' ? (args.mode as string) : undefined;
+      if (!f) return 'Patched a file';
+      return mode && mode !== 'replace' ? `Patched ${f} (${mode})` : `Patched ${f}`;
+    }
+    case 'search_files': {
+      const pattern = typeof args.pattern === 'string' ? (args.pattern as string) : undefined;
+      const where = basename(args.path);
+      if (pattern && count != null) return `${count} match${count === 1 ? '' : 'es'} for "${trim(pattern, 34)}"`;
+      if (pattern) return `Searched for "${trim(pattern, 40)}"${where ? ` in ${where}` : ''}`;
+      return where ? `Searched ${where}` : 'Searched files';
+    }
+    case 'session_search': {
+      if (query && count != null) return `${count} session${count === 1 ? '' : 's'} matching "${query}"`;
+      return query ? `Searched sessions for "${query}"` : 'Searched past sessions';
+    }
+    case 'skill_view': {
+      const name = typeof args.name === 'string' ? (args.name as string) : basename(args.file_path);
+      return name ? `Read the ${name} skill` : 'Read a skill';
+    }
+    case 'skill_manage': {
+      const name = typeof args.name === 'string' ? (args.name as string) : undefined;
+      const action = typeof args.action === 'string' ? (args.action as string) : '';
+      const verb = action === 'create' ? 'Created' : action === 'delete' ? 'Deleted' : 'Edited';
+      return name ? `${verb} the ${name} skill` : `${verb} a skill`;
+    }
+    case 'browser_navigate': {
+      const h = host(args.url) ?? (typeof args.url === 'string' ? trim(args.url as string, 40) : undefined);
+      return h ? `Opened ${h}` : 'Opened a page';
+    }
+    case 'browser_console': {
+      const expr = firstLine(args.expression);
+      return expr ? `Evaluated \`${trim(expr, 46)}\`` : 'Ran a console expression';
+    }
+    case 'browser_snapshot':
+      return args.full ? 'Read the full page' : 'Read the page';
+    case 'browser_click':
+      return args.ref ? `Clicked ${String(args.ref)}` : 'Clicked an element';
+    case 'browser_type': {
+      const text = typeof args.text === 'string' ? (args.text as string) : undefined;
+      return text ? `Typed “${trim(text, 40)}”` : 'Typed into the page';
+    }
+    case 'browser_press':
+      return args.key ? `Pressed ${String(args.key)}` : 'Pressed a key';
+    case 'browser_scroll':
+      return args.direction ? `Scrolled ${String(args.direction)}` : 'Scrolled the page';
+    case 'browser_vision': {
+      const q = typeof args.question === 'string' ? (args.question as string) : undefined;
+      return q ? `Looked at the page — “${trim(q, 40)}”` : 'Looked at the page';
+    }
+    case 'todo': {
+      const raw = args.todos;
+      const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? safeJsonArray(raw) : [];
+      return list.length ? `Updated the plan (${list.length} item${list.length === 1 ? '' : 's'})` : 'Updated the plan';
+    }
+    case 'memory': {
+      const action = typeof args.action === 'string' ? (args.action as string) : '';
+      if (action === 'add') return 'Saved to memory';
+      if (action === 'delete') return 'Removed from memory';
+      return 'Updated memory';
+    }
+    case 'cronjob': {
+      const action = typeof args.action === 'string' ? (args.action as string) : '';
+      const name = typeof args.name === 'string' ? (args.name as string) : undefined;
+      if (action === 'list') return 'Listed scheduled jobs';
+      const verb = action === 'create' ? 'Scheduled' : action === 'delete' ? 'Cancelled' : 'Updated';
+      return name ? `${verb} “${trim(name, 40)}”` : `${verb} a scheduled job`;
+    }
+    case 'process': {
+      const action = typeof args.action === 'string' ? (args.action as string) : '';
+      if (action === 'kill') return 'Stopped a background process';
+      return 'Checked a background process';
+    }
+    case 'kanban_show':
+      return 'Showed the board';
     case 'gmail_search': {
       const n = count ?? 0;
       return query ? `Searched Gmail for "${query}" (${n} thread${n === 1 ? '' : 's'})` : `Searched Gmail (${n} threads)`;
