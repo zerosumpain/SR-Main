@@ -20,6 +20,32 @@
   let pending = $state<string | null>(null);
   const result = $derived(form as ActionForm);
 
+  // Chat-engine toggle. Not a form action: the setting is site-wide (it lives
+  // in app_settings, read per request by the chat endpoint), whereas the
+  // actions above shell out to systemd on the Hermes host and are gated on
+  // `canManage`. Switching engines works from either host.
+  let engineBusy = $state(false);
+  let engineError = $state<string | null>(null);
+
+  async function setEngine(enabled: boolean): Promise<void> {
+    engineBusy = true;
+    engineError = null;
+    try {
+      const res = await fetch('/api/admin/chat-engine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? `server error (${res.status})`);
+      await invalidateAll();
+    } catch (err) {
+      engineError = err instanceof Error ? err.message : String(err);
+    } finally {
+      engineBusy = false;
+    }
+  }
+
   function fmtMs(ms: number): string {
     return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
   }
@@ -162,9 +188,48 @@
     <div class="line">
       <span class="dot {data.flagEnabled ? 'ok' : 'off'}"></span>
       <span class="mono">
-        flag <code>JKAI_HERMES_CANVAS_CHAT</code>: {data.flagEnabled ? 'on' : 'off'}
+        chat engine: {data.flagEnabled ? 'Hermes' : 'in-repo (generalChat)'}
       </span>
     </div>
+  </section>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Chat engine</span>
+      <span class="nm-sec-meta">/jkai</span>
+    </div>
+
+    <p class="engine-note">
+      {#if data.flagEnabled}
+        <strong>Hermes</strong> is answering chat. Terminal, file editing, patching, the
+        skill library, sub-agent delegation, web search and browser control all come from
+        here — and so does the dependency on homeserv being reachable.
+      {:else}
+        The <strong>in-repo engine</strong> is answering chat. Every site toolset still
+        works (intel, canvas, datastore, drive, Gmail, research, decks); terminal, file
+        editing, skills, delegation, web search and browser control do not.
+      {/if}
+    </p>
+
+    <div class="btn-row">
+      <button
+        class="nm-save-btn"
+        disabled={engineBusy}
+        onclick={() => setEngine(!data.flagEnabled)}
+      >
+        {engineBusy ? 'switching…' : data.flagEnabled ? 'Switch to in-repo engine' : 'Switch to Hermes'}
+      </button>
+    </div>
+
+    {#if engineError}
+      <p class="engine-err mono">{engineError}</p>
+    {/if}
+
+    <p class="engine-note subtle">
+      Applies to the next message — no restart, no redeploy. Turns in flight finish on the
+      engine that started them. Unset, this follows <code>JKAI_HERMES_CANVAS_CHAT</code>
+      (currently <code>{data.flagEnvDefault ? 'on' : 'off'}</code> on this host).
+    </p>
   </section>
 
   <section class="nm-sec">
@@ -294,6 +359,9 @@
   .sessions-note a:hover { text-decoration: underline; }
 
   /* ── Telemetry ── */
+  .engine-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.7rem; line-height: 1.5; }
+  .engine-note.subtle { color: var(--text-muted); margin: 0.7rem 0 0; }
+  .engine-err { color: var(--danger, #c0392b); font-size: 12px; margin: 0.5rem 0 0; }
   .tele-days { display: inline-flex; gap: 0.3rem; }
   .day-pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border: 1px solid var(--card-border); border-radius: 4px; color: var(--text-secondary); text-decoration: none; }
   .day-pill.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }

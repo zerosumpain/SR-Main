@@ -31,6 +31,12 @@ export interface SessionContext {
 
 export interface SendMessageRequest extends SessionContext {
   text: string;
+  /** Identifies this turn end-to-end. Hermes' jkai plugin stamps it onto
+   * every frame the turn produces (`metadata.turn_id`) so the consumer can
+   * tell its own output from a previous turn's leftovers — the outbound
+   * queue is keyed by chat alone, and whichever connection is attached
+   * drains it. Pass the job id. */
+  turnId?: string;
   /** Where this chat originated. Hermes uses it to route MCP tool calls
    * back to the correct SvelteKit host (VPS or homeserv). Defaults to
    * the host running this client (see `defaultOrigin` / `defaultMcpUrl`
@@ -207,6 +213,7 @@ export class HermesClient {
         kind: req.kind,
         kind_id: req.kindId,
         session_id: req.sessionId,
+        turn_id: req.turnId,
         origin: req.origin ?? this.config.defaultOrigin ?? 'homeserv',
         mcp_url: req.mcpUrl ?? this.config.defaultMcpUrl ?? 'http://127.0.0.1:5173/api/mcp/local',
       }),

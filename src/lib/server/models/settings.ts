@@ -134,6 +134,32 @@ export async function setApprovalUiSettings(value: ApprovalUiSettings): Promise<
   await setSetting(APPROVAL_UI_KEY, value);
 }
 
+/** Which engine answers /jkai chat.
+ *
+ * `true` → Hermes (the gateway on homeserv: terminal, file editing, skills,
+ * delegation, web search). `false` → the in-repo `generalChat` loop, which
+ * keeps every site toolset (intel, canvas, datastore, drive, Gmail…) but has
+ * no terminal, file or browser tools.
+ *
+ * Unset falls back to the `JKAI_HERMES_CANVAS_CHAT` env var, so a host that
+ * has never touched the toggle behaves exactly as it did before. Setting it
+ * from /admin/ops/engine overrides the env var — which is the point: flipping
+ * engines used to need an env edit and a redeploy on the VPS.
+ *
+ * Read per request (30s cache in getSetting), never captured at module load,
+ * or the toggle would need a restart to take effect.
+ */
+const HERMES_CHAT_KEY = 'jkai.chat.hermes_enabled';
+
+export async function isHermesChatEnabled(envDefault: boolean): Promise<boolean> {
+  const v = await getSetting<boolean | null>(HERMES_CHAT_KEY);
+  return typeof v === 'boolean' ? v : envDefault;
+}
+
+export async function setHermesChatEnabled(enabled: boolean): Promise<void> {
+  await setSetting(HERMES_CHAT_KEY, enabled);
+}
+
 export async function getOpenRouterApiKey(): Promise<string | undefined> {
   const v = await getSetting<{ value?: string }>('openrouter.api_key');
   if (v?.value) return v.value;

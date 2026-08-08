@@ -5,6 +5,7 @@ import os from 'node:os';
 import { clampDays } from '$lib/server/hermes-sessions';
 import { canManageHermes, IS_HOMESERV, rTelemetry, rStatus, rServiceAction } from '$lib/server/hermes-remote';
 import { isServiceAction, type ServiceAction } from '$lib/server/hermes-control';
+import { isHermesChatEnabled } from '$lib/server/models/settings';
 
 export const load: PageServerLoad = async ({ url }) => {
   const days = clampDays(url.searchParams.get('days'));
@@ -23,7 +24,11 @@ export const load: PageServerLoad = async ({ url }) => {
     curator: status?.curator ?? null,
     telemetry,
     telemetryDays: days,
-    flagEnabled: env.JKAI_HERMES_CANVAS_CHAT === '1',
+    // The live value, not the env var: the toggle below overrides it.
+    flagEnabled: await isHermesChatEnabled(env.JKAI_HERMES_CANVAS_CHAT === '1').catch(
+      () => env.JKAI_HERMES_CANVAS_CHAT === '1',
+    ),
+    flagEnvDefault: env.JKAI_HERMES_CANVAS_CHAT === '1',
     canManage: manage,
     direct: IS_HOMESERV,
     hostname: os.hostname(),
