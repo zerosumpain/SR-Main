@@ -999,7 +999,7 @@ class Orchestrator {
         await emitLog(buildId, 'system', `Running gate: ${build.gitTargetConfig.gateCommand} ...`, iteration.id);
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         const dev = `/home/jkai/workspace/${buildId}/dev`;
-        const gate = await execInSandbox(`cd ${dev} && ${build.gitTargetConfig.gateCommand} 2>&1`, 600000);
+        const gate = await execInSandbox(`cd ${dev} && ${build.gitTargetConfig.gateCommand} 2>&1`, 1_200_000);
         const gateOut = (gate.stdout + '\n' + gate.stderr).trim();
         const gatePassed = gate.exitCode === 0;
         testResult = {

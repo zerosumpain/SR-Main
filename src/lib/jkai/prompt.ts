@@ -163,15 +163,25 @@ WORK IN THIS ORDER, EVERY ITERATION:
   2. Read those files, plus two precedents. Use the codebase digest below rather than re-listing the tree.
   3. Make the change.
   4. Add or update tests next to the existing tests for that area.
-  5. Check your work with the NARROWEST command that can fail (see below).
-  6. Run the full gate command ONCE, at the end. Fix what it reports.
-  7. Write ## Evaluation + ## Next Steps and stop.
+  5. Check your work with the NARROWEST command that can prove it (see below).
+  6. Write ## Evaluation + ## Next Steps and stop.
 
-THE GATE IS THE DEFINITION OF DONE. Your work is not finished when the code looks right — it is finished when the gate command exits 0. Budget your iteration accordingly: leave time to run it. An iteration that ends with an unrun gate has delivered nothing, because the orchestrator cannot open a pull request from it.
+**DO NOT RUN THE FULL GATE YOURSELF. You cannot, and you do not need to.**
 
-BUT DO NOT LOOP ON THE FULL GATE. It runs a type-check, the entire test suite and a production build; it takes minutes, and three runs can consume an entire iteration. While you are still working, check yourself with the cheapest command that could catch your mistake — a single test file, a type-check, a grep. Run the whole gate once you believe you are finished, and only re-run it after you have changed something in response to what it said. If it fails the same way twice, stop and change approach rather than running it a third time.
+Two hard facts about your environment:
 
-If the repo exposes narrower scripts (\`npm run\` with no arguments lists them), prefer those while iterating: a type-check or a single test file costs seconds where the full gate costs minutes.
+  - **Every command you run is killed at 300 seconds.** That is a limit of the agent runtime, not a setting anyone can raise for you. The full gate takes far longer than that, so running it can only ever end in \`Command timed out after 300 seconds\` — several wasted minutes and no information.
+  - **The orchestrator runs the full gate for you** after your iteration ends, with a much longer budget, and feeds the result back into your next iteration's context. If it fails, you will see the failing output at the top of your next turn and can fix it then.
+
+So your job inside an iteration is to make the change and check it NARROWLY:
+
+  - the single test file covering what you touched (e.g. \`npx vitest run path/to/one.test.ts\`)
+  - a type-check, if one can be scoped to your files
+  - a \`grep\`/\`rg\` to confirm a symbol exists or a pattern matches
+
+Anything that reliably finishes inside 300 seconds is fair game. Anything that installs, builds the whole project, or runs every test is not.
+
+THE GATE IS STILL THE DEFINITION OF DONE — it is simply not yours to run. Write code that will pass it: match existing patterns, keep the diff small, and add tests you have actually seen pass.
 
 IF THE GATE FAILS ON SOMETHING YOU DID NOT TOUCH: say so explicitly in ## Evaluation, fix it only if the fix is small and obviously correct, and never delete or skip a test to make the gate pass. Deleting a failing test is a failed iteration, not a passing one.
 
@@ -258,7 +268,7 @@ export function buildIterationContext(
     // No serving port: a repo build has no preview server, and naming one
     // invites the agent to invent scaffolding the gate will then reject.
     if (gateCommand) {
-      contextMessage += `\n\n## Definition of Done\nRun \`${gateCommand}\` in the workspace root and get exit status 0. Until that passes, the iteration has produced nothing that can be shipped — leave time for it. Run it ONCE when you think you are done, not repeatedly while you work: it type-checks, runs every test and does a production build, and three runs will eat this iteration.`;
+      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, its output appears at the top of your next iteration. Verify narrowly instead — the one test file covering what you touched.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
   } else {
