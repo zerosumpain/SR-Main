@@ -10,6 +10,21 @@ export interface BudgetConfig {
    * gets a say — two did on 2026-08-07, at 1.55M tokens each.
    */
   maxTokensPerIteration?: number;
+  /**
+   * Hard ceiling on total spend for the build, in USD. Tokens and minutes are
+   * proxies for cost; this is the thing itself, and it is the cap a human
+   * actually reasons about.
+   */
+  maxCostUsd?: number;
+  /**
+   * Stop after this many CONSECUTIVE iterations that changed no files.
+   *
+   * An agent that believes it is finished but cannot prove it will re-verify
+   * forever: build #131 spent iterations 7, 8 and 9 each concluding "no changes
+   * were needed" and re-running a ten-minute gate. Repeating a verification
+   * that already failed is not progress.
+   */
+  maxIdleIterations?: number;
 }
 
 export interface ServeConfig {
@@ -61,6 +76,8 @@ export type FailureKind =
   | 'tooling_unavailable'
   /** One iteration hit `maxTokensPerIteration`; work is preserved, like a wall-clock stop. */
   | 'iteration_token_cap'
+  /** Consecutive iterations changed no files — a verification loop, not work. */
+  | 'no_progress'
   | 'container_missing'
   | 'wall_clock_timeout'
   | 'nonzero_exit'

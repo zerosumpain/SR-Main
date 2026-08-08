@@ -476,6 +476,7 @@ class Orchestrator {
     // skeleton; git-target builds clone the target repo + branch off base.
     if (buildRecord.gitTargetConfig) {
       await emitLog(buildId, 'system', `Git-target mode — cloning ${buildRecord.gitTargetConfig.repoUrl} and branching off ${buildRecord.gitTargetConfig.baseBranch}.`);
+      this.consecutiveIdleIterations = 0;
       await ensureGitWorkspace(buildId, buildRecord.gitTargetConfig as GitTargetConfig);
     } else {
       await ensureWorkspace(buildId);
@@ -1017,6 +1018,35 @@ class Orchestrator {
       const testSummary = `${testEmoji} Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? ` (${testResult.failCount} failed)` : ''}`;
       await emitLog(buildId, testResult.passed ? 'system' : 'error', `${testSummary}\n${testResult.output.slice(0, 2000)}`, iteration.id);
 
+      // Idle-iteration breaker. An agent that believes it is finished but
+      // cannot prove it will re-verify forever — build #131 spent iterations
+      // 7, 8 and 9 each concluding "no changes were needed" and re-running a
+      // ten-minute gate. Count consecutive iterations that wrote nothing, and
+      // stop when they reach the cap: repeating a verification that already
+      // failed is not progress, and the human needs to see it.
+      const budgetCfg = (build.budgetConfig ?? {}) as BudgetConfig;
+      const idleCap = budgetCfg.maxIdleIterations ?? 0;
+      if (idleCap > 0) {
+        const wroteSomething = (result.actions ?? []).some(
+          (a) => a.lang === 'write' || a.lang === 'edit',
+        );
+        this.consecutiveIdleIterations = wroteSomething ? 0 : this.consecutiveIdleIterations + 1;
+        if (this.consecutiveIdleIterations >= idleCap) {
+          await emitLog(
+            buildId,
+            'error',
+            `${this.consecutiveIdleIterations} iterations in a row changed no files — stopping rather than re-verifying indefinitely. ` +
+              `The agent believes the work is done; the gate disagrees, or it is stuck. Read the last evaluation and decide.`,
+          );
+          await this.abortBuild(buildId, {
+            kind: 'no_progress',
+            message: `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
+            attempts: 1,
+          });
+          return;
+        }
+      }
+
       // Snapshot this iteration's dev state
       await snapshotIteration(buildId, iterationNumber);
 
@@ -1184,6 +1214,50 @@ class Orchestrator {
     }
   }
 
+  /**
+   * Push a failed git-target build's branch and open a draft PR for it.
+   *
+   * Silent no-op when there is nothing to rescue (not a git build, or the agent
+   * never changed a file). Never throws into the abort path — a failure to
+   * rescue must not stop the build being marked failed.
+   */
+  private async rescueFailedGitBuild(buildId: string, failure: FailureEnvelope): Promise<void> {
+    const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
+    if (!build?.gitTargetConfig) return;
+
+    const cfg = build.gitTargetConfig as GitTargetConfig;
+    const dev = `/home/jkai/workspace/${buildId}/dev`;
+    const dirty = await execInSandbox(`cd ${dev} && git status --porcelain 2>&1`, 60000);
+    if (dirty.exitCode !== 0 || !dirty.stdout.trim()) return;
+
+    await emitLog(
+      buildId,
+      'system',
+      'Build failed with uncommitted work — pushing the branch and opening a draft PR so it is not lost.',
+    );
+
+    const body = [
+      `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the gate did not pass.`,
+      '',
+      `> ${(failure.message ?? '').slice(0, 500)}`,
+      '',
+      'Review the diff before doing anything with it. To continue the work, resume the build rather than starting a new one — the workspace and branch are still on the VPS.',
+    ].join('\n');
+
+    const res = await publishViaGit(buildId, { ...cfg, openPr: true }, {
+      draft: true,
+      title: `[rescued] ${build.title ?? `Build ${buildId.slice(0, 8)}`}`,
+      body,
+      summary: `rescued from failed build ${buildId.slice(0, 8)}`,
+    });
+    if (res?.prUrl) {
+      await emitLog(buildId, 'system', `Draft PR opened with the rescued work → ${res.prUrl}`);
+    }
+  }
+
+  /** Consecutive iterations that changed no files — see the idle breaker. */
+  private consecutiveIdleIterations = 0;
+
   private async abortBuild(buildId: string, failure: FailureEnvelope): Promise<void> {
     await db
       .update(jkaiBuilds)
@@ -1200,6 +1274,16 @@ class Orchestrator {
       `Build aborted: ${failure.kind} — ${failure.message}`,
     );
     await emitStage(buildId, { stage: 'failed', failureKind: failure.kind, message: failure.message });
+
+    // Rescue the work. A git-target build that dies still has a branch full of
+    // real edits sitting in its workspace, and until now that was simply lost —
+    // three builds' worth had to be recovered by hand on 2026-08-08. Push it and
+    // open a DRAFT pull request instead, so a failed build produces something
+    // reviewable rather than nothing. Draft, because the gate has not passed:
+    // it is a rescue, not a delivery.
+    await this.rescueFailedGitBuild(buildId, failure).catch((err) => {
+      console.warn('[jkai] rescue PR failed', err);
+    });
 
     try {
       await notifyAllSubscribers({

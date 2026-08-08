@@ -349,6 +349,8 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
 }
 
 export interface PublishViaGitOptions {
+  /** Open the PR as a draft — used to rescue the work of a FAILED build. */
+  draft?: boolean;
   summary?: string;
   /**
    * PR title + commit-message subject. This is the build's own `title` column
@@ -462,6 +464,7 @@ export async function publishViaGit(
       base: cfg.baseBranch,
       body: bodyText,
       token,
+      draft: opts.draft === true,
     });
     await emitLog(buildId, 'system', `publishViaGit: PR ready → ${prUrl}`);
     return { branch, prUrl };
@@ -503,9 +506,9 @@ export async function publishViaGit(
 async function openPrViaRestApi(
   buildId: string,
   repoSlug: string,
-  args: { title: string; head: string; base: string; body: string; token: string },
+  args: { title: string; head: string; base: string; body: string; token: string; draft?: boolean },
 ): Promise<string> {
-  const { title, head, base, body, token } = args;
+  const { title, head, base, body, token, draft } = args;
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -516,7 +519,7 @@ async function openPrViaRestApi(
   const createRes = await fetch(`https://api.github.com/repos/${repoSlug}/pulls`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ title, head, base, body }),
+    body: JSON.stringify({ title, head, base, body, draft: draft === true }),
   });
 
   if (createRes.ok) {
