@@ -1,0 +1,18 @@
+[Unit]
+Description=jkai Codex bridge — OpenAI-compatible HTTP face over the Codex CLI, so site LLM traffic can bill to the ChatGPT Pro subscription instead of OpenRouter. Loopback only.
+After=network.target
+
+[Service]
+Type=simple
+User=johnk
+WorkingDirectory=/opt/strange-rambling-svelte
+# The bridge needs no site env of its own — its credential is the Codex OAuth
+# token in ~/.codex/auth.json, owned by User= above. EnvironmentFile is present
+# only so CODEX_BRIDGE_* overrides can be set alongside the app's other vars.
+EnvironmentFile=-/opt/strange-rambling-svelte/.env
+ExecStart=/usr/bin/node /opt/strange-rambling-svelte/packages/jkai-codex-bridge/dist/start.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { setSetting, clearSettingsCache, resolveDefaultModel } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
 import { describeProfiles, setOverride, isRoutingEnabled } from '$lib/routing/events';
 import { PROFILE_LABEL, PROFILES, type ModelProfile } from '$lib/routing/types';
 
@@ -39,7 +40,12 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!isValidOpenRouterId(body?.modelId)) {
       throw error(400, 'invalid modelId — must be a full OpenRouter slug (vendor/model)');
     }
-    await setSetting(SITE_DEFAULT_KEY, { provider: 'openrouter', modelId: body.modelId });
+    // Store the provider the id actually implies. Hardcoding 'openrouter' here
+    // still "worked" for Codex picks — coerceModelContext recovers the provider
+    // from the id prefix on read — but it left a row that contradicted itself,
+    // which is the sort of thing that reads as truth the next time someone
+    // greps for how the default is stored.
+    await setSetting(SITE_DEFAULT_KEY, coerceModelContext({ modelId: body.modelId }));
     clearSettingsCache();
     return json({ ok: true, ...(await picture()) });
   }

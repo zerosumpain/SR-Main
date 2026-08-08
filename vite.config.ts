@@ -42,7 +42,10 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+		// packages/ is included so sidecar code (jkai-codex-bridge, …) is covered
+		// by the same merge gate as the app — a test that only runs when someone
+		// remembers to point vitest at it is not a gate.
+		include: ['tests/**/*.test.ts', 'src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
 		// Many tests pull heavy module graphs in via dynamic `await import()`.
 		// Across the whole suite that is ~150s of module loading, so the 5s
 		// default makes any import-bound test a load-dependent flake (it passes

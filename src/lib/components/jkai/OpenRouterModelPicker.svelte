@@ -122,6 +122,28 @@
   let total = $state(0);
   let loading = $state(false);
 
+  /** Codex models — a separate provider billed to the ChatGPT Pro subscription
+   *  rather than per token, served from a static catalogue by
+   *  /api/admin/models/codex. Empty when Codex is disabled or its bridge is
+   *  down, which is the normal state on a host with no `codex login`. */
+  interface CodexRow {
+    id: string;
+    name: string;
+    description: string;
+    proOnly: boolean;
+  }
+  let codexRows = $state<CodexRow[]>([]);
+
+  /** Client-side search over the Codex group, matching the server-side `q`
+   *  behaviour on the OpenRouter table so one search box filters both. */
+  const visibleCodexRows = $derived(
+    q.trim()
+      ? codexRows.filter((r) =>
+          `${r.id} ${r.name}`.toLowerCase().includes(q.trim().toLowerCase()),
+        )
+      : codexRows,
+  );
+
   let tab = $state<Tab>('list');
   // Owned here, not in the chart, so Escape collapses the expanded chart before
   // it closes the whole picker.
@@ -210,6 +232,26 @@
     return params;
   }
 
+  /**
+   * Codex models, loaded once rather than on every filter change: they come
+   * from a five-row static table, not the DB query the OpenRouter rows use, so
+   * there is nothing for the server to re-sort or re-score. Filtering by the
+   * search box happens client-side below.
+   */
+  async function loadCodex() {
+    try {
+      const res = await fetch('/api/admin/models/codex');
+      if (!res.ok) return;
+      const data = await res.json();
+      // Show them only when the operator has enabled Codex AND the bridge can
+      // serve a call — a model you can pick but that always fails is worse
+      // than one that isn't offered.
+      if (data.enabled && data.health?.ok) codexRows = data.rows;
+    } catch {
+      // A dead bridge just means no Codex group; the picker still works.
+    }
+  }
+
   async function load() {
     loading = true;
     try {
@@ -275,9 +317,11 @@
   });
 
   // Reads nothing reactive → runs once on mount. Fetches what is currently
-  // pinned where, so the chips can show it.
+  // pinned where, so the chips can show it, plus the static Codex catalogue
+  // (which no filter re-queries).
   $effect(() => {
     untrack(() => loadPicture());
+    untrack(() => loadCodex());
   });
 
   async function loadPicture() {
@@ -365,7 +409,10 @@
 
   async function pick(modelId: string) {
     if (target === 'chat') {
-      onselect({ provider: 'openrouter', modelId });
+      // Provider comes from the id prefix, not from which table the row was in
+      // — the same rule coerceModelContext applies server-side, so a persisted
+      // pick round-trips to the right provider.
+      onselect({ provider: modelId.startsWith('codex/') ? 'codex' : 'openrouter', modelId });
       onclose();
       return;
     }
@@ -704,6 +751,45 @@
           </tr>
         </thead>
         <tbody>
+          <!-- Codex group, pinned above the OpenRouter table. Pinned rather
+               than sorted in because it has no price, quality index or
+               throughput to sort on — dropping five permanently-blank rows
+               into a table sorted by those columns would bury them. -->
+          {#if visibleCodexRows.length}
+            <tr class="group-row">
+              <td colspan="5">
+                Codex — billed to the ChatGPT Pro subscription, not per token
+              </td>
+            </tr>
+            {#each visibleCodexRows as m (m.id)}
+              {@const active = activeModelId === m.id}
+              <tr
+                class="model-row"
+                class:active={active}
+                class:busy={applying?.endsWith(`:${m.id}`)}
+                tabindex="0"
+                role="button"
+                title={m.description}
+                onclick={() => pick(m.id)}
+                onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(m.id); } }}
+              >
+                <td class="cell-name" title={m.description}>
+                  <span class="name-main">
+                    {m.name}
+                    {#if m.proOnly}<span class="open-badge" title="Requires a ChatGPT Pro plan">pro</span>{/if}
+                  </span>
+                  <span class="name-id">{m.id}</span>
+                </td>
+                <td class="ta-right cell-muted cell-q">—</td>
+                <td class="ta-right cell-muted cell-in-price">sub</td>
+                <td class="ta-right cell-muted cell-out-price">sub</td>
+                <td class="ta-right cell-muted cell-tps">—</td>
+              </tr>
+            {/each}
+            <tr class="group-row">
+              <td colspan="5">OpenRouter — billed per token</td>
+            </tr>
+          {/if}
           {#each rows as m (m.id)}
             {@const active = activeModelId === m.id}
             <tr
@@ -1215,6 +1301,18 @@
   .cell-muted { color: var(--text-secondary); white-space: nowrap; }
   .cell-q { font-family: var(--font-mono); }
   .empty { text-align: center; padding: 28px 0; color: var(--text-ghost); }
+
+  /* Provider separator inside the table. Labelled on both sides of the split
+     so the pinned Codex rows can't be misread as unpriced OpenRouter ones. */
+  .group-row td {
+    padding: 10px 0 4px;
+    color: var(--text-ghost);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--divider);
+  }
 
   .picker-foot {
     display: flex;

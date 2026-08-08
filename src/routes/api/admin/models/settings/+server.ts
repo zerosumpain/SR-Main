@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getSetting, setSetting, clearSettingsCache } from '$lib/server/models/settings';
 import { loadKeys } from '$lib/deepdive/keys';
-import { DEFAULT_CHAT_MODEL_ID } from '$lib/constants/default-models';
+import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 
 export const GET: RequestHandler = async () => {
   const [chatDefault, alt, orKey] = await Promise.all([
@@ -36,7 +36,10 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!isValidOpenRouterId(body.chatDefaultModelId)) {
       throw error(400, 'invalid chatDefaultModelId — must be a full OpenRouter slug (vendor/model)');
     }
-    await setSetting('jkai.chat.default_model', { provider: 'openrouter', modelId: body.chatDefaultModelId });
+    // coerceModelContext, not a hardcoded provider — a `codex/*` id saved here
+    // must persist as a Codex context, not an OpenRouter one that only happens
+    // to be recovered correctly on read.
+    await setSetting('jkai.chat.default_model', coerceModelContext({ modelId: body.chatDefaultModelId }));
     changed = true;
   }
 

@@ -6,6 +6,7 @@ import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workfl
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
+import type { ModelProvider } from '$lib/server/models/types';
 
 export interface CompletionUsage {
   prompt_tokens?: number;
@@ -20,7 +21,7 @@ export interface CompletionUsage {
  *  call regardless of where it originated). Robust to missing fields: if usage
  *  is absent, tokens/cost record as null — never a fabricated zero. */
 function captureUsage(
-  provider: 'openrouter',
+  provider: ModelProvider,
   model: string,
   usage: CompletionUsage | null | undefined,
 ): void {
@@ -72,7 +73,7 @@ function captureUsage(
  *  on iteration to observe the final usage-bearing chunk. */
 function wrapStreamForUsage(
   stream: AsyncIterable<{ usage?: CompletionUsage }>,
-  provider: 'openrouter',
+  provider: ModelProvider,
   model: string,
 ): AsyncIterable<{ usage?: CompletionUsage }> {
   let lastUsage: CompletionUsage | undefined;
@@ -186,7 +187,7 @@ async function withProviderCap<T extends { model?: string; max_tokens?: number |
  *  For streams we ensure the provider emits a final usage chunk
  *  (stream_options.include_usage) and observe it transparently as the stream is
  *  consumed. Embeddings are not intercepted (only chat.completions). */
-export function installUsageCapture(client: OpenAI, provider: 'openrouter'): OpenAI {
+export function installUsageCapture(client: OpenAI, provider: ModelProvider): OpenAI {
   type CreateFn = typeof client.chat.completions.create;
   const completions = client.chat.completions as unknown as { create: CreateFn };
   const original = completions.create.bind(completions);

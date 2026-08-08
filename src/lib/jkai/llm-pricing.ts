@@ -85,7 +85,15 @@ export function clearPriceCache(): void {
 
 /** Returns null when the model is unknown. Caller writes null cost in that
  *  case — that's a visible "we don't know" signal in charts, not a silently
- *  understated zero. */
+ *  understated zero.
+ *
+ *  `codex` also returns null, but for a different reason: those calls are
+ *  billed against a ChatGPT Pro subscription, so there IS no per-token price.
+ *  Null is still the right answer rather than 0 — a Codex call is not free, it
+ *  spends a finite weekly quota, and charting it at £0.00 would read as "this
+ *  work cost nothing" when the true statement is "this work cost quota, not
+ *  cash". `isSubscriptionProvider` lets the cost UIs tell those two nulls
+ *  apart and label them differently. */
 export function priceFor(provider: string, model: string): ModelPricing | null {
   if (provider !== 'openrouter') return null;
   warmCataloguePrices();
@@ -101,4 +109,14 @@ export function computeCost(
     (tokensInput * pricing.inputPerMillion) / PER_MILLION +
     (tokensOutput * pricing.outputPerMillion) / PER_MILLION
   );
+}
+
+/**
+ * True for providers whose calls are covered by a flat subscription rather than
+ * metered per token. Cost UIs use this to distinguish a null cost that means
+ * "unknown model, we couldn't price it" from one that means "billed to a
+ * subscription — no cash cost, but it did spend quota".
+ */
+export function isSubscriptionProvider(provider: string): boolean {
+  return provider === 'codex';
 }
