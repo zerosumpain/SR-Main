@@ -51,12 +51,35 @@ register({
 
 register({
   name: 'research_list',
-  description: 'List recent research sessions with topic, status, and stats',
-  parameters: { type: 'object', properties: {}, required: [] },
+  description:
+    'List recent research sessions with topic, status, and stats. ' +
+    'Compact by default — returns only the identifying fields (id, topic, status, createdAt) to keep token usage low. ' +
+    'Pass verbose:true to return the full rows including heavy columns (goals, config, report, seedContext).',
+  parameters: {
+    type: 'object',
+    properties: {
+      verbose: { type: 'boolean', description: 'Set true to return full rows including heavy columns; defaults to compact identifying fields only' },
+    },
+    required: [],
+  },
   category: 'Deep Dive Research',
   toolset: 'research',
-  handler: async () => {
-    const rows = await db.select().from(researchSessions).orderBy(desc(researchSessions.createdAt)).limit(50);
+  handler: async (args) => {
+    const verbose = (args?.verbose as boolean) === true;
+    if (verbose) {
+      const rows = await db.select().from(researchSessions).orderBy(desc(researchSessions.createdAt)).limit(50);
+      return { success: true, data: rows };
+    }
+    const rows = await db
+      .select({
+        id: researchSessions.id,
+        topic: researchSessions.topic,
+        status: researchSessions.status,
+        createdAt: researchSessions.createdAt,
+      })
+      .from(researchSessions)
+      .orderBy(desc(researchSessions.createdAt))
+      .limit(50);
     return { success: true, data: rows };
   },
 });
