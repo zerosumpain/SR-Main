@@ -80,7 +80,20 @@ export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
  * with the reason shown, rather than letting the pick fail at call time.
  */
 export interface ProviderFeatures {
-  /** Caller-supplied `tools` / `tool_choice` function schemas. */
+  /**
+   * Whether THIS TRANSPORT can forward caller-supplied `tools` / `tool_choice`
+   * function schemas.
+   *
+   * NOT a statement about the model. GPT-5.6 does tool-calling perfectly well —
+   * Hermes drives Codex tool calls every day over the Responses API. What
+   * cannot carry them is our bridge, because it drives the Codex CLI/SDK, whose
+   * `TurnOptions` has no `tools` field at all: Codex brings its own toolset and
+   * offers no way to inject yours.
+   *
+   * The earlier version of this comment said "Codex does not support tools",
+   * which was wrong and produced a UI message telling the user something untrue
+   * about the model.
+   */
   tools: boolean;
   /** `response_format` with a JSON schema. */
   structuredOutput: boolean;
@@ -120,7 +133,15 @@ export function getProviderFeatures(provider: ModelProvider): ProviderFeatures {
  */
 export function siteDefaultBlockReason(provider: ModelProvider): string | null {
   if (getProviderFeatures(provider).tools) return null;
-  return `${provider} cannot be the site default: it does not support tool-calling, which the orchestrator and builder require. Pick it per-conversation or per-node instead.`;
+  if (provider === 'codex') {
+    return (
+      'Codex models do support tool-calling — but the site default is served through the local Codex bridge, ' +
+      'which drives the Codex CLI and has no way to pass caller-supplied tool schemas. The orchestrator and ' +
+      'builder need those, so they would fail. Pick Codex for a conversation instead: chat runs on Hermes, ' +
+      'which talks to Codex over the Responses API and keeps tool-calling.'
+    );
+  }
+  return `${provider} cannot be the site default: this transport cannot pass tool schemas, which the orchestrator and builder require.`;
 }
 
 /** Human-readable reason a provider can't serve a role, or null if it can.
@@ -133,7 +154,7 @@ export function unsupportedReason(
   if (provider !== 'codex') return `This provider does not support ${need}.`;
   switch (need) {
     case 'tools':
-      return 'Codex runs its own toolset and cannot accept the function schemas this role passes in. Use an OpenRouter model here.';
+      return 'Codex models do tool-calling, but the local Codex bridge cannot pass caller-supplied schemas — it drives the Codex CLI, which brings its own toolset. Chat is unaffected (it goes via Hermes); use an OpenRouter model for this role.';
     case 'embeddings':
       return 'Codex has no embeddings endpoint. Use an OpenRouter model here.';
     default:

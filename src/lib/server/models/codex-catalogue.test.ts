@@ -92,8 +92,22 @@ describe('codex capabilities', () => {
     // The site default is the fallback for every unpinned role, including the
     // orchestrator's tool-calling loop. Allowing Codex there would break the
     // builder at call time with no obvious cause.
-    expect(siteDefaultBlockReason('codex')).toMatch(/cannot be the site default/);
+    expect(siteDefaultBlockReason('codex')).not.toBeNull();
     expect(siteDefaultBlockReason('openrouter')).toBeNull();
+  });
+
+  it('blames the bridge, not the model, for the tool-calling limit', () => {
+    // The first version of this message said Codex "does not support
+    // tool-calling", which is false — Hermes drives Codex tool calls over the
+    // Responses API daily. The limit is our bridge, which runs the Codex CLI
+    // and has nowhere to put caller-supplied schemas. Telling the user an
+    // untruth about the model sends them arguing with the wrong thing.
+    const reason = siteDefaultBlockReason('codex')!;
+    expect(reason).toMatch(/do support tool-calling/);
+    expect(reason).toMatch(/bridge/);
+    // And it must point at the route that does work.
+    expect(reason).toMatch(/conversation|Hermes/);
+    expect(unsupportedReason('codex', 'tools')).toMatch(/do tool-calling/);
   });
 
   it('explains why a role is unavailable', () => {

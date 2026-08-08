@@ -171,8 +171,15 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	const { modelProvider, modelId } = body;
 
-	if (modelProvider !== 'openrouter') {
-		throw error(400, 'modelProvider must be openrouter');
+	// Codex is a valid provider for a conversation. Chat turns run on Hermes,
+	// which reaches Codex through its own native openai-codex profile (the
+	// Responses API, where tool-calling works) rather than through our
+	// jkai-codex-bridge — so the bridge's inability to take caller-supplied
+	// tool schemas does not constrain chat. This validator predated the second
+	// provider and rejected every Codex pick with a 400 the UI swallowed
+	// silently, which looked like "the picker doesn't work".
+	if (modelProvider !== 'openrouter' && modelProvider !== 'codex') {
+		throw error(400, 'modelProvider must be openrouter or codex');
 	}
 	if (typeof modelId !== 'string' || modelId.length === 0) {
 		throw error(400, 'modelId is required');
