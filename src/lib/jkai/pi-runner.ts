@@ -289,13 +289,46 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // then dies hits the idle cap.
   const FIRST_EVENT_TIMEOUT_MS = 240 * 1000;
   const IDLE_TIMEOUT_MS = 180 * 1000;
+  // A tool call is pi executing something on our behalf — `npm run gate`,
+  // `npm install`, a test suite. pi writes NOTHING to stdout for its whole
+  // duration, so the idle timer above would be counting the tool's runtime as
+  // upstream silence. The gate takes ~10 minutes here; at a 180s idle cap an
+  // agent that runs it is killed every single time, which is precisely what
+  // happened to builds #125, #126 and #131 (diagnosed 2026-08-08).
+  //
+  // So while any tool call is outstanding the idle timer is suspended and this
+  // much longer cap applies instead, measured from when the tool started. It
+  // sits above the orchestrator's own 600s gate timeout and below the 30-minute
+  // wall clock, so a genuinely hung tool is still caught.
+  const TOOL_TIMEOUT_MS = 15 * 60 * 1000;
   const startedAt = Date.now();
   let lastOutputAt = Date.now();
   let anyOutput = false;
   let stalled = false;
   let stalledAgeMs = 0;
+  /** When the currently-outstanding batch of tool calls began; null when idle. */
+  let toolBusySince: number | null = null;
   const idleCheck = setInterval(() => {
     const now = Date.now();
+
+    if (toolBusySince !== null) {
+      const toolAge = now - toolBusySince;
+      if (toolAge > TOOL_TIMEOUT_MS) {
+        stalled = true;
+        stalledAgeMs = toolAge;
+        try {
+          child.kill('SIGTERM');
+          emitLog(
+            build.id,
+            'error',
+            `A tool call ran for ${Math.round(toolAge / 1000)}s without returning (cap ${Math.round(TOOL_TIMEOUT_MS / 1000)}s) — killed.`,
+            iteration.id,
+          );
+        } catch {}
+      }
+      return;
+    }
+
     const idleAge = now - lastOutputAt;
     const sinceStart = now - startedAt;
     const limit = anyOutput ? IDLE_TIMEOUT_MS : FIRST_EVENT_TIMEOUT_MS;
@@ -306,7 +339,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       try {
         child.kill('SIGTERM');
         const reason = anyOutput
-          ? `Pi idle for ${Math.round(IDLE_TIMEOUT_MS / 1000)}s mid-stream — upstream connection stalled.`
+          ? `Pi idle for ${Math.round(IDLE_TIMEOUT_MS / 1000)}s mid-stream with no tool running — upstream connection stalled.`
           : `Pi produced no output in ${Math.round(FIRST_EVENT_TIMEOUT_MS / 1000)}s — upstream never responded.`;
         emitLog(build.id, 'error', `${reason} Killed.`, iteration.id);
       } catch {}
@@ -433,6 +466,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
           await emitLog(build.id, 'thinking', c.thinking, iteration.id);
         } else if (c.type === 'toolCall') {
           if (c.id) pendingCalls.set(c.id, { name: c.name ?? 'tool', args: c.arguments });
+          // Suspend the idle watchdog for the duration of the call — pi goes
+          // silent while it runs, and that silence is work, not a stall.
+          if (toolBusySince === null) toolBusySince = Date.now();
           const body = summarizeArgs(c.arguments);
           await emitLog(
             build.id,
@@ -454,6 +490,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       const resultText = (m.content ?? []).map((c) => c.text ?? '').join('\n');
       const call = m.toolCallId ? pendingCalls.get(m.toolCallId) : undefined;
       if (m.toolCallId) pendingCalls.delete(m.toolCallId);
+      // Last outstanding call returned: resume the idle watchdog, and restart
+      // its clock so a long tool doesn't leave it instantly expired.
+      if (pendingCalls.size === 0) {
+        toolBusySince = null;
+        lastOutputAt = Date.now();
+      }
 
       const name = call?.name ?? m.toolName ?? 'tool';
       const code = summarizeArgs(call?.args);
