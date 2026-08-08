@@ -1154,6 +1154,55 @@ export type OrchestratorChat = typeof orchestratorChats.$inferSelect;
 export type NewOrchestratorChat = typeof orchestratorChats.$inferInsert;
 
 // ==========================================
+// JKAI tool-call traces (one row per turn)
+// ==========================================
+//
+// The ordered chain of tool calls a single chat turn made, recorded server-side
+// in `handleWithHermes` and rendered by /jkai/trace/[traceId].
+//
+// This table exists because the chain is otherwise not durable anywhere: the
+// Hermes branch never writes `orchestrator_chats.metadata.toolSteps` (only the
+// retired in-process loop did), so tool activity lives in the watching browser
+// tab and dies on reload. Keeping it here rather than back in message metadata
+// is deliberate — the conversation loader selects `metadata` for every message
+// in a thread, and a chain can be hundreds of KB.
+//
+// `id` is the chat job id, which is the only turn identifier that exists on BOTH
+// sides while the turn is in flight; the assistant message's row id is not
+// created until after `done` has already been published to the client.
+export const jkaiToolTraces = pgTable(
+  'jkai_tool_traces',
+  {
+    /** The chat job id (`jobId`) that produced the turn. */
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    workflowId: text('workflow_id').references(() => workflows.id, { onDelete: 'cascade' }),
+    /** Back-filled once the assistant row is inserted; null if the turn never persisted one. */
+    messageId: text('message_id').references(() => orchestratorChats.id, { onDelete: 'cascade' }),
+    /** First user-visible words of the prompt, so the trace page can say what turn this was. */
+    prompt: text('prompt'),
+    model: text('model'),
+    provider: text('provider'),
+    costUsd: doublePrecision('cost_usd'),
+    stepCount: integer('step_count').notNull().default(0),
+    errorCount: integer('error_count').notNull().default(0),
+    /** Wall-clock span of the tool chain (not the whole turn). */
+    durationMs: integer('duration_ms'),
+    /** ToolTrace from $lib/jkai/tool-trace — capped before it reaches here. */
+    steps: jsonb('steps').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('jkai_tool_traces_conversation_idx').on(t.conversationId, t.createdAt),
+    index('jkai_tool_traces_message_idx').on(t.messageId),
+    index('jkai_tool_traces_created_idx').on(t.createdAt),
+  ],
+);
+
+export type JkaiToolTrace = typeof jkaiToolTraces.$inferSelect;
+export type NewJkaiToolTrace = typeof jkaiToolTraces.$inferInsert;
+
+// ==========================================
 // JKAI Attachments (multimedia I/O)
 // ==========================================
 
