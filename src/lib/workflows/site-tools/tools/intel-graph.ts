@@ -28,6 +28,7 @@ const loadModel = () => import('$lib/jkai/intel/analytics/model');
 const loadSurprise = () => import('$lib/jkai/intel/analytics/surprise');
 const loadInsights = () => import('$lib/jkai/intel/analytics/insights');
 const loadCentrality = () => import('$lib/jkai/intel/analytics/centrality');
+const loadSearchIntel = () => import('$lib/jkai/intel/search');
 
 /**
  * Resolve a name the model typed to an entity id.
@@ -262,17 +263,25 @@ register({
 register({
   name: 'intel_insights',
   description:
-    'What the intel graph has noticed on its own: brokers holding separate areas together, unexpected connections, links that probably exist but are not recorded, isolated clusters, entities going stale, and data-quality problems. ' +
-    'Use when the user asks what is interesting, what they are missing, what to look at, or for a standing brief on their knowledge base.',
+    'Find entities in the intel graph that are semantically related to a topic, plus any structural insights about them (brokers, unexpected connections, missing links, emerging hubs, stale entities). ' +
+    'Pass a `query` (e.g. "insurance", "home automation", "John Kelly") to get the most relevant entities with their type, summary, and connection count, plus insights scoped to that topic. ' +
+    'Omit `query` for the full graph-wide analytics view. This is the primary tool for topic-specific graph enrichment — cheaper than chaining intel_find + intel_neighbourhood manually.',
   parameters: {
     type: 'object',
     properties: {
+      query: {
+        type: 'string',
+        description:
+          'REQUIRED for topic-specific lookups: natural-language query for the entities you want. Uses semantic embeddings + name matching to find the most relevant entities, then returns them with their type, summary, connections, and any structural insights involving them. ' +
+          'Omit for the full graph-wide analytics view.',
+      },
       kind: {
         type: 'string',
         description:
           'Optional filter: broker, unlikely_relation, missing_link, orphan, isolated_cluster, emerging_hub, stale_hub, thin_evidence, type_outlier, dominant_cluster.',
       },
-      limit: { type: 'number', description: 'Max findings (default 10, max 30).' },
+      limit: { type: 'number', description: 'Max insights to return (default 10, max 30).' },
+      entityLimit: { type: 'number', description: 'Max matching entities to scope to (default 10, max 30). Only used when query is provided.' },
     },
   },
   category: 'Knowledge',
@@ -280,14 +289,53 @@ register({
   handler: async (args) => {
     const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 30);
     const kind = typeof args.kind === 'string' ? args.kind : null;
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    const entityLimit = Math.min(Math.max(Number(args.entityLimit ?? 10), 1), 30);
 
     const { getGraphAnalysis, ensureEmbeddings } = await loadAnalytics();
     const { generateInsights } = await loadInsights();
     const analysis = await getGraphAnalysis();
-    // generateInsights scores semantic distance, which needs the embeddings the
-    // analysis no longer loads eagerly.
     await ensureEmbeddings(analysis);
     let found = await generateInsights(analysis);
+
+    let matchedEntities: Array<{ id: string; name: string; type: string; summary: string | null; connections: number }> | undefined;
+
+    if (query) {
+      const { searchIntel } = await loadSearchIntel();
+      const searchResult = await searchIntel(query, { limit: entityLimit, ordering: 'relevant' });
+      const entityIds = new Set(
+        searchResult.items.filter((i) => i.kind === 'entity').map((i) => i.id),
+      );
+
+      // Also match by name via the analysis index — searchIntel uses embeddings
+      // which may miss entities whose name is a substring match but whose
+      // embedding doesn't rank them top-N. Union both signal sources.
+      const nq = query.toLowerCase();
+      for (const [id, node] of analysis.index.byId) {
+        if (node.name.toLowerCase().includes(nq)) entityIds.add(id);
+      }
+
+      matchedEntities = [...entityIds]
+        .map((id) => {
+          const n = analysis.index.byId.get(id);
+          if (!n) return null;
+          return {
+            id: n.id,
+            name: n.name,
+            type: n.typeName,
+            summary: n.summary,
+            connections: analysis.index.degree.get(n.id) ?? 0,
+          };
+        })
+        .filter(Boolean) as Array<{ id: string; name: string; type: string; summary: string | null; connections: number }>;
+
+      // Filter insights to only those involving matched entities
+      if (matchedEntities.length > 0) {
+        const matchIds = new Set(matchedEntities.map((e) => e.id));
+        found = found.filter((i) => i.entityIds.some((id) => matchIds.has(id)));
+      }
+    }
+
     if (kind) found = found.filter((i) => i.kind === kind);
 
     return {
@@ -300,6 +348,7 @@ register({
           clusters: analysis.community.communities.size,
           modularity: Number(analysis.community.modularity.toFixed(3)),
         },
+        entities: matchedEntities,
         insights: found.slice(0, limit).map((i) => ({
           kind: i.kind,
           title: i.title,
@@ -308,6 +357,9 @@ register({
           entities: i.entityIds.map((id) => analysis.index.byId.get(id)?.name).filter(Boolean),
           suggestedAction: `${i.action}: ${i.actionPayload}`,
         })),
+        note: matchedEntities && matchedEntities.length === 0
+          ? 'No entities matched the query. Try a different term, or omit query for the full graph-wide view.'
+          : undefined,
       },
     };
   },
