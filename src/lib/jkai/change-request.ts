@@ -26,6 +26,12 @@ const DEFAULT_BUDGET = {
   maxTotalMinutes: 120,
   maxTokensPerHour: 1_000_000,
   activeMinutesPerHour: 45,
+  // The per-hour cap is only consulted between iterations, so on its own it
+  // cannot stop a single iteration running away — two spent 1.5M tokens each
+  // on 2026-08-07 without it ever engaging. A change request is a surgical edit
+  // to an existing repo; 400k is generous for that, and hitting it continues
+  // into a fresh iteration rather than failing the build.
+  maxTokensPerIteration: 400_000,
 };
 
 export interface ChangeRequestResult {
@@ -81,6 +87,25 @@ export async function createChangeRequest({
 
   const ctx = await resolveDefaultModel();
   const priceSnapshot = await snapshotPrice(ctx);
+
+  // The site deliberately runs one default model everywhere, which means the
+  // /jkai model picker also re-tasks the autonomous builder. That is fine for a
+  // model the agent runtime knows; it is not fine for one it doesn't. On
+  // 2026-08-07 the default was `~deepseek/deepseek-v4-flash-latest`, which pi
+  // reports as "not found for provider openrouter — using custom model id":
+  // no context-window metadata, so nothing manages context, and both builds
+  // ballooned past a million tokens per iteration. Record it on the issue
+  // rather than blocking — the build may still work, but the trail should say
+  // the model was unrecognised before anyone blames the code.
+  if (/^[~@]/.test(ctx.modelId)) {
+    await commentOnIssue(
+      issue.number,
+      `⚠️ Starting this build on \`${ctx.modelId}\`, the current site default. That id carries a ` +
+        `provider-alias prefix the agent runtime does not resolve to a known model, so it has no ` +
+        `context-window metadata for it and cannot manage context. If this build burns tokens or ` +
+        `stalls, check the model before the code — set a plain id at /admin/ai/models.`,
+    ).catch(() => {});
+  }
 
   // The agent's directive: the ask, plus the issue to close. `Closes #n` is also
   // appended to the PR body from gitTargetConfig.issueNumber, so the link holds

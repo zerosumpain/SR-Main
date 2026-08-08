@@ -3,6 +3,13 @@ export interface BudgetConfig {
   maxTokensPerHour?: number;
   maxIterations?: number;
   maxTotalMinutes?: number;
+  /**
+   * Hard ceiling on a SINGLE iteration, enforced mid-stream by the runner.
+   * The per-hour caps are only checked between iterations, so without this one
+   * runaway iteration can spend the whole hourly budget and more before anyone
+   * gets a say — two did on 2026-08-07, at 1.55M tokens each.
+   */
+  maxTokensPerIteration?: number;
 }
 
 export interface ServeConfig {
@@ -50,6 +57,10 @@ export type FailureKind =
   | 'provider_error'
   | 'rate_limited'
   | 'auth_failed'
+  /** The jkai tool bridge did not load — the agent ran with no site tools. */
+  | 'tooling_unavailable'
+  /** One iteration hit `maxTokensPerIteration`; work is preserved, like a wall-clock stop. */
+  | 'iteration_token_cap'
   | 'container_missing'
   | 'wall_clock_timeout'
   | 'nonzero_exit'

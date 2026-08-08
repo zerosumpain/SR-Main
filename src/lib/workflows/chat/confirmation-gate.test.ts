@@ -26,6 +26,36 @@ describe('describeDestructiveAction', () => {
   it('has a default for unknown tools', () => {
     expect(describeDestructiveAction('mystery_tool', {})).toContain('mystery_tool');
   });
+
+  it('names what a change request will actually do', () => {
+    const prompt = describeDestructiveAction('request_change', {
+      title: 'Add a /projects/tide-times page',
+      request: 'the long body',
+    });
+    expect(prompt).toContain('Add a /projects/tide-times page');
+    expect(prompt).toContain('GitHub issue');
+  });
+
+  it('falls back to the arguments rather than an empty question', () => {
+    // A destructive tool with no hand-written case must still tell the user
+    // what it is about to act on — a bare "Proceed with X?" is not consent.
+    const prompt = describeDestructiveAction('mystery_tool', { target: 'production-db' });
+    expect(prompt).toContain('mystery_tool');
+    expect(prompt).toContain('target: production-db');
+  });
+
+  it('says so explicitly when there is nothing to show', () => {
+    expect(describeDestructiveAction('mystery_tool', {})).toContain('no arguments');
+  });
+
+  it('drops routing args and truncates long values', () => {
+    const prompt = describeDestructiveAction('mystery_tool', {
+      workflow_id: 'chat_123',
+      body: 'x'.repeat(500),
+    });
+    expect(prompt).not.toContain('chat_123');
+    expect(prompt).toContain('…');
+  });
 });
 
 describe('requireConfirmation', () => {

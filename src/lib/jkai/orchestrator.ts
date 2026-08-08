@@ -853,7 +853,10 @@ class Orchestrator {
       if (failure) {
         const canContinue =
           (failure.kind === 'empty_output' && !isEmptyOutputRetry) ||
-          failure.kind === 'wall_clock_timeout';
+          failure.kind === 'wall_clock_timeout' ||
+          // Same shape as the wall clock: a budget stop, not a fault. The work
+          // is in dev/ and the next iteration picks it up.
+          failure.kind === 'iteration_token_cap';
         const shouldAbort = !canContinue || newConsecutiveFailures >= 2;
 
         if (shouldAbort) {
@@ -863,7 +866,9 @@ class Orchestrator {
 
         const continueMsg = failure.kind === 'wall_clock_timeout'
           ? `Iteration #${iterationNumber} hit the wall-clock cap while still working — partial work preserved in dev/. Continuing with iteration #${iterationNumber + 1}.`
-          : `Iteration #${iterationNumber} produced no tool calls — retrying once with a corrective nudge.`;
+          : failure.kind === 'iteration_token_cap'
+            ? `Iteration #${iterationNumber} hit its token ceiling — partial work preserved in dev/. Continuing with iteration #${iterationNumber + 1}.`
+            : `Iteration #${iterationNumber} produced no tool calls — retrying once with a corrective nudge.`;
 
         await emitLog(
           buildId,

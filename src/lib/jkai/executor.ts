@@ -1,4 +1,4 @@
-import { buildSystemPrompt, buildIterationContext } from './prompt';
+import { buildSystemPrompt, buildIterationContext, type BuildPromptMode } from './prompt';
 import {
   listWorkspaceFiles,
   allocatePort,
@@ -14,6 +14,58 @@ import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { runPi } from './pi-runner';
 import { consumePendingDeliveries } from './workflow-deliveries';
 import { buildAttachedWorkflowGrounding, buildDeliveriesBlock } from './workflow-grounding';
+
+/**
+ * Ask the tool bridge for its manifest exactly as the sandboxed agent will.
+ *
+ * Logs the outcome either way — a healthy build says how many tools it has, a
+ * broken one says why it has none — and never throws: a missing bridge degrades
+ * the build, it does not invalidate it. The agent still has its own file and
+ * shell tools.
+ */
+async function preflightToolBridge(
+  buildId: string,
+  apiUrl: string,
+  token: string,
+  iterationId: string,
+): Promise<void> {
+  try {
+    const res = await fetch(`${apiUrl}/api/jkai/tools/manifest`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      await emitLog(
+        buildId,
+        'error',
+        `Tool bridge unavailable — ${apiUrl}/api/jkai/tools/manifest returned ${res.status}. ` +
+          `This iteration will run with NO site tools (no workflow_*, datastore_*, gmail_* …). ` +
+          `A 401 usually means the route is not exempted in hooks.server.ts or JKAI_BRIDGE_SECRET ` +
+          `differs between this process and the web app; a connection error usually means ` +
+          `JKAI_API_URL is stale — this process reads it once at start, so restart the builder ` +
+          `after editing .env.`,
+        iterationId,
+      );
+      return;
+    }
+    const body = (await res.json().catch(() => null)) as { tools?: unknown[] } | null;
+    await emitLog(
+      buildId,
+      'system',
+      `Tool bridge OK — ${body?.tools?.length ?? 0} site tools available to the agent.`,
+      iterationId,
+    );
+  } catch (err) {
+    await emitLog(
+      buildId,
+      'error',
+      `Tool bridge unreachable at ${apiUrl} (${(err as Error).message}). This iteration will run ` +
+        `with NO site tools. JKAI_API_URL is read once at process start — restart the builder ` +
+        `service after changing it.`,
+      iterationId,
+    );
+  }
+}
 
 // --- Section extraction (used by orchestrator for completion detection) ---
 
@@ -50,6 +102,13 @@ export async function executeIteration(
 ): Promise<IterationResult> {
   const workdir = `/home/jkai/workspace/${build.id}/dev`;
 
+  // A git-target build is editing an existing repo and its deliverable is a
+  // diff, not a preview server. It needs a different system prompt — see
+  // REPO_SYSTEM_PROMPT in ./prompt for why the app-build one actively harms it.
+  const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string } | null })
+    .gitTargetConfig;
+  const promptMode: BuildPromptMode = gitTarget ? 'repo' : 'app';
+
   // Verify-then-fix: the sandbox may have been removed since the last iteration
   // (admin action, image rebuild, crash). Re-verify every time.
   await ensureSandboxRunning();
@@ -57,7 +116,7 @@ export async function executeIteration(
 
   const assignedPort = await allocatePort(build.id);
 
-  let systemPrompt = buildSystemPrompt(build.id, assignedPort);
+  let systemPrompt = buildSystemPrompt(build.id, assignedPort, promptMode);
   const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
   if (enforceDesign) {
     systemPrompt += `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
@@ -92,6 +151,19 @@ export async function executeIteration(
       : 'http://host.docker.internal:5173';
     extraEnv.JKAI_API_URL = process.env.JKAI_API_URL ?? HOST_DEFAULT;
     extraEnv.JKAI_BRIDGE_TOKEN = signBridgeToken(build.id);
+
+    // Preflight the bridge from the orchestrator, before spending a single
+    // model token. The extension itself only writes a line to stderr when the
+    // manifest fetch fails, and the agent then runs with ZERO site tools while
+    // appearing perfectly healthy — builds #125/#126 each burned ~1.5M tokens
+    // that way before dying of something unrelated (2026-08-07). A tool-less
+    // build is worth knowing about at second zero, not at minute twenty.
+    await preflightToolBridge(
+      build.id,
+      extraEnv.JKAI_API_URL,
+      extraEnv.JKAI_BRIDGE_TOKEN,
+      iteration.id,
+    );
   } catch (err) {
     await emitLog(
       build.id,
@@ -122,6 +194,8 @@ export async function executeIteration(
     iterationNumber,
     assignedPort,
     codebaseDigest,
+    promptMode,
+    gitTarget?.gateCommand ?? null,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];

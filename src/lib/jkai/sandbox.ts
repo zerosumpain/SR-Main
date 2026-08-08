@@ -323,10 +323,19 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
     );
   }
 
-  // The agent writes a `serve.json` (preview-server config) into the workspace.
-  // Exclude it locally (NOT via the repo's tracked .gitignore) so the later
-  // `git add -A` in publishViaGit never stages it into the PR.
-  await execInSandbox(`cd ${dev} && echo 'serve.json' >> .git/info/exclude`, 30000);
+  // Exclude the build harness's own droppings locally (NOT via the repo's
+  // tracked .gitignore) so the later `git add -A` in publishViaGit can never
+  // stage them into the PR:
+  //   serve.json    — preview-server config
+  //   index.html    — app-build scaffolding at the repo root
+  //   design-system/— the read-only reference mounted by syncDesignAssets
+  // The repo-mode system prompt now tells the agent not to create the first two
+  // at all; this is the belt to that pair of braces, and it also covers the
+  // mounted directory, which the agent does not control.
+  await execInSandbox(
+    `cd ${dev} && printf '%s\\n' 'serve.json' '/index.html' 'design-system/' >> .git/info/exclude`,
+    30000,
+  );
 
   // `--include=dev` is required: the builder runs under NODE_ENV=production,
   // which makes a plain `npm install` skip devDependencies → the gate's

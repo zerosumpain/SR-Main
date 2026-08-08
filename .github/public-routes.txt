@@ -45,6 +45,8 @@
 /api/jkai/intel/backfill
 /api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
+/api/jkai/tools/invoke
+/api/jkai/tools/manifest
 /api/landing/ecg-telemetry
 /api/landing/vitals
 /api/live-walk
