@@ -41,6 +41,49 @@ function readToolCall(frame: SseFrame): SseFrameToolCall | null {
 }
 
 /**
+ * Arguments seen on a tool's `started` frame, kept so its `completed` frame can
+ * be summarised with them.
+ *
+ * Hermes sends `args` on start and omits them on completion (`send_tool` in the
+ * jkai_platform adapter fills `payload["args"]` only when the caller passes a
+ * dict, and the completion callback passes none). Every finished card was
+ * therefore written blind — which is why so many read "Done — <tool>" while the
+ * *running* line, one frame earlier, knew the filename or the command.
+ *
+ * Self-evicting: the entry is taken and deleted the moment its tool completes.
+ * The cap only matters for calls that never complete at all (a stream that dies
+ * mid-tool), and sheds oldest-first so it cannot grow without bound.
+ */
+const MAX_PENDING_TOOL_ARGS = 500;
+const pendingToolArgs = new Map<string, Record<string, unknown>>();
+
+function rememberToolArgs(id: string | undefined, args: Record<string, unknown>): void {
+  if (!id || !args || Object.keys(args).length === 0) return;
+  if (pendingToolArgs.size >= MAX_PENDING_TOOL_ARGS) {
+    const oldest = pendingToolArgs.keys().next().value;
+    if (oldest !== undefined) pendingToolArgs.delete(oldest);
+  }
+  pendingToolArgs.set(id, args);
+}
+
+/** Args for a finishing tool: whatever the frame carried, else what its start
+ *  frame did. Consumes the entry — a tool completes once. */
+function takeToolArgs(id: string | undefined, fromFrame: Record<string, unknown>): Record<string, unknown> {
+  if (fromFrame && Object.keys(fromFrame).length > 0) return fromFrame;
+  if (!id) return fromFrame;
+  const remembered = pendingToolArgs.get(id);
+  if (!remembered) return fromFrame;
+  pendingToolArgs.delete(id);
+  return remembered;
+}
+
+/** Test seam: the cache is module state, so a test asserting eviction needs a
+ *  way back to a known-empty starting point. */
+export function __resetPendingToolArgs(): void {
+  pendingToolArgs.clear();
+}
+
+/**
  * Translate a Hermes `tool` SSE frame into the SAME tool-step JobEvents the
  * in-repo orchestrator emits (see `/api/workflows/orchestrator/chat`'s
  * `tool-step-bus` subscriber): `started` → `tool_start`; `progress` →
@@ -100,6 +143,7 @@ export function adaptToolFrameToJobEvents(
       // A start frame with no tool name is unusable — skip rather than emit a
       // nameless tool bubble.
       if (!toolName) return [];
+      rememberToolArgs(toolCallId, disp.args);
       return [{
         type: 'tool_start',
         tool: disp.tool,
@@ -117,25 +161,29 @@ export function adaptToolFrameToJobEvents(
       // sub-agent visualizer); undefined for every other tool, so they ride
       // through unchanged.
       const children = Array.isArray(tc.children) ? (tc.children as DelegateChild[]) : undefined;
+      // Args from the start frame, so the finished card can name what it acted on.
+      const doneArgs = takeToolArgs(toolCallId, disp.args);
       return [{
         type: 'tool_result',
         tool: disp.tool,
         result: tc.result ?? null,
         status: 'done',
         toolCallId,
-        summary: summary ?? (summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: tc.result ?? null, status: 'done', ...(children && children.length ? { children } : {}) }) || undefined),
+        summary: summary ?? (summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: doneArgs, result: tc.result ?? null, status: 'done', ...(children && children.length ? { children } : {}) }) || undefined),
         ...(children && children.length ? { children } : {}),
       }];
     }
-    case 'failed':
+    case 'failed': {
+      const failArgs = takeToolArgs(toolCallId, disp.args);
       return [{
         type: 'tool_result',
         tool: disp.tool,
         result: { error: tc.error ?? 'unknown error' },
         status: 'error',
         toolCallId,
-        summary: summary ?? summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: disp.args, result: { error: tc.error ?? 'unknown error' }, status: 'error' }),
+        summary: summary ?? summarizeToolResult({ tool: disp.tool, toolCallId: toolCallId ?? '', args: failArgs, result: { error: tc.error ?? 'unknown error' }, status: 'error' }),
       }];
+    }
     default:
       // Unknown phase — ignore rather than throw.
       return [];
