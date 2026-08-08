@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { createTraceRecorder, capDeep, TRACE_CAPS, isUniformRows, coerceJsonString } from './tool-trace';
+import {
+  createTraceRecorder,
+  capDeep,
+  TRACE_CAPS,
+  isUniformRows,
+  coerceJsonString,
+  compactStepsForMessage,
+} from './tool-trace';
 import type { JobEvent } from '$lib/workflows/chat/job-store';
 
 /** A clock that advances a fixed step per read, so durations are deterministic. */
@@ -338,6 +345,204 @@ describe('recorder parses JSON-string results before capping', () => {
     rec.observe({ type: 'tool_start', tool: 't', args: {}, toolCallId: '1' });
     rec.observe({ type: 'tool_result', tool: 't', result: { ok: true }, status: 'done', toolCallId: '1' });
     expect(rec.snapshot().steps[0].resultJsonString).toBeUndefined();
+  });
+});
+
+describe('protected payloads survive capping verbatim', () => {
+  it('keeps an ephemeral handler intact and lifts it out of the result', () => {
+    // handlerCode is compiled later by promote_ephemeral_tool — a capped copy
+    // would be unusable, and it must not stay inside the rehydrated result.
+    const handlerCode = `async function run(args) {\n${'  // padding\n'.repeat(600)}  return 1;\n}`;
+    expect(handlerCode.length).toBeGreaterThan(TRACE_CAPS.maxString);
+
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'ephemeral_run', args: {}, toolCallId: 'e1' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'ephemeral_run',
+      status: 'done',
+      toolCallId: 'e1',
+      result: {
+        success: true,
+        data: {
+          answer: 42,
+          __ephemeral__: {
+            handlerCode,
+            parameters: { type: 'object', properties: {} },
+            proposedName: 'my_tool',
+            proposedDescription: 'does a thing',
+          },
+        },
+      },
+    });
+
+    const step = rec.snapshot().steps[0];
+    expect(step.ephemeral?.handlerCode).toBe(handlerCode);
+    expect(step.ephemeral?.proposedName).toBe('my_tool');
+    // Stripped from the result the model would see on rehydration.
+    expect(JSON.stringify(step.result)).not.toContain('__ephemeral__');
+    expect((step.result as { data: { answer: number } }).data.answer).toBe(42);
+  });
+
+  it('keeps a chart artifact intact rather than capping its data points', () => {
+    // 400 points is well past maxArray — capping would silently redraw the
+    // chart with a different shape.
+    const artifact = {
+      kind: 'chart',
+      spec: { type: 'line' },
+      data: Array.from({ length: 400 }, (_, i) => ({ x: i, y: i * 2 })),
+    };
+
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'render_chart', args: { caption: 'c' }, toolCallId: 'a1' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'render_chart',
+      status: 'done',
+      toolCallId: 'a1',
+      result: { success: true, data: { artifact } },
+    });
+
+    const step = rec.snapshot().steps[0];
+    expect(step.artifact).toEqual(artifact);
+    expect((step.artifact as { data: unknown[] }).data).toHaveLength(400);
+  });
+
+  it('drops a protected payload that is absurdly large rather than storing it', () => {
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 'render_chart', args: {}, toolCallId: 'a2' });
+    rec.observe({
+      type: 'tool_result',
+      tool: 'render_chart',
+      status: 'done',
+      toolCallId: 'a2',
+      result: { success: true, data: { artifact: { blob: 'q'.repeat(300_000) } } },
+    });
+    expect(rec.snapshot().steps[0].artifact).toBeUndefined();
+  });
+
+  it('leaves an ordinary result untouched by the lift', () => {
+    const rec = createTraceRecorder({ now: fakeClock() });
+    rec.observe({ type: 'tool_start', tool: 't', args: {}, toolCallId: '1' });
+    rec.observe({ type: 'tool_result', tool: 't', result: { success: true, data: { n: 1 } }, status: 'done', toolCallId: '1' });
+    const step = rec.snapshot().steps[0];
+    expect(step.ephemeral).toBeUndefined();
+    expect(step.artifact).toBeUndefined();
+    expect(step.result).toEqual({ success: true, data: { n: 1 } });
+  });
+});
+
+describe('compactStepsForMessage', () => {
+  function traceWith(events: JobEvent[]) {
+    const rec = createTraceRecorder({ now: fakeClock() });
+    for (const e of events) rec.observe(e);
+    return rec.snapshot();
+  }
+
+  it('emits the shape the chat hydrates, with both id keys set', () => {
+    const trace = traceWith([
+      { type: 'tool_start', tool: 'mcp_jkai_jkai_extended', args: { operation: 'invoke', name: 'file_search', args: { q: 'a' } }, toolCallId: 'c1' },
+      { type: 'tool_result', tool: 'mcp_jkai_jkai_extended', result: { success: true, data: { count: 2 } }, status: 'done', toolCallId: 'c1', summary: '2 files' },
+    ]);
+
+    const [step] = compactStepsForMessage(trace);
+    // Both keys: the client matches `id`, promote_ephemeral_tool tries `id`
+    // then the tool name, and the legacy writer only ever set `toolCallId`.
+    expect(step.id).toBe('c1');
+    expect(step.toolCallId).toBe('c1');
+    // Un-masked, so the client's resolveDisplayTool is a no-op.
+    expect(step.tool).toBe('file_search');
+    expect(step.args).toEqual({ q: 'a' });
+    expect(step.status).toBe('done');
+    expect(step.summary).toBe('2 files');
+  });
+
+  it('re-attaches the artifact where artifactsForMessage looks for it', () => {
+    const artifact = { kind: 'chart', spec: { type: 'bar' }, data: [{ x: 1, y: 2 }] };
+    const trace = traceWith([
+      { type: 'tool_start', tool: 'render_chart', args: {}, toolCallId: 'a1' },
+      { type: 'tool_result', tool: 'render_chart', result: { success: true, data: { artifact } }, status: 'done', toolCallId: 'a1' },
+    ]);
+
+    const [step] = compactStepsForMessage(trace);
+    // ChatArea reads exactly `step.result.data.artifact`.
+    const r = step.result as { data?: { artifact?: unknown } };
+    expect(r.data?.artifact).toEqual(artifact);
+  });
+
+  it('preserves the build id that the build pill digs out of the result', () => {
+    const trace = traceWith([
+      { type: 'tool_start', tool: 'build_create', args: { brief: 'x' }, toolCallId: 'b1' },
+      { type: 'tool_result', tool: 'build_create', result: { success: true, data: { id: 'build-123' } }, status: 'done', toolCallId: 'b1' },
+    ]);
+
+    const [step] = compactStepsForMessage(trace);
+    const r = step.result as { success?: boolean; data?: { id?: string } };
+    expect(r.success).toBe(true);
+    expect(r.data?.id).toBe('build-123');
+  });
+
+  it('carries the ephemeral sidecar so promote_ephemeral_tool can find it', () => {
+    const sidecar = {
+      handlerCode: 'async function run() { return 1 }',
+      parameters: { type: 'object' as const, properties: {} },
+      proposedName: 'n',
+      proposedDescription: 'd',
+    };
+    const trace = traceWith([
+      { type: 'tool_start', tool: 'ephemeral_run', args: {}, toolCallId: 'e1' },
+      { type: 'tool_result', tool: 'ephemeral_run', result: { success: true, data: { __ephemeral__: sidecar } }, status: 'done', toolCallId: 'e1' },
+    ]);
+
+    const [step] = compactStepsForMessage(trace);
+    expect(step.ephemeral).toEqual(sidecar);
+  });
+
+  it('keeps delegate children for the sub-agent rows', () => {
+    const children = [{ index: 0, status: 'done', summary: 's', toolTrace: [{ tool: 'web_search', status: 'done' }] }];
+    const trace = traceWith([
+      { type: 'tool_start', tool: 'delegate_task', args: { goal: 'g' }, toolCallId: 'd1' },
+      { type: 'tool_result', tool: 'delegate_task', result: 'done', status: 'done', toolCallId: 'd1', children },
+    ]);
+    expect(compactStepsForMessage(trace)[0].children).toEqual(children);
+  });
+
+  it('stays far smaller than the full trace on a heavy chain', () => {
+    const events: JobEvent[] = [];
+    for (let i = 0; i < 30; i++) {
+      events.push({ type: 'tool_start', tool: `t${i}`, args: { blob: 'x'.repeat(3_000) }, toolCallId: `c${i}` });
+      events.push({ type: 'tool_result', tool: `t${i}`, result: { data: { blob: 'y'.repeat(3_000) } }, status: 'done', toolCallId: `c${i}` });
+    }
+    const trace = traceWith(events);
+    const compact = compactStepsForMessage(trace);
+
+    // Every card survives — a reloaded thread shows the whole chain...
+    expect(compact).toHaveLength(30);
+    expect(compact.every((s) => s.tool && s.status)).toBe(true);
+    // ...but the bytes the conversation loader carries are bounded.
+    expect(JSON.stringify(compact).length).toBeLessThan(JSON.stringify(trace).length);
+    expect(JSON.stringify(compact).length).toBeLessThanOrEqual(80_000);
+  });
+
+  it('never sheds a payload the chat has to re-render, even over budget', () => {
+    const artifact = { kind: 'table', spec: {}, data: Array.from({ length: 50 }, (_, i) => ({ i })) };
+    const events: JobEvent[] = [];
+    // Push well past the compact budget with junk first.
+    for (let i = 0; i < 40; i++) {
+      events.push({ type: 'tool_start', tool: `t${i}`, args: { blob: 'x'.repeat(3_000) }, toolCallId: `c${i}` });
+      events.push({ type: 'tool_result', tool: `t${i}`, result: { data: { blob: 'y'.repeat(3_000) } }, status: 'done', toolCallId: `c${i}` });
+    }
+    events.push({ type: 'tool_start', tool: 'render_table', args: {}, toolCallId: 'art' });
+    events.push({ type: 'tool_result', tool: 'render_table', result: { success: true, data: { artifact } }, status: 'done', toolCallId: 'art' });
+
+    const compact = compactStepsForMessage(traceWith(events));
+    const artStep = compact.find((s) => s.toolCallId === 'art');
+    const r = artStep?.result as { data?: { artifact?: unknown } };
+    expect(r?.data?.artifact).toEqual(artifact);
+  });
+
+  it('returns an empty list for a chain with no steps', () => {
+    expect(compactStepsForMessage(traceWith([]))).toEqual([]);
   });
 });
 

@@ -33,7 +33,7 @@ import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
 import { maybeExtractThreadConcepts } from '$lib/jkai/intel/chat-extract';
 import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
-import { createTraceRecorder } from '$lib/jkai/tool-trace';
+import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 
 const MAX_MESSAGE_LEN = 20_000;
 
@@ -411,6 +411,17 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   let tracePersisted = false;
 
   /**
+   * The small form of the chain, written to the assistant message so a reloaded
+   * thread can rebuild its step cards — plus the build pills, inline artifacts
+   * and `promote_ephemeral_tool` addressing that all read the same field.
+   *
+   * Computed even if the trace INSERT fails: the message write is the more
+   * important of the two, and the cards should not disappear because a
+   * diagnostic row could not be stored.
+   */
+  let compactSteps: CompactToolStep[] = [];
+
+  /**
    * Write the turn's tool-call chain. Called immediately BEFORE `done` is
    * published, never after: the client renders the "open trace" link the moment
    * it sees `done`, so a row written afterwards would give it a window in which
@@ -425,8 +436,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     if (!traceRecorder.hasSteps()) return null;
     if (!conversationId && !workflowId) return null;
     tracePersisted = true;
+    const trace = traceRecorder.snapshot();
+    compactSteps = compactStepsForMessage(trace);
     try {
-      const trace = traceRecorder.snapshot();
       await db
         .insert(jkaiToolTraces)
         .values({
@@ -896,11 +908,14 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           if (turnWorkflowRefs.length > 0) {
             assistantMeta.workflowRefs = turnWorkflowRefs;
           }
-          // Pointer to the turn's tool-call chain in jkai_tool_traces. Just the
-          // id — the chain itself is deliberately NOT inlined here, because the
-          // conversation loader selects `metadata` for every message in the
-          // thread and a chain can run to hundreds of KB.
+          // Pointer to the turn's FULL chain in jkai_tool_traces.
           if (tracePersisted) assistantMeta.traceId = jobId;
+          // The compact chain, so a reloaded thread rebuilds its step cards,
+          // build pills and inline artifacts instead of showing nothing. The
+          // full chain stays in jkai_tool_traces: this field is read for every
+          // message in the thread on every conversation load, so it carries a
+          // glance, not the payload. See compactStepsForMessage.
+          if (compactSteps.length > 0) assistantMeta.toolSteps = compactSteps;
           const assistantMetadata = Object.keys(assistantMeta).length > 0 ? assistantMeta : undefined;
           const [insertedAssistant] = await db.insert(orchestratorChats).values({
             conversationId: conversationId ?? null,

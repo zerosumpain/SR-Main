@@ -510,6 +510,34 @@
                         </div>
                       </div>
 
+                      {#if step.artifact !== undefined}
+                        <!-- Lifted out of result.data.artifact before capping so
+                             the chat can re-render it verbatim; shown here too,
+                             or the result pane above reads as "returned nothing". -->
+                        {@const artTable = tabulate(step.artifact)}
+                        <div class="pane">
+                          <div class="pane-hd"><span class="sr-label-tight">artifact</span></div>
+                          {#if artTable}
+                            {@render dataTable(artTable.rows, artTable.cols, artTable.path)}
+                          {:else}
+                            <JsonBlock data={step.artifact} fontSize="10px" />
+                          {/if}
+                        </div>
+                      {/if}
+
+                      {#if step.ephemeral}
+                        <div class="pane">
+                          <div class="pane-hd">
+                            <span class="sr-label-tight">ephemeral tool</span>
+                            <span class="trunc">{step.ephemeral.proposedName ?? 'unnamed'}</span>
+                          </div>
+                          <details class="raw-toggle">
+                            <summary class="sr-label-tight">handler source</summary>
+                            <pre class="handler">{step.ephemeral.handlerCode}</pre>
+                          </details>
+                        </div>
+                      {/if}
+
                       {#if step.children?.length}
                         <div class="pane">
                           <div class="pane-hd"><span class="sr-label-tight">sub-agents</span></div>
@@ -1098,6 +1126,20 @@
   }
   .raw-toggle {
     margin-top: 0.35rem;
+  }
+  .handler {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0.35rem 0 0;
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-soft, 4px);
+    background: color-mix(in srgb, var(--card-border) 30%, transparent);
+    color: var(--text-primary);
+    max-height: 340px;
+    overflow: auto;
   }
   .raw-toggle summary {
     cursor: pointer;
