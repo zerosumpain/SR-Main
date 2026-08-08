@@ -148,6 +148,34 @@ function firstUrl(d: Record<string, unknown>): unknown {
   return undefined;
 }
 
+/**
+ * The URLs a page-reading tool was pointed at.
+ *
+ * `web_extract` takes `urls`, and it arrives in one of two shapes: a real array
+ * when the call comes off the MCP bus, or a **JSON string containing an array**
+ * once it has been through Hermes' argument preview
+ * (`_compact_tool_value` stringifies nested values). Reading only the array form
+ * left the summariser with nothing to say, which is how `web_extract` ended up
+ * labelled "Done — web extract" despite its arguments naming the page exactly.
+ */
+export function urlsFromArgs(args: Record<string, unknown>): string[] {
+  const raw = args.urls ?? args.url;
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (t.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(t);
+        if (Array.isArray(parsed)) return parsed.filter((u): u is string => typeof u === 'string' && !!u);
+      } catch {
+        /* Not a JSON array after all — treat the whole string as one URL. */
+      }
+    }
+    return t ? [t] : [];
+  }
+  if (Array.isArray(raw)) return raw.filter((u): u is string => typeof u === 'string' && !!u);
+  return [];
+}
+
 /** Hostname of a URL, for compact "top result" / "fetched" summaries. */
 function host(u: unknown): string | undefined {
   if (typeof u !== 'string' || !u) return undefined;
@@ -261,6 +289,16 @@ export function summarizeRunningTool(tool: string, args: Record<string, unknown>
       return 'looking for surprising links';
     case 'fetch_url':
     case 'webpage_fetch': return str('url') ? `fetching ${host(str('url')) ?? trim(str('url')!, 50)}` : 'fetching a page';
+    case 'web_extract': {
+      // Without this the generic fallback prints the raw `urls` argument, which
+      // on the Hermes path is a JSON-encoded array — `["https://…"]`, brackets,
+      // quotes and all — in the middle of the running line.
+      const urls = urlsFromArgs(a);
+      const hosts = [...new Set(urls.map((u) => host(u)).filter((h): h is string => !!h))];
+      if (hosts.length === 1) return `reading ${hosts[0]}`;
+      if (hosts.length > 1) return `reading ${hosts.length} pages`;
+      return 'reading a page';
+    }
     case 'stealth_scrape':
     case 'stealth_scrape_llm':
       return str('url') ? `scraping ${host(str('url')) ?? trim(str('url')!, 50)}` : (str('profile') ? `profile ${str('profile')}` : 'scraping a page');
@@ -404,6 +442,32 @@ export function summarizeToolResult(step: ToolProgressStep): string {
       const h = host(url);
       if (title) return `Read “${trim(title, 50)}”${h ? ` (${h})` : ''}`;
       return h ? `Fetched ${h}` : 'Fetched webpage';
+    }
+    case 'web_extract': {
+      // Built from the ARGS first, deliberately. Hermes previews native tool
+      // results at 600 chars, so a `web_extract` result is usually a JSON string
+      // cut mid-object that `unwrap` cannot parse — there is no count and no
+      // title to read. The URLs it was given are complete, and they are what a
+      // person would name the action by anyway.
+      const rows = Array.isArray(d.results) ? (d.results as Array<Record<string, unknown>>) : [];
+      // Hermes sends args on `started` but not on `completed`, so on the finished
+      // card the URLs have to come from the result. Args stay the fallback for
+      // the bus path and for a result too clipped to parse.
+      const resultUrls = rows.map((r) => r.url).filter((u): u is string => typeof u === 'string' && !!u);
+      const urls = resultUrls.length > 0 ? resultUrls : urlsFromArgs(args);
+      const hosts = [...new Set(urls.map((u) => host(u)).filter((h): h is string => !!h))];
+      const firstTitle = typeof rows[0]?.title === 'string' ? (rows[0].title as string) : undefined;
+      const n = count ?? urls.length;
+
+      // A title only survives on pages small enough to clear the preview cap.
+      if (firstTitle) {
+        return n > 1
+          ? `Read ${n} pages — “${trim(firstTitle, 36)}” and ${n - 1} more`
+          : `Read “${trim(firstTitle, 50)}”${hosts[0] ? ` (${hosts[0]})` : ''}`;
+      }
+      if (hosts.length === 1) return `Read ${hosts[0]}`;
+      if (hosts.length > 1) return `Read ${hosts.length} pages — ${trim(hosts.join(', '), 50)}`;
+      return n > 0 ? `Read ${n} page${n === 1 ? '' : 's'}` : 'Read webpage';
     }
     case 'gmail_search': {
       const n = count ?? 0;
