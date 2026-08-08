@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyHermesStatusText,
   createHermesTextAccumulator,
+  frameBelongsToTurn,
   HERMES_HOME_CHANNEL_NOTICE_PREFIX,
   type HermesTextFrame,
 } from './hermes-frames';
@@ -174,5 +175,34 @@ describe('createHermesTextAccumulator', () => {
     expect(acc.accept({ kind: 'finalize', message_id: 'f', content: '' })).toEqual({ kind: 'ignore' });
     expect(acc.accept(send('a', ''))).toEqual({ kind: 'ignore' });
     expect(acc.text).toBe('');
+  });
+});
+
+describe('frameBelongsToTurn', () => {
+  it('accepts a frame stamped with this turn', () => {
+    expect(frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-a')).toBe(true);
+  });
+
+  it("rejects a frame stamped with another turn", () => {
+    // The production failure (2026-08-08): a superseded turn's reply was left
+    // in the shared per-chat queue, the next job drained it, rendered it as its
+    // own answer and took its `finalize` as its own completion — so every reply
+    // after it landed one message behind and never resynchronised.
+    expect(frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-b')).toBe(false);
+  });
+
+  it('accepts untagged frames', () => {
+    // Gateway status bubbles and cron pushes are produced outside any inbound
+    // turn. So is EVERY frame if the plugin hasn't been restarted since this
+    // shipped — rejecting by default would turn a stale gateway into a chat
+    // that silently streams nothing.
+    expect(frameBelongsToTurn({ metadata: {} }, 'job-a')).toBe(true);
+    expect(frameBelongsToTurn({ metadata: null }, 'job-a')).toBe(true);
+    expect(frameBelongsToTurn({}, 'job-a')).toBe(true);
+  });
+
+  it('ignores a non-string or empty tag rather than dropping the frame', () => {
+    expect(frameBelongsToTurn({ metadata: { turn_id: 42 } }, 'job-a')).toBe(true);
+    expect(frameBelongsToTurn({ metadata: { turn_id: '' } }, 'job-a')).toBe(true);
   });
 });

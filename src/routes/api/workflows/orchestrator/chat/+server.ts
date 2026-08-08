@@ -12,13 +12,13 @@ import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOl
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
-import { resolveDefaultModel } from '$lib/server/models/settings';
+import { resolveDefaultModel, isHermesChatEnabled } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getModelCapabilities, canAcceptKind } from '$lib/server/models/capabilities';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
-import { createHermesTextAccumulator, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
+import { createHermesTextAccumulator, frameBelongsToTurn, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
 import {
   subscribeToolSteps,
   registerToolConfirmer,
@@ -63,12 +63,17 @@ const PICKABLE_SKILLS = new Set([
   'jkai-scraper', 'jkai-home-assistant', 'jkai-files', 'jkai-utility', 'jkai-node-builder',
 ]);
 
-// Feature flag (Hermes Phase 1). When `JKAI_HERMES_CANVAS_CHAT=1`, canvas
-// orchestrator chat is proxied through the Hermes gateway via HermesClient +
-// JkaiPlatformAdapter; otherwise we keep running the legacy generalChat /
-// ReAct loop here in-process. The flag is OFF by default — Task 14 is the
-// soak that flips it.
-const HERMES_ENABLED = env.JKAI_HERMES_CANVAS_CHAT === '1';
+// Which engine answers chat. When on, it's proxied through the Hermes gateway
+// via HermesClient + JkaiPlatformAdapter; when off, the legacy generalChat /
+// ReAct loop runs here in-process (every site toolset, no terminal/file/
+// browser tools).
+//
+// `JKAI_HERMES_CANVAS_CHAT` is now only the DEFAULT — the live value comes from
+// the `jkai.chat.hermes_enabled` setting, flipped from /admin/ops/engine, so
+// switching engines doesn't need an env edit and a redeploy. Resolved per
+// request rather than at module load, or the toggle wouldn't take effect until
+// a restart.
+const HERMES_ENV_DEFAULT = env.JKAI_HERMES_CANVAS_CHAT === '1';
 const HERMES_URL = env.HERMES_PLATFORM_URL ?? 'http://127.0.0.1:18790';
 const HERMES_SECRET = env.HERMES_BRIDGE_SECRET ?? '';
 
@@ -80,7 +85,10 @@ const HERMES_ORIGIN = (env.JKAI_HERMES_ORIGIN as 'vps' | 'homeserv') ?? 'homeser
 const HERMES_MCP_URL = env.JKAI_HERMES_MCP_URL ?? 'http://127.0.0.1:5173/api/mcp/local';
 
 export const POST: RequestHandler = async (event) => {
-  if (HERMES_ENABLED) {
+  // A settings-read failure must not take chat down — fall back to the env
+  // default, which is what this line did before the toggle existed.
+  const useHermes = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
+  if (useHermes) {
     return handleWithHermes(event);
   }
   return handleWithLoop(event);
@@ -711,6 +719,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         kind,
         kindId,
         sessionId,
+        // Tags every frame this turn emits, so the loop below can tell them
+        // from a superseded turn's leftovers in the shared per-chat queue.
+        turnId: jobId,
       });
 
       // NOTE: turnAttachments is hoisted above (outer scope) so both the
@@ -725,6 +736,9 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // side-channel message replaced the whole answer on screen AND in the
       // persisted row. See $lib/jkai/hermes-frames.
       const textAcc = createHermesTextAccumulator();
+      // Log the first foreign frame only. A superseded turn's leftovers are
+      // mostly token deltas — one line each would bury the useful signal.
+      let foreignFrames = 0;
 
       for await (const frame of client.openStream({
         chatId,
@@ -733,6 +747,16 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       }, { signal: abortController.signal })) {
         if (abortController.signal.aborted) break;
+        // Frames left in the queue by a turn whose consumer detached are not
+        // ours: rendering them would answer this message with the previous
+        // one's reply, and taking their `finalize` would end this turn before
+        // it started. See frameBelongsToTurn for why untagged frames pass.
+        if (!frameBelongsToTurn(frame, jobId)) {
+          if (foreignFrames++ === 0) {
+            console.warn(`[hermes-chat] Job ${jobId} is dropping frames left by turn ${String(frame.metadata?.['turn_id'])} (first: ${frame.kind})`);
+          }
+          continue;
+        }
         if (frame.kind === 'send' || frame.kind === 'replace') {
           const update = textAcc.accept(frame);
           if (update.kind === 'status') {
@@ -1537,6 +1561,11 @@ async function forwardClarifyToHermes(
       kindId: chatId,
       sessionId,
       text,
+      // A clarify answer RESUMES the turn that asked the question rather than
+      // starting a new one, so the continuation belongs to that job — which is
+      // still streaming and waiting for it. Tagging it with a fresh id would
+      // make the original job reject its own resumed output.
+      turnId: jobId,
     });
     return { ok: true };
   } catch (err) {
@@ -1609,7 +1638,8 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
     // message in the session (gateway/run.py:6938-6962), so forward the answers
     // as an ordinary silent message. Mirrors the approval card, whose buttons
     // send `/approve` back through the normal inbound path.
-    if (HERMES_ENABLED && typed.type === 'clarify_ack') {
+    const hermesLive = await isHermesChatEnabled(HERMES_ENV_DEFAULT).catch(() => HERMES_ENV_DEFAULT);
+    if (hermesLive && typed.type === 'clarify_ack') {
       const forwarded = await forwardClarifyToHermes(jobId, job, typed.answers);
       if (!forwarded.ok) return json({ error: forwarded.error }, { status: 502 });
       publishJobEvent(jobId, typed as JobEvent);

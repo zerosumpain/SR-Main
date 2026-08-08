@@ -170,6 +170,36 @@ export interface HermesTextFrame {
   message_id: string;
 }
 
+/**
+ * Does this frame belong to the turn we are streaming?
+ *
+ * Hermes' outbound queue is keyed by chat, not by turn, and whichever
+ * connection is attached drains it. So a turn whose consumer detached — a new
+ * message superseded it, the watchdog killed it, the tab reloaded — leaves its
+ * frames in the queue for the NEXT turn's consumer to pick up. That consumer
+ * used to accept them as its own: it rendered and persisted the previous
+ * turn's answer, then took that turn's `finalize` as its own completion and
+ * closed in milliseconds. Every reply after it landed one message behind, and
+ * nothing ever resynchronised (production, 2026-08-08).
+ *
+ * The plugin now stamps `metadata.turn_id` on everything a turn emits.
+ *
+ * Untagged frames are ACCEPTED, deliberately. Two kinds arrive untagged: the
+ * gateway's own status bubbles and cron pushes, which are produced outside any
+ * inbound turn and have always been welcome; and every frame at all if the
+ * plugin has not been restarted since this shipped. Rejecting by default would
+ * turn a stale gateway into a silent total outage — a chat that streams
+ * nothing — which is a far worse failure than the one being fixed.
+ */
+export function frameBelongsToTurn(
+  frame: { metadata?: Record<string, unknown> | null },
+  turnId: string,
+): boolean {
+  const stamped = frame.metadata?.['turn_id'];
+  if (typeof stamped !== 'string' || !stamped) return true;
+  return stamped === turnId;
+}
+
 export interface HermesTextAccumulator {
   /** Fold one `send` / `replace` frame in and report what changed. */
   accept(frame: HermesTextFrame): HermesTextUpdate;
