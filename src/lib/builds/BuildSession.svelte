@@ -24,6 +24,7 @@
   import StreamLine from './StreamLine.svelte';
   import IterationHeader from './IterationHeader.svelte';
   import BuildCockpit from './BuildCockpit.svelte';
+  import IterationInspector from './IterationInspector.svelte';
   import { buildCockpitMetrics } from './cockpit-metrics';
   import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 
@@ -346,6 +347,8 @@
   {#if cockpitMetrics}
     <BuildCockpit metrics={cockpitMetrics} />
   {/if}
+
+  <IterationInspector iterations={data.iterations ?? []} buildPrompt={build?.prompt ?? null} />
 
   <!-- Focus chips: filter the stream to a single iteration (or 'All').
        Lives outside the terminal stream so it's always reachable even

@@ -31,11 +31,18 @@
     content,
     lang,
     collapsedLines = 6,
+    dark = false,
   }: {
     content: string;
     lang?: string;
     /** Lines shown when collapsed. 0 = always show full. */
     collapsedLines?: number;
+    /**
+     * Force the dark terminal surface regardless of the viewer's colour
+     * scheme. The build views read code against `--code-bg`, which is what
+     * that token exists for; the canvas keeps the light default.
+     */
+    dark?: boolean;
   } = $props();
 
   let html = $state<string | null>(null);
@@ -64,7 +71,9 @@
         if (cancelled) return;
         const next = h.codeToHtml(c, {
           lang: resolvedLang,
-          themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+          themes: dark
+            ? { light: 'vitesse-dark', dark: 'vitesse-dark' }
+            : { light: 'vitesse-light', dark: 'vitesse-dark' },
           defaultColor: false, // emit CSS vars; we map them in styles below
         });
         if (cancelled) return;
@@ -99,7 +108,7 @@
   const COLLAPSED_PX = $derived(collapsedLines * PX_PER_LINE + 12); // + padding
 </script>
 
-<div class="scb">
+<div class="scb" class:scb-dark={dark}>
   <header class="scb-hdr">
     <span class="scb-lang">{lang ?? 'code'}</span>
     {#if collapsible}
@@ -244,6 +253,45 @@
     .scb-body :global(pre.shiki span) {
       color: var(--shiki-dark, inherit);
     }
+  }
+
+  /* Forced dark: the shiki payload already carries the dark theme's colours,
+     so only the surrounding chrome needs to follow it onto --code-bg. */
+  .scb-dark {
+    background: var(--code-bg);
+    border-color: var(--code-border);
+  }
+  .scb-dark .scb-hdr {
+    background: color-mix(in srgb, var(--code-text) 8%, transparent);
+    border-bottom-color: var(--code-border);
+  }
+  .scb-dark .scb-body :global(pre.shiki),
+  .scb-dark .scb-body :global(pre.shiki code) {
+    background-color: var(--code-bg) !important;
+  }
+  .scb-dark .scb-fallback {
+    background: var(--code-bg);
+    color: var(--code-text);
+  }
+  /* The header sits ON the dark surface, so its text has to come from the code
+     palette — the light-mode ink is all but invisible against #1a1008. */
+  .scb-dark .scb-lang {
+    color: color-mix(in srgb, var(--code-text) 70%, transparent);
+  }
+  .scb-dark .scb-meta {
+    color: color-mix(in srgb, var(--code-text) 55%, transparent);
+  }
+  .scb-dark .scb-btn {
+    color: var(--code-text);
+    border-color: color-mix(in srgb, var(--code-text) 35%, transparent);
+    background: transparent;
+  }
+  .scb-dark .scb-btn:hover {
+    background: color-mix(in srgb, var(--code-text) 14%, transparent);
+  }
+  .scb-dark .scb-fade-cta {
+    color: var(--code-text);
+    background: linear-gradient(to bottom, transparent, var(--code-bg));
   }
 
   .scb-fallback {

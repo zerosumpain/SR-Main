@@ -14,6 +14,7 @@
   import { reduceFeed, type FeedEvent } from './feed';
   import { buildFileTimeline } from './parse-actions';
   import BuildCockpit from './BuildCockpit.svelte';
+  import IterationInspector from './IterationInspector.svelte';
   import { buildCockpitMetrics } from './cockpit-metrics';
 
   let { data }: { data: any } = $props();
@@ -299,6 +300,8 @@
   {#if cockpitMetrics}
     <BuildCockpit metrics={cockpitMetrics} />
   {/if}
+
+  <IterationInspector iterations={iterations ?? []} buildPrompt={build?.prompt ?? null} />
 
   <div class="actions-row">
     {#if build.status === 'running'}
