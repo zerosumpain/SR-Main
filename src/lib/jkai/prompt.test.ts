@@ -37,12 +37,15 @@ describe('buildSystemPrompt', () => {
     expect(p).toMatch(/do not commit or push/i);
   });
 
-  it('tells a repo build not to loop on the full gate', () => {
-    // The gate type-checks, runs every test and does a production build.
-    // Looping on it is the most expensive thing an iteration can do.
+  it('tells a repo build the gate is not its to run', () => {
+    // Every command the agent runs is killed at 300s by the agent runtime;
+    // the gate takes longer, so running it can only ever time out. The
+    // orchestrator runs it afterwards and feeds the result back.
     const p = buildSystemPrompt('b1', 8123, 'repo');
-    expect(p).toMatch(/DO NOT LOOP ON THE FULL GATE/);
-    expect(p).toMatch(/narrowest command/i);
+    expect(p).toMatch(/DO NOT RUN THE FULL GATE YOURSELF/);
+    expect(p).toMatch(/300 seconds/);
+    expect(p).toMatch(/orchestrator runs the full gate for you/i);
+    expect(p).toMatch(/narrowly/i);
   });
 });
 
