@@ -92,6 +92,26 @@ into the container, the harness reports `ran: false` with a reason and
 registration proceeds. A harness fault must never read as a failing app.
 *Reversible.*
 
+## Two things the deploy taught us afterwards
+
+**`scripts/` is an allow-list, not a directory sync.** `ci-deploy.sh` rsyncs a
+named set of runtime-read files; `scripts/server-with-ws.mjs` is listed
+individually. #144 shipped the harness without adding its line, so the runner
+was simply absent from the VPS and every production build reported
+`skipped — playwright is not available`. CI was green throughout: the feature is
+built to degrade quietly, which is correct for a missing browser and wrong for a
+missing file. Fixed by adding the rsync line. **Anything new under `scripts/`
+that runtime code shells out to needs its own line there.**
+
+**Playwright's presence on the VPS is incidental.** The deploy runs
+`npm install --omit=dev`, so devDependencies are never installed by it —
+`playwright` and its Chromium builds are there from an earlier full install and
+have survived every deploy since. Verified still resolving after today's. It was
+not promoted to a production dependency on purpose: several hundred megabytes of
+browser on every deploy is a poor trade for one check, and the harness already
+reports `ran: false` rather than failing a build when it is missing. If it ever
+does disappear, smoke checks degrade to "skipped" and say so in the build log.
+
 ## Verification
 
 - `parseSmokeOutput` / `describeSmoke` unit-tested, including every
