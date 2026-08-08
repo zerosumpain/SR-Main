@@ -23,6 +23,8 @@
   import BuildSessionPanel from './BuildSessionPanel.svelte';
   import StreamLine from './StreamLine.svelte';
   import IterationHeader from './IterationHeader.svelte';
+  import BuildCockpit from './BuildCockpit.svelte';
+  import { buildCockpitMetrics } from './cockpit-metrics';
   import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 
   interface PageData {
@@ -44,6 +46,13 @@
   // Live streaming buffers — keyed by streamId, flushed into a synthetic
   // line until the segment ends (turn_end / tool_input_end).
   const liveBuffers = $state<Record<string, { type: string; content: string; iterationId: string | null }>>({});
+
+  // Instrument panel. Derived from the same live state the stream renders, so
+  // it tracks the SSE refresh without an effect of its own. V3 needs this as
+  // much as V2 — it is the default view in production.
+  const cockpitMetrics = $derived(
+    build ? buildCockpitMetrics(build as never, data.iterations ?? [], lines) : null,
+  );
 
   let livePreviewUrl = $state<string | null>(null);
   const previewLink = $derived(
@@ -333,6 +342,10 @@
       {/if}
     </span>
   </header>
+
+  {#if cockpitMetrics}
+    <BuildCockpit metrics={cockpitMetrics} />
+  {/if}
 
   <!-- Focus chips: filter the stream to a single iteration (or 'All').
        Lives outside the terminal stream so it's always reachable even
