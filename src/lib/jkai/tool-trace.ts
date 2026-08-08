@@ -86,6 +86,46 @@ export interface TraceStep {
   resultClipped?: boolean;
   /** Sub-agent summary rows parsed adapter-side from a `delegate_task` result. */
   children?: DelegateChild[];
+  /** Ephemeral-tool sidecar, lifted out of `result.data.__ephemeral__` BEFORE
+   *  capping and stored verbatim. `promote_ephemeral_tool` compiles this
+   *  handler source, so a truncated copy is not merely degraded — it is
+   *  unusable. */
+  ephemeral?: EphemeralSidecar;
+  /** Chart/map/table artifact, lifted out of `result.data.artifact` BEFORE
+   *  capping and stored verbatim. This is user-visible content the chat
+   *  re-renders, not diagnostics: capping an array of data points at 100 would
+   *  silently redraw the chart with the wrong shape. */
+  artifact?: unknown;
+}
+
+/** Mirrors `$lib/workflows/chat/ephemeral-sidecar` — duplicated as a type only
+ *  so this module stays free of server imports. */
+export interface EphemeralSidecar {
+  handlerCode: string;
+  parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+  proposedName?: string;
+  proposedDescription?: string;
+}
+
+/**
+ * The shape the chat persists on the assistant message so a reloaded thread can
+ * rebuild its step cards. Matches what `ChatArea` hydrates from
+ * `metadata.toolSteps` and what `promote_ephemeral_tool` looks up server-side.
+ */
+export interface CompactToolStep {
+  /** Both keys are set on purpose: the client matches on `id`, the legacy
+   *  writer set only `toolCallId`, and `promote_ephemeral_tool` tries `id`
+   *  first then falls back to the tool name. Setting both ends a long-standing
+   *  mismatch between the two shapes. */
+  id: string;
+  toolCallId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  status: 'running' | 'done' | 'error';
+  summary?: string;
+  children?: DelegateChild[];
+  ephemeral?: EphemeralSidecar;
 }
 
 export interface TraceSubAgentStep {
@@ -279,6 +319,50 @@ export function coerceJsonString(value: unknown): { value: unknown; wasJsonStrin
   return { value, wasJsonString: false, clipped: false };
 }
 
+/** Ceiling for the two payloads exempted from deep capping. Generous, because
+ *  both are content rather than diagnostics, but not unbounded. */
+const PROTECTED_MAX_BYTES = 200_000;
+
+/**
+ * Pull the payloads that must survive verbatim out of a tool result, and hand
+ * back the remainder for normal capping.
+ *
+ * Two of them, for the same underlying reason — they are re-used, not just
+ * read. `__ephemeral__.handlerCode` gets compiled by `promote_ephemeral_tool`,
+ * and `artifact` gets re-rendered as a chart/map/table in the chat. A capped
+ * copy of either is worse than none: it looks intact and behaves wrongly.
+ *
+ * `__ephemeral__` is additionally *removed* from the result (mirroring
+ * `extractEphemeralSidecar`), so the sidecar does not also sit inside the
+ * result the model sees when history is rehydrated.
+ */
+function liftProtectedPayloads(result: unknown): {
+  rest: unknown;
+  ephemeral?: EphemeralSidecar;
+  artifact?: unknown;
+} {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return { rest: result };
+  const r = result as Record<string, unknown>;
+  const data = r.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { rest: result };
+
+  const d = data as Record<string, unknown>;
+  const rawSidecar = d.__ephemeral__;
+  const rawArtifact = d.artifact;
+  if (rawSidecar === undefined && rawArtifact === undefined) return { rest: result };
+
+  const { __ephemeral__: _drop, ...cleanedData } = d;
+  void _drop;
+
+  const withinBudget = (v: unknown) => v !== undefined && rawByteLength(v) <= PROTECTED_MAX_BYTES;
+
+  return {
+    rest: { ...r, data: cleanedData },
+    ephemeral: withinBudget(rawSidecar) ? (rawSidecar as EphemeralSidecar) : undefined,
+    artifact: withinBudget(rawArtifact) ? rawArtifact : undefined,
+  };
+}
+
 /** Original size of a payload, measured before capping, for the viewer's benefit. */
 function rawByteLength(v: unknown): number {
   if (v === undefined) return 0;
@@ -358,6 +442,90 @@ export function unionColumns(rows: Record<string, unknown>[]): string[] {
     }
   }
   return cols;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Compact projection for the message row                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Per-message ceiling for the compact steps written to `metadata.toolSteps`.
+ *  The conversation loader selects `metadata` for EVERY message in a thread, so
+ *  this is multiplied by thread length on every thread switch. */
+const COMPACT_TOTAL_BYTES = 64_000;
+/** Per-result ceiling inside a compact step. The inline disclosure is a glance;
+ *  the trace page holds the full payload. */
+const COMPACT_RESULT_BYTES = 4_000;
+
+/**
+ * Project a recorded chain into the small form the chat stores on the assistant
+ * message, so a reloaded thread can rebuild its step cards.
+ *
+ * WHY BOTH STORES EXIST. They answer different questions and are sized for
+ * different readers. `metadata.toolSteps` is read on every thread load and only
+ * has to render a one-line card plus a glance at the payload. `jkai_tool_traces`
+ * is read when someone deliberately opens one turn to study it, and keeps the
+ * full chain, timings and untruncated payloads. Storing the full chain in both
+ * would multiply the heaviest data by thread length on every conversation
+ * switch; storing only the compact form would make the trace page pointless.
+ *
+ * `artifact` and `ephemeral` are re-attached verbatim regardless of the result
+ * budget — the chat re-renders the first and compiles the second.
+ */
+export function compactStepsForMessage(trace: ToolTrace): CompactToolStep[] {
+  const out: CompactToolStep[] = [];
+  let spent = 0;
+
+  for (const step of trace.steps) {
+    // The tool name and args are already un-masked (jkai_extended unwrapped,
+    // mcp_ prefix stripped) — which is exactly what the UI expects to find in
+    // this field, so `resolveDisplayTool` on the client is a no-op.
+    const compact: CompactToolStep = {
+      id: step.toolCallId,
+      toolCallId: step.toolCallId,
+      tool: step.displayTool,
+      args: {},
+      status: step.status,
+      summary: step.summary,
+    };
+    if (step.children?.length) compact.children = step.children;
+    if (step.ephemeral) compact.ephemeral = step.ephemeral;
+
+    const argsCap = capDeep(step.args, COMPACT_RESULT_BYTES);
+    compact.args = (argsCap.value ?? {}) as Record<string, unknown>;
+
+    if (step.result !== undefined) {
+      const resCap = capDeep(step.result, COMPACT_RESULT_BYTES);
+      compact.result = resCap.value;
+    }
+
+    // Re-attach the artifact into the shape `artifactsForMessage` reads:
+    // `step.result.data.artifact`.
+    if (step.artifact !== undefined) {
+      const base =
+        compact.result && typeof compact.result === 'object' && !Array.isArray(compact.result)
+          ? (compact.result as Record<string, unknown>)
+          : {};
+      const baseData =
+        base.data && typeof base.data === 'object' && !Array.isArray(base.data)
+          ? (base.data as Record<string, unknown>)
+          : {};
+      compact.result = { ...base, data: { ...baseData, artifact: step.artifact } };
+    }
+
+    const size = safeByteLength(compact);
+    if (spent + size > COMPACT_TOTAL_BYTES && out.length > 0) {
+      // Over budget: keep the card (tool, status, summary stay useful) but drop
+      // the payload, unless it carries content the chat has to re-render.
+      if (step.artifact === undefined && !step.ephemeral) {
+        compact.result = undefined;
+        compact.args = {};
+      }
+    }
+    spent += safeByteLength(compact);
+    out.push(compact);
+  }
+
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -593,7 +761,10 @@ export function createTraceRecorder(opts: { now?: () => number } = {}): TraceRec
         if (argsCap.truncated) step.argsTruncated = true;
         if (s._hasResult) {
           const coerced = coerceJsonString(s._rawResult);
-          const resCap = capDeep(coerced.value);
+          const lifted = liftProtectedPayloads(coerced.value);
+          if (lifted.ephemeral) step.ephemeral = lifted.ephemeral;
+          if (lifted.artifact !== undefined) step.artifact = lifted.artifact;
+          const resCap = capDeep(lifted.rest);
           step.result = resCap.value;
           // Size is reported against what the tool actually sent, not the
           // parsed form, so "22 KB" matches what crossed the wire.
