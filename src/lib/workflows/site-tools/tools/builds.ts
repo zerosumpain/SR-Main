@@ -18,20 +18,52 @@ import { resolvePublishSlug } from '$lib/jkai/publish-slug';
  * Parse what we can recognise; complain about the shape we actually got when
  * we can't. Same underlying cause as `urlsFromArgs` in chat/tool-summary.ts.
  */
+function parseMaybe(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  const t = v.trim();
+  if (!t.startsWith('[') && !t.startsWith('{')) return v;
+  try {
+    return JSON.parse(t);
+  } catch {
+    return v;
+  }
+}
+
+/**
+ * An array argument, however deeply Hermes stringified it on the way in.
+ * Shared by `files` and `checks` — both arrive encoded, for the same reason,
+ * and silently dropping `checks` would mean an app registered with no
+ * behavioural coverage while appearing to have been tested.
+ */
+function coerceArrayArg(raw: unknown): unknown[] {
+  let value = parseMaybe(raw);
+  if (Array.isArray(value) && value.length === 1) {
+    const inner = parseMaybe(value[0]);
+    if (Array.isArray(inner)) value = inner;
+  }
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) value = [value];
+  return (value as unknown[]).map(parseMaybe);
+}
+
+/** The `checks` argument, normalised. Malformed entries are dropped, not fatal:
+ *  a bad assertion must not cost the user a working app. */
+export function coerceChecksArg(raw: unknown): Array<{ description: string; script: string }> {
+  return coerceArrayArg(raw).flatMap((c) => {
+    if (!c || typeof c !== 'object' || Array.isArray(c)) return [];
+    const rec = c as Record<string, unknown>;
+    const script = rec.script ?? rec.code ?? rec.assertion;
+    if (typeof script !== 'string' || !script.trim()) return [];
+    const description = typeof rec.description === 'string' && rec.description.trim()
+      ? rec.description.trim()
+      : 'unnamed check';
+    return [{ description, script }];
+  });
+}
+
 export function coerceFilesArg(
   raw: unknown,
 ): { ok: true; files: Array<{ path: string; content: string }> } | { ok: false; error: string } {
-  const parseMaybe = (v: unknown): unknown => {
-    if (typeof v !== 'string') return v;
-    const t = v.trim();
-    if (!t.startsWith('[') && !t.startsWith('{')) return v;
-    try {
-      return JSON.parse(t);
-    } catch {
-      return v;
-    }
-  };
-
   let value = parseMaybe(raw);
   // An array holding a single stringified array is still the array.
   if (Array.isArray(value) && value.length === 1) {
@@ -714,7 +746,7 @@ register({
     // column and told the user "we've landed" about an app that computed
     // nothing. The result goes in the build log so /jkai/builds shows it too.
     const { runStaticSmoke, describeSmoke } = await import('$lib/jkai/static-smoke');
-    const smoke = await runStaticSmoke(liveRoot, Array.isArray(args.checks) ? (args.checks as never[]) : []);
+    const smoke = await runStaticSmoke(liveRoot, coerceChecksArg(args.checks));
     const smokeText = describeSmoke(smoke);
     await db.insert(jkaiLogs).values({ buildId, type: 'system', content: smokeText });
 
