@@ -43,15 +43,47 @@ format maps cleanly:
 - `reasoning_effort` → `modelReasoningEffort`
 - usage → real `prompt_tokens` / `completion_tokens` / reasoning / cached counts
 
-Two things genuinely don't exist and are rejected with a clear 400 rather than
-silently ignored:
+- `tools` / `tool_choice` → published as a per-request MCP server (below)
 
-- **`tools` / `tool_choice`.** Codex brings its own toolset; you cannot hand it
-  your function schemas and get `tool_calls` back. Tool-calling roles (the jkai
-  orchestrator loop) stay on OpenRouter.
-- **Embeddings.** No endpoint at all.
+One thing genuinely doesn't exist: **embeddings**. No endpoint at all, so those
+paths stay on OpenRouter.
 
 `temperature` and `max_tokens` are accepted and ignored — Codex exposes neither.
+
+## Tool-calling
+
+Codex's SDK has no `tools` parameter, so for a while the bridge rejected tool
+schemas outright and Codex could not serve tool-calling roles. That was a limit
+of how the bridge drove Codex, not of Codex: **external tools reach Codex as MCP
+servers**, and it accepts streamable-HTTP ones (`codex mcp add --url`).
+
+So when a request carries `tools[]`:
+
+1. the schemas are published at `/mcp/<uuid>` on this bridge (see
+   `src/mcp-tool-server.ts`), on an unguessable path — the endpoint is loopback,
+   but schemas can describe internal capabilities;
+2. Codex is pointed at that URL via `mcp_servers.caller.url`;
+3. the moment Codex dispatches a call, the runner captures the name and
+   arguments from the event stream, aborts the turn, and the HTTP layer answers
+   `finish_reason: "tool_calls"`.
+
+**The bridge never executes a tool.** In the chat-completions contract the
+caller owns them and expects the call handed back. `tools/call` therefore
+returns an error string saying so, in case the abort ever loses the race — a
+plausible-looking placeholder would have the model answer from fiction.
+
+A 400 ms grace window after the first capture collects siblings, so a model that
+wants three lookups at once returns three `tool_calls` in one response instead of
+being serialised into three fresh Codex starts.
+
+Multi-turn works because the transcript carries the request and the result:
+`messagesToPrompt` renders assistant `tool_calls` and `role: "tool"` results
+explicitly. Without the request half, the model sees a result with nothing to
+attach it to and re-requests the same call, looping the caller.
+
+**Measured:** first tool call ~10 s, follow-up turn ~3 s. Each turn is a fresh
+Codex process, so a long tool chain is materially slower than OpenRouter
+(~1–2 s/call). Capability is no longer the trade-off; latency is.
 
 ## The agent is pinned shut
 

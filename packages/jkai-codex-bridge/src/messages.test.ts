@@ -88,3 +88,40 @@ describe('response_format mapping', () => {
     expect(wantsBareJson(undefined)).toBe(false);
   });
 });
+
+describe('tool-calling transcripts', () => {
+  it('renders an assistant turn that only requested tools', () => {
+    // The bridge aborts the turn that produced the call and starts a fresh
+    // thread next time, so the transcript is the ONLY place the model can
+    // learn what it previously asked for. Drop it and the model re-requests
+    // the same call, looping the caller.
+    const out = messagesToPrompt([
+      { role: 'user', content: 'Weather in Oslo?' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: 'c1', function: { name: 'get_weather', arguments: '{"city":"Oslo"}' } }],
+      },
+      { role: 'tool', tool_call_id: 'c1', name: 'get_weather', content: '{"tempC":-3}' },
+    ]);
+    expect(out).toContain('get_weather({"city":"Oslo"})');
+    expect(out).toContain('Tool result (get_weather):');
+    expect(out).toContain('{"tempC":-3}');
+  });
+
+  it('keeps a tool-request turn even though it has no content', () => {
+    const out = messagesToPrompt([
+      { role: 'user', content: 'go' },
+      { role: 'assistant', content: '', tool_calls: [{ function: { name: 'ping', arguments: '{}' } }] },
+    ]);
+    expect(out).toContain('ping({})');
+  });
+
+  it('labels an unnamed tool result', () => {
+    const out = messagesToPrompt([
+      { role: 'user', content: 'go' },
+      { role: 'tool', content: 'done' },
+    ]);
+    expect(out).toContain('Tool result:');
+  });
+});

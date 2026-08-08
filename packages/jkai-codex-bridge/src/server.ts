@@ -19,7 +19,14 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODELS, DEFAULT_CODEX_MODEL_SLUG, toCodexSlug } from '$lib/server/models/codex-catalogue';
-import { runOnce, runStreamed } from './codex-runner';
+import { runOnce, runStreamed, type CapturedToolCall } from './codex-runner';
+import {
+  registerTools,
+  unregisterTools,
+  handleMcpRequest,
+  isMcpPath,
+  type OpenAiTool,
+} from './mcp-tool-server';
 import {
   messagesToPrompt,
   extractOutputSchema,
@@ -130,6 +137,59 @@ async function codexVersion(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Where Codex should reach this bridge's MCP endpoint.
+ *
+ * Codex runs as a child process on this host, so loopback is right — and the
+ * bridge is loopback-only anyway. Uses the configured port rather than a
+ * hostname so it keeps working when the listener is moved.
+ */
+function selfBaseUrl(): string {
+  const port = Number(process.env.CODEX_BRIDGE_PORT || 5207);
+  return `http://127.0.0.1:${port}`;
+}
+
+/** Captured MCP dispatches → the OpenAI `tool_calls` shape. Arguments are
+ *  stringified because that is what the wire format specifies, and every SDK
+ *  consumer JSON.parses them. */
+function toOpenAiToolCalls(calls: CapturedToolCall[]) {
+  return calls.map((c, i) => ({
+    id: `call_codex_${i}_${c.name}`.slice(0, 64),
+    type: 'function' as const,
+    function: {
+      name: c.name,
+      arguments:
+        typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments ?? {}),
+    },
+  }));
+}
+
+/**
+ * Pull a caller-fixable validation message out of a Codex failure.
+ *
+ * Codex surfaces upstream rejections as the raw JSON error body inside its exit
+ * message. Those are 400-class — a bad `reasoning_effort`, an unknown model —
+ * and reporting them as our 502 sends the caller debugging the bridge instead
+ * of their request. Returns null for genuine bridge/transport failures.
+ */
+export function extractUpstreamValidationError(raw: string): string | null {
+  const start = raw.indexOf('{');
+  if (start === -1) return null;
+  try {
+    const parsed = JSON.parse(raw.slice(start)) as {
+      error?: { type?: string; code?: string; message?: string };
+    };
+    const e = parsed?.error;
+    if (!e?.message) return null;
+    const isValidation =
+      e.type === 'invalid_request_error' ||
+      (typeof e.code === 'string' && /unsupported|invalid|not_found/.test(e.code));
+    return isValidation ? e.message : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Codex reports usage with its own field names; the OpenAI shape is what every
  *  caller (including $lib/jkai/usage-capture) reads. */
 function toOpenAiUsage(usage: {
@@ -171,20 +231,16 @@ async function handleChatCompletions(
     return;
   }
 
-  // Fail loudly rather than quietly ignoring tools. A caller that passes tool
-  // schemas is expecting tool_calls back; answering in prose instead looks like
-  // the model "chose not to" and sends the caller debugging its prompt.
-  if (body.tools || body.tool_choice) {
-    sendError(
-      res,
-      400,
-      'Codex does not accept caller-supplied tool schemas — it runs its own toolset. Use an OpenRouter model for tool-calling roles.',
-      'tools_unsupported',
-    );
-    return;
-  }
-
   const model = toCodexSlug(body.model?.trim() || DEFAULT_CODEX_MODEL_SLUG);
+
+  // Caller-supplied tools are published as a per-request MCP server, which is
+  // the only way Codex accepts external tools. See mcp-tool-server.ts. Nothing
+  // is executed here — the first dispatch is captured and returned as
+  // `tool_calls` for the caller to run, per the chat-completions contract.
+  const wantsTools =
+    Array.isArray(body.tools) && body.tools.length > 0 && body.tool_choice !== 'none';
+  const registration = wantsTools ? registerTools(body.tools as OpenAiTool[]) : null;
+  const toolServerUrl = registration ? `${selfBaseUrl()}${registration.path}` : undefined;
   let prompt = messagesToPrompt(messages);
   const outputSchema = extractOutputSchema(body.response_format);
   if (!outputSchema && wantsBareJson(body.response_format)) {
@@ -213,6 +269,44 @@ async function handleChatCompletions(
         connection: 'keep-alive',
       });
       const write = (payload: unknown) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+      // A tool-bearing request cannot stream token deltas meaningfully — the
+      // useful output is a tool call that only exists once the model dispatches
+      // it. Run it as a single capture and emit the result as one well-formed
+      // SSE sequence, rather than fake incremental tool_call deltas.
+      if (wantsTools) {
+        const captured = await withSlot(() =>
+          runOnce({ model, prompt, outputSchema, reasoningEffort, signal: controller.signal, toolServerUrl }),
+        );
+        write({
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model,
+          choices: [
+            {
+              index: 0,
+              delta: captured.toolCalls?.length
+                ? { role: 'assistant', tool_calls: toOpenAiToolCalls(captured.toolCalls) }
+                : { role: 'assistant', content: captured.text },
+              finish_reason: null,
+            },
+          ],
+        });
+        write({
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model,
+          choices: [
+            { index: 0, delta: {}, finish_reason: captured.toolCalls?.length ? 'tool_calls' : 'stop' },
+          ],
+          usage: toOpenAiUsage(captured.usage),
+        });
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      }
 
       await withSlot(async () => {
         let first = true;
@@ -258,8 +352,9 @@ async function handleChatCompletions(
     }
 
     const result = await withSlot(() =>
-      runOnce({ model, prompt, outputSchema, reasoningEffort, signal: controller.signal }),
+      runOnce({ model, prompt, outputSchema, reasoningEffort, signal: controller.signal, toolServerUrl }),
     );
+    const calls = result.toolCalls?.length ? toOpenAiToolCalls(result.toolCalls) : null;
     sendJson(res, 200, {
       id,
       object: 'chat.completion',
@@ -268,14 +363,28 @@ async function handleChatCompletions(
       choices: [
         {
           index: 0,
-          message: { role: 'assistant', content: result.text },
-          finish_reason: 'stop',
+          // `content` must be null alongside tool_calls — SDK consumers branch
+          // on it, and an empty string reads as "the model replied with
+          // nothing" rather than "the model wants a tool run".
+          message: calls
+            ? { role: 'assistant', content: null, tool_calls: calls }
+            : { role: 'assistant', content: result.text },
+          finish_reason: calls ? 'tool_calls' : 'stop',
         },
       ],
       usage: toOpenAiUsage(result.usage),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Upstream rejected the REQUEST (e.g. reasoning_effort "minimal", which the
+    // GPT-5.6 line does not accept). That is the caller's to fix, so give them
+    // a 400 with the model's own words rather than a 502 that reads like our
+    // bridge fell over.
+    const upstream = extractUpstreamValidationError(message);
+    if (upstream && !res.headersSent) {
+      sendError(res, 400, upstream, 'upstream_invalid_request');
+      return;
+    }
     if (res.headersSent) {
       // Mid-stream failure: emit an SSE error frame so the consumer sees a
       // failure rather than a truncated-but-well-formed answer.
@@ -286,6 +395,9 @@ async function handleChatCompletions(
     }
   } finally {
     clearTimeout(timeout);
+    // The registration only exists for this request; leaving it would let a
+    // later Codex run reach a stale tool list.
+    if (registration) unregisterTools(registration.id);
   }
 }
 
@@ -318,6 +430,12 @@ export function createBridgeServer() {
             owned_by: 'openai-codex',
           })),
         });
+        return;
+      }
+
+      // Codex's own connection back in, to read the caller's tool schemas.
+      if (isMcpPath(url.pathname)) {
+        await handleMcpRequest(req, res, url.pathname);
         return;
       }
 

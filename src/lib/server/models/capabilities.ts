@@ -64,23 +64,29 @@ export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
  * What a PROVIDER can do at the request level, as opposed to what a model can
  * accept as input (ModelCapabilities above).
  *
- * This exists because Codex is an agent runtime wearing an OpenAI-shaped face,
- * not a chat-completions endpoint. Most of the wire format maps cleanly — the
- * Codex SDK has streaming (`runStreamed`), structured output (`outputSchema`,
- * which the bridge maps from `response_format: json_schema`), reasoning effort
- * and real token usage. Two things genuinely do not exist:
+ * Codex is an agent runtime wearing an OpenAI-shaped face, so the mapping is
+ * not one-for-one — but almost all of it works: streaming, structured output
+ * (`outputSchema` from `response_format: json_schema`), reasoning effort, real
+ * token usage, and — since the bridge learned to publish caller tools as an
+ * MCP server — full tool-calling.
  *
- *  - CALLER-SUPPLIED TOOLS. Codex brings its own toolset (shell, file edits,
- *    web search, MCP) and there is no way to hand it your own function schemas
- *    and get tool_calls back. The jkai orchestrator's generation loop depends
- *    on exactly that, so it must stay on OpenRouter.
- *  - EMBEDDINGS. No embedding endpoint at all.
+ * The one genuine gap left is EMBEDDINGS: Codex has no embedding endpoint, so
+ * those paths stay on OpenRouter.
  *
- * The pickers read this to disable Codex options for roles that need those,
+ * The pickers read this to disable options for roles a provider cannot serve,
  * with the reason shown, rather than letting the pick fail at call time.
  */
 export interface ProviderFeatures {
-  /** Caller-supplied `tools` / `tool_choice` function schemas. */
+  /**
+   * Whether this transport can forward caller-supplied `tools` / `tool_choice`
+   * function schemas and return `tool_calls`.
+   *
+   * True for both providers. It briefly read false for Codex because the SDK
+   * has no `tools` field — but that was a limit of how the bridge drove Codex,
+   * not of Codex, and stating it here made the UI tell users something untrue
+   * about GPT-5.6. The bridge now publishes caller tools over MCP, which is the
+   * supported way in, so the flag reflects the model again.
+   */
   tools: boolean;
   /** `response_format` with a JSON schema. */
   structuredOutput: boolean;
@@ -98,7 +104,12 @@ const OPENROUTER_FEATURES: ProviderFeatures = {
 };
 
 const CODEX_FEATURES: ProviderFeatures = {
-  tools: false,
+  // TRUE since the bridge learned to publish caller tools as an MCP server —
+  // the only route by which Codex accepts external tools. It captures the
+  // dispatch and returns `tool_calls`, so the caller still runs the tool, as
+  // the chat-completions contract requires. Before that this said false, and
+  // the UI wrongly reported the MODEL as incapable.
+  tools: true,
   structuredOutput: true,
   streaming: true,
   embeddings: false,
@@ -113,14 +124,23 @@ export function getProviderFeatures(provider: ModelProvider): ProviderFeatures {
  *
  * The site default is the one model every unpinned role falls back to —
  * including the orchestrator's tool-calling loop, the autonomous builder and
- * every workflow LLM node with a blank model field. A provider that can't do
- * tools would leave those failing at call time with no obvious cause, so the
- * write is refused at save time instead. Narrower selections (a conversation,
- * a node, a routing profile) know their role and stay free to pick Codex.
+ * every workflow LLM node with a blank model field. A provider that cannot pass
+ * tool schemas would leave those failing at call time with no obvious cause, so
+ * the write is refused at save time instead.
+ *
+ * BOTH providers now pass this: Codex gained tool-calling when the bridge
+ * started publishing caller tools over MCP, so Codex is a legitimate site
+ * default. The guard stays because the property it checks is real and the next
+ * provider may not have it — not as a Codex carve-out.
+ *
+ * Note this is a capability gate, not a judgement about speed. A Codex site
+ * default is materially slower per tool call than OpenRouter (a fresh Codex
+ * process per turn); that is a cost trade the operator is entitled to make, and
+ * the picker says so rather than deciding for them.
  */
 export function siteDefaultBlockReason(provider: ModelProvider): string | null {
   if (getProviderFeatures(provider).tools) return null;
-  return `${provider} cannot be the site default: it does not support tool-calling, which the orchestrator and builder require. Pick it per-conversation or per-node instead.`;
+  return `${provider} cannot be the site default: this transport cannot pass tool schemas, which the orchestrator and builder require.`;
 }
 
 /** Human-readable reason a provider can't serve a role, or null if it can.
@@ -132,8 +152,6 @@ export function unsupportedReason(
   if (getProviderFeatures(provider)[need]) return null;
   if (provider !== 'codex') return `This provider does not support ${need}.`;
   switch (need) {
-    case 'tools':
-      return 'Codex runs its own toolset and cannot accept the function schemas this role passes in. Use an OpenRouter model here.';
     case 'embeddings':
       return 'Codex has no embeddings endpoint. Use an OpenRouter model here.';
     default:

@@ -79,28 +79,27 @@ describe('codex capabilities', () => {
     expect(caps).toEqual({ image: false, audio: false, video: false, pdf: false, documentText: true });
   });
 
-  it('cannot do tools or embeddings, can stream and do structured output', () => {
+  it('does tools and structured output and streaming; embeddings remain the gap', () => {
     expect(getProviderFeatures('codex')).toEqual({
-      tools: false,
+      tools: true,
       structuredOutput: true,
       streaming: true,
       embeddings: false,
     });
   });
 
-  it('refuses Codex as the site default, but allows OpenRouter', () => {
-    // The site default is the fallback for every unpinned role, including the
-    // orchestrator's tool-calling loop. Allowing Codex there would break the
-    // builder at call time with no obvious cause.
-    expect(siteDefaultBlockReason('codex')).toMatch(/cannot be the site default/);
+  it('allows Codex as the site default now that tool-calling works', () => {
+    // This was blocked while the bridge could not pass tool schemas — the site
+    // default feeds the orchestrator and builder, which would have failed at
+    // call time. The bridge now publishes caller tools over MCP, so the block
+    // is gone. Speed is the operator's trade to make, not a capability gate.
+    expect(siteDefaultBlockReason('codex')).toBeNull();
     expect(siteDefaultBlockReason('openrouter')).toBeNull();
   });
 
-  it('explains why a role is unavailable', () => {
-    expect(unsupportedReason('codex', 'tools')).toMatch(/own toolset/);
+  it('still refuses Codex for embeddings, with the reason', () => {
     expect(unsupportedReason('codex', 'embeddings')).toMatch(/no embeddings/);
-    expect(unsupportedReason('codex', 'streaming')).toBeNull();
-    expect(unsupportedReason('openrouter', 'tools')).toBeNull();
+    expect(unsupportedReason('codex', 'tools')).toBeNull();
   });
 });
 
