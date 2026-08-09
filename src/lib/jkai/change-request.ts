@@ -29,10 +29,16 @@ const DEFAULT_BUDGET = {
   activeMinutesPerHour: 45,
   // The per-hour cap is only consulted between iterations, so on its own it
   // cannot stop a single iteration running away — two spent 1.5M tokens each
-  // on 2026-08-07 without it ever engaging. A change request is a surgical edit
-  // to an existing repo; 400k is generous for that, and hitting it continues
-  // into a fresh iteration rather than failing the build.
-  maxTokensPerIteration: 400_000,
+  // on 2026-08-07 without it ever engaging.
+  //
+  // NOTE THE UNIT: this counts OUTPUT tokens now. It used to sum
+  // `usage.totalTokens`, which is per API call and includes the whole re-sent
+  // conversation, so 400k was reached after ~15 turns regardless of how much
+  // work had been done — six iterations died to it in 30 days, including both
+  // of change request #159. With the wall-clock deadline already bounding an
+  // iteration, this is the secondary brake for a genuine runaway loop, so it
+  // is set well above any plausible legitimate iteration.
+  maxTokensPerIteration: 150_000,
   // A change request is one surgical edit. If it has cost more than this, the
   // request was too big or the agent is stuck — either way a human should look
   // before more is spent.
