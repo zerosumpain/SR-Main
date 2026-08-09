@@ -627,6 +627,15 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
   serveConfig: jsonb('serve_config'),
   publishedSlug: text('published_slug'),
+  // How the build presents itself on /projects once promoted. All three are
+  // null for a build published before this existed, and the card falls back to
+  // `title` and `prompt` exactly as it always did — which is the reason to
+  // curate: an unedited card leads with the raw prompt that was typed to start
+  // the build, and reads like a work order rather than a project.
+  cardTitle: text('card_title'),
+  cardBlurb: text('card_blurb'),
+  /** The small right-hand line on the card — "Interactive · Pay data". */
+  cardTag: text('card_tag'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   modelProvider: text('model_provider').notNull().default('openrouter'),

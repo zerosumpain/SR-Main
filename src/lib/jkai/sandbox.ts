@@ -965,6 +965,23 @@ export async function publishBuild(buildId: string, slug: string): Promise<strin
   const destDir = `${PUBLISHED_DIR}/${slug}`;
   const liveDir = `/home/jkai/workspace/${buildId}/live`;
 
+  // Refuse an empty workspace rather than publishing a blank directory.
+  // The Publish button used to be hidden unless the build had a serveConfig,
+  // which stood in for "it produced something" — but serveConfig only records
+  // how to RUN a build, so that gate also hid every static site the builder
+  // ever made. Promotion is now offered for any finished build, and this is the
+  // check that actually matters: is there anything on disk to copy?
+  const hasFiles = await execInSandbox(
+    `test -d ${liveDir} && [ -n "$(ls -A ${liveDir} 2>/dev/null)" ] && echo YES`,
+    5000,
+  );
+  if (hasFiles.stdout.trim() !== 'YES') {
+    throw new Error(
+      'This build has no files in its workspace, so there is nothing to publish. ' +
+        'Failed builds keep their work at /home/jkai/workspace/<id>/dev — resume or restart it first.',
+    );
+  }
+
   // Try to produce a static build inside the sandbox first
   // Check for package.json with a build script
   const hasBuildScript = await execInSandbox(
