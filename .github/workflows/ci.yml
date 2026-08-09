@@ -77,14 +77,46 @@ jobs:
             pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
           echo "postgres pulling/booting in the background; waited on before the schema push"
 
+      # Full history: the level classifier and the risk classifier both diff
+      # against a base, and a depth-1 checkout has nothing to diff against.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The blast-radius axis. See scripts/gate-level.sh for why this is a
+      # second axis rather than a third value on the risk tier.
+      #
+      # EVERY skip below is written as `!= 'L1'`, never `== 'L2'`. If this step
+      # fails, is skipped, or emits nothing, the level is empty — and an empty
+      # string is `!= 'L1'`, so every expensive step still runs. The failure
+      # direction is a full gate, which costs time rather than safety. Written
+      # the other way round, an unrecognised level would silently skip the
+      # install, the tests and the build while the job still reported success.
+      - name: Classify gate level
+        id: level
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="HEAD^"
+          fi
+          ./scripts/gate-level.sh "$BASE" | tee /tmp/level.txt
+          {
+            echo "### Gate level: \`$(sed -n 's/^level=//p' /tmp/level.txt)\`"
+            echo ""
+            echo "$(sed -n 's/^reason=//p' /tmp/level.txt)"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-node@v4
+        if: steps.level.outputs.level != 'L1'
         with:
           node-version: 22
           cache: npm
 
+      # Skipped at L1: both bespoke linters import only node: builtins, so a
+      # documentation-only change needs no dependency tree at all.
       - run: npm ci
+        if: steps.level.outputs.level != 'L1'
 
       # `docker exec ... pg_isready` is NOT a sufficient readiness test, and
       # using it turned master red on run 31339327336: the step reported
@@ -101,6 +133,7 @@ jobs:
       # Poll the condition the next step actually needs — a query, through the
       # published port, over the same URL the tests use.
       - name: Wait for Postgres
+        if: steps.level.outputs.level != 'L1'
         run: |
           for i in $(seq 1 90); do
             if psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
@@ -121,18 +154,21 @@ jobs:
       # database rather than skipping. Anyone reasoning about removing the
       # container needs both facts.
       - name: Prepare test database
+        if: steps.level.outputs.level != 'L1'
         run: |
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
       # Cheap and near-instant (~0.4s for the pair), so they run first and fail
-      # fast before anything expensive starts.
+      # fast before anything expensive starts. Runs at EVERY level — these two
+      # are the whole gate for a documentation-only change.
       - name: Lint gates
         run: npm run gate:public-routes && npm run gate:font-sizes
 
       # svelte-check and vitest, concurrently. See scripts/gate-concurrent.sh for
       # why the exit-code handling in there is written the long way round.
       - name: Type check + tests
+        if: steps.level.outputs.level != 'L1'
         run: ./scripts/gate-concurrent.sh
 
       # The build is a PROOF here, not an artifact — the gate deletes it. On a
@@ -150,7 +186,7 @@ jobs:
       # bundle nobody reads is skipped. See svelte.config.js. Deliberately set
       # here and nowhere else: on the VPS this flag would deploy an empty build.
       - name: Build
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' && steps.level.outputs.level != 'L1'
         run: npm run gate:build
         env:
           SR_GATE_STUB_ADAPTER: '1'
