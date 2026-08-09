@@ -55,6 +55,8 @@
     spendTodayUsd={data.hub.spendTodayUsd}
     budgetUsd={data.hub.budgetUsd}
     credit={data.hub.credit}
+    codex={data.hub.codex}
+    defaultModelId={data.hub.defaultModelId}
     activeRuns={data.hub.activeRuns}
     workflowCount={data.hub.workflowCount}
     workflowLiveCount={data.hub.workflowLiveCount}

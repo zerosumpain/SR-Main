@@ -1,11 +1,13 @@
 <script lang="ts">
   import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import type { CodexMeter } from '$lib/jkai/usage-meter';
 
   let {
     tokensToday,
     spendUsd,
     budgetUsd,
     credit = null,
+    codex = null,
     contextTokens = null,
     contextFraction = null,
     liveRuns = 0,
@@ -19,6 +21,10 @@
      *  `credit.remainingUsd` and the strip says so; when null the strip has
      *  fallen back to the static app_settings budget. */
     credit?: { remainingUsd: number; totalUsd: number; usedUsd: number } | null;
+    /** Set only while a `codex/` model is answering. When present it REPLACES
+     *  the spend chunk: that turn spends subscription quota, not credit, so a
+     *  pound figure would be describing money the turn will never touch. */
+    codex?: CodexMeter | null;
     contextTokens?: number | null;
     contextFraction?: number | null;
     liveRuns?: number;
@@ -67,13 +73,31 @@
   {#if !isMobile}
     <span class="unit unit-spend">
       <span class="sep" aria-hidden="true">/</span>
-      <span class="chunk spend" title={spendTitle}>
-        <b class="accent">{formatGbp(spendUsd)}</b><span class="of">
-          of {formatGbp(budgetUsd)}{credit ? ' credit' : ''}</span
-        >
-      </span>
+      {#if codex}
+        <span class="chunk spend" title={codex.title}>
+          <b class="accent" class:warn={codex.limitReached}
+            >{Math.round(codex.remainingPercent)}%</b
+          ><span class="of">
+            {codex.windowLabel.toLowerCase()} left{codex.resetIn
+              ? ` · ${codex.resetIn}`
+              : ''}</span
+          >
+        </span>
+      {:else}
+        <span class="chunk spend" title={spendTitle}>
+          <b class="accent">{formatGbp(spendUsd)}</b><span class="of">
+            of {formatGbp(budgetUsd)}{credit ? ' credit' : ''}</span
+          >
+        </span>
+      {/if}
+      <!-- Fill is what has been CONSUMED in both modes: spend against the
+           balance, or the tightest quota window against its ceiling. -->
       <span class="budget-bar" aria-hidden="true">
-        <span class="budget-fill" style="width: {budgetPct}%"></span>
+        <span
+          class="budget-fill"
+          class:warn={codex?.limitReached}
+          style="width: {codex ? codex.usedPercent : budgetPct}%"
+        ></span>
       </span>
     </span>
   {/if}
@@ -134,6 +158,10 @@
   .chunk b.accent {
     color: var(--accent);
   }
+  /* Quota exhausted — calls are being refused, not merely running low. */
+  .chunk b.accent.warn {
+    color: var(--error);
+  }
   .spend .of {
     opacity: 0.75;
   }
@@ -151,6 +179,9 @@
     display: block;
     height: 100%;
     background: var(--accent);
+  }
+  .budget-fill.warn {
+    background: var(--error);
   }
   .live-dot {
     width: 6px;
