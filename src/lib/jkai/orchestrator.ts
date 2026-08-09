@@ -903,22 +903,27 @@ class Orchestrator {
         })
         .where(eq(jkaiIterations.id, iteration.id));
 
-      // Build counters: failed iterations don't consume active-minutes budget
-      // (per design: only successful work counts). Token spend still counts.
-      // wall_clock_timeout doesn't bump consecutive_failures because Pi did
-      // useful work and just ran out of time — the next iteration will pick
-      // up the partial work in dev/ (live/ is empty so seedDevFromLive is a
-      // no-op, preserving whatever files iter N wrote).
-      const counts = failure && failure.kind !== 'wall_clock_timeout';
+      // Build counters. A BUDGET STOP IS NOT A FAULT: wall_clock_timeout and
+      // iteration_token_cap both mean Pi did useful work and ran out of
+      // allowance, and both are explicitly continuable below — the work is in
+      // dev/ and the next iteration picks it up. Counting them toward
+      // consecutive_failures made the second one abort the build, which is how
+      // change request #159 died with two capped iterations and a draft PR of
+      // rescued work nobody was told about.
+      const counts =
+        failure && failure.kind !== 'wall_clock_timeout' && failure.kind !== 'iteration_token_cap';
       const newConsecutiveFailures = counts ? build.consecutiveFailures + 1 : failure ? build.consecutiveFailures : 0;
       await db
         .update(jkaiBuilds)
         .set({
           iterationsCompleted: build.iterationsCompleted + 1,
           tokensUsed: build.tokensUsed + result.tokensUsed,
-          activeMinutesUsed: failure
-            ? build.activeMinutesUsed
-            : build.activeMinutesUsed + durationMs / 60000,
+          // Wall-clock accrues whatever the iteration actually burned, pass or
+          // fail. It used to accrue only on success, so a build whose every
+          // iteration failed reported 0 active minutes and maxTotalMinutes
+          // could never bind — contradicting the comment in budget.ts that says
+          // a failed iteration costs as much as a successful one.
+          activeMinutesUsed: build.activeMinutesUsed + durationMs / 60000,
           consecutiveFailures: newConsecutiveFailures,
           updatedAt: new Date(),
         })

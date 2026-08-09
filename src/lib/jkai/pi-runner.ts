@@ -352,6 +352,14 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const messages: Array<{ role: string; content: string }> = [];
   let finalAssistantText = '';
   let tokensUsed = 0;
+  // Separate accumulator for the cap. `usage.totalTokens` is per API CALL and
+  // includes the whole re-sent conversation, so summing it grows roughly
+  // quadratically with turn count and the "token cap" was really a turn cap:
+  // 461,311 "tokens" in 100 seconds of wall clock is arithmetically impossible
+  // as new tokens. Codex holds ~99% prompt-cache hit rates, so those re-counted
+  // tokens cost almost nothing — the cap was punishing an accounting artefact.
+  // `tokensUsed` stays as-is for reporting and comparability with history.
+  let outputTokensUsed = 0;
   let errorMessage: string | null = null;
   let providerHttpStatus: number | undefined;
   let providerErrorCode: string | undefined;
@@ -551,14 +559,15 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     if (m.role === 'assistant') {
       if (m.usage) {
         tokensUsed += m.usage.totalTokens ?? 0;
-        if (maxTokensPerIteration > 0 && tokensUsed >= maxTokensPerIteration && !tokenCapHit) {
+        outputTokensUsed += m.usage.output ?? 0;
+        if (maxTokensPerIteration > 0 && outputTokensUsed >= maxTokensPerIteration && !tokenCapHit) {
           tokenCapHit = true;
           try {
             child.kill('SIGTERM');
             await emitLog(
               build.id,
               'error',
-              `Iteration token cap hit (${tokensUsed}/${maxTokensPerIteration}). Killed. ` +
+              `Iteration output-token cap hit (${outputTokensUsed}/${maxTokensPerIteration}). Killed. ` +
                 `Whatever the agent had written is preserved in the workspace — resume to continue.`,
               iteration.id,
             );

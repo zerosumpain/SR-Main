@@ -128,14 +128,27 @@ export const DEFAULT_NODE_MAX_TOKENS = 25_000;
  * a cap, it never makes a model generate more than it would.
  */
 export function isReasoningModel(modelId: string): boolean {
-  const id = modelId.toLowerCase();
+  // A leading `~` marks an OpenRouter "latest" alias and defeats every
+  // startsWith below. 16 prod conversations carry one, and all three
+  // `(empty heartbeat reply)` rows in 30 days came from unmatched models —
+  // `~deepseek/deepseek-v4-flash-latest`, `moonshotai/kimi-k3` and
+  // `tencent/hy3-preview` — each having spent its whole 350-token budget
+  // thinking and returned nothing.
+  const id = modelId.toLowerCase().replace(/^~/, '');
   return (
     isGlmModel(id) ||
     id.startsWith('deepseek/deepseek-v4') ||
     id.startsWith('deepseek/deepseek-r') ||
     id.startsWith('minimax/minimax-m') ||
+    id.startsWith('moonshotai/') ||
+    id.startsWith('tencent/hy3') ||
     id.startsWith('qwen/qwq') ||
     id.startsWith('openai/o1') ||
-    id.startsWith('openai/o3')
+    id.startsWith('openai/o3') ||
+    // Codex models reach here as the bare slug — `toCodexSlug` strips the
+    // `codex/` prefix long before a request is built, so matching on that
+    // prefix would be dead code.
+    id.startsWith('gpt-5.') ||
+    id.startsWith('openai/gpt-5')
   );
 }
