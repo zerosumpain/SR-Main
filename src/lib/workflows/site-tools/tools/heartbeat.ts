@@ -2,9 +2,8 @@
 //
 // The heartbeat engine ticks every 30s. On each tick it scans
 // `heartbeat_actions` for any active row whose next_run_at has passed and
-// runs it. Targeted actions execute as a focused LLM turn against the
-// owning conversation; the LLM either takes one concrete step or replies
-// "DONE: …" to mark the goal met and remove itself from the queue.
+// runs it. Targeted actions report the live state of the task they watch,
+// and retire themselves once that task reaches a terminal state.
 //
 // Use these tools when:
 //   • You promise the user a follow-up ("I'll check on this in a minute")
@@ -18,34 +17,76 @@
 
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
-import { heartbeatActions } from '$lib/db/schema';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { heartbeatActions, heartbeatPulses, conversations } from '$lib/db/schema';
+import { eq, or, desc, inArray } from 'drizzle-orm';
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
+import { requiredString, optionalString } from '../tool-args';
+
+/** How many recent pulses to attach to each row in `list_heartbeat_actions`. */
+const RECENT_PULSES_PER_ACTION = 5;
 
 register({
   name: 'register_heartbeat_action',
   description:
-    'Schedule a perpetual heartbeat action for this conversation. The engine will run the prompt every cadence_seconds (≥30) until the action marks itself DONE: in its reply. Use whenever you promise the user a follow-up or kick off any background task whose completion is asynchronous.',
+    'Schedule a perpetual heartbeat action for this conversation. The engine will run it every cadence_seconds (≥30) until the task it watches reaches a terminal state. Use whenever you promise the user a follow-up or kick off any background task whose completion is asynchronous.',
   parameters: {
     type: 'object',
     properties: {
       conversation_id: { type: 'string', description: 'The current conversation ID. Required so the heartbeat reply lands in the same chat.' },
       name: { type: 'string', description: 'Stable, unique identifier for this action — e.g. "watch-build-90e8fc5c". Reusing a name updates the existing action.' },
-      goal: { type: 'string', description: 'Concrete description of what "done" looks like. The LLM uses this on each tick to decide whether to mark itself DONE.' },
-      prompt: { type: 'string', description: 'Instruction the engine sends to the LLM on each tick — e.g. "Check the status of build 90e8fc5c. If terminal, summarise the result and reply DONE: <summary>. Otherwise report current state in ≤30 words."' },
+      goal: { type: 'string', description: 'Concrete description of what "done" looks like. Used to decide whether the watch can retire.' },
+      prompt: { type: 'string', description: 'What this watch is about, in one line — e.g. "Check the status of build 90e8fc5c and report progress." Shown to the user alongside the status line.' },
       cadence_seconds: { type: 'number', description: 'How often to fire (≥30). Use 30 for tight watches, 300 for things that change every few minutes, 1800 for hourly review-style actions.' },
       description: { type: 'string', description: 'One-line label that appears in the admin Pulse UI. Optional — defaults to the prompt.' },
+      task_kind: { type: 'string', description: "Optional. Bind the watch to a live task so it can read real state: 'build', 'research', or 'workflow_run'. Most callers should omit this — spawning a build already attaches its own watcher automatically." },
+      task_id: { type: 'string', description: 'Optional. The id of the task named by task_kind.' },
     },
     required: ['conversation_id', 'name', 'goal', 'prompt', 'cadence_seconds'],
   },
   category: 'System',
   toolset: 'heartbeat',
   handler: async (args) => {
-    const name = String(args.name);
+    const nameArg = requiredString(args, 'name');
+    if (!nameArg.ok) return { success: false, error: nameArg.error };
+    const convArg = requiredString(args, 'conversation_id');
+    if (!convArg.ok) return { success: false, error: convArg.error };
+    const goalArg = requiredString(args, 'goal');
+    if (!goalArg.ok) return { success: false, error: goalArg.error };
+    const promptArg = requiredString(args, 'prompt');
+    if (!promptArg.ok) return { success: false, error: promptArg.error };
+
+    const name = nameArg.value;
+    const goal = goalArg.value;
+    const prompt = promptArg.value;
     const cadence = Math.max(30, Math.min(86400, Math.round(Number(args.cadence_seconds))));
-    const conversationId = String(args.conversation_id);
-    const goal = String(args.goal);
-    const prompt = String(args.prompt);
-    const description = (args.description as string | undefined) ?? prompt.slice(0, 120);
+    if (!Number.isFinite(cadence)) return { success: false, error: 'cadence_seconds must be a number ≥ 30' };
+
+    // Hermes hands us `chat_<uuid>`; the conversation tables key on the bare
+    // uuid. Storing the prefixed form is what made every targeted action fail
+    // its lookup on every tick, silently, forever.
+    const conversationId = normaliseConversationId(convArg.value);
+
+    // Validate up front. A watch registered against a conversation that does
+    // not resolve can never deliver anything, so tell the caller now rather
+    // than creating a row that errors every 30 seconds for nine days.
+    const [conv] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    if (!conv) {
+      return {
+        success: false,
+        error:
+          `No conversation ${conversationId} — the watch was not registered. ` +
+          'Pass the id of the conversation this chat belongs to.',
+      };
+    }
+
+    const description = optionalString(args, 'description') ?? prompt.slice(0, 120);
+    const taskKind = optionalString(args, 'task_kind');
+    const taskId = optionalString(args, 'task_id');
+    const config = taskKind && taskId ? { taskKind, taskId } : {};
 
     const now = new Date();
     const nextRunAt = new Date(now.getTime() + cadence * 1000);
@@ -65,6 +106,9 @@ register({
           source: 'orchestrator',
           nextRunAt,
           completedAt: null,
+          consecutiveFailures: 0,
+          lastError: null,
+          ...(taskKind && taskId ? { config } : {}),
           updatedAt: now,
         })
         .where(eq(heartbeatActions.name, name))
@@ -72,8 +116,8 @@ register({
       return {
         success: true,
         data: {
-          actionId: updated.id,
           name,
+          actionId: updated.id,
           updated: true,
           firstRunAt: nextRunAt.toISOString(),
           cadenceSeconds: cadence,
@@ -95,13 +139,14 @@ register({
         conversationId,
         source: 'orchestrator',
         nextRunAt,
+        config,
       })
       .returning();
     return {
       success: true,
       data: {
-        actionId: created.id,
         name,
+        actionId: created.id,
         updated: false,
         firstRunAt: nextRunAt.toISOString(),
         cadenceSeconds: cadence,
@@ -114,21 +159,33 @@ register({
 register({
   name: 'complete_heartbeat_action',
   description:
-    'Mark a heartbeat action complete and remove it from the queue. Use when you\'ve delivered the outcome (or the task it watches is genuinely done). Equivalent to replying "DONE: …" inside the action\'s own LLM turn, but available for the orchestrator to call from a normal user turn.',
+    'Mark a heartbeat action complete and remove it from the queue. Use when you\'ve delivered the outcome (or the task it watches is genuinely done). Accepts either the action\'s name or its id.',
   parameters: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'The name passed to register_heartbeat_action.' },
+      name: { type: 'string', description: 'The name passed to register_heartbeat_action. Either this or id is required.' },
+      id: { type: 'string', description: 'The action id, as returned by list_heartbeat_actions. Either this or name is required.' },
       reason: { type: 'string', description: 'Short note about why the action is being completed (stored on the action row).' },
     },
-    required: ['name'],
   },
   category: 'System',
   toolset: 'heartbeat',
   handler: async (args) => {
-    const name = String(args.name);
-    const reason = (args.reason as string | undefined) ?? null;
+    // `list_heartbeat_actions` returns both fields, so the model reaches for
+    // whichever it saw first. Accept either rather than coercing a missing
+    // key into the string "undefined" and reporting "no such action".
+    const name = optionalString(args, 'name');
+    const id = optionalString(args, 'id');
+    if (!name && !id) return { success: false, error: 'name or id is required' };
+
+    const reason = optionalString(args, 'reason') ?? null;
     const now = new Date();
+    const match = name && id
+      ? or(eq(heartbeatActions.name, name), eq(heartbeatActions.id, id))!
+      : name
+        ? eq(heartbeatActions.name, name)
+        : eq(heartbeatActions.id, id!);
+
     const [row] = await db
       .update(heartbeatActions)
       .set({
@@ -137,18 +194,32 @@ register({
         updatedAt: now,
         config: reason ? { completionReason: reason } : undefined,
       })
-      .where(eq(heartbeatActions.name, name))
+      .where(match)
       .returning();
+
     if (!row) {
-      return { success: false, error: `No heartbeat action named "${name}"` };
+      // Say what does exist — a bare "no such action" sent the model looking
+      // for a delivery bug when the call itself was simply mis-keyed.
+      const open = await db
+        .select({ name: heartbeatActions.name })
+        .from(heartbeatActions)
+        .where(eq(heartbeatActions.status, 'active'));
+      const names = open.map((r) => r.name);
+      return {
+        success: false,
+        error:
+          `No heartbeat action matching ${name ? `name "${name}"` : `id "${id}"`}. ` +
+          (names.length > 0 ? `Active actions: ${names.join(', ')}.` : 'There are no active actions.'),
+      };
     }
-    return { success: true, data: { actionId: row.id, name, status: row.status } };
+    return { success: true, data: { name: row.name, actionId: row.id, status: row.status } };
   },
 });
 
 register({
   name: 'list_heartbeat_actions',
-  description: 'List heartbeat actions for the current conversation (or globally if no conversation_id). Useful when deciding whether to register a new action or whether a watch is already in place.',
+  description:
+    'List heartbeat actions for the current conversation (or globally if no conversation_id), each with its most recent pulses. Check recentPulses before concluding a watch is healthy — a high totalRuns with every pulse erroring means the watch is broken, not busy.',
   parameters: {
     type: 'object',
     properties: {
@@ -160,37 +231,64 @@ register({
   toolset: 'heartbeat',
   handler: async (args) => {
     const includeCompleted = (args.include_completed as boolean) ?? false;
-    const conversationId = args.conversation_id as string | undefined;
-    const conds = [];
-    if (conversationId) conds.push(eq(heartbeatActions.conversationId, conversationId));
-    if (!includeCompleted) {
-      // status != 'done'  — Drizzle doesn't have a `ne` import here, use isNotNull on a helper field instead
-      // Simpler: filter in JS after fetching the row set we care about
-    }
-    const rows = conds.length > 0
-      ? await db.select().from(heartbeatActions).where(and(...conds))
+    const rawConversationId = optionalString(args, 'conversation_id');
+    const conversationId = rawConversationId ? normaliseConversationId(rawConversationId) : undefined;
+
+    const rows = conversationId
+      ? await db.select().from(heartbeatActions).where(eq(heartbeatActions.conversationId, conversationId))
       : await db.select().from(heartbeatActions);
     const filtered = rows.filter((r) => includeCompleted || r.status !== 'done');
+
+    // Outcome history is the difference between "this watch has run 719 times"
+    // and "this watch has failed 719 times". Without it a dead action reads as
+    // a healthy one and the model invents an explanation for the silence.
+    const pulsesByAction = new Map<string, Array<{ ts: Date; outcome: string; summary: string }>>();
+    if (filtered.length > 0) {
+      const recent = await db
+        .select({
+          actionId: heartbeatPulses.actionId,
+          ts: heartbeatPulses.ts,
+          outcome: heartbeatPulses.outcome,
+          summary: heartbeatPulses.summary,
+        })
+        .from(heartbeatPulses)
+        .where(inArray(heartbeatPulses.actionId, filtered.map((r) => r.id)))
+        .orderBy(desc(heartbeatPulses.ts))
+        .limit(filtered.length * RECENT_PULSES_PER_ACTION * 4);
+      for (const p of recent) {
+        const list = pulsesByAction.get(p.actionId) ?? [];
+        if (list.length < RECENT_PULSES_PER_ACTION) {
+          list.push({ ts: p.ts, outcome: p.outcome, summary: p.summary });
+          pulsesByAction.set(p.actionId, list);
+        }
+      }
+    }
+
     return {
       success: true,
       data: {
         count: filtered.length,
-        actions: filtered.map((r) => ({
-          id: r.id,
-          name: r.name,
-          kind: r.kind,
-          status: r.status,
-          goal: r.goal,
-          cadenceSeconds: r.cadenceSeconds,
-          conversationId: r.conversationId,
-          totalRuns: r.totalRuns,
-          totalCostUsd: Number(r.totalCostUsd),
-          lastRunAt: r.lastRunAt,
-          nextRunAt: r.nextRunAt,
-        })),
+        actions: filtered.map((r) => {
+          const recentPulses = pulsesByAction.get(r.id) ?? [];
+          return {
+            name: r.name,
+            id: r.id,
+            kind: r.kind,
+            status: r.status,
+            goal: r.goal,
+            cadenceSeconds: r.cadenceSeconds,
+            conversationId: r.conversationId,
+            totalRuns: r.totalRuns,
+            consecutiveFailures: r.consecutiveFailures,
+            lastError: r.lastError,
+            totalCostUsd: Number(r.totalCostUsd),
+            lastRunAt: r.lastRunAt,
+            nextRunAt: r.nextRunAt,
+            recentPulses,
+            healthy: recentPulses.length > 0 ? recentPulses.some((p) => p.outcome !== 'error') : null,
+          };
+        }),
       },
     };
   },
 });
-
-void isNotNull; // imported for clarity but unused above; keep import stable
