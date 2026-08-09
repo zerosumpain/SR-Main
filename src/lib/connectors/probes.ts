@@ -282,6 +282,35 @@ async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorR
 
     if (state?.status === 'error') {
       const why = state.errorMessage ?? 'the last sync failed';
+
+      // Strava 403s every endpoint with
+      //   {"resource":"Application","field":"Status","code":"Inactive"}
+      // when the API *application* has been deactivated, which is a different
+      // fault from a bad grant: /athlete fails too, the refresh endpoint keeps
+      // handing out fresh tokens, and reconnecting can never fix it because
+      // there is nothing wrong with the athlete's consent. Sending someone to
+      // "Reconnect" here is a loop they cannot win, so it gets its own branch.
+      const appInactive = /\bapplication\b/i.test(why) && /\binactive\b/i.test(why);
+      if (appInactive) {
+        const devSettings =
+          service === 'strava'
+            ? 'https://www.strava.com/settings/api'
+            : 'https://developer.whoop.com/';
+        return {
+          status: 'broken' as ConnectorStatus,
+          detail: `${label} has marked the API application inactive · ${since}`,
+          live: true,
+          lastOkAt,
+          impact,
+          fixUrl: devSettings,
+          fixHint: `Reconnecting will not help — the token still refreshes, but every API call 403s because the application registration itself is inactive. Re-activate it in the ${label} developer settings.`,
+          actions: [
+            { kind: 'link', target: devSettings, label: `${label} API settings`, primary: true },
+            { ...resync, primary: false },
+          ],
+        };
+      }
+
       // A 401/403 from the API with a token that just refreshed cleanly means
       // the grant itself is the problem — re-consent, don't retry.
       const authish = /\b(401|403|unauthor|forbidden|invalid[_ ]grant|scope)\b/i.test(why);

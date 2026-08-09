@@ -57,7 +57,10 @@ export async function exchangeStravaCode(code: string): Promise<StravaTokens> {
       grant_type: 'authorization_code',
     }),
   });
-  if (!res.ok) throw new Error(`Strava token exchange failed: ${res.status}`);
+  if (!res.ok) {
+    const error = await res.text().catch(() => 'unknown');
+    throw new Error(`Strava token exchange failed: ${res.status} - ${error}`);
+  }
   return res.json();
 }
 
@@ -72,7 +75,10 @@ export async function refreshStravaToken(refreshToken: string): Promise<StravaTo
       grant_type: 'refresh_token',
     }),
   });
-  if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status}`);
+  if (!res.ok) {
+    const error = await res.text().catch(() => 'unknown');
+    throw new Error(`Strava token refresh failed: ${res.status} - ${error}`);
+  }
   return res.json();
 }
 
@@ -91,6 +97,9 @@ export async function getStravaActivities(
   const res = await fetch(`${STRAVA_API_BASE}/athlete/activities?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
+  if (!res.ok) {
+    const error = await res.text().catch(() => 'unknown');
+    throw new Error(`Strava API error: ${res.status} - ${error}`);
+  }
   return res.json();
 }
