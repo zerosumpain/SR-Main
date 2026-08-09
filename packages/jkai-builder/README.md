@@ -32,6 +32,34 @@ In production, a systemd user service at
 `~/.config/systemd/user/jkai-builder.service` runs the dist artifact under
 `Restart=always` with linger enabled.
 
+## Running a build on Codex
+
+A build whose model id starts `codex/` runs on pi's own `openai-codex`
+provider — the Codex Responses API direct, the same route Hermes uses for chat.
+It does **not** go through `packages/jkai-codex-bridge`: the bridge starts a
+fresh Codex process per turn and carries ~9,700 tokens of the Codex CLI's own
+instructions on every call, which an agent making hundreds of tool calls per
+iteration cannot absorb.
+
+That route needs **pi's own ChatGPT login on the build host**, which is separate
+from the bridge's `~/.codex/auth.json` — deliberately, since OpenAI rotates the
+refresh token on each refresh and two clients sharing one credential would
+invalidate each other. One-time, from a machine with a browser:
+
+```bash
+ssh -L 1455:127.0.0.1:1455 -t johnk@157.180.19.38 pi
+# then: /login  ->  ChatGPT Plus/Pro (Codex)
+```
+
+Without it pi exits 1 with `No API key found for openai-codex` before opening
+its JSON stream; the failure classifier names the missing login.
+
+`pi-runner` also drops a `.pi/settings.json` carrying `transport: "sse"` into
+each Codex workspace. Pi's default (`auto`) tries a WebSocket to chatgpt.com
+first and only falls back on an *error* — from the VPS it hangs instead, so
+turns either never start or never end and the idle watchdog files them as
+`stalled`. See the comment on `pinCodexTransport`.
+
 ## Probing
 
 ```bash
