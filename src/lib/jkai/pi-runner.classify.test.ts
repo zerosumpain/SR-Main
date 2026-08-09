@@ -92,4 +92,27 @@ describe('classifyFailure', () => {
       'rate_limited',
     );
   });
+
+  it('names the missing pi login instead of reporting a bare exit code', () => {
+    // Verbatim from pi 0.72.1 on the VPS with no ChatGPT login. It arrives on
+    // stderr with exit 1 and NO provider output, so without this branch the
+    // build record just said "pi exited with code 1".
+    const f = classifyFailure(
+      base({
+        exitCode: 1,
+        stderrTail:
+          'Warning: Model "gpt-5.6-terra" not found for provider "openai-codex". Using custom model id.\n' +
+          'No API key found for openai-codex.\n\nUse /login to log into a provider via OAuth or API key.',
+      }),
+    );
+    expect(f?.kind).toBe('auth_failed');
+    expect(f?.message).toMatch(/\/login/);
+    expect(f?.message).toMatch(/\.pi\/agent\/auth\.json/);
+  });
+
+  it('does not read a stale login line as a failure on a clean run', () => {
+    expect(
+      classifyFailure(base({ exitCode: 0, stderrTail: 'No API key found for openai-codex.' })),
+    ).toBeNull();
+  });
 });

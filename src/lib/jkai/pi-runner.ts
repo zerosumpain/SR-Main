@@ -8,6 +8,8 @@ import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ActionRecord, BudgetConfig, FailureEnvelope, FailureKind } from './types';
 import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
+import { coerceModelContext } from '$lib/constants/default-models';
+import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 
 const CONTAINER_NAME = 'jkai-sandbox';
@@ -67,13 +69,79 @@ export interface PiRunResult {
 
 // --- Provider resolution ---
 
-async function resolveApiKey(_provider: string): Promise<{ envVar: string; value: string }> {
-  // All providers now resolve to OpenRouter. Legacy build rows persisted with
-  // provider 'zai' (direct-z.ai era) also land here and get the OpenRouter key
-  // instead of throwing — GLM is served via OpenRouter's z-ai/* slugs.
+export interface PiInvocation {
+  /** Provider name in PI's vocabulary, for `--provider`. */
+  provider: 'openrouter' | 'openai-codex';
+  /** Model id in PI's vocabulary, for `--model`. */
+  modelId: string;
+  /** Env var to hand pi the API key in, or null when pi authenticates itself
+   *  from its own `~/.pi/agent/auth.json` (that is the Codex case). */
+  apiKeyEnv: 'OPENROUTER_API_KEY' | null;
+}
+
+/**
+ * Translate a stored build model context into the flags pi understands.
+ *
+ * Pi has its own provider registry and has never heard of our provider names.
+ * A build saved from the picker as `{provider: 'codex', modelId:
+ * 'codex/gpt-5.6-terra'}` was handed to the CLI verbatim and died on startup
+ * with `Unknown provider "codex"` — after the tool bridge had printed its own
+ * banner, so the failure read like a mid-run crash rather than a bad flag.
+ *
+ * Codex maps onto pi's first-class `openai-codex` provider, NOT our
+ * `jkai-codex-bridge`. Both can now do tool calls, but the bridge starts a
+ * fresh Codex process per turn (~10 s) and carries ~9,700 tokens of the Codex
+ * CLI's own instructions on every single call. For chat that is a rounding
+ * error; for an agent making hundreds of tool calls per iteration it is the
+ * difference between slow and unusable. Pi talks the Codex Responses API
+ * directly — the same route Hermes uses for chat, with real function tools.
+ *
+ * That route authenticates from pi's OWN ChatGPT OAuth in
+ * `~/.pi/agent/auth.json` (`pi`, then `/login`), which is a separate login
+ * from the bridge's `~/.codex/auth.json`. Deliberately so: both refresh their
+ * tokens, and OpenAI rotates the refresh token on each refresh, so sharing one
+ * credential between two clients would have them invalidate each other.
+ */
+export function piInvocation(ctx: { provider?: string | null; modelId: string }): PiInvocation {
+  const coerced = coerceModelContext({ provider: ctx.provider ?? undefined, modelId: ctx.modelId });
+  if (coerced.provider === 'codex') {
+    // Bare slug: pi wants `gpt-5.6-terra`, our ids carry a `codex/` prefix so
+    // that provider stays recoverable from a bare persisted string.
+    //
+    // Pi's bundled model catalogue lags OpenAI (0.72.1 stops at gpt-5.5), so
+    // the current 5.6 line comes back as `Model "…" not found for provider
+    // "openai-codex". Using custom model id.` — a warning, not an error: pi
+    // passes an unknown id straight through to the API, which is what we want.
+    return { provider: 'openai-codex', modelId: toCodexSlug(coerced.modelId), apiKeyEnv: null };
+  }
+  // Everything else runs on OpenRouter, including legacy rows persisted with
+  // provider 'zai' from the direct-z.ai era — coerceModelContext remaps those
+  // bare GLM ids onto z-ai/* slugs. Passing `--provider zai` through to pi
+  // (which has a zai provider of its own) while handing it an OpenRouter key
+  // would fail on a credential mismatch.
+  return { provider: 'openrouter', modelId: coerced.modelId, apiKeyEnv: 'OPENROUTER_API_KEY' };
+}
+
+/**
+ * Clamp a thinking level the chosen provider would reject.
+ *
+ * The GPT-5.6 line 400s on `reasoning_effort: minimal` (found via the bridge,
+ * PR #151). The build form offers `minimal` for every model, so without this a
+ * Codex build picked with minimal thinking fails every iteration on a
+ * validation error that says nothing about thinking levels.
+ */
+export function piThinkingLevel(provider: PiInvocation['provider'], level: string | undefined): string | undefined {
+  if (provider === 'openai-codex' && level === 'minimal') return 'low';
+  return level;
+}
+
+async function resolveApiKey(envVar: 'OPENROUTER_API_KEY'): Promise<{ envVar: string; value: string }> {
+  // Legacy build rows persisted with provider 'zai' (direct-z.ai era) also land
+  // here and get the OpenRouter key instead of throwing — GLM is served via
+  // OpenRouter's z-ai/* slugs.
   const key = await getOpenRouterApiKey();
   if (!key) throw new Error('OpenRouter API key not configured');
-  return { envVar: 'OPENROUTER_API_KEY', value: key };
+  return { envVar, value: key };
 }
 
 // --- Shell-escape helper ---
@@ -136,9 +204,11 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   } = opts;
   const deadline = deadlineRef ?? { current: Date.now() + maxWallClockMs };
 
-  const provider = (build.modelProvider ?? 'openrouter') as string;
-  const modelId = build.modelId ?? 'anthropic/claude-sonnet-4.5';
-  const { envVar, value: apiKey } = await resolveApiKey(provider);
+  const { provider, modelId, apiKeyEnv } = piInvocation({
+    provider: build.modelProvider,
+    modelId: build.modelId ?? 'anthropic/claude-sonnet-4.5',
+  });
+  const auth = apiKeyEnv ? await resolveApiKey(apiKeyEnv) : null;
 
   const piParts = [
     'pi',
@@ -163,8 +233,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   } else {
     piParts.push('--no-skills');
   }
-  if (opts.thinkingLevel) {
-    piParts.push('--thinking', opts.thinkingLevel);
+  const thinkingLevel = piThinkingLevel(provider, opts.thinkingLevel);
+  if (thinkingLevel) {
+    piParts.push('--thinking', thinkingLevel);
   }
   piParts.push('--provider', provider);
   piParts.push('--model', sh(modelId));
@@ -178,7 +249,10 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   //
   // Container-mode (legacy): docker exec -i -w workdir jkai-sandbox bash -c '<piCmd>'.
   // Workdir lives inside the container's jkai-workspace volume. Pi binary
-  // lives at /usr/bin/pi inside the container image.
+  // lives at /usr/bin/pi inside the container image. NOTE a Codex build needs
+  // pi's ChatGPT OAuth, which lives in the RUNNING USER's ~/.pi/agent/auth.json
+  // — present on the VPS build host, absent inside the sandbox image, so a
+  // container-mode Codex build fails at startup (classified below).
   let spawnCmd: string;
   let spawnArgs: string[];
   let spawnOpts: Parameters<typeof spawn>[2];
@@ -190,7 +264,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       cwd: workdir,
       env: {
         ...process.env,
-        [envVar]: apiKey,
+        ...(auth ? { [auth.envVar]: auth.value } : {}),
         PI_OFFLINE: '1',
         PI_TELEMETRY: '0',
         ...Object.fromEntries(
@@ -203,7 +277,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       'exec',
       '-i',
       '-w', workdir,
-      '-e', `${envVar}=${apiKey}`,
+      ...(auth ? ['-e', `${auth.envVar}=${auth.value}`] : []),
       '-e', 'PI_OFFLINE=1',
       '-e', 'PI_TELEMETRY=0',
     ];
@@ -601,6 +675,9 @@ function stripExtensionLogs(text: string): string {
 
 const BRIDGE_FAILURE = /\[jkai-tools\][^\n]*manifest fetch (failed|error)/i;
 
+/** Pi's own startup refusal, verbatim: `No API key found for openai-codex.` */
+const PI_MISSING_LOGIN = /^No API key found for ([\w-]+)/m;
+
 export function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
   const stderrLc = i.stderrTail.toLowerCase();
   // Classify on what the PROVIDER said, not on everything that reached stderr.
@@ -645,6 +722,24 @@ export function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
         'Check JKAI_API_URL is reachable from the builder process (it is read once at start, ' +
         'so restart the service after editing .env) and that /api/jkai/tools/manifest is ' +
         'exempted from the auth gate in hooks.server.ts.',
+      i,
+    );
+  }
+
+  // Pi refusing to start for want of a login. Read off raw stderr rather than
+  // errorMessage because pi prints this before it opens the JSON stream, so
+  // there is no provider output at all — just exit 1 and this line, which the
+  // generic branch below would report as the useless `pi exited with code 1`.
+  if (reallyFailed && PI_MISSING_LOGIN.test(i.stderrTail)) {
+    const provider = i.stderrTail.match(PI_MISSING_LOGIN)?.[1] ?? 'the provider';
+    return base(
+      'auth_failed',
+      provider === 'openai-codex'
+        ? 'Pi has no ChatGPT login, so the Codex build never started. Codex builds run on ' +
+            "pi's native openai-codex provider, which authenticates from ~/.pi/agent/auth.json — " +
+            "a separate login from the bridge's ~/.codex/auth.json. Fix it on the build host: run " +
+            '`pi`, then `/login`, and choose ChatGPT Plus/Pro (Codex).'
+        : `Pi has no credentials for ${provider} — set its API key on the build host, or pick another model.`,
       i,
     );
   }
