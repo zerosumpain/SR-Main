@@ -12,6 +12,7 @@
  * the `risk-tier` CI job refuses to auto-merge anything touching
  * `.github/protected-paths.txt`. See `$lib/jkai/git-targets`.
  */
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -55,15 +56,23 @@ export interface ChangeRequestResult {
  *                 the issue body so the original intent survives, and handed to
  *                 the agent as its directive.
  * @param labels   optional issue labels.
+ * @param conversationId
+ *                 the chat that asked for the change. Without it the build is
+ *                 invisible to `build-progress-check`, whose filter requires a
+ *                 non-null conversation_id — which is why every change-request
+ *                 build reported "no slow running builds" while four of them
+ *                 were grinding away.
  */
 export async function createChangeRequest({
   title,
   request,
   labels,
+  conversationId,
 }: {
   title: string;
   request: string;
   labels?: string[];
+  conversationId?: string;
 }): Promise<ChangeRequestResult> {
   if (!githubConfigured()) {
     throw new Error(
@@ -139,6 +148,7 @@ export async function createChangeRequest({
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       priceSnapshot,
+      ...(conversationId ? { conversationId: normaliseConversationId(conversationId) } : {}),
     } as any)
     .returning();
 

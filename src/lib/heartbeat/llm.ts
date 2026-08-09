@@ -199,6 +199,9 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
     role: 'assistant',
     content: finalReply || '(empty heartbeat reply)',
     source: 'followup',
+    // Same metadata the row carries, so the live frame and the reloaded row
+    // render identically.
+    metadata: { heartbeat: { activity: opts.activityName, kind: 'reply' } },
   });
 
   return { reply: finalReply, promptTokens, completionTokens, messageId: asstMsg.id, toolsCalled };
@@ -232,6 +235,7 @@ export async function postHeartbeatNote(opts: {
     role: 'assistant',
     content: opts.text,
     source: 'followup',
+    metadata: { heartbeat: { activity: opts.activityName, kind: 'note' } },
   });
   return { messageId: row.id };
 }

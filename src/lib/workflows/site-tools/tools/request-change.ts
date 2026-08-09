@@ -47,7 +47,10 @@ register({
     },
     required: ['title', 'request'],
   },
-  handler: async (args): Promise<ToolResult> => {
+  // Attaches a build watcher automatically, same as build_create. Without it
+  // change-request builds were the one family nothing ever reported on.
+  producesLongRunningTask: { kind: 'build', idPath: 'buildId', cadenceSeconds: 300 },
+  handler: async (args, toolCtx): Promise<ToolResult> => {
     const title = typeof args.title === 'string' ? args.title.trim() : '';
     const request = typeof args.request === 'string' ? args.request.trim() : '';
 
@@ -73,6 +76,9 @@ register({
         labels: Array.isArray(args.labels)
           ? (args.labels as unknown[]).filter((l): l is string => typeof l === 'string')
           : undefined,
+        // Link the build back to the chat that asked for it, so the
+        // build-progress watcher can see it at all.
+        conversationId: toolCtx?.conversationId,
       });
 
       return {
