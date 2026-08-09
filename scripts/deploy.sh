@@ -7,6 +7,31 @@ VPS_KEY="$HOME/.ssh/id_ed25519"
 VPS_DIR="/opt/strange-rambling-svelte"
 SERVICE="strange-rambling-svelte"
 
+# This script was already the forbidden path — running it by hand once replaced
+# production's .env with a laptop's and cost 33 hours. It is now also actively
+# destructive: production serves out of $VPS_DIR/releases/<sha>/ with
+# $VPS_DIR/build a symlink into it, so the rsync below would follow that symlink
+# and --delete its way through whatever release is live. Refuse rather than
+# explain, and let the refusal be the documentation.
+if ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "[ -L '$VPS_DIR/build' ]" 2>/dev/null; then
+  cat >&2 <<'REFUSE'
+==> REFUSING TO RUN.
+
+The VPS serves out of a release directory with build/ as a symlink into it.
+This script rsyncs over build/, which would write through that symlink and
+delete files out of the live release.
+
+Deploy by merging to master. CI builds on the VPS and flips the symlink
+atomically (scripts/ci-prebuild.sh + scripts/ci-release.sh).
+
+To roll back, point the symlink at a previous release and restart:
+  ln -sfn releases/<sha> /opt/strange-rambling-svelte/build.tmp \
+    && mv -Tf /opt/strange-rambling-svelte/build.tmp /opt/strange-rambling-svelte/build \
+    && sudo systemctl restart strange-rambling-svelte
+REFUSE
+  exit 1
+fi
+
 echo "==> Building..."
 # The default Node heap OOMs on this 8GB box (post earlyoom/zram tuning) — pin it up.
 NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=8192}" npm run build
