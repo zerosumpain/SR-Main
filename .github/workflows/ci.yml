@@ -13,9 +13,17 @@ name: CI
 #    so a runaway build is cgroup-killed instead of the kernel OOM-killer
 #    picking the production node process.
 #
-# `needs: gate` is what actually enforces the gate: SR-Main is private on
-# GitHub Free, so required status checks are unavailable (the branch-protection
-# and rulesets APIs both 403). A red gate cannot reach the deploy job regardless.
+# `needs: gate` is what enforces the gate at the workflow level: a red gate
+# cannot reach the deploy job regardless of anything configured server-side.
+#
+# The long-standing note here claimed required status checks were unavailable
+# on this plan because "the branch-protection and rulesets APIs both 403". That
+# was wrong, and worth correcting because a lot of defensive design was built on
+# it. Neither API 403s: branch-protection returns 404 ("Branch not protected")
+# and rulesets returns an empty array, which mean "none configured", not
+# "forbidden". Creating an active ruleset with a required_status_checks rule
+# against master succeeds on this repo — verified by creating one and deleting
+# it again. Only `enforcement: evaluate` is gated (that one needs Enterprise).
 
 on:
   pull_request:

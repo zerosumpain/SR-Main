@@ -40,11 +40,18 @@ Rules worth knowing before touching this:
 
 ### Merging a PR — never use `gh pr merge --auto`
 
-SR-Main is **private on GitHub Free**, so required status checks do not exist
-here: the branch-protection and rulesets APIs both 403. `--auto` therefore has
-no check to wait on and merges IMMEDIATELY, cancelling the branch's in-flight
-CI run. It looks like "merge when green" and is "merge now" (seen 2026-07-27,
-PR #44).
+`--auto` has no check to wait on unless a required status check is configured,
+so it merges IMMEDIATELY, cancelling the branch's in-flight CI run. It looks
+like "merge when green" and is "merge now" (seen 2026-07-27, PR #44).
+
+The reason given here used to be that required status checks "do not exist on
+GitHub Free — the branch-protection and rulesets APIs both 403". **That was
+wrong.** Neither API 403s: branch-protection returns 404 ("Branch not
+protected") and rulesets returns `[]`, both meaning "none configured". Creating
+an active ruleset with a `required_status_checks` rule on master succeeds here
+— verified 2026-08-09 by creating one and deleting it. Only
+`enforcement: evaluate` needs Enterprise. So `--auto` can be made to work; it
+just has nothing to wait for until a ruleset exists.
 
 Block on the conclusion and merge explicitly:
 
