@@ -229,7 +229,8 @@ const commitAndPush = async (args: Record<string, unknown>) => {
     verified: false,
     live: false,
     auditId: undefined as string | undefined,
-    verificationEvidence: 'GitHub Actions and production were not queried by this tool.',
+    status: 'not_accepted',
+    verificationEvidence: [] as string[],
   };
   const commitMessage = args.commitMessage as string;
   if (typeof commitMessage !== 'string' || commitMessage.trim().length === 0) {
@@ -279,7 +280,7 @@ const commitAndPush = async (args: Record<string, unknown>) => {
 
   lifecycle.accepted = true;
   lifecycle.applied = true;
-  lifecycle.verificationEvidence = 'Git push to origin/master was accepted. GitHub Actions and production were not queried by this tool.';
+  lifecycle.status = 'accepted_unverified';
   return { success: true, data: { ok: true, log, ...lifecycle } };
 };
 

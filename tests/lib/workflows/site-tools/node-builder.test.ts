@@ -306,10 +306,11 @@ describe('node_builder_commit_and_push', () => {
         applied: true,
         verified: false,
         live: false,
+        status: 'accepted_unverified',
+        verificationEvidence: [],
       });
       expect(data.resourceId).toEqual(expect.any(String));
       expect(data.auditId).toBe(data.resourceId);
-      expect(data.verificationEvidence).toMatch(/not queried/i);
       const remoteHead = await runProcess('git', ['--git-dir', remoteDir, 'rev-parse', 'master'], {});
       expect(remoteHead.stdout.trim()).toBe(data.resourceId);
     } finally {
@@ -333,6 +334,7 @@ describe('node_builder_commit_and_push', () => {
       replacement: 'node_builder_commit_and_push',
     });
     expect(alias.description).toMatch(/does not deploy directly/i);
+    expect(alias.handler).toBe(getTool('node_builder_commit_and_push')!.handler);
   });
 
   it('registers no node-builder implementation or description that invokes the deploy script', () => {
