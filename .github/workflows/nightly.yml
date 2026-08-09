@@ -111,8 +111,33 @@ jobs:
       # The whole suite, integration tests included. Sequential rather than
       # concurrent with the type check: nothing is waiting on this run, and
       # keeping the two apart means a failure here is unambiguous.
+      # Three of the eight integration files need REAL external credentials or a
+      # running service, not just a database — and their own skip guards do not
+      # say so:
+      #
+      #   apis/registry          gates on DATABASE_URL, but its header tells you
+      #                          to `source .env` first; it needs live API keys.
+      #   rag/pipeline           gates on DATABASE_URL, but needs embeddings,
+      #                          i.e. an OpenRouter key.
+      #   models/codex-live      guards two of its three cases on a reachable
+      #                          bridge and leaves the third unguarded; that one
+      #                          needs an OpenRouter key.
+      #
+      # This repo deliberately keeps secrets OUT of GitHub — the gate needs none,
+      # which is precisely why it can run on a disposable hosted VM. Supplying
+      # these keys here would trade that away for three tests. They belong on
+      # homeserv, where the credentials already live.
+      #
+      # Excluded by path rather than by fixing the guards because the guards are
+      # the tests' own business; the right fix is for each to skip on the thing
+      # it actually needs. Until then this list is the honest boundary of what
+      # the nightly covers.
       - name: Full test suite
-        run: npm run gate:test:full
+        run: |
+          npm run gate:test:full -- \
+            --exclude '**/apis/registry.integration.test.ts' \
+            --exclude '**/rag/pipeline.integration.test.ts' \
+            --exclude '**/models/codex-live.integration.test.ts'
 
       # The REAL adapter, unlike the gate, which stubs it. This is what catches
       # adapter-only failures — externalisation edges and packaging errors — that
