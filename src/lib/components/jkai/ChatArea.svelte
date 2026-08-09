@@ -31,6 +31,7 @@
   import VoiceRecorder from './VoiceRecorder.svelte';
   import OpenRouterModelPicker from '$lib/components/jkai/OpenRouterModelPicker.svelte';
   import { hermesModelCommand } from '$lib/jkai/hermes-model-command';
+  import { coerceModelContext } from '$lib/constants/default-models';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
@@ -1793,11 +1794,27 @@
     }
     onmodelchange?.({ provider, modelId });
 
-    // 2) Tell Hermes for this chat session via the gateway /model command. Sent
-    //    silently (no user bubble) and its confirmation reply is drained without
-    //    rendering. `loading` keeps the composer disabled until the switch turn
-    //    settles so the user's first real message can't race ahead of it.
+    // 2) Tell Hermes for this chat session via the gateway /model command.
+    //    `loading` keeps the composer disabled until the switch turn settles so
+    //    the user's first real message can't race ahead of it.
     if (!force) loading = true;
+    try {
+      await tellHermesModel(provider, modelId);
+    } finally {
+      if (!force) loading = false;
+    }
+  }
+
+  /** The conversation whose model we have already pushed to Hermes. */
+  let hermesModelAssertedFor: string | null = null;
+
+  /** Push a model choice to Hermes for this chat session via the gateway
+   *  `/model` command. Sent silently (no user bubble) and its confirmation reply
+   *  is drained without rendering.
+   *
+   *  Hermes keys the switch to the chat session and holds it in memory, so it
+   *  has to be pushed once per conversation — see `ensureHermesModel`. */
+  async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -1813,12 +1830,32 @@
           new Promise((r) => setTimeout(r, 15000)),
         ]);
       }
+      hermesModelAssertedFor = conversationId ?? null;
     } catch {
-      // The switch is already persisted; if the /model turn failed Hermes keeps
-      // its session default and pricing may be off until the next turn.
-    } finally {
-      if (!force) loading = false;
+      // The choice is already persisted site-side; if the /model turn failed
+      // Hermes keeps its own default and pricing may be off until the next turn.
     }
+  }
+
+  /** Make sure Hermes is running the model this conversation says it is.
+   *
+   *  A conversation only ever told Hermes its model when the user *changed* the
+   *  picker. One that took the chat default silently never told it anything, so
+   *  Hermes fell back to `model.default` in its own config.yaml — the UI, the
+   *  price snapshot and the cost accounting all said one model while a different
+   *  one answered (seen 2026-08-09: a conversation stamped codex/gpt-5.6-terra
+   *  was served by deepseek-v4-flash on OpenRouter).
+   *
+   *  Cheap because it runs once per conversation: the model locks after the
+   *  first message, and `switchModel` already covers the hand-picked path. */
+  async function ensureHermesModel(isFirstMessage: boolean): Promise<void> {
+    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
+    if (hermesModelAssertedFor === conversationId) return;
+    // The id decides the provider, never the stored field: `currentModel` falls
+    // back to 'openrouter' whenever the conversation row hasn't loaded, which
+    // would hand Hermes a codex/ id under the wrong provider.
+    const ctx = coerceModelContext(currentModel);
+    await tellHermesModel(ctx.provider, ctx.modelId);
   }
 
   async function send() {
@@ -1899,6 +1936,10 @@
     // meant submit left the composer full and the screen unchanged for all of
     // that — the send read as dropped. First message of a conversation only.
     await applyRouting(text, isFirstMessage);
+
+    // Routing may have switched the model (and pushed it to Hermes already); if
+    // it didn't, this conversation still has to tell Hermes what it is running.
+    await ensureHermesModel(isFirstMessage);
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
