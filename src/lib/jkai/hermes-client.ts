@@ -228,6 +228,26 @@ export class HermesClient {
     return { accepted: Boolean(body.accepted), chatId: body.chat_id };
   }
 
+  /**
+   * Liveness probe. `bootId` identifies the runtime PROCESS, not the service —
+   * it changes on every restart, which is the only way to tell "Hermes is up"
+   * from "Hermes is up again". See `ensureModelPinned`.
+   *
+   * Returns null rather than throwing: a failed probe must never block a turn.
+   */
+  async health(): Promise<{ bootId: string | null; startedAt: number | null } | null> {
+    try {
+      const resp = await fetch(`${this.config.baseUrl}/platforms/jkai/health`, {
+        signal: AbortSignal.timeout(3_000),
+      });
+      if (!resp.ok) return null;
+      const body = (await resp.json()) as { boot_id?: string; started_at?: number };
+      return { bootId: body.boot_id ?? null, startedAt: body.started_at ?? null };
+    } catch {
+      return null;
+    }
+  }
+
   async *openStream(ctx: SessionContext, opts?: { signal?: AbortSignal }): AsyncGenerator<SseFrame, void, undefined> {
     const token = this.mintToken(ctx);
     const url = new URL(`${this.config.baseUrl}/platforms/jkai/out`);

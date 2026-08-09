@@ -19,6 +19,7 @@ import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { createHermesTextAccumulator, frameBelongsToTurn, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
+import { ensureModelPinned } from '$lib/jkai/hermes-model-pin';
 import {
   subscribeToolSteps,
   registerToolConfirmer,
@@ -713,6 +714,33 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     // adapter's skill selection): 'canvas_chat' → jkai-canvas, 'skill' → the
     // pinned jkai-* domain (carried in kindId), 'manual' → jkai-general routing.
     try {
+      // Re-assert the chat's model if Hermes has restarted since we last set
+      // it. The `/model` command is pushed once, when the user picks it, and a
+      // rebuilt agent falls back to config.yaml's default — so a restart
+      // silently moves the conversation onto a different model while every
+      // surface still reports the chosen one. No-op unless the boot id changed.
+      if (conversationId) {
+        try {
+          const [conv] = await db
+            .select({ provider: conversations.modelProvider, modelId: conversations.modelId })
+            .from(conversations)
+            .where(eq(conversations.id, conversationId))
+            .limit(1);
+          if (conv?.modelId) {
+            await ensureModelPinned({
+              client,
+              chatId,
+              sessionId,
+              kind,
+              kindId,
+              model: coerceModelContext({ provider: conv.provider, modelId: conv.modelId }),
+            });
+          }
+        } catch (err) {
+          console.error('[hermes-chat] model re-pin check failed:', err);
+        }
+      }
+
       await client.sendMessage({
         chatId,
         text: message,
