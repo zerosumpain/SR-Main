@@ -6,6 +6,7 @@ import { conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getModelDefaultPrice, costFromUsage } from '../cost';
 import { getTaskStateProvider, type TaskStateSnapshot } from '../state-providers';
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 
 /**
  * Pull the current state of the watched task using its kind-registered
@@ -39,6 +40,10 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
     return { outcome: 'error', summary: 'targeted action missing prompt' };
   }
 
+  // Rows written before registration normalised the id still carry Hermes'
+  // `chat_<uuid>` form. Normalise on read so they resolve instead of erroring
+  // on every tick forever.
+  const conversationId = normaliseConversationId(action.conversationId);
   const [conv] = await db
     .select({
       modelProvider: conversations.modelProvider,
@@ -46,10 +51,14 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
       priceSnapshot: conversations.priceSnapshot,
     })
     .from(conversations)
-    .where(eq(conversations.id, action.conversationId))
+    .where(eq(conversations.id, conversationId))
     .limit(1);
   if (!conv) {
-    return { outcome: 'error', summary: 'conversation not found — pausing action' };
+    // Say what actually happened. The old text claimed the action was being
+    // paused; nothing paused it, and the same string covered both a bad id
+    // and a deleted conversation. The engine's failure budget does the
+    // pausing now — see audit.ts.
+    return { outcome: 'error', summary: `conversation ${conversationId} not found` };
   }
 
   const goal = action.goal?.trim() || '(no goal set — continue indefinitely until removed by orchestrator)';
@@ -69,7 +78,7 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
     `Be terse. ≤80 words for status updates, ≤30 words for DONE replies.`;
 
   const turn = await runHeartbeatTurn({
-    conversationId: action.conversationId,
+    conversationId,
     userText: `[heartbeat:${action.name}] ${action.prompt}`,
     activityName: action.name,
     instruction,
@@ -94,7 +103,7 @@ export async function runTargetedAction(action: HeartbeatAction): Promise<Activi
       model: `${conv.modelProvider}:${conv.modelId}`,
       runNumber: (action.totalRuns ?? 0) + 1,
     },
-    conversationId: action.conversationId,
+    conversationId,
     costUsd,
     markDone,
   };

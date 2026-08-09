@@ -1,11 +1,12 @@
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
 import { notifySubscribers } from '$lib/workflows/chat/followup-queue';
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 
 export interface RunHeartbeatTurnOpts {
   conversationId: string;
@@ -44,8 +45,12 @@ export interface HeartbeatTurnResult {
 const MAX_TOOL_ROUNDS = 3;
 
 export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
-  const [conv] = await db.select().from(conversations).where(eq(conversations.id, opts.conversationId)).limit(1);
-  if (!conv) throw new Error(`conversation ${opts.conversationId} not found`);
+  // Belt and braces: callers should hand us a bare uuid, but a `chat_`-prefixed
+  // id here reads as "conversation not found" and writes here are rejected
+  // outright by orchestrator_chats' FK. Normalise so no caller can reintroduce it.
+  const conversationId = normaliseConversationId(opts.conversationId);
+  const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conv) throw new Error(`conversation ${conversationId} not found`);
 
   const ctx = opts.model ?? (
     conv.modelProvider && conv.modelId
@@ -54,12 +59,18 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   );
   const { client, model } = await getLLMClient(ctx);
 
-  const history = await db
-    .select()
-    .from(orchestratorChats)
-    .where(eq(orchestratorChats.conversationId, opts.conversationId))
-    .orderBy(asc(orchestratorChats.createdAt))
-    .limit(40);
+  // Newest 40, restored to chronological order. This was `asc(...).limit(40)`,
+  // i.e. the OLDEST 40 — so on any thread longer than the window the heartbeat
+  // reasoned over the opening of the conversation and none of the recent work,
+  // which is exactly the long autonomous session it exists to report on.
+  const history = (
+    await db
+      .select()
+      .from(orchestratorChats)
+      .where(eq(orchestratorChats.conversationId, conversationId))
+      .orderBy(desc(orchestratorChats.createdAt))
+      .limit(40)
+  ).reverse();
 
   const messages: Array<Record<string, unknown>> = [
     {
@@ -82,7 +93,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   const [userMsg] = await db
     .insert(orchestratorChats)
     .values({
-      conversationId: opts.conversationId,
+      conversationId: conversationId,
       role: 'user',
       content: opts.userText,
       metadata: { heartbeat: { activity: opts.activityName, kind: 'user-trigger' } },
@@ -147,7 +158,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
         try { parsed = JSON.parse(tc.function?.arguments ?? '{}'); } catch { /* keep empty */ }
         let result: unknown = { error: 'tool not registered' };
         if (isRegisteredTool(fnName)) {
-          result = await executeSiteTool(fnName, parsed, { emit: () => {}, conversationId: opts.conversationId });
+          result = await executeSiteTool(fnName, parsed, { emit: () => {}, conversationId: conversationId });
         }
         messages.push({
           role: 'tool',
@@ -165,7 +176,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   const [asstMsg] = await db
     .insert(orchestratorChats)
     .values({
-      conversationId: opts.conversationId,
+      conversationId: conversationId,
       role: 'assistant',
       content: finalReply || '(empty heartbeat reply)',
       metadata: {
@@ -184,7 +195,7 @@ export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<Hear
   // sees the progress note in real time. Without this the message only
   // appears on next page reload, which is what the user means by "the pulse
   // didn't keep me posted with the build progress".
-  notifySubscribers(opts.conversationId, {
+  notifySubscribers(conversationId, {
     role: 'assistant',
     content: finalReply || '(empty heartbeat reply)',
     source: 'followup',
@@ -203,17 +214,21 @@ export async function postHeartbeatNote(opts: {
   text: string;
   activityName: string;
 }): Promise<{ messageId: string }> {
+  // Same normalisation as runHeartbeatTurn: a `chat_`-prefixed id here is an
+  // FK violation on insert, and the SSE registry is keyed on the bare uuid too,
+  // so the note would miss both the durable and the live channel.
+  const conversationId = normaliseConversationId(opts.conversationId);
   const [row] = await db
     .insert(orchestratorChats)
     .values({
-      conversationId: opts.conversationId,
+      conversationId,
       role: 'assistant',
       content: opts.text,
       metadata: { heartbeat: { activity: opts.activityName, kind: 'note' } },
     })
     .returning({ id: orchestratorChats.id });
   // Live SSE push (same reason as the LLM-reply path above).
-  notifySubscribers(opts.conversationId, {
+  notifySubscribers(conversationId, {
     role: 'assistant',
     content: opts.text,
     source: 'followup',

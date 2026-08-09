@@ -18,6 +18,8 @@
 //                        message; the LLM will respond as if the user wrote it
 
 import { register } from '../registry-internal';
+import { requiredString, optionalString } from '../tool-args';
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { db } from '$lib/db';
 import { scheduledCallbacks } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -54,9 +56,15 @@ register({
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
-    const text = String(args.text).slice(0, 4000);
-    const name = String(args.name);
-    const conversationId = String(args.conversation_id);
+    const textArg = requiredString(args, 'text');
+    if (!textArg.ok) return { success: false, error: textArg.error };
+    const nameArg = requiredString(args, 'name');
+    if (!nameArg.ok) return { success: false, error: nameArg.error };
+    const convArg = requiredString(args, 'conversation_id');
+    if (!convArg.ok) return { success: false, error: convArg.error };
+    const text = textArg.value.slice(0, 4000);
+    const name = nameArg.value;
+    const conversationId = normaliseConversationId(convArg.value);
     const notifyWhatsApp = !!args.notify_whatsapp;
 
     return upsertCallback({
@@ -91,7 +99,9 @@ register({
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
-    const toolName = String(args.tool_name);
+    const toolNameArg = requiredString(args, 'tool_name');
+    if (!toolNameArg.ok) return { success: false, error: toolNameArg.error };
+    const toolName = toolNameArg.value;
     // Gate-bypass guard: a deferred call fires with no LLM round and no
     // confirmation UI, so it must not be allowed to run a destructive tool
     // behind the confirmation gate. Refuse to schedule those — the caller
@@ -105,8 +115,11 @@ register({
       };
     }
     const toolArgs = (args.args as Record<string, unknown>) ?? {};
-    const conversationId = (args.conversation_id as string) ?? null;
-    const name = String(args.name);
+    const rawConv = optionalString(args, 'conversation_id');
+    const conversationId = rawConv ? normaliseConversationId(rawConv) : null;
+    const nameArg = requiredString(args, 'name');
+    if (!nameArg.ok) return { success: false, error: nameArg.error };
+    const name = nameArg.value;
 
     return upsertCallback({
       name,
@@ -139,9 +152,15 @@ register({
   handler: async (args) => {
     const fireAt = parseFireAt(args);
     if (!fireAt) return { success: false, error: 'must provide fire_at_iso or in_seconds' };
-    const message = String(args.message);
-    const name = String(args.name);
-    const conversationId = String(args.conversation_id);
+    const messageArg = requiredString(args, 'message');
+    if (!messageArg.ok) return { success: false, error: messageArg.error };
+    const nameArg = requiredString(args, 'name');
+    if (!nameArg.ok) return { success: false, error: nameArg.error };
+    const convArg = requiredString(args, 'conversation_id');
+    if (!convArg.ok) return { success: false, error: convArg.error };
+    const message = messageArg.value;
+    const name = nameArg.value;
+    const conversationId = normaliseConversationId(convArg.value);
 
     return upsertCallback({
       name,
@@ -165,7 +184,9 @@ register({
   category: 'System',
   toolset: 'schedule',
   handler: async (args) => {
-    const name = String(args.name);
+    const nameArg = requiredString(args, 'name');
+    if (!nameArg.ok) return { success: false, error: nameArg.error };
+    const name = nameArg.value;
     const [row] = await db
       .update(scheduledCallbacks)
       .set({ status: 'cancelled', updatedAt: new Date() })

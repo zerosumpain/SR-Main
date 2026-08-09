@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -15,6 +16,14 @@ const ENGINE_TICK_MS = 30_000;
 let engineTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
 
+/**
+ * Actions currently mid-run. `runOne` is fired without awaiting so one slow
+ * action can't hold up the tick, which means an action taking longer than
+ * ENGINE_TICK_MS would otherwise be re-entered by the next tick — its
+ * next_run_at only advances once it finishes. No second replica required.
+ */
+const inFlight = new Set<string>();
+
 export async function startHeartbeatEngine(): Promise<void> {
   if (started) return;
   started = true;
@@ -24,6 +33,20 @@ export async function startHeartbeatEngine(): Promise<void> {
   } catch (err) {
     console.error('[heartbeat] seed failed:', err);
   }
+
+  // Prod-only gate, same shape as the self-improvement engine's. Nothing
+  // prevents two engines sharing a database — runTick selects due rows and
+  // fires them with no lock or lease — and today only homeserv's DATABASE_URL
+  // pointing at its own Postgres keeps them apart. That isolation is a
+  // config accident, not a design.
+  const host = os.hostname();
+  if (host === 'homeserv' && process.env.HEARTBEAT_ALLOW_DEV !== '1') {
+    console.log(
+      '[heartbeat] host is homeserv — ticker disabled (seeds still ran). Set HEARTBEAT_ALLOW_DEV=1 to enable locally.',
+    );
+    return;
+  }
+
   // One tick now so anything overdue runs without waiting 30s.
   void runTick().catch((e) => console.error('[heartbeat] initial tick failed:', e));
   engineTimer = setInterval(() => {
@@ -48,7 +71,11 @@ async function runTick(): Promise<void> {
   for (const row of rows) {
     const dueAt = row.nextRunAt ?? new Date(0);
     if (dueAt.getTime() > now.getTime()) continue;
-    void runOne(row, now).catch((e) => console.error(`[heartbeat] action ${row.name} crashed:`, e));
+    if (inFlight.has(row.id)) continue;
+    inFlight.add(row.id);
+    void runOne(row, now)
+      .catch((e) => console.error(`[heartbeat] action ${row.name} crashed:`, e))
+      .finally(() => inFlight.delete(row.id));
   }
 }
 
@@ -57,6 +84,8 @@ async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
   const nextRunAt = new Date(now.getTime() + row.cadenceSeconds * 1000);
 
   if (!withinActiveHours(row, now)) {
+    // No `action` — a skip is neither a success nor a failure, so it must not
+    // reset the failure budget of an action that is genuinely broken.
     await recordPulse({
       actionId: row.id,
       actionName: row.name,
@@ -97,6 +126,7 @@ async function runOne(row: HeartbeatAction, now: Date): Promise<void> {
     result,
     durationMs: Date.now() - startedAt,
     nextRunAt,
+    action: { consecutiveFailures: row.consecutiveFailures, cadenceSeconds: row.cadenceSeconds },
   });
 }
 

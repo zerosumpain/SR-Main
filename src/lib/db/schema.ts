@@ -2207,6 +2207,19 @@ export const heartbeatActions = pgTable('heartbeat_actions', {
   lastRunAt: timestamp('last_run_at', { withTimezone: true }),
   nextRunAt: timestamp('next_run_at', { withTimezone: true }),
   totalRuns: integer('total_runs').notNull().default(0),
+  /**
+   * Error pulses since the last non-error one. Reset to 0 on any success.
+   * Same column name and semantics as `jkai_builds.consecutive_failures`.
+   *
+   * Without this the engine had no failure budget at all: an action whose
+   * conversation had been deleted logged 22,127 consecutive `conversation not
+   * found` errors over nine days at full 30s cadence, and was only stopped by
+   * a human noticing. Past `HEARTBEAT_BACKOFF_AFTER` the engine widens the
+   * interval; past `HEARTBEAT_PAUSE_AFTER` it flips status to 'paused'.
+   */
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  /** Summary of the most recent error, so a paused action can explain itself. */
+  lastError: text('last_error'),
   totalCostUsd: numeric('total_cost_usd', { precision: 12, scale: 6 }).notNull().default('0'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
