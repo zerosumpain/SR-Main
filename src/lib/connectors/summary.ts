@@ -42,10 +42,15 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
       .from(gmailAccounts)
       .where(ne(gmailAccounts.status, 'active'))
       .catch(() => []),
-    // Only strava/whoop. `apple_health` also has a row here and it is
-    // permanently months stale — it is written by a pull-sync job that no
-    // longer runs, while the webhook keeps delivering. Reading it would put a
-    // false alarm on the landing page every single day.
+    // Whoop only. Two services with a row here are deliberately excluded:
+    //
+    // `apple_health` is permanently months stale — it is written by a pull-sync
+    // job that no longer runs, while the webhook keeps delivering.
+    //
+    // `strava` is dormant: Strava restricted its API to paid subscribers, so its
+    // sync fails every hour and always will. It is not a fault to be fixed, and
+    // a banner naming it every day is exactly how a banner stops being read.
+    // See DORMANT in ./probes.ts — that is the switch to flip if it comes back.
     db
       .select({
         service: healthSyncState.service,
@@ -53,7 +58,7 @@ export async function syncAttentionSummary(): Promise<SyncAttentionSummary> {
         lastOk: healthSyncState.lastSuccessfulSyncAt,
       })
       .from(healthSyncState)
-      .where(inArray(healthSyncState.service, ['strava', 'whoop']))
+      .where(inArray(healthSyncState.service, ['whoop']))
       .catch(() => []),
     db
       .select({ latest: sql<number | null>`max(${appleHealthMetrics.date})` })

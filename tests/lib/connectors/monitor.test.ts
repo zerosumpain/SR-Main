@@ -97,4 +97,28 @@ describe('what the landing banner counts', () => {
     const reports = [r({ key: 'integration:apple-calendar', tier: 'account', status: 'unconfigured' })];
     expect(needsResync(reports)).toEqual([]);
   });
+
+  it('ignores dormant accounts — parked on purpose is not waiting to be resynced', () => {
+    const reports = [r({ key: 'strava', tier: 'account', status: 'dormant' })];
+    expect(needsResync(reports)).toEqual([]);
+  });
+});
+
+describe('dormant connectors', () => {
+  it('never wakes anyone — Strava cannot be fixed, so it is not an alert', () => {
+    expect(buildAlert([r({ key: 'strava', label: 'Strava', status: 'dormant' })])).toBeNull();
+  });
+
+  it('is not counted as broken', () => {
+    expect(brokenOf([r({ key: 'strava', status: 'dormant' })])).toEqual([]);
+  });
+
+  it('sorts below everything else — there is nothing to act on', () => {
+    const sorted = sortReports([
+      r({ key: 'strava', label: 'Strava', status: 'dormant' }),
+      r({ key: 'whoop', label: 'Whoop', status: 'ok' }),
+      r({ key: 'gmail', label: 'Gmail', status: 'broken' }),
+    ]);
+    expect(sorted.map((x) => x.key)).toEqual(['gmail', 'whoop', 'strava']);
+  });
 });
