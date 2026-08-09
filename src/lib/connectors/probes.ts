@@ -218,6 +218,21 @@ async function probeHaSensors(): Promise<ConnectorReport> {
 }
 
 // ---------------------------------------------------------------------------
+// Connectors that are parked on purpose. Strava moved its API behind a paid
+// subscription, which this account does not have, so no token and no amount of
+// reconnecting will ever make it work again. The integration stays wired up —
+// the activities already stored still render on /health, and un-parking it is
+// deleting one line — but it must not present as a fault anywhere: not on the
+// dashboard, not in the 06:45 alert, and not on the landing banner.
+//
+// Probing a dormant connector is pointless, so we do not: the row is built
+// from this constant alone, without a token refresh or a network call.
+// ---------------------------------------------------------------------------
+const DORMANT: Partial<Record<string, string>> = {
+  strava: 'parked — Strava restricted its API to paid subscribers',
+};
+
+// ---------------------------------------------------------------------------
 // Strava / Whoop — getValidToken performs a real refresh when expired.
 //
 // A valid token is NOT the same as a working sync, and conflating the two is
@@ -232,6 +247,17 @@ async function probeOAuthHealth(service: 'strava' | 'whoop'): Promise<ConnectorR
     service === 'strava'
       ? 'No new activities on /health, and training-load figures drift out of date'
       : 'No new sleep, recovery or strain — readiness and recovery-debt go stale';
+
+  const parked = DORMANT[service];
+  if (parked) {
+    return guard(service, label, 'Health', 'account', async () => ({
+      status: 'dormant' as ConnectorStatus,
+      detail: parked,
+      live: false,
+      fixUrl: '/health',
+      fixHint: 'Activities synced before it closed are still on /health',
+    }));
+  }
 
   return guard(service, label, 'Health', 'account', async () => {
     const { getValidToken } = await import('$lib/health/tokens');

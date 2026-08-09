@@ -63,6 +63,7 @@
     degraded: 'degraded',
     broken: 'broken',
     unconfigured: 'not set up',
+    dormant: 'dormant',
   };
 
   const headline = $derived(
@@ -239,6 +240,7 @@
   .cn-st-degraded { color: var(--warn, #b0892a); }
   .cn-st-broken { color: var(--error, #c44); }
   .cn-st-unconfigured { color: var(--text-ghost); }
+  .cn-st-dormant { color: var(--text-ghost); }
 
   @media (max-width: 620px) {
     .cn-row { grid-template-columns: 10px 1fr; }

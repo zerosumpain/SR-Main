@@ -16,7 +16,14 @@ export type ConnectorStatus =
   /** Confirmed not working — needs a fix. */
   | 'broken'
   /** No credentials configured. Not a failure; just absent. */
-  | 'unconfigured';
+  | 'unconfigured'
+  /**
+   * Deliberately parked. The integration is still wired up and its stored data
+   * still renders, but it cannot work and nobody intends to fix it — so it must
+   * never count as broken. Distinct from `unconfigured`, which means nothing was
+   * ever set up; a dormant connector is fully configured and still shut.
+   */
+  | 'dormant';
 
 /**
  * `account` — something you signed into, whose authorisation can lapse: it can
@@ -75,6 +82,9 @@ export const STATUS_RANK: Record<ConnectorStatus, number> = {
   degraded: 1,
   unconfigured: 2,
   ok: 3,
+  // Last: there is nothing to do about a parked connector, so it should never
+  // be the first thing read on the dashboard.
+  dormant: 4,
 };
 
 export function sortReports(reports: ConnectorReport[]): ConnectorReport[] {
