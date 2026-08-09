@@ -1,10 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ensureModelPinned, resetModelPinCache } from './hermes-model-pin';
 
+/** Typed on the request so `mock.calls[0][0]` is reachable. */
 function makeClient(bootId: string | null) {
   return {
     health: vi.fn(async () => (bootId === null ? null : { bootId, startedAt: 1 })),
-    sendMessage: vi.fn(async () => ({ accepted: true, chatId: 'chat_1' })),
+    sendMessage: vi.fn(async (_req: { chatId: string; text: string }) => ({
+      accepted: true,
+      chatId: 'chat_1',
+    })),
   };
 }
 
