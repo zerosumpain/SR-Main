@@ -27,7 +27,15 @@ describe('gmail crypto', () => {
   it('rejects tampered ciphertext', () => {
     const enc = encryptToken('hello');
     const parts = enc.split(':');
-    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + '00'].join(':');
+    // Flip the final byte to a DIFFERENT value rather than to a fixed '00'.
+    // Overwriting with '00' is a no-op whenever the ciphertext already ends in
+    // 00, so the "tampered" string equals the original, decryption succeeds and
+    // nothing throws — a 1-in-256 flake that turned master red on run
+    // 31339999303, ten minutes after a green run of the identical code.
+    const last = parts[2].slice(-2);
+    const flipped = last.toLowerCase() === '00' ? '01' : '00';
+    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + flipped].join(':');
+    expect(tampered).not.toBe(enc);
     expect(() => decryptToken(tampered)).toThrow();
   });
 });
