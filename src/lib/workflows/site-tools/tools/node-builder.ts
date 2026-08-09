@@ -212,7 +212,7 @@ register({
   name: 'node_builder_commit_and_deploy',
   destructive: true,
   description:
-    'GATED: commits codegen-managed paths with the supplied message, pushes to origin/master, runs scripts/deploy.sh, and verifies the deployed site responds. REFUSES if any staged file is outside the codegen path allowlist. Only call after explicit user approval in the current turn.',
+    'DEPRECATED NAME — CI-safe commit-and-push path. Commits codegen-managed paths with the supplied message and pushes to origin/master, which triggers GitHub Actions deployment. It never deploys or reports live locally. REFUSES if any staged file is outside the codegen path allowlist. Only call after explicit user approval in the current turn.',
   parameters: {
     type: 'object',
     properties: {
@@ -269,38 +269,42 @@ register({
     }
     let log = commit.stdout;
 
-    // 5. Push (unless test stubbed).
+    // 5. Push (unless test stubbed). GitHub Actions is the only deployment path.
     if (process.env.NODE_BUILDER_SKIP_PUSH !== '1') {
       const push = await runProcess('git', ['push', 'origin', 'master'], { timeoutMs: 60_000 });
       log += `\n${push.stdout}\n${push.stderr}`;
-      if (!push.ok) return { success: true, data: { ok: false, log: `${log}\npush failed` } };
-    }
-
-    // 6. Deploy.
-    const deployCmd = process.env.NODE_BUILDER_DEPLOY_CMD ?? './scripts/deploy.sh';
-    const deploy = await runProcess(deployCmd, [], { timeoutMs: 5 * 60_000 });
-    log += `\n${deploy.stdout}\n${deploy.stderr}`;
-    if (!deploy.ok) return { success: true, data: { ok: false, log } };
-
-    // 7. Live verification (skipped if NODE_BUILDER_VERIFY_URL is empty string).
-    const verifyUrl = process.env.NODE_BUILDER_VERIFY_URL ?? 'https://strangeramblings.com';
-    if (verifyUrl) {
-      const curl = await runProcess(
-        'curl',
-        ['-sS', '-o', '/dev/null', '-w', '%{http_code}', verifyUrl],
-        { timeoutMs: 30_000 },
-      );
-      log += `\nverify ${verifyUrl} → ${curl.stdout}`;
-      if (curl.stdout.trim() !== '200') {
-        return { success: true, data: { ok: false, deployUrl: verifyUrl, log } };
+      if (!push.ok) {
+        return {
+          success: true,
+          data: {
+            ok: false,
+            accepted: true,
+            applied: false,
+            verified: false,
+            live: false,
+            environment: 'production',
+            resourceType: 'git_commit',
+            changed: true,
+            log: `${log}\npush failed`,
+          },
+        };
       }
     }
 
+    // A successful push merely asks GitHub Actions to deploy. Do not infer CI
+    // success or production liveness without independent evidence.
     return {
       success: true,
       data: {
         ok: true,
-        deployUrl: verifyUrl || undefined,
+        accepted: true,
+        applied: true,
+        verified: false,
+        live: false,
+        environment: 'production',
+        resourceType: 'git_commit',
+        changed: true,
+        verification: { source: 'github_actions', status: 'pending' },
         log,
       },
     };

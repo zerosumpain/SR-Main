@@ -1,4 +1,4 @@
-import { register } from '../registry-internal';
+import { createAsyncOperationHandle, register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
@@ -158,7 +158,21 @@ register({
     if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
     const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
     await orchestrator.startBuild(build.id);
-    return { success: true, data: build };
+    return {
+      success: true,
+      data: {
+        ...build,
+        operation: createAsyncOperationHandle({
+          operationId: build.id,
+          kind: 'build',
+          status: 'running',
+          statusTool: 'build_inspect',
+          terminalStates: ['completed', 'failed', 'cancelled'],
+          resourceId: build.id,
+          environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+        }),
+      },
+    };
   },
 });
 
@@ -519,7 +533,22 @@ register({
   handler: async (args) => {
     const { orchestrator } = await import('$lib/jkai/orchestrator');
     await orchestrator.continueBuild(args.id as string, args.instruction as string);
-    return { success: true, data: { id: args.id, instruction: args.instruction } };
+    return {
+      success: true,
+      data: {
+        id: args.id,
+        instruction: args.instruction,
+        operation: createAsyncOperationHandle({
+          operationId: args.id as string,
+          kind: 'build',
+          status: 'running',
+          statusTool: 'build_inspect',
+          terminalStates: ['completed', 'failed', 'cancelled'],
+          resourceId: args.id as string,
+          environment: process.env.NODE_ENV === 'production' ? 'production' : 'development',
+        }),
+      },
+    };
   },
 });
 

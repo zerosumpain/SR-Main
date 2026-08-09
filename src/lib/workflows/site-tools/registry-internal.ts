@@ -1,7 +1,27 @@
 // Internal registry state — separated to avoid circular initialization with domain modules.
 // Domain modules import `register` from here. The public API in registry.ts re-exports everything.
 
+export interface AsyncOperationHandle {
+  operationId: string;
+  kind: string;
+  status: string;
+  statusTool: string;
+  statusAction?: string;
+  cancelTool?: string;
+  cancelAction?: string;
+  terminalStates: string[];
+  resourceId?: string;
+  environment: string;
+}
+
 export type ToolResult = { success: boolean; data?: unknown; error?: string };
+
+/** Create the additive handle returned by tools that start background work. */
+export function createAsyncOperationHandle(
+  handle: AsyncOperationHandle,
+): AsyncOperationHandle {
+  return handle;
+}
 
 /**
  * Context passed to long-running tool handlers so they can emit user-visible
