@@ -17,7 +17,10 @@
     "gate": "npm run gate:public-routes && npm run gate:font-sizes && npm run gate:check && npm run gate:test && npm run gate:build",
     "gate:public-routes": "node scripts/check-public-routes.mjs",
     "gate:font-sizes": "node scripts/check-font-sizes.mjs",
-    "gate:check": "svelte-kit sync && NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --threshold error",
+    "gate:check": "npm run gate:sync && npm run gate:check:only",
+    "gate:sync": "svelte-kit sync",
+    "gate:check:only": "NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json --threshold error",
+    "gate:concurrent": "./scripts/gate-concurrent.sh",
     "gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'",
     "gate:build": "NODE_OPTIONS=--max-old-space-size=6144 vite build",
     "build:codex-bridge": "node packages/jkai-codex-bridge/build.mjs"

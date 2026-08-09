@@ -70,10 +70,16 @@ else
 fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  # Random heredoc delimiter, not a fixed one. `matched` is built from PR-
+  # supplied filenames, and a file literally named EOF_MATCHED would close the
+  # block early and let the rest of the name be parsed as further outputs —
+  # including a forged `tier`. That matters more than it looks: the tier decides
+  # auto-merge eligibility today, and is intended to gate more later.
+  DELIM="EOF_$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   {
     echo "tier=$TIER"
-    echo "matched<<EOF_MATCHED"
+    echo "matched<<$DELIM"
     echo "$matched"
-    echo "EOF_MATCHED"
+    echo "$DELIM"
   } >> "$GITHUB_OUTPUT"
 fi

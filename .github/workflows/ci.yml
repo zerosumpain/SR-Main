@@ -38,26 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
-    # Parts of the suite reach a real Postgres through the import chain (e.g.
-    # tests/lib/integrations/credentials.test.ts), so the gate needs a database.
-    # A throwaway service container keeps it hermetic — the gate never touches
-    # the production DB. pgvector, not plain postgres: the schema declares
-    # vector() columns and drizzle-kit push fails without the extension.
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: app
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: strange_rambling
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     env:
       DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
       # stealth-scrape refuses to run anywhere but homeserv (a datacenter IP
@@ -66,8 +46,37 @@ jobs:
       # `runScrape`, so nothing is actually scraped — the flag only stops the
       # host guard short-circuiting before the mock is reached.
       SCRAPER_ALLOW_NON_HOMESERV: '1'
+      # Must exist at `svelte-kit sync` time, which BOTH the type check and the
+      # build trigger: SvelteKit generates `$env/static/public` from the
+      # environment, so without it the module has no members and
+      # jkai/+layout.svelte fails to type-check ("has no exported member"). It
+      # is the ONLY statically-imported env var. A placeholder is correct here —
+      # the gate never serves push notifications, and the real value is inlined
+      # by the deploy job below.
+      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
 
     steps:
+      # Postgres starts FIRST and in the BACKGROUND, before the checkout.
+      #
+      # It used to be a `services:` block, which GitHub initialises before the
+      # first step — measured at 23s of dead time, serialised ahead of the
+      # checkout and `npm ci` that do not need it. Started here, the image pull
+      # and boot overlap the ~29s of install that follows, and the wait happens
+      # where the database is actually first needed.
+      #
+      # pgvector, not plain postgres: the schema declares vector() columns and
+      # drizzle-kit push fails without the extension. Throwaway either way — the
+      # gate never touches the production DB.
+      - name: Start Postgres in the background
+        run: |
+          nohup docker run --rm --name ci-postgres \
+            -e POSTGRES_USER=app \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=strange_rambling \
+            -p 5432:5432 \
+            pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
+          echo "postgres pulling/booting in the background; waited on before the schema push"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -77,25 +86,53 @@ jobs:
 
       - run: npm ci
 
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 90); do
+            if docker exec ci-postgres pg_isready -U app -q 2>/dev/null; then
+              echo "postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Postgres did not become ready within 90s"
+          docker logs ci-postgres 2>&1 | tail -40 || true
+          cat /tmp/ci-postgres.log 2>/dev/null | tail -40 || true
+          exit 1
+
+      # The database is here for the schema push, not for the tests. Exactly one
+      # test file reaches a real Postgres (tests/lib/integrations/credentials.test.ts)
+      # and — contrary to what this comment used to claim — it has NO skip guard:
+      # its beforeEach deletes rows unconditionally, so it hard-fails without a
+      # database rather than skipping. Anyone reasoning about removing the
+      # container needs both facts.
       - name: Prepare test database
         run: |
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
-      # svelte-check (errors only) + vitest. Both pin a 4GB heap internally —
-      # svelte-check OOMs under Node's default.
+      # Cheap and near-instant (~0.4s for the pair), so they run first and fail
+      # fast before anything expensive starts.
+      - name: Lint gates
+        run: npm run gate:public-routes && npm run gate:font-sizes
+
+      # svelte-check and vitest, concurrently. See scripts/gate-concurrent.sh for
+      # why the exit-code handling in there is written the long way round.
+      - name: Type check + tests
+        run: ./scripts/gate-concurrent.sh
+
+      # The build is a PROOF here, not an artifact — the gate deletes it. On a
+      # master push that proof is redundant: the VPS rebuilds the identical tree
+      # minutes later in the deploy job, and its Build step runs BEFORE
+      # ci-deploy.sh, whose first write to production is an rsync. A broken build
+      # therefore fails the deploy with production untouched.
       #
-      # PUBLIC_VAPID_PUBLIC_KEY must exist at `svelte-kit sync` time: SvelteKit
-      # generates `$env/static/public` from the environment, so without it the
-      # module has no members and jkai/+layout.svelte fails to type-check
-      # ("has no exported member"). It is the ONLY statically-imported env var.
-      # A placeholder is correct here — the gate only type-checks and runs unit
-      # tests, it never serves push notifications. The real value is inlined by
-      # the deploy job below.
-      - name: npm run gate
-        run: npm run gate
-        env:
-          PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+      # The guard is `!= push`, deliberately, so that a workflow_dispatch re-run
+      # still builds. Writing it as `== pull_request` would leave a manual
+      # dispatch with no build check from EITHER job.
+      - name: Build
+        if: github.event_name != 'push'
+        run: npm run gate:build
 
   deploy:
     name: Build + deploy (VPS)
@@ -163,14 +200,24 @@ jobs:
       # Deliberately never fails. A high tier is a normal, expected outcome
       # (any change to auth or schema is high) — it means "a human looks at
       # this", not "this is broken". Failing here would block legitimate work.
+      #
+      # `matched` is a list of filenames taken from the PR, i.e. attacker-
+      # controlled text, and Actions expands `${{ }}` into the script body
+      # BEFORE bash parses it. Interpolated inline (as this step used to be), a
+      # PR adding a file whose name contains a quote or a backtick gets shell
+      # execution on the runner. Passing both values through `env:` and
+      # referencing them as ordinary variables removes the expansion entirely.
       - name: Summarise
+        env:
+          TIER: ${{ steps.classify.outputs.tier }}
+          MATCHED: ${{ steps.classify.outputs.matched }}
         run: |
           {
-            echo "## Risk tier: \`${{ steps.classify.outputs.tier }}\`"
-            if [ "${{ steps.classify.outputs.tier }}" = "high" ]; then
+            echo "## Risk tier: \`$TIER\`"
+            if [ "$TIER" = "high" ]; then
               echo "Touches protected paths — **will not auto-merge**, needs a human."
               echo '```'
-              echo "${{ steps.classify.outputs.matched }}"
+              echo "$MATCHED"
               echo '```'
             else
               echo "No protected paths touched — eligible for auto-merge from an \`agent/\` branch."
