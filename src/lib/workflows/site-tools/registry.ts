@@ -135,11 +135,41 @@ export async function executeTool(
 ): Promise<ToolResult> {
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
+  let result: ToolResult;
   try {
-    return await tool.handler(args, ctx);
+    result = await tool.handler(args, ctx);
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
+
+  // Attach a durable watcher to anything that spawns a long-running task.
+  //
+  // This hook used to live in general-chat.ts, which the Hermes cutover made
+  // dormant — so every `producesLongRunningTask` declaration went inert and
+  // the last auto-bound watcher dates from May. The model was told by the tool
+  // catalogue that watchers attach themselves, so it stopped registering them;
+  // when it did register one by hand it had no task binding and could only
+  // guess at progress. Hooking the shared execution boundary instead of one
+  // engine's loop means both paths get it.
+  if (tool.producesLongRunningTask && ctx?.conversationId && result?.success) {
+    try {
+      const { autoRegisterFromToolResult } = await import('$lib/heartbeat/auto-register');
+      const outcome = await autoRegisterFromToolResult({
+        conversationId: ctx.conversationId,
+        toolName: name,
+        produces: tool.producesLongRunningTask,
+        resultData: result.data,
+      });
+      if (!outcome.registered) {
+        console.warn(`[heartbeat-auto] skipped ${name}: ${outcome.reason}`);
+      }
+    } catch (err) {
+      // A watcher is a nicety; never fail the tool call over it.
+      console.error(`[heartbeat-auto] failed for ${name}:`, err);
+    }
+  }
+
+  return result;
 }
 
 /** Compact system prompt section — lists toolsets, not individual tools */

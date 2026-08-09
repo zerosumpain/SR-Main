@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classify } from './chat-continuation';
+import { classify, beatGate } from './chat-continuation';
 
 describe('chat-continuation classify', () => {
   it('flags streaming status interleaves as in_progress', () => {
@@ -25,5 +25,37 @@ describe('chat-continuation classify', () => {
   it("doesn't mistake punctuation-rich completions for in_progress", () => {
     // Ends with a period, no streaming pattern → not in_progress.
     expect(classify("Done! The file is at /home/john/foo.html — open it whenever.")).not.toBe('in_progress');
+  });
+});
+
+describe('chat-continuation beatGate', () => {
+  const MAX = 6;
+  const gate = (beats: number, ageMin: number) =>
+    beatGate({ beats, ageMs: ageMin * 60_000, maxConsecutiveBeats: MAX });
+
+  it('acts freely when the thread ends on a real message', () => {
+    expect(gate(0, 3)).toBe('act');
+  });
+
+  it('re-beats an unanswered thread instead of stopping at one', () => {
+    // The regression: the handler used to refuse outright once its own note
+    // was the newest message, so it posted exactly once per user turn and then
+    // went silent — during precisely the long runs it exists to report on.
+    expect(gate(1, 30)).toBe('act');
+    expect(gate(2, 30)).toBe('act');
+  });
+
+  it('widens the interval with each consecutive beat', () => {
+    expect(gate(1, 2)).toBe('backoff');
+    expect(gate(1, 4)).toBe('act');
+    expect(gate(2, 9)).toBe('backoff');
+    expect(gate(2, 11)).toBe('act');
+    expect(gate(3, 19)).toBe('backoff');
+    expect(gate(3, 21)).toBe('act');
+  });
+
+  it('still goes quiet on a thread nobody answers', () => {
+    expect(gate(MAX, 999)).toBe('capped');
+    expect(gate(MAX + 3, 999)).toBe('capped');
   });
 });

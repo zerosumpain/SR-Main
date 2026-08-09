@@ -1,3 +1,4 @@
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { register } from '../registry-internal';
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
@@ -154,7 +155,9 @@ register({
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
     };
-    if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
+    // Bare uuid, not Hermes' `chat_<uuid>` — build-progress-check posts to
+    // orchestrator_chats, whose FK rejects the prefixed form outright.
+    if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
     if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
     const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
     await orchestrator.startBuild(build.id);
@@ -707,7 +710,9 @@ register({
           kind: 'static',
         },
       };
-      if (toolCtx?.conversationId) insertValues.conversationId = toolCtx.conversationId;
+      // Bare uuid, not Hermes' `chat_<uuid>` — build-progress-check posts to
+    // orchestrator_chats, whose FK rejects the prefixed form outright.
+    if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
       const [inserted] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
       build = inserted;
     }

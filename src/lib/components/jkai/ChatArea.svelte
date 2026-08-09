@@ -790,6 +790,18 @@
     return { kind: hb.kind, activity: hb.activity || 'heartbeat' };
   }
 
+  /** Progress from a task watch, as opposed to a "still there?" nudge.
+   *
+   *  The 2026-07-27 collapse was aimed at chat-continuation, whose notes repeat
+   *  near-verbatim and contributed nothing to the dialogue. A task watch is the
+   *  opposite: it only speaks when the thing it watches has actually changed,
+   *  and it is the only signal a long background run produces. Collapsing that
+   *  into a hover chip is what made an hour of autonomous work read as silence. */
+  function isTaskProgress(m: { metadata?: unknown }): boolean {
+    const info = heartbeatInfo(m);
+    return !!info && info.activity !== 'chat-continuation';
+  }
+
   // Heartbeat output is collapsed to ONE marker for the whole session, pinned in
   // the thread header — not to a marker per contiguous run sitting in the flow of
   // the conversation (John, 2026-07-27).
@@ -904,6 +916,11 @@
           role: data.role || 'assistant',
           content: data.content,
           source: data.source || 'followup',
+          // Carry the row's metadata so the message keeps its identity across a
+          // reload. Without it a heartbeat note arrived as an ordinary assistant
+          // bubble and then turned into a status line on refresh, once the
+          // metadata-bearing row came back from the DB.
+          metadata: data.metadata ?? undefined,
         };
 
         // Status updates are mid-conversation — insert just before the active
@@ -2251,9 +2268,16 @@
         {#each messages as msg, msgIndex (msg.id)}
           {#if isHeartbeatCheckIn(msg)}
             <!-- Synthetic heartbeat check-in poke — not shown in the thread. -->
+          {:else if isTaskProgress(msg)}
+            <!-- Task-watch progress: a slim status line in the flow. Repeated
+                 nudges still collapse into the header marker below; this is the
+                 one heartbeat output that has something new to say. -->
+            <div class="flex justify-start mb-3">
+              <div class="hb-progress-msg">{msg.content}</div>
+            </div>
           {:else if heartbeatInfo(msg)}
-            <!-- Heartbeat output draws nothing in the thread — the session's
-                 single marker in the thread header carries all of it. -->
+            <!-- Nudges draw nothing in the thread — the session's single marker
+                 in the thread header carries all of them (John, 2026-07-27). -->
           {:else if msg.isProgress}
             <!-- Live delegate_task workers — self-hides when there are none, and
                  renders above both the tool-progress box and the typing state. -->
@@ -3909,6 +3933,19 @@
   .status-update-msg .status-update-label {
     font-style: normal;
     margin-bottom: 1px;
+  }
+
+  /* Between-turn progress from a task watch. Same slim treatment as a mid-task
+     status note, in the quieter ink — it is machinery reporting in, not the
+     assistant speaking. */
+  .hb-progress-msg {
+    max-width: 85%;
+    padding: 2px 0 2px 10px;
+    color: var(--text-tertiary, var(--text-secondary));
+    border-left: 2px solid color-mix(in srgb, var(--text-secondary) 35%, transparent);
+    font-family: var(--font-mono, monospace);
+    font-size: var(--fs-label);
+    line-height: 1.5;
   }
 
   /* Composer send + palette trigger. Send is the one solid-accent control on

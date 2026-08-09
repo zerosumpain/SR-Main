@@ -2,6 +2,7 @@ import { db } from '$lib/db';
 import { heartbeatActions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getTaskStateProvider } from './state-providers';
+import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import type { ProducesLongRunningTask } from '$lib/workflows/site-tools/registry-internal';
 
 /**
@@ -31,14 +32,19 @@ export async function autoRegisterFromToolResult(opts: {
     return { registered: false, reason: `idPath '${opts.produces.idPath}' did not resolve to a string` };
   }
 
+  // Strip Hermes' `chat_` prefix here rather than at each call site. Wiring
+  // this hook up without it would spawn a 30s watcher per build that errors
+  // forever — the exact failure this whole change exists to end.
+  const conversationId = normaliseConversationId(opts.conversationId);
+
   const cadenceSeconds = opts.produces.cadenceSeconds ?? 30;
   const name = `watch-${opts.produces.kind}-${taskId.slice(0, 8)}`;
   const goal =
     opts.produces.goal ??
-    `Keep the user informed about this ${opts.produces.kind} every ${cadenceSeconds}s with a one-line status. When the task reaches a terminal state, summarise and reply DONE: <one-sentence summary>.`;
+    `Keep the user informed about this ${opts.produces.kind}. Retires itself when the task reaches a terminal state.`;
   const prompt =
     opts.produces.prompt ??
-    `Heartbeat watch for ${opts.produces.kind} ${taskId}. Live state is injected above by the engine — read it, then post one short status line (≤25 words) describing what's happening right now or has just changed. If the live state shows a terminal status, reply with "DONE: <summary>".`;
+    `${opts.produces.kind} ${taskId.slice(0, 8)}`;
 
   const now = new Date();
   const nextRunAt = new Date(now.getTime() + cadenceSeconds * 1000);
@@ -54,7 +60,7 @@ export async function autoRegisterFromToolResult(opts: {
         prompt,
         cadenceSeconds,
         status: 'active',
-        conversationId: opts.conversationId,
+        conversationId,
         source: 'system',
         config,
         nextRunAt,
@@ -74,7 +80,7 @@ export async function autoRegisterFromToolResult(opts: {
     prompt,
     cadenceSeconds,
     status: 'active',
-    conversationId: opts.conversationId,
+    conversationId,
     source: 'system',
     config,
     nextRunAt,

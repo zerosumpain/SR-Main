@@ -44,6 +44,14 @@ export interface ConversationMessageFrame {
   role: string;
   content: string;
   source: string;
+  /**
+   * The row's `metadata`, so a message keeps its identity across a reload.
+   * Without it a heartbeat note arrived over SSE as a plain assistant bubble
+   * and then, on refresh, the metadata-bearing row from the DB was classified
+   * as heartbeat output and rendered somewhere else entirely — the same
+   * message changing shape depending on when you looked at it.
+   */
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Intel extraction changed state for this thread. `done` carries how many

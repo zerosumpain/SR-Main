@@ -49,14 +49,49 @@ interface CCConfig {
   maxConversationsPerTick?: number;
   /** Cap for total LLM continuations per conversation per 24h. */
   maxLlmContinuationsPer24h?: number;
+  /** How many beats in a row before we stop nudging an unanswered thread. */
+  maxConsecutiveBeats?: number;
 }
 
 const DEFAULTS: Required<CCConfig> = {
   maxStaleMinutes: 25,
   perConversationCooldownMinutes: 5,
   maxConversationsPerTick: 5,
-  maxLlmContinuationsPer24h: 6,
+  // Was 6, which one long self-improvement session exhausted by lunchtime —
+  // after that every beat was the cap-nudge, so the thread went quiet exactly
+  // when the work was longest. The escalating ladder below is the real brake.
+  maxLlmContinuationsPer24h: 12,
+  maxConsecutiveBeats: 6,
 };
+
+/**
+ * Minutes to wait before beat N+1, indexed by how many beats already trail the
+ * conversation. Previously there was no ladder: the handler refused outright to
+ * act when the newest message was one of its own, so it could post exactly once
+ * per user turn and then went silent until the user typed again. A mechanism
+ * whose whole purpose is to speak when the user is silent was gated on the user
+ * speaking.
+ */
+const BEAT_BACKOFF_MINUTES = [0, 3, 10, 20, 30, 45];
+
+/**
+ * Whether a conversation trailed by `beats` of our own output, whose newest
+ * message is `ageMs` old, may be beaten into again.
+ *
+ * Pure so the ladder is testable — the behaviour it replaces (an unconditional
+ * skip) had no test, which is how "posts once per user turn, then never again"
+ * survived as long as it did.
+ */
+export function beatGate(opts: {
+  beats: number;
+  ageMs: number;
+  maxConsecutiveBeats: number;
+}): 'act' | 'backoff' | 'capped' {
+  if (opts.beats <= 0) return 'act';
+  if (opts.beats >= opts.maxConsecutiveBeats) return 'capped';
+  const waitMs = (BEAT_BACKOFF_MINUTES[opts.beats] ?? 45) * 60_000;
+  return opts.ageMs < waitMs ? 'backoff' : 'act';
+}
 
 /** A 'silent' pause this short almost always means the user is reading the
  *  assistant's reply. The user-trigger LLM call is expensive (~1500 prompt
@@ -118,9 +153,21 @@ export const chatContinuation: ActivityHandler = {
 
     type Latest = (typeof recent)[number];
     const latestByConv = new Map<string, Latest>();
+    // How many of our own beats trail each conversation, newest-first. Drives
+    // the backoff ladder; `recent` is already ordered desc.
+    const consecutiveBeatsByConv = new Map<string, number>();
+    const chainClosed = new Set<string>();
     for (const r of recent) {
       if (!r.convId) continue;
       if (!latestByConv.has(r.convId)) latestByConv.set(r.convId, r);
+      if (!chainClosed.has(r.convId)) {
+        const m = r.metadata as { heartbeat?: { activity?: string } } | null;
+        if (m?.heartbeat?.activity === NAME) {
+          consecutiveBeatsByConv.set(r.convId, (consecutiveBeatsByConv.get(r.convId) ?? 0) + 1);
+        } else {
+          chainClosed.add(r.convId);
+        }
+      }
     }
     const latest = Array.from(latestByConv.values()).filter((r) => r.role === 'assistant');
 
@@ -178,13 +225,27 @@ export const chatContinuation: ActivityHandler = {
       if (!row.convId) continue;
       const convId = row.convId;
       const ageMs = now - new Date(row.createdAt).getTime();
-      if (ageMs > maxStaleMs) { skippedReasons.tooStale = (skippedReasons.tooStale ?? 0) + 1; continue; }
+      const beats = consecutiveBeatsByConv.get(convId) ?? 0;
+      // A conversation we are actively beating into is not stale — each beat
+      // is itself the newest message, so the plain 25-minute ceiling would
+      // fire the moment the ladder widened past it.
+      const staleCeilingMs = beats > 0 ? Math.max(maxStaleMs, 2 * 60 * 60_000) : maxStaleMs;
+      if (ageMs > staleCeilingMs) { skippedReasons.tooStale = (skippedReasons.tooStale ?? 0) + 1; continue; }
       if (ageMs < minStaleMs) { skippedReasons.tooFresh = (skippedReasons.tooFresh ?? 0) + 1; continue; }
       if (activeJobConvIds.has(convId)) { skippedReasons.activeJob = (skippedReasons.activeJob ?? 0) + 1; continue; }
       if (recentlyPulsed.has(convId)) { skippedReasons.cooldown = (skippedReasons.cooldown ?? 0) + 1; continue; }
-      // Skip if the latest message is itself a heartbeat reply — avoid loops.
-      const meta = row.metadata as { heartbeat?: { activity?: string } } | null;
-      if (meta?.heartbeat?.activity === NAME) { skippedReasons.lastWasHeartbeat = (skippedReasons.lastWasHeartbeat ?? 0) + 1; continue; }
+      // The latest message being one of our own beats used to end the matter
+      // permanently. Now it just widens the interval, and we stop after
+      // maxConsecutiveBeats so a dead thread still goes quiet.
+      const gate = beatGate({ beats, ageMs, maxConsecutiveBeats: cfg.maxConsecutiveBeats });
+      if (gate === 'capped') {
+        skippedReasons.beatCapReached = (skippedReasons.beatCapReached ?? 0) + 1;
+        continue;
+      }
+      if (gate === 'backoff') {
+        skippedReasons.beatBackoff = (skippedReasons.beatBackoff ?? 0) + 1;
+        continue;
+      }
 
       const cls = classify(row.content);
       // Silent pauses need a longer reading window than question/blocked
