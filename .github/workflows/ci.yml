@@ -85,11 +85,19 @@ jobs:
             pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
           echo "postgres pulling/booting in the background; waited on before the schema push"
 
-      # Full history: the level classifier and the risk classifier both diff
-      # against a base, and a depth-1 checkout has nothing to diff against.
+      # Enough history to diff against a base, and no more. `fetch-depth: 0`
+      # would be the obvious choice and is the wrong one: a full clone costs
+      # ~10-20s on EVERY run, to enable a shortcut that fires on 3% of them.
+      # That is roughly break-even, which is not worth a new moving part.
+      #
+      # A small depth is sufficient because both classifiers only ever need the
+      # immediate base. On a pull_request the checked-out ref is the merge
+      # commit, whose FIRST PARENT is the base branch tip; on a push it is the
+      # new master tip, whose first parent is the previous one. `HEAD^` is the
+      # base in both cases, so neither classifier needs origin/master at all.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 5
 
       # The blast-radius axis. See scripts/gate-level.sh for why this is a
       # second axis rather than a third value on the risk tier.
@@ -103,12 +111,7 @@ jobs:
       - name: Classify gate level
         id: level
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="origin/${{ github.base_ref }}"
-          else
-            BASE="HEAD^"
-          fi
-          ./scripts/gate-level.sh "$BASE" | tee /tmp/level.txt
+          ./scripts/gate-level.sh HEAD^ | tee /tmp/level.txt
           {
             echo "### Gate level: \`$(sed -n 's/^level=//p' /tmp/level.txt)\`"
             echo ""
