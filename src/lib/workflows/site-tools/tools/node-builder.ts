@@ -208,101 +208,101 @@ register({
   },
 });
 
+const commitAndPushParameters = {
+  type: 'object' as const,
+  properties: {
+    commitMessage: {
+      type: 'string',
+      description: 'One-line conventional commit message (e.g. "feat(nodes): add apple_calendar node").',
+    },
+  },
+  required: ['commitMessage'],
+};
+
+const commitAndPush = async (args: Record<string, unknown>) => {
+  const lifecycle = {
+    environment: 'production',
+    resourceType: 'git_commit',
+    resourceId: undefined as string | undefined,
+    accepted: false,
+    applied: false,
+    verified: false,
+    live: false,
+    auditId: undefined as string | undefined,
+    verificationEvidence: 'GitHub Actions and production were not queried by this tool.',
+  };
+  const commitMessage = args.commitMessage as string;
+  if (typeof commitMessage !== 'string' || commitMessage.trim().length === 0) {
+    return { success: false, error: 'commitMessage is required and must be a non-empty string', data: lifecycle };
+  }
+
+  const status = await runProcess('git', ['status', '--porcelain'], {});
+  if (!status.ok) return { success: false, error: `git status failed: ${status.stderr}`, data: lifecycle };
+
+  const changedPaths = status.stdout
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .map((line) => line.slice(3));
+
+  if (changedPaths.length === 0) {
+    return { success: false, error: 'nothing to commit — working tree is clean', data: lifecycle };
+  }
+
+  const offenders = changedPaths.filter((p) => !isPathAllowed(p));
+  if (offenders.length > 0) {
+    return {
+      success: false,
+      error: `refusing to commit — these paths are outside the node-builder allowlist: ${offenders.join(', ')}`,
+      data: lifecycle,
+    };
+  }
+
+  const stage = await runProcess('git', ['add', ...changedPaths], {});
+  if (!stage.ok) return { success: false, error: `git add failed: ${stage.stderr}`, data: lifecycle };
+
+  const commit = await runProcess('git', ['commit', '-m', commitMessage], {});
+  if (!commit.ok) {
+    return { success: false, error: `git commit failed: ${commit.stderr || commit.stdout}`, data: lifecycle };
+  }
+  let log = commit.stdout;
+
+  const revision = await runProcess('git', ['rev-parse', 'HEAD'], {});
+  if (revision.ok) {
+    lifecycle.resourceId = revision.stdout.trim();
+    lifecycle.auditId = lifecycle.resourceId;
+  }
+
+  const push = await runProcess('git', ['push', 'origin', 'master'], { timeoutMs: 60_000 });
+  log += `\n${push.stdout}\n${push.stderr}`;
+  if (!push.ok) return { success: true, data: { ok: false, log, ...lifecycle } };
+
+  lifecycle.accepted = true;
+  lifecycle.applied = true;
+  lifecycle.verificationEvidence = 'Git push to origin/master was accepted. GitHub Actions and production were not queried by this tool.';
+  return { success: true, data: { ok: true, log, ...lifecycle } };
+};
+
+register({
+  name: 'node_builder_commit_and_push',
+  destructive: true,
+  description:
+    'GATED: commits codegen-managed paths with the supplied message and pushes to origin/master for GitHub Actions to handle. Does not deploy directly or verify CI or production. REFUSES if any staged file is outside the codegen path allowlist. Only call after explicit user approval in the current turn.',
+  parameters: commitAndPushParameters,
+  category: 'Node Builder',
+  toolset: 'node-builder',
+  handler: commitAndPush,
+});
+
 register({
   name: 'node_builder_commit_and_deploy',
   destructive: true,
+  deprecated: true,
+  replacement: 'node_builder_commit_and_push',
   description:
-    'GATED: commits codegen-managed paths with the supplied message, pushes to origin/master, runs scripts/deploy.sh, and verifies the deployed site responds. REFUSES if any staged file is outside the codegen path allowlist. Only call after explicit user approval in the current turn.',
-  parameters: {
-    type: 'object',
-    properties: {
-      commitMessage: {
-        type: 'string',
-        description: 'One-line conventional commit message (e.g. "feat(nodes): add apple_calendar node").',
-      },
-    },
-    required: ['commitMessage'],
-  },
+    'DEPRECATED compatibility alias for node_builder_commit_and_push. Commits codegen-managed paths and pushes to origin/master for GitHub Actions; it does not deploy directly or verify CI or production.',
+  parameters: commitAndPushParameters,
   category: 'Node Builder',
   toolset: 'node-builder',
-  handler: async (args) => {
-    const commitMessage = args.commitMessage as string;
-    if (typeof commitMessage !== 'string' || commitMessage.trim().length === 0) {
-      return { success: false, error: 'commitMessage is required and must be a non-empty string' };
-    }
-
-    // 1. Inspect changes.
-    const status = await runProcess('git', ['status', '--porcelain'], {});
-    if (!status.ok) return { success: false, error: `git status failed: ${status.stderr}` };
-
-    const allLines = status.stdout
-      .split('\n')
-      .map((line) => line.trimEnd())
-      .filter((line) => line.length > 0);
-
-    // Every change (tracked or untracked) must pass the allowlist check.
-    const changedPaths = allLines
-      .map((line) => line.slice(3));
-
-    // "nothing to commit" if there are no changes at all.
-    if (changedPaths.length === 0) {
-      return { success: false, error: 'nothing to commit — working tree is clean' };
-    }
-
-    // 2. Enforce allowlist.
-    const offenders = changedPaths.filter((p) => !isPathAllowed(p));
-    if (offenders.length > 0) {
-      return {
-        success: false,
-        error: `refusing to commit — these paths are outside the node-builder allowlist: ${offenders.join(', ')}`,
-      };
-    }
-
-    // 3. Stage the already-validated changed paths.
-    const stage = await runProcess('git', ['add', ...changedPaths], {});
-    if (!stage.ok) return { success: false, error: `git add failed: ${stage.stderr}` };
-
-    // 4. Commit.
-    const commit = await runProcess('git', ['commit', '-m', commitMessage], {});
-    if (!commit.ok) {
-      return { success: false, error: `git commit failed: ${commit.stderr || commit.stdout}` };
-    }
-    let log = commit.stdout;
-
-    // 5. Push (unless test stubbed).
-    if (process.env.NODE_BUILDER_SKIP_PUSH !== '1') {
-      const push = await runProcess('git', ['push', 'origin', 'master'], { timeoutMs: 60_000 });
-      log += `\n${push.stdout}\n${push.stderr}`;
-      if (!push.ok) return { success: true, data: { ok: false, log: `${log}\npush failed` } };
-    }
-
-    // 6. Deploy.
-    const deployCmd = process.env.NODE_BUILDER_DEPLOY_CMD ?? './scripts/deploy.sh';
-    const deploy = await runProcess(deployCmd, [], { timeoutMs: 5 * 60_000 });
-    log += `\n${deploy.stdout}\n${deploy.stderr}`;
-    if (!deploy.ok) return { success: true, data: { ok: false, log } };
-
-    // 7. Live verification (skipped if NODE_BUILDER_VERIFY_URL is empty string).
-    const verifyUrl = process.env.NODE_BUILDER_VERIFY_URL ?? 'https://strangeramblings.com';
-    if (verifyUrl) {
-      const curl = await runProcess(
-        'curl',
-        ['-sS', '-o', '/dev/null', '-w', '%{http_code}', verifyUrl],
-        { timeoutMs: 30_000 },
-      );
-      log += `\nverify ${verifyUrl} → ${curl.stdout}`;
-      if (curl.stdout.trim() !== '200') {
-        return { success: true, data: { ok: false, deployUrl: verifyUrl, log } };
-      }
-    }
-
-    return {
-      success: true,
-      data: {
-        ok: true,
-        deployUrl: verifyUrl || undefined,
-        log,
-      },
-    };
-  },
+  handler: commitAndPush,
 });

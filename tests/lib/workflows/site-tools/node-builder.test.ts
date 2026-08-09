@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { runProcess } from '$lib/workflows/site-tools/tools/node-builder-shared';
@@ -250,7 +250,7 @@ describe('node_builder_write_files', () => {
   });
 });
 
-describe('node_builder_commit_and_deploy', () => {
+describe('node_builder_commit_and_push', () => {
   let originalCwd: string;
   let repoDir: string;
 
@@ -275,75 +275,74 @@ describe('node_builder_commit_and_deploy', () => {
   it('refuses if any changed file is outside the allowlist', async () => {
     writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
     writeFileSync(path.join(repoDir, 'src/unrelated.ts'), 'export {};\n', 'utf8');
-    const tool = getTool('node_builder_commit_and_deploy')!;
+    const tool = getTool('node_builder_commit_and_push')!;
     const result = await tool.handler({ commitMessage: 'feat: x' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('src/unrelated.ts');
   });
 
   it('refuses if the working tree has nothing to commit', async () => {
-    const tool = getTool('node_builder_commit_and_deploy')!;
+    const tool = getTool('node_builder_commit_and_push')!;
     const result = await tool.handler({ commitMessage: 'feat: x' });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/nothing|clean/i);
   });
 
-  it('happy path: stages allowlist files, commits, push+deploy invoked, returns ok', async () => {
+  it('commits and pushes without claiming CI verification or a live deployment', async () => {
     writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
-    const stubDir = mkdtempSync(path.join(tmpdir(), 'nb-cad-stub-'));
-    const stub = path.join(stubDir, 'fake-deploy.sh');
-    writeFileSync(stub, '#!/bin/sh\necho "deploy ok"\n', 'utf8');
-    chmodSync(stub, 0o755);
-    process.env.NODE_BUILDER_DEPLOY_CMD = stub;
-    process.env.NODE_BUILDER_SKIP_PUSH = '1';
-    process.env.NODE_BUILDER_VERIFY_URL = '';
+    const remoteDir = mkdtempSync(path.join(tmpdir(), 'nb-push-remote-'));
     try {
-      const tool = getTool('node_builder_commit_and_deploy')!;
+      await runProcess('git', ['init', '--bare', '-q', remoteDir], {});
+      await runProcess('git', ['remote', 'add', 'origin', remoteDir], {});
+      const tool = getTool('node_builder_commit_and_push')!;
       const result = await tool.handler({ commitMessage: 'feat(test): a' });
       expect(result.success).toBe(true);
-      const data = result.data as { ok: boolean; log: string };
-      expect(data.ok).toBe(true);
-      expect(data.log).toContain('deploy ok');
-      const log = await runProcess('git', ['log', '--oneline', '-1'], {});
-      expect(log.stdout).toContain('feat(test): a');
+      const data = result.data as Record<string, unknown>;
+      expect(data).toMatchObject({
+        ok: true,
+        environment: 'production',
+        resourceType: 'git_commit',
+        accepted: true,
+        applied: true,
+        verified: false,
+        live: false,
+      });
+      expect(data.resourceId).toEqual(expect.any(String));
+      expect(data.auditId).toBe(data.resourceId);
+      expect(data.verificationEvidence).toMatch(/not queried/i);
+      const remoteHead = await runProcess('git', ['--git-dir', remoteDir, 'rev-parse', 'master'], {});
+      expect(remoteHead.stdout.trim()).toBe(data.resourceId);
     } finally {
-      delete process.env.NODE_BUILDER_DEPLOY_CMD;
-      delete process.env.NODE_BUILDER_SKIP_PUSH;
-      delete process.env.NODE_BUILDER_VERIFY_URL;
-      rmSync(stubDir, { recursive: true, force: true });
-    }
-  });
-
-  it('bubbles up deploy-script failure', async () => {
-    writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
-    const stubDir = mkdtempSync(path.join(tmpdir(), 'nb-cad-stub-'));
-    const stub = path.join(stubDir, 'fake-deploy-fail.sh');
-    writeFileSync(stub, '#!/bin/sh\necho "deploy broke" >&2\nexit 2\n', 'utf8');
-    chmodSync(stub, 0o755);
-    process.env.NODE_BUILDER_DEPLOY_CMD = stub;
-    process.env.NODE_BUILDER_SKIP_PUSH = '1';
-    process.env.NODE_BUILDER_VERIFY_URL = '';
-    try {
-      const tool = getTool('node_builder_commit_and_deploy')!;
-      const result = await tool.handler({ commitMessage: 'feat(test): b' });
-      expect(result.success).toBe(true);
-      const data = result.data as { ok: boolean; log: string };
-      expect(data.ok).toBe(false);
-      expect(data.log).toMatch(/deploy.*broke|exit 2|deploy/i);
-    } finally {
-      delete process.env.NODE_BUILDER_DEPLOY_CMD;
-      delete process.env.NODE_BUILDER_SKIP_PUSH;
-      delete process.env.NODE_BUILDER_VERIFY_URL;
-      rmSync(stubDir, { recursive: true, force: true });
+      rmSync(remoteDir, { recursive: true, force: true });
     }
   });
 
   it('refuses untracked files at repo root (no carve-out)', async () => {
     writeFileSync(path.join(repoDir, 'src/lib/workflows/index.ts'), 'export const a = 1;\n', 'utf8');
     writeFileSync(path.join(repoDir, 'evil.sh'), '#!/bin/sh\nrm -rf /\n', 'utf8');
-    const tool = getTool('node_builder_commit_and_deploy')!;
+    const tool = getTool('node_builder_commit_and_push')!;
     const result = await tool.handler({ commitMessage: 'feat: x' });
     expect(result.success).toBe(false);
     expect(result.error).toContain('evil.sh');
+  });
+
+  it('keeps the former deploy name as a deprecated push-only compatibility alias', () => {
+    const alias = getTool('node_builder_commit_and_deploy')!;
+    expect(alias).toMatchObject({
+      deprecated: true,
+      replacement: 'node_builder_commit_and_push',
+    });
+    expect(alias.description).toMatch(/does not deploy directly/i);
+  });
+
+  it('registers no node-builder implementation or description that invokes the deploy script', () => {
+    const source = readFileSync(
+      path.join(originalCwd, 'src/lib/workflows/site-tools/tools/node-builder.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/scripts\/deploy\.sh/);
+    for (const name of ['node_builder_commit_and_push', 'node_builder_commit_and_deploy']) {
+      expect(getTool(name)!.description).not.toMatch(/scripts\/deploy\.sh/);
+    }
   });
 });

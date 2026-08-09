@@ -66,6 +66,10 @@ export interface ToolDefinition {
    * live (Hermes) path can gate too. Omit for read-only / low-stakes tools.
    */
   destructive?: boolean;
+  /** Signals a compatibility-only tool name; callers should use `replacement`. */
+  deprecated?: boolean;
+  /** Canonical tool name replacing a deprecated compatibility alias. */
+  replacement?: string;
   handler: (
     args: Record<string, unknown>,
     ctx?: ToolExecContext,
