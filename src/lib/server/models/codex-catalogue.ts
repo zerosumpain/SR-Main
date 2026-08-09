@@ -33,6 +33,8 @@
  * the picker as though it were measured. Null renders as "—".
  */
 
+import { isSubscriptionModelId } from '$lib/jkai/usage-meter';
+
 /** Reasoning effort levels the Codex SDK accepts (`ThreadOptions.modelReasoningEffort`). */
 export const CODEX_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh'] as const;
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORTS)[number];
@@ -98,8 +100,10 @@ export function toCodexModelId(slug: string): string {
   return slug.startsWith('codex/') ? slug : `codex/${slug}`;
 }
 
+/** Delegates so the rule has one home: the header and the usage meter need the
+ *  same test from the browser, and `$lib/server/*` cannot cross that boundary. */
 export function isCodexModelId(modelId: string): boolean {
-  return modelId.startsWith('codex/');
+  return isSubscriptionModelId(modelId);
 }
 
 /** Strip the `codex/` prefix back to the slug the Codex CLI expects. */

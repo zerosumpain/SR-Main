@@ -1,5 +1,6 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import PromoteModal from './PromoteModal.svelte';
 
   type Build = {
     id: string;
@@ -12,6 +13,9 @@
     publishedSlug: string | null;
     planStatus: string | null;
     serveConfig: any;
+    cardTitle: string | null;
+    cardBlurb: string | null;
+    cardTag: string | null;
     origin: 'manual' | 'hermes' | string | null;
     createdAt: string | Date;
   };
@@ -167,10 +171,36 @@
     }
   }
 
-  async function publishOne(b: Build) {
-    const result = await callAction(b.id, `/api/jkai/builds/${b.id}/publish`, 'Published', { refresh: true });
-    if (result?.ok && result.url) {
-      window.open(result.url, '_blank', 'noopener');
+  /** The build whose promote/card dialog is open. */
+  let promoting = $state<Build | null>(null);
+
+  function openPromote(b: Build) {
+    openMenuId = null;
+    promoting = b;
+  }
+
+  /** Promote the selection. Curating a card is one build's worth of writing, so
+   *  this opens the dialog for the single selected build rather than pretending
+   *  a batch could share one blurb. */
+  function promoteSelected() {
+    if (selected.size !== 1) return;
+    const id = Array.from(selected)[0];
+    const b = builds.find((x) => x.id === id);
+    if (b) openPromote(b);
+  }
+
+  async function afterPromote(result: { slug: string; url: string }) {
+    showToast('ok', `Promoted → /projects/${result.slug}/`);
+    selected = new Set();
+    try {
+      const r = await fetch('/api/jkai/builds');
+      if (r.ok) {
+        const list = (await r.json()) as Build[];
+        const map = new Map(list.map((b) => [b.id, b]));
+        builds = builds.map((b) => map.get(b.id) ?? b);
+      }
+    } catch {
+      // The write succeeded; a failed refresh only means stale rows on screen.
     }
   }
 
@@ -292,6 +322,17 @@
         </button>
         <span class="dim">{selected.size} selected</span>
         <span class="spacer"></span>
+        <button
+          class="link"
+          type="button"
+          onclick={promoteSelected}
+          disabled={bulkBusy || selected.size !== 1}
+          title={selected.size === 1
+            ? 'Promote this build to a project'
+            : 'Select exactly one build — a project card is written per build'}
+        >
+          Promote
+        </button>
         <button class="link danger" type="button" onclick={bulkDelete} disabled={bulkBusy}>
           {bulkBusy ? 'Deleting…' : `Delete ${selected.size}`}
         </button>
@@ -307,7 +348,12 @@
           {@const canRestart = b.status === 'failed'}
           {@const canStop = b.status === 'running' || b.status === 'paused'}
           {@const canCancelQueue = b.status === 'queued'}
-          {@const canPublish = b.serveConfig && !isPublished}
+          <!-- Promotion used to be gated on serveConfig, which records how to RUN
+               a build and so hid the Publish button on every static site the
+               builder produced. A build that has actually done some work can be
+               promoted; publishBuild refuses an empty workspace with a real
+               message, which is the check that was wanted all along. -->
+          {@const canPromote = !isPublished && b.status !== 'queued' && b.status !== 'pending'}
           {@const isBusy = busyId === b.id}
           {@const buc = bucket(b)}
           {@const isHermes = b.origin === 'hermes'}
@@ -334,16 +380,22 @@
               {/if}
 
               <div class="quick-actions">
-                {#if canPublish}
+                {#if canPromote}
                   <button
                     type="button"
                     class="quick-btn"
-                    title="Publish to /projects/"
+                    title="Promote to a project on /projects/"
                     disabled={isBusy}
-                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); publishOne(b); }}
-                  >Publish</button>
+                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); openPromote(b); }}
+                  >Promote</button>
                 {/if}
                 {#if isPublished}
+                  <button
+                    type="button"
+                    class="quick-btn"
+                    title="Edit the card this project shows on /projects"
+                    onclick={(e) => { e.preventDefault(); e.stopPropagation(); openPromote(b); }}
+                  >Edit card</button>
                   <button
                     type="button"
                     class="quick-btn"
@@ -437,7 +489,7 @@
                   <span class="mini-val">
                     {#if isPublished}
                       <span class="mini-live">live</span>
-                    {:else if b.serveConfig}
+                    {:else if canPromote}
                       ready
                     {:else}
                       <span class="mini-muted">—</span>
@@ -461,6 +513,14 @@
 
   {#if toast}
     <div class="toast" data-kind={toast.kind}>{toast.text}</div>
+  {/if}
+
+  {#if promoting}
+    <PromoteModal
+      build={promoting}
+      onClose={() => (promoting = null)}
+      ondone={afterPromote}
+    />
   {/if}
 </div>
 

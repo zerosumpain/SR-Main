@@ -5,12 +5,15 @@
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/canvas/stats/costFormat';
+  import { codexMeter, type CodexUsageView } from '$lib/jkai/usage-meter';
 
   let {
     tokensToday,
     spendTodayUsd,
     budgetUsd,
     credit = null,
+    codex = null,
+    defaultModelId = null,
     activeRuns,
     workflowCount,
     workflowLiveCount,
@@ -21,11 +24,30 @@
     budgetUsd: number;
     /** Live OpenRouter balance, or null when it couldn't be read. */
     credit?: { remainingUsd: number; totalUsd: number; usedUsd: number } | null;
+    /** ChatGPT subscription position, or null with no Codex login on the host. */
+    codex?: CodexUsageView | null;
+    /** The model that answers a thread with no pin of its own. */
+    defaultModelId?: string | null;
     activeRuns: number;
     workflowCount: number;
     workflowLiveCount: number;
     workflowFailedToday?: number;
   } = $props();
+
+  /**
+   * The model that will actually answer: the active thread's pin when the chat
+   * page has published one, otherwise the site default. Both can be a `codex/`
+   * id, and the header has to follow whichever is paying.
+   */
+  const effectiveModelId = $derived(hub.modelId ?? defaultModelId);
+
+  /**
+   * Non-null only while a subscription model is answering, in which case the
+   * dollar balance is the wrong number to show — a Codex turn spends quota, not
+   * credit. Recomputed on `hub.modelId` so switching model in the picker swaps
+   * the meter without a navigation.
+   */
+  const codexView = $derived(codexMeter(codex, effectiveModelId, Date.now()));
 
   // Menu state is shared with the phone tab bar's `≡ more` tab.
   const menuOpen = $derived(hub.menuOpen);
@@ -73,9 +95,11 @@
     {
       label: 'Spend & limits',
       href: '/admin/ops/costs',
-      meta: credit
-        ? `${formatGbp(spendTodayUsd)} / ${formatGbp(credit.remainingUsd)} CREDIT`
-        : `${formatGbp(spendTodayUsd)} / ${formatGbp(budgetUsd)}`,
+      meta: codexView
+        ? `${Math.round(codexView.remainingPercent)}% ${codexView.windowLabel} LEFT`
+        : credit
+          ? `${formatGbp(spendTodayUsd)} / ${formatGbp(credit.remainingUsd)} CREDIT`
+          : `${formatGbp(spendTodayUsd)} / ${formatGbp(budgetUsd)}`,
     },
     // The site nav bar no longer sits above these pages, so the way out lives
     // in the menu.
@@ -154,6 +178,7 @@
           spendUsd={spendTodayUsd}
           {budgetUsd}
           {credit}
+          codex={codexView}
           contextTokens={hub.contextTokens}
           contextFraction={hub.contextFraction}
           liveRuns={runs}
@@ -163,9 +188,16 @@
     </div>
 
     <div class="hdr-right" data-hub-menu>
-      <!-- Mobile promotes spend out of the strip and into a tappable pill. -->
-      <a class="spend-pill" href="/admin/ops/costs" title="Spend & limits">
-        {formatGbp(spendTodayUsd)}
+      <!-- Mobile promotes spend out of the strip and into a tappable pill. On a
+           subscription model the cash figure is always £0.00 — Codex calls price
+           as null, not zero — so the pill carries the quota instead. -->
+      <a
+        class="spend-pill"
+        class:warn={codexView?.limitReached}
+        href="/admin/ops/costs"
+        title={codexView ? codexView.title : 'Spend & limits'}
+      >
+        {codexView ? `${Math.round(codexView.remainingPercent)}%` : formatGbp(spendTodayUsd)}
       </a>
 
       <button type="button" class="chip palette-chip" onclick={openLauncher} title="Command palette">
@@ -261,6 +293,7 @@
       spendUsd={spendTodayUsd}
       {budgetUsd}
       {credit}
+      codex={codexView}
       contextTokens={hub.contextTokens}
       contextFraction={hub.contextFraction}
       liveRuns={runs}
@@ -449,6 +482,12 @@
       color: var(--accent);
       text-decoration: none;
       white-space: nowrap;
+    }
+    /* Subscription quota exhausted — Codex calls are being refused. */
+    .spend-pill.warn {
+      background: var(--error-bg);
+      border-color: var(--error);
+      color: var(--error);
     }
     .menu-btn {
       width: 44px;

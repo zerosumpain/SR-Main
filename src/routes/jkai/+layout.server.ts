@@ -3,8 +3,9 @@ import { db } from '$lib/db';
 import { agentActions, workflows, workflowRuns, workflowSchedules } from '$lib/db/schema';
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { listRunningJobsByConversation } from '$lib/workflows/chat/job-store';
-import { getSetting } from '$lib/server/models/settings';
+import { getSetting, resolveDefaultModel } from '$lib/server/models/settings';
 import { getOpenRouterCredits } from '$lib/server/models/openrouter-credits';
+import { getCodexUsage } from '$lib/server/models/codex-usage';
 
 /** Fallback spend ceiling, used ONLY when OpenRouter can't tell us the real
  *  credit balance. Overridable from app_settings so it can be raised without a
@@ -25,8 +26,16 @@ export const load: LayoutServerLoad = async () => {
 
   // "Live" workflows are the ones with an enabled schedule — `workflows` itself
   // carries no enabled flag, the schedule row is what makes one fire.
-  const [[today], [workflowCount], [liveCount], [runningWorkflowRuns], budgetSetting, credits] =
-    await Promise.all([
+  const [
+    [today],
+    [workflowCount],
+    [liveCount],
+    [runningWorkflowRuns],
+    budgetSetting,
+    credits,
+    codex,
+    defaultModel,
+  ] = await Promise.all([
       db
         .select({
           tokens: sql<number>`COALESCE(SUM(COALESCE(tokens_input, 0) + COALESCE(tokens_output, 0)), 0)::int`,
@@ -49,6 +58,15 @@ export const load: LayoutServerLoad = async () => {
       // Cached in-process for a minute, so this does not become an OpenRouter
       // round-trip on every hub navigation.
       getOpenRouterCredits(),
+      // Same caching. Fetched unconditionally rather than behind the Codex
+      // enable flag, so the meter is already warm the moment a thread is pinned
+      // to a `codex/` model; it resolves to null on a host with no Codex login.
+      getCodexUsage(),
+      // Which meter to show follows the model that will actually answer. On the
+      // chat page that is the thread's own pin, published live to the hub bus;
+      // everywhere else in the hub it is the site default — which is allowed to
+      // be a Codex model, so the header must be able to say so.
+      resolveDefaultModel(),
     ]);
 
   // The ceiling the strip renders against is the REAL OpenRouter balance when we
@@ -78,6 +96,12 @@ export const load: LayoutServerLoad = async () => {
             fetchedAt: credits.fetchedAt,
           }
         : null,
+      /** ChatGPT subscription position, or null when this host has no Codex
+       *  login. Shown INSTEAD of `credit` while a `codex/` model is answering —
+       *  the two are not commensurable and only one of them is being spent. */
+      codex,
+      /** The model that answers when a thread hasn't pinned one. */
+      defaultModelId: defaultModel.modelId,
       activeRuns: listRunningJobsByConversation().size + (runningWorkflowRuns?.running ?? 0),
       workflowCount: workflowCount?.count ?? 0,
       workflowLiveCount: liveCount?.count ?? 0,

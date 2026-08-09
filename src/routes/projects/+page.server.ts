@@ -18,6 +18,12 @@ export const load: PageServerLoad = async ({ locals }) => {
         title: jkaiBuilds.title,
         prompt: jkaiBuilds.prompt,
         publishedSlug: jkaiBuilds.publishedSlug,
+        // Curated card copy, written when the build was promoted. Null on
+        // anything published before promotion existed — resolveProjectCard
+        // falls those back to the title and prompt, exactly as before.
+        cardTitle: jkaiBuilds.cardTitle,
+        cardBlurb: jkaiBuilds.cardBlurb,
+        cardTag: jkaiBuilds.cardTag,
         iterationsCompleted: jkaiBuilds.iterationsCompleted,
         createdAt: jkaiBuilds.createdAt,
         updatedAt: jkaiBuilds.updatedAt,

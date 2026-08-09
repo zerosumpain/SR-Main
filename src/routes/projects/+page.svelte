@@ -2,6 +2,7 @@
   import type { PageData } from './$types';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import ShareModal from './ShareModal.svelte';
+  import { resolveProjectCard } from '$lib/jkai/project-card';
 
   let { data }: { data: PageData } = $props();
   let projects = $state(data.projects);
@@ -625,6 +626,7 @@
       </div>
     {:else}
       {#each projects as project (project.id)}
+        {@const card = resolveProjectCard(project)}
         <div class="project-card group">
           <a href="/projects/{project.publishedSlug}/" class="absolute inset-0 z-0" aria-label="View project"></a>
 
@@ -636,7 +638,7 @@
               AI Built
             </p>
             <span class="text-[11px]" style="color: var(--text-ghost); font-family: var(--font-mono);">
-              {formatDate(project.createdAt)}
+              {card.tag || formatDate(project.createdAt)}
             </span>
           </div>
 
@@ -644,11 +646,11 @@
             class="text-[20px] font-medium mb-3 group-hover:text-[var(--accent)] transition-colors"
             style="color: var(--text-primary);"
           >
-            {project.title || project.prompt.slice(0, 40)}
+            {card.heading}
           </h2>
 
           <p class="text-sm leading-relaxed mb-4 line-clamp-3" style="color: var(--text-secondary);">
-            {project.prompt}
+            {card.blurb}
           </p>
 
           <div class="flex items-center justify-between relative z-10">

@@ -5,6 +5,7 @@ import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { publishBuild } from '$lib/jkai/sandbox';
 import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+import { normaliseCardFields } from '$lib/jkai/project-card';
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
@@ -18,6 +19,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const resolved = resolvePublishSlug(build, requested);
   if (!resolved.ok) return json({ error: resolved.error }, { status: 400 });
   const slug = resolved.slug;
+
+  // Promote sends the curated card alongside the slug; the bare Publish button
+  // sends neither and leaves whatever is already stored untouched.
+  const card = normaliseCardFields(body);
+  if (!card.ok) return json({ error: card.error }, { status: 400 });
 
   const [existing] = await db
     .select()
@@ -42,7 +48,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       }
       await tx
         .update(jkaiBuilds)
-        .set({ publishedSlug: finalSlug, updatedAt: new Date() })
+        .set({ publishedSlug: finalSlug, ...card.fields, updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, params.id));
     });
 
@@ -55,4 +61,34 @@ export const POST: RequestHandler = async ({ params, request }) => {
   } catch (err: any) {
     return json({ error: err.message }, { status: 500 });
   }
+};
+
+/**
+ * Edit the card of an already-published build, without touching its files.
+ *
+ * Re-running POST would work, but publishing re-installs dependencies and
+ * re-runs the project's build inside the sandbox — minutes of work to change a
+ * sentence of copy. Rewording a blurb must not risk the live page.
+ */
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
+  if (!build) return json({ error: 'Build not found' }, { status: 404 });
+  if (!build.publishedSlug) {
+    return json({ error: 'This build is not published yet — promote it first' }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => ({}) as Record<string, unknown>);
+  const card = normaliseCardFields(body);
+  if (!card.ok) return json({ error: card.error }, { status: 400 });
+
+  await db
+    .update(jkaiBuilds)
+    .set({ ...card.fields, updatedAt: new Date() })
+    .where(eq(jkaiBuilds.id, params.id));
+
+  return json({
+    ok: true,
+    slug: build.publishedSlug,
+    url: `/projects/${build.publishedSlug}/`,
+  });
 };
