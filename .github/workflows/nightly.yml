@@ -1,0 +1,132 @@
+name: Nightly full suite
+
+# The backstop for everything the merge gate does not run.
+#
+# It exists because the gate is being scoped: once the risk ladder lands, an
+# ordinary source change runs only the tests its import graph can reach, and
+# three classes of coupling are invisible to that graph — tests whose real
+# subject is a file they read off disk rather than import, tests that mock a
+# module they never import (the resolver drops mocked modules from the
+# dependency graph entirely), and modules loaded by a computed string at
+# runtime. Nothing catches those at PR time. This does, within twelve hours.
+#
+# It also runs the eight *.integration.test.ts files the merge gate has never
+# once executed. They are excluded there because they need a database; they get
+# one here, and each already skips itself when its dependency is absent.
+#
+# DELIBERATELY A SEPARATE FILE, not another trigger on ci.yml. The gate job
+# there has no `if:` condition, so any trigger added to that workflow fires it —
+# a schedule would run the full gate as an extra job AND, because ci.yml's
+# concurrency group is workflow-level, hold the deploy lock while doing it.
+
+on:
+  schedule:
+    # Twice daily. GitHub cron is always UTC — there is no timezone option — so
+    # these drift by an hour against London across DST, which does not matter
+    # for a backstop. Twelve hours apart is what bounds the exposure window the
+    # scoped gate trades away; widening the gap widens that window.
+    - cron: '15 4 * * *'
+    - cron: '15 16 * * *'
+  workflow_dispatch:
+
+# Its own group, never sr-main-deploy — a nightly must not queue behind or ahead
+# of a production deploy. Cancelling in progress is right here: if a newer
+# nightly has started, the older one's verdict is stale and nobody wants both.
+concurrency:
+  group: sr-main-nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  full:
+    name: Full suite (everything the gate skips)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
+      SCRAPER_ALLOW_NON_HOMESERV: '1'
+      PUBLIC_VAPID_PUBLIC_KEY: ci-nightly-placeholder
+
+    steps:
+      - name: Start Postgres in the background
+        run: |
+          nohup docker run --rm --name ci-postgres \
+            -e POSTGRES_USER=app \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=strange_rambling \
+            -p 5432:5432 \
+            pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
+          echo "postgres pulling/booting in the background"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 90); do
+            if docker exec ci-postgres pg_isready -U app -q 2>/dev/null; then
+              echo "postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Postgres did not become ready within 90s"
+          docker logs ci-postgres 2>&1 | tail -40 || true
+          exit 1
+
+      - name: Prepare test database
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
+
+      - name: Lint gates
+        run: npm run gate:public-routes && npm run gate:font-sizes
+
+      - name: Type check
+        run: npm run gate:check
+
+      # The whole suite, integration tests included. Sequential rather than
+      # concurrent with the type check: nothing is waiting on this run, and
+      # keeping the two apart means a failure here is unambiguous.
+      - name: Full test suite
+        run: npm run gate:test:full
+
+      # The REAL adapter, unlike the gate, which stubs it. This is what catches
+      # adapter-only failures — externalisation edges and packaging errors — that
+      # a scoped PR build would miss.
+      - name: Build with the real adapter
+        run: npm run gate:build
+
+      # A red run in the Actions tab is easy to miss for something nobody is
+      # waiting on, and a silent backstop is not a backstop. One open issue at a
+      # time: if the previous failure has not been dealt with, comment on it
+      # rather than opening a second.
+      - name: Report a failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Nightly full suite is failing"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "Still failing: $RUN_URL"
+            echo "commented on existing issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body "$(printf '%s\n\n%s\n\n%s' \
+              "The nightly full suite failed: $RUN_URL" \
+              "This is the backstop for coupling the scoped merge gate cannot see — tests coupled by filesystem reads, by module mocks, or by runtime string imports — plus the integration tests the gate never runs." \
+              "A failure here means something reached master that PR-time selection did not cover. Worth understanding rather than just re-running.")"
+            echo "opened a new issue"
+          fi
