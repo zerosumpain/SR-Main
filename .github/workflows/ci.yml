@@ -86,16 +86,30 @@ jobs:
 
       - run: npm ci
 
+      # `docker exec ... pg_isready` is NOT a sufficient readiness test, and
+      # using it turned master red on run 31339327336: the step reported
+      # "postgres ready after 8s" and the very next command died with "server
+      # closed the connection unexpectedly".
+      #
+      # The postgres image runs a TEMPORARY server during initdb so that init
+      # scripts can run against it. pg_isready happily succeeds against that
+      # server; it is then shut down and restarted for real, and any client
+      # connected in the gap is dropped. The old `services:` block hid this
+      # because its health check had a 10s interval, which usually stepped over
+      # the window rather than into it.
+      #
+      # Poll the condition the next step actually needs — a query, through the
+      # published port, over the same URL the tests use.
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 90); do
-            if docker exec ci-postgres pg_isready -U app -q 2>/dev/null; then
-              echo "postgres ready after ${i}s"
+            if psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
+              echo "postgres accepting queries after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::Postgres did not become ready within 90s"
+          echo "::error::Postgres did not accept a query within 90s"
           docker logs ci-postgres 2>&1 | tail -40 || true
           cat /tmp/ci-postgres.log 2>/dev/null | tail -40 || true
           exit 1
