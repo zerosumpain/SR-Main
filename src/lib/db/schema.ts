@@ -644,6 +644,18 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   priceSnapshot: jsonb('price_snapshot').$type<{ promptPrice: number; completionPrice: number } | null>(),
   failure: jsonb('failure'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  /**
+   * Liveness ping, written every ~15s while an iteration is in flight.
+   * Mirrors `workflow_runs.heartbeat_at` and exists for the same reason.
+   *
+   * `updated_at` is stamped only at iteration boundaries, and the longest phase
+   * of a git-target iteration — `npm run gate` — writes nothing at all for its
+   * whole duration (10m22s of silence on one observed build). So a build inside
+   * the gate and a build whose sidecar was killed ten minutes ago serialised to
+   * byte-identical output, and anything reading the row had no field that could
+   * separate them.
+   */
+  heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
   origin: text('origin', { enum: ['manual', 'hermes', 'forge'] }).notNull().default('manual'),

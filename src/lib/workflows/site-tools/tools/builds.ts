@@ -306,9 +306,13 @@ register({
 // Inspection Tools
 // ==========================================
 
+/** The gate's own ceiling (`execInSandbox(..., 1_200_000)` in orchestrator.ts). */
+const GATE_BUDGET_SECONDS = 1_200;
+
 register({
   name: 'build_inspect',
-  description: 'Full build overview — status, prompt, config, all iterations (number, status, goals, evaluation summary, duration, tokens), serve config, published URL',
+  description:
+    'Full build overview — status, liveness, prompt, config, all iterations (number, status, goals, evaluation summary, duration, tokens), serve config, published URL. Judge progress from `liveness`, not by subtracting timestamps: you do not know the current time, and `updatedAt` only moves at iteration boundaries.',
   parameters: {
     type: 'object',
     properties: { id: { type: 'string', description: 'Build ID' } },
@@ -334,10 +338,64 @@ register({
       .where(eq(jkaiIterations.buildId, build.id))
       .orderBy(asc(jkaiIterations.number));
 
+    // Server-computed liveness, because the caller has no clock.
+    //
+    // Hermes injects no current time — its prompt builder tells the model to
+    // shell out to `date` — so handing back bare ISO timestamps invites exactly
+    // what happened on 2026-08-09: the model subtracted `updatedAt` against a
+    // time it had guessed, said "last activity 3 min ago, so it's actively
+    // working" (it was 51 seconds, and the number carried no information about
+    // health either way), and reported that to the user as evidence.
+    //
+    // `updatedAt` alone cannot answer "is this alive": it moves at iteration
+    // boundaries only, and the gate runs for up to twenty minutes writing
+    // nothing. `heartbeatAt` is the field that separates "in the gate" from
+    // "sidecar died". The newest stage row says which phase we're in, and the
+    // phase's own budget says how much of it is left.
+    const now = new Date();
+    const [latestStage] = await db
+      .select({ content: jkaiLogs.content, createdAt: jkaiLogs.createdAt })
+      .from(jkaiLogs)
+      .where(and(eq(jkaiLogs.buildId, build.id), eq(jkaiLogs.type, 'stage')))
+      .orderBy(desc(jkaiLogs.createdAt))
+      .limit(1);
+
+    const secondsSince = (d: Date | null | undefined) =>
+      d ? Math.round((now.getTime() - d.getTime()) / 1000) : null;
+
+    let currentStage: string | null = null;
+    if (latestStage?.content) {
+      try {
+        currentStage = (JSON.parse(latestStage.content) as { stage?: string }).stage ?? null;
+      } catch {
+        currentStage = null;
+      }
+    }
+    const stageAgeSeconds = secondsSince(latestStage?.createdAt);
+
     return {
       success: true,
       data: {
         ...build,
+        liveness: {
+          serverNow: now.toISOString(),
+          secondsSinceUpdate: secondsSince(build.updatedAt),
+          secondsSinceHeartbeat: secondsSince(build.heartbeatAt),
+          currentStage,
+          stageAgeSeconds,
+          // Only meaningful during the gate, which is the phase that goes quiet.
+          stageBudgetSeconds: currentStage === 'running_tests' ? GATE_BUDGET_SECONDS : null,
+          // Null for a terminal build, and for one that predates heartbeat_at.
+          alive:
+            build.status !== 'running'
+              ? null
+              : build.heartbeatAt
+                ? (secondsSince(build.heartbeatAt) ?? 0) < 120
+                : null,
+        },
+        // A build can read `completed` while carrying a failure envelope — say so
+        // rather than making the caller notice the contradiction.
+        failureKind: (build.failure as { kind?: string } | null)?.kind ?? null,
         iterations,
         publishedUrl: build.publishedSlug
           ? `https://strangeramblings.com/projects/${build.publishedSlug}/`
