@@ -130,9 +130,16 @@ jobs:
       # The guard is `!= push`, deliberately, so that a workflow_dispatch re-run
       # still builds. Writing it as `== pull_request` would leave a manual
       # dispatch with no build check from EITHER job.
+      #
+      # SR_GATE_STUB_ADAPTER swaps adapter-node for a no-op, cutting ~93s. The
+      # bundle is still built and checked — only the packaging of a server
+      # bundle nobody reads is skipped. See svelte.config.js. Deliberately set
+      # here and nowhere else: on the VPS this flag would deploy an empty build.
       - name: Build
         if: github.event_name != 'push'
         run: npm run gate:build
+        env:
+          SR_GATE_STUB_ADAPTER: '1'
 
   deploy:
     name: Build + deploy (VPS)
