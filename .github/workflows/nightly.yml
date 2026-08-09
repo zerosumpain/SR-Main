@@ -50,6 +50,16 @@ jobs:
       DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
       SCRAPER_ALLOW_NON_HOMESERV: '1'
       PUBLIC_VAPID_PUBLIC_KEY: ci-nightly-placeholder
+      # The integration tests the merge gate never runs reach the credential
+      # vault, which refuses to start without a 64-hex-char key. Without this
+      # the whole file errors in its beforeAll and every case inside it is
+      # reported as failed — which is exactly what the first nightly run did
+      # (run 31341122910, issue #178).
+      #
+      # A fixed throwaway value is correct here: it encrypts test-only rows in a
+      # throwaway database that is destroyed with the runner. It is NOT a
+      # secret, and must never be reused anywhere that stores real credentials.
+      INTEGRATION_CREDENTIALS_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
 
     steps:
       - name: Start Postgres in the background
