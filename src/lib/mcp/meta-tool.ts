@@ -1,5 +1,5 @@
 // jkai_extended — single dispatcher tool that collapses ~128 extended tools
-// behind list / schema / invoke operations. Surfaced in `tools/list` only
+// behind list / names / schema / invoke operations. Surfaced in `tools/list` only
 // when JKAI_MCP_META_TOOL=1 (see ./essentials.ts). The underlying registry
 // is unchanged — tools/call by name still works for the extended set, so
 // any tool the LLM discovers via jkai_extended.list can be either invoked
@@ -15,7 +15,9 @@ import { isEssentialUnderPolicy } from './essentials';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { McpTool } from './server';
 
-export type MetaOperation = 'list' | 'schema' | 'invoke';
+/** Operations supported by both the dispatcher and its advertised MCP schema. */
+export const META_OPERATIONS = ['list', 'names', 'schema', 'invoke'] as const;
+export type MetaOperation = (typeof META_OPERATIONS)[number];
 
 export interface MetaToolInput {
   operation: MetaOperation;
@@ -66,7 +68,8 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     'domains). Use this when you need a capability beyond the essential ' +
     'tools you can see directly. Workflow: operation="list" to discover ' +
     '(optionally with a substring "query" filter, or compact=true for a cheap ' +
-    'name+truncated-description catalogue survey), operation="schema" with ' +
+    'name+truncated-description catalogue survey), operation="names" for a ' +
+    'bare name-only catalogue, operation="schema" with ' +
     '"name" (or "names" to batch several schemas in one call) to fetch the ' +
     'exact argument schema, then operation="invoke" with "name" and ' +
     '"args" to run it.',
@@ -75,9 +78,10 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     properties: {
       operation: {
         type: 'string',
-        enum: ['list', 'schema', 'invoke'],
+        enum: META_OPERATIONS,
         description:
           '"list" returns matching tool names + descriptions; ' +
+          '"names" returns all tool names; ' +
           '"schema" returns the full input JSON Schema for one or more named tools; ' +
           '"invoke" executes a named tool with the provided args.',
       },
@@ -143,6 +147,7 @@ export async function dispatchMetaTool(
 ): Promise<
   | ExtendedToolListEntry[]
   | ExtendedToolSchemaEntry
+  | string[]
   | { success: boolean; data?: unknown; error?: string }
   | MetaErrorResult
 > {
@@ -154,8 +159,14 @@ export async function dispatchMetaTool(
   const args = (input as MetaToolInput | undefined)?.args;
 
   if (!operation) {
-    return { error: 'jkai_extended: "operation" is required (one of: list, schema, invoke)' };
+    return { error: `jkai_extended: "operation" is required (one of: ${META_OPERATIONS.join(', ')})` };
   }
+  if (!META_OPERATIONS.includes(operation as MetaOperation)) {
+    return {
+      error: `jkai_extended: unknown operation "${String(operation)}" (expected: ${META_OPERATIONS.join(', ')})`,
+    };
+  }
+  const validOperation = operation as MetaOperation;
 
   // Descriptions here go through the same policy overlay as tools/list, so a
   // published call-efficiency hint reaches the model whether it discovers the
@@ -163,7 +174,7 @@ export async function dispatchMetaTool(
   const policy = await getActivePolicy();
   const extended = getExtendedTools(policy);
 
-  if (operation === 'list') {
+  if (validOperation === 'list') {
     const filtered = query
       ? extended.filter((t) => {
           const q = query.toLowerCase();
@@ -186,7 +197,11 @@ export async function dispatchMetaTool(
     }));
   }
 
-  if (operation === 'schema') {
+  if (validOperation === 'names') {
+    return extended.map((t) => t.name);
+  }
+
+  if (validOperation === 'schema') {
     const hasNames = Array.isArray(names) && names.length > 0;
     const requested = hasNames
       ? [
@@ -234,7 +249,7 @@ export async function dispatchMetaTool(
     return schemas;
   }
 
-  if (operation === 'invoke') {
+  if (validOperation === 'invoke') {
     if (!name) return { error: 'jkai_extended: operation="invoke" requires "name"' };
     const tool = extended.find((t) => t.name === name);
     if (!tool) return { error: `jkai_extended: unknown tool "${name}" (not in extended catalogue)` };
@@ -245,5 +260,6 @@ export async function dispatchMetaTool(
     return await executeTool(name, args ?? {}, ctx);
   }
 
-  return { error: `jkai_extended: unknown operation "${String(operation)}" (expected: list, schema, invoke)` };
+  const exhaustiveOperation: never = validOperation;
+  return exhaustiveOperation;
 }

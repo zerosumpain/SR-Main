@@ -20,8 +20,31 @@ describe('jkai_extended meta-tool', () => {
         properties: { operation: { enum: string[] } };
         required: string[];
       };
-      expect(schema.properties.operation.enum).toEqual(['list', 'schema', 'invoke']);
+      expect(schema.properties.operation.enum).toEqual(['list', 'names', 'schema', 'invoke']);
       expect(schema.required).toContain('operation');
+    });
+
+    it('accepts a minimal valid request for every advertised operation', async () => {
+      const schema = JKAI_EXTENDED_TOOL.inputSchema as {
+        properties: { operation: { enum: string[] } };
+      };
+      const minimalRequests: Record<string, Record<string, unknown>> = {
+        list: { operation: 'list' },
+        names: { operation: 'names' },
+        schema: { operation: 'schema', name: 'gmail_search' },
+        invoke: {
+          operation: 'invoke',
+          name: 'workflow_list_node_types',
+          args: { workflow_id: 'wf_meta_contract_test' },
+        },
+      };
+
+      for (const operation of schema.properties.operation.enum) {
+        const request = minimalRequests[operation];
+        expect(request, `missing minimal request for advertised operation ${operation}`).toBeDefined();
+        const result = (await dispatchMetaTool(request, fakeCtx)) as { error?: string };
+        expect(result.error, `operation ${operation} rejected its minimal request`).toBeUndefined();
+      }
     });
   });
 
