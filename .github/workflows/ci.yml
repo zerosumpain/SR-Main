@@ -86,16 +86,30 @@ jobs:
 
       - run: npm ci
 
+      # `docker exec ... pg_isready` is NOT a sufficient readiness test, and
+      # using it turned master red on run 31339327336: the step reported
+      # "postgres ready after 8s" and the very next command died with "server
+      # closed the connection unexpectedly".
+      #
+      # The postgres image runs a TEMPORARY server during initdb so that init
+      # scripts can run against it. pg_isready happily succeeds against that
+      # server; it is then shut down and restarted for real, and any client
+      # connected in the gap is dropped. The old `services:` block hid this
+      # because its health check had a 10s interval, which usually stepped over
+      # the window rather than into it.
+      #
+      # Poll the condition the next step actually needs — a query, through the
+      # published port, over the same URL the tests use.
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 90); do
-            if docker exec ci-postgres pg_isready -U app -q 2>/dev/null; then
-              echo "postgres ready after ${i}s"
+            if psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
+              echo "postgres accepting queries after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::Postgres did not become ready within 90s"
+          echo "::error::Postgres did not accept a query within 90s"
           docker logs ci-postgres 2>&1 | tail -40 || true
           cat /tmp/ci-postgres.log 2>/dev/null | tail -40 || true
           exit 1
@@ -141,28 +155,26 @@ jobs:
         env:
           SR_GATE_STUB_ADAPTER: '1'
 
-  deploy:
-    name: Build + deploy (VPS)
-    needs: gate
-    # The ref guard is on BOTH arms, deliberately. It used to sit only on the push arm, which
-    # meant `gh workflow run CI --ref <any-branch>` deployed that branch straight to
-    # production — the same class of unsanctioned deploy path that once replaced production
-    # configuration with a laptop's and cost 33 hours. Dispatch stays available as the manual
-    # re-trigger for when GitHub does not fire the push event, but it can only ever ship master.
+  # Building is ~160s of work nobody is waiting on, and it used to sit behind the
+  # gate purely because it shared a job with the ship. It does not need the
+  # gate's verdict: nothing it does is visible to production. Staging a release
+  # directory is inert until the `release` job flips a symlink at it, and that
+  # job does depend on a green gate.
+  #
+  # The ref guard is identical to `release`'s, so already-merged master code is
+  # the only thing that ever executes here. That guard, not the gate, is what
+  # keeps PR code off the production box — `npm ci` runs arbitrary lifecycle
+  # scripts and the gate never inspected them anyway.
+  prebuild:
+    name: Prebuild (VPS)
     if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
-      # Full history: scripts/ci-deploy.sh records the release log by diffing the
-      # previously-deployed sha against HEAD, and the default depth-1 checkout
-      # has no such commit to diff against. The self-hosted runner reuses its
-      # workspace, so this is a one-off cost rather than a full clone per run.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Deliberately no setup-node: use the VPS's system Node (22.x), so CI
-      # builds with the exact runtime that serves production.
       - name: Runtime versions
         run: node --version && npm --version
 
@@ -179,13 +191,48 @@ jobs:
           grep -E '^PUBLIC_' /opt/strange-rambling-svelte/.env > .env
           echo "public vars provided: $(grep -c '^PUBLIC_' .env)"
 
+      # The REAL adapter. SR_GATE_STUB_ADAPTER is a gate-only flag and must
+      # never reach here — ci-prebuild.sh asserts handler.js exists for exactly
+      # that reason.
       - name: Build
         run: npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
 
-      - name: Deploy
-        run: ./scripts/ci-deploy.sh
+      - name: Stage the release
+        run: ./scripts/ci-prebuild.sh
+
+  release:
+    name: Release (VPS)
+    # Both, and plain `needs:` semantics — the job runs only when BOTH succeed,
+    # and is cancelled with the run. Deliberately no `always()`: it returns true
+    # even for a cancelled run, which would turn cancel into a no-op on the one
+    # job that touches production.
+    needs: [gate, prebuild]
+    # The ref guard is on BOTH arms, deliberately. It used to sit only on the push arm, which
+    # meant `gh workflow run CI --ref <any-branch>` deployed that branch straight to
+    # production — the same class of unsanctioned deploy path that once replaced production
+    # configuration with a laptop's and cost 33 hours. Dispatch stays available as the manual
+    # re-trigger for when GitHub does not fire the push event, but it can only ever ship master.
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    runs-on: [self-hosted, srmain]
+    timeout-minutes: 15
+    steps:
+      # Full history: scripts/ci-release.sh records the release log by diffing
+      # the previously-deployed sha against HEAD, and the default depth-1
+      # checkout has no such commit to diff against. The self-hosted runner
+      # reuses its workspace, so this is a one-off cost rather than a full clone.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # No setup-node and, deliberately, no `npm ci`. Nothing this job runs
+      # needs node_modules: the release-log ingest imports only node: builtins
+      # and its own siblings, and the build it ships was packaged by prebuild.
+      # Skipping the install is most of why the ship is seconds rather than
+      # minutes.
+      - name: Release
+        run: ./scripts/ci-release.sh
 
   risk-tier:
     name: Risk tier

@@ -71,16 +71,19 @@ jobs:
 
       - run: npm ci
 
+      # See ci.yml for why this polls a query rather than pg_isready: the image
+      # runs a temporary server during initdb that pg_isready reports as ready,
+      # then restarts it, dropping anything already connected.
       - name: Wait for Postgres
         run: |
           for i in $(seq 1 90); do
-            if docker exec ci-postgres pg_isready -U app -q 2>/dev/null; then
-              echo "postgres ready after ${i}s"
+            if psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
+              echo "postgres accepting queries after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::error::Postgres did not become ready within 90s"
+          echo "::error::Postgres did not accept a query within 90s"
           docker logs ci-postgres 2>&1 | tail -40 || true
           exit 1
 
