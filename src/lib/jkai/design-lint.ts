@@ -20,6 +20,23 @@ const FONT_VAR_OR_KEYWORD_RE = /^(?:var\s*\(|inherit|initial|unset|revert)/i;
 
 const FILES_TO_CHECK = /\.(css|scss|sass|less|html|svelte|jsx|tsx|vue)$/i;
 
+/**
+ * The read-only design-system reference `syncDesignAssets` writes into the
+ * workspace. Nothing under it may ever produce a finding: the agent is told to
+ * read it, `.git/info/exclude` hides it, and it is regenerated from
+ * `design-assets.ts` every iteration — so a finding here CANNOT be fixed, and
+ * three iterations of an unfixable finding aborts the build as
+ * `design_lint_loop`.
+ *
+ * That is not hypothetical. `examples/page.svelte` ships `<div class="grid">`,
+ * which `no-tailwind` matches, so every design-system-enforced build that
+ * reached iteration 3 died on our own reference file with findings stuck at
+ * 1 → 1 → 1 (found 2026-08-09 by a build whose app was complete and serving
+ * 200 at iteration 1). The mount was already exempt from `no-raw-hex`; it just
+ * was not exempt from the other two rules.
+ */
+const DESIGN_MOUNT_RE = /(^|\/)design-system\//i;
+
 function looksLikeRawFontFamily(line: string): boolean {
   const m = line.match(FONT_FAMILY_RE);
   if (!m) return false;
@@ -30,7 +47,10 @@ export function lintDesignSystem(files: Record<string, string>): LintResult {
   const findings: LintFinding[] = [];
   for (const [path, body] of Object.entries(files)) {
     if (!FILES_TO_CHECK.test(path)) continue;
-    const isTokens = /tokens\.css$/i.test(path) || /design-system\//i.test(path);
+    if (DESIGN_MOUNT_RE.test(path)) continue;
+    // Raw hex is legal in a tokens file — that IS the declaration site. The
+    // other two rules still apply to a tokens file the agent wrote itself.
+    const isTokens = /tokens\.css$/i.test(path);
     const lines = body.split('\n');
     lines.forEach((line, i) => {
       if (!isTokens && HEX_RE.test(line) && !CUSTOM_PROP_DECL_RE.test(line)) {
