@@ -23,6 +23,20 @@ import type { BudgetConfig, FailureEnvelope } from './types';
 import { emitStage } from './stage-events';
 import { notifyAllSubscribers } from '$lib/server/push';
 
+/**
+ * How often a running iteration stamps `jkai_builds.heartbeat_at`.
+ * Must stay well under STALE_BUILD_MS in the sidecar's reaper, and the reaper's
+ * threshold must in turn exceed the 20-minute gate cap — a 5-minute rule like
+ * the workflow reaper's would kill perfectly healthy builds mid-gate.
+ */
+const LIVENESS_PING_MS = 15_000;
+
+/**
+ * How quiet a `running` build must go before the reaper calls it abandoned.
+ * Above the gate's 1_200_000 ms cap with room to spare — see reapStaleBuilds.
+ */
+const STALE_BUILD_MS = 30 * 60_000;
+
 export { onBuildLog } from './log-emitter';
 
 /**
@@ -220,9 +234,24 @@ class Orchestrator {
     // Mark any running iterations as failed
     await failOrphanedIterations(buildId);
 
+    // Don't paint over a build that already failed. This set `completed`
+    // unconditionally and never cleared the `failure` envelope `abortBuild`
+    // had written, so builds whose every iteration was killed by the token cap
+    // ended up reading `status='completed'` with `consecutive_failures=2` and
+    // a populated failure — and `build_inspect` reported them as completed.
+    const [current] = await db
+      .select({ failure: jkaiBuilds.failure })
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.id, buildId))
+      .limit(1);
     await db
       .update(jkaiBuilds)
-      .set({ status: 'completed', queuedAction: null, queuedAt: null, updatedAt: new Date() })
+      .set({
+        status: current?.failure ? 'failed' : 'completed',
+        queuedAction: null,
+        queuedAt: null,
+        updatedAt: new Date(),
+      })
       .where(eq(jkaiBuilds.id, buildId));
 
     await emitLog(buildId, 'system', 'Build stopped by user');
@@ -466,6 +495,51 @@ class Orchestrator {
     await this.dequeueNext();
   }
 
+  /**
+   * Reap builds whose liveness ping has gone quiet.
+   *
+   * The boot sweep above only runs when the sidecar restarts, which covers the
+   * common case (a deploy) and nothing else. A wedged or killed sidecar that
+   * never comes back leaves a row `running` with a frozen timestamp forever,
+   * and every tool that reads it keeps reporting a healthy build.
+   *
+   * The threshold deliberately exceeds the gate's own 20-minute cap — copying
+   * the workflow reaper's 5-minute rule here would kill healthy builds mid-gate.
+   * A build that predates this column (heartbeat_at NULL) is judged on
+   * updated_at instead, so old rows aren't immortal.
+   */
+  async reapStaleBuilds(): Promise<number> {
+    const cutoff = new Date(Date.now() - STALE_BUILD_MS);
+    const running = await db
+      .select({
+        id: jkaiBuilds.id,
+        heartbeatAt: jkaiBuilds.heartbeatAt,
+        updatedAt: jkaiBuilds.updatedAt,
+      })
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.status, 'running'));
+
+    let reaped = 0;
+    for (const b of running) {
+      if (this.activeBuildId === b.id) continue; // ours, and alive
+      const lastSeen = b.heartbeatAt ?? b.updatedAt;
+      if (!lastSeen || lastSeen > cutoff) continue;
+      await failOrphanedIterations(b.id);
+      await db
+        .update(jkaiBuilds)
+        .set({
+          status: 'failed',
+          failure: { kind: 'abandoned', message: `No liveness ping since ${lastSeen.toISOString()}.` },
+          updatedAt: new Date(),
+        })
+        .where(eq(jkaiBuilds.id, b.id));
+      await emitLog(b.id, 'error', 'Build abandoned — no liveness ping from the builder. Use Continue to pick it up.');
+      reaped++;
+    }
+    if (reaped > 0) console.log(`[orchestrator] reaped ${reaped} abandoned build(s)`);
+    return reaped;
+  }
+
   private async initAndPlan(buildId: string): Promise<void> {
     await ensureSandboxRunning();
 
@@ -688,6 +762,14 @@ class Orchestrator {
 
   private async runIteration(buildId: string): Promise<void> {
     if (this.stopped || this.activeBuildId !== buildId) return;
+
+    // Liveness ping for the whole iteration, including the gate. `updated_at`
+    // is only stamped at iteration boundaries, and the gate can run for twenty
+    // minutes writing nothing — so without this a build in the gate and a build
+    // whose sidecar died look identical to every reader. Same shape as the
+    // workflow engine's run heartbeat: a ticker around the long await, cleared
+    // in `finally`.
+    const liveness = this.startLivenessTicker(buildId);
 
     try {
       // Re-fetch build to get latest counters
@@ -1211,7 +1293,25 @@ class Orchestrator {
     } catch (err: any) {
       await emitLog(buildId, 'error', `Iteration error: ${err.message}`);
       this.scheduleNext(buildId, 30000);
+    } finally {
+      clearInterval(liveness);
     }
+  }
+
+  /**
+   * Stamp `jkai_builds.heartbeat_at` every LIVENESS_PING_MS until cleared.
+   * Fires once immediately so a short iteration still leaves a mark.
+   */
+  private startLivenessTicker(buildId: string): ReturnType<typeof setInterval> {
+    const ping = () => {
+      void db
+        .update(jkaiBuilds)
+        .set({ heartbeatAt: new Date() })
+        .where(eq(jkaiBuilds.id, buildId))
+        .catch((err) => console.error(`[orchestrator] liveness ping failed for ${buildId}:`, err));
+    };
+    ping();
+    return setInterval(ping, LIVENESS_PING_MS);
   }
 
   /**

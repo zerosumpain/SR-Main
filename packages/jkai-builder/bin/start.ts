@@ -12,6 +12,9 @@ import { orchestrator } from '$lib/jkai/orchestrator';
 //   1. JKAI_BUILDER_SOCKET (explicit override — set by the systemd unit)
 //   2. $XDG_RUNTIME_DIR/jkai-builder.sock (interactive shell + user services)
 //   3. /run/jkai-builder/jkai-builder.sock (system service via RuntimeDirectory)
+/** How often to sweep for builds whose liveness ping stopped. */
+const REAPER_INTERVAL_MS = 5 * 60_000;
+
 const xdg = process.env.XDG_RUNTIME_DIR;
 const sock =
   process.env.JKAI_BUILDER_SOCKET ??
@@ -35,6 +38,16 @@ async function main(): Promise<void> {
     console.error('[jkai-builder] recovery failed:', err);
     // Don't exit — recovery failure shouldn't take down the RPC surface.
   }
+
+  // The boot sweep above only fires when this process restarts, which covers a
+  // deploy and nothing else. A sidecar that wedges and never comes back leaves
+  // a build `running` with a frozen timestamp indefinitely, and every tool that
+  // reads the row keeps reporting it healthy. Sweep periodically too.
+  setInterval(() => {
+    void orchestrator
+      .reapStaleBuilds()
+      .catch((err) => console.error('[jkai-builder] stale-build sweep failed:', err));
+  }, REAPER_INTERVAL_MS);
 }
 
 main().catch((err) => {
