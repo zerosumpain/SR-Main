@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { join } from 'path';
 import { db } from '$lib/db';
 import { jkaiIterations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -135,6 +136,48 @@ export function piThinkingLevel(provider: PiInvocation['provider'], level: strin
   return level;
 }
 
+/**
+ * Pin pi's Codex transport to SSE for one workspace.
+ *
+ * Pi's Codex provider defaults to `transport: "auto"`, which tries a WebSocket
+ * to chatgpt.com first and only falls back to SSE if that *errors*. From the
+ * VPS it does not error, it hangs (measured 2026-08-09, pi 0.72.1): one turn
+ * streamed its whole answer and then left the process alive indefinitely,
+ * another produced no events at all for 200s. Both shapes reach us as a silent
+ * stream and get killed by the 180s idle watchdog, i.e. every Codex iteration
+ * would cost three wasted minutes and be filed as `stalled` — the failure kind
+ * that names the watchdog and not the cause. The same prompt over SSE answered
+ * in 4s and exited 0.
+ *
+ * Transport is settable only through pi's settings files — there is no CLI flag
+ * and no env var — so this drops a project-level one into the workspace pi runs
+ * in. Project settings beat global, so the fix travels with the code instead of
+ * living as undocumented host state that a fresh build host would lack. Only
+ * the Codex provider reads the setting, so it cannot affect an OpenRouter run.
+ *
+ * `.git/info/exclude` keeps it out of the build's diff: a change-request build
+ * commits its own work, and a stray `.pi/settings.json` in a PR is noise the
+ * agent would have to explain.
+ */
+export async function pinCodexTransport(workdir: string): Promise<void> {
+  const { mkdir, writeFile, readFile, appendFile } = await import('fs/promises');
+  await mkdir(join(workdir, '.pi'), { recursive: true });
+  await writeFile(
+    join(workdir, '.pi', 'settings.json'),
+    JSON.stringify({ transport: 'sse' }, null, 2) + '\n',
+  );
+  try {
+    const excludePath = join(workdir, '.git', 'info', 'exclude');
+    const current = await readFile(excludePath, 'utf8');
+    if (!/^\.pi\/$/m.test(current)) {
+      await appendFile(excludePath, `${current.endsWith('\n') ? '' : '\n'}.pi/\n`);
+    }
+  } catch {
+    // No git repo, or a worktree whose .git is a file — the settings file is
+    // still in place, which is the part that matters.
+  }
+}
+
 async function resolveApiKey(envVar: 'OPENROUTER_API_KEY'): Promise<{ envVar: string; value: string }> {
   // Legacy build rows persisted with provider 'zai' (direct-z.ai era) also land
   // here and get the OpenRouter key instead of throwing — GLM is served via
@@ -209,6 +252,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     modelId: build.modelId ?? 'anthropic/claude-sonnet-4.5',
   });
   const auth = apiKeyEnv ? await resolveApiKey(apiKeyEnv) : null;
+  if (provider === 'openai-codex' && HOST_MODE) {
+    // Host mode only: in container mode `workdir` is a path inside the sandbox,
+    // not one this process can write to. Codex builds need host mode anyway —
+    // the ChatGPT OAuth lives in the host user's ~/.pi/agent/auth.json.
+    await pinCodexTransport(workdir);
+  }
 
   const piParts = [
     'pi',

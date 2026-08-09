@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { piInvocation, piThinkingLevel } from './pi-runner';
+import { mkdtemp, mkdir, writeFile, readFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { piInvocation, piThinkingLevel, pinCodexTransport } from './pi-runner';
 
 // A build row stores OUR provider names. Pi has its own registry and knows
 // none of them: handing it `--provider codex` killed every Codex build on
@@ -42,6 +45,49 @@ describe('piInvocation', () => {
       modelId: 'z-ai/glm-5.2',
       apiKeyEnv: 'OPENROUTER_API_KEY',
     });
+  });
+});
+
+describe('pinCodexTransport', () => {
+  const workspace = async (withGit: boolean) => {
+    const dir = await mkdtemp(join(tmpdir(), 'pi-runner-test-'));
+    if (withGit) {
+      await mkdir(join(dir, '.git', 'info'), { recursive: true });
+      await writeFile(join(dir, '.git', 'info', 'exclude'), '# git ls-files --others\nnode_modules/');
+    }
+    return dir;
+  };
+
+  it('pins the transport pi hangs without', async () => {
+    const dir = await workspace(false);
+    await pinCodexTransport(dir);
+    expect(JSON.parse(await readFile(join(dir, '.pi', 'settings.json'), 'utf8'))).toEqual({
+      transport: 'sse',
+    });
+  });
+
+  it('keeps itself out of the build diff', async () => {
+    const dir = await workspace(true);
+    await pinCodexTransport(dir);
+    const exclude = await readFile(join(dir, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toMatch(/^\.pi\/$/m);
+    // The file it appended to had no trailing newline — the entry must still
+    // land on its own line rather than glued to `node_modules/`.
+    expect(exclude).not.toMatch(/node_modules\/\.pi/);
+  });
+
+  it('is idempotent across iterations of the same build', async () => {
+    const dir = await workspace(true);
+    await pinCodexTransport(dir);
+    await pinCodexTransport(dir);
+    const exclude = await readFile(join(dir, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude.match(/^\.pi\/$/gm)).toHaveLength(1);
+  });
+
+  it('still writes the settings when there is no git repo to exclude from', async () => {
+    const dir = await workspace(false);
+    await expect(pinCodexTransport(dir)).resolves.toBeUndefined();
+    expect(await readFile(join(dir, '.pi', 'settings.json'), 'utf8')).toContain('sse');
   });
 });
 
