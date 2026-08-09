@@ -14,6 +14,7 @@ import './tools/research';
 import './tools/whatsapp';
 import './tools/workflows';
 import './tools/diagnostics';
+import './tools/capabilities-snapshot';
 import './tools/memory';
 import './tools/followup';
 import './tools/heartbeat';
