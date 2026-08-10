@@ -65,7 +65,12 @@ const full = (reason) => emit('full', [], reason);
 try {
 	// ── the change set ─────────────────────────────────────────────────────────
 	let changed;
-	if (process.env.SELECT_TESTS_FILES) {
+	// `!== undefined`, not truthiness: an injected EMPTY list means "an empty
+	// change set", which must resolve to a full run. Testing truthiness let the
+	// empty case fall through to the git path instead, so the selector answered a
+	// different question than the caller asked — invisible locally, where the git
+	// answer happened to agree.
+	if (process.env.SELECT_TESTS_FILES !== undefined) {
 		changed = process.env.SELECT_TESTS_FILES.split('\n').filter(Boolean);
 	} else {
 		const base = process.argv[2] || 'HEAD^';
