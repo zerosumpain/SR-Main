@@ -165,3 +165,27 @@ describe('per-chapter checks stay scoped to the chapter', () => {
     }
   });
 });
+
+// runStudioGate accepted chaptersDue and dropped it from the payload between
+// PR #193 and #195 — the fixture tests passed because they drove
+// scripts/studio-gate.mjs DIRECTLY, never through this module. The runner
+// defaults a missing chaptersDue to 0, which means "check every chapter",
+// so the drop was invisible except as a wall of premature findings on a real
+// build. Assert the wire format, not just the signature.
+describe('the spec put on the wire', () => {
+  it('carries every field the runner reads', async () => {
+    const src = await readFile('src/lib/jkai/studio-gate.ts', 'utf-8');
+    const payload = src.slice(src.indexOf('const payload = JSON.stringify('));
+    const body = payload.slice(0, payload.indexOf('});') + 3);
+    for (const field of ['chapters:', 'chaptersDue:', 'sourceUrls:', 'kitFiles:']) {
+      expect(body, `${field} missing from the runner payload`).toContain(field);
+    }
+  });
+
+  it('reads back every field it writes', async () => {
+    const runner = await readFile('scripts/studio-gate.mjs', 'utf-8');
+    for (const field of ['spec.chapters', 'spec.chaptersDue', 'spec.sourceUrls', 'spec.kitFiles']) {
+      expect(runner, `${field} is sent but never read`).toContain(field);
+    }
+  });
+});

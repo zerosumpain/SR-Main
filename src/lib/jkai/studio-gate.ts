@@ -112,6 +112,12 @@ export async function runStudioGate(opts: {
   }
   const payload = JSON.stringify({
     chapters: opts.chapters,
+    // Chapters the plan says should be FINISHED by now. Omitting this makes the
+    // runner check every chapter including unbuilt placeholders — which is what
+    // happened between 2026-08-10 PR #193 and #195: the parameter was accepted
+    // here and silently dropped from the payload, so `still-placeholder` fired
+    // for every chapter the agent had not reached yet, on every iteration.
+    chaptersDue: opts.chaptersDue ?? 0,
     sourceUrls: opts.sourceUrls,
     kitFiles: opts.kitFiles ?? [],
   });
