@@ -55,22 +55,19 @@
       outEls[o.id] = v;
     }
 
-    function recompute() {
-      let result;
-      try {
-        result = step({ ...values }) || {};
-      } catch (err) {
-        for (const o of outcomes) outEls[o.id].textContent = 'error';
-        console.error('[explainer] step() threw', err);
-        return;
-      }
+    // Monotonic run counter — see the ordering guard in recompute below.
+    let runSeq = 0;
+
+    // Paint + emit for one completed model run. Split out of recompute so the
+    // synchronous and the promise-resolved paths do exactly the same thing.
+    function paint(result, snapshot) {
       for (const o of outcomes) {
         const fmt = o.format || defaultFormat;
         outEls[o.id].textContent = fmt(result[o.id]);
       }
       try {
         window.parent.postMessage(
-          { type: 'lever_changed', ts: Date.now(), values: { ...values }, outcomes: result },
+          { type: 'lever_changed', ts: Date.now(), values: snapshot, outcomes: result },
           '*',
         );
       } catch (e) { /* not embedded */ }
@@ -79,9 +76,45 @@
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'same-origin',
-          body: JSON.stringify({ type: 'lever_changed', ts: Date.now(), values: { ...values }, outcomes: result }),
+          body: JSON.stringify({ type: 'lever_changed', ts: Date.now(), values: snapshot, outcomes: result }),
         }).catch(() => {});
       }
+    }
+
+    // Returns a promise when step() is async, so a caller that needs the paint
+    // to have happened can await it; the synchronous path is unchanged and
+    // still paints before returning.
+    function recompute() {
+      const snapshot = { ...values };
+      let result;
+      try {
+        result = step(snapshot);
+      } catch (err) {
+        for (const o of outcomes) outEls[o.id].textContent = 'error';
+        console.error('[explainer] step() threw', err);
+        return;
+      }
+      // An async step() returns a thenable. It is truthy, so `|| {}` never
+      // catches it and every outcome would render the em-dash placeholder for
+      // the life of the page — which the gate then reports as an inert lever,
+      // with a remedy telling the author to make the outcome depend on the
+      // lever. It already does; it is just not awaited. So: await it.
+      if (result && typeof result.then === 'function') {
+        // Ordering guard: a slider drag fires many 'input' events, and two
+        // in-flight async runs can settle out of order. Only the newest run may
+        // paint, so the readout can never end up showing a superseded result.
+        const myRun = ++runSeq;
+        return result.then(
+          (settled) => { if (myRun === runSeq) paint(settled || {}, snapshot); },
+          (err) => {
+            if (myRun !== runSeq) return;
+            for (const o of outcomes) outEls[o.id].textContent = 'error';
+            console.error('[explainer] async step() rejected — outcomes cannot be painted', err);
+          },
+        );
+      }
+      runSeq++;
+      paint(result || {}, snapshot);
     }
 
     for (const l of levers) {

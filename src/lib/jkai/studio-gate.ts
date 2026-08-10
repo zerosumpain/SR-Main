@@ -58,6 +58,34 @@ export function describeGate(outcome: GateOutcome): string {
   return `Studio gate FAILED — ${outcome.findings.length} finding(s):\n${lines.join('\n')}`;
 }
 
+/**
+ * Why the gate cannot be run at all, or null when it can.
+ *
+ * The orchestrator's studio-gate call was guarded on
+ * `chapterPlan.length > 0 && serve?.port`, and when either was falsy it did
+ * nothing and said nothing — not even the "skipped" line the `ran: false`
+ * contract produces via describeGate. That is how an empty chapter spine (a
+ * plan that emitted no Chapter Plan table) stayed invisible: the build simply
+ * had no guardrail, and the log looked healthy.
+ *
+ * Both conditions are errors, not asides, so the message says what is missing
+ * and what stops being checked as a result.
+ */
+export function describeGateSkip(chapterCount: number, port: number | null | undefined): string | null {
+  const noSpine = chapterCount <= 0;
+  const noPort = !port;
+  if (!noSpine && !noPort) return null;
+  const missing = noSpine && noPort
+    ? 'the chapter spine is empty AND no serving port is recorded'
+    : noSpine
+    ? 'the chapter spine is empty — the plan produced no Chapter Plan table'
+    : 'no serving port is recorded — the preview server never came up healthy';
+  return (
+    `Studio gate SKIPPED — ${missing}. Nothing is checking this build's chapters: ` +
+    `no reachability, interactivity, citation or kit-usage findings will be produced.`
+  );
+}
+
 export async function runStudioGate(opts: {
   baseUrl: string;
   chapters: Array<{ n: number; title: string; path: string; leverId: string; outcomeId: string }>;

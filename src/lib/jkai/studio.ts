@@ -39,6 +39,19 @@ export const STUDIO_BUDGET: BudgetConfig = Object.freeze({
   maxIdleIterations: 3,
 });
 
+/**
+ * Input caps live here, not on the route.
+ *
+ * There are two entry points and only one of them is an HTTP route: the
+ * `studio_build` chat tool is registered in the `builds` toolset, so a running
+ * build's own agent can start a Studio build over the tool bridge without ever
+ * touching /api/jkai/studio's validation. Capping in the shared creator is the
+ * only place both inherit it. Throw rather than truncate — a silently halved
+ * challenge produces a confidently wrong syllabus, and the caller cannot tell.
+ */
+export const MAX_CHALLENGE_LEN = 4_000;
+export const MAX_TITLE_LEN = 200;
+
 export async function createStudioBuild({
   challenge,
   title,
@@ -48,6 +61,17 @@ export async function createStudioBuild({
 }): Promise<{ buildId: string }> {
   const trimmed = challenge.trim();
   if (!trimmed) throw new Error('createStudioBuild: challenge is required');
+  if (trimmed.length > MAX_CHALLENGE_LEN) {
+    throw new Error(
+      `createStudioBuild: challenge too long (${trimmed.length} chars, max ${MAX_CHALLENGE_LEN})`,
+    );
+  }
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle && trimmedTitle.length > MAX_TITLE_LEN) {
+    throw new Error(
+      `createStudioBuild: title too long (${trimmedTitle.length} chars, max ${MAX_TITLE_LEN})`,
+    );
+  }
 
   const ctx = await resolveDefaultModel();
   const priceSnapshot = await snapshotPrice(ctx);
@@ -55,7 +79,7 @@ export async function createStudioBuild({
   const [build] = await db
     .insert(jkaiBuilds)
     .values({
-      title: title?.trim() || `Studio: ${trimmed.slice(0, 60)}`,
+      title: trimmedTitle || `Studio: ${trimmed.slice(0, 60)}`,
       prompt: trimmed,
       origin: 'studio',
       // Design enforcement stays ON. Only the mounted worked example changes —

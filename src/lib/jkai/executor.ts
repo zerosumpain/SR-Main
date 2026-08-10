@@ -19,6 +19,7 @@ import type { JkaiBuild, JkaiIteration } from '$lib/db/schema';
 import { runPi } from './pi-runner';
 import { consumePendingDeliveries } from './workflow-deliveries';
 import { buildAttachedWorkflowGrounding, buildDeliveriesBlock } from './workflow-grounding';
+import { formatBriefForPrompt, type ResearchBrief } from './research-brief';
 
 /**
  * Ask the tool bridge for its manifest exactly as the sandboxed agent will.
@@ -231,6 +232,34 @@ export async function executeIteration(
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
   const attachedGrounding = attachedIds.length > 0 ? await buildAttachedWorkflowGrounding(attachedIds) : '';
   if (attachedGrounding) systemPrompt = `${systemPrompt}\n\n${attachedGrounding}`;
+
+  // Studio: the research brief IS the agent's evidence base, and until now it
+  // had exactly two readers — the planner, and the gate's sourceUrls list.
+  // Never the agent. STUDIO_SYSTEM_PROMPT tells it "Your research brief is in
+  // the context below" (false on every iteration) and chapter contract point 4
+  // requires an <a data-citation> pointing at one of the brief's sources, which
+  // studio-gate then checks against the brief's fact hosts. An agent that has
+  // never seen the brief cannot satisfy that, so `uncited` fired on every
+  // chapter forever with a remedy naming a document not in context — the
+  // unfixable-finding loop. Appended before the notes and pending blocks so a
+  // later human instruction still has the last word.
+  if (isStudio) {
+    const brief: ResearchBrief | null = build.researchBrief ?? null;
+    if (brief) {
+      systemPrompt = `${systemPrompt}\n\n${formatBriefForPrompt(brief)}`;
+    } else {
+      // Should be unreachable: initAndPlan aborts a studio build whose research
+      // stage fails. Say so anyway rather than shipping a prompt that claims a
+      // brief is present when it is not.
+      await emitLog(
+        build.id,
+        'error',
+        'Studio build has no research brief — the agent is being asked to cite sources it has not been given, ' +
+          'and every chapter will fail the gate\'s citation check. Expect an unfixable `uncited` finding each iteration.',
+        iteration.id,
+      );
+    }
+  }
 
   // Phase 6: re-inject pinned notes every iteration. The user's "always
   // remember this" directives — applied as hard constraints by the agent.

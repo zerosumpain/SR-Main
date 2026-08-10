@@ -129,6 +129,90 @@ export const STUDIO_CRITIC_EXTRA = `
 9. SOURCING: Does every factual claim in the plan trace to a numbered FACT in the research brief? Look for figures, dates, percentages and mechanisms that appear in the plan but not in the brief. Flag each with "UNSOURCED:" and name the claim. Also check the reverse: is the plan ignoring the brief's GAPS by presenting a settled story where the research found none? Flag that with "FALSE-CONFIDENCE:".`;
 
 /**
+ * Round 3's instruction to the proposer — the LAST format instruction the
+ * model sees before it writes the final plan, and therefore the one that
+ * actually decides the shape of the output.
+ *
+ * This has to branch. The app variant demands "## UI Design / ## Iteration
+ * Plan / ### Iteration 1 through 5", which for a studio build directly
+ * contradicts STUDIO_PROPOSER_SYSTEM_PROMPT's "## Chapter Plan" table. A model
+ * that obeys it emits no table at all: `parseChapterPlan` returns [], and
+ * planBuild's `### Chapter N:` cross-check then compares 0 against 0, agrees,
+ * and stays silent. The build runs with no chapter spine and — because the
+ * orchestrator's studio gate is guarded on `chapterPlan.length > 0` — no gate
+ * either, while the log reads perfectly healthy.
+ *
+ * The studio section names and table columns below are copied verbatim from
+ * STUDIO_PROPOSER_SYSTEM_PROMPT. They are machine-read downstream
+ * (`parseChapterPlan` → `jkai_builds.chapterPlan` → studio-gate); paraphrasing
+ * either breaks the parse. Keep the two in sync by hand.
+ *
+ * The non-studio string is unchanged, deliberately — including its stale "six
+ * dimensions" (the app critic lists seven). Non-studio builds must not shift
+ * behaviour on this branch.
+ */
+export function buildRevisionInstruction(isStudio: boolean): string {
+  if (isStudio) {
+    return `The critic above has reviewed your plan across nine dimensions. Address all critical issues raised.
+
+For each "VIOLATION:", "BLOATED-SKELETON:", "FRAGMENTED:", "VAGUE:", "INFEASIBLE:", "REINSTALL-WASTE:", "BLAND:", "OBVIOUS:", "NO-MODEL:", "ARBITRARY-ORDER:", "DECORATIVE-LEVER:", "UNSOURCED:", "FALSE-CONFIDENCE:", or critical issue: make a concrete fix. If the critic suggested a specific replacement, use it. If a chapter has no interactive model, give it one or replace the chapter. If the chapter order could be shuffled without loss, re-sequence it so each chapter depends on the last. If a claim was flagged as unsourced, either ground it in a numbered FACT from the research brief or remove it.
+
+Start with a ## Changes Made section listing each marker you received and what you changed in response. Then produce the complete revised plan in EXACTLY the format you were given — same section names, same table columns:
+
+## Changes Made
+(For each marker: [marker + issue] → [what you changed])
+
+## Concept
+(what the reader will be able to do at the end that they cannot do now — 2-3 sentences)
+
+## Architecture
+(stack, routing, how chapters are served — 3-5 sentences)
+
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | ... | ... | ... |
+
+(one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
+
+## Chapter Detail
+
+### Chapter 1: [title]
+- Idea: [the single thing this chapter teaches]
+- Visual: [createScene | createDiagram | createSim | createChart, and what it shows]
+- Manipulate: [what the reader changes]
+- Consequence: [what visibly moves, and why that is the lesson]
+- Grounded in: [which numbered FACTS from the brief]
+
+(repeat for every chapter)
+
+## Risks & Mitigations
+(2-3 real risks)
+
+THE ## Chapter Plan TABLE IS MANDATORY, AND IT IS MACHINE-READ. It becomes this build's chapter spine, and an automated post-iteration gate drives exactly the lever id and outcome id you write in each row. Emit it with those four columns, in that order, one row per chapter, and one "### Chapter N: [title]" heading under ## Chapter Detail for every row. Do NOT emit "## UI Design" or "## Iteration Plan" — those belong to a different kind of build, and replacing the table with them leaves this build with no spine and no gate at all.
+
+Be specific — name exact APIs with endpoint URLs, exact datasets from the brief's LIVE DATA section, exact file structure for Iteration 1.`;
+  }
+  return `The critic above has reviewed your plan across six dimensions. Address all critical issues raised.
+
+For each "VIOLATION:", "OVERSIZED:", "BLAND:", "OBVIOUS:", "INFEASIBLE:", or critical issue: make a concrete fix. If the critic suggested a specific replacement, use it. If an iteration is oversized, split or descope it. If the design was flagged as bland, make it distinctive. If the approach was flagged as obvious, make it more creative and ambitious.
+
+Start with a ## Changes Made section listing each marker you received and what you changed in response. Then produce the complete revised plan:
+
+## Changes Made
+(For each marker: [marker + issue] → [what you changed])
+
+## Architecture
+## UI Design
+## Iteration Plan
+### Iteration 1 through 5 (same structure as before)
+## Risks & Mitigations
+
+Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries, exact file structure for Iteration 1.`;
+}
+
+/**
  * Slice the plan down to the "## Chapter Plan" section only — from that
  * heading to the next "##"-level heading (or end of document).
  *
@@ -387,22 +471,7 @@ export async function planBuild(
     checkDeadline('Proposer revision');
     await emitLog(buildId, 'system', 'Round 3/3 — Proposer revising based on critique...', planIteration.id);
 
-    const revisionInstruction = `The critic above has reviewed your plan across six dimensions. Address all critical issues raised.
-
-For each "VIOLATION:", "OVERSIZED:", "BLAND:", "OBVIOUS:", "INFEASIBLE:", or critical issue: make a concrete fix. If the critic suggested a specific replacement, use it. If an iteration is oversized, split or descope it. If the design was flagged as bland, make it distinctive. If the approach was flagged as obvious, make it more creative and ambitious.
-
-Start with a ## Changes Made section listing each marker you received and what you changed in response. Then produce the complete revised plan:
-
-## Changes Made
-(For each marker: [marker + issue] → [what you changed])
-
-## Architecture
-## UI Design
-## Iteration Plan
-### Iteration 1 through 5 (same structure as before)
-## Risks & Mitigations
-
-Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries, exact file structure for Iteration 1.`;
+    const revisionInstruction = buildRevisionInstruction(isStudio);
 
     debateMessages.push({ role: 'user', content: revisionInstruction });
 

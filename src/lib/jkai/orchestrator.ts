@@ -1260,9 +1260,25 @@ class Orchestrator {
         // it would fail chapters the agent has been explicitly told not to
         // flesh out yet, feeding it findings it is forbidden to act on.
         if (build.origin === 'studio' && iterationNumber > 1) {
-          const port = (build.serveConfig as { port?: number } | null)?.port;
-          if (build.chapterPlan.length > 0 && port) {
-            const { runStudioGate, describeGate } = await import('./studio-gate');
+          // Re-read serveConfig rather than using the `build` snapshot taken at
+          // the top of runIteration: manageServeConfig above may have just
+          // reassigned this build's port on a collision and written the new one
+          // to the row. The stale port would point the gate at another build's
+          // server (or nothing), and every chapter would come back unreachable.
+          const [servedBuild] = await db
+            .select({ serveConfig: jkaiBuilds.serveConfig })
+            .from(jkaiBuilds)
+            .where(eq(jkaiBuilds.id, buildId));
+          const port = (servedBuild?.serveConfig as { port?: number } | null)?.port;
+          const { runStudioGate, describeGate, describeGateSkip } = await import('./studio-gate');
+          const skip = describeGateSkip(build.chapterPlan.length, port);
+          if (skip) {
+            // The gate is this build's only guardrail, and skipping it used to
+            // be completely silent — not even the "skipped" line the ran:false
+            // contract produces. Both missing conditions leave every chapter
+            // unchecked, so both are errors.
+            await emitLog(buildId, 'error', `${skip} (iteration #${iterationNumber})`, iteration.id);
+          } else {
             const outcome = await runStudioGate({
               baseUrl: `http://127.0.0.1:${port}`,
               chapters: build.chapterPlan.map((c) => ({ ...c, path: `/chapter-${c.n}/` })),
