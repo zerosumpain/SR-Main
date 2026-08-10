@@ -5,9 +5,19 @@ Pick per chapter, not per project. A good project usually uses three of the four
 | The concept is… | Use | Why |
 |---|---|---|
 | A system where a few inputs drive an outcome through named mechanisms | `createSim` + `createDiagram` | The diagram shows the causal path; the levers let the learner feel it. This is the default for a policy or process. |
-| Spatially distributed, or about density, allocation and place | `createScene` | Extruded tiles read as quantity-in-place instantly. This is the SimCity register: one variable as height, one as colour. |
+| **Any quantity that varies across a SET of things** — sources, claims, years, categories, cohorts, regions | `createScene` | This is the SimCity register and it is far broader than maps. One tile per item, height for magnitude, colour for a second variable. Ten sources with different credibility? A tile grid. Eight claims with different evidential weight? A tile grid. It does not need to be geography — it needs a set and a number. |
 | A quantity changing over time, or a comparison across categories | `createChart` | Do not build a 3D scene for a time series. |
 | A sequence of stages with gates, queues or dropout between them | `createDiagram` with `kind: 'mechanism'` nodes and weighted edges | Edge weight carries the flow; `setWeight` animates it as a lever moves. |
+
+## Reach for the scene more often than feels natural
+
+The commonest failure of this kit is a project where every chapter is a flat
+diagram. Diagrams are the safe default and they make a monotonous artefact. If a
+chapter involves more than about five of anything with a number attached, the
+tile grid will almost always read better than a bar chart and far better than
+prose — it is the one visual here that makes quantity *physical*.
+
+A build of five or more chapters with no scene at all is flagged by the checker.
 
 ## Anti-patterns
 
