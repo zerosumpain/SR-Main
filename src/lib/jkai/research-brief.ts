@@ -11,7 +11,7 @@
  * the structured brief with one LLM call.
  */
 import { db } from '$lib/db';
-import { researchSessions } from '$lib/db/schema';
+import { researchSessions, facts, sources } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
@@ -58,6 +58,17 @@ export function isBriefUsable(brief: ResearchBrief): { ok: boolean; reason?: str
       reason: `${unsourced.length} fact(s) arrived without a source URL, starting with "${unsourced[0].claim.slice(0, 80)}". A fact without provenance is a guess.`,
     };
   }
+  // A brief could otherwise pass with 8+ well-formed https:// facts that all
+  // point at the same one or two pages — technically sourced, not actually
+  // researched. Require some spread across the source set.
+  const distinctSources = new Set(brief.facts.map((f) => f.sourceUrl)).size;
+  const MIN_SOURCES = 3;
+  if (distinctSources < MIN_SOURCES) {
+    return {
+      ok: false,
+      reason: `The brief draws on only ${distinctSources} distinct source${distinctSources === 1 ? '' : 's'} across ${brief.facts.length} facts. A brief built from one or two sources is not a research base.`,
+    };
+  }
   if (brief.gaps.length > brief.facts.length) {
     return {
       ok: false,
@@ -102,12 +113,21 @@ export function formatBriefForPrompt(brief: ResearchBrief): string {
   return lines.join('\n');
 }
 
-const CONVERT_PROMPT = `You are converting a research report into a structured brief for someone building an interactive explainer.
+// Deliberately does NOT ask for `facts` or their sourceUrl. ResearchReport
+// carries no URLs anywhere — ranked_facts and every *_fact_ids array are
+// opaque fact ids (see $lib/deepdive/postprocess.ts), so a model asked to
+// emit sourced facts from that JSON has only two options: fabricate a
+// plausible-looking URL, or return nothing — and isBriefUsable's
+// http(s)-prefix check cannot tell a fabricated URL from a real one. Real
+// facts+URLs come straight from the `facts`/`sources` tables in
+// buildResearchBrief below and never pass through the LLM. This prompt only
+// synthesises the parts that are genuinely synthesis: concepts, the causal
+// model, live data pointers, misconceptions, and gaps.
+const CONVERT_PROMPT = `You are given a NUMBERED list of research facts, each with its source URL already attached. Sourcing is handled separately — do not repeat the facts back. Your job is to synthesise structure on top of them for someone building an interactive explainer.
 
 Return ONLY a JSON object, no prose and no code fence, with exactly these keys:
 
 {
-  "facts": [{ "claim": "...", "sourceUrl": "https://...", "detail": "..." }],
   "concepts": [{ "name": "...", "whyHard": "..." }],
   "causalMap": [{ "from": "...", "to": "...", "relationship": "..." }],
   "liveData": [{ "name": "...", "url": "https://...", "what": "..." }],
@@ -116,10 +136,11 @@ Return ONLY a JSON object, no prose and no code fence, with exactly these keys:
 }
 
 Rules:
-- A fact with no source URL in the report must be OMITTED, not invented. Fewer honest facts beats more confident ones.
-- causalMap is the model an interactive simulation will be built on. Prefer relationships with a direction and a rough magnitude.
-- gaps are what the report could NOT establish. Do not leave this empty to look thorough; an empty gaps list on a complex topic is itself a warning sign.
-- Aim for 10-15 facts, 3-5 concepts, 4-8 causal relationships.`;
+- Ground every concept, every causal link, and every misconception in the numbered facts you were given. Do not introduce a claim, relationship, or figure the facts do not support — if it isn't traceable to one of the numbered facts, it does not belong here.
+- causalMap is the model an interactive simulation will be built on. Prefer relationships with a direction and a rough magnitude, drawn only from what the facts establish.
+- liveData should point to real datasets or APIs the facts actually mention, not invented ones.
+- gaps are what the numbered facts do NOT establish, not general knowledge a search engine might find. Do not leave this empty to look thorough; an empty gaps list on a complex topic is itself a warning sign.
+- Aim for 3-5 concepts, 4-8 causal relationships.`;
 
 /**
  * Run the research stage. Polls the Deep Dive session for up to 20 minutes.
@@ -145,15 +166,71 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
 
   const deadline = Date.now() + 20 * 60 * 1000;
   let report: ResearchReport | null = null;
+  let sessionFailed = false;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 20_000));
     const [row] = await db.select().from(researchSessions).where(eq(researchSessions.id, session.id));
     if (row?.report) { report = row.report as ResearchReport; break; }
-    if (row?.status === 'failed') break;
+    if (row?.status === 'failed') { sessionFailed = true; break; }
   }
   if (!report) {
+    // A worker crash and a genuine 20-minute stall are different operator
+    // problems — one means "read the deep-dive logs", the other means "this
+    // topic may be too obscure or the model too slow". Distinct messages so
+    // the build failure reason actually points somewhere useful.
+    if (sessionFailed) {
+      throw new Error(
+        `Research stage: the deep-dive session failed before producing a report (session ${session.id}). Check its logs.`,
+      );
+    }
     throw new Error(`Research stage produced no report within 20 minutes (session ${session.id}).`);
   }
+
+  // The facts (and their sourceUrl) come DIRECTLY from the facts/sources
+  // tables, never from the LLM. ResearchReport carries no URLs anywhere —
+  // ranked_facts and every *_fact_ids array are opaque fact ids, not fact
+  // text (see $lib/deepdive/postprocess.ts) — so asking the model to emit
+  // `sourceUrl` per fact from the serialised report gave it no real URLs to
+  // draw on, and every one it returned was invented. isBriefUsable's
+  // http(s)-prefix check could not tell a fabricated URL from a real one.
+  const factRows = await db
+    .select({
+      id: facts.id,
+      content: facts.content,
+      confidence: facts.confidence,
+      url: sources.url,
+      title: sources.title,
+    })
+    .from(facts)
+    .innerJoin(sources, eq(facts.sourceId, sources.id))
+    .where(eq(facts.sessionId, session.id));
+
+  // report.ranked_facts is the session's ranked order (best first); anything
+  // it doesn't cover falls back to descending confidence and goes last.
+  const rankIndex = new Map(report.ranked_facts.map((id, i) => [id, i]));
+  const ranked = factRows
+    .filter((f) => rankIndex.has(f.id))
+    .sort((a, b) => rankIndex.get(a.id)! - rankIndex.get(b.id)!);
+  const unranked = factRows
+    .filter((f) => !rankIndex.has(f.id))
+    .sort((a, b) => b.confidence - a.confidence);
+  const orderedFacts = [...ranked, ...unranked].slice(0, 15);
+
+  if (orderedFacts.length < MIN_FACTS) {
+    throw new Error(
+      `Research stage: the research session produced too few sourced facts (${orderedFacts.length}, need ${MIN_FACTS}) — session ${session.id}.`,
+    );
+  }
+
+  const briefFacts: BriefFact[] = orderedFacts.map((f) => ({
+    claim: f.content,
+    sourceUrl: f.url,
+    ...(f.title ? { detail: f.title } : {}),
+  }));
+
+  const factsForPrompt = orderedFacts
+    .map((f, i) => `${i + 1}. ${f.content}\n   source: ${f.url}`)
+    .join('\n');
 
   // getLLMClient is async and takes a full ModelContext ({ provider, modelId }),
   // returning { client, model } — NOT a bare client keyed by a model id string.
@@ -166,7 +243,7 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     model,
     messages: [
       { role: 'system', content: CONVERT_PROMPT },
-      { role: 'user', content: JSON.stringify(report).slice(0, 120_000) },
+      { role: 'user', content: `Topic: ${challenge}\n\nFACTS:\n${factsForPrompt}`.slice(0, 120_000) },
     ],
     temperature: 0.3,
     max_tokens: 8192,
@@ -183,7 +260,7 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
 
   const brief: ResearchBrief = {
     topic: challenge.slice(0, 500),
-    facts: (parsed.facts ?? []).filter((f) => f && f.claim && f.sourceUrl),
+    facts: briefFacts,
     concepts: parsed.concepts ?? [],
     causalMap: parsed.causalMap ?? [],
     liveData: parsed.liveData ?? [],
