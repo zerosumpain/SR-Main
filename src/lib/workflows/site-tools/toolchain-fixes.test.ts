@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getTool, getToolsByToolset, getAvailableToolsets } from './registry';
 import { isDestructive } from '$lib/workflows/chat/confirmation-gate';
+import { isBridgeable } from '$lib/jkai/tool-bridge';
 
 describe('destructive flag (single source of truth)', () => {
   const shouldBeDestructive = [
@@ -39,6 +40,22 @@ describe('destructive flag (single source of truth)', () => {
     expect(getTool('build_control')?.destructive).toBeFalsy();
     expect(isDestructive('build_control')).toBe(false);
     expect(isDestructive('build_delete')).toBe(true);
+  });
+
+  it('registers studio_build in the builds toolset, ungated and bridgeable', () => {
+    // Verifies registration the way the app actually resolves it — via
+    // registry.ts's explicit `import './tools/studio'` — rather than a
+    // one-off script, and pins the destructive=false decision recorded in
+    // studio.ts's header comment: a studio build is reversible like any
+    // other build, so it must stay bridgeable to builds (isBridgeable
+    // refuses anything destructive, per tool-bridge.ts).
+    const tool = getTool('studio_build');
+    expect(tool).toBeDefined();
+    expect(tool?.toolset).toBe('builds');
+    expect(tool?.destructive).toBeFalsy();
+    expect(isDestructive('studio_build')).toBe(false);
+    expect(isBridgeable('studio_build')).toBe(true);
+    expect(getToolsByToolset('builds').some((t) => t.name === 'studio_build')).toBe(true);
   });
 
   it('has no phantom gate entries', () => {

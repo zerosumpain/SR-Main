@@ -41,3 +41,31 @@ describe('lintDesignSystem', () => {
     ).toEqual(['no-raw-font']);
   });
 });
+
+describe('read-only mounts are exempt', () => {
+  it('never reports a finding inside explainer-kit/', () => {
+    const { findings } = lintDesignSystem({
+      'explainer-kit/examples/chapter.html': '<div class="grid" style="color:#ff0000">x</div>',
+      'explainer-kit/tokens.css': 'body { font-family: Helvetica; }',
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('still reports the same violations outside the mount', () => {
+    const { findings } = lintDesignSystem({
+      'src/chapter.html': '<div class="grid" style="color:#ff0000">x</div>',
+    });
+    expect(findings.map((f) => f.rule).sort()).toEqual(['no-raw-hex', 'no-tailwind']);
+  });
+
+  it('still lints a directory named explainer-kit/ that is not at the workspace root', () => {
+    // The exemption is anchored to the top of the path because that's the
+    // only place syncExplainerKit / syncDesignAssets ever write. An agent
+    // naming its OWN directory explainer-kit/ or design-system/ deeper in its
+    // source tree must not get a free pass from the linter.
+    const { findings } = lintDesignSystem({
+      'src/explainer-kit/foo.html': '<div class="grid" style="color:#ff0000">x</div>',
+    });
+    expect(findings.map((f) => f.rule).sort()).toEqual(['no-raw-hex', 'no-tailwind']);
+  });
+});

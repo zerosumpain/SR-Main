@@ -37,6 +37,37 @@ const LIVENESS_PING_MS = 15_000;
  */
 const STALE_BUILD_MS = 30 * 60_000;
 
+/**
+ * Kit files the studio gate checks are actually served (see runStudioGate's
+ * chapter-0 `kit-missing` check). Paths relative to the served root, matching
+ * where `syncExplainerKit` (./sandbox) mounts the kit — `dev/explainer-kit/`.
+ *
+ * This is a small sample, not the full `EXPLAINER_FILES` list from
+ * design-assets.ts — deliberately, but NOT because some of those files are
+ * "referenced in place" and others get copied. They don't split that way:
+ * `promoteDevToLive` does an unconditional `cp -a dev/. live/` every
+ * iteration, so every file under `dev/explainer-kit/` — copied by the agent
+ * elsewhere or not, edited or not — is physically present under
+ * `live/explainer-kit/` regardless. (An earlier version of this comment
+ * claimed tokens.css/three.min.js are referenced at the mount path while
+ * sim.js/diagram.js get relocated; the kit's own worked example,
+ * static/explainer-kit/examples/chapter.html, references tokens.css with
+ * `href="../tokens.css"` exactly like it references the JS modules, and
+ * VENDOR.md documents three.min.js as copied too — so that distinction was
+ * wrong and is not the reason for this list.)
+ *
+ * What this check actually tests is one binary fact: does the build's own
+ * server expose the `/explainer-kit/` subtree at all. If it does, any file
+ * in it will resolve, so a handful is exactly as informative as all nine —
+ * checking more would only mean more HTTP round trips for the same yes/no
+ * answer. If it doesn't (the server is scoped to a `public/`/`dist/`
+ * subdirectory that excludes the mount), every file in the list 404s
+ * together, which is itself the signal worth surfacing — see the
+ * kit-missing remedy in scripts/studio-gate.mjs, which now names that as the
+ * more likely, and agent-fixable, cause.
+ */
+const STUDIO_KIT_CHECK_FILES = ['explainer-kit/tokens.css', 'explainer-kit/three.min.js', 'explainer-kit/README.md'];
+
 export { onBuildLog } from './log-emitter';
 
 /**
@@ -556,13 +587,44 @@ class Orchestrator {
       await ensureWorkspace(buildId);
     }
 
+    const isStudio = buildRecord.origin === 'studio';
+
+    // Studio builds run a research stage before the planner — everything the
+    // planner (and every chapter after it) writes must trace back to sourced
+    // facts, so this has to land before planBuild is ever invoked. Gated on
+    // researchBrief already being null so a re-entry into initAndPlan (e.g.
+    // replan()) does not re-run 20 minutes of research it already has.
+    if (isStudio && !buildRecord.researchBrief) {
+      try {
+        const { buildResearchBrief } = await import('./research-brief');
+        const brief = await buildResearchBrief(buildId, buildRecord.prompt);
+        await db.update(jkaiBuilds).set({ researchBrief: brief }).where(eq(jkaiBuilds.id, buildId));
+        await emitLog(buildId, 'system', 'Research brief attached — proceeding to planning.');
+      } catch (err: any) {
+        // Do not fall through to planning. An explainer built without sources
+        // is confidently wrong, which is worse than one that does not exist.
+        await this.abortBuild(buildId, {
+          kind: 'nonzero_exit',
+          message: `Research stage failed: ${err.message}`,
+          attempts: 1,
+        });
+        return;
+      }
+    }
+
     // Honour planStatus from the create-build form. When planFirst=false
     // the API sets planStatus='approved' at insert time — meaning the user
     // explicitly opted out of the proposer/critic/revision debate. Pre-fix,
     // we ran planBuild() anyway and just threw the 90 seconds of output
     // away because the gate didn't fire. Now: skip the planner entirely
     // and go straight to iteration 1.
-    const skipPlanning = buildRecord.planStatus !== 'pending';
+    //
+    // Studio builds are exempted from this skip. createStudioBuild also sets
+    // planStatus='approved', but there it means "no human approval PAUSE"
+    // (see the pending-check below) — not "no planner". Without planBuild
+    // actually running, a studio build never gets a chapter spine and the
+    // research brief attached above is never read by anything.
+    const skipPlanning = !isStudio && buildRecord.planStatus !== 'pending';
     if (skipPlanning) {
       await emitLog(
         buildId,
@@ -680,11 +742,26 @@ class Orchestrator {
         .set({ prompt: revisedPrompt.trim(), updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, buildId));
     }
+    // Studio builds carry no human approval gate: createStudioBuild sets
+    // planStatus='approved' at creation, and the Studio UI (BuildSession, the
+    // v3 build-detail chrome) has no Approve/Skip/Re-plan control at all — the
+    // only surface offering "Re-plan from scratch" is FailureRecovery in the
+    // classic BuildDetailV2 view, which is origin-blind and reachable for any
+    // failed build. Setting planStatus='pending' below unconditionally, as
+    // this did before, would park a re-planned studio build at
+    // awaiting_plan_approval with no in-Studio-UI way to un-park it. Self-
+    // approve for studio the same way creation does, instead of parking.
+    const [existing] = await db
+      .select({ origin: jkaiBuilds.origin })
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.id, buildId))
+      .limit(1);
+    const isStudio = existing?.origin === 'studio';
     await db
       .update(jkaiBuilds)
       .set({
         status: 'running',
-        planStatus: 'pending',
+        planStatus: isStudio ? 'approved' : 'pending',
         failure: null,
         consecutiveFailures: 0,
         iterationsCompleted: 0,
@@ -1167,6 +1244,63 @@ class Orchestrator {
           await emitLog(buildId, 'system', 'Tests failed — promoting anyway so the live preview reflects the latest iteration. Failure context is included for the next iteration.', iteration.id);
         }
         await manageServeConfig(buildId);
+
+        // Studio gate. Runs after promotion so it drives the same build the
+        // user is looking at. Findings feed the next iteration via the
+        // evaluation text; they never abort a build on their own — the
+        // budget cap and the idle-iteration breaker above already terminate
+        // a build that cannot converge, and a build-ending abort on
+        // unfixable gate findings is exactly the design_lint_loop failure
+        // mode (see lintDesignSystem's DESIGN_MOUNT_RE comment): a build was
+        // once aborted after three iterations of a finding it could not fix
+        // while its app was complete and serving 200.
+        //
+        // iterationNumber > 1: iteration 1 is the skeleton, where every
+        // chapter is a reachable placeholder by design. Running the gate on
+        // it would fail chapters the agent has been explicitly told not to
+        // flesh out yet, feeding it findings it is forbidden to act on.
+        if (build.origin === 'studio' && iterationNumber > 1) {
+          // Re-read serveConfig rather than using the `build` snapshot taken at
+          // the top of runIteration: manageServeConfig above may have just
+          // reassigned this build's port on a collision and written the new one
+          // to the row. The stale port would point the gate at another build's
+          // server (or nothing), and every chapter would come back unreachable.
+          const [servedBuild] = await db
+            .select({ serveConfig: jkaiBuilds.serveConfig })
+            .from(jkaiBuilds)
+            .where(eq(jkaiBuilds.id, buildId));
+          const port = (servedBuild?.serveConfig as { port?: number } | null)?.port;
+          const { runStudioGate, describeGate, describeGateSkip } = await import('./studio-gate');
+          const skip = describeGateSkip(build.chapterPlan.length, port);
+          if (skip) {
+            // The gate is this build's only guardrail, and skipping it used to
+            // be completely silent — not even the "skipped" line the ran:false
+            // contract produces. Both missing conditions leave every chapter
+            // unchecked, so both are errors.
+            await emitLog(buildId, 'error', `${skip} (iteration #${iterationNumber})`, iteration.id);
+          } else {
+            const outcome = await runStudioGate({
+              baseUrl: `http://127.0.0.1:${port}`,
+              chapters: build.chapterPlan.map((c) => ({ ...c, path: `/chapter-${c.n}/` })),
+              sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
+              kitFiles: STUDIO_KIT_CHECK_FILES,
+            });
+            const summary = describeGate(outcome);
+            await emitLog(
+              buildId,
+              outcome.ran && !outcome.passed ? 'error' : 'system',
+              summary,
+              iteration.id,
+            );
+            if (outcome.ran && !outcome.passed && result.evaluation) {
+              result.evaluation = `${result.evaluation}\n\n## Studio gate\n${summary}`;
+              await db
+                .update(jkaiIterations)
+                .set({ evaluation: result.evaluation })
+                .where(eq(jkaiIterations.id, iteration.id));
+            }
+          }
+        }
       }
 
       // Log iteration summary

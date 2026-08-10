@@ -1,0 +1,49 @@
+/* Explainer kit tokens — derived from the Strange Ramblings palette.
+   Raw hex is legal in this file and nowhere else. */
+:root {
+  --ex-bg: #faf8f4;
+  --ex-surface: #ffffff;
+  --ex-ink: #17150f;
+  --ex-ink-soft: #565043;
+  --ex-rule: #d9d3c6;
+  --ex-accent: #c2410c;
+  --ex-accent-soft: #fde3d3;
+
+  /* Sequential ramp for scene tiles and choropleths — perceptually ordered. */
+  --ex-ramp-0: #f4ede2;
+  --ex-ramp-1: #e8cfae;
+  --ex-ramp-2: #d9a86e;
+  --ex-ramp-3: #c2410c;
+  --ex-ramp-4: #7c2408;
+
+  /* Categorical series — max six, distinguishable in greyscale. */
+  --ex-cat-1: #1d4e63;
+  --ex-cat-2: #c2410c;
+  --ex-cat-3: #6b7f3a;
+  --ex-cat-4: #8a5a9c;
+  --ex-cat-5: #b08900;
+  --ex-cat-6: #4a4a4a;
+
+  --ex-good: #2f6b3f;
+  --ex-warn: #b08900;
+  --ex-bad: #a32b1c;
+
+  --font-display: 'Archivo Black', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --ex-radius: 2px;
+  --ex-gap: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ex-bg: #14120e;
+    --ex-surface: #1d1a15;
+    --ex-ink: #f3efe7;
+    --ex-ink-soft: #a49c8c;
+    --ex-rule: #38332a;
+    --ex-accent: #f97316;
+    --ex-accent-soft: #3a2214;
+  }
+}

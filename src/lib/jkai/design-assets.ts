@@ -162,6 +162,53 @@ const EXAMPLE_PAGE_SVELTE = `<script lang="ts">
 </style>
 `;
 
+/**
+ * The Studio mount. Unlike `buildDesignAssets` — which inlines its content as
+ * string constants — the explainer kit is real, testable JavaScript, so it is
+ * read from disk. `static/` is copied to `build/client/` by the adapter and
+ * `build/` is rsynced wholesale by ci-deploy, so both paths resolve. Same
+ * two-candidate pattern `syncJkaiExtension` already uses for jkai-tools.js.
+ */
+const EXPLAINER_FILES = [
+  'tokens.css',
+  'sim.js',
+  'diagram.js',
+  'lowpoly.js',
+  'chart.js',
+  'three.min.js',
+  'README.md',
+  'scenes.md',
+  'examples/chapter.html',
+  // VENDOR.md (three.js provenance) is intentionally NOT listed here — the
+  // agent needs the kit to build with, not its licensing paperwork. Omitting
+  // it is safe: buildExplainerAssets only throws for files it lists and
+  // cannot find, never for files on disk it doesn't list.
+];
+
+export async function buildExplainerAssets(repoRoot: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const rel of EXPLAINER_FILES) {
+    const candidates = [
+      path.join(repoRoot, 'static/explainer-kit', rel),
+      path.join(repoRoot, 'build/client/explainer-kit', rel),
+    ];
+    let body: string | null = null;
+    for (const c of candidates) {
+      body = await readFile(c, 'utf-8').catch(() => null);
+      if (body != null) break;
+    }
+    if (body == null) missing.push(rel);
+    else out[rel] = body;
+  }
+  if (missing.length > 0) {
+    // Fail loudly. A half-mounted kit gives the agent a README promising modules
+    // that are not there, and it will spend an iteration discovering that.
+    throw new Error(`buildExplainerAssets: missing ${missing.join(', ')} under static/ and build/client/`);
+  }
+  return out;
+}
+
 export async function buildDesignAssets(repoRoot: string): Promise<Record<string, string>> {
   const appCss = await readFile(path.join(repoRoot, 'src/app.css'), 'utf-8').catch(() => '');
   const nmTokens = await readFile(path.join(repoRoot, 'src/lib/styles/nm-tokens.css'), 'utf-8').catch(

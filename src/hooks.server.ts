@@ -39,6 +39,10 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   { pattern: /^\/api\/workflows\/orchestrator(\/|$)/, capacity: 10, refillPerSecond: 10 / 60 },
   { pattern: /^\/api\/workflows\/webhook(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/jkai\/builds(\/|$)/, capacity: 5, refillPerSecond: 5 / 60 },
+  // Studio and Forge each kick off an autonomous multi-hour build (STUDIO_BUDGET:
+  // up to $15 and 480 minutes). Unlike /builds these were unmatched entirely, so
+  // a retry loop could queue them serially. 3/hour, not 3/minute.
+  { pattern: /^\/api\/jkai\/(studio|forge)(\/|$)/, capacity: 3, refillPerSecond: 3 / 3600 }, // 3/hour
   { pattern: /^\/api\/jkai\/(conversations|chat)(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
 ];

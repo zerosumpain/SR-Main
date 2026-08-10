@@ -66,6 +66,11 @@ rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
 # stayed green: the feature degrades silently by design, which is right for a
 # missing browser and wrong for a missing file.
 rsync -a scripts/smoke-static-app.mjs "$VPS_DIR/scripts/"
+# Same reasoning, same failure mode, for the Studio gate: runStudioGate shells
+# out to this by path, and without this line the gate is silently absent in
+# production — it reports { ran: false } forever and every studio build sails
+# through unchecked, with nothing to indicate the check never ran.
+rsync -a scripts/studio-gate.mjs "$VPS_DIR/scripts/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of

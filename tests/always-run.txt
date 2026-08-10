@@ -6,7 +6,10 @@
 # this list from the source and fails if it has drifted, so a new filesystem-
 # coupled test cannot be added without landing here too.
 #
+src/lib/jkai/explainer-kit.test.ts
+src/lib/jkai/explainer-sim.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
+src/lib/jkai/studio.test.ts
 src/lib/projects/registry-cards.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts

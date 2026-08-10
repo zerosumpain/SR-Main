@@ -68,3 +68,48 @@ describe('buildIterationContext', () => {
     expect(ctx('repo', null)).not.toContain('Definition of Done');
   });
 });
+
+describe('studio prompt mode', () => {
+  const p = buildSystemPrompt('b1', 8123, 'studio');
+
+  it('does not carry the app mode wrap-up-at-200 hard stop', () => {
+    expect(p).not.toContain('at least one route returns a 200. → Wrap up');
+    expect(p).not.toContain("You've been working for 15 minutes");
+  });
+
+  it('does not recommend Tailwind, which the linter rejects', () => {
+    expect(p).not.toMatch(/cdn\.tailwindcss\.com/);
+  });
+
+  it('states the four-part chapter contract', () => {
+    expect(p).toContain('data-chapter');
+    expect(p).toContain('data-lever');
+    expect(p).toContain('data-outcome');
+    expect(p).toContain('data-citation');
+  });
+
+  it('points at the explainer kit mount', () => {
+    expect(p).toContain('./explainer-kit/');
+    expect(p).toContain('scenes.md');
+  });
+
+  it('still carries the port and workspace footer', () => {
+    expect(p).toContain('/home/jkai/workspace/b1/dev');
+    expect(p).toContain('8123');
+  });
+
+  it('leaves app and repo modes untouched', () => {
+    expect(buildSystemPrompt('b1', 8123, 'app')).toContain('SHIP THE THINNEST RUNNABLE PREVIEW');
+    expect(buildSystemPrompt('b1', 8123, 'repo')).toContain('THE DELIVERABLE IS A REVIEWABLE DIFF');
+  });
+
+  it('injects the chapter plan into iteration context', () => {
+    const msgs = buildIterationContext(
+      'explain school funding', null, '', null, 4, 8123, '', 'studio', null,
+      [{ n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' }],
+    );
+    expect(msgs[0].content).toContain('Chapter Plan');
+    expect(msgs[0].content).toContain('What a school budget is');
+    expect(msgs[0].content).toContain('iteration 4');
+  });
+});

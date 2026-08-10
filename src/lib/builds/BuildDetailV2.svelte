@@ -347,6 +347,7 @@
     <FailureRecovery
       buildId={build.id}
       failureKind={build.failure?.kind ?? null}
+      origin={build.origin}
       onAfter={refresh}
     />
   {/if}

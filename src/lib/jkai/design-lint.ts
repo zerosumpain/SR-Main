@@ -34,8 +34,20 @@ const FILES_TO_CHECK = /\.(css|scss|sass|less|html|svelte|jsx|tsx|vue)$/i;
  * 1 → 1 → 1 (found 2026-08-09 by a build whose app was complete and serving
  * 200 at iteration 1). The mount was already exempt from `no-raw-hex`; it just
  * was not exempt from the other two rules.
+ *
+ * `explainer-kit/` is the second such mount (Studio builds) and carries exactly
+ * the same hazard: it is read-only, regenerated every iteration, and contains a
+ * worked example the agent is told to copy. A finding there cannot be fixed.
+ *
+ * Anchored to the start of the path, not `(^|\/)`: both mounts only ever exist
+ * at the top of `dev/` (`syncDesignAssets` / `syncExplainerKit` always write
+ * to `dev/design-system` / `dev/explainer-kit`, never nested), and paths
+ * reaching `lintDesignSystem` are workspace-relative from `listDevFiles`. An
+ * unanchored match would exempt any directory the agent itself names
+ * `design-system/` or `explainer-kit/` anywhere in its own source tree — quite
+ * plausible on a site whose own subject matter is worked explainers.
  */
-const DESIGN_MOUNT_RE = /(^|\/)design-system\//i;
+const DESIGN_MOUNT_RE = /^(design-system|explainer-kit)\//i;
 
 function looksLikeRawFontFamily(line: string): boolean {
   const m = line.match(FONT_FAMILY_RE);

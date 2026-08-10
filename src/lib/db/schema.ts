@@ -616,6 +616,25 @@ export const agentSettings = pgTable('agent_settings', {
 // JKAI — Autonomous Build System
 // ==========================================
 
+/**
+ * Studio builds only. Shape of the FACTS/GAPS research brief produced before
+ * planning. `src/lib/jkai/research-brief.ts` (Task 10) owns the canonical
+ * `ResearchBrief` interface with an identical shape — it imports
+ * `researchSessions` FROM this file, so this file cannot import a type back
+ * out of it without a circular import. The duplication here is deliberate to
+ * keep schema.ts free of app-level ($lib/jkai) imports.
+ */
+export interface StudioResearchBrief {
+  topic: string;
+  facts: Array<{ claim: string; sourceUrl: string; detail?: string }>;
+  concepts: Array<{ name: string; whyHard: string }>;
+  causalMap: Array<{ from: string; to: string; relationship: string }>;
+  liveData: Array<{ name: string; url: string; what: string }>;
+  misconceptions: string[];
+  gaps: string[];
+  sessionId: string | null;
+}
+
 export const jkaiBuilds = pgTable('jkai_builds', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   title: text('title'),
@@ -658,7 +677,7 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
   enforceDesignSystem: boolean('enforce_design_system').notNull().default(true),
   planStatus: text('plan_status').notNull().default('approved'),
-  origin: text('origin', { enum: ['manual', 'hermes', 'forge'] }).notNull().default('manual'),
+  origin: text('origin', { enum: ['manual', 'hermes', 'forge', 'studio'] }).notNull().default('manual'),
   // Git-target mode (Brass & Rails Forge). NULL for every normal build —
   // when null the builder behaves byte-identically to before (same workspace,
   // same publish). When set, the build clones a git repo, branches, runs the
@@ -673,6 +692,26 @@ export const jkaiBuilds = pgTable('jkai_builds', {
     prTitlePrefix?: string;
   } | null>().default(null),
   milestones: jsonb('milestones').$type<Array<{ id: string; title: string; done: boolean; iter?: number }>>().notNull().default(sql`'[]'::jsonb`),
+  /**
+   * Studio builds only. The FACTS/GAPS brief produced before planning — see
+   * src/lib/jkai/research-brief.ts. Injected into the planner and into every
+   * iteration; the sourcing gate resolves citations against its fact URLs.
+   */
+  researchBrief: jsonb('research_brief').$type<StudioResearchBrief | null>().default(null),
+  /**
+   * Studio builds only. The chapter spine. `leverId`/`outcomeId` are the
+   * data-attribute ids studio-gate drives — a chapter with no declared pair
+   * cannot be interactivity-checked, and a check that cannot run is a check
+   * that silently passes.
+   *
+   * `src/lib/jkai/prompt.ts` owns the canonical `ChapterPlanEntry` type with
+   * an identical shape. This file keeps its own inline copy deliberately, to
+   * stay free of app-level ($lib/jkai) imports.
+   */
+  chapterPlan: jsonb('chapter_plan')
+    .$type<Array<{ n: number; title: string; leverId: string; outcomeId: string }>>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),
   thinkingLevel: text('thinking_level').notNull().default('medium'),
   enabledToolsets: jsonb('enabled_toolsets').$type<string[]>().notNull().default(sql`'["all"]'::jsonb`),
