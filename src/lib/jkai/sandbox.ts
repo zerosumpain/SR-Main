@@ -667,24 +667,44 @@ export function sliceBase64(b64: string, size = CHUNKED_WRITE_B64_THRESHOLD): st
  * in one shot, then verifies the decoded byte count — a silently truncated
  * three.min.js would be worse than a missing one, so a mismatch is a hard
  * failure rather than a logged warning.
+ *
+ * Every failure branch best-effort cleans up BOTH the `.b64` side file and the
+ * destination path before returning. Without that, a failed write can leave a
+ * corrupt (partial or wrong-length) artifact on disk instead of no artifact at
+ * all — exactly the outcome the byte-count check above exists to prevent, so
+ * leaving a bad file behind on the way out would undo the point of checking.
+ *
+ * `exec` is injectable (defaults to the real `execInSandbox`) purely so tests
+ * can stub each failure mode and assert the cleanup command actually ran,
+ * without needing a real sandbox.
  */
-async function writeFileInSandboxChunked(filePath: string, content: string): Promise<ExecResult> {
+export async function writeFileInSandboxChunked(
+  filePath: string,
+  content: string,
+  exec: typeof execInSandbox = execInSandbox,
+): Promise<ExecResult> {
   const b64 = Buffer.from(content).toString('base64');
   const b64Path = `${filePath}.b64`;
+  const cleanup = () => exec(`rm -f ${b64Path} ${filePath}`).catch(() => {});
   const slices = sliceBase64(b64);
   for (let i = 0; i < slices.length; i++) {
     const op = i === 0 ? '>' : '>>';
-    const r = await execInSandbox(`printf '%s' '${slices[i]}' ${op} ${b64Path}`);
+    const r = await exec(`printf '%s' '${slices[i]}' ${op} ${b64Path}`);
     if (r.exitCode !== 0) {
+      await cleanup();
       return { ...r, stderr: `chunk ${i + 1}/${slices.length} write failed for ${b64Path}: ${r.stderr}` };
     }
   }
-  const decode = await execInSandbox(`base64 -d < ${b64Path} > ${filePath} && rm -f ${b64Path}`);
-  if (decode.exitCode !== 0) return decode;
+  const decode = await exec(`base64 -d < ${b64Path} > ${filePath} && rm -f ${b64Path}`);
+  if (decode.exitCode !== 0) {
+    await cleanup();
+    return decode;
+  }
   const expectedBytes = Buffer.byteLength(content);
-  const check = await execInSandbox(`wc -c < ${filePath}`);
+  const check = await exec(`wc -c < ${filePath}`);
   const actualBytes = parseInt(check.stdout.trim(), 10);
   if (check.exitCode !== 0 || actualBytes !== expectedBytes) {
+    await cleanup();
     return {
       stdout: check.stdout,
       stderr: `chunked write verification failed for ${filePath}: expected ${expectedBytes} bytes, decoded ${Number.isNaN(actualBytes) ? 'unknown' : actualBytes}`,
@@ -709,7 +729,11 @@ export async function syncExplainerKit(buildId: string): Promise<string> {
   }
   const assets = await buildExplainerAssets(process.cwd());
   let written = 0;
-  let failed = 0;
+  // Per-file `rel: stderr` diagnosis, not just a pass/fail count — a
+  // byte-mismatch on three.min.js and a permissions error on README.md used to
+  // both collapse into an identical "N/M writes failed" message, which left
+  // nobody reading the build log able to tell which file broke or why.
+  const failures: string[] = [];
   for (const [rel, body] of Object.entries(assets)) {
     const filePath = `${dest}/${rel}`;
     // HOST_MODE (writeFileInSandbox's fs.writeFile branch) has no arg-length
@@ -721,10 +745,12 @@ export async function syncExplainerKit(buildId: string): Promise<string> {
       ? await writeFileInSandboxChunked(filePath, body)
       : await writeFileInSandbox(filePath, body);
     if (r.exitCode === 0) written++;
-    else failed++;
+    else failures.push(`${rel}: ${r.stderr.trim()}`);
   }
-  if (failed > 0) {
-    throw new Error(`syncExplainerKit: ${failed}/${written + failed} writes failed (dest=${dest})`);
+  if (failures.length > 0) {
+    throw new Error(
+      `syncExplainerKit: ${failures.length}/${written + failures.length} writes failed (dest=${dest}) — ${failures.join('; ')}`,
+    );
   }
   return dest;
 }
