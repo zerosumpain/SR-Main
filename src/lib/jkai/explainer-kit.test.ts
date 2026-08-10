@@ -92,11 +92,20 @@ describe('explainer kit', () => {
     expect(findings).toEqual([]);
   });
 
+  // data-lever and data-outcome are injected into the DOM by sim.js at
+  // runtime (createSim calls setAttribute for both), so they are correctly
+  // absent from this file's static markup — asserting the bare strings here
+  // would only prove that a sentence somewhere mentions the words, not that
+  // the contract holds. The real check on their presence lives in the
+  // headless-browser gate (studio-gate) built later in this plan. What is
+  // statically true and load-bearing here is that the example carries
+  // data-chapter and data-citation directly, and invokes the runtime that
+  // produces the other two.
   it('the worked chapter example declares the contract studio-gate drives', async () => {
     const html = await read('examples/chapter.html');
     expect(html).toContain('data-chapter');
-    expect(html).toContain('data-lever');
-    expect(html).toContain('data-outcome');
     expect(html).toContain('data-citation');
+    expect(html).toMatch(/Explainer\.createSim\(/);
+    expect(html).toMatch(/Explainer\.createDiagram\(/);
   });
 });

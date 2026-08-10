@@ -45,13 +45,15 @@
         stroke: 'var(--ex-rule)', 'stroke-width': 1,
       }));
 
+      const maxPoints = Math.max(...series.map((s) => s.points.length), 1);
+      const bw = Math.max(2, (w - pad.left - pad.right) / (maxPoints * series.length + 1));
+
       series.forEach((s, i) => {
         const colour = `var(${CAT[i % CAT.length]})`;
         if (spec.kind === 'bar') {
-          const bw = Math.max(2, (w - pad.left - pad.right) / (s.points.length * series.length + 1));
           s.points.forEach((p) => {
             svg.appendChild(svgEl('rect', {
-              x: sx(p.x) + i * bw - bw / 2, y: sy(p.y),
+              x: sx(p.x) - (series.length * bw) / 2 + i * bw, y: sy(p.y),
               width: bw, height: Math.max(0, h - pad.bottom - sy(p.y)),
               fill: colour, 'data-series': s.id,
             }));
