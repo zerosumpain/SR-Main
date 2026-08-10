@@ -156,7 +156,14 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           TITLE="Nightly full suite is failing"
-          EXISTING=$(gh issue list --state open --search "$TITLE in:title" \
+          # Deliberately NOT `--search`. GitHub's issue search is an index and it
+          # lags by minutes, so an issue opened by the previous run is not
+          # necessarily findable by the next one — which is exactly what happened
+          # on 2026-08-09: run 31341819530 failed ~17 minutes after 31341122910
+          # and opened a duplicate (#180) because the search could not yet see
+          # #178. List and match client-side; the repo has nowhere near 200 open
+          # issues, so this is exact and immediate.
+          EXISTING=$(gh issue list --state open --limit 200 \
             --json number,title --jq "[.[] | select(.title == \"$TITLE\")][0].number")
           if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
             gh issue comment "$EXISTING" --body "Still failing: $RUN_URL"
