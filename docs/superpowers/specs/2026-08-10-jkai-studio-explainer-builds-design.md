@@ -269,8 +269,15 @@ start one, and the builds UI.
 | `src/lib/db/schema.ts` | `researchBrief` jsonb, `chapterPlan` jsonb, `origin` enum + `'studio'` |
 | `src/routes/jkai/builds/new/+page.svelte` | studio option in the UI |
 
-Fourteen files for a subsystem that mirrors an existing one. No `ci-deploy.sh` change, by
-design — see Component 1.
+Fourteen files for a subsystem that mirrors an existing one.
+
+**Correction to Component 1, found while planning:** the *kit* needs no allow-list change, but
+the gate runner does. `studio-gate.ts` cannot import Playwright directly — `import('playwright')`
+resolves from the importing script's own directory, which is why `static-smoke.ts` shells out to
+`scripts/smoke-static-app.mjs` and why that file has its own rsync line at `ci-deploy.sh:61`.
+`scripts/studio-gate.mjs` needs the same. Without it the gate is absent in production, reports
+`ran: false`, and every build sails through unchecked — a fail-soft feature that cannot report
+being undeployed, which is precisely the trap `reference_ci_deploy_scripts_allowlist` records.
 
 ## Verification
 
