@@ -5,6 +5,7 @@
 (function () {
   const ns = (window.Explainer = window.Explainer || {});
   const SVG = 'http://www.w3.org/2000/svg';
+  let _seq = 0;
 
   const KIND_FILL = {
     lever: 'var(--ex-accent-soft)',
@@ -26,18 +27,19 @@
     const byId = {};
     for (const n of nodes) byId[n.id] = n;
 
+    const markerId = 'ex-arrow-' + (++_seq);
     const w = spec.width || 720;
     const h = spec.height || 380;
     const svg = svgEl('svg', {
       viewBox: `0 0 ${w} ${h}`,
       width: '100%',
-      role: 'img',
+      role: spec.onNodeClick ? 'group' : 'img',
       'aria-label': spec.title || 'Causal diagram',
     });
 
     const defs = svgEl('defs', {});
     const marker = svgEl('marker', {
-      id: 'ex-arrow', viewBox: '0 0 10 10', refX: '9', refY: '5',
+      id: markerId, viewBox: '0 0 10 10', refX: '9', refY: '5',
       markerWidth: '6', markerHeight: '6', orient: 'auto-start-reverse',
     });
     marker.appendChild(svgEl('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: 'var(--ex-ink-soft)' }));
@@ -59,7 +61,7 @@
         x1: a.x, y1: a.y, x2: b.x, y2: b.y,
         stroke: 'var(--ex-ink-soft)',
         'stroke-width': Math.max(1, Math.min(8, (e.weight ?? 1) * 3)),
-        'marker-end': 'url(#ex-arrow)',
+        'marker-end': `url(#${markerId})`,
         'data-edge': key,
       });
       edgeLayer.appendChild(line);
@@ -76,7 +78,13 @@
     }
 
     for (const n of nodes) {
-      const g = svgEl('g', { 'data-node': n.id, class: 'ex-node', tabindex: '0' });
+      const attrs = { 'data-node': n.id, class: 'ex-node' };
+      if (spec.onNodeClick) {
+        attrs.tabindex = '0';
+        attrs.role = 'button';
+        attrs['aria-label'] = n.label;
+      }
+      const g = svgEl('g', attrs);
       g.appendChild(svgEl('rect', {
         x: n.x - 68, y: n.y - 20, width: 136, height: 40, rx: 2,
         fill: KIND_FILL[n.kind] || 'var(--ex-surface)',
@@ -91,6 +99,12 @@
       if (spec.onNodeClick) {
         g.style.cursor = 'pointer';
         g.addEventListener('click', () => spec.onNodeClick(n.id));
+        g.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            spec.onNodeClick(n.id);
+          }
+        });
       }
       nodeLayer.appendChild(g);
     }
@@ -100,7 +114,10 @@
     return {
       setWeight(from, to, weight) {
         const line = edgeEls[from + '__' + to];
-        if (line) line.setAttribute('stroke-width', String(Math.max(1, Math.min(8, weight * 3))));
+        if (line) {
+          const w = weight ?? 1;
+          line.setAttribute('stroke-width', String(Math.max(1, Math.min(8, w * 3))));
+        }
       },
       highlight(id) {
         nodeLayer.querySelectorAll('[data-node]').forEach((g) => {
