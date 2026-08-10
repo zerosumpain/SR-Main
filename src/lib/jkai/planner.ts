@@ -50,7 +50,7 @@ Format your response as:
 
 const CRITIC_SYSTEM_PROMPT = `You are a rigorous technical reviewer stress-testing a project delivery plan. Your job is to find real problems, not to validate. Be specific — cite the exact part of the plan that is problematic.
 
-Evaluate the proposed plan across these SEVEN dimensions:
+Evaluate the proposed plan across these dimensions:
 
 1. SERVING MODEL: Does the plan specify a concrete start command and port that the sandbox reverse-proxy can hit? Look for: missing serve.json plan, ambiguous tech stack choice, routes that rely on assumptions the sandbox doesn't support (e.g. OAuth callbacks to unknown hostnames). Flag each with "VIOLATION:" and explain what needs to change.
 
@@ -129,26 +129,70 @@ export const STUDIO_CRITIC_EXTRA = `
 9. SOURCING: Does every factual claim in the plan trace to a numbered FACT in the research brief? Look for figures, dates, percentages and mechanisms that appear in the plan but not in the brief. Flag each with "UNSOURCED:" and name the claim. Also check the reverse: is the plan ignoring the brief's GAPS by presenting a settled story where the research found none? Flag that with "FALSE-CONFIDENCE:".`;
 
 /**
+ * Slice the plan down to the "## Chapter Plan" section only — from that
+ * heading to the next "##"-level heading (or end of document).
+ *
+ * Without this, `parseChapterPlan` scans every `|`-prefixed line in the
+ * whole document, and a second markdown table anywhere else in the plan
+ * pollutes the chapter spine — observed concretely with a "Risks &
+ * Mitigations" table whose rows happen to share the same 4-column shape.
+ * `### Chapter N:` headings under "## Chapter Detail" are level-3 and so
+ * never end the slice early. Falls back to the whole document when the
+ * heading is missing, so an unusually formatted plan still yields whatever
+ * `parseChapterPlan` can find rather than nothing.
+ */
+function extractChapterPlanSection(planMarkdown: string): string {
+  const headingMatch = /^##[ \t]+Chapter Plan[ \t]*$/m.exec(planMarkdown);
+  if (!headingMatch) return planMarkdown;
+  const afterHeading = planMarkdown.slice(headingMatch.index + headingMatch[0].length);
+  const nextHeading = /^##(?!#)[ \t]/m.exec(afterHeading);
+  return nextHeading ? afterHeading.slice(0, nextHeading.index) : afterHeading;
+}
+
+/**
  * Read the chapter table out of the plan markdown.
  *
  * Deliberately forgiving: a malformed row is skipped, not fatal. The plan is
  * LLM output and one bad row must not cost the whole spine — the executor can
  * work from a partial plan, but not from an exception.
+ *
+ * `stats`, if passed, is populated with the count of candidate rows that were
+ * dropped (missing lever/outcome id, or too few cells) — not the header or
+ * divider row, which every well-formed table has and which are structural,
+ * not a chapter the model tried and failed to write. A silently-dropped
+ * chapter leaves a gap in `n` that nothing else surfaces, and the caller uses
+ * this count (plus a `### Chapter N:` heading cross-check) to log that the
+ * spine came out short.
  */
 export function parseChapterPlan(
   planMarkdown: string,
+  stats?: { rejected: number },
 ): Array<{ n: number; title: string; leverId: string; outcomeId: string }> {
+  if (stats) stats.rejected = 0;
   const out: Array<{ n: number; title: string; leverId: string; outcomeId: string }> = [];
-  for (const line of planMarkdown.split('\n')) {
+  for (const line of extractChapterPlanSection(planMarkdown).split('\n')) {
     if (!line.trim().startsWith('|')) continue;
-    const cells = line.split('|').map((c) => c.trim());
+    // Strip inline markdown emphasis before parsing: a model emitting
+    // "| **1** | **Title** | ... |" must still parse as n=1 with a clean
+    // title, not NaN (silently dropping the row) or a title carrying raw
+    // asterisks into jkai_builds.chapterPlan.
+    const cells = line.split('|').map((c) => c.replace(/\*+/g, '').trim());
     // ['', '#', 'Chapter', 'Lever id', 'Outcome id', ''] -> 6 cells
-    if (cells.length < 6) continue;
+    if (cells.length < 6) {
+      if (stats) stats.rejected++;
+      continue;
+    }
     const n = Number.parseInt(cells[1], 10);
+    // A non-finite n is overwhelmingly the header row ("#") or the divider
+    // row ("---...") — both structural and present in every well-formed
+    // table — so this is not counted as a rejected chapter.
     if (!Number.isFinite(n)) continue;
     const [, , title, leverId, outcomeId] = cells;
-    if (!title || !leverId || !outcomeId) continue;
-    if (/^-+$/.test(title)) continue;
+    if (/^-+$/.test(title)) continue; // defensive: a divider row whose number cell happened to parse
+    if (!title || !leverId || !outcomeId) {
+      if (stats) stats.rejected++;
+      continue;
+    }
     out.push({ n, title, leverId, outcomeId });
   }
   return out;
@@ -388,9 +432,31 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
     // concluded. executor.ts reads jkai_builds.chapterPlan to drive each
     // chapter's lever/outcome gate — see prompt.ts's ChapterPlanEntry.
     if (isStudio) {
-      const chapterPlan = parseChapterPlan(finalPlan);
+      const rowStats = { rejected: 0 };
+      const chapterPlan = parseChapterPlan(finalPlan, rowStats);
       await db.update(jkaiBuilds).set({ chapterPlan }).where(eq(jkaiBuilds.id, buildId));
-      await emitLog(buildId, 'system', `Chapter spine: ${chapterPlan.length} chapters.`, planIteration.id);
+      await emitLog(
+        buildId,
+        'system',
+        `Chapter spine: ${chapterPlan.length} chapters${rowStats.rejected > 0 ? ` (${rowStats.rejected} malformed row(s) dropped)` : ''}.`,
+        planIteration.id,
+      );
+
+      // Cross-check against the Chapter Detail section: the proposer writes
+      // one "### Chapter N:" heading per chapter there, independent of the
+      // table row. If the counts disagree, the table and the detail drifted
+      // — Task 13's gate will drive whatever ended up in chapterPlan, so a
+      // silently short spine needs to be visible to whoever reads this build,
+      // not just inferred from rowStats.
+      const detailHeadings = (finalPlan.match(/^###\s+Chapter\s+\d+:/gm) ?? []).length;
+      if (detailHeadings !== chapterPlan.length) {
+        await emitLog(
+          buildId,
+          'error',
+          `Chapter spine mismatch: ${chapterPlan.length} row(s) parsed from the Chapter Plan table but ${detailHeadings} "### Chapter N:" heading(s) found in Chapter Detail — the spine is incomplete.`,
+          planIteration.id,
+        );
+      }
     }
 
     // --- Store results ---

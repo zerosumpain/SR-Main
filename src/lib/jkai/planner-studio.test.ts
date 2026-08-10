@@ -31,6 +31,54 @@ describe('parseChapterPlan', () => {
 `;
     expect(parseChapterPlan(md).map((c) => c.n)).toEqual([1, 3]);
   });
+
+  it('ignores a second table outside the Chapter Plan section (e.g. Risks & Mitigations)', () => {
+    const md = `
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | What a school budget is | roll | total |
+
+## Risks & Mitigations
+
+| # | Risk | Mitigation | Owner |
+|---|------|------------|-------|
+| 2 | Data goes stale | Cache refresh | eng |
+`;
+    expect(parseChapterPlan(md)).toEqual([
+      { n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' },
+    ]);
+  });
+
+  it('strips bold markdown from cells so ** does not corrupt the number or leak into the title', () => {
+    const md = `
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| **1** | **What a school budget is** | roll | total |
+`;
+    expect(parseChapterPlan(md)).toEqual([
+      { n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' },
+    ]);
+  });
+
+  it('drops a row with an empty lever id and reports it via the stats out-param', () => {
+    const md = `
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | Good chapter | roll | total |
+| 2 | Missing lever |  | uplift |
+| 3 | Also good | fsm | share |
+`;
+    const stats = { rejected: 0 };
+    const chapters = parseChapterPlan(md, stats);
+    expect(chapters.map((c) => c.n)).toEqual([1, 3]);
+    expect(stats.rejected).toBe(1);
+  });
 });
 
 describe('studio critic', () => {
