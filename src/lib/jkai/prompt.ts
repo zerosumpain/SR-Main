@@ -233,9 +233,15 @@ Before writing any HTML, CSS or JavaScript:
 
 THE CHAPTER CONTRACT — every chapter page must have all four:
 1. A root element with \`data-chapter="<n>"\`, numbered from 1, and NO \`data-chapter-status="placeholder"\` — remove that attribute the moment the chapter is genuinely written.
+0. EVERYTHING BELOW MUST LIVE INSIDE THAT ELEMENT. The checker scopes every test to the chapter's own root: a visual, a lever, an outcome or a citation sitting elsewhere on the page does not count for this chapter. One page carrying all the chapters' content and serving it at every URL passes nothing.
 2. At least one <canvas> or <svg> produced by the kit. Prose and a table is not a chapter.
 3. At least one control tagged \`data-lever="<id>"\` whose change visibly updates an element tagged \`data-outcome="<id>"\`. \`Explainer.createSim\` gives you both.
 4. At least one \`<a data-citation href="...">\` pointing at a real source from the research brief.
+
+AND THREE RULES ABOUT THE PROJECT AS A WHOLE:
+- ONE CHAPTER PER ROUTE. Requesting \`/chapter-3/\` must show chapter 3, not all of them stacked. Serve each chapter as its own document, or hide the others when that route is active. Mapping every chapter URL to one combined page is the single most common way this format goes wrong.
+- EVERY LINK YOU RENDER MUST RESOLVE. The checker follows the internal links on the page, not just the routes in the plan. Watch for template placeholders escaping into the HTML — a literal \`\${...}\` in an href is a 404.
+- THE KIT'S TOKENS MUST BE IN EFFECT. Copy \`explainer-kit/tokens.css\` into your project and load it, then build every colour and font from \`var(--ex-*)\`. The checker reads \`--ex-ink\` from the live page; if it resolves to nothing, the design system is not applied and that is a finding.
 
 All four are checked automatically after every iteration by a headless browser that actually drives your controls. A chapter missing one comes back named, with the remedy. These are not style notes.
 

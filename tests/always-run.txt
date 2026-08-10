@@ -10,6 +10,7 @@ src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/explainer-sim.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
+src/lib/jkai/studio-gate.test.ts
 src/lib/jkai/studio.test.ts
 src/lib/projects/registry-cards.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
