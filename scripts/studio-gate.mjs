@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+/**
+ * Studio gate — does the explainer actually teach?
+ *
+ * Five checks per served project: the explainer kit actually mounted (once,
+ * across the whole project — see below), then per chapter: reachable, has a
+ * kit-produced visual, has a control that changes an outcome when driven,
+ * cites a source from the brief.
+ *
+ * Contract, copied from smoke-static-app.mjs: a harness that could not run
+ * prints { ran: false }. Never { passed: false }. A broken harness reporting a
+ * failing app blocks good work and teaches the model to route around the tool.
+ *
+ * Every finding carries a `remedy`. An unfixable finding repeated three times
+ * kills a finished build — that is the design_lint_loop incident of 2026-08-09.
+ *
+ *   echo '<base64 spec>' | node scripts/studio-gate.mjs <baseUrl>
+ *
+ * Spec shape (JSON, base64-encoded on stdin):
+ *   {
+ *     chapters: Array<{ n: number, title: string, path: string, leverId: string, outcomeId: string }>,
+ *     sourceUrls?: string[],
+ *     kitFiles?: string[],   // paths relative to the served root, e.g. "explainer-kit/tokens.css"
+ *   }
+ *
+ * kitFiles is OPTIONAL. If it is absent or empty, the kit-presence check is
+ * skipped entirely — this script never invents a default file list, because
+ * the caller (studio-gate.ts, Task 13) is the one that knows which files the
+ * kit sync was supposed to mount (see design-assets.ts EXPLAINER_FILES).
+ */
+let out = { ran: false, reason: 'harness did not start' };
+
+async function main() {
+  const baseUrl = process.argv[2];
+  if (!baseUrl) { out = { ran: false, reason: 'no base url given' }; return; }
+
+  const stdin = await new Promise((resolve) => {
+    let buf = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (d) => (buf += d));
+    process.stdin.on('end', () => resolve(buf));
+    setTimeout(() => resolve(buf), 5000);
+  });
+
+  let spec;
+  try {
+    spec = JSON.parse(Buffer.from(stdin.trim(), 'base64').toString('utf8'));
+  } catch {
+    out = { ran: false, reason: 'could not parse the spec on stdin' };
+    return;
+  }
+  const chapters = spec.chapters || [];
+  const kitFiles = Array.isArray(spec.kitFiles) ? spec.kitFiles : [];
+  const sourceHosts = new Set(
+    (spec.sourceUrls || []).map((u) => { try { return new URL(u).host; } catch { return null; } }).filter(Boolean),
+  );
+  if (chapters.length === 0) { out = { ran: false, reason: 'no chapters in the spec' }; return; }
+
+  const findings = [];
+
+  // Check 0: the explainer kit actually mounted. Chapter 0 because this is a
+  // project-level fact, not any one chapter's. A failed kit sync logs an
+  // error and lets the build continue by design (the sync retries every
+  // iteration), but that log line is a weak signal across a 20-iteration
+  // unattended build — its real consequence, the agent inventing its own
+  // visual language, is only visible by reading the finished output. So this
+  // checks the served files directly instead of trusting anyone read the log.
+  if (kitFiles.length > 0) {
+    const missing = [];
+    for (const rel of kitFiles) {
+      const url = new URL(rel, baseUrl).toString();
+      try {
+        const resp = await fetch(url);
+        if (!resp.ok) missing.push(rel);
+      } catch {
+        missing.push(rel);
+      }
+    }
+    if (missing.length > 0) {
+      findings.push({
+        chapter: 0,
+        rule: 'kit-missing',
+        message: `The explainer kit did not mount: ${missing.length}/${kitFiles.length} kit file(s) 404'd — ${missing.join(', ')}.`,
+        remedy: `Re-run the kit sync into the workspace's dev/explainer-kit directory so ${missing.join(', ')} are served at those paths. Until they are, the agent is likely inventing its own visuals instead of using the kit.`,
+      });
+    }
+  }
+
+  let chromium;
+  try { ({ chromium } = await import('playwright')); }
+  catch (e) { out = { ran: false, reason: `playwright is not available: ${e.message}` }; return; }
+
+  let browser;
+  try { browser = await chromium.launch({ args: ['--no-sandbox'] }); }
+  catch (e) { out = { ran: false, reason: `could not launch chromium: ${e.message}` }; return; }
+
+  try {
+    for (const ch of chapters) {
+      const url = new URL(ch.path, baseUrl).toString();
+      const page = await browser.newPage();
+      try {
+        const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20_000 });
+        if (!resp || resp.status() >= 400) {
+          findings.push({
+            chapter: ch.n, rule: 'unreachable',
+            message: `Chapter ${ch.n} (${ch.title}) returned ${resp ? resp.status() : 'no response'} at ${ch.path}.`,
+            remedy: `Add a route serving ${ch.path} that returns 200 with a root element carrying data-chapter="${ch.n}".`,
+          });
+          continue;
+        }
+
+        const marked = await page.locator(`[data-chapter="${ch.n}"]`).count();
+        if (marked === 0) {
+          findings.push({
+            chapter: ch.n, rule: 'unmarked',
+            message: `Chapter ${ch.n} has no element with data-chapter="${ch.n}".`,
+            remedy: `Put data-chapter="${ch.n}" on the chapter's root element in the file serving ${ch.path}.`,
+          });
+        }
+
+        const visuals = await page.locator('canvas[data-scene], svg').count();
+        if (visuals === 0) {
+          findings.push({
+            chapter: ch.n, rule: 'prose-only',
+            message: `Chapter ${ch.n} (${ch.title}) renders no canvas or svg — it is prose.`,
+            remedy: `Add a kit visual to ${ch.path}: Explainer.createDiagram for a mechanism, createScene for something spatial, createChart for a series. See ./explainer-kit/scenes.md.`,
+          });
+        }
+
+        const lever = page.locator(`[data-lever="${ch.leverId}"]`).first();
+        const outcome = page.locator(`[data-outcome="${ch.outcomeId}"]`).first();
+        const haveLever = (await lever.count()) > 0;
+        const haveOutcome = (await outcome.count()) > 0;
+        if (!haveLever || !haveOutcome) {
+          findings.push({
+            chapter: ch.n, rule: 'no-model',
+            message: `Chapter ${ch.n} is missing ${!haveLever ? `a control tagged data-lever="${ch.leverId}"` : ''}${!haveLever && !haveOutcome ? ' and ' : ''}${!haveOutcome ? `an element tagged data-outcome="${ch.outcomeId}"` : ''}.`,
+            remedy: `Use Explainer.createSim in ${ch.path} with a lever id of "${ch.leverId}" and an outcome id of "${ch.outcomeId}". It tags both for you.`,
+          });
+        } else {
+          const before = (await outcome.textContent()) ?? '';
+          const min = Number(await lever.getAttribute('min'));
+          const max = Number(await lever.getAttribute('max'));
+          const target = Number.isFinite(min) && Number.isFinite(max) ? String(min + (max - min) * 0.8) : '1';
+          await lever.fill(target).catch(async () => { await lever.click().catch(() => {}); });
+          await lever.dispatchEvent('input').catch(() => {});
+          await page.waitForTimeout(400);
+          const after = (await outcome.textContent()) ?? '';
+          if (before.trim() === after.trim()) {
+            findings.push({
+              chapter: ch.n, rule: 'inert-lever',
+              message: `Chapter ${ch.n}: moving data-lever="${ch.leverId}" left data-outcome="${ch.outcomeId}" unchanged at "${before.trim().slice(0, 40)}".`,
+              remedy: `The step() function in ${ch.path} must return a value for "${ch.outcomeId}" that depends on "${ch.leverId}". A control that changes nothing is decoration.`,
+            });
+          }
+        }
+
+        const citations = await page.locator('a[data-citation]').evaluateAll((els) =>
+          els.map((e) => e.getAttribute('href') || ''),
+        );
+        const good = citations.filter((href) => {
+          try { return sourceHosts.has(new URL(href).host); } catch { return false; }
+        });
+        if (good.length === 0) {
+          findings.push({
+            chapter: ch.n, rule: 'uncited',
+            message: `Chapter ${ch.n} has ${citations.length} citation link(s), none pointing at a source from the research brief.`,
+            remedy: `Add <a data-citation href="..."> in ${ch.path} linking to one of the FACT source URLs in the brief.`,
+          });
+        }
+      } catch (e) {
+        findings.push({
+          chapter: ch.n, rule: 'errored',
+          message: `Chapter ${ch.n} threw while being checked: ${e.message}`,
+          remedy: `Open ${ch.path} in a browser and fix the runtime error before adding more chapters.`,
+        });
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+    out = { ran: true, passed: findings.length === 0, findings };
+  } catch (e) {
+    out = { ran: false, reason: `the gate harness failed: ${e.message}` };
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+main()
+  .catch((e) => { out = { ran: false, reason: `unexpected: ${e.message}` }; })
+  .finally(() => { process.stdout.write(JSON.stringify(out) + '\n'); });
