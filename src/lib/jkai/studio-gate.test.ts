@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, it, expect } from 'vitest';
 import { parseGateOutput, describeGate, describeGateSkip } from './studio-gate';
 
@@ -127,5 +128,40 @@ describe('not-yet-due chapters', () => {
 
   it('says nothing extra when every chapter was due', () => {
     expect(describeGate({ ran: true, passed: true, findings: [], notYetDue: [] })).not.toContain('not yet due');
+  });
+});
+
+// Build 5443df54 passed this gate while serving one identical page at all seven
+// chapter URLs: the per-chapter assertions ran against the whole document, so
+// chapter 1's visual, lever and citation satisfied every other chapter. A
+// browser is needed to test the behaviour, but the regression is a one-word
+// edit — page.locator instead of root.locator — so guard the source directly.
+describe('per-chapter checks stay scoped to the chapter', () => {
+  it('uses root.locator, never page.locator, for visual/lever/outcome/citation', async () => {
+    const src = await readFile('scripts/studio-gate.mjs', 'utf-8');
+    for (const scoped of [
+      "root.locator('canvas[data-scene], svg')",
+      'root.locator(`[data-lever=',
+      'root.locator(`[data-outcome=',
+      "root.locator('a[data-citation]')",
+    ]) {
+      expect(src, `${scoped} must be scoped to the chapter root`).toContain(scoped);
+    }
+    // These four facts must never be asked of the whole document again.
+    for (const unscoped of [
+      "page.locator('canvas[data-scene], svg')",
+      'page.locator(`[data-lever=',
+      'page.locator(`[data-outcome=',
+      "page.locator('a[data-citation]')",
+    ]) {
+      expect(src, `${unscoped} searches the whole page — scope it to the chapter`).not.toContain(unscoped);
+    }
+  });
+
+  it('still checks the four project-wide rules', async () => {
+    const src = await readFile('scripts/studio-gate.mjs', 'utf-8');
+    for (const rule of ['chapters-not-distinct', 'broken-link', 'no-design-tokens', 'still-placeholder']) {
+      expect(src).toContain(rule);
+    }
   });
 });

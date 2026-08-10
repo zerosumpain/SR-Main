@@ -74,6 +74,10 @@ async function main() {
 
   const findings = [];
   const notYetDue = [];
+  // Both are page-level facts, not per-chapter — check once, on the first
+  // chapter that loads, since every chapter shares the same shell.
+  let linksChecked = false;
+  let designChecked = false;
 
   // Check 0: the explainer kit actually mounted. Chapter 0 because this is a
   // project-level fact, not any one chapter's. A failed kit sync logs an
@@ -178,7 +182,15 @@ async function main() {
           continue;
         }
 
-        const marked = await page.locator(`[data-chapter="${ch.n}"]`).count();
+        // FIX (2026-08-10): every per-chapter assertion below is scoped to
+        // THIS chapter's own element. They used to run against the whole
+        // document, so a build that served one page for every /chapter-N/ URL
+        // passed all seven checks on a single chapter's worth of content —
+        // observed on build 5443df54, which shipped 7 identical 46KB pages and
+        // a green gate. `root` is the scope; never use bare `page.locator` for
+        // a per-chapter fact again.
+        const root = page.locator(`[data-chapter="${ch.n}"]`);
+        const marked = await root.count();
         if (marked === 0) {
           findings.push({
             chapter: ch.n, rule: 'unmarked',
@@ -187,7 +199,19 @@ async function main() {
           });
         }
 
-        const visuals = await page.locator('canvas[data-scene], svg').count();
+        // Distinctness: on /chapter-N/ the reader should see chapter N, not
+        // all of them stacked. A client-routed SPA that shows one at a time
+        // passes; a single page dumping every chapter does not.
+        const visibleChapters = await page.locator('[data-chapter]:visible').count();
+        if (visibleChapters > 1) {
+          findings.push({
+            chapter: ch.n, rule: 'chapters-not-distinct',
+            message: `Requesting ${ch.path} renders ${visibleChapters} chapters at once — every chapter URL is showing the same combined page.`,
+            remedy: `Serve ${ch.path} as its own document containing only chapter ${ch.n}, or hide the other chapters when this route is active. A reader following the nav should land on one chapter.`,
+          });
+        }
+
+        const visuals = await root.locator('canvas[data-scene], svg').count();
         if (visuals === 0) {
           findings.push({
             chapter: ch.n, rule: 'prose-only',
@@ -196,8 +220,8 @@ async function main() {
           });
         }
 
-        const lever = page.locator(`[data-lever="${ch.leverId}"]`).first();
-        const outcome = page.locator(`[data-outcome="${ch.outcomeId}"]`).first();
+        const lever = root.locator(`[data-lever="${ch.leverId}"]`).first();
+        const outcome = root.locator(`[data-outcome="${ch.outcomeId}"]`).first();
         const haveLever = (await lever.count()) > 0;
         const haveOutcome = (await outcome.count()) > 0;
         if (!haveLever || !haveOutcome) {
@@ -292,7 +316,56 @@ async function main() {
           }
         }
 
-        const citations = await page.locator('a[data-citation]').evaluateAll((els) =>
+        // FIX 4 (2026-08-10): does the design system actually apply? The
+        // orchestrator's design linter only runs when a workspace contains
+        // .svelte files, and a studio build writes plain HTML — so it has
+        // never run once, and enforceDesignSystem:true was decorative. Build
+        // 5443df54 shipped with zero references to the kit's tokens. A runtime
+        // read is unfakeable: if tokens.css is loaded, --ex-ink resolves.
+        if (!designChecked) {
+          designChecked = true;
+          const inkToken = await page
+            .evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--ex-ink').trim())
+            .catch(() => '');
+          if (!inkToken) {
+            findings.push({
+              chapter: 0, rule: 'no-design-tokens',
+              message: `The explainer kit's design tokens are not in effect — --ex-ink resolves to nothing on ${ch.path}.`,
+              remedy: `Link the kit's tokens at the top of your stylesheet — copy explainer-kit/tokens.css into your project and reference it, or @import it — and build colours and fonts from var(--ex-*) instead of hard-coded values.`,
+            });
+          }
+        }
+
+        // FIX 2 (2026-08-10): the gate fetched the paths the PLAN declared and
+        // never the ones the page actually links to. Build 5443df54 shipped a
+        // nav containing the literal string /chapter-${number}/ — an
+        // uninterpolated template that 404s — and the gate reported every
+        // chapter reachable. Follow the real links.
+        if (!linksChecked) {
+          linksChecked = true;
+          const hrefs = await page.locator('a[href]').evaluateAll((els) =>
+            els.map((e) => e.getAttribute('href') || ''),
+          );
+          const internal = [...new Set(hrefs.filter((h) => h.startsWith('/')))].slice(0, 25);
+          for (const href of internal) {
+            let status = 0;
+            try {
+              const r = await fetch(new URL(href, baseUrl).toString(), { redirect: 'follow' });
+              status = r.status;
+            } catch {
+              status = 0;
+            }
+            if (status === 0 || status >= 400) {
+              findings.push({
+                chapter: ch.n, rule: 'broken-link',
+                message: `The page links to ${href}, which returns ${status || 'no response'}.`,
+                remedy: `Fix or remove the link to ${href} in the page served at ${ch.path}. If it came from a template, check the value was interpolated rather than emitted literally.`,
+              });
+            }
+          }
+        }
+
+        const citations = await root.locator('a[data-citation]').evaluateAll((els) =>
           els.map((e) => e.getAttribute('href') || ''),
         );
         const good = citations.filter((href) => {
