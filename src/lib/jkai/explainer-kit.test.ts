@@ -44,4 +44,17 @@ describe('explainer kit', () => {
     const js = await read('diagram.js');
     expect(js).toContain('data-node');
   });
+
+  it('ships a pinned three.js build', async () => {
+    const js = await read('three.min.js');
+    expect(js.length).toBeGreaterThan(100_000);
+    expect(js).toMatch(/REVISION/);
+  });
+
+  it('lowpoly.js exposes createScene and renders to a canvas', async () => {
+    const js = await read('lowpoly.js');
+    expect(js).toMatch(/createScene/);
+    expect(js).toMatch(/WebGLRenderer/);
+    expect(js).toContain('data-scene');
+  });
 });
