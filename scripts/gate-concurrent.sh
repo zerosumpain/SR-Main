@@ -45,12 +45,28 @@ if ! npm run gate:sync; then
   exit 1
 fi
 
+# At L2 — ordinary source, no wide triggers, low risk tier — the tests are scoped
+# to what the change can actually reach. EVERY other value runs the whole suite,
+# including an empty or unrecognised one, because the condition selects the CHEAP
+# path rather than excluding it. That polarity is the point: get the level wrong
+# and you run too much, never too little.
+#
+# The type check is NEVER scoped. A changed type signature breaks its consumers,
+# not itself, so narrowing it would miss exactly what it exists to catch.
+if [ "${GATE_LEVEL:-}" = "L2" ]; then
+  TEST_CMD=(./scripts/gate-test-scoped.sh "${GATE_BASE:-HEAD^}")
+  echo "==> level L2: tests scoped to the change set"
+else
+  TEST_CMD=(npm run gate:test)
+  echo "==> level ${GATE_LEVEL:-<unset>}: running the whole suite"
+fi
+
 echo "==> Starting svelte-check and vitest concurrently"
 START=$(date +%s)
 
 npm run gate:check:only > "$CHECK_LOG" 2>&1 &
 CHECK_PID=$!
-npm run gate:test > "$TEST_LOG" 2>&1 &
+"${TEST_CMD[@]}" > "$TEST_LOG" 2>&1 &
 TEST_PID=$!
 
 # `wait <pid>` yields that child's status. Do NOT collapse these into a bare
