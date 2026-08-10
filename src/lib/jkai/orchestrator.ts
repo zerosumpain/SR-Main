@@ -1238,6 +1238,9 @@ class Orchestrator {
       // start a static preview server. Git-target builds have no static
       // preview (the dev/ tree is a cloned git repo on a branch) and must NOT
       // promote to live/ — they publish via a GitHub PR at completion instead.
+      // Set by the studio gate below when every planned chapter is built and
+      // passing; read by the completion branch further down.
+      let studioComplete = false;
       if (!build.gitTargetConfig) {
         // Always surface a preview, even when tests failed — the user
         // explicitly wants link visibility from iteration #1, and seeing
@@ -1306,6 +1309,29 @@ class Orchestrator {
                 .update(jkaiIterations)
                 .set({ evaluation: result.evaluation })
                 .where(eq(jkaiIterations.id, iteration.id));
+            }
+
+            // A green gate with nothing left pending IS done for a studio
+            // build, and until now nothing said so. detectCompletion looks for
+            // "100% complete" in the evaluation, but the studio prompt asks for
+            // "chapters-done / chapters-planned", so "8/8 chapters complete"
+            // never matched and a finished build could only end by hitting a
+            // cap. Build f86342f9 finished all 8 chapters around iteration 12,
+            // then spent 13, 14 and 15 reporting "8/8 complete, nothing to do",
+            // tripped the idle breaker, and was recorded as FAILED with
+            // no_progress — a working explainer filed as a failure, plus five
+            // wasted iterations.
+            //
+            // `notYetDue` empty means every planned chapter exists and is out
+            // of placeholder state; `passed` means each one cleared all four
+            // contract checks. Together that is the whole definition of done.
+            if (
+              outcome.ran &&
+              outcome.passed &&
+              (outcome.notYetDue?.length ?? 0) === 0 &&
+              build.chapterPlan.length > 0
+            ) {
+              studioComplete = true;
             }
           }
         }
@@ -1385,6 +1411,38 @@ class Orchestrator {
         }
         // Gate failed — keep iterating (subject to budget cap). Fall through
         // to the per-iteration approval gate / scheduleNext below.
+      } else if (studioComplete) {
+        // Studio's own completion signal — see where studioComplete is set.
+        // Deliberately NOT routed through replanBuild: that re-plans with the
+        // app-shaped prompt ("## Iteration Plan", "CLIENT-SIDE FIRST"), which
+        // would hand every later iteration a plan that is no longer a chapter
+        // plan. A studio build whose gate is green is finished, not due a
+        // fresh plan.
+        await db
+          .update(jkaiBuilds)
+          .set({ status: 'completed', updatedAt: new Date() })
+          .where(eq(jkaiBuilds.id, buildId));
+        const previewUrl = (build.serveConfig as { port?: number } | null)?.port
+          ? `/api/jkai/proxy/${buildId}/`
+          : null;
+        await emitLog(
+          buildId,
+          'system',
+          `Studio build complete — all ${build.chapterPlan.length} chapters built and passing the gate. Publish it from the builds page to give it a /projects/<slug>/ URL.`,
+        );
+        await emitStage(buildId, { stage: 'completed', previewUrl });
+        try {
+          await notifyAllSubscribers({
+            title: 'Studio build complete',
+            body: build.title ?? 'jkai studio build finished',
+            url: `/jkai/builds/${buildId}`,
+          });
+        } catch (e) {
+          console.warn('[jkai-pwa] push failed', e);
+        }
+        this.activeBuildId = null;
+        await this.dequeueNext();
+        return;
       } else if (detectCompletion(result.evaluation)) {
         await emitLog(buildId, 'system', 'Completion detected — entering re-planning phase.');
         const shouldContinue = await replanBuild(buildId);
