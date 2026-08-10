@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isBriefUsable, formatBriefForPrompt, type ResearchBrief } from './research-brief';
+import { isBriefUsable, formatBriefForPrompt, RESEARCH_DEADLINE_MS, type ResearchBrief } from './research-brief';
 
 function brief(over: Partial<ResearchBrief> = {}): ResearchBrief {
   return {
@@ -81,5 +81,22 @@ describe('formatBriefForPrompt', () => {
 
   it('states plainly that gaps must not be smoothed over', () => {
     expect(formatBriefForPrompt(brief())).toMatch(/do not invent/i);
+  });
+});
+
+describe('research deadline', () => {
+  // The first pick was 20 minutes and it killed the first real studio build at
+  // 20m00s, while its session was still gathering (353 facts, 44 sources).
+  // Measured across the 17 completed sessions in production on 2026-08-10:
+  // mean 29.8m, p90 67.4m, max 82.8m. Anything at or below the observed max
+  // fails a meaningful share of real topics, so pin above it.
+  it('clears the longest real research session ever observed', () => {
+    expect(RESEARCH_DEADLINE_MS).toBeGreaterThanOrEqual(83 * 60 * 1000);
+  });
+
+  // reapStaleBuilds abandons a running build quiet for 30 minutes. A deadline
+  // past that is only safe because the poll loop writes heartbeatAt.
+  it('exceeds the 30-minute reaper cutoff, which is why the poll must heartbeat', () => {
+    expect(RESEARCH_DEADLINE_MS).toBeGreaterThan(30 * 60 * 1000);
   });
 });

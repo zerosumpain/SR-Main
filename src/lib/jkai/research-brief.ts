@@ -37,6 +37,28 @@ export interface ResearchBrief {
   sessionId: string | null;
 }
 
+/**
+ * How long to wait for the deep-dive session's report.
+ *
+ * MEASURED, not guessed. The first pick was 20 minutes, which turned out to be
+ * below the *average* real session and killed the very first studio build
+ * (2026-08-10) at 20m00s while its session was still in phase3 with 353 facts
+ * from 44 sources already gathered. Across the 17 completed sessions in
+ * production at that point: mean 29.8m, p90 67.4m, max 82.8m.
+ *
+ * 90 minutes clears the observed maximum with headroom. Research does not count
+ * against `activeMinutesUsed` (only iterations do), so a long research stage
+ * spends wall-clock, not iteration budget.
+ *
+ * Raising this REQUIRES the heartbeat in the poll loop below — reapStaleBuilds
+ * abandons any running build quiet for STALE_BUILD_MS (30 min), so a longer
+ * deadline without a ping just moves the failure from the timeout to the reaper.
+ */
+export const RESEARCH_DEADLINE_MS = 90 * 60 * 1000;
+
+/** How often the poll writes a progress line to the build log. */
+const PROGRESS_INTERVAL_MS = 2 * 60 * 1000;
+
 const MIN_FACTS = 8;
 
 /**
@@ -166,26 +188,59 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
   await emitLog(buildId, 'system', `Research stage started (session ${session.id}) — this runs before planning.`);
   void startResearch(session.id);
 
-  const deadline = Date.now() + 20 * 60 * 1000;
+  const deadline = Date.now() + RESEARCH_DEADLINE_MS;
   let report: ResearchReport | null = null;
   let sessionFailed = false;
+  let lastProgressAt = 0;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 20_000));
     const [row] = await db.select().from(researchSessions).where(eq(researchSessions.id, session.id));
     if (row?.report) { report = row.report as ResearchReport; break; }
     if (row?.status === 'failed') { sessionFailed = true; break; }
+
+    // Liveness. Nothing else writes heartbeat_at or updated_at during research,
+    // and reapStaleBuilds kills any running build whose `heartbeatAt ?? updatedAt`
+    // is older than STALE_BUILD_MS (30 min). Research routinely runs longer than
+    // that, so without this ping the reaper — or a sidecar restart, which clears
+    // the `activeBuildId === b.id` escape hatch — would abandon a healthy build
+    // mid-research. Ping every poll; it is one cheap UPDATE per 20s.
+    await db
+      .update(jkaiBuilds)
+      .set({ heartbeatAt: new Date() })
+      .where(eq(jkaiBuilds.id, buildId))
+      .catch(() => {});
+
+    // Visible progress. The build log was previously silent for the whole
+    // research stage, so a perfectly healthy build looked hung — which is
+    // exactly what happened on the first real studio run.
+    if (Date.now() - lastProgressAt >= PROGRESS_INTERVAL_MS) {
+      lastProgressAt = Date.now();
+      const [factCount, sourceCount] = await Promise.all([
+        db.$count(facts, eq(facts.sessionId, session.id)).catch(() => 0),
+        db.$count(sources, eq(sources.sessionId, session.id)).catch(() => 0),
+      ]);
+      const mins = Math.round((Date.now() - (deadline - RESEARCH_DEADLINE_MS)) / 60_000);
+      await emitLog(
+        buildId,
+        'system',
+        `Research: ${row?.status ?? 'starting'} — ${factCount} facts from ${sourceCount} sources, ${mins}m elapsed of ${RESEARCH_DEADLINE_MS / 60_000}m. Watch it at /deepdive/${session.id}`,
+      );
+    }
   }
   if (!report) {
-    // A worker crash and a genuine 20-minute stall are different operator
-    // problems — one means "read the deep-dive logs", the other means "this
-    // topic may be too obscure or the model too slow". Distinct messages so
-    // the build failure reason actually points somewhere useful.
+    // A worker crash and a genuine stall are different operator problems — one
+    // means "read the deep-dive logs", the other means "this topic may be too
+    // obscure or the model too slow". Distinct messages so the build failure
+    // reason actually points somewhere useful.
     if (sessionFailed) {
       throw new Error(
         `Research stage: the deep-dive session failed before producing a report (session ${session.id}). Check its logs.`,
       );
     }
-    throw new Error(`Research stage produced no report within 20 minutes (session ${session.id}).`);
+    throw new Error(
+      `Research stage produced no report within ${RESEARCH_DEADLINE_MS / 60_000} minutes (session ${session.id}). ` +
+        `The session may still be running — see /deepdive/${session.id}.`,
+    );
   }
 
   // The facts (and their sourceUrl) come DIRECTLY from the facts/sources
