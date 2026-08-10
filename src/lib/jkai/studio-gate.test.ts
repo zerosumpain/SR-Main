@@ -189,3 +189,31 @@ describe('the spec put on the wire', () => {
     }
   });
 });
+
+// The orchestrator treats "gate passed AND nothing not-yet-due AND a non-empty
+// chapter plan" as the definition of a finished studio build. Build f86342f9
+// met that at iteration ~12 and nothing acted on it: the agent then reported
+// "8/8 complete, nothing to do" three times, tripped the idle breaker, and a
+// working explainer was recorded as failed. Pin the shape of the signal.
+describe('studio completion signal', () => {
+  const done = (over: Partial<{ passed: boolean; notYetDue: number[] }> = {}) => {
+    const o = parseGateOutput(
+      JSON.stringify({ ran: true, passed: true, findings: [], notYetDue: [], ...over }),
+      '',
+    );
+    if (!o.ran) throw new Error('expected ran:true');
+    return o.passed && (o.notYetDue?.length ?? 0) === 0;
+  };
+
+  it('is true when every planned chapter passed and none are pending', () => {
+    expect(done()).toBe(true);
+  });
+
+  it('is false while chapters are still not due', () => {
+    expect(done({ notYetDue: [7, 8] })).toBe(false);
+  });
+
+  it('is false when the gate found problems', () => {
+    expect(done({ passed: false })).toBe(false);
+  });
+});
