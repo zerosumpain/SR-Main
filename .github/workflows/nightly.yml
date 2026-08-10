@@ -111,37 +111,19 @@ jobs:
       # The whole suite, integration tests included. Sequential rather than
       # concurrent with the type check: nothing is waiting on this run, and
       # keeping the two apart means a failure here is unambiguous.
-      # Three of the eight integration files need REAL external credentials or a
-      # running service, not just a database — and their own skip guards do not
-      # say so:
+      # The whole suite, integration tests included. Sequential rather than
+      # concurrent with the type check: nothing is waiting on this run, and
+      # keeping the two apart means a failure here is unambiguous.
       #
-      #   apis/registry          gates on DATABASE_URL, but its header tells you
-      #                          to `source .env` first; it needs live API keys.
-      #   rag/pipeline           gates on DATABASE_URL, but needs embeddings,
-      #                          i.e. an OpenRouter key.
-      #   models/codex-live      guards two of its three cases on a reachable
-      #                          bridge and leaves the third unguarded; that one
-      #                          needs an OpenRouter key.
-      #
-      # This repo deliberately keeps secrets OUT of GitHub — the gate needs none,
-      # which is precisely why it can run on a disposable hosted VM. Supplying
-      # these keys here would trade that away for three tests. They belong on
-      # homeserv, where the credentials already live.
-      #
-      # Excluded by path rather than by fixing the guards because the guards are
-      # the tests' own business; the right fix is for each to skip on the thing
-      # it actually needs. Until then this list is the honest boundary of what
-      # the nightly covers.
+      # No exclusions any more. The three files that used to be excluded by path
+      # (apis/registry, rag/pipeline, models/codex-live) now skip on the thing
+      # they actually need — a resolvable OpenRouter key — rather than on
+      # DATABASE_URL. They self-skip here and run for real on homeserv, which is
+      # where the credentials live. An exclusion list would have drifted; a
+      # correct guard cannot.
       - name: Full test suite
-        run: |
-          npm run gate:test:full -- \
-            --exclude '**/apis/registry.integration.test.ts' \
-            --exclude '**/rag/pipeline.integration.test.ts' \
-            --exclude '**/models/codex-live.integration.test.ts'
+        run: npm run gate:test:full
 
-      # The REAL adapter, unlike the gate, which stubs it. This is what catches
-      # adapter-only failures — externalisation edges and packaging errors — that
-      # a scoped PR build would miss.
       - name: Build with the real adapter
         run: npm run gate:build
 

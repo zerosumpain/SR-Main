@@ -30,7 +30,21 @@ import { saveIntegration, callIntegration, deleteIntegration } from '$lib/apis/i
 import { runSeeds } from '$lib/selfimprove/seed-apis';
 import { getOpenRouterApiKey } from '$lib/server/models/settings';
 
-const RUN = !!process.env.DATABASE_URL;
+// Gate on what this file actually needs, not on what is easiest to check. A
+// database alone is not enough: everything below reaches OpenRouter, so without
+// a resolvable key the whole file fails rather than skips. That is how these
+// tests came to have never run in CI at all — they were excluded "for want of a
+// database" while also wanting a key nobody knew about.
+const RUN =
+	!!process.env.DATABASE_URL &&
+	(await (async () => {
+		try {
+			const { getOpenRouterApiKey } = await import('$lib/server/models/settings');
+			return !!(await getOpenRouterApiKey());
+		} catch {
+			return false;
+		}
+	})());
 const d = RUN ? describe : describe.skip;
 
 const DEMO_KEY = 'test-openrouter-credit';
