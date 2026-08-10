@@ -22,7 +22,7 @@ export interface GateFinding {
 }
 
 export type GateOutcome =
-  | { ran: true; passed: boolean; findings: GateFinding[] }
+  | { ran: true; passed: boolean; findings: GateFinding[]; notYetDue?: number[] }
   | { ran: false; reason: string };
 
 export function parseGateOutput(stdout: string, stderr: string): GateOutcome {
@@ -46,16 +46,20 @@ export function parseGateOutput(stdout: string, stderr: string): GateOutcome {
     return { ran: false, reason: typeof r.reason === 'string' ? r.reason : 'the studio gate did not run' };
   }
   const findings = Array.isArray(r.findings) ? (r.findings as GateFinding[]) : [];
-  return { ran: true, passed: r.passed === true, findings };
+  const notYetDue = Array.isArray(r.notYetDue) ? (r.notYetDue as number[]) : [];
+  return { ran: true, passed: r.passed === true, findings, notYetDue };
 }
 
 export function describeGate(outcome: GateOutcome): string {
   if (!outcome.ran) return `Studio gate skipped — ${outcome.reason}`;
-  if (outcome.passed) return 'Studio gate passed — every chapter is reachable, visual, interactive and cited.';
+  const pending = outcome.notYetDue?.length
+    ? ` (${outcome.notYetDue.length} chapter(s) not yet due: ${outcome.notYetDue.join(', ')})`
+    : '';
+  if (outcome.passed) return `Studio gate passed — every chapter due so far is reachable, visual, interactive and cited.${pending}`;
   const lines = outcome.findings.map(
     (f) => `  ✗ [${f.rule}] ${f.message}\n     → ${f.remedy}`,
   );
-  return `Studio gate FAILED — ${outcome.findings.length} finding(s):\n${lines.join('\n')}`;
+  return `Studio gate FAILED — ${outcome.findings.length} finding(s)${pending}:\n${lines.join('\n')}`;
 }
 
 /**
@@ -87,6 +91,8 @@ export function describeGateSkip(chapterCount: number, port: number | null | und
 }
 
 export async function runStudioGate(opts: {
+  /** Chapters the plan says should be FINISHED by now; later ones are skipped as not-yet-due. */
+  chaptersDue?: number;
   baseUrl: string;
   chapters: Array<{ n: number; title: string; path: string; leverId: string; outcomeId: string }>;
   sourceUrls: string[];

@@ -4,7 +4,9 @@ import { parseGateOutput, describeGate, describeGateSkip } from './studio-gate';
 describe('parseGateOutput', () => {
   it('reads a clean pass', () => {
     const r = parseGateOutput('{"ran":true,"passed":true,"findings":[]}', '');
-    expect(r).toEqual({ ran: true, passed: true, findings: [] });
+    // notYetDue is always present now — chapters the plan says are not due yet,
+    // skipped rather than reported as broken.
+    expect(r).toEqual({ ran: true, passed: true, findings: [], notYetDue: [] });
   });
 
   it('reads findings', () => {
@@ -94,5 +96,36 @@ describe('describeGate', () => {
     });
     expect(s).toContain('Chapter 2 renders no canvas or svg.');
     expect(s).toContain('Add a kit visual.');
+  });
+});
+
+describe('not-yet-due chapters', () => {
+  // Before chaptersDue existed the gate reported every unbuilt chapter as
+  // prose-only + no-model + uncited on EVERY iteration — three findings each
+  // for work the agent was not yet meant to have done, drowning the real ones.
+  it('carries notYetDue through the parse', () => {
+    const r = parseGateOutput('{"ran":true,"passed":true,"findings":[],"notYetDue":[3,4]}', '');
+    expect(r.ran).toBe(true);
+    if (r.ran) expect(r.notYetDue).toEqual([3, 4]);
+  });
+
+  it('defaults notYetDue to empty when the runner omits it', () => {
+    const r = parseGateOutput('{"ran":true,"passed":true,"findings":[]}', '');
+    if (r.ran) expect(r.notYetDue).toEqual([]);
+  });
+
+  // Silence about a skipped check reads as a pass. The summary must say so.
+  it('says how many chapters were skipped, on both pass and fail', () => {
+    expect(describeGate({ ran: true, passed: true, findings: [], notYetDue: [3, 4] })).toContain('not yet due: 3, 4');
+    expect(
+      describeGate({
+        ran: true, passed: false, notYetDue: [4],
+        findings: [{ chapter: 2, rule: 'still-placeholder', message: 'm', remedy: 'r' }],
+      }),
+    ).toContain('not yet due: 4');
+  });
+
+  it('says nothing extra when every chapter was due', () => {
+    expect(describeGate({ ran: true, passed: true, findings: [], notYetDue: [] })).not.toContain('not yet due');
   });
 });

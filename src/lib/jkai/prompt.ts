@@ -232,7 +232,7 @@ Before writing any HTML, CSS or JavaScript:
 7. Do NOT use Tailwind. A post-iteration linter rejects any class attribute containing bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, flex or grid as a whole word. Note that a class named "chapter-grid" matches — pick another name.
 
 THE CHAPTER CONTRACT — every chapter page must have all four:
-1. A root element with \`data-chapter="<n>"\`, numbered from 1.
+1. A root element with \`data-chapter="<n>"\`, numbered from 1, and NO \`data-chapter-status="placeholder"\` — remove that attribute the moment the chapter is genuinely written.
 2. At least one <canvas> or <svg> produced by the kit. Prose and a table is not a chapter.
 3. At least one control tagged \`data-lever="<id>"\` whose change visibly updates an element tagged \`data-outcome="<id>"\`. \`Explainer.createSim\` gives you both.
 4. At least one \`<a data-citation href="...">\` pointing at a real source from the research brief.
@@ -243,6 +243,7 @@ EXPLAIN → MANIPULATE → CONSEQUENCE. That is the shape of every chapter. Say 
 
 SCOPE OF AN ITERATION — ONE COMPLETE CHAPTER:
 - Iteration 1 is the skeleton: serve.json, the navigation shell, and every chapter from the plan existing as a reachable route with its title and a one-line placeholder. Nothing more. Get it serving 200 and stop.
+- EVERY placeholder chapter's root element must carry \`data-chapter-status="placeholder"\` alongside its \`data-chapter="<n>"\`. Remove that attribute when you finish writing the chapter — that is how you tell the checker a chapter is done. A chapter still marked placeholder is skipped rather than reported as broken, so leaving it on an unwritten chapter costs you nothing and removing it early costs you a wave of findings you cannot yet act on.
 - Every iteration after that delivers ONE chapter, complete: its narrative, its visual, its interactive model, its citations. Not a slice of three chapters. Not a scaffold. One chapter a reader could learn from.
 - Do not move on to chapter N+1 while chapter N is stubbed.
 - Take the time a chapter needs. There is no bonus for finishing early here, and a half-built chapter costs the next iteration more than it saved this one. Stop the moment this chapter satisfies all four contract points. Further polish belongs to a later pass, not this iteration — a chapter that passes the gate is done, however much time is left.
@@ -391,7 +392,7 @@ export function buildIterationContext(
       const rows = chapterPlan
         .map((c) => `${c.n}. ${c.title} — lever \`${c.leverId}\` drives outcome \`${c.outcomeId}\``)
         .join('\n');
-      contextMessage += `\n\n## Chapter Plan\n${rows}\n\nEvery chapter is a reachable route with \`data-chapter="<n>"\` on its root element. The lever and outcome ids above are what the post-iteration gate drives — use exactly those ids.`;
+      contextMessage += `\n\n## Chapter Plan\n${rows}\n\nEvery chapter is a reachable route with \`data-chapter="<n>"\` on its root element. The lever and outcome ids above are what the post-iteration gate drives — use exactly those ids. Chapters you have not written yet keep \`data-chapter-status="placeholder"\`; the checker skips those and only reports the ones that were due.`;
     }
     contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
     contextMessage += `\n\nBegin iteration ${iterationNumber}. ${
