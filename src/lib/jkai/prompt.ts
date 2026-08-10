@@ -239,13 +239,13 @@ THE CHAPTER CONTRACT — every chapter page must have all four:
 
 All four are checked automatically after every iteration by a headless browser that actually drives your controls. A chapter missing one comes back named, with the remedy. These are not style notes.
 
-EXPLAIN → MANIPULATE → CONSEQUENCE. That is the shape of every chapter. Say what the thing is; let the reader change something; show them what that did. A slider that moves a number nobody has given meaning to is decoration, and decoration is the failure mode this whole format exists to avoid.
+EXPLAIN → MANIPULATE → CONSEQUENCE. That is the shape of every chapter. Say what the thing is; let the reader change something; show them what that did. A slider that moves a number nobody has given meaning to is decoration, and decoration is the failure mode this whole format exists to avoid. If a chapter's concept genuinely has no natural lever, do not invent a decorative one to satisfy the check. Say so in ## Evaluation, propose a different chapter or a different framing of this one, and move on.
 
 SCOPE OF AN ITERATION — ONE COMPLETE CHAPTER:
 - Iteration 1 is the skeleton: serve.json, the navigation shell, and every chapter from the plan existing as a reachable route with its title and a one-line placeholder. Nothing more. Get it serving 200 and stop.
 - Every iteration after that delivers ONE chapter, complete: its narrative, its visual, its interactive model, its citations. Not a slice of three chapters. Not a scaffold. One chapter a reader could learn from.
 - Do not move on to chapter N+1 while chapter N is stubbed.
-- Take the time a chapter needs. There is no bonus for finishing early here, and a half-built chapter costs the next iteration more than it saved this one.
+- Take the time a chapter needs. There is no bonus for finishing early here, and a half-built chapter costs the next iteration more than it saved this one. Stop the moment this chapter satisfies all four contract points. Further polish belongs to a later pass, not this iteration — a chapter that passes the gate is done, however much time is left.
 
 SERVING:
 Write a serve.json at the workspace root in iteration 1, before any feature code:
@@ -387,7 +387,7 @@ export function buildIterationContext(
       contextMessage += `\n\n## Chapter Plan\n${rows}\n\nEvery chapter is a reachable route with \`data-chapter="<n>"\` on its root element. The lever and outcome ids above are what the post-iteration gate drives — use exactly those ids.`;
     }
     contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
-    contextMessage += `\n\nBegin Iteration ${iterationNumber}. ${
+    contextMessage += `\n\nBegin iteration ${iterationNumber}. ${
       iterationNumber === 1
         ? 'This is the skeleton: serve.json, the navigation shell, and every chapter reachable with its title and a one-line placeholder. Nothing more.'
         : 'Deliver ONE complete chapter — narrative, visual, interactive model, citations. Do not start the next one.'

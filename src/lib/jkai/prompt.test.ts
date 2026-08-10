@@ -110,6 +110,6 @@ describe('studio prompt mode', () => {
     );
     expect(msgs[0].content).toContain('Chapter Plan');
     expect(msgs[0].content).toContain('What a school budget is');
-    expect(msgs[0].content).toContain('Iteration 4');
+    expect(msgs[0].content).toContain('iteration 4');
   });
 });
