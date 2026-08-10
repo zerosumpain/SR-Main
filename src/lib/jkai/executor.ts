@@ -107,7 +107,8 @@ export async function executeIteration(
   // REPO_SYSTEM_PROMPT in ./prompt for why the app-build one actively harms it.
   const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string } | null })
     .gitTargetConfig;
-  const promptMode: BuildPromptMode = gitTarget ? 'repo' : 'app';
+  const isStudio = (build as JkaiBuild & { origin?: string }).origin === 'studio';
+  const promptMode: BuildPromptMode = gitTarget ? 'repo' : isStudio ? 'studio' : 'app';
 
   // Verify-then-fix: the sandbox may have been removed since the last iteration
   // (admin action, image rebuild, crash). Re-verify every time.
@@ -118,7 +119,7 @@ export async function executeIteration(
 
   let systemPrompt = buildSystemPrompt(build.id, assignedPort, promptMode);
   const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
-  if (enforceDesign) {
+  if (enforceDesign && !isStudio) {
     systemPrompt += `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
   }
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
@@ -128,7 +129,22 @@ export async function executeIteration(
   const skillDirs: string[] = [];
   const extensions: string[] = [];
   const extraEnv: Record<string, string> = {};
-  if (enforceDesign) {
+  if (isStudio) {
+    try {
+      const { syncExplainerKit } = await import('./sandbox');
+      const kitPath = await syncExplainerKit(build.id);
+      skillDirs.push(kitPath);
+    } catch (err) {
+      // Loud, not silent. A studio build with no kit will invent its own
+      // visual language, fail the visual gate, and burn iterations finding out.
+      await emitLog(
+        build.id,
+        'error',
+        `Explainer kit sync FAILED — this build will not have the kit: ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  } else if (enforceDesign) {
     try {
       const dsPath = await syncDesignAssets(build.id);
       skillDirs.push(dsPath);
@@ -196,6 +212,9 @@ export async function executeIteration(
     codebaseDigest,
     promptMode,
     gitTarget?.gateCommand ?? null,
+    isStudio
+      ? ((build as JkaiBuild & { chapterPlan?: Array<{ n: number; title: string; leverId: string; outcomeId: string }> }).chapterPlan ?? null)
+      : null,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
