@@ -2,10 +2,17 @@
   let {
     buildId,
     failureKind,
+    origin,
     onAfter,
   }: {
     buildId: string;
     failureKind: string | null;
+    // Read-only display data — used only inside replan()'s confirm() text,
+    // never copied into local $state (see svelte5-pitfalls: a prop mirrored
+    // into $state and then read back is how the prop-sync effect loop
+    // happens; this prop isn't even read inside an $effect, so that trap
+    // doesn't apply, but there's no reason to add a state copy either).
+    origin?: string;
     onAfter: () => void | Promise<void>;
   } = $props();
 
@@ -46,7 +53,16 @@
     if (ok) prompt = '';
   }
   async function replan() {
-    if (!confirm('Re-plan from scratch? All iterations will be wiped and the planner will run again.')) return;
+    // Studio builds self-approve their replanned plan (orchestrator.ts
+    // replan() — see task-14-report.md "Studio builds carry no human
+    // approval gate"), so the same click that parks every other build for a
+    // second look resumes a studio build's unattended, budget-spending
+    // execution immediately. Say so before the click, not after.
+    const confirmMessage =
+      origin === 'studio'
+        ? 'Re-plan from scratch? All iterations will be wiped and the build will start iterating again immediately — Studio builds have no approval step, so this resumes unattended, budget-spending execution right away.'
+        : 'Re-plan from scratch? All iterations will be wiped and the planner will run again.';
+    if (!confirm(confirmMessage)) return;
     return call('Re-plan', `/api/jkai/builds/${buildId}/plan`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
