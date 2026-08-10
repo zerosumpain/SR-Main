@@ -10,7 +10,21 @@ import { saveBuffer, deleteFile, newDiskPath } from '$lib/file-store/storage';
 import { buildCollection, answer } from '$lib/rag/pipeline';
 import { readIndex, deleteIndex } from '$lib/rag/index-store';
 
-const RUN = !!process.env.DATABASE_URL;
+// Gate on what this file actually needs, not on what is easiest to check. A
+// database alone is not enough: everything below reaches OpenRouter, so without
+// a resolvable key the whole file fails rather than skips. That is how these
+// tests came to have never run in CI at all — they were excluded "for want of a
+// database" while also wanting a key nobody knew about.
+const RUN =
+	!!process.env.DATABASE_URL &&
+	(await (async () => {
+		try {
+			const { getOpenRouterApiKey } = await import('$lib/server/models/settings');
+			return !!(await getOpenRouterApiKey());
+		} catch {
+			return false;
+		}
+	})());
 const d = RUN ? describe : describe.skip;
 
 // Distinctive, invented facts the model cannot know except from the document.
