@@ -1285,6 +1285,10 @@ class Orchestrator {
           } else {
             const outcome = await runStudioGate({
               baseUrl: `http://127.0.0.1:${port}`,
+              // Iteration 1 is the skeleton; iteration 2 delivers chapter 1. So
+              // after iteration N, chapters 1..N-1 are due and anything later is
+              // legitimately still a placeholder.
+              chaptersDue: iterationNumber - 1,
               chapters: build.chapterPlan.map((c) => ({ ...c, path: `/chapter-${c.n}/` })),
               sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
               kitFiles: STUDIO_KIT_CHECK_FILES,

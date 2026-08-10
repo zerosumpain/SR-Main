@@ -62,7 +62,18 @@ async function main() {
   );
   if (chapters.length === 0) { out = { ran: false, reason: 'no chapters in the spec' }; return; }
 
+  // How many chapters the plan says should be FINISHED by now. Iteration 1 is
+  // the skeleton (every chapter a placeholder), iteration 2 delivers chapter 1,
+  // and so on — so after iteration N, chapters 1..N-1 are due. Without this the
+  // gate reported every unbuilt chapter as prose-only/no-model/uncited on every
+  // single iteration: not wrong, but premature, and it padded each iteration's
+  // context with a wall of findings for work the agent was not yet meant to
+  // have done. 0 or absent means "check everything", preserving old behaviour
+  // for any caller that does not supply it.
+  const dueBy = Number.isFinite(spec.chaptersDue) ? Math.max(0, spec.chaptersDue) : 0;
+
   const findings = [];
+  const notYetDue = [];
 
   // Check 0: the explainer kit actually mounted. Chapter 0 because this is a
   // project-level fact, not any one chapter's. A failed kit sync logs an
@@ -139,6 +150,31 @@ async function main() {
             message: `Chapter ${ch.n} (${ch.title}) was not reachable at any of the checked paths: ${attempted.join(', ')}.`,
             remedy: `Serve chapter ${ch.n} at exactly /chapter-${ch.n}/ (trailing slash) returning 200 with a root element carrying data-chapter="${ch.n}". Checked paths: ${attempted.join(', ')}.`,
           });
+          continue;
+        }
+
+        // A chapter still carrying data-chapter-status="placeholder" is the
+        // skeleton's stub, not finished work. Skip it — UNLESS the plan says it
+        // was due, in which case the stub itself is the finding. That bound is
+        // what stops the marker becoming a free pass: an agent that never
+        // clears it still gets caught, just on the iteration it actually owed
+        // the chapter.
+        const isPlaceholder =
+          (await page.locator(`[data-chapter="${ch.n}"][data-chapter-status="placeholder"]`).count()) > 0;
+        if (isPlaceholder) {
+          // No deadline supplied means we cannot justify skipping anything: an
+          // unchecked chapter is indistinguishable from a passing one, so an
+          // absent chaptersDue falls back to checking everything rather than
+          // handing every placeholder a free pass.
+          if (dueBy === 0 || ch.n <= dueBy) {
+            findings.push({
+              chapter: ch.n, rule: 'still-placeholder',
+              message: `Chapter ${ch.n} (${ch.title}) was due by now but is still the skeleton placeholder.`,
+              remedy: `Write chapter ${ch.n} in ${ch.path}: narrative, a kit visual, a control tagged data-lever="${ch.leverId}" driving data-outcome="${ch.outcomeId}", and a citation. Then remove data-chapter-status="placeholder" from its root element.`,
+            });
+          } else {
+            notYetDue.push(ch.n);
+          }
           continue;
         }
 
@@ -279,7 +315,7 @@ async function main() {
         await page?.close().catch(() => {});
       }
     }
-    out = { ran: true, passed: findings.length === 0, findings };
+    out = { ran: true, passed: findings.length === 0, findings, notYetDue };
   } catch (e) {
     out = { ran: false, reason: `the gate harness failed: ${e.message}` };
   } finally {
