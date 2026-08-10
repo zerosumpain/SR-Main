@@ -5,6 +5,7 @@ import { isOwnerEmail } from '$lib/server/access';
 // the `studio_build` chat tool is a second entry point that never reaches this
 // route. Imported rather than re-declared so the two cannot drift; this route
 // keeps its own check only to answer 400 instead of 500.
+import { RESEARCH_MODES, type ResearchMode } from '$lib/jkai/research-brief';
 import { createStudioBuild, MAX_CHALLENGE_LEN, MAX_TITLE_LEN } from '$lib/jkai/studio';
 
 export const POST: RequestHandler = async ({ request, locals }) => {

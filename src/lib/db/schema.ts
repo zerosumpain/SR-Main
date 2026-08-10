@@ -708,6 +708,18 @@ export const jkaiBuilds = pgTable('jkai_builds', {
    * an identical shape. This file keeps its own inline copy deliberately, to
    * stay free of app-level ($lib/jkai) imports.
    */
+  /**
+   * Studio builds only. Where the research brief's evidence comes from:
+   * 'reuse' = only what the corpus already knows, 'extend' = reuse if it clears
+   * the bar else research the gaps seeded with it, 'fresh' = always a new Deep
+   * Dive. `src/lib/jkai/research-brief.ts` owns the canonical ResearchMode
+   * union; the literals are repeated here deliberately, for the same reason
+   * StudioResearchBrief is — schema.ts stays free of app-level ($lib/jkai)
+   * imports.
+   */
+  researchMode: text('research_mode', { enum: ['reuse', 'extend', 'fresh'] })
+    .notNull()
+    .default('extend'),
   chapterPlan: jsonb('chapter_plan')
     .$type<Array<{ n: number; title: string; leverId: string; outcomeId: string }>>()
     .notNull()

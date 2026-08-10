@@ -28,6 +28,7 @@
   // preconfigured budget/design defaults (see src/lib/jkai/studio.ts) — a
   // plain read-only-in-the-template flag, nothing derived or synced from it.
   let studioMode = $state(false);
+  let researchMode = $state<'reuse' | 'extend' | 'fresh'>('extend');
 
   async function submit() {
     if (!prompt.trim()) return;
@@ -39,7 +40,7 @@
         const res = await fetch('/api/jkai/studio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ challenge: prompt.trim() }),
+          body: JSON.stringify({ challenge: prompt.trim(), researchMode }),
         });
         const data = await res.json();
         if (!res.ok || !data.buildId) {
@@ -123,9 +124,28 @@
       </label>
       {#if studioMode}
         <p class="text-xs mt-2" style="color: var(--text-ghost);">
-          Runs a research stage first, plans a 6–10 chapter spine, then builds one complete chapter
-          per iteration. Budget and design settings below are replaced by the Studio defaults.
+          Plans a 6–10 chapter spine, then builds one complete chapter per iteration. Budget and
+          design settings below are replaced by the Studio defaults.
         </p>
+        <div class="mt-3">
+          <span class="text-xs block mb-1" style="color: var(--text-ghost);">Evidence</span>
+          <select
+            bind:value={researchMode}
+            class="w-full text-sm p-2 rounded-[var(--radius-round)] border"
+            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);"
+          >
+            <option value="extend">Extend — reuse what is known, research only the gaps (default)</option>
+            <option value="reuse">Reuse only — existing research, no new session (seconds, free)</option>
+            <option value="fresh">Fresh — ignore prior research, full Deep Dive (30–90 min)</option>
+          </select>
+          <p class="text-xs mt-1" style="color: var(--text-ghost);">
+            {researchMode === 'reuse'
+              ? 'Fails fast if the corpus does not already hold enough sourced facts on this topic.'
+              : researchMode === 'fresh'
+                ? 'Always starts a new Deep Dive, even if this topic is already covered.'
+                : 'Searches existing research first; only starts a Deep Dive if it falls short, seeded with what was found.'}
+          </p>
+        </div>
       {/if}
     </div>
 

@@ -16,6 +16,7 @@ import { builderClient } from '$lib/jkai/builder-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import type { BudgetConfig } from './types';
+import type { ResearchMode } from './research-brief';
 
 /**
  * Deeper than the app default (25 iterations / 1M tokens per hour / 120 min).
@@ -55,9 +56,12 @@ export const MAX_TITLE_LEN = 200;
 export async function createStudioBuild({
   challenge,
   title,
+  researchMode = 'extend',
 }: {
   challenge: string;
   title?: string;
+  /** See ResearchMode in research-brief.ts. Defaults to 'extend'. */
+  researchMode?: ResearchMode;
 }): Promise<{ buildId: string }> {
   const trimmed = challenge.trim();
   if (!trimmed) throw new Error('createStudioBuild: challenge is required');
@@ -89,6 +93,7 @@ export async function createStudioBuild({
       planStatus: 'approved',
       budgetConfig: { ...STUDIO_BUDGET },
       chapterPlan: [],
+      researchMode,
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       priceSnapshot,

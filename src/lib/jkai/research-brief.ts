@@ -60,6 +60,31 @@ export const RESEARCH_DEADLINE_MS = 90 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 2 * 60 * 1000;
 
 const MIN_FACTS = 8;
+/** A brief drawn from one or two pages is technically sourced, not researched. */
+const MIN_SOURCES = 3;
+/** Cap on facts in a brief, identical on every path so prompts stay comparable. */
+const BRIEF_FACT_CAP = 15;
+
+/**
+ * How a studio build gets its evidence.
+ *
+ * `reuse`  — only what is already in the corpus. No new session, seconds, no cost.
+ * `extend` — reuse if it clears the bars, otherwise research the gaps, SEEDED with
+ *            what was already found. The default: never worse than `fresh`, often
+ *            far faster.
+ * `fresh`  — always a new Deep Dive, ignoring prior work.
+ */
+export type ResearchMode = 'reuse' | 'extend' | 'fresh';
+export const RESEARCH_MODES: readonly ResearchMode[] = ['reuse', 'extend', 'fresh'] as const;
+
+/**
+ * searchResearch's own default is 0.3, tuned for chat recall where a human reads
+ * the hits and discards the duds. A brief's facts are rendered to a learner as
+ * true, so precision matters more than recall here.
+ */
+const REUSE_MIN_SIM = 0.45;
+/** searchResearch caps topK at 30; ask for the maximum and filter down. */
+const REUSE_TOP_K = 30;
 
 /**
  * Would a syllabus built on this brief be grounded, or invented?
@@ -86,7 +111,6 @@ export function isBriefUsable(brief: ResearchBrief): { ok: boolean; reason?: str
   // point at the same one or two pages — technically sourced, not actually
   // researched. Require some spread across the source set.
   const distinctSources = new Set(brief.facts.map((f) => f.sourceUrl)).size;
-  const MIN_SOURCES = 3;
   if (distinctSources < MIN_SOURCES) {
     return {
       ok: false,
@@ -106,6 +130,84 @@ export function isBriefUsable(brief: ResearchBrief): { ok: boolean; reason?: str
     };
   }
   return { ok: true };
+}
+
+/** The shape both evidence paths produce before synthesis. */
+type OrderedFact = {
+  id: string;
+  content: string;
+  confidence: number;
+  url: string | null;
+  title: string | null;
+};
+
+export function distinctHostCount(rows: Array<{ url: string | null }>): number {
+  const hosts = new Set<string>();
+  for (const r of rows) {
+    if (!r.url) continue;
+    try {
+      hosts.add(new URL(r.url).host);
+    } catch {
+      /* a malformed URL is not a host */
+    }
+  }
+  return hosts.size;
+}
+
+/**
+ * Map cross-session search hits into the brief's fact shape.
+ *
+ * Exported for tests: this is where reuse either produces real evidence or
+ * quietly produces junk, and the dedup is the part most likely to rot.
+ * `sourceUrl` arrives already sanitised to http(s)-or-null by research-search.ts,
+ * but we re-check rather than trust a neighbour module's invariant.
+ */
+export function mapHitsToFacts(
+  hits: Array<{
+    factId: string;
+    passage: string;
+    confidence: number;
+    sourceUrl: string | null;
+    sourceTitle: string | null;
+  }>,
+  cap = BRIEF_FACT_CAP,
+): OrderedFact[] {
+  const seen = new Set<string>();
+  const out: OrderedFact[] = [];
+  for (const h of hits) {
+    if (!h.sourceUrl || !/^https?:\/\//.test(h.sourceUrl)) continue;
+    const passage = (h.passage ?? '').trim();
+    if (!passage) continue;
+    // Two sessions researching the same topic routinely extract the same claim
+    // from the same page. Without this the brief looks well-sourced while
+    // actually repeating itself, and the host-diversity check is fooled too.
+    const key = `${h.sourceUrl}::${passage.slice(0, 120).toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: h.factId,
+      content: passage,
+      confidence: h.confidence,
+      url: h.sourceUrl,
+      title: h.sourceTitle,
+    });
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/** Search everything already researched. Returns [] when nothing clears the bar. */
+async function factsFromExistingKnowledge(challenge: string): Promise<OrderedFact[]> {
+  const { searchResearch } = await import('$lib/deepdive/research-search');
+  const hits = await searchResearch(challenge, { topK: REUSE_TOP_K, minSim: REUSE_MIN_SIM }).catch(
+    () => [],
+  );
+  return mapHitsToFacts(hits);
+}
+
+/** Does this evidence clear the same bars isBriefUsable will apply later? */
+export function evidenceIsSufficient(rows: OrderedFact[]): boolean {
+  return rows.length >= MIN_FACTS && distinctHostCount(rows) >= MIN_SOURCES;
 }
 
 export function formatBriefForPrompt(brief: ResearchBrief): string {
@@ -171,7 +273,47 @@ Rules:
  * Throws on timeout or an unusable brief — the caller marks the build failed
  * with the reason, which is far better than an ungrounded explainer.
  */
-export async function buildResearchBrief(buildId: string, challenge: string): Promise<ResearchBrief> {
+/**
+ * Get a studio build its evidence, by whichever route the mode allows.
+ *
+ * The expensive path (a fresh Deep Dive) is unchanged; what is new is that it is
+ * no longer the only one. On 2026-08-10 the corpus already held 4,088 embedded
+ * facts across 19 sessions from 975 distinct URLs, and the first studio build
+ * still spent 20 minutes re-researching a topic a prior session had covered with
+ * 361 facts from 24 hosts.
+ */
+export async function buildResearchBrief(
+  buildId: string,
+  challenge: string,
+  mode: ResearchMode = 'extend',
+): Promise<ResearchBrief> {
+  let seedFacts: OrderedFact[] = [];
+
+  if (mode !== 'fresh') {
+    const known = await factsFromExistingKnowledge(challenge);
+    if (evidenceIsSufficient(known)) {
+      await emitLog(
+        buildId,
+        'system',
+        `Research: reusing existing knowledge — ${known.length} facts from ${distinctHostCount(known)} sources already in the corpus. No new research session needed.`,
+      );
+      return synthesiseBrief(buildId, challenge, known, null);
+    }
+    if (mode === 'reuse') {
+      throw new Error(
+        `Research stage: mode 'reuse' found only ${known.length} usable facts from ${distinctHostCount(known)} sources in existing research (need ${MIN_FACTS} from ${MIN_SOURCES}). Re-run with mode 'extend' to research the gaps.`,
+      );
+    }
+    // extend: not enough on its own, but not nothing — carry it into the new
+    // session so the researcher works the gaps instead of re-treading ground.
+    seedFacts = known;
+    await emitLog(
+      buildId,
+      'system',
+      `Research: existing knowledge covers ${seedFacts.length} facts from ${distinctHostCount(seedFacts)} sources — short of the ${MIN_FACTS}/${MIN_SOURCES} bar, so starting a seeded research session to fill the gaps.`,
+    );
+  }
+
   const { startResearch } = await import('$lib/deepdive/worker');
   const [session] = await db
     .insert(researchSessions)
@@ -182,10 +324,27 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
         'Find public datasets or APIs a reader could explore',
         'Identify what people commonly get wrong about this',
       ],
+      // phase1.ts folds this into the researcher's system prompt — same
+      // mechanism research_branch uses. parentSessionId stays null on purpose:
+      // reuse hits span several sessions, and that column means one parent.
+      ...(seedFacts.length
+        ? {
+            seedContext: {
+              type: 'fact' as const,
+              parentTopic: challenge.slice(0, 500),
+              parentGoals: [],
+              factContents: seedFacts.map((f) => f.content),
+            },
+          }
+        : {}),
     })
     .returning();
 
-  await emitLog(buildId, 'system', `Research stage started (session ${session.id}) — this runs before planning.`);
+  await emitLog(
+    buildId,
+    'system',
+    `Research stage started (session ${session.id})${seedFacts.length ? `, seeded with ${seedFacts.length} known facts` : ''} — this runs before planning.`,
+  );
   void startResearch(session.id);
 
   const deadline = Date.now() + RESEARCH_DEADLINE_MS;
@@ -199,20 +358,14 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     if (row?.status === 'failed') { sessionFailed = true; break; }
 
     // Liveness. Nothing else writes heartbeat_at or updated_at during research,
-    // and reapStaleBuilds kills any running build whose `heartbeatAt ?? updatedAt`
-    // is older than STALE_BUILD_MS (30 min). Research routinely runs longer than
-    // that, so without this ping the reaper — or a sidecar restart, which clears
-    // the `activeBuildId === b.id` escape hatch — would abandon a healthy build
-    // mid-research. Ping every poll; it is one cheap UPDATE per 20s.
+    // and reapStaleBuilds abandons any running build quiet for STALE_BUILD_MS
+    // (30 min). Research routinely runs longer than that.
     await db
       .update(jkaiBuilds)
       .set({ heartbeatAt: new Date() })
       .where(eq(jkaiBuilds.id, buildId))
       .catch(() => {});
 
-    // Visible progress. The build log was previously silent for the whole
-    // research stage, so a perfectly healthy build looked hung — which is
-    // exactly what happened on the first real studio run.
     if (Date.now() - lastProgressAt >= PROGRESS_INTERVAL_MS) {
       lastProgressAt = Date.now();
       const [factCount, sourceCount] = await Promise.all([
@@ -228,10 +381,6 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     }
   }
   if (!report) {
-    // A worker crash and a genuine stall are different operator problems — one
-    // means "read the deep-dive logs", the other means "this topic may be too
-    // obscure or the model too slow". Distinct messages so the build failure
-    // reason actually points somewhere useful.
     if (sessionFailed) {
       throw new Error(
         `Research stage: the deep-dive session failed before producing a report (session ${session.id}). Check its logs.`,
@@ -243,13 +392,6 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     );
   }
 
-  // The facts (and their sourceUrl) come DIRECTLY from the facts/sources
-  // tables, never from the LLM. ResearchReport carries no URLs anywhere —
-  // ranked_facts and every *_fact_ids array are opaque fact ids, not fact
-  // text (see $lib/deepdive/postprocess.ts) — so asking the model to emit
-  // `sourceUrl` per fact from the serialised report gave it no real URLs to
-  // draw on, and every one it returned was invented. isBriefUsable's
-  // http(s)-prefix check could not tell a fabricated URL from a real one.
   const factRows = await db
     .select({
       id: facts.id,
@@ -263,21 +405,15 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     .where(
       and(
         eq(facts.sessionId, session.id),
-        // A refuted claim or one the researcher discarded must never reach a
-        // published explainer as sourced truth — the worst failure mode this
-        // feature has. isCounterfactual=false is the same filter every other
-        // reader of this table applies (see postprocess.ts, credibility.ts,
-        // synthesis-scope.ts); deskState='archived' is Research Desk's own
-        // "discarded" state and has no equivalent precedent elsewhere, but the
-        // semantics are the same — a fact the researcher filed away as wrong
-        // or unwanted, not raw material a syllabus should cite.
+        // A refuted or discarded claim must never reach a published explainer
+        // as sourced truth — the worst failure mode this feature has.
         eq(facts.isCounterfactual, false),
         ne(facts.deskState, 'archived'),
       ),
     );
 
-  // report.ranked_facts is the session's ranked order (best first); anything
-  // it doesn't cover falls back to descending confidence and goes last.
+  // report.ranked_facts is the session's ranked order (best first); anything it
+  // doesn't cover falls back to descending confidence and goes last.
   const rankIndex = new Map(report.ranked_facts.map((id, i) => [id, i]));
   const ranked = factRows
     .filter((f) => rankIndex.has(f.id))
@@ -285,7 +421,7 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
   const unranked = factRows
     .filter((f) => !rankIndex.has(f.id))
     .sort((a, b) => b.confidence - a.confidence);
-  const orderedFacts = [...ranked, ...unranked].slice(0, 15);
+  const orderedFacts = [...ranked, ...unranked].slice(0, BRIEF_FACT_CAP);
 
   if (orderedFacts.length < MIN_FACTS) {
     throw new Error(
@@ -293,12 +429,25 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     );
   }
 
+  return synthesiseBrief(buildId, challenge, orderedFacts, session.id);
+}
+
+/**
+ * Turn a fact set into a full brief. Shared by both evidence paths — reuse and a
+ * fresh Deep Dive differ ONLY in where `orderedFacts` came from. The facts and
+ * their URLs never pass through the model; it synthesises structure on top.
+ */
+async function synthesiseBrief(
+  buildId: string,
+  challenge: string,
+  orderedFacts: OrderedFact[],
+  sessionId: string | null,
+): Promise<ResearchBrief> {
   const briefFacts: BriefFact[] = orderedFacts.map((f) => ({
     claim: f.content,
-    sourceUrl: f.url,
+    sourceUrl: f.url as string,
     ...(f.title ? { detail: f.title } : {}),
   }));
-
   const factsForPrompt = orderedFacts
     .map((f, i) => `${i + 1}. ${f.content}\n   source: ${f.url}`)
     .join('\n');
@@ -352,7 +501,7 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     liveData: parsed.liveData ?? [],
     misconceptions: parsed.misconceptions ?? [],
     gaps: parsed.gaps ?? [],
-    sessionId: session.id,
+    sessionId,
   };
 
   const usable = isBriefUsable(brief);

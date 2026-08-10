@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { isBriefUsable, formatBriefForPrompt, RESEARCH_DEADLINE_MS, type ResearchBrief } from './research-brief';
+import {
+  isBriefUsable,
+  formatBriefForPrompt,
+  mapHitsToFacts,
+  distinctHostCount,
+  evidenceIsSufficient,
+  RESEARCH_DEADLINE_MS,
+  RESEARCH_MODES,
+  type ResearchBrief,
+} from './research-brief';
 
 function brief(over: Partial<ResearchBrief> = {}): ResearchBrief {
   return {
@@ -98,5 +107,94 @@ describe('research deadline', () => {
   // past that is only safe because the poll loop writes heartbeatAt.
   it('exceeds the 30-minute reaper cutoff, which is why the poll must heartbeat', () => {
     expect(RESEARCH_DEADLINE_MS).toBeGreaterThan(30 * 60 * 1000);
+  });
+});
+
+function hit(over: Partial<{ factId: string; passage: string; confidence: number; sourceUrl: string | null; sourceTitle: string | null }> = {}) {
+  return {
+    factId: 'f1',
+    passage: 'A claim about school funding.',
+    confidence: 0.8,
+    sourceUrl: 'https://a.gov.uk/one',
+    sourceTitle: 'A page',
+    ...over,
+  };
+}
+
+describe('mapHitsToFacts', () => {
+  it('keeps only hits with a usable http(s) source', () => {
+    const out = mapHitsToFacts([
+      hit(),
+      hit({ factId: 'f2', sourceUrl: null }),
+      hit({ factId: 'f3', sourceUrl: 'javascript:alert(1)' }),
+    ]);
+    expect(out.map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('drops an empty passage rather than emitting a blank fact', () => {
+    expect(mapHitsToFacts([hit({ passage: '   ' })])).toEqual([]);
+  });
+
+  // Two sessions researching the same area routinely extract the same claim
+  // from the same page. Left in, the brief looks well-sourced while repeating
+  // itself, and the host-diversity check is fooled too.
+  it('dedupes the same claim from the same url across sessions', () => {
+    const out = mapHitsToFacts([
+      hit({ factId: 'a' }),
+      hit({ factId: 'b' }),
+      hit({ factId: 'c', passage: 'A CLAIM about school funding.' }),
+    ]);
+    expect(out).toHaveLength(1);
+  });
+
+  it('keeps the same claim when it came from a different source', () => {
+    const out = mapHitsToFacts([hit({ factId: 'a' }), hit({ factId: 'b', sourceUrl: 'https://b.gov.uk/two' })]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('respects the cap', () => {
+    const many = Array.from({ length: 40 }, (_, i) => hit({ factId: `f${i}`, sourceUrl: `https://x.gov.uk/${i}` }));
+    expect(mapHitsToFacts(many)).toHaveLength(15);
+  });
+});
+
+describe('distinctHostCount', () => {
+  it('counts hosts, not urls', () => {
+    expect(distinctHostCount([
+      { url: 'https://a.gov.uk/one' },
+      { url: 'https://a.gov.uk/two' },
+      { url: 'https://b.gov.uk/one' },
+    ])).toBe(2);
+  });
+
+  it('ignores nulls and malformed urls', () => {
+    expect(distinctHostCount([{ url: null }, { url: 'not a url' }, { url: 'https://a.gov.uk/x' }])).toBe(1);
+  });
+});
+
+describe('evidenceIsSufficient', () => {
+  const rows = (n: number, hosts: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `f${i}`, content: 'c', confidence: 0.5,
+      url: `https://h${i % hosts}.gov.uk/${i}`, title: null,
+    }));
+
+  it('accepts evidence clearing both bars', () => {
+    expect(evidenceIsSufficient(rows(8, 3))).toBe(true);
+  });
+
+  it('rejects too few facts even from many hosts', () => {
+    expect(evidenceIsSufficient(rows(7, 7))).toBe(false);
+  });
+
+  // 15 facts all scraped off one page is technically sourced, not researched.
+  it('rejects plenty of facts from too few hosts', () => {
+    expect(evidenceIsSufficient(rows(15, 2))).toBe(false);
+  });
+});
+
+describe('research modes', () => {
+  it('exposes exactly the three modes the schema column allows', () => {
+    expect([...RESEARCH_MODES].sort()).toEqual(['extend', 'fresh', 'reuse']);
   });
 });
