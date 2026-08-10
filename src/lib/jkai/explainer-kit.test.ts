@@ -32,4 +32,16 @@ describe('explainer kit', () => {
     expect(js).toContain('data-lever');
     expect(js).toContain('data-outcome');
   });
+
+  it('diagram.js exposes createDiagram and emits svg', async () => {
+    const js = await read('diagram.js');
+    expect(js).toMatch(/createDiagram/);
+    expect(js).toContain('createElementNS');
+    expect(js).toContain('http://www.w3.org/2000/svg');
+  });
+
+  it('diagram.js tags nodes so a chapter can link a lever to a mechanism', async () => {
+    const js = await read('diagram.js');
+    expect(js).toContain('data-node');
+  });
 });
