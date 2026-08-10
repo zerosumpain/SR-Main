@@ -302,6 +302,13 @@ Ordered and concrete. Name the next chapter by number and title.`;
 
 export type BuildPromptMode = 'app' | 'repo' | 'studio';
 
+// Canonical shape of a studio chapter-plan entry. src/lib/db/schema.ts keeps
+// its own inline copy of this shape on the `chapterPlan` jsonb column
+// (deliberately — schema.ts must not import from $lib/jkai) and
+// src/lib/jkai/executor.ts imports this type for its cast. Keep all three in
+// sync by hand; this is the one this repo has a recorded history of drifting.
+export type ChapterPlanEntry = { n: number; title: string; leverId: string; outcomeId: string };
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
@@ -338,7 +345,7 @@ export function buildIterationContext(
   codebaseDigest: string = '',
   mode: BuildPromptMode = 'app',
   gateCommand: string | null = null,
-  chapterPlan: Array<{ n: number; title: string; leverId: string; outcomeId: string }> | null = null,
+  chapterPlan: Array<ChapterPlanEntry> | null = null,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 

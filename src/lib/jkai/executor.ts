@@ -1,4 +1,9 @@
-import { buildSystemPrompt, buildIterationContext, type BuildPromptMode } from './prompt';
+import {
+  buildSystemPrompt,
+  buildIterationContext,
+  type BuildPromptMode,
+  type ChapterPlanEntry,
+} from './prompt';
 import {
   listWorkspaceFiles,
   allocatePort,
@@ -107,8 +112,14 @@ export async function executeIteration(
   // REPO_SYSTEM_PROMPT in ./prompt for why the app-build one actively harms it.
   const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string } | null })
     .gitTargetConfig;
-  const isStudio = (build as JkaiBuild & { origin?: string }).origin === 'studio';
-  const promptMode: BuildPromptMode = gitTarget ? 'repo' : isStudio ? 'studio' : 'app';
+  const originIsStudio = (build as JkaiBuild & { origin?: string }).origin === 'studio';
+  const promptMode: BuildPromptMode = gitTarget ? 'repo' : originIsStudio ? 'studio' : 'app';
+  // promptMode is the single decider from here down. Every studio-only branch
+  // below (design-system suffix, asset-mount, chapter-plan arg) reads
+  // isStudio rather than origin directly, so a git-target build's repo
+  // precedence flows through automatically instead of being re-decided per
+  // branch.
+  const isStudio = promptMode === 'studio';
 
   // Verify-then-fix: the sandbox may have been removed since the last iteration
   // (admin action, image rebuild, crash). Re-verify every time.
@@ -213,7 +224,7 @@ export async function executeIteration(
     promptMode,
     gitTarget?.gateCommand ?? null,
     isStudio
-      ? ((build as JkaiBuild & { chapterPlan?: Array<{ n: number; title: string; leverId: string; outcomeId: string }> }).chapterPlan ?? null)
+      ? ((build as JkaiBuild & { chapterPlan?: Array<ChapterPlanEntry> }).chapterPlan ?? null)
       : null,
   );
 

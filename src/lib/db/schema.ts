@@ -703,6 +703,10 @@ export const jkaiBuilds = pgTable('jkai_builds', {
    * data-attribute ids studio-gate drives — a chapter with no declared pair
    * cannot be interactivity-checked, and a check that cannot run is a check
    * that silently passes.
+   *
+   * `src/lib/jkai/prompt.ts` owns the canonical `ChapterPlanEntry` type with
+   * an identical shape. This file keeps its own inline copy deliberately, to
+   * stay free of app-level ($lib/jkai) imports.
    */
   chapterPlan: jsonb('chapter_plan')
     .$type<Array<{ n: number; title: string; leverId: string; outcomeId: string }>>()
