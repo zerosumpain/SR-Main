@@ -11,11 +11,13 @@
  * the structured brief with one LLM call.
  */
 import { db } from '$lib/db';
-import { researchSessions, facts, sources } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { researchSessions, facts, sources, jkaiBuilds } from '$lib/db/schema';
+import { eq, and, ne } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { emitLog } from './log-emitter';
+import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
+import type { PriceSnapshot } from '$lib/server/models/types';
 import type { ResearchReport } from '$lib/deepdive/types';
 
 export interface BriefFact {
@@ -203,7 +205,21 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     })
     .from(facts)
     .innerJoin(sources, eq(facts.sourceId, sources.id))
-    .where(eq(facts.sessionId, session.id));
+    .where(
+      and(
+        eq(facts.sessionId, session.id),
+        // A refuted claim or one the researcher discarded must never reach a
+        // published explainer as sourced truth — the worst failure mode this
+        // feature has. isCounterfactual=false is the same filter every other
+        // reader of this table applies (see postprocess.ts, credibility.ts,
+        // synthesis-scope.ts); deskState='archived' is Research Desk's own
+        // "discarded" state and has no equivalent precedent elsewhere, but the
+        // semantics are the same — a fact the researcher filed away as wrong
+        // or unwanted, not raw material a syllabus should cite.
+        eq(facts.isCounterfactual, false),
+        ne(facts.deskState, 'archived'),
+      ),
+    );
 
   // report.ranked_facts is the session's ranked order (best first); anything
   // it doesn't cover falls back to descending confidence and goes last.
@@ -249,6 +265,21 @@ export async function buildResearchBrief(buildId: string, challenge: string): Pr
     max_tokens: 8192,
     response_format: { type: 'json_object' },
   });
+  // Record spend against the build, not just this ad-hoc research session.
+  // maxCostUsd (see studio.ts's STUDIO_BUDGET) is the hard backstop on a
+  // studio build's total spend — same recordBuildUsage/parseUsage pairing
+  // planner.ts's streamPlannerCall uses for its own LLM calls. Unlike that
+  // streaming call, this one is a plain (non-streamed) completion, so
+  // completion.usage already carries real prompt_tokens/completion_tokens
+  // rather than only a total.
+  if (completion.usage) {
+    const [buildRow] = await db
+      .select({ priceSnapshot: jkaiBuilds.priceSnapshot })
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.id, buildId));
+    const priceSnapshot = (buildRow?.priceSnapshot ?? null) as PriceSnapshot | null;
+    await recordBuildUsage(buildId, parseUsage(completion.usage), priceSnapshot);
+  }
   const raw = completion.choices?.[0]?.message?.content ?? '{}';
   const jsonStart = raw.indexOf('{');
   let parsed: Partial<ResearchBrief> = {};

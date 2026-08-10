@@ -556,13 +556,44 @@ class Orchestrator {
       await ensureWorkspace(buildId);
     }
 
+    const isStudio = buildRecord.origin === 'studio';
+
+    // Studio builds run a research stage before the planner — everything the
+    // planner (and every chapter after it) writes must trace back to sourced
+    // facts, so this has to land before planBuild is ever invoked. Gated on
+    // researchBrief already being null so a re-entry into initAndPlan (e.g.
+    // replan()) does not re-run 20 minutes of research it already has.
+    if (isStudio && !buildRecord.researchBrief) {
+      try {
+        const { buildResearchBrief } = await import('./research-brief');
+        const brief = await buildResearchBrief(buildId, buildRecord.prompt);
+        await db.update(jkaiBuilds).set({ researchBrief: brief }).where(eq(jkaiBuilds.id, buildId));
+        await emitLog(buildId, 'system', 'Research brief attached — proceeding to planning.');
+      } catch (err: any) {
+        // Do not fall through to planning. An explainer built without sources
+        // is confidently wrong, which is worse than one that does not exist.
+        await this.abortBuild(buildId, {
+          kind: 'nonzero_exit',
+          message: `Research stage failed: ${err.message}`,
+          attempts: 1,
+        });
+        return;
+      }
+    }
+
     // Honour planStatus from the create-build form. When planFirst=false
     // the API sets planStatus='approved' at insert time — meaning the user
     // explicitly opted out of the proposer/critic/revision debate. Pre-fix,
     // we ran planBuild() anyway and just threw the 90 seconds of output
     // away because the gate didn't fire. Now: skip the planner entirely
     // and go straight to iteration 1.
-    const skipPlanning = buildRecord.planStatus !== 'pending';
+    //
+    // Studio builds are exempted from this skip. createStudioBuild also sets
+    // planStatus='approved', but there it means "no human approval PAUSE"
+    // (see the pending-check below) — not "no planner". Without planBuild
+    // actually running, a studio build never gets a chapter spine and the
+    // research brief attached above is never read by anything.
+    const skipPlanning = !isStudio && buildRecord.planStatus !== 'pending';
     if (skipPlanning) {
       await emitLog(
         buildId,

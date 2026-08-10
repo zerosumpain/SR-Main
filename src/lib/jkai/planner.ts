@@ -7,6 +7,7 @@ import { listWorkspaceFiles } from './sandbox';
 import { emitLog, emitLive } from './log-emitter';
 import { recordBuildUsage, parseUsage } from '$lib/server/models/usage';
 import type { PriceSnapshot } from '$lib/server/models/types';
+import { formatBriefForPrompt, type ResearchBrief } from './research-brief';
 
 // --- System Prompts ---
 
@@ -71,6 +72,87 @@ End your review with:
 
 ## Recommended Changes
 (concrete, actionable fixes for each critical issue — specific replacements, not vague suggestions)`;
+
+// --- Studio mode: chapter-spine planning ---
+//
+// A Studio build (origin === 'studio') plans a multi-chapter interactive
+// explainer instead of a generic delivery plan. It swaps in these prompts —
+// see planBuild's isStudio branch — and additionally persists the parsed
+// chapter table onto jkai_builds.chapterPlan once the debate concludes.
+
+export const STUDIO_PROPOSER_SYSTEM_PROMPT = `You are designing an interactive explainer — a multi-chapter learning experience about one subject. You produce plans only, no code.
+
+You are given a research brief. Every chapter must be grounded in it.
+
+CONSTRAINTS YOUR PLAN MUST RESPECT:
+1. 6-10 chapters. Each is a real route the reader can link to.
+2. Every chapter has ONE idea and follows explain → manipulate → consequence: say what the thing is, let the reader change something, show them what that did.
+3. Sequence so each chapter can only be understood after the last. A workable spine: what the thing is → what drives it → the mechanism in the middle → what happens when you push it → where it breaks → what is genuinely uncertain. The final chapter names the brief's GAPS honestly.
+4. Each chapter names its visual mode from the explainer kit: createScene (spatial/allocation), createDiagram (mechanisms and flow), createSim (levers and consequence), createChart (over time or across categories). Do not use a 3D scene for a time series.
+5. Iteration 1 is the skeleton ONLY: serve.json, navigation shell, every chapter reachable with its title and a one-line placeholder. Then one complete chapter per iteration.
+6. Real data only, named from the brief's LIVE DATA section.
+
+Format your response as:
+
+## Concept
+(what the reader will be able to do at the end that they cannot do now — 2-3 sentences)
+
+## Architecture
+(stack, routing, how chapters are served — 3-5 sentences)
+
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | ... | ... | ... |
+
+(one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
+
+## Chapter Detail
+
+### Chapter 1: [title]
+- Idea: [the single thing this chapter teaches]
+- Visual: [createScene | createDiagram | createSim | createChart, and what it shows]
+- Manipulate: [what the reader changes]
+- Consequence: [what visibly moves, and why that is the lesson]
+- Grounded in: [which numbered FACTS from the brief]
+
+(repeat for every chapter)
+
+## Risks & Mitigations
+(2-3 real risks)`;
+
+export const STUDIO_CRITIC_EXTRA = `
+
+8. PEDAGOGY: Does every chapter have explain → manipulate → consequence, or are some just prose with a picture? Is the chapter order a real progression where each depends on the last, or is it topic buckets in arbitrary order? Is any chapter's lever decoration — a control that moves a number the chapter never gave meaning to? Flag chapters with no interactive model as "NO-MODEL:", an order that could be shuffled without loss as "ARBITRARY-ORDER:", and a meaningless control as "DECORATIVE-LEVER:". For each, say concretely what the model should be instead.
+
+9. SOURCING: Does every factual claim in the plan trace to a numbered FACT in the research brief? Look for figures, dates, percentages and mechanisms that appear in the plan but not in the brief. Flag each with "UNSOURCED:" and name the claim. Also check the reverse: is the plan ignoring the brief's GAPS by presenting a settled story where the research found none? Flag that with "FALSE-CONFIDENCE:".`;
+
+/**
+ * Read the chapter table out of the plan markdown.
+ *
+ * Deliberately forgiving: a malformed row is skipped, not fatal. The plan is
+ * LLM output and one bad row must not cost the whole spine — the executor can
+ * work from a partial plan, but not from an exception.
+ */
+export function parseChapterPlan(
+  planMarkdown: string,
+): Array<{ n: number; title: string; leverId: string; outcomeId: string }> {
+  const out: Array<{ n: number; title: string; leverId: string; outcomeId: string }> = [];
+  for (const line of planMarkdown.split('\n')) {
+    if (!line.trim().startsWith('|')) continue;
+    const cells = line.split('|').map((c) => c.trim());
+    // ['', '#', 'Chapter', 'Lever id', 'Outcome id', ''] -> 6 cells
+    if (cells.length < 6) continue;
+    const n = Number.parseInt(cells[1], 10);
+    if (!Number.isFinite(n)) continue;
+    const [, , title, leverId, outcomeId] = cells;
+    if (!title || !leverId || !outcomeId) continue;
+    if (/^-+$/.test(title)) continue;
+    out.push({ n, title, leverId, outcomeId });
+  }
+  return out;
+}
 
 // --- Streaming helper ---
 //
@@ -162,6 +244,17 @@ export async function planBuild(
   const priceSnapshot = (build?.priceSnapshot ?? null) as PriceSnapshot | null;
   const deadline = Date.now() + timeLimitMs;
 
+  // Studio mode: swap in the chapter-spine prompts and, when the research
+  // stage has already attached a brief, ground the proposer in it. Gated on
+  // isStudio (not just brief-presence) so a non-studio origin plans exactly
+  // as it always has even in the unreachable case its researchBrief were
+  // somehow non-null.
+  const isStudio = build?.origin === 'studio';
+  const proposerPrompt = isStudio ? STUDIO_PROPOSER_SYSTEM_PROMPT : PROPOSER_SYSTEM_PROMPT;
+  const criticPrompt = isStudio ? CRITIC_SYSTEM_PROMPT + STUDIO_CRITIC_EXTRA : CRITIC_SYSTEM_PROMPT;
+  const brief: ResearchBrief | null = isStudio ? (build?.researchBrief ?? null) : null;
+  const briefBlock = brief ? `${formatBriefForPrompt(brief)}\n\n---\n\n` : '';
+
   const [planIteration] = await db
     .insert(jkaiIterations)
     .values({ buildId, number: 0, status: 'running' })
@@ -186,11 +279,11 @@ export async function planBuild(
     // --- Round 1: Proposer ---
     await emitLog(buildId, 'system', 'Round 1/3 — Proposer drafting initial plan...', planIteration.id);
 
-    const userPromptMsg = `Project objective:\n${prompt}\n\nProduce your initial delivery plan following the required format.`;
+    const userPromptMsg = `${briefBlock}Project objective:\n${prompt}\n\nProduce your initial delivery plan following the required format.`;
 
     const proposal = await streamPlannerCall({
       client, model, planIteration, buildId,
-      systemPrompt: PROPOSER_SYSTEM_PROMPT,
+      systemPrompt: proposerPrompt,
       messages: [{ role: 'user', content: userPromptMsg }],
       temperature: 0.7,
       max_tokens: 3000,
@@ -226,7 +319,7 @@ export async function planBuild(
     // Critic gets its own system prompt but sees the proposal conversation.
     const critique = await streamPlannerCall({
       client, model, planIteration, buildId,
-      systemPrompt: CRITIC_SYSTEM_PROMPT,
+      systemPrompt: criticPrompt,
       messages: debateMessages,
       temperature: 0.6,
       max_tokens: 2500,
@@ -271,7 +364,7 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
 
     const finalPlan = await streamPlannerCall({
       client, model, planIteration, buildId,
-      systemPrompt: PROPOSER_SYSTEM_PROMPT,
+      systemPrompt: proposerPrompt,
       messages: debateMessages,
       temperature: 0.7,
       max_tokens: 3000,
@@ -290,6 +383,15 @@ Be specific — name exact APIs with endpoint URLs, exact CDN URLs for libraries
       streamId: `${planIteration.id}:plan`,
       full: finalPlan,
     });
+
+    // Studio mode: persist the chapter spine now that the debate has
+    // concluded. executor.ts reads jkai_builds.chapterPlan to drive each
+    // chapter's lever/outcome gate — see prompt.ts's ChapterPlanEntry.
+    if (isStudio) {
+      const chapterPlan = parseChapterPlan(finalPlan);
+      await db.update(jkaiBuilds).set({ chapterPlan }).where(eq(jkaiBuilds.id, buildId));
+      await emitLog(buildId, 'system', `Chapter spine: ${chapterPlan.length} chapters.`, planIteration.id);
+    }
 
     // --- Store results ---
     const durationMs = Date.now() - startMs;
