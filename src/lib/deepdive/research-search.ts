@@ -34,6 +34,15 @@ export type ResearchSearchOptions = {
   minSim?: number;
   /** Restrict to a single research session (optional; default = all sessions). */
   sessionId?: string;
+  /**
+   * Restrict to distilled facts and skip raw source chunks.
+   *
+   * Chat wants both — a raw passage is often the better answer for a human who
+   * can judge it. A consumer that renders hits AS SOURCED CLAIMS must not:
+   * chunk rows are unreviewed page text, truncated mid-sentence, and carry a
+   * hardcoded confidence of 0. The studio research brief passes this.
+   */
+  factsOnly?: boolean;
 };
 
 /**
@@ -122,10 +131,15 @@ export async function searchResearch(
       WHERE f.embedding IS NOT NULL
         AND f.embedding_model = ${model}
         AND NOT f.is_counterfactual
+        -- 'archived' is Research Desk's "discarded" state. A fact the
+        -- researcher filed away as wrong or unwanted should not be cited back
+        -- anywhere — not in chat, and certainly not as evidence in a published
+        -- explainer. The studio brief's own DB path has always filtered it.
+        AND f.desk_state <> 'archived'
         ${factSessionFilter}
         AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
 
-      UNION ALL
+      ${options.factsOnly ? sql`` : sql`UNION ALL
 
       SELECT
         'source'::text AS kind,
@@ -145,7 +159,7 @@ export async function searchResearch(
       WHERE sc.embedding IS NOT NULL
         AND sc.embedding_model = ${model}
         ${chunkSessionFilter}
-        AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}
+        AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}`}
     ) u
     ORDER BY u.similarity DESC
     LIMIT ${topK}

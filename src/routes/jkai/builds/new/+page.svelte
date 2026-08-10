@@ -128,8 +128,9 @@
           design settings below are replaced by the Studio defaults.
         </p>
         <div class="mt-3">
-          <span class="text-xs block mb-1" style="color: var(--text-ghost);">Evidence</span>
+          <label class="text-xs block mb-1" for="studio-evidence" style="color: var(--text-ghost);">Evidence</label>
           <select
+            id="studio-evidence"
             bind:value={researchMode}
             class="w-full text-sm p-2 rounded-[var(--radius-round)] border"
             style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);"

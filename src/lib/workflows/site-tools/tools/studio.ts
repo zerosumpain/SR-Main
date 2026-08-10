@@ -21,6 +21,7 @@
 // leaving the caller to guess at progress.
 
 import { register } from '../registry-internal';
+import type { ResearchMode } from '$lib/jkai/research-brief';
 
 register({
   name: 'studio_build',
@@ -60,6 +61,11 @@ register({
     const { buildId } = await createStudioBuild({
       challenge: args.challenge as string,
       title: typeof args.title === 'string' ? args.title : undefined,
+      // createStudioBuild validates this and throws on anything unknown — the
+      // column has no CHECK constraint, so that is the only real guard.
+      ...(typeof args.researchMode === 'string'
+        ? { researchMode: args.researchMode as ResearchMode }
+        : {}),
     });
     return { success: true, data: { buildId, url: `/jkai/builds/${buildId}` } };
   },

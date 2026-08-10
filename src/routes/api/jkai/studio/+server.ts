@@ -26,7 +26,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: `title too long (max ${MAX_TITLE_LEN} chars)` }, { status: 400 });
   }
   try {
-    const { buildId } = await createStudioBuild({ challenge, title });
+    const researchMode = RESEARCH_MODES.includes(body.researchMode as ResearchMode)
+      ? (body.researchMode as ResearchMode)
+      : undefined;
+    const { buildId } = await createStudioBuild({
+      challenge,
+      title,
+      ...(researchMode ? { researchMode } : {}),
+    });
     return json({ buildId, url: `/jkai/builds/${buildId}` });
   } catch (err) {
     return json({ error: (err as Error).message }, { status: 500 });

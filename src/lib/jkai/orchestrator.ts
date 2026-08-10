@@ -600,7 +600,7 @@ class Orchestrator {
         const brief = await buildResearchBrief(
             buildId,
             buildRecord.prompt,
-            (buildRecord as { researchMode?: 'reuse' | 'extend' | 'fresh' }).researchMode ?? 'extend',
+            buildRecord.researchMode ?? 'extend',
           );
         await db.update(jkaiBuilds).set({ researchBrief: brief }).where(eq(jkaiBuilds.id, buildId));
         await emitLog(buildId, 'system', 'Research brief attached — proceeding to planning.');

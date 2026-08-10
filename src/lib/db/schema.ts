@@ -699,16 +699,6 @@ export const jkaiBuilds = pgTable('jkai_builds', {
    */
   researchBrief: jsonb('research_brief').$type<StudioResearchBrief | null>().default(null),
   /**
-   * Studio builds only. The chapter spine. `leverId`/`outcomeId` are the
-   * data-attribute ids studio-gate drives — a chapter with no declared pair
-   * cannot be interactivity-checked, and a check that cannot run is a check
-   * that silently passes.
-   *
-   * `src/lib/jkai/prompt.ts` owns the canonical `ChapterPlanEntry` type with
-   * an identical shape. This file keeps its own inline copy deliberately, to
-   * stay free of app-level ($lib/jkai) imports.
-   */
-  /**
    * Studio builds only. Where the research brief's evidence comes from:
    * 'reuse' = only what the corpus already knows, 'extend' = reuse if it clears
    * the bar else research the gaps seeded with it, 'fresh' = always a new Deep
@@ -720,6 +710,16 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   researchMode: text('research_mode', { enum: ['reuse', 'extend', 'fresh'] })
     .notNull()
     .default('extend'),
+  /**
+   * Studio builds only. The chapter spine. `leverId`/`outcomeId` are the
+   * data-attribute ids studio-gate drives — a chapter with no declared pair
+   * cannot be interactivity-checked, and a check that cannot run is a check
+   * that silently passes.
+   *
+   * `src/lib/jkai/prompt.ts` owns the canonical `ChapterPlanEntry` type with
+   * an identical shape. This file keeps its own inline copy deliberately, to
+   * stay free of app-level ($lib/jkai) imports.
+   */
   chapterPlan: jsonb('chapter_plan')
     .$type<Array<{ n: number; title: string; leverId: string; outcomeId: string }>>()
     .notNull()

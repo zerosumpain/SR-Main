@@ -197,12 +197,36 @@ export function mapHitsToFacts(
 }
 
 /** Search everything already researched. Returns [] when nothing clears the bar. */
-async function factsFromExistingKnowledge(challenge: string): Promise<OrderedFact[]> {
+async function factsFromExistingKnowledge(
+  buildId: string,
+  challenge: string,
+): Promise<{ facts: OrderedFact[]; searchFailed: boolean }> {
   const { searchResearch } = await import('$lib/deepdive/research-search');
-  const hits = await searchResearch(challenge, { topK: REUSE_TOP_K, minSim: REUSE_MIN_SIM }).catch(
-    () => [],
-  );
-  return mapHitsToFacts(hits);
+  try {
+    const hits = await searchResearch(challenge, {
+      topK: REUSE_TOP_K,
+      minSim: REUSE_MIN_SIM,
+      // Distilled facts only. Raw source chunks are unreviewed page text,
+      // truncated mid-sentence, with a hardcoded confidence of 0 — fine for a
+      // human reading chat, not something to render to a learner as a sourced
+      // claim. Without this they would also compete for the 30-row limit.
+      factsOnly: true,
+    });
+    return { facts: mapHitsToFacts(hits), searchFailed: false };
+  } catch (err) {
+    // Never silently. searchResearch embeds the query, so a missing or invalid
+    // embeddings key throws here — and swallowing that turns an infrastructure
+    // outage into "this topic is not covered", which is the exact misdiagnosis
+    // pattern that has bitten this codebase before. Reuse stays dead until
+    // someone notices, and in 'reuse' mode the error blames the corpus.
+    console.error('[studio] research reuse search failed', err);
+    await emitLog(
+      buildId,
+      'error',
+      `Research: the search over existing knowledge FAILED (${(err as Error).message}). This is an infrastructure fault, not an empty corpus — check the embeddings key.`,
+    ).catch(() => {});
+    return { facts: [], searchFailed: true };
+  }
 }
 
 /** Does this evidence clear the same bars isBriefUsable will apply later? */
@@ -290,7 +314,7 @@ export async function buildResearchBrief(
   let seedFacts: OrderedFact[] = [];
 
   if (mode !== 'fresh') {
-    const known = await factsFromExistingKnowledge(challenge);
+    const { facts: known, searchFailed } = await factsFromExistingKnowledge(buildId, challenge);
     if (evidenceIsSufficient(known)) {
       await emitLog(
         buildId,
@@ -301,7 +325,9 @@ export async function buildResearchBrief(
     }
     if (mode === 'reuse') {
       throw new Error(
-        `Research stage: mode 'reuse' found only ${known.length} usable facts from ${distinctHostCount(known)} sources in existing research (need ${MIN_FACTS} from ${MIN_SOURCES}). Re-run with mode 'extend' to research the gaps.`,
+        searchFailed
+          ? `Research stage: mode 'reuse' could not search existing knowledge — the search itself failed, so this says nothing about what the corpus holds. Check the embeddings key, then retry.`
+          : `Research stage: mode 'reuse' found only ${known.length} usable facts from ${distinctHostCount(known)} sources in existing research (need ${MIN_FACTS} from ${MIN_SOURCES}). Re-run with mode 'extend' to research the gaps.`,
       );
     }
     // extend: not enough on its own, but not nothing — carry it into the new
@@ -331,9 +357,22 @@ export async function buildResearchBrief(
         ? {
             seedContext: {
               type: 'fact' as const,
-              parentTopic: challenge.slice(0, 500),
+              // phase1.ts renders this as "a follow-up investigation from a
+              // parent research session on X", so say what the follow-up is
+              // FOR rather than repeating the topic back at itself.
+              parentTopic: `${challenge.slice(0, 400)} — partially covered by earlier research`,
               parentGoals: [],
-              factContents: seedFacts.map((f) => f.content),
+              // phase1.ts slices this to 5; sending more just sits unread.
+              factContents: seedFacts.slice(0, 5).map((f) => f.content),
+              // phase1.ts DOES read gapDescription and suggestedQueries. Without
+              // them a seeded session is just a fresh one with five facts of
+              // background — it would re-tread the ground we already have.
+              gapDescription: `Existing research already establishes the ${seedFacts.length} facts above. Do not re-establish them — find what they do not cover: the mechanisms linking cause to effect, quantities and magnitudes, and public datasets a reader could explore.`,
+              suggestedQueries: [
+                `${challenge.slice(0, 120)} mechanism`,
+                `${challenge.slice(0, 120)} data`,
+                `${challenge.slice(0, 120)} criticism OR limitations`,
+              ],
             },
           }
         : {}),

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, it, expect } from 'vitest';
 import {
   isBriefUsable,
@@ -194,7 +195,19 @@ describe('evidenceIsSufficient', () => {
 });
 
 describe('research modes', () => {
-  it('exposes exactly the three modes the schema column allows', () => {
+  it('exposes exactly the three modes', () => {
     expect([...RESEARCH_MODES].sort()).toEqual(['extend', 'fresh', 'reuse']);
+  });
+
+  // schema.ts deliberately repeats these literals rather than importing from
+  // $lib/jkai (that direction is circular). Repetition without a check is how
+  // the two drift, and drizzle's enum is a TS hint with no CHECK constraint
+  // behind it — so a drifted value fails at runtime, not at push.
+  it('matches the enum on the jkai_builds.research_mode column', async () => {
+    const schemaSrc = await readFile('src/lib/db/schema.ts', 'utf-8');
+    const m = schemaSrc.match(/text\('research_mode',\s*\{\s*enum:\s*\[([^\]]+)\]/);
+    expect(m, 'research_mode column not found in schema.ts').toBeTruthy();
+    const declared = (m![1].match(/'([^']+)'/g) ?? []).map((q) => q.replace(/'/g, '')).sort();
+    expect(declared).toEqual([...RESEARCH_MODES].sort());
   });
 });
