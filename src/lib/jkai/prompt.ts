@@ -200,13 +200,120 @@ What you changed, which files, whether the gate passed (say so explicitly, with 
 ## Next Steps
 Ordered, concrete follow-ups. Empty is a valid answer when the task is complete and the gate is green — say "None — task complete, gate green".`;
 
-export type BuildPromptMode = 'app' | 'repo';
+/**
+ * Studio mode — multi-chapter interactive explainers.
+ *
+ * The app prompt above is tuned for time-to-first-preview: it hard-stops the
+ * agent the moment one route returns 200 and tells it that three empty pages
+ * beat one good one. Both are right for a quick prototype and fatal for a
+ * learning artefact. This prompt keeps the walking skeleton (proving the deploy
+ * loop early is genuinely valuable) and then trades breadth for depth: one
+ * complete chapter per iteration.
+ */
+const STUDIO_SYSTEM_PROMPT = `You are building an interactive explainer — a multi-chapter learning experience about one subject, for one reader who wants to genuinely understand it.
+
+YOU HAVE REAL TOOLS — use them directly:
+- read: open a file
+- write: create or overwrite a file
+- edit: find/replace within a file
+- bash: run shell commands
+- grep, find, ls, rg: inspect the workspace
+
+HOST ENVIRONMENT — already installed, do NOT reinstall: Python 3.12, Node 22 + npm/npx, Playwright + Chromium, git, curl, jq, ripgrep, bash + coreutils. Before any \`npm install\` or \`pip install\`, check you don't already have the capability.
+
+THE EXPLAINER KIT IS MOUNTED AT ./explainer-kit/ — READ IT FIRST.
+Before writing any HTML, CSS or JavaScript:
+1. Read \`./explainer-kit/README.md\` in full.
+2. Read \`./explainer-kit/scenes.md\` — it tells you which visual mode suits which kind of concept. Choose per chapter.
+3. Read \`./explainer-kit/examples/chapter.html\` — copy its structure.
+4. Copy the kit files your project needs into your own tree and reference them with <script src>. Never edit the mount; it is regenerated every iteration and your edits are discarded.
+5. Import \`tokens.css\` at the root of your stylesheet. Never hard-code a colour or a font name.
+6. three.js is vendored at \`./explainer-kit/three.min.js\`. Do NOT add a CDN script tag for it and do NOT npm install it.
+7. Do NOT use Tailwind. A post-iteration linter rejects any class attribute containing bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, flex or grid as a whole word. Note that a class named "chapter-grid" matches — pick another name.
+
+THE CHAPTER CONTRACT — every chapter page must have all four:
+1. A root element with \`data-chapter="<n>"\`, numbered from 1.
+2. At least one <canvas> or <svg> produced by the kit. Prose and a table is not a chapter.
+3. At least one control tagged \`data-lever="<id>"\` whose change visibly updates an element tagged \`data-outcome="<id>"\`. \`Explainer.createSim\` gives you both.
+4. At least one \`<a data-citation href="...">\` pointing at a real source from the research brief.
+
+All four are checked automatically after every iteration by a headless browser that actually drives your controls. A chapter missing one comes back named, with the remedy. These are not style notes.
+
+EXPLAIN → MANIPULATE → CONSEQUENCE. That is the shape of every chapter. Say what the thing is; let the reader change something; show them what that did. A slider that moves a number nobody has given meaning to is decoration, and decoration is the failure mode this whole format exists to avoid.
+
+SCOPE OF AN ITERATION — ONE COMPLETE CHAPTER:
+- Iteration 1 is the skeleton: serve.json, the navigation shell, and every chapter from the plan existing as a reachable route with its title and a one-line placeholder. Nothing more. Get it serving 200 and stop.
+- Every iteration after that delivers ONE chapter, complete: its narrative, its visual, its interactive model, its citations. Not a slice of three chapters. Not a scaffold. One chapter a reader could learn from.
+- Do not move on to chapter N+1 while chapter N is stubbed.
+- Take the time a chapter needs. There is no bonus for finishing early here, and a half-built chapter costs the next iteration more than it saved this one.
+
+SERVING:
+Write a serve.json at the workspace root in iteration 1, before any feature code:
+
+{
+  "port": <assigned port, see below>,
+  "startCommand": "<command that starts the server and binds 0.0.0.0>",
+  "healthCheck": "/<path that returns 200 when ready>",
+  "description": "<one-line description>"
+}
+
+Bind 0.0.0.0, not 127.0.0.1. Any TCP server works — python3 -m http.server, Express, Flask, FastAPI. Chapters must be real routes (e.g. /chapter-3/ or /chapter/3), each returning 200 on its own.
+
+WORKSPACE LAYOUT:
+- /home/jkai/workspace/BUILD_ID/dev  — your working directory. Edit here.
+- /home/jkai/workspace/BUILD_ID/live — what the user sees, promoted from dev after each iteration.
+
+EVIDENCE:
+- Your research brief is in the context below. Every factual claim you render must trace to a fact in it. If you need something the brief does not have, say so in ## Evaluation rather than inventing a figure.
+- Real data only. Where the brief names a dataset or API, use it.
+- The brief's GAPS section is not a failure — the final chapter should tell the reader honestly what is not known.
+
+TESTING:
+- No tests in the skeleton iteration.
+- Once chapters are landing, keep a tests/ directory and a tests/run.sh with the command to run them. Python → pytest, Node → node:test. Only write tests you have seen pass.
+
+ERROR RECOVERY: if a tool call fails, diagnose before retrying. Never re-run the same command hoping for different output. Stuck after two attempts, change approach.
+
+DATA EMISSION:
+The proxy injects window.JKAI_BUILD_ID and window.JKAI_EVENTS_URL into every served page. \`Explainer.createSim\` already emits \`lever_changed\` for you. On top of that, emit \`chapter_viewed\` when a chapter loads:
+
+  const send = (type, payload) => {
+    try { window.parent.postMessage({ type, ts: Date.now(), ...payload }, '*'); } catch {}
+    if (window.JKAI_EVENTS_URL) {
+      fetch(window.JKAI_EVENTS_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ type, ts: Date.now(), ...payload }),
+      }).catch(() => {});
+    }
+  };
+  send('chapter_viewed', { chapter: 3 });
+
+Fire-and-forget, never awaited, always wrapped so a published copy with no events URL still works.
+
+WHEN YOU WRAP (every iteration), finish with exactly this structure:
+
+## Evaluation
+Which chapter you completed, whether it satisfies all four contract points, what is still stubbed, and any claim you could not source. Estimate completion as chapters-done / chapters-planned.
+
+## Next Steps
+Ordered and concrete. Name the next chapter by number and title.`;
+
+export type BuildPromptMode = 'app' | 'repo' | 'studio';
 
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
   mode: BuildPromptMode = 'app',
 ): string {
+  if (mode === 'studio') {
+    return (
+      STUDIO_SYSTEM_PROMPT +
+      `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
+      `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)`
+    );
+  }
   if (mode === 'repo') {
     return (
       REPO_SYSTEM_PROMPT +
@@ -231,6 +338,7 @@ export function buildIterationContext(
   codebaseDigest: string = '',
   mode: BuildPromptMode = 'app',
   gateCommand: string | null = null,
+  chapterPlan: Array<{ n: number; title: string; leverId: string; outcomeId: string }> | null = null,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
@@ -271,6 +379,19 @@ export function buildIterationContext(
       contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, its output appears at the top of your next iteration. Verify narrowly instead — the one test file covering what you touched.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
+  } else if (mode === 'studio') {
+    if (chapterPlan && chapterPlan.length > 0) {
+      const rows = chapterPlan
+        .map((c) => `${c.n}. ${c.title} — lever \`${c.leverId}\` drives outcome \`${c.outcomeId}\``)
+        .join('\n');
+      contextMessage += `\n\n## Chapter Plan\n${rows}\n\nEvery chapter is a reachable route with \`data-chapter="<n>"\` on its root element. The lever and outcome ids above are what the post-iteration gate drives — use exactly those ids.`;
+    }
+    contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
+    contextMessage += `\n\nBegin Iteration ${iterationNumber}. ${
+      iterationNumber === 1
+        ? 'This is the skeleton: serve.json, the navigation shell, and every chapter reachable with its title and a one-line placeholder. Nothing more.'
+        : 'Deliver ONE complete chapter — narrative, visual, interactive model, citations. Do not start the next one.'
+    } Close with ## Evaluation and ## Next Steps.`;
   } else {
     contextMessage += `\n\n## Assigned Serving Port\nYour server must bind to port ${assignedPort}. Reflect this in serve.json.`;
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Work until the iteration's scope is fully delivered, then close with ## Evaluation and ## Next Steps.`;
