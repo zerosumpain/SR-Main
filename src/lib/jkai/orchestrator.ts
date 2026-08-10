@@ -37,6 +37,43 @@ const LIVENESS_PING_MS = 15_000;
  */
 const STALE_BUILD_MS = 30 * 60_000;
 
+/**
+ * Kit files the studio gate checks are actually served (see runStudioGate's
+ * chapter-0 `kit-missing` check). Paths relative to the served root, matching
+ * where `syncExplainerKit` (./sandbox) mounts the kit — `dev/explainer-kit/`,
+ * promoted wholesale into `live/` every iteration by `promoteDevToLive`
+ * (`cp -a dev/. live/`), which is what `manageServeConfig` calls just above
+ * this check runs.
+ *
+ * Deliberately NOT the full `EXPLAINER_FILES` list from design-assets.ts. The
+ * agent is told to copy the kit modules it uses into its own tree and
+ * reference the copies (prompt.ts's STUDIO_SYSTEM_PROMPT, point 4) — so a
+ * module like sim.js or diagram.js can legitimately end up served from a
+ * path of the agent's choosing, and checking it at the mount path risks a
+ * false `kit-missing` finding against a build that did everything right.
+ * `three.min.js` is different: the prompt vendors it at this exact path and
+ * tells the agent NOT to fetch or reinstall it, i.e. to reference it in
+ * place, and `tokens.css` is meant to be imported (`@import`/`<link>`) rather
+ * than duplicated — both are plausibly referenced directly from the mount,
+ * and unlike the JS modules neither has a legitimate reason to be renamed.
+ * `README.md` costs nothing to include: no correct implementation ever needs
+ * to move or delete it, so its absence has no confound with legitimate agent
+ * behaviour — it is pure signal that the sync didn't run or the served root
+ * doesn't expose `dev/` (i.e. `live/`) wholesale.
+ *
+ * That "does the served root expose the mount at all" question is the one
+ * real residual uncertainty this check can't fully close from HTTP alone —
+ * an agent could point its server at a scoped "public" subdirectory that
+ * excludes explainer-kit/, in which case this fires even though the kit
+ * synced fine. That risk is bounded and worth taking: gate findings never
+ * abort a build (see the guard below), so the worst case is one noisy
+ * finding in the next iteration's context, weighed against the failure mode
+ * this exists to catch — an explainer-kit sync that failed silently (logged
+ * once by executor.ts, never retried into visibility) leaving the agent to
+ * invent its own visual language for the rest of an unattended run.
+ */
+const STUDIO_KIT_CHECK_FILES = ['explainer-kit/tokens.css', 'explainer-kit/three.min.js', 'explainer-kit/README.md'];
+
 export { onBuildLog } from './log-emitter';
 
 /**
@@ -1198,6 +1235,47 @@ class Orchestrator {
           await emitLog(buildId, 'system', 'Tests failed — promoting anyway so the live preview reflects the latest iteration. Failure context is included for the next iteration.', iteration.id);
         }
         await manageServeConfig(buildId);
+
+        // Studio gate. Runs after promotion so it drives the same build the
+        // user is looking at. Findings feed the next iteration via the
+        // evaluation text; they never abort a build on their own — the
+        // budget cap and the idle-iteration breaker above already terminate
+        // a build that cannot converge, and a build-ending abort on
+        // unfixable gate findings is exactly the design_lint_loop failure
+        // mode (see lintDesignSystem's DESIGN_MOUNT_RE comment): a build was
+        // once aborted after three iterations of a finding it could not fix
+        // while its app was complete and serving 200.
+        //
+        // iterationNumber > 1: iteration 1 is the skeleton, where every
+        // chapter is a reachable placeholder by design. Running the gate on
+        // it would fail chapters the agent has been explicitly told not to
+        // flesh out yet, feeding it findings it is forbidden to act on.
+        if (build.origin === 'studio' && iterationNumber > 1) {
+          const port = (build.serveConfig as { port?: number } | null)?.port;
+          if (build.chapterPlan.length > 0 && port) {
+            const { runStudioGate, describeGate } = await import('./studio-gate');
+            const outcome = await runStudioGate({
+              baseUrl: `http://127.0.0.1:${port}`,
+              chapters: build.chapterPlan.map((c) => ({ ...c, path: `/chapter-${c.n}/` })),
+              sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
+              kitFiles: STUDIO_KIT_CHECK_FILES,
+            });
+            const summary = describeGate(outcome);
+            await emitLog(
+              buildId,
+              outcome.ran && !outcome.passed ? 'error' : 'system',
+              summary,
+              iteration.id,
+            );
+            if (outcome.ran && !outcome.passed && result.evaluation) {
+              result.evaluation = `${result.evaluation}\n\n## Studio gate\n${summary}`;
+              await db
+                .update(jkaiIterations)
+                .set({ evaluation: result.evaluation })
+                .where(eq(jkaiIterations.id, iteration.id));
+            }
+          }
+        }
       }
 
       // Log iteration summary
