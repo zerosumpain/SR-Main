@@ -24,11 +24,36 @@
   let enforceDesignSystem = $state(true);
   let planFirst = $state(false);
   let thinkingLevel = $state<'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>('medium');
+  // Studio replaces the whole flow below with createStudioBuild's own
+  // preconfigured budget/design defaults (see src/lib/jkai/studio.ts) — a
+  // plain read-only-in-the-template flag, nothing derived or synced from it.
+  let studioMode = $state(false);
 
   async function submit() {
     if (!prompt.trim()) return;
     submitting = true;
     error = '';
+
+    if (studioMode) {
+      try {
+        const res = await fetch('/api/jkai/studio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ challenge: prompt.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.buildId) {
+          error = data.error ?? 'Studio build failed to start';
+          return;
+        }
+        goto(`/jkai/builds/${data.buildId}`);
+      } catch (err: any) {
+        error = err.message;
+      } finally {
+        submitting = false;
+      }
+      return;
+    }
 
     const budgetConfig: Record<string, number> = {};
     if (activeMinutesPerHour) budgetConfig.activeMinutesPerHour = activeMinutesPerHour;
@@ -77,19 +102,34 @@
   <form onsubmit={(e) => { e.preventDefault(); submit(); }}>
     <div class="mb-6">
       <label for="prompt" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">
-        Development Objective
+        {studioMode ? 'Challenge Statement' : 'Development Objective'}
       </label>
       <textarea
         id="prompt"
         bind:value={prompt}
         rows={5}
-        placeholder="Describe what you want to build..."
+        placeholder={studioMode
+          ? 'What should the reader understand by the end? Name a subject and the counter-intuitive thing about it, e.g. "Explain how the National Funding Formula decides what a school receives, and why two schools of the same size get different budgets."'
+          : 'Describe what you want to build...'}
         class="w-full rounded-[var(--radius-round)] border p-3 text-base resize-y"
         style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
       ></textarea>
     </div>
 
     <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <label class="flex items-center gap-2 text-sm" style="color: var(--text-primary);">
+        <input type="checkbox" bind:checked={studioMode} />
+        Studio — multi-chapter interactive explainer
+      </label>
+      {#if studioMode}
+        <p class="text-xs mt-2" style="color: var(--text-ghost);">
+          Runs a research stage first, plans a 6–10 chapter spine, then builds one complete chapter
+          per iteration. Budget and design settings below are replaced by the Studio defaults.
+        </p>
+      {/if}
+    </div>
+
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);" class:opacity-50={studioMode}>
       <h2 class="text-sm font-medium mb-4" style="color: var(--text-secondary);">Budget</h2>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -124,11 +164,11 @@
       </div>
     </div>
 
-    <div class="mb-6">
+    <div class="mb-6" class:opacity-50={studioMode}>
       <ModelPicker bind:value={builderModel} label="Model" />
     </div>
 
-    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);" class:opacity-50={studioMode}>
       <h2 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Strategy</h2>
       <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
         <input type="checkbox" bind:checked={enforceDesignSystem} />
@@ -155,7 +195,7 @@
     <button type="submit" disabled={!prompt.trim() || submitting}
       class="px-6 py-2.5 rounded-[var(--radius-round)] text-sm font-medium transition-opacity disabled:opacity-50"
       style="background: var(--accent); color: white;">
-      {submitting ? 'Starting...' : 'Start Build'}
+      {submitting ? 'Starting…' : studioMode ? 'Start Studio Build' : 'Start Build'}
     </button>
   </form>
 </div>

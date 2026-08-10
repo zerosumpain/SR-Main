@@ -742,11 +742,26 @@ class Orchestrator {
         .set({ prompt: revisedPrompt.trim(), updatedAt: new Date() })
         .where(eq(jkaiBuilds.id, buildId));
     }
+    // Studio builds carry no human approval gate: createStudioBuild sets
+    // planStatus='approved' at creation, and the Studio UI (BuildSession, the
+    // v3 build-detail chrome) has no Approve/Skip/Re-plan control at all — the
+    // only surface offering "Re-plan from scratch" is FailureRecovery in the
+    // classic BuildDetailV2 view, which is origin-blind and reachable for any
+    // failed build. Setting planStatus='pending' below unconditionally, as
+    // this did before, would park a re-planned studio build at
+    // awaiting_plan_approval with no in-Studio-UI way to un-park it. Self-
+    // approve for studio the same way creation does, instead of parking.
+    const [existing] = await db
+      .select({ origin: jkaiBuilds.origin })
+      .from(jkaiBuilds)
+      .where(eq(jkaiBuilds.id, buildId))
+      .limit(1);
+    const isStudio = existing?.origin === 'studio';
     await db
       .update(jkaiBuilds)
       .set({
         status: 'running',
-        planStatus: 'pending',
+        planStatus: isStudio ? 'approved' : 'pending',
         failure: null,
         consecutiveFailures: 0,
         iterationsCompleted: 0,

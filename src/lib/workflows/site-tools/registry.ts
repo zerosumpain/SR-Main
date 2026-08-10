@@ -10,6 +10,7 @@ import type { ToolResult } from './registry-internal';
 import './tools/health';
 import './tools/blog';
 import './tools/builds';
+import './tools/studio';
 import './tools/research';
 import './tools/whatsapp';
 import './tools/workflows';
