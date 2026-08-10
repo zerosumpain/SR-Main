@@ -79,6 +79,14 @@ const HOOK_BYPASSES = [
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
+  // Starting a studio build. POST only, STUDIO_SERVICE_TOKEN as a Bearer,
+  // constant-time compared, refused entirely when the var is unset or under 32
+  // chars — see $lib/server/studio-auth. Re-checked in the handler, which also
+  // applies its own 3/hour ceiling because the hook's RATE_LIMITS pass is
+  // skipped for a tokened call. Deliberately NOT loopback-gated: cloudflared
+  // makes every VPS request look like 127.0.0.1, so loopback proves nothing
+  // here. The action is reversible and cannot publish.
+  '/api/jkai/studio', // POST only, STUDIO_SERVICE_TOKEN
   // Autonomous-builder tool bridge. HMAC-over-build-id bearer token, verified
   // in $lib/jkai/tool-bridge. Named one path at a time on purpose: the sibling
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.

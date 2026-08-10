@@ -18,6 +18,7 @@ import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
+import { hasStudioServiceToken } from '$lib/server/studio-auth';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { redirect, type Handle } from '@sveltejs/kit';
@@ -461,6 +462,16 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     if (isLoopback && hasMaintenanceSecret(event.request)) {
       return resolve(event);
     }
+  }
+
+  // Studio builds can be started by a service credential as well as an owner
+  // session — see $lib/server/studio-auth for why this one action is safe to
+  // open and why it is not loopback-gated. Scoped to exactly this path and to
+  // POST; everything else stays session-only. The route re-checks the token
+  // itself (defence in depth), and the RATE_LIMITS entry below does not apply
+  // to a tokened call, so the route enforces its own ceiling.
+  if (pathname === '/api/jkai/studio' && event.request.method === 'POST' && hasStudioServiceToken(event.request)) {
+    return resolve(event);
   }
 
   // API routes return 401
