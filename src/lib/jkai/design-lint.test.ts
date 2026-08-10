@@ -41,3 +41,20 @@ describe('lintDesignSystem', () => {
     ).toEqual(['no-raw-font']);
   });
 });
+
+describe('read-only mounts are exempt', () => {
+  it('never reports a finding inside explainer-kit/', () => {
+    const { findings } = lintDesignSystem({
+      'explainer-kit/examples/chapter.html': '<div class="grid" style="color:#ff0000">x</div>',
+      'explainer-kit/tokens.css': 'body { font-family: Helvetica; }',
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('still reports the same violations outside the mount', () => {
+    const { findings } = lintDesignSystem({
+      'src/chapter.html': '<div class="grid" style="color:#ff0000">x</div>',
+    });
+    expect(findings.map((f) => f.rule).sort()).toEqual(['no-raw-hex', 'no-tailwind']);
+  });
+});
