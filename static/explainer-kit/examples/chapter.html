@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chapter 3 — How the funding formula reaches a school</title>
+<link rel="stylesheet" href="../tokens.css" />
+<style>
+  body {
+    background: var(--ex-bg);
+    color: var(--ex-ink);
+    font-family: var(--font-body);
+    margin: 0;
+  }
+  .chapter { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ex-accent);
+  }
+  h1 { font-family: var(--font-display); font-size: 2rem; line-height: 1.05; margin: 0.3rem 0 1rem; }
+  .lede { font-size: 1.1rem; color: var(--ex-ink-soft); max-width: 62ch; }
+  .panel {
+    background: var(--ex-surface);
+    border: 1px solid var(--ex-rule);
+    border-radius: var(--ex-radius);
+    padding: 1.25rem;
+    margin: 2rem 0;
+  }
+  .sources { border-top: 1px solid var(--ex-rule); padding-top: 1rem; margin-top: 3rem; }
+  .sources a { color: var(--ex-accent); }
+</style>
+</head>
+<body>
+<article class="chapter" data-chapter="3">
+  <p class="kicker">Chapter 3</p>
+  <h1>How the funding formula reaches a school</h1>
+  <p class="lede">
+    Two schools with the same number of pupils can receive materially different
+    budgets. The difference is not discretion — it is four factors applied in a
+    fixed order. This chapter lets you apply them yourself.
+  </p>
+
+  <!-- Visual: the causal path, before the learner touches anything. -->
+  <div class="panel" id="causal"></div>
+
+  <p>
+    Move a lever and watch the total change. Each slider below carries
+    <code>data-lever</code>; the number it drives carries <code>data-outcome</code>,
+    so what you see updating on screen is exactly what an automated interaction
+    check drives too.
+  </p>
+
+  <!-- Manipulate + consequence: createSim renders both halves. -->
+  <div class="panel" id="sim"></div>
+
+  <p>
+    Notice what happens when deprivation weighting rises while the basic entitlement
+    holds: the total moves less than most people expect, because the weighting applies
+    to a minority of the roll. That gap between expectation and arithmetic is the point
+    of this chapter.
+  </p>
+
+  <footer class="sources">
+    <p class="kicker">Sources</p>
+    <p>
+      <a data-citation href="https://www.gov.uk/government/publications/national-funding-formula-tables-for-schools-and-high-needs">
+        National funding formula tables for schools and high needs, DfE
+      </a>
+    </p>
+  </footer>
+</article>
+
+<script src="../diagram.js"></script>
+<script src="../sim.js"></script>
+<script>
+  const diagram = window.Explainer.createDiagram({
+    mount: document.getElementById('causal'),
+    title: 'From pupil count to school budget',
+    nodes: [
+      { id: 'roll', label: 'Pupils on roll', x: 90, y: 60, kind: 'lever' },
+      { id: 'basic', label: 'Basic entitlement', x: 330, y: 60, kind: 'mechanism' },
+      { id: 'depriv', label: 'Deprivation weight', x: 330, y: 180, kind: 'mechanism' },
+      { id: 'budget', label: 'School budget', x: 600, y: 120, kind: 'outcome' },
+    ],
+    edges: [
+      { from: 'roll', to: 'basic', weight: 1.4 },
+      { from: 'roll', to: 'depriv', weight: 0.6 },
+      { from: 'basic', to: 'budget', weight: 1.8 },
+      { from: 'depriv', to: 'budget', weight: 0.7 },
+    ],
+  });
+
+  window.Explainer.createSim({
+    mount: document.getElementById('sim'),
+    levers: [
+      { id: 'roll', label: 'Pupils on roll', min: 100, max: 1800, step: 10, value: 640 },
+      { id: 'fsm', label: 'Share eligible for free school meals', min: 0, max: 60, step: 1, value: 22, unit: '%' },
+      { id: 'rate', label: 'Deprivation weighting per eligible pupil', min: 0, max: 1400, step: 50, value: 500, unit: '£' },
+    ],
+    outcomes: [
+      { id: 'basic', label: 'Basic entitlement', unit: '£' },
+      { id: 'uplift', label: 'Deprivation uplift', unit: '£' },
+      { id: 'total', label: 'Total budget', unit: '£' },
+    ],
+    step: (v) => {
+      const basic = v.roll * 4610;
+      const uplift = v.roll * (v.fsm / 100) * v.rate;
+      diagram.setWeight('depriv', 'budget', Math.max(0.2, (uplift / (basic + uplift)) * 6));
+      return { basic, uplift, total: basic + uplift };
+    },
+  });
+</script>
+</body>
+</html>

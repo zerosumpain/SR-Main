@@ -57,4 +57,46 @@ describe('explainer kit', () => {
     expect(js).toMatch(/WebGLRenderer/);
     expect(js).toContain('data-scene');
   });
+
+  it('chart.js exposes createChart', async () => {
+    const js = await read('chart.js');
+    expect(js).toMatch(/createChart/);
+    expect(js).toContain('http://www.w3.org/2000/svg');
+  });
+
+  it('chart.js tags series so a chart can be queried', async () => {
+    const js = await read('chart.js');
+    expect(js).toContain('data-series');
+  });
+
+  it('README pins the three.js version', async () => {
+    const md = await read('README.md');
+    expect(md).toMatch(/three@0\.\d+\.\d+/);
+  });
+
+  it('scenes.md maps every kit module to a concept shape', async () => {
+    const md = await read('scenes.md');
+    for (const mode of ['createScene', 'createDiagram', 'createSim', 'createChart']) {
+      expect(md).toContain(mode);
+    }
+  });
+
+  // The design_lint_loop guard. On 2026-08-09 a finished build died because the
+  // read-only worked example the agent may not edit contained `class="grid"`,
+  // which no-tailwind matches — findings stuck at 1 -> 1 -> 1 for three
+  // iterations. The example must pass the rules it teaches.
+  it('the worked chapter example passes the design linter it teaches', async () => {
+    const { findings } = lintDesignSystem({
+      'explainer/examples/chapter.html': await read('examples/chapter.html'),
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('the worked chapter example declares the contract studio-gate drives', async () => {
+    const html = await read('examples/chapter.html');
+    expect(html).toContain('data-chapter');
+    expect(html).toContain('data-lever');
+    expect(html).toContain('data-outcome');
+    expect(html).toContain('data-citation');
+  });
 });
