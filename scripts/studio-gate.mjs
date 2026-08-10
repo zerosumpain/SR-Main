@@ -30,6 +30,12 @@
  */
 let out = { ran: false, reason: 'harness did not start' };
 
+// Playwright error messages carry ANSI colour codes and a multi-line call
+// log. An LLM agent reads finding text, not a terminal, so strip the escapes
+// and keep only the first line — the rest is noise for that reader.
+const stripAnsi = (s) => String(s).replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+const firstLine = (s) => stripAnsi(s).split('\n')[0].slice(0, 300);
+
 async function main() {
   const baseUrl = process.argv[2];
   if (!baseUrl) { out = { ran: false, reason: 'no base url given' }; return; }
@@ -96,9 +102,16 @@ async function main() {
 
   try {
     for (const ch of chapters) {
-      const url = new URL(ch.path, baseUrl).toString();
-      const page = await browser.newPage();
+      // `new URL` and `newPage()` used to sit outside this try, so a
+      // malformed ch.path threw past the per-chapter boundary and erased
+      // every finding already collected for earlier chapters (proved by
+      // review: a 3-chapter spec with a malformed chapter-2 path returned
+      // { ran: false }, discarding chapter 1's pass). Both now live inside
+      // it: one bad chapter costs one chapter, never the run.
+      let page;
       try {
+        const url = new URL(ch.path, baseUrl).toString();
+        page = await browser.newPage();
         const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20_000 });
         if (!resp || resp.status() >= 400) {
           findings.push({
@@ -139,18 +152,86 @@ async function main() {
           });
         } else {
           const before = (await outcome.textContent()) ?? '';
-          const min = Number(await lever.getAttribute('min'));
-          const max = Number(await lever.getAttribute('max'));
-          const target = Number.isFinite(min) && Number.isFinite(max) ? String(min + (max - min) * 0.8) : '1';
-          await lever.fill(target).catch(async () => { await lever.click().catch(() => {}); });
-          await lever.dispatchEvent('input').catch(() => {});
-          await page.waitForTimeout(400);
-          const after = (await outcome.textContent()) ?? '';
-          if (before.trim() === after.trim()) {
+          const tagName = await lever.evaluate((el) => el.tagName.toLowerCase());
+          const inputType = tagName === 'input'
+            ? (await lever.getAttribute('type') || 'text').toLowerCase()
+            : null;
+
+          // min/max ABSENT must not silently coerce to 0/0 — Number(null) is
+          // 0, which is finite, so the old code's "fallback to '1' when
+          // min/max are absent" branch was dead. Check presence explicitly.
+          const minAttr = await lever.getAttribute('min');
+          const maxAttr = await lever.getAttribute('max');
+          const min = minAttr != null ? Number(minAttr) : null;
+          const max = maxAttr != null ? Number(maxAttr) : null;
+          const haveRange = min != null && max != null && Number.isFinite(min) && Number.isFinite(max);
+
+          // Candidate values to drive the lever to, most-likely-to-work
+          // first: 80% of range, then both extremes. A single point can land
+          // in the same rounded/bucketed value as the start — sim.js's own
+          // defaultFormat rounds every outcome to 0-2 decimal places — but
+          // the endpoints are the values most likely to cross a boundary.
+          // For a <select> (a discrete parameter, explicitly sanctioned by
+          // sim.js's own doc comment for hand-rolled controls), every other
+          // option is a candidate, capped at 5 to bound worst-case runtime
+          // against the poll below.
+          let candidates;
+          if (tagName === 'select') {
+            const options = await lever.evaluate((el) => Array.from(el.options).map((o) => o.value));
+            const current = await lever.inputValue().catch(() => null);
+            candidates = options.filter((v) => v !== current).slice(0, 5);
+          } else if (haveRange) {
+            candidates = [...new Set([min + (max - min) * 0.8, min, max])].map(String);
+          } else {
+            candidates = ['1'];
+          }
+
+          const setValue = async (val) => {
+            if (tagName === 'select') {
+              await lever.selectOption(String(val)).catch(() => {});
+            } else if (tagName === 'input' && (inputType === 'range' || inputType === 'number')) {
+              await lever.fill(String(val)).catch(async () => { await lever.click().catch(() => {}); });
+            } else {
+              await lever.click().catch(() => {});
+            }
+            // A hand-rolled control may listen for 'change' rather than
+            // 'input' — dispatch both rather than assume which.
+            await lever.dispatchEvent('input').catch(() => {});
+            await lever.dispatchEvent('change').catch(() => {});
+          };
+
+          // Poll rather than a fixed wait: re-read the outcome every 100ms
+          // for up to 2000ms, stopping the moment it differs. Faster than a
+          // fixed sleep in the common synchronous case, and tolerant of an
+          // outcome that updates asynchronously and lands after the old
+          // hardcoded 400ms.
+          const pollForChange = async () => {
+            const deadline = Date.now() + 2000;
+            let last = before;
+            while (Date.now() < deadline) {
+              last = (await outcome.textContent()) ?? '';
+              if (last.trim() !== before.trim()) return last;
+              await page.waitForTimeout(100);
+            }
+            return last;
+          };
+
+          const tried = [];
+          let changed = false;
+          for (const val of candidates) {
+            tried.push(val);
+            await setValue(val);
+            const after = await pollForChange();
+            if (after.trim() !== before.trim()) { changed = true; break; }
+          }
+
+          // tried.length === 0 only for a <select> with no alternative
+          // option to test — nothing to probe, so nothing to fail.
+          if (!changed && tried.length > 0) {
             findings.push({
               chapter: ch.n, rule: 'inert-lever',
-              message: `Chapter ${ch.n}: moving data-lever="${ch.leverId}" left data-outcome="${ch.outcomeId}" unchanged at "${before.trim().slice(0, 40)}".`,
-              remedy: `The step() function in ${ch.path} must return a value for "${ch.outcomeId}" that depends on "${ch.leverId}". A control that changes nothing is decoration.`,
+              message: `Chapter ${ch.n}: driving data-lever="${ch.leverId}" through ${tried.join(', ')} left data-outcome="${ch.outcomeId}" at "${before.trim().slice(0, 40)}" the whole time.`,
+              remedy: `data-outcome="${ch.outcomeId}" in ${ch.path} showed no observable change while data-lever="${ch.leverId}" was driven through ${tried.join(', ')}. Either the model genuinely does not depend on this lever — wire step() so the outcome depends on it — or the outcome's display formatting (rounding, bucketing) is hiding a real change; show a value the check can observe moving.`,
             });
           }
         }
@@ -171,11 +252,11 @@ async function main() {
       } catch (e) {
         findings.push({
           chapter: ch.n, rule: 'errored',
-          message: `Chapter ${ch.n} threw while being checked: ${e.message}`,
+          message: `Chapter ${ch.n} threw while being checked: ${firstLine(e?.message ?? e)}`,
           remedy: `Open ${ch.path} in a browser and fix the runtime error before adding more chapters.`,
         });
       } finally {
-        await page.close().catch(() => {});
+        await page?.close().catch(() => {});
       }
     }
     out = { ran: true, passed: findings.length === 0, findings };
