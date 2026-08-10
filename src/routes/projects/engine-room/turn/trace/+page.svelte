@@ -31,8 +31,8 @@
   <LeafHead
     part="turn"
     title="Trace a turn"
-    line="One message followed from keystroke to bill. Pick a scenario and press play."
-    lineEli5="Type a message to an AI and a lot has to happen. Pick an example and press play."
+    line="One message, followed from keystroke to bill. Pick a scenario, press play, and watch an alarming amount happen on your behalf."
+    lineEli5="You type one message to an AI. An enormous amount then happens very fast. Pick an example and press play."
   />
 
   <Instrument
@@ -40,7 +40,7 @@
     title="One turn, end to end"
     tone="var(--accent-ink)"
     reading="Six stages across, six layers down, one instant on every row."
-    takeaway="⚠ marks a known failure mode: {hazCells} of {allCells} cells, in {hazLayers} layers."
+    takeaway="⚠ marks a spot where this is known to be capable of going sideways: {hazCells} of {allCells} cells, spread across {hazLayers} layers."
   >
     <TurnTrace {depth} />
   </Instrument>

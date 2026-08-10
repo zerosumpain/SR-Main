@@ -26,15 +26,15 @@
   <LeafHead
     part="reach"
     title="Keys it can use and cannot read"
-    line="The assistant authenticates as itself to a dozen services and has never seen a single one of their credentials. Where a key may go is a property of the key, set by hand, checked on every request."
-    lineEli5="It can log in to other services on my behalf, but it is never shown the passwords — and each one only works on the exact address it was set up for." />
+    line="The assistant logs in to a dozen services and has never laid eyes on a single one of their credentials. Where a key is permitted to travel is baked into the key, set by hand, and checked on every request without exception."
+    lineEli5="It can log in to other services for me, but it is never shown the passwords — and each one only works on the exact address it was set up for." />
 
   <Instrument
     kicker="The instrument"
     title="Aim a credential somewhere and see what happens"
     tone={TONE}
     reading="Four gates, in the order the resolver applies them. Every refusal names its own list."
-    takeaway="The binding is the boundary, not the tool that uses it. An entry saying “use the gateway key against my server” is a perfectly well-formed request that simply fails to authenticate, because the attacker’s host is not on the owner’s list and only the owner can put it there.">
+    takeaway="The binding is the boundary; the tool using it is not. “Send the gateway key to my server, please” is a perfectly polite, perfectly well-formed request that simply fails to authenticate — the host is not on the list, and only I can put it there.">
     <BindingBench />
   </Instrument>
 

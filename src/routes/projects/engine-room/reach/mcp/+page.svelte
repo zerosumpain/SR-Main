@@ -47,15 +47,15 @@
   <LeafHead
     part="reach"
     title="One doorway"
-    line="One open protocol carries every tool to every caller, so the check on a dangerous call has to sit in the doorway rather than in the caller."
-    lineEli5="Outside apps plug into the same tools the assistant uses. The safety check lives in the plug, not in each app." />
+    line="One open protocol carries every tool to every caller. Which means the check on a dangerous call has to live in the doorway, because trusting four separate callers to each remember is not a plan."
+    lineEli5="Outside apps plug into the same tools the assistant uses. The safety check lives in the socket, not in each plug." />
 
   <Instrument
     kicker="The gate"
     title="Four ways in, one check"
     tone={TONE}
     reading="Pick who is calling, what kind of call it is, and whether anyone is there to answer."
-    takeaway="Changing the caller never moves the verdict, because the gate sits at the boundary every route must pass rather than inside any one of them — which is the only placement that a new caller cannot arrive without.">
+    takeaway="Change the caller all you like; the verdict does not budge. The gate sits at the boundary every route has to cross rather than inside any one of them, which is the only arrangement a new caller cannot turn up and quietly bypass.">
     <CallGate />
   </Instrument>
 
@@ -80,7 +80,7 @@
     title="What a deploy does to a call in flight"
     tone={TONE}
     reading="Forty calls across three deliberate restarts, placed twice: straight at the endpoint, then through a process that holds a call for up to three minutes rather than failing it."
-    takeaway="A component whose whole job is surviving the main application’s restarts must not share its fate — so it is dependency-free and supervised separately.">
+    takeaway="A component whose entire job is surviving the main application’s restarts really must not go down with it. So it has no dependencies on the thing it is outliving, and it is supervised separately.">
     <Bars items={AVAIL} unit=" of 40" max={40} tone={TONE} grouped={false} height={30} />
   </Instrument>
 

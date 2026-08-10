@@ -50,15 +50,15 @@
   <LeafHead
     part="memory"
     title="Deciding what to believe"
-    line="Every claim in the graph carries a number between nought and one — and the number is worth nothing unless it comes apart into the four things that made it."
-    lineEli5="Everything it thinks it knows gets a confidence score, and the score can always be broken down into the reasons behind it." />
+    line="Every claim in the graph carries a number between nought and one. The number is worth precisely nothing unless it comes apart into the four things that made it, so it does."
+    lineEli5="Everything it thinks it knows gets a confidence score, and the score can always be pulled apart into the reasons behind it." />
 
   <Instrument
     kicker="The instrument"
     title="Grade a claim and watch the score assemble"
     tone={TONE}
     reading="Two independent axes, how many sources say it, how old that is, and whether a person has signed it off."
-    takeaway="The parts sum to the total exactly. That is the design constraint, not a coincidence — a score that cannot be decomposed is an assertion wearing a decimal point.">
+    takeaway="The parts add up to the total exactly. That is the design constraint rather than a happy accident: a score you cannot take apart is just an assertion that has put on a decimal point and hopes you will not ask.">
     <TrustBench />
   </Instrument>
 
@@ -98,7 +98,7 @@
     kicker="Reading the number"
     title="Four bands, and one of them is honesty"
     tone={TONE}
-    reading="Where the boundaries sit, and why the bottom one is not called 'low'.">
+    reading="Where the boundaries sit, and why the bottom band is not called 'low'. It is not low. It is empty, which is a different problem.">
     <div class="bands">
       {#each BANDS as b (b.id)}
         <div class="band">

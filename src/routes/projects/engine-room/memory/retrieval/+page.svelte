@@ -44,15 +44,15 @@
   <LeafHead
     part="memory"
     title="Finding things"
-    line="Storing something and finding it again are different problems. A document is cut, embedded and permission-filtered before a prompt sees it."
-    lineEli5="Saving a document is easy. Pulling out the right paragraph months later is the hard part." />
+    line="Keeping a document and finding it again are two entirely different problems, and only one of them is easy. A document gets cut, embedded and permission-filtered long before a prompt lays eyes on it."
+    lineEli5="Saving a document is easy. Pulling out the one right paragraph eight months later is the hard part." />
 
   <Instrument
     kicker="The instrument"
     title="Cutting a document into chunks"
     tone={TONE}
     reading="This section's own notes, cut at the live setting. Drag a dial, or turn the nudge off."
-    takeaway="Two guards: 150 characters repeated across each cut, and the split moved back to a sentence end — so no fact is severed.">
+    takeaway="Two guards against chopping a fact in half: 150 characters repeated across every cut, and the split shuffled back to the end of a sentence. Cut mid-clause and you get a chunk confidently asserting the opposite of what was written.">
     <Chunker />
   </Instrument>
 
@@ -60,8 +60,8 @@
     kicker="Two indexes, on purpose"
     title="Different jobs, different budgets"
     tone={TONE}
-    reading="Two separate indexes, not one shared space."
-    takeaway="The costlier embedding goes only where a collection was chosen deliberately.">
+    reading="Two separate indexes, kept apart on purpose rather than one big shared space."
+    takeaway="The dearer embedding only gets used where somebody deliberately picked a collection. Everywhere else makes do, and nobody has ever noticed.">
     <Bars items={INDEXES} unit=" dims" tone={TONE} />
     <p class="foot">Both discard anything below a minimum similarity rather than padding the list out.</p>
   </Instrument>

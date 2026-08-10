@@ -178,9 +178,17 @@ jobs:
 
       # svelte-check and vitest, concurrently. See scripts/gate-concurrent.sh for
       # why the exit-code handling in there is written the long way round.
+      # GATE_LEVEL scopes only the TEST half, and only at L2. The type check is
+      # never scoped — a changed type signature breaks its consumers, not itself.
+      # gate-concurrent.sh treats any level other than exactly "L2" as "run the
+      # whole suite", so an unset or unrecognised value costs time rather than
+      # coverage.
       - name: Type check + tests
         if: steps.level.outputs.level != 'L1'
         run: ./scripts/gate-concurrent.sh
+        env:
+          GATE_LEVEL: ${{ steps.level.outputs.level }}
+          GATE_BASE: HEAD^
 
       # The build is a PROOF here, not an artifact — the gate deletes it. On a
       # master push that proof is redundant: the VPS rebuilds the identical tree

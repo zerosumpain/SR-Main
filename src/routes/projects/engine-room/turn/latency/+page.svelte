@@ -36,15 +36,15 @@
   <LeafHead
     part="turn"
     title="Where the time goes"
-    line={`Between pressing send and the first character, this site's own code accounts for ${siteMs} milliseconds. The other ${modelS} seconds is the model reading.`}
-    lineEli5="Almost none of the wait is the website. It is the model reading your message before it starts to answer." />
+    line={`From pressing send to the first character, my own code accounts for ${siteMs} milliseconds. The other ${modelS} seconds is the model having a read, at what I can only describe as its own pace.`}
+    lineEli5="Almost none of the wait is the website. It is the AI reading your message before it starts answering." />
 
   <Instrument
     kicker="Finding one"
     title="The site is a rounding error"
     tone={TONE}
     reading="The measured send path, submit to first visible character, drawn to true scale."
-    takeaway={`Optimising all ${siteMs} milliseconds of site code to zero would be imperceptible. The wait is the model reading a ${MANIFEST.medianPrompt.toLocaleString('en-GB')}-token prompt before it says anything.`}>
+    takeaway={`Optimise all ${siteMs} milliseconds of my code down to zero and nobody would notice. The wait is the model working through a ${MANIFEST.medianPrompt.toLocaleString('en-GB')}-token prompt before it says a word. A useful thing to learn early, and a slightly deflating one.`}>
     <TtftWaterfall />
   </Instrument>
 
@@ -52,8 +52,8 @@
     kicker="Finding two"
     title="Prompt length is not the culprit"
     tone={TONE}
-    reading="Five calls: prompt size across, time to first token up. A relationship would show as a line."
-    takeaway={`Across the five, prompt size varies ${sizeSpread}×; first-token time varies ${timeSpread}×. The largest prompt of the five answered in ${biggest.ttft}s, so the variable is which seller answered, not what you sent.`}>
+    reading="Five calls: prompt size across, time to first token up. If one drove the other, these would form a line. They form a shrug."
+    takeaway={`Across the five, prompt size varies ${sizeSpread}×; first-token time varies ${timeSpread}×. The biggest prompt of the lot came back in ${biggest.ttft}s. So the variable is which seller picked up, not what you sent them.`}>
     <TtftScatter />
   </Instrument>
 

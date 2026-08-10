@@ -24,7 +24,8 @@
     "gate:test": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**' --exclude '**/*.integration.test.ts'",
     "gate:test:full": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --exclude '**/node_modules/**'",
     "gate:build": "NODE_OPTIONS=--max-old-space-size=6144 vite build",
-    "build:codex-bridge": "node packages/jkai-codex-bridge/build.mjs"
+    "build:codex-bridge": "node packages/jkai-codex-bridge/build.mjs",
+    "gate:test:scoped": "./scripts/gate-test-scoped.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

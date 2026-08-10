@@ -12,6 +12,8 @@
 // deliberately is part of what the study is arguing.
 
 import { BANDS, NODES, STATS, CLAIMS } from './system';
+import { TIERS as TOUR_TIERS, SURFACES, byTier, surfaceById, CAPTURED } from './tour';
+import { BLOCKS, ROUTE, NIGHT_ROUTE, VERDICT, NIGHT_VERDICT } from './city';
 import { STAGES, LAYERS, MATRIX, SCENARIOS } from './trace';
 import { RESOLUTION, SELLER_FACTS, POLICY, CATALOGUE, CACHE_STORY, REASONING_ROWS } from './models';
 import { WATCHDOG, STREAM_CONSTANTS } from './chat';
@@ -53,7 +55,7 @@ export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
   | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails'
   | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground'
-  | 'keys' | 'store' | 'house' | 'watch';
+  | 'keys' | 'store' | 'house' | 'watch' | 'tour' | 'city';
 
 export interface Chunk {
   id: string;
@@ -84,6 +86,32 @@ function buildChunks(): Chunk[] {
   for (const c of CLAIMS)
     add({ id: `claim-${c.n}`, sourceKey: 'claims', sourceType: 'overview', title: `Claim ${c.n}: ${c.title}`, url: `${B}/${c.section}`,
       text: `${c.body} Put simply: ${c.eli5}` });
+
+  // ---- the visual tour of the site's own pages ----
+  // Indexed so "what does the drive page do" or "which screens are there" is answerable.
+  // Each feature is its own chunk pointing at the leaf that explains it, which is the
+  // same relationship the tour draws on screen.
+  for (const t of TOUR_TIERS)
+    add({ id: `tier-${t.id}`, sourceKey: 'tour', sourceType: 'tour', title: `Tier ${t.no}: ${t.name}`, url: B,
+      text: `${t.lede} It groups these pages: ${byTier(t.id).map((s) => s.label).join(', ')}.` });
+  for (const s of SURFACES) {
+    add({ id: `surface-${s.id}`, sourceKey: 'tour-pages', sourceType: 'tour', title: `${s.label} (${s.route})`, url: B,
+      text: `${s.line} ${s.open ? 'Anyone can open it.' : 'It needs a login; the screenshot in the study is redacted.'} From it you can reach: ${s.leads.map((l) => surfaceById(l)?.label ?? l).join(', ')}.` });
+    for (const f of s.features)
+      add({ id: `surface-${s.id}-${f.label.slice(0, 18).replace(/\W+/g, '-').toLowerCase()}`, sourceKey: 'tour-features', sourceType: 'tour',
+        title: `${s.label}: ${f.label}`, url: f.section ? `${B}/${f.section}` : B, text: f.what });
+  }
+  // ---- the two isometric set pieces on the index ----
+  for (const b of BLOCKS)
+    add({ id: `city-${b.id}`, sourceKey: 'city', sourceType: 'city', title: `The town: ${b.label}`,
+      url: b.section ? `${B}/${b.section}` : B, text: b.what });
+  add({ id: 'city-run', sourceKey: 'city', sourceType: 'city', title: 'One message, walked across town', url: B,
+    text: `The index animates a single turn as a journey between six buildings: ${ROUTE.map((l) => l.caption).join(' ')} ${VERDICT.head} ${VERDICT.body}` });
+  add({ id: 'city-night', sourceKey: 'city', sourceType: 'city', title: 'The same town at half past three', url: `${B}/change/nights`,
+    text: `The second set piece runs the nightly self-improvement pass over the same six buildings: ${NIGHT_ROUTE.map((l) => l.caption).join(' ')} ${NIGHT_VERDICT.head} ${NIGHT_VERDICT.body}` });
+
+  add({ id: 'tour-shots', sourceKey: 'tour', sourceType: 'tour', title: 'How the screenshots were made', url: B,
+    text: `The screenshots in the tour are real, captured from a running instance on ${CAPTURED}. Personal data is replaced in the browser before the picture is taken, rather than painted over afterwards, so no real name, address, filename or key exists in the published image at all. Anything drawn on a canvas element — the knowledge graph paints its node labels as pixels — is redacted further upstream by rewriting the data before the page receives it.` });
 
   // ---- the trace ----
   for (const s of STAGES)
@@ -368,6 +396,12 @@ function tokenize(s: string): string[] {
 // to nothing, because `money` was only ever a value under `cost`. The concept groups below
 // are therefore written out per-term rather than once per concept.
 const GROUPS: string[][] = [
+  // The tour's vocabulary. A reader who has just looked at the pictures asks "what is
+  // that screen", not "describe the surface", so both have to reach the same chunks.
+  ['page', 'pages', 'screen', 'screens', 'surface', 'surfaces', 'view', 'views', 'section', 'tour'],
+  ['screenshot', 'screenshots', 'picture', 'pictures', 'image', 'images', 'photo', 'shot', 'look', 'looks'],
+  ['redact', 'redacted', 'redaction', 'anonymise', 'anonymised', 'obscured', 'blurred', 'placeholder', 'standin', 'invented'],
+  ['login', 'private', 'public', 'owner', 'gated', 'password', 'anonymous', 'visitor'],
   ['cost', 'costs', 'price', 'pricing', 'money', 'spend', 'spending', 'bill', 'billed', 'cheap', 'cheaper', 'expensive', 'afford', 'budget', 'token', 'tokens'],
   ['cache', 'caching', 'cached', 'prefix', 'breakpoint', 'reuse', 'discount'],
   ['slow', 'fast', 'speed', 'latency', 'ttft', 'wait', 'waiting', 'delay', 'quick', 'performance'],

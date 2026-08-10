@@ -24,15 +24,15 @@
   <LeafHead
     part="ground"
     title="Three places, one codebase"
-    line="There is no production branch. The same code runs everywhere, and what a process is allowed to do is decided at startup by reading which machine it woke up on."
-    lineEli5="The same program runs on a server, on a computer at home, and on a temporary machine that checks new code. Each one is allowed to do different things." />
+    line="There is no production branch. The same code runs everywhere, and what a process is permitted to do gets decided at startup by the software working out where it has woken up and adjusting its expectations accordingly."
+    lineEli5="The same program runs on a server, on a computer at home, and on a temporary machine that checks new code. Each is allowed to do different things." />
 
   <Instrument
     kicker="The instrument"
     title="What wakes up where"
     tone={TONE}
     reading="Click a machine to read its column, or a row to read why it is gated that way."
-    takeaway="{oneOnly} of the {SUBSYSTEMS.length} run in exactly one place. Two copies of a nightly job writing to one database is not redundancy, it is a race — so almost everything scheduled refuses to start anywhere but the origin, and the scraper refuses everywhere else.">
+    takeaway="{oneOnly} of the {SUBSYSTEMS.length} run in exactly one place. Two copies of a nightly job writing into one database is not redundancy, it is a race with a database at the end of it — so nearly everything scheduled refuses to start anywhere but the origin, and the scraper refuses everywhere else.">
     <HostMatrix />
   </Instrument>
 
@@ -40,7 +40,7 @@
     kicker="The awkward one"
     title="Why anything is at home at all"
     tone={TONE}
-    reading="Three reasons, and each is a property of the place rather than of the software."
+    reading="Three reasons, and every one of them is a property of the place rather than anything I could fix in software."
     takeaway={HOUSE_COST.body}>
     <ul class="reasons">
       {#each HOUSE_REASONS as r (r.k)}

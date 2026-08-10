@@ -90,14 +90,14 @@
   <LeafHead
     part="memory"
     title="Reading the web"
-    line="Three sources, composed two ways. One answer invents a sentence."
-    lineEli5="Squash sources together and the answer can say things nobody said." />
+    line="Three sources, composed two different ways. One of the answers contains a sentence that nobody anywhere ever wrote, and it reads exactly as convincingly as the rest."
+    lineEli5="Squash your sources together into one blob and the answer can end up saying things nobody actually said." />
 
   <Instrument
     kicker="The instrument"
     title="Same sources, two compositions"
     tone={TONE}
-    takeaway="Merging destroys provenance, then invents; the invention reads like the rest.">
+    takeaway="Merge first and you throw away provenance; having thrown it away, the model cheerfully fills the gap. The invented bit is indistinguishable from the true bits, which is the entire problem.">
     <ProvenanceDemo />
   </Instrument>
 
@@ -106,7 +106,7 @@
     title="What survives to the answer"
     tone={TONE}
     reading="Pick a stage."
-    takeaway="Corroboration is scarce. The rest is cited, not confirmed.">
+    takeaway="Corroboration turns out to be thin on the ground. Most of what survives is cited rather than confirmed, and the page says which is which rather than rounding up.">
     <Steps items={PIPE} selected={stage} onselect={(id) => (stage = id)} tone={TONE} />
     <p class="readout" aria-live="polite" title={RESEARCH_FACTS.find((f) => f.k === stage)?.why}>{WHY[stage] ?? ''}</p>
 

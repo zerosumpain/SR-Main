@@ -57,15 +57,15 @@
   <LeafHead
     part="change"
     title="The gate"
-    line="Tools the night shift writes are registered live, with nobody in the loop. A scan of {FORBIDDEN.length} patterns and a smoke test are what make that safe."
-    lineEli5="The system writes new abilities for itself while nobody is watching. These are the checks that stop a bad one going live." />
+    line="Tools the night shift writes go live with nobody in the loop, which is a sentence that ought to worry you. A scan of {FORBIDDEN.length} patterns and a smoke test are the entire reason it does not."
+    lineEli5="The system writes new abilities for itself while nobody is watching. These are the checks standing between a bad one and my server." />
 
   <Instrument
     kicker="The instrument"
     title="Run the gate on {CANDIDATES.length} handlers"
     tone={TONE}
     reading="Pick a handler the engine might have authored. Two checks, in order — the scan reads raw source before compilation."
-    takeaway="Both are absolute: a clean scan, and every smoke case passing — not most. Source that trips the scan is rejected before it is ever compiled.">
+    takeaway="Both are absolute. A clean scan, and every smoke case passing — every one, not most, not nearly all. Source that trips the scan is turned away before anything compiles it.">
     <VerifyGate />
   </Instrument>
 
@@ -74,7 +74,7 @@
     title="What the {FORBIDDEN.length} patterns are defending"
     tone={TONE}
     reading="Each pattern grouped by what a handler would reach if it got through. Pick a group."
-    takeaway="Blunt on purpose. A bare process catches environment access, exit and argv in one, at the cost of occasionally refusing something harmless.">
+    takeaway="Blunt entirely on purpose. A bare process catches environment access, exit and argv in one swing, and the price is occasionally refusing something perfectly innocent. I can live with that.">
     <StackBar {segments} unit=" patterns" selected={group} onselect={(l) => (group = l)} />
 
     <ul class="pats" aria-live="polite">

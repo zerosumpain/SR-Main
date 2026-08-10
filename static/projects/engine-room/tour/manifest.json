@@ -1,0 +1,20 @@
+{
+  "base": "http://localhost:5173",
+  "surfaces": [
+    {
+      "id": "canvas",
+      "path": "/jkai/canvas/morning-briefing",
+      "capturedAt": "2026-08-10T07:18:21.438Z"
+    },
+    {
+      "id": "briefing",
+      "path": "/jkai/briefing",
+      "capturedAt": "2026-08-10T07:18:26.506Z"
+    },
+    {
+      "id": "improvement",
+      "path": "/admin/ai/improvement",
+      "capturedAt": "2026-08-10T07:18:31.522Z"
+    }
+  ]
+}

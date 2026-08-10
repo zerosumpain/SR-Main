@@ -65,15 +65,15 @@
   <LeafHead
     part="turn"
     title="Picking a model"
-    line="Naming a model settles less than you think."
-    lineEli5="Asking for an AI by name decides little. Four things pick it, and many companies run it." />
+    line="Asking for a model by name settles far less than you would hope. Four things get a vote, and the name is only one of them."
+    lineEli5="Asking for an AI by name decides surprisingly little. Four things pick it, and several different companies might end up running it." />
 
   <Instrument
     kicker="The chooser"
     title="Four ways a model gets chosen"
     tone={TONE}
     reading="Four layers, in precedence order."
-    takeaway="First match wins; only the auction moves itself.">
+    takeaway="First match wins. Only the bottom layer re-scores itself overnight; the rest sit there until somebody changes their mind.">
     <ResolutionTrack tone={TONE} />
   </Instrument>
 
@@ -81,7 +81,7 @@
     kicker="Who serves it"
     title="One name, many sellers"
     tone={TONE}
-    reading="Same model id. Choose how one is picked."
+    reading="Same model id, different shop. Choose how one gets picked and see who you end up with."
     takeaway="{SELLER_FACTS.mixDefault.fp8} full precision, {SELLER_FACTS.mixDefault.unknown} unstated, {SELLER_FACTS.mixDefault.fp4} quantised — of {SELLER_FACTS.endpointsDefault} sellers on the default model, {SELLER_FACTS.endpointsAgentic} on the agentic, {SELLER_FACTS.priceSpread} cheapest to dearest.">
     <SellerRoulette />
   </Instrument>
@@ -91,7 +91,7 @@
     title="What is allowed to win"
     tone={TONE}
     reading="Narrowed by rule, then split by profile."
-    takeaway="Cost is capped; two rules are hard stops.">
+    takeaway="Price gets a weighting, not a free run — otherwise cheap and useless wins every time. Two of these rules do not negotiate at all.">
     <Bars items={NARROWING} tone={TONE} />
 
     <p class="sub">Per-profile shortlist</p>

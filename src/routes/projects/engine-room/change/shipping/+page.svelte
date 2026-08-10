@@ -45,15 +45,15 @@
   <LeafHead
     part="change"
     title="Getting it live"
-    line="Six stages sit between a change and production. File path decides which a machine may clear alone."
-    lineEli5="Six steps sit between a change and the live site. Whether the computer can finish them alone depends on which files it touched." />
+    line="Six stages stand between a change and production. Which of them a machine may clear on its own comes down to something wonderfully unglamorous: which files it touched."
+    lineEli5="Six steps sit between a change and the live site. Whether the computer can finish them by itself depends on which files it touched." />
 
   <Instrument
     kicker="The instrument"
     title="Push a change to production"
     tone={TONE}
     reading="Say who wrote it, whether the gate passed, and what it touches."
-    takeaway="A routine machine-written change with a green gate merges itself. A protected path waits for a person.">
+    takeaway="A routine machine-written change with a green gate merges itself and I find out afterwards. Touch a protected path and it sits there waiting for me, no matter how green everything is.">
     <PipelineRun tone={TONE} />
   </Instrument>
 
@@ -61,8 +61,8 @@
     kicker="Enforcement"
     title="A red gate is a wall, not a warning"
     tone={TONE}
-    reading="The deploy job declares the gate as a dependency."
-    takeaway="Required status checks are not available on this plan at all. A rule a person must remember would be no rule; a job that cannot start is one.">
+    reading="The deploy job declares the gate as a dependency, so there is nothing for it to start from."
+    takeaway="A rule someone has to remember is not a rule. A job that cannot start is. The stronger claim this page used to make — that the host would not let me require a status check — turned out to be wrong; I had just never configured one.">
     <GateWall tone={TONE} />
 
     <p class="sub">{CALLOUTS.length} more standing rules</p>
