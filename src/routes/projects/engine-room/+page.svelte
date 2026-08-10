@@ -4,6 +4,7 @@
   // Deliberately short. The job of this page is orientation, not explanation: a map, a
   // scale, and four doors. Everything that wants a paragraph lives on a leaf page next to
   // the diagram that earns it.
+  import SiteTour from './components/SiteTour.svelte';
   import SystemMap from './components/SystemMap.svelte';
   import StatWall from './components/StatWall.svelte';
   import Instrument from './components/viz/Instrument.svelte';
@@ -26,13 +27,14 @@
     <h1 class="pe-h1">The Engine Room</h1>
     <p class="idx-line">
       {#if eli}
-        This site looks like an ordinary blog. Behind it is an assistant that can read my email and control my
-        house, a machine that builds its own tools while I sleep, and a memory that joins everything together and
-        keeps track of how much of it to believe.
+        This site looks like an ordinary blog. Behind it is an assistant that reads my email, runs my house,
+        remembers what it learns, and quietly rewrites its own code while I am asleep. This page takes the lid
+        off and shows you all of it.
       {:else}
-        This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into
-        mail, files, decks and home, a workflow engine, a graded knowledge graph, and a system that rewrites itself
-        overnight across three machines.
+        This site looks like a blog. It is a blog. It is also an assistant with its hands in my mail, my files
+        and my house, a workflow engine, a knowledge graph that grades its own confidence, and a night shift
+        that rewrites the codebase while I sleep — all of which seemed like a sensible weekend project at the
+        time. Here it is with the lid off.
       {/if}
     </p>
     <a class="idx-cta" href={href('turn', 'trace')}>
@@ -42,10 +44,25 @@
     </a>
   </header>
 
+  <!--
+    The tour goes first and the architecture diagram second, on purpose. A stranger who
+    has never seen the logged-in half of this site cannot place a box labelled "agent
+    runtime", but they can absolutely place a photograph of a chat window. Pictures
+    first, then the same system as a diagram.
+  -->
   <Instrument
-    title="The whole system, one frame"
+    title="Every room in the place"
+    kicker="Nineteen pages"
+    reading="The site as you would actually meet it. Hover to light what a page connects to; click for a proper look."
+    flush
+  >
+    <SiteTour />
+  </Instrument>
+
+  <Instrument
+    title="The same thing, from the inside"
     kicker="Six bands"
-    reading="Every part of the machine, grouped by what it is for."
+    reading="Those nineteen pages are the top band. Everything below it is what happens after you press send."
     flush
   >
     <SystemMap />

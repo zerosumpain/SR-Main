@@ -55,15 +55,15 @@
   <LeafHead
     part="turn"
     title="Getting it back"
-    line="A streamed answer arrives as a chain of segments on one channel. Keeping them apart is the job."
-    lineEli5="The answer arrives in pieces. The hard part is stopping the pieces overwriting each other." />
+    line="A streamed answer turns up as a chain of segments down one channel. The entire job is stopping them treading on one another."
+    lineEli5="The answer arrives in pieces. The hard part is stopping the pieces from scribbling over each other." />
 
   <Instrument
     kicker="The failure"
     title="Seven frames, two accumulators"
     tone={TONE}
-    reading="The real failure, reconstructed frame by frame."
-    takeaway="Two of the seven frames are not the answer. Only one accumulator can tell.">
+    reading="A real frame sequence, reconstructed one frame at a time. Run it through either accumulator."
+    takeaway="Two of the seven frames are not the answer at all. Only one of these two accumulators has the wit to notice.">
     <FrameStream />
   </Instrument>
 
@@ -72,7 +72,7 @@
     title="How long quiet is allowed"
     tone={TONE}
     reading="Pick a tier."
-    takeaway="Tolerance follows what the system is waiting for, not one global timeout.">
+    takeaway="How much silence is acceptable depends entirely on what it is waiting for. One global timeout would be simpler and would be wrong four different ways.">
     <div class="wd">
       <Steps items={STEPS} selected={tier} onselect={(id) => (tier = id)} tone={TONE} railed />
     </div>

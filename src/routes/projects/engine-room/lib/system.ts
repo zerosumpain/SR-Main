@@ -15,22 +15,22 @@ export interface Band {
 
 export const BANDS: Band[] = [
   { id: 'surface', no: 1, name: 'Surfaces', eli5Name: 'The things you touch',
-    blurb: 'Every way in. All of them are thin — none of them holds logic the others do not have.',
+    blurb: 'Every way in. All of them are deliberately thick as a plank — none holds logic the others lack.',
     eli5Blurb: 'All the different ways you can talk to it. None of them is the "real" one.' },
   { id: 'engine', no: 2, name: 'Engines', eli5Name: 'The things that run',
-    blurb: 'Four long-lived runners that own work: conversation, automation, building, and self-improvement.',
+    blurb: 'Four long-lived runners that own the actual work: conversation, automation, building, and self-improvement.',
     eli5Blurb: 'Four bits of software that actually do the work, each with a different job.' },
   { id: 'reason', no: 3, name: 'Reasoning', eli5Name: 'The thinking bit',
-    blurb: 'One gateway to every model, with routing, caching and tool dispatch in front of it.',
+    blurb: 'One gateway to every model, with routing, caching and tool dispatch loitering in front of it.',
     eli5Blurb: 'One doorway to every AI, with the clever bits that pick which one and keep the cost down.' },
   { id: 'memory', no: 4, name: 'Memory', eli5Name: 'What it remembers',
-    blurb: 'One database. Structured tables, flexible records, vectors for meaning, and a graph for who-relates-to-what.',
+    blurb: 'One database. Tables, loose records, vectors for meaning, and a graph for who-knows-whom.',
     eli5Blurb: 'One place where everything is kept — facts, files, and how things connect to each other.' },
   { id: 'world', no: 5, name: 'The world', eli5Name: 'The outside',
-    blurb: 'Everything outside the box that it can read from or act upon.',
+    blurb: 'Everything beyond the box that it can read from, or reach out and meddle with.',
     eli5Blurb: 'All the outside things it can look at or change.' },
   { id: 'ground', no: 6, name: 'Ground', eli5Name: 'Where it lives',
-    blurb: 'The unglamorous layer that decides whether any of the above is still there tomorrow.',
+    blurb: 'The deeply unglamorous layer that decides whether any of the above still exists tomorrow morning.',
     eli5Blurb: 'The boring plumbing that keeps it alive.' },
 ];
 
@@ -136,27 +136,27 @@ export const STATS: Stat[] = [
 export const CLAIMS: Array<{ n: string; title: string; body: string; eli5: string; section: string }> = [
   {
     n: '01', title: 'It is one system, not a pile of features', section: 'turn/stream',
-    body: 'A tool written for the assistant is automatically available to a workflow, to the builder, and to an external client over an open protocol. Nothing is wired twice. That is the whole reason the surface area can be this large and still be maintained by one person.',
+    body: 'Write a tool for the assistant and a workflow can use it, the builder can use it, and so can an external client over an open protocol. Nothing is wired twice. That is the entire reason one middle-aged man can maintain a surface area this daft without the whole thing quietly falling over.',
     eli5: 'Everything shares the same parts. Teach it one new trick and every part of the system can use it immediately.',
   },
   {
     n: '02', title: 'The expensive thing is context, not compute', section: 'turn/cost',
-    body: 'Almost every performance and cost problem in a system like this turns out to be prompt size, not code speed. Measured end to end, the site’s own code is a small fraction of the wait. The work that pays is deciding what not to send.',
+    body: 'Nearly every cost and performance problem here turned out to be prompt size rather than code speed. Measured end to end, my own code is a rounding error in the wait. The work that actually pays is deciding what not to send — which is a much less satisfying thing to spend a Sunday on.',
     eli5: 'The slow, expensive part is how much you tell the AI — not how fast your own software is.',
   },
   {
     n: '03', title: 'It improves itself, but it cannot merge', section: 'change/nights',
-    body: 'Every night it reads its own failures and writes improvements. Small self-contained tools it installs itself, after a static scan and a smoke test where every case must pass. Anything larger becomes a draft pull request. There is no code path by which it can merge one.',
+    body: 'Every night it reads its own failures and writes improvements. Small self-contained tools it installs itself, after a static scan and a smoke test in which every case must pass. Anything bigger becomes a draft pull request with my name on the approval. There is no code path by which it can merge one, and I have gone looking for it more than once.',
     eli5: 'It fixes itself overnight — but only small, safe things. Anything bigger has to be approved by a human.',
   },
   {
     n: '04', title: 'Nothing it knows is a bare assertion', section: 'memory/trust',
-    body: 'Eight channels feed one graph, and every claim in it carries a score that comes apart into who said it, how well it holds up, how many independent sources assert it, whether a person has signed it off, and what age has taken off. A number you cannot decompose is an opinion with a decimal point.',
+    body: 'Eight channels feed one graph, and every claim in it carries a score that comes apart into who said it, how well it holds up, how many independent sources agree, whether a human signed it off, and what age has quietly taken off the top. A number you cannot take apart is just an opinion wearing a decimal point.',
     eli5: 'Everything it thinks it knows has a confidence rating — and the rating can always be broken down into the reasons behind it, so you can disagree with any one of them.',
   },
   {
     n: '05', title: 'A boundary, not a request', section: 'change/limits',
-    body: 'A sentence in a prompt asking a model not to do something will usually be honoured, and “usually” is not a security property. Of the guardrails in this system all but one are boundaries — a container with no route out, a job that cannot start until another is green, a scan that runs before compilation, a credential the agent can use but cannot read, a tool with no parameter for the dangerous thing. Where the placement is what makes it hold, the page says where and why.',
+    body: 'Ask a model nicely not to do something and it will usually oblige. “Usually” is not a security property; it is a personality trait. So all but one of the guardrails here are boundaries instead — a container with no way out, a job that cannot start until another goes green, a scan that runs before anything is compiled, a credential the agent can use but never read, a tool with no parameter for the dangerous thing. Where the placement is what makes it hold, the page says where, and why.',
     eli5: 'Most of the safety features are things that simply cannot be done, rather than things it has been asked not to do.',
   },
 ];

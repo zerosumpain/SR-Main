@@ -50,14 +50,14 @@
   <LeafHead
     part="change"
     title="What it cannot do"
-    line={`${RAILS.length} guardrails, plotted by whether they hold regardless of intent — and by where each one had to be placed to hold.`}
-    lineEli5="Some rules are walls; some are polite requests. Which is which, and where each one sits." />
+    line={`${RAILS.length} guardrails, plotted by whether they hold regardless of what anyone intends — and by where each one had to be put in order to hold at all.`}
+    lineEli5="Some rules are walls. Some are polite requests. Here is which is which, and where each one sits." />
 
   <Instrument
     kicker="The instrument"
     title={PRINCIPLE.title}
     tone={TONE}
-    takeaway="All but one are boundaries. “Usually honoured” is not a security property.">
+    takeaway="All but one are boundaries. “Usually honoured” is a lovely quality in a colleague and not a security property.">
     {#snippet controls()}
       <div class="filters" role="group" aria-label="Filter the guardrails">
         {#each FILTERS as f (f.id)}
@@ -80,7 +80,7 @@
     kicker="Failure modes"
     title="{FAILURE_MODES.length} ways a guardrail fails without changing"
     tone={TONE}
-    reading="Same code, same green dashboard, no longer protecting anything.">
+    reading="Same code, same reassuringly green dashboard, no longer protecting anything at all.">
     <FailureModes tone={TONE} />
   </Instrument>
 

@@ -27,8 +27,8 @@
   <LeafHead
     part="memory"
     title="Somewhere to put anything"
-    line="A typed table is right when the shape is known and costs more than it is worth when it is not. The long tail goes here — and everything that makes it safe to write to unattended is bolted on the outside."
-    lineEli5="A place to keep anything that does not deserve its own database table, with rules about who can see each thing and when it should disappear." />
+    line="A typed table is exactly right when you know the shape, and a millstone when you do not. Everything else lands here. Dropping the schema was the easy half; every rule that makes it safe to write to at 3am unsupervised is bolted on the outside."
+    lineEli5="A drawer for anything that does not deserve its own database table, with rules about who can see each thing and when it quietly disappears." />
 
   <Instrument
     kicker="The instrument"
@@ -61,7 +61,7 @@
     title="A filter language with no string concatenation in it"
     tone={TONE}
     reading="Pick a rule."
-    takeaway="One language across a workflow node, an agent toolset and the admin interface — so none of them has to learn SQL, and none of them can invent a dialect of its own.">
+    takeaway="One language across a workflow node, an agent toolset and the admin screens. None of them has to learn SQL, and — rather more to the point — none of them gets to invent a dialect of its own at three in the morning.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Query safety rules">
         {#each QUERY_SAFETY as q, i (q.k)}

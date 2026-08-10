@@ -53,15 +53,15 @@
   <LeafHead
     part="memory"
     title="Is this the same person?"
-    line="Two records, ten signals, one threshold. Above it they are merged unattended overnight; below it, a person decides."
-    lineEli5="The system finds two records that might be the same thing. It weighs the evidence, and only joins them if it is sure enough." />
+    line="Two records, ten signals, one threshold. Clear the bar and they are merged overnight with nobody watching. Fall short and it waits for me, which is the correct way round."
+    lineEli5="The system spots two records that might be the same thing. It weighs up the evidence, and only joins them if it is sure enough." />
 
   <Instrument
     kicker="The instrument"
     title="Toggle the evidence"
     tone={TONE}
     reading="Pick a worked case, then pull the evidence out of it."
-    takeaway="Merging two people who are not the same destroys information no re-run recovers. The rules decide; a model only suggests.">
+    takeaway="Merge two people who are not the same and you have destroyed something no amount of re-running will bring back. So the rules decide. The model is allowed to suggest, and that is where its authority ends.">
     <EntityResolver />
   </Instrument>
 
@@ -70,7 +70,7 @@
     title="What each signal is worth"
     tone={TONE}
     reading="Every scored signal on one nought-to-one scale. The dashed rule is the merge bar."
-    takeaway="A shared address outranks every name rule. {belowBar} of the {primaryBars.length} cannot merge anything alone, and the biggest single nudge is {maxNudge}.">
+    takeaway="A shared address beats every clever thing you can do with a name. {belowBar} of the {primaryBars.length} cannot merge a pair on their own no matter how confident they feel, and the biggest nudge any corroborating signal can manage is {maxNudge}.">
     <div class="ladder">
       <div class="band">
         <span class="band-lab">Sets the confidence · strongest one wins</span>

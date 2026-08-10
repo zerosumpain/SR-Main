@@ -47,8 +47,8 @@
   <LeafHead
     part="reach"
     title="Making the case"
-    line="A deck the assistant can build from a conversation — on a page that is a fixed size, never scrolls, and cuts off anything past the edge."
-    lineEli5="It can turn a conversation into a slide deck. The pages are a fixed size, so anything that does not fit is simply lost — which is why it is told exactly how much fits." />
+    line="A deck the assistant builds out of a conversation, onto a page that is a fixed size, never scrolls, and unsentimentally cuts off anything past the edge. Slides have been doing this to us for thirty years; here it is at least deliberate."
+    lineEli5="It can turn a conversation into a slide deck. The pages are a fixed size, so anything that does not fit is simply lost — which is why it is told up front exactly how much fits." />
 
   <Instrument
     kicker="The instrument"
@@ -61,9 +61,9 @@
 
   <Instrument
     kicker="The clever path is the optional one"
-    title="Composition either produces a valid slide or does not happen"
+    title="Composition either produces a valid slide or does not happen at all"
     tone={TONE}
-    reading="Break it and see."
+    reading="Break it and see what turns up instead."
     takeaway={FALLBACK_NOTE.body}>
     {#snippet controls()}
       <div class="seg" role="group" aria-label="What goes wrong">

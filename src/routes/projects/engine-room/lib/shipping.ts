@@ -52,7 +52,7 @@ export const PIPELINE: Stage[] = [
 export const SAFETY = [
   {
     title: 'The deploy cannot run if the gate is red',
-    body: 'The deploy job declares the gate as a dependency, so a failing gate makes the deploy unreachable. This is the enforcement, not a convention: on this code host, in this plan, required status checks are not available at all — the configuration APIs simply refuse. A rule that a person has to remember would be no rule. A job that cannot start is one.',
+    body: 'The deploy job declares the gate as a dependency, so a red gate leaves the deploy with nothing to start from. That is the enforcement, and it is deliberately not a convention — a rule somebody has to remember at half past eleven on a Friday is not a rule at all, whereas a job that cannot start is. Worth saying plainly, because this page used to claim the code host would not let me require a status check on this plan. It will. I had simply never set one up, and the belief survived a lot longer than the evidence for it did.',
   },
   {
     title: 'Two deploys never touch the machine at once',

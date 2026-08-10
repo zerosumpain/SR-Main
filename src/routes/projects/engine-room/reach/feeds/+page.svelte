@@ -29,8 +29,8 @@
   <LeafHead
     part="reach"
     title="Reading from the outside"
-    line="Some feeds arrive on their own and some have to be fetched. Both will tell you they are working, and the column that says so is a memory of the last time something ran."
-    lineEli5="It reads data from other services. The hard part is not connecting to them — it is knowing when one has quietly stopped." />
+    line="Some feeds turn up on their own and some have to be fetched. Both will cheerfully tell you they are working. The column saying so is a memory of the last time something ran, which is not at all the same claim."
+    lineEli5="It reads data from other services. The hard part is not connecting to them — it is noticing when one has quietly given up." />
 
   <Instrument
     kicker="The instrument"
@@ -51,7 +51,7 @@
     title="Three feeds, two ways in, two ways to fail"
     tone={TONE}
     reading="Pick a feed."
-    takeaway="A pushed feed fails silently — no data looks exactly like a quiet day — so it is treated as stale after two days rather than the three everything else gets. A pulled feed fails discoverably, because using it is the test.">
+    takeaway="A pushed feed fails silently, because no data looks identical to a quiet day. So it is called stale after two days rather than the three everything else gets. A pulled feed has the decency to fail where you can see it, since using it is the test.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Feeds">
         {#each FEEDS as f (f.id)}
@@ -82,7 +82,7 @@
     title="Calling an API nobody wrote code for"
     tone={TONE}
     reading="What the model may do with a catalogued data source, and what it may not."
-    takeaway="The register is writable by the model itself, so nothing in it is trusted. Every rule below is enforced at call time against the owner's settings, not against what the record claims.">
+    takeaway="The model can write to this register itself, so nothing in it gets the benefit of the doubt. Every rule below is enforced at call time against my settings, not against whatever the record says about itself.">
     <ul class="rules">
       {#each CATALOGUE_RULES as r (r.k)}
         <li><b>{r.k}</b><span>{r.why}</span></li>

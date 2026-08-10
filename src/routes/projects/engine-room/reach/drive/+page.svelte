@@ -27,15 +27,15 @@
   <LeafHead
     part="reach"
     title="The filing cabinet"
-    line="Storing a document is easy. Being able to ask it a question means turning six kinds of file into the one thing a search index understands — and admitting which two never get there."
-    lineEli5="Everything you put in can be searched by what is inside it — but a photo has to be described first, and a video is not read at all." />
+    line="Keeping a document is easy. Being able to ask it a question means turning six kinds of file into the one thing a search index actually understands — and being honest about which two never make it."
+    lineEli5="Everything you put in can be searched by what is inside it — except a photo has to be described first, and a video is not read at all." />
 
   <Instrument
     kicker="The instrument"
     title="Six kinds in, one index out"
     tone={TONE}
     reading="Pick a kind of file and follow it."
-    takeaway="A photograph has no text, so one is written for it — a literal description plus a reading of anything visible — and that description is what search actually matches on. The uniform surface is real; the uniform capability behind it is not.">
+    takeaway="A photograph has no text, so a model writes some for it — a plain description plus whatever words are visible in the picture — and that description is what search is really matching on. The uniform surface is genuine. The uniform capability behind it is a polite fiction.">
     <FilePipeline />
   </Instrument>
 
