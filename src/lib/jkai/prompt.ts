@@ -257,7 +257,7 @@ Write a serve.json at the workspace root in iteration 1, before any feature code
   "description": "<one-line description>"
 }
 
-Bind 0.0.0.0, not 127.0.0.1. Any TCP server works — python3 -m http.server, Express, Flask, FastAPI. Chapters must be real routes (e.g. /chapter-3/ or /chapter/3), each returning 200 on its own.
+Bind 0.0.0.0, not 127.0.0.1. Any TCP server works — python3 -m http.server, Express, Flask, FastAPI. Chapters MUST be served at exactly /chapter-<n>/ — trailing slash, numbered from 1 — each returning 200 on its own. An automated check fetches exactly those paths after every iteration; serving chapters at a different URL reports every one of them unreachable.
 
 WORKSPACE LAYOUT:
 - /home/jkai/workspace/BUILD_ID/dev  — your working directory. Edit here.

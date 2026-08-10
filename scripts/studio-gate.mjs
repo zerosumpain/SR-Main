@@ -86,8 +86,8 @@ async function main() {
       findings.push({
         chapter: 0,
         rule: 'kit-missing',
-        message: `The explainer kit did not mount: ${missing.length}/${kitFiles.length} kit file(s) 404'd — ${missing.join(', ')}.`,
-        remedy: `Re-run the kit sync into the workspace's dev/explainer-kit directory so ${missing.join(', ')} are served at those paths. Until they are, the agent is likely inventing its own visuals instead of using the kit.`,
+        message: `The explainer kit is not reachable at the served root: ${missing.length}/${kitFiles.length} kit file(s) 404'd — ${missing.join(', ')}.`,
+        remedy: `Two possible causes. Most likely: your server only serves a subdirectory (e.g. public/ or dist/) that excludes explainer-kit/ — serve the workspace root instead, or copy the kit files into the directory you do serve. Less likely: the kit mount itself failed — check the build log for an "Explainer kit sync FAILED" line; if you see one, this isn't something you can fix directly, mention it in ## Evaluation. Until ${missing.join(', ')} are reachable, you are likely inventing your own visuals instead of using the kit.`,
       });
     }
   }
@@ -110,14 +110,34 @@ async function main() {
       // it: one bad chapter costs one chapter, never the run.
       let page;
       try {
-        const url = new URL(ch.path, baseUrl).toString();
+        // prompt.ts mandates chapters be served at exactly /chapter-<n>/,
+        // but an agent may still land elsewhere (it used to offer
+        // /chapter/<n>/ as an equally-valid example, and old context from
+        // earlier iterations can linger). Try the caller-supplied path
+        // first, then three fixed fallbacks — bounded at four attempts
+        // total, never more, no crawling — before reporting unreachable. A
+        // build that used the mandated path always hits on the first try.
+        const rawCandidates = [ch.path, `/chapter/${ch.n}/`, `/chapter-${ch.n}`, `/chapters/${ch.n}/`];
+        const attempted = [];
         page = await browser.newPage();
-        const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 20_000 });
-        if (!resp || resp.status() >= 400) {
+        let resp = null;
+        for (const cand of rawCandidates) {
+          if (attempted.includes(cand)) continue; // ch.path often already is one of the fallbacks
+          attempted.push(cand);
+          try {
+            const candUrl = new URL(cand, baseUrl).toString();
+            resp = await page.goto(candUrl, { waitUntil: 'networkidle', timeout: 20_000 });
+          } catch {
+            resp = null;
+          }
+          if (resp && resp.status() < 400) break;
+          resp = null;
+        }
+        if (!resp) {
           findings.push({
             chapter: ch.n, rule: 'unreachable',
-            message: `Chapter ${ch.n} (${ch.title}) returned ${resp ? resp.status() : 'no response'} at ${ch.path}.`,
-            remedy: `Add a route serving ${ch.path} that returns 200 with a root element carrying data-chapter="${ch.n}".`,
+            message: `Chapter ${ch.n} (${ch.title}) was not reachable at any of the checked paths: ${attempted.join(', ')}.`,
+            remedy: `Serve chapter ${ch.n} at exactly /chapter-${ch.n}/ (trailing slash) returning 200 with a root element carrying data-chapter="${ch.n}". Checked paths: ${attempted.join(', ')}.`,
           });
           continue;
         }

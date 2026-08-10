@@ -40,37 +40,31 @@ const STALE_BUILD_MS = 30 * 60_000;
 /**
  * Kit files the studio gate checks are actually served (see runStudioGate's
  * chapter-0 `kit-missing` check). Paths relative to the served root, matching
- * where `syncExplainerKit` (./sandbox) mounts the kit — `dev/explainer-kit/`,
- * promoted wholesale into `live/` every iteration by `promoteDevToLive`
- * (`cp -a dev/. live/`), which is what `manageServeConfig` calls just above
- * this check runs.
+ * where `syncExplainerKit` (./sandbox) mounts the kit — `dev/explainer-kit/`.
  *
- * Deliberately NOT the full `EXPLAINER_FILES` list from design-assets.ts. The
- * agent is told to copy the kit modules it uses into its own tree and
- * reference the copies (prompt.ts's STUDIO_SYSTEM_PROMPT, point 4) — so a
- * module like sim.js or diagram.js can legitimately end up served from a
- * path of the agent's choosing, and checking it at the mount path risks a
- * false `kit-missing` finding against a build that did everything right.
- * `three.min.js` is different: the prompt vendors it at this exact path and
- * tells the agent NOT to fetch or reinstall it, i.e. to reference it in
- * place, and `tokens.css` is meant to be imported (`@import`/`<link>`) rather
- * than duplicated — both are plausibly referenced directly from the mount,
- * and unlike the JS modules neither has a legitimate reason to be renamed.
- * `README.md` costs nothing to include: no correct implementation ever needs
- * to move or delete it, so its absence has no confound with legitimate agent
- * behaviour — it is pure signal that the sync didn't run or the served root
- * doesn't expose `dev/` (i.e. `live/`) wholesale.
+ * This is a small sample, not the full `EXPLAINER_FILES` list from
+ * design-assets.ts — deliberately, but NOT because some of those files are
+ * "referenced in place" and others get copied. They don't split that way:
+ * `promoteDevToLive` does an unconditional `cp -a dev/. live/` every
+ * iteration, so every file under `dev/explainer-kit/` — copied by the agent
+ * elsewhere or not, edited or not — is physically present under
+ * `live/explainer-kit/` regardless. (An earlier version of this comment
+ * claimed tokens.css/three.min.js are referenced at the mount path while
+ * sim.js/diagram.js get relocated; the kit's own worked example,
+ * static/explainer-kit/examples/chapter.html, references tokens.css with
+ * `href="../tokens.css"` exactly like it references the JS modules, and
+ * VENDOR.md documents three.min.js as copied too — so that distinction was
+ * wrong and is not the reason for this list.)
  *
- * That "does the served root expose the mount at all" question is the one
- * real residual uncertainty this check can't fully close from HTTP alone —
- * an agent could point its server at a scoped "public" subdirectory that
- * excludes explainer-kit/, in which case this fires even though the kit
- * synced fine. That risk is bounded and worth taking: gate findings never
- * abort a build (see the guard below), so the worst case is one noisy
- * finding in the next iteration's context, weighed against the failure mode
- * this exists to catch — an explainer-kit sync that failed silently (logged
- * once by executor.ts, never retried into visibility) leaving the agent to
- * invent its own visual language for the rest of an unattended run.
+ * What this check actually tests is one binary fact: does the build's own
+ * server expose the `/explainer-kit/` subtree at all. If it does, any file
+ * in it will resolve, so a handful is exactly as informative as all nine —
+ * checking more would only mean more HTTP round trips for the same yes/no
+ * answer. If it doesn't (the server is scoped to a `public/`/`dist/`
+ * subdirectory that excludes the mount), every file in the list 404s
+ * together, which is itself the signal worth surfacing — see the
+ * kit-missing remedy in scripts/studio-gate.mjs, which now names that as the
+ * more likely, and agent-fixable, cause.
  */
 const STUDIO_KIT_CHECK_FILES = ['explainer-kit/tokens.css', 'explainer-kit/three.min.js', 'explainer-kit/README.md'];
 

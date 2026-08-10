@@ -82,11 +82,26 @@ export async function runStudioGate(opts: {
     kitFiles: opts.kitFiles ?? [],
   });
   const encoded = Buffer.from(payload, 'utf-8').toString('base64');
+  // NOT `| base64 -d |` before node: unlike static-smoke.ts's runner, which
+  // reads plain JSON off stdin (the shell decodes for it),
+  // scripts/studio-gate.mjs decodes the base64 itself (see its own
+  // `Buffer.from(stdin.trim(), 'base64')`) — its docstring's usage line is
+  // `echo '<base64 spec>' | node scripts/studio-gate.mjs <baseUrl>`, base64
+  // going straight in. A pre-decode here fed it double-decoded garbage and
+  // it reported `ran:false, reason:'could not parse the spec on stdin'` on
+  // every call — confirmed by actually running this command, not just
+  // reading it, during fix-round-1 verification.
   const cmd =
     `cd ${JSON.stringify(process.cwd())} && ` +
-    `echo ${encoded} | base64 -d | node scripts/studio-gate.mjs ${JSON.stringify(opts.baseUrl)}`;
+    `echo ${encoded} | node scripts/studio-gate.mjs ${JSON.stringify(opts.baseUrl)}`;
   try {
-    const res = await execInSandbox(cmd, 180_000);
+    // 300s, not 180s: each chapter now probes up to 4 candidate paths (up to
+    // 20s navigation timeout each) before falling back to unreachable, plus
+    // up to 2s of outcome-polling per lever-drive attempt. A 10-chapter
+    // build with several genuinely inert levers is the case most likely to
+    // need the headroom, and it runs outside the agent's own budget, so the
+    // extra wall-clock costs nothing but wall-clock.
+    const res = await execInSandbox(cmd, 300_000);
     return parseGateOutput(res.stdout, res.stderr);
   } catch (err) {
     return {
