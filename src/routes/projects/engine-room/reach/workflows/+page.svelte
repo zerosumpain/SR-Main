@@ -60,15 +60,15 @@
   <LeafHead
     part="reach"
     title="Wiring it together"
-    line="{NODE_COUNT} node types wire the system to itself. Where two branches meet, one of them quietly disappears."
-    lineEli5="The system is built from blocks you join up. Where two lines join, one can vanish with no warning." />
+    line="{NODE_COUNT} node types wire the system to itself. Where two branches meet at one node, one of them quietly ceases to exist, and everything downstream carries on as though nothing has happened."
+    lineEli5="The system is built from blocks you join up. Where two lines join, one of them can vanish without a word of warning." />
 
   <Instrument
     kicker="The instrument"
     title="Two branches, one node"
     tone={TONE}
     reading="Two API calls into one node. Pick a wiring; watch what arrives."
-    takeaway="A daily spending summary did this twice: one branch wiped the other, three more collapsed into one. The build, the save and the editor all passed it. The engine now reports overlapping keys before a run.">
+    takeaway="A daily spending summary managed this twice: one branch wiped the other, then three more collapsed into one. The build passed, the save passed, the editor looked delighted. The engine now names overlapping keys before a run, which it might have mentioned earlier.">
     <FanInTrap tone={TONE} />
   </Instrument>
 

@@ -106,15 +106,15 @@
   <LeafHead
     part="reach"
     title="The cost of being able"
-    line="Every tool a model may call is described to it in full, on every turn, before you type."
-    lineEli5="The AI is told about every button it can press, every time you message it. That list is not free." />
+    line="Every tool a model may call is described to it in full, on every single turn, before you have typed a word. Capability is billed as prompt whether you use it or not."
+    lineEli5="The AI is told about every button it could press, every time you message it. That list is not free, and it is long." />
 
   <Instrument
     kicker="The switch"
     title="Send all 155, or send 21"
     tone={TONE}
     reading="The fill is to scale against the full catalogue. Flip it."
-    takeaway="Same capabilities either way. One bills for all of them on every message, including “hi”.">
+    takeaway="Identical capabilities either way. One of them charges you for all 155 on every message you send, up to and including “hi”.">
     <ManifestBudget />
   </Instrument>
 
@@ -145,14 +145,14 @@
     title="What each tier costs"
     tone={TONE}
     reading="Length is the count. The note is the cost per turn."
-    takeaway="The longest bar is the free one. Nothing is deleted, only deferred.">
+    takeaway="The longest bar is the free one, which is not how any of this normally works. Nothing has been deleted — it is all still there, just not shouted about up front.">
     <Bars items={TIER_BARS} tone={TONE} grouped={false} height={24} />
     <p class="gap"><b>{MANIFEST.invokeShare}% of dispatcher calls</b> go straight to invoke; browsing is rare.</p>
   </Instrument>
 
   <Instrument
     kicker="Lessons"
-    title="Five that only showed up in production"
+    title="Five things that only ever show up in production"
     tone={TONE}
     reading="Pick one.">
     <div class="tags">

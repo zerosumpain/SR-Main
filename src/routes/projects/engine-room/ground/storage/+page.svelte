@@ -25,8 +25,8 @@
   <LeafHead
     part="ground"
     title="Where the bytes live"
-    line="Four places a byte can end up, chosen by one question each — and one kind of loss that a perfect backup does nothing about."
-    lineEli5="Different things are kept in different places, on purpose. One of them can be lost in a way no backup fixes."
+    line="Four places a byte can end up, each chosen by answering a single question — and one kind of loss about which a flawless, nightly, off-site backup can do absolutely nothing."
+    lineEli5="Different things are kept in different places, on purpose. One of them can be lost in a way that no backup will fix."
   />
 
   <Instrument
@@ -34,7 +34,7 @@
     title="Break something"
     tone={TONE}
     reading="Pick a failure. What recovers it is listed in the order it would actually be reached."
-    takeaway="Four of the five are survivable and dull, which is the goal. The fifth is the one worth designing for: encrypting credentials at rest is obviously right, and it creates a second thing to lose.">
+    takeaway="Four of the five are survivable and thoroughly boring, which is precisely the goal. The fifth is the one worth losing sleep over: encrypting credentials at rest is obviously the right thing to do, and it quietly creates a second thing to lose.">
     <FailureLadder />
   </Instrument>
 

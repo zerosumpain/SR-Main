@@ -70,8 +70,8 @@
   <LeafHead
     part="turn"
     title="Where the money goes"
-    line="A median prompt runs to {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens. One measured answer was a single word. Context is the expensive part, not thinking."
-    lineEli5="You pay mostly for what it reads, not for what it says back." />
+    line="A median prompt runs to {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens. One measured answer came back as a single word. You are paying for the reading, not the wisdom."
+    lineEli5="You mostly pay for what it reads, not for what it says back. The reading is enormous." />
 
   {#snippet controls()}
     <div class="ctl" role="group" aria-label="Tool manifest mode">
@@ -86,7 +86,7 @@
     tone={TONE}
     {controls}
     reading="The median prompt itemised, with reasoning and answer from one measured call. Volume, not price. The toggle puts every hidden tool description back."
-    takeaway="Thinking is a hairline. The answer is invisible. Sending all {MANIFEST.registered} tool descriptions instead of {MANIFEST.shown} costs {MANIFEST.savedTokens.toLocaleString('en-GB')} extra tokens on every turn.">
+    takeaway="Thinking is a hairline. The answer is invisible. Sending all {MANIFEST.registered} tool descriptions rather than {MANIFEST.shown} adds {MANIFEST.savedTokens.toLocaleString('en-GB')} tokens to every single turn, for the privilege of describing tools nobody asked for.">
     <StackBar {segments} selected={picked} onselect={(l) => (picked = picked === l ? null : l)} height={46} />
   </Instrument>
 
@@ -94,8 +94,8 @@
     kicker="The floor"
     title="Budget the thinking, or get nothing"
     tone={TONE}
-    reading="Drag the output budget. Below what the model needs to think, it returns an empty string and no error."
-    takeaway="Reasoning is emitted before the answer, so a tight budget buys thinking nobody ever sees.">
+    reading="Drag the output budget. Below what the model needs in order to think, it hands back an empty string and no error whatsoever."
+    takeaway="Reasoning comes out before the answer does. Set the budget too tight and you have paid, in full, for thoughts nobody will ever read.">
     <ReasoningFloor />
   </Instrument>
 
@@ -103,7 +103,7 @@
     kicker="The refund"
     title="The bytes never changed"
     tone={TONE}
-    reading="Marking a prefix as cacheable reached one vendor’s models only. Everything else paid the full input rate for bytes that never changed."
+    reading="The cacheable-prefix marker was only ever being sent to one vendor’s models. Everything else paid full whack, every turn, for bytes that had not moved."
     takeaway={CACHE_STORY.lesson}>
     <Bars items={CACHE_BARS} unit=" tok" tone={TONE} height={24} />
   </Instrument>

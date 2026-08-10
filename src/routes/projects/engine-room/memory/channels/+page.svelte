@@ -26,15 +26,15 @@
   <LeafHead
     part="memory"
     title="Where it all comes from"
-    line="Eight doors feed one graph. What separates them is not volume or cost but authorship — and grading by authorship is what stops the same sentence scoring two different ways."
-    lineEli5="Information reaches it eight different ways. How much it trusts each one depends on who wrote it, not on how it got there." />
+    line="Eight doors feed one graph. What separates them is not volume, and it is not cost — it is who actually wrote the words. Grade by authorship and the same sentence stops scoring two different ways depending on how it wandered in."
+    lineEli5="Information reaches it eight different ways. How much it trusts each one depends on who wrote it, not on which door it came through." />
 
   <Instrument
     kicker="The instrument"
     title="Eight doors, three differences"
     tone={TONE}
     reading="Chips are grouped by the grade their source carries. Pick one."
-    takeaway="Two channels sit at the top for the same reason — you wrote them — even though one is a note on a phone and the other a message thread. A grade records authorship; the transport is not evidence of anything.">
+    takeaway="Two channels sit at the top for exactly the same reason — you wrote them — even though one is a note thumbed into a phone and the other a message thread. The grade records who was holding the pen. How it travelled is not evidence of anything.">
     <ChannelBoard />
   </Instrument>
 
@@ -43,7 +43,7 @@
     title="One sweep, two halves, one budget"
     tone={TONE}
     reading="A worked mailbox of 900 threads in the window. Set what a night may spend."
-    takeaway="Drag the budget to zero and the graph still learns who corresponds with whom. The free half is read off the headers, which makes it both the cheaper evidence and the better evidence — so it is never the half that gets cut.">
+    takeaway="Drag the budget to zero and the graph still works out who corresponds with whom. That half is read straight off the headers, so it is simultaneously the free evidence and the better evidence. It is therefore never the half that gets cut, which is a rare and pleasing state of affairs.">
     <MailSweep />
   </Instrument>
 

@@ -31,14 +31,14 @@
   <LeafHead
     part="memory"
     title="Standing questions"
-    line="A graph will tell you its shape whenever you ask. Nothing in it tells you what changed since you last looked — and that is the only part worth an interruption."
-    lineEli5="You can mark things as worth watching. Overnight it works out what actually moved, and tells you only when it is genuinely worth knowing." />
+    line="A graph will happily tell you its shape any time you ask. What it will not tell you is what moved since you last looked — which is the only part worth being interrupted for."
+    lineEli5="You mark things as worth watching. Overnight it works out what actually moved, and only pipes up when it is genuinely worth knowing." />
 
   <Instrument
     kicker="The instrument"
     title="Two bars, and a change has to clear both"
     tone={TONE}
-    reading="Move an entity between two nights. Switch a bar off to hear what it was keeping quiet."
+    reading="Move an entity between two nights. Switch a bar off and hear exactly what it had been sparing you from."
     takeaway={BOTH_KINDS.body}>
     <AlarmBench />
   </Instrument>
@@ -59,7 +59,7 @@
     title="Nine kinds of movement, and one that never wakes you"
     tone={TONE}
     reading="Pick one."
-    takeaway="Joining the watchlist is reported and never alarms — you did that on purpose, so telling you is noise. The baseline it recorded is still shown, because that is the thing every later comparison is against.">
+    takeaway="Joining the watchlist gets reported and never alarms. You did that on purpose thirty seconds ago; announcing it back to you is just noise with extra steps. The baseline it recorded is still shown, because every later comparison is measured against it.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Kinds of change">
         {#each ALARMS as a (a.id)}

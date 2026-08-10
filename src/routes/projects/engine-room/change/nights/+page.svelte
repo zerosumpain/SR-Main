@@ -25,16 +25,16 @@
   <LeafHead
     part="change"
     title="The night shift"
-    line="Unattended, it reads its own failures and writes improvements — eight phases, and six caps that bound what any one night may spend."
-    lineEli5="While nobody is watching, it looks at what went wrong, tries to fix it, and is only allowed to do so much."
+    line="At half past three, with nobody watching, it reads back its own failures and writes improvements. Eight phases, and six caps deciding exactly how much rope any one night gets."
+    lineEli5="While everyone is asleep, it looks at what went wrong, has a go at fixing it, and is only allowed to do so much before it has to stop."
   />
 
   <Instrument
     kicker="The instrument"
     title="One night, eight phases"
     tone={TONE}
-    reading="Pick a phase to read it. Break one, and watch the run's verdict."
-    takeaway="Every phase is caught on its own: one that fails marks the run partial rather than aborting the night. The other seven still run."
+    reading="Pick a phase to read it. Break one, and see what the run makes of that."
+    takeaway="Every phase is caught on its own, so one falling over marks the night partial rather than writing the whole thing off. The other seven carry on regardless, like professionals."
   >
     <NightRun tone={TONE} />
   </Instrument>
@@ -43,8 +43,8 @@
     kicker="The budget"
     title="What one night may spend"
     tone={TONE}
-    reading="Six ceilings. Autonomy here is bounded by arithmetic, not by the model behaving."
-    takeaway="It writes the code and opens a draft pull request — it cannot merge one."
+    reading="Six ceilings. Autonomy here is bounded by arithmetic rather than by the model being on its best behaviour."
+    takeaway="It writes the code and opens a draft pull request. It cannot merge one. That is not a setting; there is no code that does it."
   >
     <div class="caps">
       {#each NIGHT_CAPS as c (c.k)}
