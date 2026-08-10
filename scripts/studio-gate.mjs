@@ -379,7 +379,10 @@ async function main() {
               remedy: `In the page served at ${ch.path}, write it relative to the PROJECT ROOT with no leading slash and no "../" — e.g. "chapter-2/", "styles.css", "assets/three.min.js". Both the preview proxy and /projects/<slug>/ inject a <base href> at the project root, so that form is the only one that resolves on both.`,
             });
           }
-          const internal = absolute.slice(0, 25);
+          // Every internal reference, not just the malformed ones: a
+          // correctly-relative link can still point at a page that does not
+          // exist. Deduped and bounded — no crawling.
+          const internal = [...new Set(hrefs.filter((h) => h && !/^[a-z]+:/i.test(h) && !h.startsWith('#')))].slice(0, 25);
           for (const href of internal) {
             let status = 0;
             try {
