@@ -345,9 +345,14 @@ async function main() {
         // chapter reachable. Follow the real links.
         if (!linksChecked) {
           linksChecked = true;
-          const hrefs = await page.locator('a[href]').evaluateAll((els) =>
-            els.map((e) => e.getAttribute('href') || ''),
-          );
+          // Both href and src: a broken script/stylesheet URL is why a page
+          // renders unstyled or without its 3D scene, and only checking anchors
+          // missed exactly that on build 7c5f2ef2.
+          const hrefs = await page
+            .locator('a[href], link[href], script[src], img[src]')
+            .evaluateAll((els) =>
+              els.map((e) => e.getAttribute('href') || e.getAttribute('src') || ''),
+            );
           // Root-absolute internal links are ALWAYS wrong here, even when they
           // resolve against the bare dev server. A human never sees that
           // server: the preview is served under /api/jkai/proxy/<id>/ and a
@@ -357,12 +362,21 @@ async function main() {
           // So /chapter-2/ resolves to the SITE root and 404s. Observed
           // 2026-08-10: every chapter link in build 7dadc8f4 404'd for the
           // owner while the gate, testing 127.0.0.1 directly, saw them all 200.
-          const absolute = [...new Set(hrefs.filter((h) => h.startsWith('/')))];
-          for (const href of absolute.slice(0, 10)) {
+          // Both surfaces inject <base href> pointing at the project root, so
+          // ONLY a bare project-root-relative path works. A leading "/" escapes
+          // to the site root; "../" climbs above the project root. Both 404,
+          // and neither is visible when testing the bare dev server directly —
+          // which is why build 7c5f2ef2 shipped with dead nav, no stylesheet
+          // and no three.js while this gate reported every chapter fine.
+          const badUrls = [...new Set(hrefs.filter((h) => h.startsWith('/') || h.startsWith('../')))];
+          for (const href of badUrls.slice(0, 10)) {
+            const why = href.startsWith('/')
+              ? 'a leading slash escapes to the SITE root'
+              : '"../" climbs ABOVE the project root, because <base href> already points there';
             findings.push({
               chapter: ch.n, rule: 'absolute-internal-link',
-              message: `The page links to ${href} with a root-absolute path. That resolves to the site root, not this project, once it is served under the preview proxy or /projects/<slug>/.`,
-              remedy: `Make it relative in the page served at ${ch.path} — use "../chapter-N/" (or "./asset.css") instead of "${href}". Relative URLs resolve correctly under the <base href> the preview injects and under the published path prefix; absolute ones cannot.`,
+              message: `The page references ${href}, which will 404 for a human: ${why}.`,
+              remedy: `In the page served at ${ch.path}, write it relative to the PROJECT ROOT with no leading slash and no "../" — e.g. "chapter-2/", "styles.css", "assets/three.min.js". Both the preview proxy and /projects/<slug>/ inject a <base href> at the project root, so that form is the only one that resolves on both.`,
             });
           }
           const internal = absolute.slice(0, 25);

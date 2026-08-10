@@ -1,8 +1,8 @@
 import type { RequestHandler } from './$types';
 import { getPublishedDir } from '$lib/jkai/sandbox';
 import { db } from '$lib/db';
-import { projectVisibility } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { projectVisibility, jkaiBuilds } from '$lib/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { isProjectPublic } from '$lib/projects/visibility';
 import { resolveShareToken } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
@@ -113,6 +113,39 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
 
   if (!result) {
     return new Response('Not found', { status: 404 });
+  }
+
+  // Studio builds only: inject the same <base href> the preview proxy injects,
+  // so the two surfaces resolve URLs identically.
+  //
+  // The preview at /api/jkai/proxy/<id>/ sets <base href> to that prefix, which
+  // re-roots EVERY relative URL. Published pages had no base, so the same markup
+  // resolved differently on each surface and no single link style worked on
+  // both: "../chapter-1/" works published and 404s under the proxy (it climbs
+  // above the app root), while "chapter-1/" works under the proxy and 404s
+  // published. Observed 2026-08-10 on build 7c5f2ef2 — broken nav, unstyled
+  // pages and dead three.js, all from that one mismatch.
+  //
+  // Gated on studio origin on purpose. The relocated bundles under /projects/
+  // (whitehall, brass-and-rails) use "./assets/..." from pages at varying
+  // depths; a base tag would re-root those too and break them.
+  if (result.mime.startsWith('text/html')) {
+    const [studio] = await db
+      .select({ id: jkaiBuilds.id })
+      .from(jkaiBuilds)
+      .where(and(eq(jkaiBuilds.publishedSlug, params.slug), eq(jkaiBuilds.origin, 'studio')))
+      .limit(1);
+    if (studio) {
+      const text = new TextDecoder().decode(result.data);
+      if (!/<base\s/i.test(text)) {
+        const baseTag = `<base href="/projects/${params.slug}/">`;
+        const headMatch = text.match(/<head[^>]*>/i);
+        const injected = headMatch
+          ? text.replace(headMatch[0], `${headMatch[0]}${baseTag}`)
+          : `${baseTag}${text}`;
+        result = { data: new TextEncoder().encode(injected).buffer as ArrayBuffer, mime: result.mime };
+      }
+    }
   }
 
   const headers: Record<string, string> = { 'Content-Type': result.mime };
