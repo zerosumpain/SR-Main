@@ -1,3 +1,5 @@
+import { sql } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // db.execute and generateEmbedding are the only external touch-points; mock both
@@ -134,5 +136,62 @@ describe('searchResearch', () => {
     mockExecute.mockResolvedValue({ rows: [] });
     await expect(searchResearch('q', { topK: Number('abc') })).resolves.toEqual([]);
     expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The factsOnly branch gates a UNION ALL inside a drizzle sql`` template. If
+// that nesting composes wrongly the query is malformed, and nothing catches it
+// until it throws in production — against @research chat as well as the studio
+// research brief, since both call searchResearch. Serialise both shapes and
+// check them rather than trusting the template.
+describe('factsOnly query composition', () => {
+  function build(factsOnly: boolean) {
+    const vectorStr = '[0,0,0]';
+    const model = 'text-embedding-3-small';
+    const minSim = 0.45;
+    const topK = 30;
+    const factSessionFilter = sql``;
+    const chunkSessionFilter = sql``;
+    return sql`
+      SELECT * FROM (
+        SELECT 'fact'::text AS kind, f.id AS row_id,
+          1 - (f.embedding <=> ${vectorStr}::vector) AS similarity
+        FROM fact f
+        WHERE f.embedding IS NOT NULL AND f.embedding_model = ${model}
+          AND NOT f.is_counterfactual
+          AND f.desk_state <> 'archived'
+          ${factSessionFilter}
+          AND 1 - (f.embedding <=> ${vectorStr}::vector) >= ${minSim}
+        ${factsOnly ? sql`` : sql`UNION ALL
+        SELECT 'source'::text AS kind, sc.id AS row_id,
+          1 - (sc.embedding <=> ${vectorStr}::vector) AS similarity
+        FROM source_chunk sc
+        WHERE sc.embedding IS NOT NULL AND sc.embedding_model = ${model}
+          ${chunkSessionFilter}
+          AND 1 - (sc.embedding <=> ${vectorStr}::vector) >= ${minSim}`}
+      ) u
+      ORDER BY u.similarity DESC
+      LIMIT ${topK}
+    `;
+  }
+
+  it('omits the source-chunk branch when factsOnly is set', () => {
+    const q = new PgDialect().sqlToQuery(build(true));
+    expect(q.sql).not.toContain('UNION ALL');
+    expect(q.sql).not.toContain('source_chunk');
+    expect(q.sql).toContain('desk_state');
+  });
+
+  it('keeps both branches by default, so chat is unaffected', () => {
+    const q = new PgDialect().sqlToQuery(build(false));
+    expect(q.sql).toContain('UNION ALL');
+    expect(q.sql).toContain('source_chunk');
+  });
+
+  it('binds every parameter in both shapes', () => {
+    expect(new PgDialect().sqlToQuery(build(true)).params.length).toBeGreaterThan(0);
+    expect(new PgDialect().sqlToQuery(build(false)).params.length).toBeGreaterThan(
+      new PgDialect().sqlToQuery(build(true)).params.length,
+    );
   });
 });

@@ -5,6 +5,7 @@ import { isOwnerEmail } from '$lib/server/access';
 // the `studio_build` chat tool is a second entry point that never reaches this
 // route. Imported rather than re-declared so the two cannot drift; this route
 // keeps its own check only to answer 400 instead of 500.
+import { RESEARCH_MODES, type ResearchMode } from '$lib/jkai/research-brief';
 import { createStudioBuild, MAX_CHALLENGE_LEN, MAX_TITLE_LEN } from '$lib/jkai/studio';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -25,7 +26,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: `title too long (max ${MAX_TITLE_LEN} chars)` }, { status: 400 });
   }
   try {
-    const { buildId } = await createStudioBuild({ challenge, title });
+    const researchMode = RESEARCH_MODES.includes(body.researchMode as ResearchMode)
+      ? (body.researchMode as ResearchMode)
+      : undefined;
+    const { buildId } = await createStudioBuild({
+      challenge,
+      title,
+      ...(researchMode ? { researchMode } : {}),
+    });
     return json({ buildId, url: `/jkai/builds/${buildId}` });
   } catch (err) {
     return json({ error: (err as Error).message }, { status: 500 });

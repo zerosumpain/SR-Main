@@ -21,6 +21,7 @@
 // leaving the caller to guess at progress.
 
 import { register } from '../registry-internal';
+import type { ResearchMode } from '$lib/jkai/research-brief';
 
 register({
   name: 'studio_build',
@@ -40,6 +41,15 @@ register({
           'decides what a school receives, and why two schools of the same size get different budgets."',
       },
       title: { type: 'string', description: 'Optional title override' },
+      researchMode: {
+        type: 'string',
+        enum: ['reuse', 'extend', 'fresh'],
+        description:
+          "Where the evidence comes from. 'extend' (default) reuses what prior research already " +
+          "established and only researches the gaps. 'reuse' uses existing knowledge ONLY and fails " +
+          "if there is not enough — fast and free, good for a topic already covered. 'fresh' ignores " +
+          'prior work and always runs a new Deep Dive, which takes 30-90 minutes.',
+      },
     },
     required: ['challenge'],
   },
@@ -51,6 +61,11 @@ register({
     const { buildId } = await createStudioBuild({
       challenge: args.challenge as string,
       title: typeof args.title === 'string' ? args.title : undefined,
+      // createStudioBuild validates this and throws on anything unknown — the
+      // column has no CHECK constraint, so that is the only real guard.
+      ...(typeof args.researchMode === 'string'
+        ? { researchMode: args.researchMode as ResearchMode }
+        : {}),
     });
     return { success: true, data: { buildId, url: `/jkai/builds/${buildId}` } };
   },

@@ -597,7 +597,11 @@ class Orchestrator {
     if (isStudio && !buildRecord.researchBrief) {
       try {
         const { buildResearchBrief } = await import('./research-brief');
-        const brief = await buildResearchBrief(buildId, buildRecord.prompt);
+        const brief = await buildResearchBrief(
+            buildId,
+            buildRecord.prompt,
+            buildRecord.researchMode ?? 'extend',
+          );
         await db.update(jkaiBuilds).set({ researchBrief: brief }).where(eq(jkaiBuilds.id, buildId));
         await emitLog(buildId, 'system', 'Research brief attached — proceeding to planning.');
       } catch (err: any) {
