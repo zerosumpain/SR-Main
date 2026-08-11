@@ -8,6 +8,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { buildHandler } from '../custom-tool-loader';
+import { staticScan, smokeTest, type SmokeCase } from '$lib/selfimprove/verify';
 
 type JSONSchema = { type: 'object'; properties: Record<string, unknown>; required?: string[] };
 
@@ -51,7 +52,8 @@ async function buildEphemeralPlatform(callerName: string): Promise<{ call: Platf
 register({
   name: 'author_ephemeral_tool',
   description:
-    'Author and run a one-shot tool for this turn only. Use when no existing tool fits and the task needs data fetching / transformation before rendering. Handler receives (args, fetch, platform) where platform.call invokes any registered tool (e.g. render_chart). Return an ArtifactToolData envelope `{ artifact, summary }` for multimedia responses.',
+    'Create a new tool, capability or integration and run it immediately — the FAST way to add something the platform cannot yet do. Write the handler, call it once here to prove it works, then keep it with `promote_ephemeral_tool`: live in minutes, no build, no pull request, no deploy. Prefer this over `request_change` for anything shaped like "add a tool" or "give yourself the ability to…"; a change request costs 30-60 minutes and is only needed when the work must live in the repo. ' +
+    'Handler receives (args, fetch, platform). `platform.call(name, args)` invokes any registered tool, which is how a handler reaches authenticated services without ever seeing a credential — including `node_call` for capabilities that exist as canvas nodes. Return an ArtifactToolData envelope `{ artifact, summary }` for multimedia responses.',
   toolset: 'custom-tools',
   category: 'Visualise',
   parameters: {
@@ -118,6 +120,10 @@ register({
         parameters,
         proposedName: name,
         proposedDescription: description,
+        // Kept so promotion can re-run the arguments this tool has actually
+        // been seen to work on, rather than take the one successful call on
+        // trust. Without it there is no smoke case to hold a promotion to.
+        callArgs,
       },
     };
     return { success: true, data: enrichedData };
@@ -131,6 +137,7 @@ type EphemeralSidecar = {
   parameters: JSONSchema;
   proposedName?: string;
   proposedDescription?: string;
+  callArgs?: Record<string, unknown>;
 };
 
 type StoredToolStep = {
@@ -144,7 +151,7 @@ type StoredToolStep = {
 register({
   name: 'promote_ephemeral_tool',
   description:
-    'Persist a previously-run ephemeral tool into the reusable custom tools registry. Use only after an ephemeral tool has run successfully in this conversation.',
+    'Keep a tool authored by `author_ephemeral_tool`, making it a permanent, reusable capability available in every future conversation — no build, no deploy, no restart. Use it as soon as a one-shot tool proves useful; this is how the platform adds capabilities to itself. The handler is re-checked and re-run against the arguments it was proved on before it is stored, so a tool that cannot repeat itself is refused.',
   toolset: 'custom-tools',
   category: 'Visualise',
   parameters: {
@@ -155,10 +162,25 @@ register({
       name: { type: 'string', description: 'Override name. Defaults to sidecar.proposedName.' },
       description: { type: 'string', description: 'Override description. Defaults to sidecar.proposedDescription.' },
       toolset: { type: 'string', description: 'Optional toolset. Defaults to "custom-tools".' },
+      smokeCases: {
+        type: 'array',
+        items: { type: 'object' },
+        description:
+          'Optional extra argument sets to verify against, beyond the run being promoted. EVERY case must ' +
+          'succeed or the promotion is refused. Supply 1-2 covering the edges you care about — this is the ' +
+          'only check standing between the handler and the live registry.',
+      },
     },
     required: ['messageId', 'toolCallId'],
   },
-  handler: async (args): Promise<ToolResult> => {
+  handler: (args) => handlePromoteEphemeralTool(args),
+});
+
+/**
+ * Exported so the gate can be tested directly. Registration above is a thin
+ * wrapper; everything that decides whether code reaches the registry is here.
+ */
+export async function handlePromoteEphemeralTool(args: Record<string, unknown>): Promise<ToolResult> {
     const messageId = args.messageId as string;
     const toolCallId = args.toolCallId as string;
     const nameOverride = args.name as string | undefined;
@@ -189,6 +211,70 @@ register({
     const finalDesc = descOverride ?? sidecar.proposedDescription;
     if (!finalName) return { success: false, error: 'no name available (no override, no sidecar.proposedName)' };
     if (!finalDesc) return { success: false, error: 'no description available (no override, no sidecar.proposedDescription)' };
+
+    // ---- The gate ----------------------------------------------------------
+    //
+    // Promotion writes LLM-authored JavaScript into the registry, enabled, live,
+    // and persistent across restarts. Until 2026-08-11 it did that with no
+    // checks at all, while the unattended nightly toolsmith — which authors the
+    // same kind of code with no human anywhere near it — had to clear
+    // staticScan AND a multi-case smoke test first.
+    //
+    // That asymmetry was the wrong way round. The interactive path is the one
+    // reachable from text the model did not write: an email it summarised, a
+    // page it scraped, a search result it read. CLAUDE.md calls staticScan
+    // "the only thing between an LLM-authored string and the environment"; it
+    // simply was not on this road. One standard now, deliberately the stricter
+    // one.
+    const scan = staticScan(sidecar.handlerCode);
+    if (!scan.ok) {
+      return {
+        success: false,
+        error:
+          `Refusing to promote "${finalName}" — the handler uses constructs that are never allowed ` +
+          `in a stored tool: ${scan.violations.join('; ')}. Rewrite it using fetch and platform.call only.`,
+      };
+    }
+
+    // The arguments it has actually been seen to work on, plus anything the
+    // caller wants to pin. Every case must pass, as it must for the nightly.
+    const extraCases = Array.isArray(args.smokeCases)
+      ? (args.smokeCases as unknown[]).filter(
+          (c): c is Record<string, unknown> => !!c && typeof c === 'object' && !Array.isArray(c),
+        )
+      : [];
+    const cases: SmokeCase[] = [
+      ...(sidecar.callArgs ? [{ args: sidecar.callArgs, label: 'the run that was promoted' }] : []),
+      ...extraCases.map((c, i) => ({ args: c, label: `supplied case ${i + 1}` })),
+    ];
+    if (cases.length === 0) {
+      return {
+        success: false,
+        error:
+          `Refusing to promote "${finalName}" — no arguments to verify it with. This tool ran before ` +
+          `callArgs were recorded on the sidecar; re-run it with author_ephemeral_tool, or pass ` +
+          `\`smokeCases\` (2-3 sets of real arguments) to promote it directly.`,
+      };
+    }
+
+    const platformForSmoke = await buildEphemeralPlatform(finalName);
+    const smoke = await smokeTest(cases, async (caseArgs) => {
+      try {
+        return await compileHandler(sidecar.handlerCode)(caseArgs, globalThis.fetch, platformForSmoke);
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+    if (!smoke.ok) {
+      return {
+        success: false,
+        error:
+          `Refusing to promote "${finalName}" — it did not survive re-running its own arguments: ` +
+          `${smoke.failureSummary ?? 'a smoke case failed'}. A tool that cannot repeat itself once is ` +
+          `not one to leave in the registry.`,
+      };
+    }
+    // ---- end gate ----------------------------------------------------------
 
     // Name collision check
     const existing = await db
@@ -226,5 +312,4 @@ register({
       success: true,
       data: { name: finalName, description: finalDesc, toolset: toolsetName },
     };
-  },
-});
+}

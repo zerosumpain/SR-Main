@@ -65,7 +65,9 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     'schedule, home-assistant, render, document, image, audio, system ' +
     'domains). Use this when you need a capability beyond the essential ' +
     'tools you can see directly. Workflow: operation="list" to discover ' +
-    '(optionally with a substring "query" filter, or compact=true for a cheap ' +
+    '(optionally with a "query" — plain words work, e.g. "add a tool" or ' +
+    '"read my calendar"; results are ranked by how well they match — or ' +
+    'compact=true for a cheap ' +
     'name+truncated-description catalogue survey), operation="schema" with ' +
     '"name" (or "names" to batch several schemas in one call) to fetch the ' +
     'exact argument schema, then operation="invoke" with "name" and ' +
@@ -84,7 +86,7 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
       query: {
         type: 'string',
         description:
-          'For operation="list" only. Optional case-insensitive substring filter on tool name or description. Combine with compact=true for a lean filtered survey.',
+          'For operation="list" only. Words describing the capability you want — a phrase is fine ("add a tool", "fix a broken tool", "read the calendar"). Matches on tool name and description and returns the best matches first. Combine with compact=true for a lean filtered survey.',
       },
       name: {
         type: 'string',
@@ -114,6 +116,56 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
 };
 
 const MAX_COMPACT_DESC = 120;
+
+/** Words too common in tool prose to narrow anything. */
+const STOPWORDS = new Set(['a', 'an', 'the', 'to', 'for', 'of', 'and', 'or', 'in', 'on', 'my', 'me', 'new', 'use']);
+
+/**
+ * Rank the catalogue against a query.
+ *
+ * This was a single `includes(query)` over name and description, which is a
+ * fine answer to "calendar" and a useless one to anything a person would
+ * actually type. Measured against production on 2026-08-11:
+ *
+ *   "calendar"        → 2 hits
+ *   "create tool"     → 0
+ *   "add a tool"      → 0
+ *   "new capability"  → 0
+ *
+ * Three words, nothing. A model looking for a way to add a capability found
+ * nothing and fell back to what it already knew, which is a large part of why
+ * a tool request became a 50-minute repo build. The exact-phrase match is kept
+ * as the top rank — it is the best signal when it fires — and everything below
+ * it is ordinary word overlap, so a multi-word query degrades to "the tools
+ * mentioning the most of these words" instead of to silence.
+ */
+export function searchTools<T extends { name: string; description?: string }>(
+  tools: readonly T[],
+  query: string,
+): T[] {
+  const q = query.toLowerCase().trim();
+  if (!q) return [...tools];
+  const words = q.split(/[^a-z0-9_]+/).filter((w) => w.length > 1 && !STOPWORDS.has(w));
+  const scored = tools
+    .map((t) => {
+      const name = t.name.toLowerCase();
+      const desc = (t.description ?? '').toLowerCase();
+      const haystack = `${name} ${desc}`;
+      let score = 0;
+      // Whole query as a phrase — the old behaviour, now the strongest signal.
+      if (name.includes(q)) score += 100;
+      else if (desc.includes(q)) score += 50;
+      // Then per-word overlap, weighted towards the name.
+      for (const w of words) {
+        if (name.includes(w)) score += 10;
+        else if (haystack.includes(w)) score += 3;
+      }
+      return { t, score };
+    })
+    .filter((s) => s.score > 0);
+  scored.sort((a, b) => b.score - a.score || a.t.name.localeCompare(b.t.name));
+  return scored.map((s) => s.t);
+}
 
 function truncateDescription(desc: string): string {
   return desc.length > MAX_COMPACT_DESC
@@ -164,15 +216,7 @@ export async function dispatchMetaTool(
   const extended = getExtendedTools(policy);
 
   if (operation === 'list') {
-    const filtered = query
-      ? extended.filter((t) => {
-          const q = query.toLowerCase();
-          return (
-            t.name.toLowerCase().includes(q) ||
-            (t.description ?? '').toLowerCase().includes(q)
-          );
-        })
-      : extended;
+    const filtered = query ? searchTools(extended, query) : extended;
     if (compact) {
       return filtered.map((t) => ({
         name: t.name,

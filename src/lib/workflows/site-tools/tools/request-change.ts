@@ -23,7 +23,18 @@ register({
   name: 'request_change',
   destructive: true,
   description:
-    "Request a code change to the Strange Ramblings site itself (new page, route, component, API endpoint, workflow node, bug fix). Opens a GitHub issue recording the request, then starts an autonomous build that branches, implements it, runs `npm run gate`, and opens a pull request closing the issue. Use this whenever the ask needs REAL CODE in the site's repo. Do NOT use it for a one-off report, analysis or static page — that is `publish_page`, which is instant and needs no build. The build never merges its own work: additive changes can auto-merge after the gate passes, and anything touching auth, the database schema, deploy scripts or CI is flagged for human review.",
+    "Request a code change to the Strange Ramblings site itself (new page, route, component, API endpoint, workflow node, bug fix). Opens a GitHub issue recording the request, then starts an autonomous build that branches, implements it, runs `npm run gate`, and opens a pull request closing the issue. " +
+    // The routing ladder lives here because this is the tool a request for a
+    // new capability lands on, and it used to be the only one that said
+    // anything about scope. Asked for Apple Calendar as a callable tool on
+    // 2026-08-11, chat came straight here: the work took 16 minutes and the
+    // build took 52 and shipped nothing, while the capability already existed
+    // as a node and the cheap lanes were never considered.
+    'THIS IS THE SLOWEST PATH — a build, a review and a deploy, typically 30-60 minutes. Try these first, in order: ' +
+    '(1) if the ask is a NEW TOOL or capability rather than a change to the site, use `author_ephemeral_tool` to write and run it, then `promote_ephemeral_tool` to keep it — that is live in minutes, with no build and no deploy; ' +
+    '(2) if the capability already exists as a canvas node, `node_call` runs it directly — call `workflow_list_node_types` to check; ' +
+    '(3) if a stored tool is merely broken, `update_tool` repairs it in place. ' +
+    "Come here when the ask genuinely needs code in the repo — a page, a route, a component, a schema change, a new node type — or when a tool needs credentials or imports a sandboxed handler cannot reach. Do NOT use it for a one-off report, analysis or static page — that is `publish_page`, which is instant and needs no build. The build never merges its own work: additive changes can auto-merge after the gate passes, and anything touching auth, the database schema, deploy scripts or CI is flagged for human review.",
   toolset: 'builds',
   category: 'builds',
   parameters: {
