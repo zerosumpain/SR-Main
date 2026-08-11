@@ -14,6 +14,11 @@ import {
   type GitTargetConfig,
 } from './sandbox';
 import { manageServeConfig } from './serve-manager';
+import {
+  isTransientProviderFailure,
+  transientBackoffMs,
+  MAX_CONSECUTIVE_TRANSIENT,
+} from './transient-failure';
 import { failOrphanedIterations } from './orchestrator-helpers';
 import { executeIteration } from './executor';
 import { runTests } from './test-runner';
@@ -991,8 +996,15 @@ class Orchestrator {
       // consecutive_failures made the second one abort the build, which is how
       // change request #159 died with two capped iterations and a draft PR of
       // rescued work nobody was told about.
+      // A transient upstream failure is the provider saying "not now", not the
+      // build being wrong — so it must not count towards the consecutive-failure
+      // abort, exactly as wall-clock and token-cap stops already do not.
+      const transient = isTransientProviderFailure(failure);
       const counts =
-        failure && failure.kind !== 'wall_clock_timeout' && failure.kind !== 'iteration_token_cap';
+        failure &&
+        failure.kind !== 'wall_clock_timeout' &&
+        failure.kind !== 'iteration_token_cap' &&
+        !transient;
       const newConsecutiveFailures = counts ? build.consecutiveFailures + 1 : failure ? build.consecutiveFailures : 0;
       await db
         .update(jkaiBuilds)
@@ -1025,13 +1037,45 @@ class Orchestrator {
           failure.kind === 'wall_clock_timeout' ||
           // Same shape as the wall clock: a budget stop, not a fault. The work
           // is in dev/ and the next iteration picks it up.
-          failure.kind === 'iteration_token_cap';
+          failure.kind === 'iteration_token_cap' ||
+          // 6. A transient upstream failure — the provider is overloaded, rate
+          //    limiting, or briefly 5xx-ing. Work is preserved in dev/ and the
+          //    condition resolves itself; retry after a backoff instead of
+          //    throwing the build away.
+          transient;
         const shouldAbort = !canContinue || newConsecutiveFailures >= 2;
 
         if (shouldAbort) {
           await this.abortBuild(buildId, failure);
           return;
         }
+
+        if (transient) {
+          // Separate counter from newConsecutiveFailures, which transient
+          // failures deliberately do not increment: without its own ceiling a
+          // provider that is genuinely down would retry until the budget caps
+          // ran out, which is a slow and confusing way to fail.
+          this.consecutiveTransient = (this.consecutiveTransient ?? 0) + 1;
+          if (this.consecutiveTransient >= MAX_CONSECUTIVE_TRANSIENT) {
+            await emitLog(
+              buildId,
+              'error',
+              `The model provider has failed ${this.consecutiveTransient} times in a row (last: ${failure.message}). Giving up — this is an upstream outage, not a problem with the build. The work so far is preserved; resume once the provider recovers.`,
+            );
+            await this.abortBuild(buildId, failure);
+            return;
+          }
+          const waitMs = transientBackoffMs(this.consecutiveTransient);
+          await emitLog(
+            buildId,
+            'system',
+            `Iteration #${iterationNumber} hit a transient provider failure (${failure.message?.slice(0, 120)}). This is the upstream saying "not now", not a fault in the build — retrying in ${Math.round(waitMs / 1000)}s. Attempt ${this.consecutiveTransient} of ${MAX_CONSECUTIVE_TRANSIENT}.`,
+          );
+          this.scheduleNext(buildId, waitMs);
+          return;
+        }
+        // Any non-transient continue resets the streak.
+        this.consecutiveTransient = 0;
 
         const continueMsg = failure.kind === 'wall_clock_timeout'
           ? `Iteration #${iterationNumber} hit the wall-clock cap while still working — partial work preserved in dev/. Continuing with iteration #${iterationNumber + 1}.`
@@ -1562,6 +1606,8 @@ class Orchestrator {
 
   /** Consecutive iterations that changed no files — see the idle breaker. */
   private consecutiveIdleIterations = 0;
+  /** Consecutive transient provider failures; see ./transient-failure. */
+  private consecutiveTransient = 0;
 
   private async abortBuild(buildId: string, failure: FailureEnvelope): Promise<void> {
     await db
