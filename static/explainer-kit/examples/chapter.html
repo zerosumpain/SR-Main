@@ -78,6 +78,9 @@
       { n: 4, title: 'What happens when it changes' },
     ],
     current: 3,
+    // The form comes from the spine's Form column. It changes the
+    // arrangement — see api.md for the seven and what each creates.
+    form: 'walk',
     kicker: 'the formula',
     lede: 'Four streams arrive by different routes. Only one of them follows the pupil.',
   });
@@ -112,10 +115,14 @@
     // createSim builds its own controls and readout inside `mount` — do not
     // pass it the instrument's control slot.
     mount: model.body,
-    levers: [{ id: 'roll', label: 'Pupils on roll', min: 100, max: 1200, value: 400, step: 10 }],
+    // `slider` because pupils on roll is a genuine continuous quantity. For a
+    // SET of things — which source, which year, which claim — use
+    // kind: 'choice' with an options array. That is the default, and a slider
+    // for six named topics is a category dressed up as a number.
+    levers: [{ id: 'roll', label: 'Pupils on roll', kind: 'slider', min: 100, max: 1200, value: 400, step: 10 }],
     outcomes: [{ id: 'total', label: 'Total funding' }],
     // `step`, NOT `compute`. Takes the current lever values, returns an object
-    // keyed by outcome id.
+    // keyed by outcome id. A string outcome is fine — it renders as written.
     step: ({ roll }) => ({ total: roll * 4200 }),
   });
 </script>

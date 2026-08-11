@@ -102,17 +102,34 @@ Format your response as:
 
 ## Chapter Plan
 
-| # | Chapter | Lever id | Outcome id |
-|---|---------|----------|------------|
-| 1 | ... | ... | ... |
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | ... | ... | ... | ... | ... |
 
 (one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
+
+FORM IS YOUR EDITORIAL DECISION — how this chapter is TOLD, not what it is about. Pick per chapter:
+- open — the visual runs full width above the words. For a chapter whose picture IS the argument.
+- question — the title is a question; evidence; then a bounded answer.
+- walk — numbered movements, one beat each. For a process or a sequence.
+- compare — two columns, this against that.
+- annotate — one artefact held wide, with reading notes beside it.
+- ledger — a list of items, each with its own small visual.
+- close — what is established and what is not. For ending.
+
+CONTROL is what the reader touches:
+- choice — segmented buttons, one per option. THE DEFAULT. Use it whenever the parameter is a SET of things: which source, which year, which claim.
+- toggle — one button, on or off. For a single assumption being held or dropped.
+- step — previous/next through an ordered sequence. For a process the reader walks.
+- slider — a continuous range. ONLY for a genuine quantity: money, people, a rate. A slider for "which of six topics" is a category dressed as a number, and it reads as one.
+
+VARY BOTH. A build where every chapter has the same form and the same control is a worse artefact than the same content arranged with judgement, and the gate now says so. Across the whole plan use at least three different forms and at least two different controls, and never the same form twice in a row. Choose each from what the chapter is doing — do not rotate through the list mechanically.
 
 ## Chapter Detail
 
 ### Chapter 1: [title]
 - Idea: [the single thing this chapter teaches]
-- Visual: [createScene | createDiagram | createSim | createChart, and what it shows]
+- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for a composition, createIconArray for a proportion, createComparison for before/after, createTimeline for events, createDiagram for a mechanism, createScene for a quantity across a set]
 - Manipulate: [what the reader changes]
 - Consequence: [what visibly moves, and why that is the lesson]
 - Grounded in: [which numbered FACTS from the brief]
@@ -170,17 +187,34 @@ Start with a ## Changes Made section listing each marker you received and what y
 
 ## Chapter Plan
 
-| # | Chapter | Lever id | Outcome id |
-|---|---------|----------|------------|
-| 1 | ... | ... | ... |
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | ... | ... | ... | ... | ... |
 
 (one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
+
+FORM IS YOUR EDITORIAL DECISION — how this chapter is TOLD, not what it is about. Pick per chapter:
+- open — the visual runs full width above the words. For a chapter whose picture IS the argument.
+- question — the title is a question; evidence; then a bounded answer.
+- walk — numbered movements, one beat each. For a process or a sequence.
+- compare — two columns, this against that.
+- annotate — one artefact held wide, with reading notes beside it.
+- ledger — a list of items, each with its own small visual.
+- close — what is established and what is not. For ending.
+
+CONTROL is what the reader touches:
+- choice — segmented buttons, one per option. THE DEFAULT. Use it whenever the parameter is a SET of things: which source, which year, which claim.
+- toggle — one button, on or off. For a single assumption being held or dropped.
+- step — previous/next through an ordered sequence. For a process the reader walks.
+- slider — a continuous range. ONLY for a genuine quantity: money, people, a rate. A slider for "which of six topics" is a category dressed as a number, and it reads as one.
+
+VARY BOTH. A build where every chapter has the same form and the same control is a worse artefact than the same content arranged with judgement, and the gate now says so. Across the whole plan use at least three different forms and at least two different controls, and never the same form twice in a row. Choose each from what the chapter is doing — do not rotate through the list mechanically.
 
 ## Chapter Detail
 
 ### Chapter 1: [title]
 - Idea: [the single thing this chapter teaches]
-- Visual: [createScene | createDiagram | createSim | createChart, and what it shows]
+- Visual: [the kit factory and what it shows — createSteps for a process, createStackBar for a composition, createIconArray for a proportion, createComparison for before/after, createTimeline for events, createDiagram for a mechanism, createScene for a quantity across a set]
 - Manipulate: [what the reader changes]
 - Consequence: [what visibly moves, and why that is the lesson]
 - Grounded in: [which numbered FACTS from the brief]
@@ -190,7 +224,7 @@ Start with a ## Changes Made section listing each marker you received and what y
 ## Risks & Mitigations
 (2-3 real risks)
 
-THE ## Chapter Plan TABLE IS MANDATORY, AND IT IS MACHINE-READ. It becomes this build's chapter spine, and an automated post-iteration gate drives exactly the lever id and outcome id you write in each row. Emit it with those four columns, in that order, one row per chapter, and one "### Chapter N: [title]" heading under ## Chapter Detail for every row. Do NOT emit "## UI Design" or "## Iteration Plan" — those belong to a different kind of build, and replacing the table with them leaves this build with no spine and no gate at all.
+THE ## Chapter Plan TABLE IS MANDATORY, AND IT IS MACHINE-READ. It becomes this build's chapter spine, and an automated post-iteration gate drives exactly the lever id and outcome id you write in each row. Emit it with those six columns, in that order, one row per chapter, and one "### Chapter N: [title]" heading under ## Chapter Detail for every row. Do NOT emit "## UI Design" or "## Iteration Plan" — those belong to a different kind of build, and replacing the table with them leaves this build with no spine and no gate at all.
 
 Be specific — name exact APIs with endpoint URLs, exact datasets from the brief's LIVE DATA section, exact file structure for Iteration 1.`;
   }
@@ -249,7 +283,35 @@ function extractChapterPlanSection(planMarkdown: string): string {
  * spine came out short.
  */
 /**
- * Reduce a plan-table id to something an agent can write and a gate can find.
+ * The editorial shapes a chapter can take, and the kinds of control it can
+ * offer. Kept here because the planner is what produces them; shell.js holds
+ * the browser-side twin and explainer-kit.test.ts pins the two together.
+ *
+ * These exist because the plan had no word for HOW a chapter is told. Every
+ * chapter of every build came out as `article > h2 > h2`, seven times over,
+ * and every lever was a range slider — including for "which of six topics".
+ * A vocabulary with no term for variety produces none.
+ */
+export const CHAPTER_FORMS = ['open', 'question', 'walk', 'compare', 'annotate', 'ledger', 'close'] as const;
+export const CONTROL_KINDS = ['choice', 'toggle', 'step', 'slider'] as const;
+
+export type ChapterForm = (typeof CHAPTER_FORMS)[number];
+export type ControlKind = (typeof CONTROL_KINDS)[number];
+
+/**
+ * Coerce a plan cell to a known form/control, or null.
+ *
+ * Null means "the model wrote something we do not have", which the caller
+ * turns into a default rather than a rejected row: a chapter with an odd form
+ * name is still a chapter, and losing it would cost more than the variety.
+ */
+export function normaliseVocab<T extends string>(raw: string, allowed: readonly T[]): T | null {
+  const v = raw.toLowerCase().replace(/[`*'"]/g, '').trim();
+  return (allowed as readonly string[]).includes(v) ? (v as T) : null;
+}
+
+/**
+ * Reduce a plan-table id to something an agent can find and a gate can drive.
  *
  * The gate builds an attribute selector from this value, so anything that
  * cannot appear unescaped in `[data-lever="..."]` has to go. Returns null when
@@ -269,12 +331,21 @@ export function normaliseSpineId(raw: string): string | null {
   return /^[a-z][a-z0-9_-]{0,63}$/.test(id) ? id : null;
 }
 
+export interface ChapterSpineRow {
+  n: number;
+  title: string;
+  form: ChapterForm;
+  control: ControlKind;
+  leverId: string;
+  outcomeId: string;
+}
+
 export function parseChapterPlan(
   planMarkdown: string,
   stats?: { rejected: number },
-): Array<{ n: number; title: string; leverId: string; outcomeId: string }> {
+): ChapterSpineRow[] {
   if (stats) stats.rejected = 0;
-  const out: Array<{ n: number; title: string; leverId: string; outcomeId: string }> = [];
+  const out: ChapterSpineRow[] = [];
   for (const line of extractChapterPlanSection(planMarkdown).split('\n')) {
     if (!line.trim().startsWith('|')) continue;
     // Strip inline markdown emphasis before parsing: a model emitting
@@ -301,12 +372,29 @@ export function parseChapterPlan(
     // row ("---...") — both structural and present in every well-formed
     // table — so this is not counted as a rejected chapter.
     if (!Number.isFinite(n)) continue;
-    const [, , title, rawLeverId, rawOutcomeId] = cells;
+    // Two table shapes are accepted. The six-column one is current:
+    //   | # | Chapter | Form | Control | Lever id | Outcome id |
+    // The four-column one predates chapter forms and is still parsed, so a
+    // plan written by an older prompt — or a model that drops the two new
+    // columns — yields a working spine instead of nothing.
+    const wide = cells.length >= 8;
+    const title = cells[2];
+    const rawForm = wide ? cells[3] : '';
+    const rawControl = wide ? cells[4] : '';
+    const rawLeverId = wide ? cells[5] : cells[3];
+    const rawOutcomeId = wide ? cells[6] : cells[4];
+
     if (/^-+$/.test(title)) continue; // defensive: a divider row whose number cell happened to parse
     if (!title || !rawLeverId || !rawOutcomeId) {
       if (stats) stats.rejected++;
       continue;
     }
+    // An unrecognised form is defaulted, never rejected. `question` is the
+    // plainest shape; `choice` is the default control because the house style
+    // this copies uses buttons over sliders 43 to 10, and a slider is only
+    // honest for a continuous quantity.
+    const form = normaliseVocab(rawForm, CHAPTER_FORMS) ?? 'question';
+    const control = normaliseVocab(rawControl, CONTROL_KINDS) ?? 'choice';
     // An id has to survive the round trip into an HTML attribute selector, so
     // normalise to the same shape the gate will look for. Anything left
     // unusable is a rejected row rather than a silent time bomb: the spine
@@ -318,7 +406,7 @@ export function parseChapterPlan(
       if (stats) stats.rejected++;
       continue;
     }
-    out.push({ n, title, leverId, outcomeId });
+    out.push({ n, title, form, control, leverId, outcomeId });
   }
   return out;
 }

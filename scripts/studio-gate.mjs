@@ -86,6 +86,27 @@ export function injectBaseHref(html, projectRoot) {
     : `<base href="${projectRoot}">${html}`;
 }
 
+/**
+ * What kind of control is this chapter's lever?
+ *
+ * Read from the DOM, so a spine that claims `choice` and ships a slider is
+ * reported as a slider. Returns null when the lever is missing — the
+ * `no-model` rule already covers that and this must not double-report it.
+ */
+async function lever0Kind(root, leverId) {
+  const el = root.locator(`[data-lever="${leverId}"]`).first();
+  if ((await el.count().catch(() => 0)) === 0) return null;
+  return el.evaluate((n) => {
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'input') return (n.getAttribute('type') || 'text').toLowerCase();
+    if (tag === 'select') return 'select';
+    if (n.getAttribute('role') === 'radiogroup') return 'choice';
+    if (n.hasAttribute('aria-pressed')) return 'toggle';
+    if (n.querySelector('button')) return 'buttons';
+    return tag;
+  }).catch(() => null);
+}
+
 async function serveLikeAHuman(page, baseUrl) {
   const projectRoot = new URL('/', baseUrl).toString();
   await page.route('**/*', async (route) => {
@@ -151,6 +172,12 @@ async function main() {
   let linksChecked = false;
   let designChecked = false;
   let sceneCount = 0;
+  // Editorial variety. Every chapter of every build used to come out
+  // structurally identical — seven chapters, seven times `article > h2 > h2` —
+  // and every lever was a range slider, including for "which of six topics".
+  // Nothing checked for it, so nothing stopped it.
+  const formsSeen = [];
+  const controlsSeen = [];
 
   // Check 0: the explainer kit actually mounted. Chapter 0 because this is a
   // project-level fact, not any one chapter's. A failed kit sync logs an
@@ -294,6 +321,16 @@ async function main() {
 
         const visuals = await root.locator('canvas[data-scene], svg').count();
         sceneCount += await root.locator('canvas[data-scene]').count();
+
+        // What shape is this chapter, and what does the reader touch? Read
+        // from the DOM rather than the plan, because the plan is a statement
+        // of intent and this is what actually shipped.
+        formsSeen.push(
+          (await page.locator('[data-form]').first().getAttribute('data-form').catch(() => null)) ?? 'none',
+        );
+        controlsSeen.push(
+          await lever0Kind(root, ch.leverId),
+        );
         if (visuals === 0) {
           findings.push({
             chapter: ch.n, rule: 'prose-only',
@@ -354,7 +391,19 @@ async function main() {
             } else if (tagName === 'input' && (inputType === 'range' || inputType === 'number')) {
               await lever.fill(String(val)).catch(async () => { await lever.click().catch(() => {}); });
             } else {
-              await lever.click().catch(() => {});
+              // A segmented control, a stepper or a toggle carries data-lever
+              // on the GROUP. Clicking the group hits whatever is under its
+              // centre — often the option already selected, which changes
+              // nothing and reads as an inert lever. Prefer a descendant
+              // button that is not currently chosen and is not disabled.
+              const notChosen = lever.locator(
+                'button:not([aria-checked="true"]):not([aria-pressed="true"]):not(:disabled)',
+              );
+              if ((await notChosen.count().catch(() => 0)) > 0) {
+                await notChosen.first().click({ timeout: 2000 }).catch(() => {});
+              } else {
+                await lever.click().catch(() => {});
+              }
             }
             // A hand-rolled control may listen for 'change' rather than
             // 'input' — dispatch both rather than assume which.
@@ -514,6 +563,27 @@ async function main() {
         message: `All ${chapters.length} chapters use flat diagrams or charts — not one uses the low-poly scene.`,
         remedy: `Give at least one chapter an Explainer.createScene tile grid. It suits any quantity that varies across a SET, not just geography — one tile per source, claim, year or category, height for magnitude and colour for a second variable. See ./explainer-kit/scenes.md.`,
       });
+    }
+    // Only judge variety once the build has actually delivered enough
+    // chapters for sameness to be a choice rather than a coincidence.
+    const delivered = formsSeen.length;
+    if (delivered >= 4 && dueBy >= chapters.length) {
+      const distinctForms = new Set(formsSeen.filter((f) => f && f !== 'none')).size;
+      if (distinctForms <= 1) {
+        findings.push({
+          chapter: 0, rule: 'same-form',
+          message: `All ${delivered} chapters are told in the same shape (${formsSeen[0]}) — the explainer has no editorial flow.`,
+          remedy: `Vary the Form column in the chapter spine and pass it to Explainer.mountShell({ form }). Use at least three of: open, question, walk, compare, annotate, ledger, close — chosen from what each chapter is doing, never the same one twice in a row.`,
+        });
+      }
+      const distinctControls = new Set(controlsSeen.filter(Boolean)).size;
+      if (distinctControls <= 1 && controlsSeen[0]) {
+        findings.push({
+          chapter: 0, rule: 'same-control',
+          message: `Every chapter's lever is the same kind of control (${controlsSeen[0]}) — the reader does the same thing ${delivered} times.`,
+          remedy: `Pass a "kind" to each createSim lever. Use choice (segmented buttons) whenever the parameter is a SET of things, toggle for a single assumption, step to walk a sequence, and slider ONLY for a continuous quantity like money or people.`,
+        });
+      }
     }
     out = { ran: true, passed: findings.length === 0, findings, notYetDue };
   } catch (e) {

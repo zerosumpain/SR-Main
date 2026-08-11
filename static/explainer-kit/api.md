@@ -39,8 +39,30 @@ inside automatically.
 | `project` | string | yes | Title shown in the header, links to `./` |
 | `chapters` | `{n, title}[]` | yes | Every chapter, in order. Drives the nav. |
 | `current` | number | yes | This chapter's `n`. Use `0` for the contents page. |
+| `form` | string | yes | How this chapter is told — see below. Comes from the spine's Form column. |
 | `kicker` | string | no | Short label above the title |
 | `lede` | string | no | One sentence framing the chapter |
+
+**The forms.** Each changes the arrangement, and some create a container for
+you to mount into:
+
+| form | what it does | mount point it creates |
+|---|---|---|
+| `open` | visual runs full width above the words | `#ex-stage` |
+| `question` | the title is asked; evidence; a bounded answer | — |
+| `walk` | numbered movements, one beat per `<h2>` | — |
+| `compare` | two columns, this against that | `#ex-left`, `#ex-right` |
+| `annotate` | one artefact held wide, notes beside it | `#ex-aside` |
+| `ledger` | a list of items, each with its own small visual | `#ex-ledger` |
+| `close` | tighter measure; an accounting, not an essay | — |
+
+The containers are created by the shell rather than described here, because an
+arrangement that depends on you writing the right wrapper is an arrangement
+that will not happen.
+
+### `Explainer.addLedgerEntry({title, note}) → HTMLElement`
+
+Adds a row to a `ledger` chapter and returns the slot for its visual.
 
 ### `Explainer.mountContents(spec) → HTMLElement`
 
@@ -166,10 +188,32 @@ an `<input>` by hand.
 | `outcomes` | `{id, label, unit?, format?}[]` | readouts carrying `data-outcome="<id>"` |
 | `step` | `(values) => outcomes` | **`step`, not `compute`.** Takes lever values keyed by id, returns an object keyed by outcome id. May be async. |
 
+**Control kinds.** `kind` decides the shape of the control:
+
+| kind | when | shape |
+|---|---|---|
+| `choice` | **the default** — the parameter is a SET: which source, which year, which claim | segmented buttons |
+| `toggle` | a single assumption held or dropped | one button |
+| `step` | walking an ordered sequence | previous / next |
+| `slider` | **only** a continuous quantity: money, people, a rate | range input |
+
+A slider for "which of six topics" is a category dressed up as a number, and it
+reads as one. The house style this kit copies uses buttons over sliders 43 to 10.
+
 ```js
+// choice — options as strings, numbers, or {value,label}
 Explainer.createSim({
   mount: inst.body,
-  levers: [{ id: 'roll', label: 'Pupils on roll', min: 100, max: 1200, value: 400, step: 10 }],
+  levers: [{ id: 'source', label: 'Which source', kind: 'choice',
+             options: ['Inquiry report', 'Scheme summary', 'Regulations'], value: 'Inquiry report' }],
+  outcomes: [{ id: 'scope', label: 'What it establishes' }],
+  step: ({ source }) => ({ scope: LOOKUP[source] }),
+});
+
+// slider — a real quantity
+Explainer.createSim({
+  mount: inst.body,
+  levers: [{ id: 'roll', label: 'Pupils on roll', kind: 'slider', min: 100, max: 1200, value: 400, step: 10 }],
   outcomes: [{ id: 'total', label: 'Total funding' }],
   step: ({ roll }) => ({ total: roll * 4200 }),
 });

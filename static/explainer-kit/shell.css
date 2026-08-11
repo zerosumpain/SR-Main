@@ -440,3 +440,152 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- chapter forms ------------------------------------------------------
+   Every chapter of every build came out as `article > h2 > h2`, seven times
+   over, because the plan had no word for HOW a chapter is told. These are the
+   arrangements; shell.js picks one from the spine's Form column. They differ
+   in real layout, not just in a class name. */
+
+/* open — the visual runs full width above the words. */
+.ex-form-open .ex-stage {
+  margin: 0 0 1.75rem;
+  min-height: 12rem;
+}
+.ex-form-open .ex-chap-head { margin-bottom: 1.5rem; }
+
+/* question — the title is asked, so it gets the weight of a question. */
+.ex-form-question .ex-h1[data-ask] { max-width: 22ch; }
+.ex-form-question .ex-h1[data-ask]::after { content: ''; }
+
+/* walk — numbered movements, each its own beat. */
+.ex-form-walk h2 {
+  counter-increment: walk;
+  display: grid;
+  grid-template-columns: 2.25rem 1fr;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+.ex-form-walk { counter-reset: walk; }
+.ex-form-walk h2::before {
+  content: counter(walk);
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  color: var(--ex-accent);
+  border-top: 2px solid var(--ex-accent);
+  padding-top: 0.35rem;
+}
+
+/* compare — two columns on a wide screen, stacked on a narrow one. */
+.ex-form-compare .ex-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+  margin: 0 0 1.6rem;
+}
+.ex-form-compare .ex-split > * { min-width: 0; }
+
+/* annotate — the artefact is held wider than the text column, with the
+   reading notes running beside it. */
+.ex-form-annotate,
+.ex-form-open { max-width: 78ch; }
+.ex-form-annotate .ex-inst { margin-inline: -4rem; }
+@media (max-width: 900px) {
+  .ex-form-annotate .ex-inst { margin-inline: 0; }
+}
+.ex-form-annotate .ex-aside {
+  border-left: 2px solid var(--ex-accent-faint);
+  padding-left: 1rem;
+  margin: 0 0 1.4rem;
+  color: var(--ex-ink-soft);
+  font-size: var(--ex-fs-small);
+}
+
+/* ledger — a list of items, each carrying its own small visual. */
+.ex-form-ledger .ex-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 14rem);
+  gap: 1rem 1.5rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--ex-rule-faint);
+  align-items: start;
+}
+.ex-form-ledger .ex-entry:last-child { border-bottom: 1px solid var(--ex-rule-faint); }
+.ex-form-ledger .ex-entry h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+@media (max-width: 700px) {
+  .ex-form-ledger .ex-entry { grid-template-columns: 1fr; }
+}
+
+/* close — tighter measure; this chapter is an accounting, not an essay. */
+.ex-form-close { max-width: 58ch; }
+.ex-form-close h2 {
+  font-size: 1.1rem;
+  border-top: 2px solid var(--ex-accent);
+  padding-top: 0.6rem;
+}
+
+/* ---- control kinds ------------------------------------------------------
+   sim.js hardcoded a range input, so every lever in every chapter was a
+   slider. The house style this kit copies uses buttons over sliders 43 to 10;
+   a slider is only honest for a continuous quantity. */
+
+.ex-seg {
+  display: inline-flex;
+  background: var(--ex-accent-faint);
+  padding: 2px;
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius-round);
+  flex-wrap: wrap;
+}
+.ex-seg-btn {
+  background: transparent;
+  border: none;
+  color: var(--ex-ink);
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--ex-radius-round);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ex-seg-btn:hover { background: var(--ex-accent-soft); }
+.ex-seg-btn[aria-checked='true'] { background: var(--ex-accent); color: var(--ex-surface); font-weight: 500; }
+
+.ex-toggle {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius-round);
+  background: var(--ex-surface);
+  color: var(--ex-ink);
+  cursor: pointer;
+}
+.ex-toggle[aria-pressed='true'] { background: var(--ex-accent); border-color: var(--ex-accent); color: var(--ex-surface); }
+
+.ex-step-ctl { display: inline-flex; align-items: center; gap: 0.5rem; }
+.ex-step-btn {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius-round);
+  background: var(--ex-surface);
+  color: var(--ex-ink);
+  cursor: pointer;
+}
+.ex-step-btn:disabled { opacity: 0.35; cursor: default; }
+.ex-step-now {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-small);
+  color: var(--ex-ink-soft);
+  min-width: 12ch;
+  text-align: center;
+}
+
+/* The containers mountShell creates for compare / ledger / annotate. They are
+   built by the shell rather than described in the prompt: an arrangement that
+   depends on the agent writing the right wrapper is an arrangement that will
+   not happen, which is how seven identical chapters got shipped. */
+.ex-split .ex-side { min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ex-ledger { display: flex; flex-direction: column; }

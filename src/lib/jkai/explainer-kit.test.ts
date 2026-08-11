@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CHAPTER_FORMS, CONTROL_KINDS } from './planner';
 import { readFile } from 'node:fs/promises';
 import { lintDesignSystem } from './design-lint';
 
@@ -114,5 +115,39 @@ describe('explainer kit', () => {
     expect(html).toMatch(/Explainer\.create(Diagram|StackBar|Bars|Chart|Scene|Steps|Cycle|Funnel|Timeline|Tree|Matrix|Venn|IconArray|Gauge|LineBand|Comparison)\(/);
     // The chrome is mounted, not authored — the reason nav stopped 404ing.
     expect(html).toMatch(/Explainer\.mountShell\(/);
+  });
+});
+
+// The form vocabulary exists twice by necessity: planner.ts produces it and
+// shell.js renders it, and a browser script cannot import TypeScript. This
+// repo already has one detector living in three drifting copies; two copies
+// are the minimum here, so pin them together.
+describe('the chapter-form vocabulary does not drift', () => {
+  it('shell.js implements exactly the forms the planner can emit', async () => {
+    const js = await read('shell.js');
+    const declared = /ns\.CHAPTER_FORMS\s*=\s*Object\.keys\(FORMS\)/.test(js);
+    expect(declared).toBe(true);
+    for (const form of CHAPTER_FORMS) {
+      // Each form must be a real key in shell.js's FORMS table, not just a
+      // name in a comment — a form the planner can pick and the shell cannot
+      // render silently falls back to the identical layout this replaced.
+      expect(js).toMatch(new RegExp(`^\\s{4}${form}:\\s*\\{`, 'm'));
+    }
+  });
+
+  it('every form has a stylesheet rule, or it is a layout in name only', async () => {
+    const css = await read('shell.css');
+    for (const form of CHAPTER_FORMS) {
+      expect(css).toContain(`.ex-form-${form}`);
+    }
+  });
+
+  it('sim.js builds every control kind the planner can emit', async () => {
+    const js = await read('sim.js');
+    for (const kind of CONTROL_KINDS) {
+      expect(js).toContain(`'${kind}'`);
+    }
+    // The regression that made this necessary: one hardcoded control type.
+    expect(js).toMatch(/kind === 'slider'/);
   });
 });
