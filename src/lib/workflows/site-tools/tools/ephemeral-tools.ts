@@ -8,6 +8,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { buildHandler } from '../custom-tool-loader';
+import { refuseDestructiveCall } from '../platform-guard';
 import { staticScan, smokeTest, type SmokeCase } from '$lib/selfimprove/verify';
 
 type JSONSchema = { type: 'object'; properties: Record<string, unknown>; required?: string[] };
@@ -36,6 +37,8 @@ async function buildEphemeralPlatform(callerName: string): Promise<{ call: Platf
           error: `ephemeral platform.call depth limit (${MAX_EPHEMERAL_DEPTH}) exceeded while calling "${name}" from "${callerName}".`,
         };
       }
+      const refusal = await refuseDestructiveCall(name, callerName);
+      if (refusal) return refusal;
       const { executeTool } = await import('../registry');
       currentDepth++;
       try {

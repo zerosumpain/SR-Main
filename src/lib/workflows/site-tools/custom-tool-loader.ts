@@ -5,6 +5,7 @@ import { customTools } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { register } from './registry-internal';
 import type { ToolResult } from './registry-internal';
+import { refuseDestructiveCall } from './platform-guard';
 
 // Module-level guard against custom-tool recursion. Depth reflects how deeply
 // nested custom-tool → platform.call → custom-tool chains can go before we
@@ -36,6 +37,8 @@ function buildPlatform(callerName: string): ToolPlatform {
           error: `platform.call depth limit (${MAX_PLATFORM_CALL_DEPTH}) exceeded while calling "${name}" from "${callerName}". Check for tools calling each other in a loop.`,
         };
       }
+      const refusal = await refuseDestructiveCall(name, callerName);
+      if (refusal) return refusal;
       // Lazy import to avoid circular init between registry.ts and this module.
       const { executeTool } = await import('./registry');
       currentDepth++;
