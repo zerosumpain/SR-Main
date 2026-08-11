@@ -71,6 +71,15 @@
           x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 6,
           'text-anchor': 'middle', fill: 'var(--ex-ink-soft)',
           'font-size': '11', 'font-family': 'var(--font-mono)',
+          // Knock the label out of the line it sits on. A weighted edge is up
+          // to 8px thick and the label lands on its midpoint, so without this
+          // the two overlap and neither is readable — seen live on the IBCA
+          // build's first chapter. paint-order draws the halo first, then the
+          // glyphs on top of it.
+          stroke: 'var(--ex-bg)',
+          'stroke-width': '4',
+          'stroke-linejoin': 'round',
+          'paint-order': 'stroke',
         });
         t.textContent = e.label;
         edgeLayer.appendChild(t);

@@ -30,7 +30,12 @@
      against on cream. */
   --ex-accent: #0e5b66;
   --ex-accent-hover: #094850;
-  --ex-accent-soft: rgba(14, 91, 102, 0.12);
+  /* OPAQUE. diagram.js fills its lever nodes with this, and a translucent
+     value lets the edge underneath show straight through the box and its
+     label — which is what happened when this was first written as an rgba.
+     Anything used as a FILL has to be opaque; use --ex-accent-faint for a
+     wash over an existing surface. */
+  --ex-accent-soft: #cfdee0;
   --ex-accent-faint: rgba(14, 91, 102, 0.06);
 
   /* Burnt orange, kept for the one thing on a page that must out-shout the
@@ -88,7 +93,7 @@
 
     --ex-accent: #4ea3b0;
     --ex-accent-hover: #6bbcc8;
-    --ex-accent-soft: rgba(78, 163, 176, 0.18);
+    --ex-accent-soft: #23383c;
     --ex-accent-faint: rgba(78, 163, 176, 0.09);
     --ex-flag: #e8834a;
 

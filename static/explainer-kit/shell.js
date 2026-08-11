@@ -84,9 +84,12 @@
         a.classList.add('is-here');
         a.setAttribute('aria-current', 'page');
       }
-      const no = el('span', 'ex-tab-n', String(c.n));
-      a.appendChild(no);
-      a.appendChild(document.createTextNode(c.title || `Chapter ${c.n}`));
+      a.appendChild(el('span', 'ex-tab-n', String(c.n)));
+      // The title goes in its own span so it can be truncated. text-overflow
+      // does not apply to a flex container, so putting the ellipsis on the tab
+      // itself clipped long chapter names mid-word with no ellipsis at all.
+      a.appendChild(el('span', 'ex-tab-t', c.title || `Chapter ${c.n}`));
+      a.title = c.title || `Chapter ${c.n}`;
       nav.appendChild(a);
     }
     header.appendChild(nav);
