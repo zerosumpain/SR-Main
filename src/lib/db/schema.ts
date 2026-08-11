@@ -720,8 +720,21 @@ export const jkaiBuilds = pgTable('jkai_builds', {
    * an identical shape. This file keeps its own inline copy deliberately, to
    * stay free of app-level ($lib/jkai) imports.
    */
+  // `form` and `control` are the editorial half of the spine: how a chapter is
+  // told and what the reader touches. Optional in the type because rows
+  // written before they existed have neither, and a build mid-flight must keep
+  // parsing. jsonb needs no migration for the added keys.
   chapterPlan: jsonb('chapter_plan')
-    .$type<Array<{ n: number; title: string; leverId: string; outcomeId: string }>>()
+    .$type<
+      Array<{
+        n: number;
+        title: string;
+        form?: string;
+        control?: string;
+        leverId: string;
+        outcomeId: string;
+      }>
+    >()
     .notNull()
     .default(sql`'[]'::jsonb`),
   requireIterationApproval: boolean('require_iteration_approval').notNull().default(false),

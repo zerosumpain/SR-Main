@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   parseChapterPlan,
   normaliseSpineId,
+  normaliseVocab,
+  CHAPTER_FORMS,
+  CONTROL_KINDS,
   buildRevisionInstruction,
   STUDIO_CRITIC_EXTRA,
   STUDIO_PROPOSER_SYSTEM_PROMPT,
@@ -12,14 +15,14 @@ describe('parseChapterPlan', () => {
     const md = `
 ## Chapter Plan
 
-| # | Chapter | Lever id | Outcome id |
-|---|---------|----------|------------|
-| 1 | What a school budget is | roll | total |
-| 2 | Where deprivation money goes | fsm | uplift |
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | What a school budget is | open | choice | roll | total |
+| 2 | Where deprivation money goes | compare | slider | fsm | uplift |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' },
-      { n: 2, title: 'Where deprivation money goes', leverId: 'fsm', outcomeId: 'uplift' },
+      { n: 1, title: 'What a school budget is', form: 'open', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+      { n: 2, title: 'Where deprivation money goes', form: 'compare', control: 'slider', leverId: 'fsm', outcomeId: 'uplift' },
     ]);
   });
 
@@ -39,10 +42,12 @@ describe('parseChapterPlan', () => {
 | 2 | Associations Without Assumptions | \`placeassociation\` | \`associationboundary\` |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'The Record Room', leverId: 'matchclaim', outcomeId: 'claimscope' },
+      { n: 1, title: 'The Record Room', form: 'question', control: 'choice', leverId: 'matchclaim', outcomeId: 'claimscope' },
       {
         n: 2,
         title: 'Associations Without Assumptions',
+        form: 'question',
+        control: 'choice',
         leverId: 'placeassociation',
         outcomeId: 'associationboundary',
       },
@@ -107,7 +112,7 @@ describe('normaliseSpineId', () => {
 | 2 | Data goes stale | Cache refresh | eng |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'What a school budget is', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 
@@ -120,7 +125,7 @@ describe('normaliseSpineId', () => {
 | **1** | **What a school budget is** | roll | total |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'What a school budget is', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 
@@ -166,11 +171,14 @@ describe('round-3 revision instruction', () => {
 
   it('emits a table the real parser can read back', () => {
     // The literal format block in the instruction is what the model copies. If
-    // it ever drifts from the four columns parseChapterPlan expects, the spine
+    // it ever drifts from the six columns parseChapterPlan expects, the spine
     // silently comes back empty — so parse the instruction itself.
-    const filled = studio.replace('| 1 | ... | ... | ... |', '| 1 | What a budget is | roll | total |');
+    const filled = studio.replace(
+      '| 1 | ... | ... | ... | ... | ... |',
+      '| 1 | What a budget is | walk | step | roll | total |',
+    );
     expect(parseChapterPlan(filled)).toEqual([
-      { n: 1, title: 'What a budget is', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'What a budget is', form: 'walk', control: 'step', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 
@@ -183,8 +191,8 @@ describe('round-3 revision instruction', () => {
       '## Chapter Plan',
       '## Chapter Detail',
       '## Risks & Mitigations',
-      '| # | Chapter | Lever id | Outcome id |',
-      '|---|---------|----------|------------|',
+      '| # | Chapter | Form | Control | Lever id | Outcome id |',
+      '|---|---------|------|---------|----------|------------|',
       '### Chapter 1: [title]',
     ]) {
       expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toContain(section);
@@ -233,5 +241,74 @@ describe('studio critic', () => {
   it('adds a sourcing dimension', () => {
     expect(STUDIO_CRITIC_EXTRA).toContain('SOURCING');
     expect(STUDIO_CRITIC_EXTRA).toContain('UNSOURCED:');
+  });
+});
+
+// The plan had no word for HOW a chapter is told, so every chapter of every
+// build came out as `article > h2 > h2` and every lever was a range slider.
+describe('the chapter spine carries editorial decisions', () => {
+  const wide = `
+## Chapter Plan
+
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | The record room | open | choice | source | scope |
+| 2 | How a claim moves | walk | step | stage | status |
+`;
+
+  it('reads form and control from the six-column table', () => {
+    expect(parseChapterPlan(wide)).toEqual([
+      { n: 1, title: 'The record room', form: 'open', control: 'choice', leverId: 'source', outcomeId: 'scope' },
+      { n: 2, title: 'How a claim moves', form: 'walk', control: 'step', leverId: 'stage', outcomeId: 'status' },
+    ]);
+  });
+
+  // A build planned before forms existed, or a model that drops the columns,
+  // must still yield a working spine rather than nothing.
+  it('still parses the old four-column table, with defaults', () => {
+    const narrow = `
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | Old shape | roll | total |
+`;
+    expect(parseChapterPlan(narrow)).toEqual([
+      { n: 1, title: 'Old shape', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+    ]);
+  });
+
+  // choice, not slider: the house style this copies uses buttons over sliders
+  // 43 to 10, and a slider is only honest for a continuous quantity.
+  it('defaults an unrecognised control to choice, not slider', () => {
+    const odd = `
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | Odd | interpretive-dance | vibes | a | b |
+`;
+    const [row] = parseChapterPlan(odd);
+    expect(row.control).toBe('choice');
+    expect(row.form).toBe('question');
+  });
+
+  it('strips backticks from form and control the same as from ids', () => {
+    const ticked = `
+| # | Chapter | Form | Control | Lever id | Outcome id |
+|---|---------|------|---------|----------|------------|
+| 1 | T | \`walk\` | \`toggle\` | a | b |
+`;
+    const [row] = parseChapterPlan(ticked);
+    expect(row.form).toBe('walk');
+    expect(row.control).toBe('toggle');
+  });
+});
+
+describe('normaliseVocab', () => {
+  it('accepts a known value in any case', () => {
+    expect(normaliseVocab('WALK', CHAPTER_FORMS)).toBe('walk');
+    expect(normaliseVocab(' Toggle ', CONTROL_KINDS)).toBe('toggle');
+  });
+
+  it('returns null for anything not in the vocabulary', () => {
+    expect(normaliseVocab('carousel', CHAPTER_FORMS)).toBeNull();
+    expect(normaliseVocab('', CONTROL_KINDS)).toBeNull();
   });
 });

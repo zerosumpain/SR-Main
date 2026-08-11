@@ -47,6 +47,39 @@
     return `chapter-${n}/`;
   }
 
+  /**
+   * The editorial shapes a chapter can take.
+   *
+   * Every chapter of every build came out structurally identical — seven
+   * chapters, seven times `article > h2 > h2` — because the plan had no word
+   * for HOW a chapter is told, only what it is about and which ids the checker
+   * would hunt for. A vocabulary with no term for variety produces none.
+   *
+   * Each form is a real arrangement, not a class name: it changes the order of
+   * the heading, the visual and the prose, and what the chapter opens with.
+   * Modelled on the Engine Room, where every leaf shares a frame and differs
+   * in its centrepiece.
+   */
+  const FORMS = {
+    // Visual first, at full width, then the claim it supports. For opening a
+    // part, or any chapter whose picture IS the argument.
+    open: { visualFirst: true, wide: true },
+    // Question as the heading; evidence; then a bounded answer.
+    question: { questionHead: true },
+    // Numbered movements, each its own small section.
+    walk: { numbered: true },
+    // Two columns: this against that.
+    compare: { split: true },
+    // One artefact, held wide, with the reading notes beside it.
+    annotate: { wide: true, aside: true },
+    // A list of items, each with its own small visual.
+    ledger: { list: true },
+    // What is established, and what is not. For closing.
+    close: { terse: true },
+  };
+
+  ns.CHAPTER_FORMS = Object.keys(FORMS);
+
   ns.mountShell = function mountShell(spec) {
     const chapters = Array.isArray(spec && spec.chapters) ? spec.chapters : [];
     const current = Number(spec && spec.current) || 0;
@@ -142,6 +175,16 @@
       document.body.appendChild(main);
       for (const node of orphans) main.appendChild(node);
     }
+    // The form drives the arrangement. An unknown or absent form falls back to
+    // `question`, which is the plainest shape, rather than silently producing
+    // the old identical one.
+    const formName = FORMS[spec.form] ? spec.form : here ? 'question' : null;
+    const form = formName ? FORMS[formName] : null;
+    if (formName) {
+      main.classList.add('ex-form-' + formName);
+      main.setAttribute('data-form', formName);
+    }
+
     if (here || spec.kicker || spec.lede) {
       const head = el('div', 'ex-chap-head');
       const kick = el('p', 'ex-kicker');
@@ -149,9 +192,52 @@
         ? `Chapter ${current} of ${chapters.length}${spec.kicker ? ` · ${spec.kicker}` : ''}`
         : spec.kicker || '';
       head.appendChild(kick);
-      if (here) head.appendChild(el('h1', 'ex-h1', here.title));
+      if (here) {
+        const h1 = el('h1', 'ex-h1', here.title);
+        // A question chapter asks its title. Marked in the DOM as well as
+        // styled, so the checker can tell the forms apart.
+        if (form && form.questionHead) h1.setAttribute('data-ask', 'true');
+        head.appendChild(h1);
+      }
       if (spec.lede) head.appendChild(el('p', 'ex-lede', spec.lede));
-      main.insertBefore(head, main.firstChild);
+
+      // `open` puts the visual above the words. Everything else keeps the
+      // heading first.
+      if (form && form.visualFirst) {
+        const stage = el('div', 'ex-stage');
+        stage.id = spec.stageId || 'ex-stage';
+        main.insertBefore(head, main.firstChild);
+        main.insertBefore(stage, main.firstChild);
+      } else {
+        main.insertBefore(head, main.firstChild);
+      }
+    }
+
+    // Structural affordances, created HERE rather than described in the prompt.
+    //
+    // `compare` and `ledger` are arrangements the CSS cannot produce from
+    // plain prose — they need a container. Asking the agent to write the right
+    // wrapper is persuasion, and persuasion is what produced seven identical
+    // chapters in the first place. So the shell makes the container and hands
+    // it over; the agent only has to put things in it.
+    if (form && form.split) {
+      const split = el('div', 'ex-split');
+      const left = el('div', 'ex-side');
+      const right = el('div', 'ex-side');
+      left.id = 'ex-left';
+      right.id = 'ex-right';
+      split.append(left, right);
+      main.appendChild(split);
+    }
+    if (form && form.list) {
+      const list = el('div', 'ex-ledger');
+      list.id = 'ex-ledger';
+      main.appendChild(list);
+    }
+    if (form && form.aside) {
+      const aside = el('div', 'ex-aside');
+      aside.id = 'ex-aside';
+      main.appendChild(aside);
     }
 
     // --- footer: previous / next -------------------------------------------
@@ -177,6 +263,26 @@
     document.body.appendChild(foot);
 
     return main;
+  };
+
+  /**
+   * Add one row to a `ledger` chapter: a heading, a line, and a slot for its
+   * own small visual. Returns the slot.
+   */
+  ns.addLedgerEntry = function addLedgerEntry(spec) {
+    const list = document.querySelector('#ex-ledger');
+    if (!list) {
+      console.error('[explainer-kit] addLedgerEntry: no #ex-ledger — is this chapter form "ledger"?');
+      return null;
+    }
+    const row = el('div', 'ex-entry');
+    const words = el('div');
+    words.appendChild(el('h3', null, spec.title || ''));
+    if (spec.note) words.appendChild(el('p', null, spec.note));
+    const slot = el('div', 'ex-entry-viz');
+    row.append(words, slot);
+    list.appendChild(row);
+    return slot;
   };
 
   /**

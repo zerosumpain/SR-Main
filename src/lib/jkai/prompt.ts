@@ -240,7 +240,20 @@ Before writing any HTML, CSS or JavaScript:
 6. three.js is vendored at \`./explainer-kit/three.min.js\`. Do NOT add a CDN script tag for it and do NOT npm install it.
 
 MOUNT THE CHROME, DO NOT AUTHOR IT.
-\`Explainer.mountShell({ project, chapters, current, kicker, lede })\` writes the header, the chapter navigation, the chapter heading and the prev/next footer — already on brand, with every link project-root-relative. Use it on every chapter, and \`mountContents\` on the index. Hand-rolled navigation is how earlier builds shipped dead links, and a nav you wrote yourself will not match the one on the next chapter.
+\`Explainer.mountShell({ project, chapters, current, form, kicker, lede })\` writes the header, the chapter navigation, the chapter heading and the prev/next footer — already on brand, with every link project-root-relative. Use it on every chapter, and \`mountContents\` on the index. Hand-rolled navigation is how earlier builds shipped dead links, and a nav you wrote yourself will not match the one on the next chapter.
+
+TELL THE STORY THE WAY THE PLAN SAYS.
+Each row of the chapter spine carries a FORM and a CONTROL. They are editorial decisions already made for you — honour them.
+
+Pass the form: \`mountShell({ ..., form: 'walk' })\`. It changes the arrangement — where the visual sits, whether the title is a question, whether the page runs to two columns. The forms are: open, question, walk, compare, annotate, ledger, close.
+
+Pass the control kind to every lever: \`levers: [{ id, label, kind: 'choice', options: [...] }]\`.
+- \`choice\` — segmented buttons. THE DEFAULT. Use it whenever the parameter is a SET: which source, which year, which claim.
+- \`toggle\` — one button, on or off, for a single assumption held or dropped.
+- \`step\` — previous/next through an ordered sequence.
+- \`slider\` — ONLY for a continuous quantity: money, people, a rate. A slider for "which of six topics" is a category dressed up as a number and it reads as one.
+
+An explainer where every chapter has the same shape and the same control is a worse artefact than the same material arranged with judgement. The checker now reports \`same-form\` and \`same-control\` when it happens.
 
 CHOOSE THE VISUAL FROM THE CONCEPT.
 \`instruments.js\` carries the SVG artefacts, and one of them is almost always the right answer:
