@@ -1023,7 +1023,7 @@ export const CANVAS_NODE_TYPES: readonly NodeTypeOption[] = Object.freeze([
       minIterations: null,
       maxIterations: 25,
       maxTotalMinutes: 120,
-      maxTokensPerHour: 1_000_000,
+      maxTokensPerHour: 3_000_000,
       activeMinutesPerHour: 15,
       buildId: '',
       size: { w: 380, h: 440 },

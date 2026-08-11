@@ -4,6 +4,34 @@ import { eq, and, gte } from 'drizzle-orm';
 import type { BudgetConfig, BudgetCheckResult } from './types';
 import type { JkaiBuild } from '$lib/db/schema';
 
+/**
+ * How long until the rolling window has room again, and how to say so.
+ *
+ * A cooldown re-checks every 5 minutes, so it logs the same line over and over.
+ * Without a time in it, the reader cannot tell a two-minute pause from a
+ * forty-minute one — during change request #204 that ambiguity was the whole
+ * reason the build got killed rather than waited out. The oldest iteration
+ * leaving the window is the first moment anything can change, so quote that.
+ */
+function cooldown(oldestInWindow: number | undefined, reason: string) {
+  const resumeAt = oldestInWindow ? oldestInWindow + 60 * 60 * 1000 : Date.now() + 60 * 1000;
+  const waitMs = resumeAt - Date.now();
+  const at = new Date(resumeAt).toLocaleTimeString('en-GB', {
+    timeZone: 'Europe/London',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return {
+    canProceed: false as const,
+    // Cap the nap at 5 minutes and re-check: the window is rolling, so room can
+    // appear sooner than the oldest iteration's own expiry.
+    sleepMs: Math.min(Math.max(waitMs, 1000), 5 * 60 * 1000),
+    reason:
+      `${reason} Cooling down for about ${Math.max(1, Math.round(waitMs / 60000))} min — ` +
+      `not before ${at}, when the oldest iteration leaves the hour. Nothing is wrong and no work is lost.`,
+  };
+}
+
 export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> {
   const config = build.budgetConfig as BudgetConfig;
 
@@ -51,14 +79,10 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
       const oldestInWindow = recentIterations
         .map((it) => it.createdAt.getTime())
         .sort((a, b) => a - b)[0];
-      const sleepMs = oldestInWindow
-        ? oldestInWindow + 60 * 60 * 1000 - Date.now()
-        : 60 * 1000;
-      return {
-        canProceed: false,
-        sleepMs: Math.min(Math.max(sleepMs, 1000), 5 * 60 * 1000), // Cap at 5 minutes, re-check after
-        reason: `Active minutes limit reached (${minutesInWindow.toFixed(1)}/${config.activeMinutesPerHour}m). Cooling down.`,
-      };
+      return cooldown(
+        oldestInWindow,
+        `Active minutes limit reached (${minutesInWindow.toFixed(1)}/${config.activeMinutesPerHour}m in the last hour).`,
+      );
     }
   }
 
@@ -71,14 +95,11 @@ export async function checkBudget(build: JkaiBuild): Promise<BudgetCheckResult> 
       const oldestInWindow = recentIterations
         .map((it) => it.createdAt.getTime())
         .sort((a, b) => a - b)[0];
-      const sleepMs = oldestInWindow
-        ? oldestInWindow + 60 * 60 * 1000 - Date.now()
-        : 60 * 1000;
-      return {
-        canProceed: false,
-        sleepMs: Math.min(Math.max(sleepMs, 1000), 5 * 60 * 1000), // Cap at 5 minutes, re-check after
-        reason: `Token limit reached (${tokensInWindow}/${config.maxTokensPerHour}). Cooling down.`,
-      };
+      return cooldown(
+        oldestInWindow,
+        `Token limit reached (${tokensInWindow.toLocaleString('en-GB')} of ` +
+          `${config.maxTokensPerHour.toLocaleString('en-GB')} total tokens in the last hour).`,
+      );
     }
   }
 
