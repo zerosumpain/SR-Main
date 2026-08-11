@@ -66,7 +66,12 @@ export const appleCalendarExecutor: NodeExecutor = {
             return { output: { id: uid, url: duplicate.url, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd, duplicate: true }, rowCount: 1 };
           }
           const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-          const datePrefix = config.allDay ? ';VALUE=DATE' : config.timezone ? ';TZID=' + config.timezone : '';
+          // All-day events are dates, so they carry VALUE=DATE and no zone.
+          // A timed event is expected to arrive as a UTC instant (…Z) and needs
+          // no parameter at all. Deliberately NOT ';TZID=<zone>': RFC 5545 wants
+          // a matching VTIMEZONE component for any zone referenced, this object
+          // has none, and a CalDAV server may reject the lot on that basis.
+          const datePrefix = config.allDay ? ';VALUE=DATE' : '';
           const icalStr = [
             'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//jkai//EN', 'BEGIN:VEVENT',
             'UID:' + uid, 'DTSTAMP:' + now, 'DTSTART' + datePrefix + ':' + config.eventStart,

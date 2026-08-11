@@ -1,6 +1,8 @@
 import { register } from '../registry-internal';
 import type { ToolDefinition, ToolResult } from '../registry-internal';
 import { appleCalendarExecutor, resolveOptions_calendar } from '$lib/workflows/nodes/apple-calendar';
+import { standaloneContext } from '$lib/workflows/standalone-context';
+import { listCredentials } from '$lib/integrations/credentials';
 
 const TIMEZONE = 'Europe/London';
 
@@ -23,19 +25,47 @@ function dateParts(value: Date): Record<string, string> {
   }).formatToParts(value).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
 }
 
-/** Convert an instant to a floating Europe/London iCalendar date-time. */
-export function toLondonIcalDateTime(value: unknown): string | { error: string } {
+/**
+ * Interpret a bare `YYYY-MM-DDTHH:MM[:SS]` as a Europe/London wall clock.
+ *
+ * Two passes: read the string as though it were UTC, ask what London's clock
+ * actually showed at that instant, and shift by the difference. One pass is
+ * enough everywhere except within an hour of a DST change, where the offset
+ * used to correct sits on the wrong side of the boundary; the second settles it.
+ */
+function londonWallClockToInstant(m: RegExpMatchArray): Date {
+  const wanted = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] ?? 0));
+  let guess = wanted;
+  for (let pass = 0; pass < 2; pass++) {
+    const p = dateParts(new Date(guess));
+    const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+    if (shown === wanted) break;
+    guess -= shown - wanted;
+  }
+  return new Date(guess);
+}
+
+/**
+ * Convert a date-time to a UTC iCalendar instant (`…Z`).
+ *
+ * Deliberately NOT a floating local time tagged `;TZID=Europe/London`: RFC 5545
+ * requires a matching VTIMEZONE component for every TZID referenced, we emit
+ * none, and a CalDAV server is entitled to reject the whole object for it. A
+ * UTC instant needs no VTIMEZONE, cannot be misread, and still displays as
+ * London time on a London device — which is the actual requirement.
+ */
+export function toUtcIcalDateTime(value: unknown): string | { error: string } {
   if (typeof value !== 'string' || !value.trim()) return { error: 'start and end date-times are required.' };
   // A bare ISO date-time denotes the user's London wall-clock time, not UTC.
   const local = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
-  if (local) {
-    const check = new Date(`${value}Z`);
-    if (!Number.isNaN(check.getTime())) return `${local[1]}${local[2]}${local[3]}T${local[4]}${local[5]}${local[6] ?? '00'}`;
-  }
-  const date = new Date(value);
+  const date = local ? londonWallClockToInstant(local) : new Date(value);
   if (Number.isNaN(date.getTime())) return { error: `Invalid date-time "${value}". Use an ISO-8601 date-time.` };
-  const p = dateParts(date);
-  return `${p.year}${p.month}${p.day}T${p.hour}${p.minute}${p.second}`;
+  return `${date.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
+}
+
+/** `20260923T093000Z` → `2026-09-23T09:30:00Z`, for CalDAV time-range queries. */
+function icalToIso(value: string): string {
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}Z`;
 }
 
 /** iCalendar all-day DTEND is exclusive; a user-facing end date is inclusive. */
@@ -70,7 +100,15 @@ async function selectedCalendar(args: Record<string, unknown>): Promise<{ creden
 
 export async function handleAppleCalendarList(args: Record<string, unknown>): Promise<ToolResult> {
   const credentialId = typeof args.credentialId === 'string' ? args.credentialId.trim() : '';
-  if (!credentialId) return { success: false, error: 'credentialId is required. Select an existing Apple Calendar credential.' };
+  if (!credentialId) {
+    try {
+      const credentials = await listCredentials('apple-calendar');
+      if (!credentials.length) return { success: false, error: 'No Apple Calendar credentials are configured. Add an iCloud app-specific-password credential before listing calendars.' };
+      return { success: true, data: { credentials: credentials.map(({ id, label, integrationType }) => ({ id, label, integrationType })) } };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? `Unable to list Apple Calendar credentials: ${err.message}` : 'Unable to list Apple Calendar credentials.' };
+    }
+  }
   try {
     const calendars = await resolveOptions_calendar(credentialId);
     if (!args.calendar) return { success: true, data: { calendars } };
@@ -79,7 +117,7 @@ export async function handleAppleCalendarList(args: Record<string, unknown>): Pr
     const start = typeof args.dateRangeStart === 'string' ? args.dateRangeStart : '';
     const end = typeof args.dateRangeEnd === 'string' ? args.dateRangeEnd : '';
     if (!start || !end) return { success: false, error: 'dateRangeStart and dateRangeEnd are required when listing events.' };
-    const result = await appleCalendarExecutor.execute({}, { credentialId, operation: 'list', calendar: calendar.value, dateRangeStart: start, dateRangeEnd: end }, {} as any);
+    const result = await appleCalendarExecutor.execute({}, { credentialId, operation: 'list', calendar: calendar.value, dateRangeStart: start, dateRangeEnd: end }, standaloneContext());
     return { success: true, data: { calendar: calendar.label, ...(result.output as Record<string, unknown>) } };
   } catch (err) {
     return { success: false, error: err instanceof Error ? `Unable to list Apple Calendar events: ${err.message}` : 'Unable to list Apple Calendar events.' };
@@ -94,18 +132,23 @@ export async function handleAppleCalendarCreate(args: Record<string, unknown>): 
   const allDay = args.allDayStart !== undefined || args.allDayEnd !== undefined;
   const range = allDay ? allDayRange(args.allDayStart, args.allDayEnd) : null;
   if (range && 'error' in range) return { success: false, error: range.error };
-  const start = range ? range.start : toLondonIcalDateTime(args.start);
-  const end = range ? range.end : toLondonIcalDateTime(args.end);
+  const start = range ? range.start : toUtcIcalDateTime(args.start);
+  const end = range ? range.end : toUtcIcalDateTime(args.end);
   if (typeof start !== 'string') return { success: false, error: start.error };
   if (typeof end !== 'string') return { success: false, error: end.error };
   const uid = await eventUid(selected.credentialId, selected.calendar.value, title, start, end);
+  // The duplicate check queries CalDAV for the event's own window, so it must
+  // be given resolved instants — handing back the caller's raw string would
+  // send an unanchored local time to the server and search the wrong hour.
+  const rangeStart = range ? range.rangeStart : icalToIso(start);
+  const rangeEnd = range ? range.rangeEnd : icalToIso(end);
   try {
     const result = await appleCalendarExecutor.execute({}, {
       credentialId: selected.credentialId, operation: 'create', calendar: selected.calendar.value,
       eventTitle: title, eventStart: start, eventEnd: end, eventLocation: typeof args.location === 'string' ? args.location : undefined,
-      eventNotes: typeof args.notes === 'string' ? args.notes : undefined, eventUid: uid, allDay, timezone: TIMEZONE,
-      duplicateRangeStart: range?.rangeStart ?? args.start, duplicateRangeEnd: range?.rangeEnd ?? args.end,
-    }, {} as any);
+      eventNotes: typeof args.notes === 'string' ? args.notes : undefined, eventUid: uid, allDay,
+      duplicateRangeStart: rangeStart, duplicateRangeEnd: rangeEnd,
+    }, standaloneContext());
     return { success: true, data: result.output };
   } catch (err) {
     return { success: false, error: err instanceof Error ? `Unable to create Apple Calendar event: ${err.message}` : 'Unable to create Apple Calendar event.' };
@@ -115,8 +158,8 @@ export async function handleAppleCalendarCreate(args: Record<string, unknown>): 
 export const appleCalendarTools: ToolDefinition[] = [
   {
     name: 'apple_calendar_list',
-    description: 'List calendars, or list events in a specified date range, from a selected existing Apple Calendar credential. Pass credentialId first to discover calendar resources; then pass a calendar resource URL or an unambiguous displayed name such as Family. Credentials are resolved server-side and are never tool arguments.',
-    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, dateRangeStart: { type: 'string', description: 'ISO-8601 range start.' }, dateRangeEnd: { type: 'string', description: 'ISO-8601 range end.' } }, required: ['credentialId'] },
+    description: 'List configured Apple Calendar credentials, then calendars, or events in a specified date range, from a selected existing credential. Pass a calendar resource URL or an unambiguous displayed name such as Family. Credentials are resolved server-side; only their safe ids and labels are returned.',
+    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit to list configured credential ids and labels.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, dateRangeStart: { type: 'string', description: 'ISO-8601 range start.' }, dateRangeEnd: { type: 'string', description: 'ISO-8601 range end.' } }, required: [] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarList,
   },
   {
