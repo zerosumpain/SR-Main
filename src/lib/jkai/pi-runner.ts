@@ -12,6 +12,8 @@ import { getOpenRouterApiKey } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
+import { stripNulls } from './strip-nulls';
+import { describeDbError } from './db-error';
 
 const CONTAINER_NAME = 'jkai-sandbox';
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
@@ -479,6 +481,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   let stdoutBuf = '';
   let stderrBuf = '';
+  // One log line per iteration for a failing incremental write — see the
+  // catch below. A repeat is always the same cause.
+  let incrementalWriteFailed = false;
 
   child.stdout.setEncoding('utf-8');
   child.stderr.setEncoding('utf-8');
@@ -505,7 +510,13 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   async function handleLine(line: string): Promise<void> {
     let ev: PiEvent;
     try {
-      ev = JSON.parse(line);
+      // Sanitise here and nowhere else. Everything the iteration persists —
+      // tool arguments, tool output, assistant text, the incremental messages
+      // write below — descends from this object, so one call covers the lot.
+      // A U+0000 anywhere in it makes Postgres reject the whole parameter with
+      // 22P05 and costs the iteration its evaluation and next steps; see
+      // ./strip-nulls for what that did to build 85dac418.
+      ev = stripNulls(JSON.parse(line) as PiEvent);
     } catch {
       return;
     }
@@ -657,12 +668,29 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       if (text) messages.push({ role: 'user', content: text.slice(0, 32000) });
     }
 
-    // Persist incrementally
+    // Persist incrementally.
+    //
+    // This used to swallow every error. It was failing on exactly the same
+    // NUL bytes as the end-of-iteration write, which turned a hard error into
+    // invisible data truncation for a whole build — the transcript simply
+    // stopped growing and nothing said so. Log once per iteration: a repeated
+    // failure is the same cause, and 400KB of parameter dump per message would
+    // bury the build log.
     await db
       .update(jkaiIterations)
       .set({ messages, tokensUsed })
       .where(eq(jkaiIterations.id, iteration.id))
-      .catch(() => {});
+      .catch((err) => {
+        if (incrementalWriteFailed) return;
+        incrementalWriteFailed = true;
+        void emitLog(
+          build.id,
+          'error',
+          `Could not persist the running transcript: ${describeDbError(err)}. ` +
+            `The iteration continues; its message history may be incomplete.`,
+          iteration.id,
+        );
+      });
   }
 
   const exitCode: number = await new Promise((resolve) => {
