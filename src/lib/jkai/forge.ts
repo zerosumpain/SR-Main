@@ -30,7 +30,9 @@ export const FORGE_GIT_TARGET = {
 const DEFAULT_BUDGET = {
   maxIterations: 25,
   maxTotalMinutes: 120,
-  maxTokensPerHour: 1_000_000,
+  // Total tokens, not output tokens — one ordinary iteration costs ~1M of
+  // them, so 1M here stalled a build after its first. See change-request.ts.
+  maxTokensPerHour: 3_000_000,
   activeMinutesPerHour: 45,
 };
 

@@ -71,4 +71,28 @@ describe('checkBudget', () => {
     expect(r.canProceed).toBe(false);
     expect(r.reason).toMatch(/Token limit/);
   });
+
+  it('tells the reader when the cooldown ends, not just that it started', async () => {
+    // The line is re-logged every five minutes. Repeated eight times with no
+    // time in it, it reads as a hang — which is why change request #204 was
+    // killed rather than waited out.
+    const started = new Date(Date.now() - 10 * 60 * 1000);
+    rows.current = [{ tokensUsed: 2_000_000, durationMs: 0, status: 'completed', createdAt: started }];
+    const r = await checkBudget(build({ budgetConfig: { maxTokensPerHour: 1_000_000 } }));
+    expect(r.canProceed).toBe(false);
+    // 50 minutes left of the window, but it re-checks in 5 — a rolling window
+    // can free up before its oldest entry actually expires.
+    expect(r.reason).toMatch(/about 50 min/);
+    expect(r.reason).toMatch(/not before \d{2}:\d{2}/);
+    expect(r.reason).toMatch(/no work is lost/);
+    expect(r.sleepMs).toBe(5 * 60 * 1000);
+  });
+
+  it('does not stall a build whose single iteration cost more than the old 1M ceiling', async () => {
+    // The unit is TOTAL tokens — input, output, and the conversation re-sent on
+    // every tool call — so one iteration of even a small change costs ~1M. The
+    // ceiling has to sit above one iteration or the first one ends the hour.
+    rows.current = [{ tokensUsed: 1_100_000, durationMs: 0, status: 'completed', createdAt: new Date() }];
+    expect((await checkBudget(build({ budgetConfig: { maxTokensPerHour: 3_000_000 } }))).canProceed).toBe(true);
+  });
 });

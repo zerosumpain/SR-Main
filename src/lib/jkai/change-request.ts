@@ -22,10 +22,26 @@ import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { SR_MAIN_GIT_TARGET } from '$lib/jkai/git-targets';
 import { createIssue, commentOnIssue, githubConfigured, REPO_SLUG } from '$lib/github/issues';
 
-const DEFAULT_BUDGET = {
+export const CHANGE_REQUEST_BUDGET = {
   maxIterations: 25,
   maxTotalMinutes: 120,
-  maxTokensPerHour: 1_000_000,
+  // MIND THE UNIT — it is not the same as maxTokensPerIteration below.
+  // `checkBudget` sums `jkai_iterations.tokens_used`, which is TOTAL tokens:
+  // input, output and the whole conversation re-sent on every one of an
+  // iteration's tool calls. A single ordinary iteration of a small change costs
+  // 0.9-1.1M of those, so the old 1M ceiling was reached by the FIRST one.
+  //
+  // What that looked like in practice (change request #204): the agent wrote
+  // the feature in two iterations and sixteen minutes, then spent the next
+  // thirty-six logging "Cooling down: Token limit reached (2009819/1000000)"
+  // every five minutes until the owner killed it. Nothing was wrong; the brake
+  // was simply set below the speed of walking.
+  //
+  // 3M matches STUDIO_BUDGET, which was sized against real iterations for the
+  // same reason. It still stops a genuine runaway inside an hour, and four
+  // other brakes sit in front of it: maxIterations, maxTotalMinutes,
+  // maxCostUsd, and the per-iteration output cap.
+  maxTokensPerHour: 3_000_000,
   activeMinutesPerHour: 45,
   // The per-hour cap is only consulted between iterations, so on its own it
   // cannot stop a single iteration running away — two spent 1.5M tokens each
@@ -150,7 +166,9 @@ export async function createChangeRequest({
       // (unlike the Forge, whose game repo owns its own checks).
       enforceDesignSystem: true,
       planStatus: 'approved',
-      budgetConfig: DEFAULT_BUDGET,
+      // Spread, so a per-build override can never write back onto the shared
+      // constant — same reason createStudioBuild spreads STUDIO_BUDGET.
+      budgetConfig: { ...CHANGE_REQUEST_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       priceSnapshot,

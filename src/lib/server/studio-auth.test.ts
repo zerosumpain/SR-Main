@@ -5,6 +5,24 @@ import { env } from '$env/dynamic/private';
 const GOOD = 'k'.repeat(48);
 const original = env.STUDIO_SERVICE_TOKEN;
 
+/**
+ * `delete env.STUDIO_SERVICE_TOKEN` needs this cast, and the reason is not
+ * cosmetic — deleting it broke every autonomous build on the VPS for a day.
+ *
+ * SvelteKit generates the type of `$env/dynamic/private` from the variables
+ * present when `svelte-kit sync` runs. In CI the variable does not exist, so it
+ * falls under the index signature and is `string | undefined` — deletable. On
+ * the VPS it IS set, so the generated declaration is a required `string`, and
+ * `delete` on a non-optional property is TS2790. The type of this file
+ * therefore depends on the secrets the host happens to hold.
+ *
+ * That is how change request #204 died: the agent wrote its feature, ran
+ * `npm run gate` in a workspace on the VPS, and was failed by two type errors
+ * in this file — which it had never touched and which CI had passed minutes
+ * earlier. Keep the cast; it is the only thing making the two agree.
+ */
+const mutableEnv = env as Record<string, string | undefined>;
+
 function req(auth?: string): Request {
   return new Request('https://example.test/api/jkai/studio', {
     method: 'POST',
@@ -16,7 +34,7 @@ beforeEach(() => {
   env.STUDIO_SERVICE_TOKEN = GOOD;
 });
 afterEach(() => {
-  if (original === undefined) delete env.STUDIO_SERVICE_TOKEN;
+  if (original === undefined) delete mutableEnv.STUDIO_SERVICE_TOKEN;
   else env.STUDIO_SERVICE_TOKEN = original;
 });
 
@@ -29,7 +47,7 @@ describe('hasStudioServiceToken', () => {
   // exist, not that any request opens it. This repo's worst incident was an
   // auth flag that defaulted the wrong way and reached production.
   it('refuses everything when the token is unset', () => {
-    delete env.STUDIO_SERVICE_TOKEN;
+    delete mutableEnv.STUDIO_SERVICE_TOKEN;
     expect(hasStudioServiceToken(req(`Bearer ${GOOD}`))).toBe(false);
     expect(hasStudioServiceToken(req('Bearer '))).toBe(false);
     expect(hasStudioServiceToken(req())).toBe(false);
