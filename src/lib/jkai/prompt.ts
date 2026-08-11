@@ -312,6 +312,21 @@ Ordered and concrete. Name the next chapter by number and title.`;
 
 export type BuildPromptMode = 'app' | 'repo' | 'studio';
 
+/**
+ * Appended by `executor.ts` when `enforceDesignSystem` is on and the build is
+ * not a Studio one (Studio mounts the explainer kit instead and carries its own
+ * token rules).
+ *
+ * It lives here, with the other prompts, rather than inline in the executor
+ * because it is part of what the agent is told, and the build screen's
+ * Blueprint pane shows a build its real system prompt. A copy inlined in the
+ * executor would drift from what that pane displays, and a prompt viewer that
+ * quietly omits a section is worse than none — it answers "why did it do that"
+ * with the wrong text.
+ */
+export const DESIGN_SYSTEM_PROMPT_BLOCK =
+  `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+
 // Canonical shape of a studio chapter-plan entry. src/lib/db/schema.ts keeps
 // its own inline copy of this shape on the `chapterPlan` jsonb column
 // (deliberately — schema.ts must not import from $lib/jkai) and

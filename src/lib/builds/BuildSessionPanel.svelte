@@ -234,7 +234,18 @@
     color: var(--status-error, #c0392b);
     margin-left: auto;
   }
-  .bsp-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  /* Capped: a build that has been running for hours accumulates notes and a
+     queue, and an uncapped list pushes the input off the bottom of the screen. */
+  .bsp-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 22vh;
+    overflow-y: auto;
+  }
   .bsp-row {
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -273,6 +284,8 @@
     padding: 0.4rem 0.6rem;
     font-family: var(--font-mono), monospace;
     font-size: 0.8rem;
+    max-height: 26vh;
+    overflow: auto;
   }
   .bsp-shell-cmd { color: var(--accent, #2d7d46); }
   .bsp-shell-out { white-space: pre-wrap; }
