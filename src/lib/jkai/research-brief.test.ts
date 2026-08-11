@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isBriefUsable,
   formatBriefForPrompt,
+  groundCausalMap,
   mapHitsToFacts,
   distinctHostCount,
   evidenceIsSufficient,
@@ -256,5 +257,80 @@ describe('source provenance reaches the prompt', () => {
     const out = formatBriefForPrompt(brief as never);
     expect(out).toMatch(/WEIGH THEM/);
     expect(out.toLowerCase()).toContain('not equivalent evidence');
+  });
+});
+
+// causalMap is what the interactive levers are built on, so an invented link
+// becomes an invented mechanism the reader operates — the most consequential
+// place in the brief for a fabrication to land.
+describe('groundCausalMap', () => {
+  it('keeps a link that cites facts in range', () => {
+    expect(groundCausalMap([{ from: 'roll', to: 'total', relationship: 'raises', facts: [1, 3] }], 5)).toEqual([
+      { from: 'roll', to: 'total', relationship: 'raises', facts: [1, 3] },
+    ]);
+  });
+
+  it('drops a link with no citation at all', () => {
+    expect(groundCausalMap([{ from: 'a', to: 'b', relationship: 'causes' }], 5)).toEqual([]);
+  });
+
+  // A citation pointing outside the fact list is not a citation. Keeping it
+  // would let a model satisfy the rule with any number it liked.
+  it.each([[[0]], [[6]], [[-1]], [['x']], [[]]])('drops a link citing %o against 5 facts', (facts) => {
+    expect(groundCausalMap([{ from: 'a', to: 'b', relationship: 'c', facts }], 5)).toEqual([]);
+  });
+
+  it('keeps the valid citations from a mixed list and dedupes them', () => {
+    const out = groundCausalMap([{ from: 'a', to: 'b', relationship: 'c', facts: [2, 2, 99] }], 5);
+    expect(out).toEqual([{ from: 'a', to: 'b', relationship: 'c', facts: [2] }]);
+  });
+
+  it('drops a link missing from, to or relationship', () => {
+    expect(groundCausalMap([{ from: '', to: 'b', relationship: 'c', facts: [1] }], 5)).toEqual([]);
+    expect(groundCausalMap([{ from: 'a', to: '  ', relationship: 'c', facts: [1] }], 5)).toEqual([]);
+  });
+});
+
+// 291 facts carry refutes_fact_id and searchResearch excludes every one, so
+// they could never reach a brief by the normal route.
+describe('the contested section is framed as candidates', () => {
+  const brief = {
+    topic: 'T',
+    facts: [{ claim: 'c', sourceUrl: 'https://gov.uk/a' }],
+    concepts: [],
+    causalMap: [],
+    liveData: [],
+    misconceptions: [],
+    gaps: ['something unknown'],
+    contested: [
+      {
+        claim: 'Core awards are available to eligible estates.',
+        counterClaim: 'Estate eligibility is restricted under the cited provisions.',
+        claimUrl: 'https://gov.uk/a',
+        counterUrl: 'https://gov.uk/b',
+      },
+    ],
+    sessionId: null,
+  };
+
+  it('shows both sides with their sources', () => {
+    const out = formatBriefForPrompt(brief as never);
+    expect(out).toContain('Core awards are available to eligible estates.');
+    expect(out).toContain('against: Estate eligibility is restricted');
+    expect(out).toContain('https://gov.uk/a  vs  https://gov.uk/b');
+  });
+
+  // The rate matters: sampling found two of five genuine. A renderer must not
+  // treat this list as a finding.
+  it('tells the agent to judge them and never to render "sources disagree"', () => {
+    const out = formatBriefForPrompt(brief as never);
+    expect(out).toContain('CANDIDATES, NOT CONCLUSIONS');
+    expect(out).toContain('extraction artefacts');
+    expect(out).toContain('Never render "sources disagree"');
+  });
+
+  it('omits the whole section when nothing is contested', () => {
+    const out = formatBriefForPrompt({ ...brief, contested: [] } as never);
+    expect(out).not.toContain('CONTESTED');
   });
 });
