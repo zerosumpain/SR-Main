@@ -25,7 +25,7 @@ import {
 } from './transient-failure';
 import { failOrphanedIterations } from './orchestrator-helpers';
 import { executeIteration } from './executor';
-import { runTests } from './test-runner';
+import { runTests, extractDiagnostics } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
@@ -1259,7 +1259,7 @@ class Orchestrator {
       // non-zero exit is a failed iteration whose output feeds the next
       // iteration's context (same shape/contract as runTests, so all the
       // downstream post-processing is unchanged).
-      let testResult: { passed: boolean; output: string; testCount: number; failCount: number };
+      let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string };
       if (build.gitTargetConfig) {
         await emitLog(buildId, 'system', `Running gate: ${build.gitTargetConfig.gateCommand} ...`, iteration.id);
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
@@ -1272,6 +1272,9 @@ class Orchestrator {
           output: gateOut.slice(0, 5000),
           testCount: 1,
           failCount: gatePassed ? 0 : 1,
+          // From the FULL output, not the truncated copy: a gate prints its
+          // passing steps first, so the useful part is always near the end.
+          diagnostics: gatePassed ? '' : extractDiagnostics(gateOut),
         };
       } else {
         await emitLog(buildId, 'system', 'Running tests...', iteration.id);
@@ -1296,15 +1299,26 @@ class Orchestrator {
         );
         this.consecutiveIdleIterations = wroteSomething ? 0 : this.consecutiveIdleIterations + 1;
         if (this.consecutiveIdleIterations >= idleCap) {
+          // Say WHAT the gate is objecting to. "no_progress" reads as the
+          // agent's failure, and on change request #216 it was not: the work
+          // was finished and two one-line type errors were outstanding, neither
+          // of which the agent had ever been shown. A reader who sees the
+          // diagnostic here can fix it in a minute instead of re-running the
+          // build to find out.
+          const blocker = testResult.diagnostics
+            ? `\n\nThe gate is failing on:\n${testResult.diagnostics.slice(0, 1200)}`
+            : '';
           await emitLog(
             buildId,
             'error',
             `${this.consecutiveIdleIterations} iterations in a row changed no files — stopping rather than re-verifying indefinitely. ` +
-              `The agent believes the work is done; the gate disagrees, or it is stuck. Read the last evaluation and decide.`,
+              `The agent believes the work is done; the gate disagrees, or it is stuck. Read the last evaluation and decide.${blocker}`,
           );
           await this.abortBuild(buildId, {
             kind: 'no_progress',
-            message: `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
+            message: testResult.diagnostics
+              ? `${this.consecutiveIdleIterations} consecutive iterations changed no files while the gate was still failing: ${testResult.diagnostics.split('\n').find((l) => l.trim())?.slice(0, 200) ?? ''}`
+              : `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
             attempts: 1,
           });
           return;
@@ -1320,7 +1334,18 @@ class Orchestrator {
         const extras = [
           currentFiles ? `\n\nWorkspace state after this iteration:\n${currentFiles}` : '',
           testResult.testCount > 0
-            ? `\n\nTest results: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? `\nFailing tests:\n${testResult.output.slice(0, 1000)}` : ''}`
+            ? `\n\nTest results: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${
+                testResult.failCount > 0
+                  ? // The DIAGNOSTICS, not the head of the log. Handing over
+                    // `output.slice(0, 1000)` meant the agent read a gate's
+                    // passing preamble and concluded all was well — see
+                    // extractDiagnostics for how that cost change request #216
+                    // its whole run.
+                    `\nThe gate FAILED. Fix these before doing anything else — a focused ` +
+                    `test run does not typecheck, so passing vitest is not passing the gate:\n` +
+                    `${testResult.diagnostics || testResult.output.slice(-1000)}`
+                  : ''
+              }`
             : '',
         ].join('');
         result.evaluation = result.evaluation + extras;

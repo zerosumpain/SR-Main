@@ -485,7 +485,13 @@ export function buildIterationContext(
     // No serving port: a repo build has no preview server, and naming one
     // invites the agent to invent scaffolding the gate will then reject.
     if (gateCommand) {
-      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, its output appears at the top of your next iteration. Verify narrowly instead — the one test file covering what you touched.`;
+      // The narrow-verification advice below is right, and on change request
+      // #216 it was also a trap: the agent ran its own vitest file, saw it
+      // pass, and declared itself finished three times while the gate was red
+      // on two type errors. Vitest transpiles — it does not typecheck — so a
+      // green focused run says nothing about the half of the gate that fails
+      // most often. Say so, and say plainly that a red gate outranks it.
+      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, the failing lines appear at the top of your next iteration under "The gate FAILED".\n\nVerify narrowly in the meantime — the one test file covering what you touched. But know what that does NOT prove: **vitest transpiles without typechecking**, so a passing focused run tells you nothing about \`svelte-check\`, which is the part of the gate that most often refuses a change. A one-argument call to a two-argument function passes vitest and fails the gate every time.\n\nSo: while the gate is red you are NOT finished, however green your own tests are. Fix what the gate names before writing anything else, and never close an iteration reporting success on a red gate — say what is still failing instead.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
   } else if (mode === 'studio') {
