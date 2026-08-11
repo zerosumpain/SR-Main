@@ -60,6 +60,30 @@ export function parseCalendarObject(url: string, data: string): CalendarEvent {
   }
 }
 
+/**
+ * ical.js accepts extended ISO values, while the workflow stores iCalendar basics.
+ *
+ * Calls the date and date-time constructors directly rather than `fromString`,
+ * which takes a second `aProperty` argument and only exists to pick between
+ * these two by length — a choice this function has already made from the regex.
+ * The one-argument `fromString` call this replaces was the single type error
+ * that stopped change request #216 reaching production: `vitest` transpiles
+ * without typechecking, so the focused tests passed, and the gate's complaint
+ * fell outside the slice of output the agent is shown.
+ */
+export function icalTime(value: string): ical.Time {
+  const date = value.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (date) return ical.Time.fromDateString(`${date[1]}-${date[2]}-${date[3]}`);
+  const dateTime = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if (dateTime) {
+    return ical.Time.fromDateTimeString(
+      `${dateTime[1]}-${dateTime[2]}-${dateTime[3]}T${dateTime[4]}:${dateTime[5]}:${dateTime[6]}${dateTime[7] ?? ''}`,
+    );
+  }
+  // Already an extended value. Same length rule fromString uses.
+  return value.length > 10 ? ical.Time.fromDateTimeString(value) : ical.Time.fromDateString(value);
+}
+
 export const appleCalendarExecutor: NodeExecutor = {
   type: 'apple-calendar',
   async execute(input, config: Record<string, any>, _ctx): Promise<NodeResult> {
@@ -119,27 +143,46 @@ export const appleCalendarExecutor: NodeExecutor = {
           });
           return { output: { id: uid, url: resp.headers?.get('Location') || uid, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd }, rowCount: 1 };
         }
-        if (config.operation === 'update') {
-          const uid = crypto.randomUUID();
-          const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-          const icalStr = [
-            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//jkai//EN', 'BEGIN:VEVENT',
-            'UID:' + uid, 'DTSTAMP:' + now, 'DTSTART:' + config.eventStart,
-            'DTEND:' + config.eventEnd, 'SUMMARY:' + (config.eventTitle || ''),
-            ...(config.eventLocation ? ['LOCATION:' + config.eventLocation] : []),
-            ...(config.eventNotes ? ['DESCRIPTION:' + config.eventNotes] : []),
-            'END:VEVENT', 'END:VCALENDAR',
-          ].join('\r\n');
-          const resp = await client.updateCalendarObject({
-            calendarObject: { url: config.eventId, etag: '*', data: icalStr },
+        if (config.operation === 'update' || config.operation === 'delete') {
+          // Looking up the resource through the selected calendar is deliberate:
+          // an event URL from another calendar (or credential) must never become
+          // a capability to modify it.
+          const objects = await client.fetchCalendarObjects({ calendar: target! });
+          const calendarObject = objects.find((object: any) => object.url === config.eventId);
+          if (!calendarObject) throw new Error('Event not found in the selected calendar.');
+          const existing = parseCalendarObject(calendarObject.url, calendarObject.data);
+          if (existing.parseError) throw new Error(`Unable to read event: ${existing.parseError}`);
+          const metadata = { id: existing.id, title: existing.title, calendar: target!.displayName || config.calendar, start: existing.start, end: existing.end, location: existing.location, notes: existing.description };
+          if (config.operation === 'delete') {
+            await client.deleteCalendarObject({ calendarObject: { url: calendarObject.url, etag: calendarObject.etag || '*' } });
+            return { output: { ...metadata, deleted: true }, rowCount: 1 };
+          }
+
+          const component = new ical.Component(ical.parse(calendarObject.data));
+          const event = component.getFirstSubcomponent('vevent');
+          if (!event) throw new Error('Event not found in calendar object.');
+          const has = (key: string) => Object.prototype.hasOwnProperty.call(config, key);
+          const setText = (name: string, value: string) => {
+            if (value) event.updatePropertyWithValue(name, value);
+            else event.removeAllProperties(name);
+          };
+          if (has('eventTitle')) setText('summary', config.eventTitle);
+          if (has('eventLocation')) setText('location', config.eventLocation);
+          if (has('eventNotes')) setText('description', config.eventNotes);
+          const allDay = config.allDay === true;
+          for (const [name, value] of [['dtstart', config.eventStart], ['dtend', config.eventEnd]] as const) {
+            if (!has(name === 'dtstart' ? 'eventStart' : 'eventEnd')) continue;
+            const property = event.updatePropertyWithValue(name, icalTime(value));
+            property.removeParameter('tzid');
+            if (allDay) property.setParameter('value', 'date');
+            else property.removeParameter('value');
+          }
+          const data = component.toString();
+          await client.updateCalendarObject({
+            calendarObject: { url: calendarObject.url, etag: calendarObject.etag || '*', data },
           });
-          return { output: { id: config.eventId }, rowCount: 1 };
-        }
-        if (config.operation === 'delete') {
-          await client.deleteCalendarObject({
-            calendarObject: { url: config.eventId, etag: '*' },
-          });
-          return { output: { id: config.eventId }, rowCount: 1 };
+          const updated = parseCalendarObject(calendarObject.url, data);
+          return { output: { id: updated.id, title: updated.title, calendar: target!.displayName || config.calendar, start: updated.start, end: updated.end, location: updated.location, notes: updated.description }, rowCount: 1 };
         }
         throw new Error('Unknown operation: ' + config.operation);
   },
