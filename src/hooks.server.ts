@@ -363,7 +363,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // Named exactly, NOT by prefix: the sibling `/api/jkai/tools/promote` has no
   // auth of its own and must keep falling through to the owner gate, or
   // promoting an ephemeral tool into the permanent registry becomes anonymous.
-  if (pathname === '/api/jkai/tools/manifest' || pathname === '/api/jkai/tools/invoke') {
+  //
+  // `/api/jkai/studio/image` is the same arrangement: scripts/studio-image.mjs
+  // runs inside the build, holds the same per-build bridge token, and its
+  // handler verifies it the same way before spending any model budget.
+  if (
+    pathname === '/api/jkai/tools/manifest' ||
+    pathname === '/api/jkai/tools/invoke' ||
+    pathname === '/api/jkai/studio/image'
+  ) {
     return resolve(event);
   }
 

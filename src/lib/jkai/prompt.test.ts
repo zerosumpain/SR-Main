@@ -147,3 +147,29 @@ describe('the studio prompt tells the agent how to look at its own work', () => 
     expect(prompt).toContain('.studio/spine.json');
   });
 });
+
+describe('the studio prompt points at the real materials', () => {
+  const prompt = buildSystemPrompt('b1', 4310, 'studio');
+
+  it('names the illustration generator with no placeholder left', () => {
+    expect(prompt).toContain('scripts/studio-image.mjs');
+    expect(prompt).not.toContain('__STUDIO_IMAGE_CMD__');
+  });
+
+  it('tells the agent to mount the chrome rather than author it', () => {
+    expect(prompt).toContain('mountShell');
+    expect(prompt).toContain('api.md');
+  });
+
+  // The 3D mandate pointed at the one technique the house style does not use:
+  // policy-engine is 40 inline SVGs with zero canvas.
+  it('makes the SVG instruments the default and the scene the exception', () => {
+    expect(prompt).toContain('createSteps');
+    expect(prompt).toContain('createInstrument');
+    expect(prompt).toMatch(/EXCEPTION, not the default/i);
+  });
+
+  it('forbids a generated image carrying a number', () => {
+    expect(prompt).toContain('Never let a generated image carry a number');
+  });
+});

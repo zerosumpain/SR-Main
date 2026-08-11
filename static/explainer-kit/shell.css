@@ -1,0 +1,374 @@
+/* shell.css — the chrome mounted by shell.js, plus the baseline page.
+   Load tokens.css BEFORE this file. Raw hex is not permitted here; every
+   colour comes from a --ex-* token so a palette change lands everywhere. */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ex-bg);
+  color: var(--ex-ink);
+  font-family: var(--font-body);
+  font-size: var(--ex-fs-body);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- header ------------------------------------------------------------- */
+
+.ex-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--ex-bg) 94%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--ex-rule);
+}
+
+.ex-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 1.5rem 0.4rem;
+}
+
+.ex-brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: var(--ex-ink);
+  text-decoration: none;
+}
+.ex-brand:hover { color: var(--ex-accent); }
+
+.ex-prog {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.12em;
+  color: var(--ex-ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ex-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 0 1.5rem 0.6rem;
+}
+
+.ex-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--ex-fs-small);
+  color: var(--ex-ink-soft);
+  text-decoration: none;
+  padding: 5px 12px;
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius-round);
+  background: var(--ex-surface);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ex-tab:hover { border-color: var(--ex-accent); color: var(--ex-accent); }
+.ex-tab.is-here {
+  background: var(--ex-accent);
+  border-color: var(--ex-accent);
+  color: var(--ex-surface);
+}
+.ex-tab-n {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  opacity: 0.6;
+}
+
+/* The narrow-screen twin of .ex-nav. Both are in the DOM; only one shows. */
+.ex-menu { display: none; padding: 0 1.5rem 0.6rem; }
+.ex-menu-sum {
+  cursor: pointer;
+  font-size: var(--ex-fs-small);
+  font-weight: 500;
+  padding: 6px 12px;
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius-round);
+  background: var(--ex-surface);
+  list-style: none;
+}
+.ex-menu-sum::-webkit-details-marker { display: none; }
+.ex-menu-sum::after { content: ' ▾'; color: var(--ex-ink-muted); }
+.ex-menu[open] .ex-menu-sum::after { content: ' ▴'; }
+.ex-menu-list { display: flex; flex-direction: column; padding: 6px 0 0; }
+.ex-menu-item {
+  padding: 8px 12px;
+  color: var(--ex-ink);
+  text-decoration: none;
+  border-radius: var(--ex-radius);
+  font-size: var(--ex-fs-small);
+}
+.ex-menu-item:hover { background: var(--ex-accent-faint); }
+.ex-menu-item.is-here { background: var(--ex-accent); color: var(--ex-surface); }
+
+@media (max-width: 900px) {
+  .ex-nav { display: none; }
+  .ex-menu { display: block; }
+  .ex-bar { padding: 0.6rem 1rem 0.35rem; }
+  .ex-menu { padding: 0 1rem 0.6rem; }
+}
+
+/* ---- chapter body ------------------------------------------------------- */
+
+.ex-chapter {
+  max-width: var(--ex-measure);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.ex-chap-head { margin-bottom: 2rem; }
+
+.ex-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-accent);
+  margin: 0 0 0.6rem;
+}
+
+.ex-h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--ex-fs-h1);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.ex-lede {
+  font-size: var(--ex-fs-lede);
+  line-height: 1.5;
+  color: var(--ex-ink-soft);
+  margin: 0.9rem 0 0;
+}
+
+.ex-chapter h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--ex-fs-h2);
+  letter-spacing: -0.01em;
+  margin: 2.5rem 0 0.5rem;
+  text-wrap: balance;
+}
+
+.ex-chapter p { margin: 0 0 1.1rem; }
+.ex-chapter a { color: var(--ex-accent); text-underline-offset: 2px; }
+
+/* Wide content never makes the page scroll sideways. */
+.ex-chapter table,
+.ex-chapter pre { display: block; overflow-x: auto; max-width: 100%; }
+.ex-chapter img,
+.ex-chapter svg,
+.ex-chapter canvas { max-width: 100%; height: auto; }
+
+:focus-visible { outline: 2px solid var(--ex-accent); outline-offset: 2px; }
+
+/* ---- footer ------------------------------------------------------------- */
+
+.ex-foot {
+  max-width: var(--ex-measure);
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 4rem;
+  border-top: 1px solid var(--ex-rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ex-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-decoration: none;
+  color: var(--ex-ink);
+  max-width: 45%;
+}
+.ex-step-next { margin-left: auto; text-align: right; }
+.ex-step-lab {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+}
+.ex-step-t { font-weight: 500; }
+.ex-step:hover .ex-step-t { color: var(--ex-accent); }
+
+@media (max-width: 620px) {
+  .ex-step { max-width: 100%; }
+  .ex-step-next { text-align: left; margin-left: 0; }
+}
+
+/* ---- contents page ------------------------------------------------------ */
+
+.ex-toc { list-style: none; margin: 0; padding: 0; }
+.ex-toc-item { border-top: 1px solid var(--ex-rule-faint); }
+.ex-toc-item:last-child { border-bottom: 1px solid var(--ex-rule-faint); }
+.ex-toc-link {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr;
+  gap: 0.25rem 1rem;
+  padding: 1rem 0;
+  text-decoration: none;
+  color: var(--ex-ink);
+}
+.ex-toc-link:hover .ex-toc-t { color: var(--ex-accent); }
+.ex-toc-n {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-small);
+  color: var(--ex-accent);
+  font-variant-numeric: tabular-nums;
+}
+.ex-toc-t { font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; }
+.ex-toc-b { grid-column: 2; color: var(--ex-ink-muted); font-size: var(--ex-fs-small); }
+
+/* ---- the instrument frame ----------------------------------------------
+   Order is fixed: label, title, reading line, controls, visual, takeaway.
+   The takeaway sits UNDER the visual on purpose — above it, readers read
+   instead of touching the control. */
+
+.ex-inst {
+  margin: 0 0 1.6rem;
+  padding: 0.9rem 1rem 0.85rem;
+  border: 1px solid var(--ex-rule);
+  border-top: 2px solid var(--ex-accent);
+  border-radius: var(--ex-radius);
+  background: var(--ex-surface);
+}
+
+.ex-inst-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  flex-wrap: wrap;
+}
+.ex-inst-id { min-width: 0; }
+.ex-inst-kick {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ex-accent);
+  margin-bottom: 0.2rem;
+}
+.ex-inst-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.125rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.ex-inst-ctl {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+/* 16px floor on inputs: anything smaller makes iOS zoom the page on focus. */
+.ex-inst-ctl input,
+.ex-inst-ctl select,
+.ex-inst-ctl button {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--ex-ink);
+  background: var(--ex-bg);
+  border: 1px solid var(--ex-rule);
+  border-radius: var(--ex-radius);
+  padding: 0.25rem 0.5rem;
+}
+.ex-inst-ctl input[type='range'] { padding: 0; accent-color: var(--ex-accent); }
+.ex-inst-ctl label {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+}
+
+.ex-inst-read {
+  margin: 0.4rem 0 0;
+  font-size: var(--ex-fs-small);
+  line-height: 1.5;
+  color: var(--ex-ink-muted);
+  max-width: 78ch;
+}
+
+.ex-inst-body { margin-top: 0.8rem; min-width: 0; overflow-x: auto; }
+
+.ex-inst-take {
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.8rem 0 0;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--ex-rule);
+  font-size: var(--ex-fs-small);
+  line-height: 1.55;
+  color: var(--ex-ink-soft);
+  max-width: 84ch;
+}
+.ex-inst-mark { color: var(--ex-accent); flex-shrink: 0; }
+.ex-inst-take b { color: var(--ex-ink); font-weight: 700; }
+
+/* ---- stat cards --------------------------------------------------------- */
+
+.ex-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.9rem;
+}
+.ex-stat { display: flex; flex-direction: column; gap: 0.15rem; }
+.ex-stat-v {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.75rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.ex-stat-l {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+}
+.ex-stat-n { font-size: var(--ex-fs-small); color: var(--ex-ink-soft); }
+
+/* ---- generated illustration -------------------------------------------- */
+
+.ex-figure { margin: 0 0 1.6rem; }
+.ex-figure img { width: 100%; height: auto; border: 1px solid var(--ex-rule); border-radius: var(--ex-radius); display: block; }
+.ex-figure figcaption {
+  margin-top: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

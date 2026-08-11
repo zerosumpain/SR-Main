@@ -4,106 +4,119 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Chapter 3 — How the funding formula reaches a school</title>
-<link rel="stylesheet" href="../tokens.css" />
-<style>
-  body {
-    background: var(--ex-bg);
-    color: var(--ex-ink);
-    font-family: var(--font-body);
-    margin: 0;
-  }
-  .chapter { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
-  .kicker {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ex-accent);
-  }
-  h1 { font-family: var(--font-display); font-size: 2rem; line-height: 1.05; margin: 0.3rem 0 1rem; }
-  .lede { font-size: 1.1rem; color: var(--ex-ink-soft); max-width: 62ch; }
-  .panel {
-    background: var(--ex-surface);
-    border: 1px solid var(--ex-rule);
-    border-radius: var(--ex-radius);
-    padding: 1.25rem;
-    margin: 2rem 0;
-  }
-  .sources { border-top: 1px solid var(--ex-rule); padding-top: 1rem; margin-top: 3rem; }
-  .sources a { color: var(--ex-accent); }
-</style>
+
+<!--
+  COPY THIS FILE AS THE STARTING POINT FOR EVERY CHAPTER.
+
+  Note the paths: "explainer-kit/tokens.css", not "../tokens.css". Every URL
+  here is PROJECT-ROOT-RELATIVE with no leading slash and no "../", because
+  both surfaces a reader reaches inject a <base href> at the project root and
+  that is the only form which resolves on both.
+
+  This example used to use "../" — so the one worked example in the kit was
+  teaching the exact mistake the checker fails a chapter for. If you are
+  reading this file from its mount at explainer-kit/examples/, the paths below
+  are written for where your COPY will live: a chapter directory at the project
+  root, e.g. chapter-3/index.html.
+
+  There is almost no CSS here on purpose. shell.css already styles the chapter,
+  the instrument frame and the controls. Writing your own is how a build ends
+  up looking like neither the house style nor itself.
+-->
+<link rel="stylesheet" href="explainer-kit/tokens.css" />
+<link rel="stylesheet" href="explainer-kit/shell.css" />
 </head>
 <body>
-<article class="chapter" data-chapter="3">
-  <p class="kicker">Chapter 3</p>
-  <h1>How the funding formula reaches a school</h1>
-  <p class="lede">
-    Two schools with the same number of pupils can receive materially different
-    budgets. The difference is not discretion — it is four factors applied in a
-    fixed order. This chapter lets you apply them yourself.
-  </p>
 
-  <!-- Visual: the causal path, before the learner touches anything. -->
-  <div class="panel" id="causal"></div>
+<!-- Your prose goes straight in the body. mountShell() wraps it in the
+     chapter measure, adds the heading, nav and footer, and sets
+     data-chapter="3" on the wrapper it creates.
 
-  <!-- Manipulate + consequence: createSim renders both halves. -->
-  <div class="panel" id="sim"></div>
+     The article below carries data-chapter too, explicitly. Belt and braces:
+     the checker scopes EVERY test to `[data-chapter="<n>"]`, so a chapter
+     that loses this attribute scores zero on a visual, a lever and a citation
+     that are all present and correct. Remove data-chapter-status="placeholder"
+     the moment the chapter is genuinely written. -->
+<article data-chapter="3">
 
-  <p>
-    Notice what happens when deprivation weighting rises while the basic entitlement
-    holds: the total moves less than most people expect, because the weighting applies
-    to a minority of the roll. That gap between expectation and arithmetic is the point
-    of this chapter.
-  </p>
+<p>
+  A school's budget is not one payment. It is the sum of several streams, each
+  with its own rule, and the formula that combines them is the whole of the
+  answer to "why does this school get more than that one?".
+</p>
 
-  <footer class="sources">
-    <p class="kicker">Sources</p>
-    <p>
-      <a data-citation href="https://www.gov.uk/government/publications/national-funding-formula-tables-for-schools-and-high-needs">
-        National funding formula tables for schools and high needs, DfE
-      </a>
-    </p>
-  </footer>
+<div id="streams"></div>
+
+<h2>What changes when the roll changes</h2>
+<p>
+  Most of the money follows pupils. Move the roll and watch the total: the
+  per-pupil entitlement is the largest single term in the formula.
+</p>
+
+<div id="model"></div>
+
+<h2>Where it comes from</h2>
+<p class="sources">
+  <a data-citation href="https://www.gov.uk/government/publications/national-funding-formula-tables-for-schools-and-high-needs">
+    National funding formula tables for schools and high needs
+  </a>
+</p>
+
 </article>
 
-<script src="../diagram.js"></script>
-<script src="../sim.js"></script>
+<script src="explainer-kit/shell.js"></script>
+<script src="explainer-kit/instruments.js"></script>
+<script src="explainer-kit/sim.js"></script>
 <script>
-  const diagram = window.Explainer.createDiagram({
-    mount: document.getElementById('causal'),
-    title: 'From pupil count to school budget',
-    nodes: [
-      { id: 'roll', label: 'Pupils on roll', x: 90, y: 60, kind: 'lever' },
-      { id: 'basic', label: 'Basic entitlement', x: 330, y: 60, kind: 'mechanism' },
-      { id: 'depriv', label: 'Deprivation weight', x: 330, y: 180, kind: 'mechanism' },
-      { id: 'budget', label: 'School budget', x: 600, y: 120, kind: 'outcome' },
+  // 1. The chrome. Mounted, never authored.
+  Explainer.mountShell({
+    project: 'How school funding actually works',
+    chapters: [
+      { n: 1, title: 'What a budget is' },
+      { n: 2, title: 'Who decides' },
+      { n: 3, title: 'How the formula reaches a school' },
+      { n: 4, title: 'What happens when it changes' },
     ],
-    edges: [
-      { from: 'roll', to: 'basic', weight: 1.4 },
-      { from: 'roll', to: 'depriv', weight: 0.6 },
-      { from: 'basic', to: 'budget', weight: 1.8 },
-      { from: 'depriv', to: 'budget', weight: 0.7 },
+    current: 3,
+    kicker: 'the formula',
+    lede: 'Four streams arrive by different routes. Only one of them follows the pupil.',
+  });
+
+  // 2. A visual chosen for the concept: a composition, so a stacked bar.
+  const streams = Explainer.createInstrument({
+    mount: '#streams',
+    kicker: 'per pupil, 2024–25',
+    title: 'Four streams, one budget',
+    reading: 'Each segment is one funding stream as a share of the total.',
+    takeaway: 'The basic entitlement alone is <b>over half</b> of it.',
+  });
+  Explainer.createStackBar({
+    mount: streams.body,
+    parts: [
+      { label: 'Basic entitlement', value: 4200 },
+      { label: 'Deprivation', value: 1100 },
+      { label: 'Low prior attainment', value: 700 },
+      { label: 'Everything else', value: 400 },
     ],
   });
 
-  window.Explainer.createSim({
-    mount: document.getElementById('sim'),
-    levers: [
-      { id: 'roll', label: 'Pupils on roll', min: 100, max: 1800, step: 10, value: 640 },
-      { id: 'fsm', label: 'Share eligible for free school meals', min: 0, max: 60, step: 1, value: 22, unit: '%' },
-      { id: 'rate', label: 'Deprivation weighting per eligible pupil', min: 0, max: 1400, step: 50, value: 500, unit: '£' },
-    ],
-    outcomes: [
-      { id: 'basic', label: 'Basic entitlement', unit: '£' },
-      { id: 'uplift', label: 'Deprivation uplift', unit: '£' },
-      { id: 'total', label: 'Total budget', unit: '£' },
-    ],
-    step: (v) => {
-      const basic = v.roll * 4610;
-      const uplift = v.roll * (v.fsm / 100) * v.rate;
-      diagram.setWeight('depriv', 'budget', Math.max(0.2, (uplift / (basic + uplift)) * 6));
-      return { basic, uplift, total: basic + uplift };
-    },
+  // 3. One lever, one outcome. createSim tags both with the ids from the
+  //    chapter spine, so the checker finds what it is looking for.
+  const model = Explainer.createInstrument({
+    mount: '#model',
+    kicker: 'try it',
+    title: 'Move the roll',
+    reading: 'Total funding at £4,200 basic entitlement per pupil.',
+  });
+  Explainer.createSim({
+    // createSim builds its own controls and readout inside `mount` — do not
+    // pass it the instrument's control slot.
+    mount: model.body,
+    levers: [{ id: 'roll', label: 'Pupils on roll', min: 100, max: 1200, value: 400, step: 10 }],
+    outcomes: [{ id: 'total', label: 'Total funding' }],
+    // `step`, NOT `compute`. Takes the current lever values, returns an object
+    // keyed by outcome id.
+    step: ({ roll }) => ({ total: roll * 4200 }),
   });
 </script>
 </body>

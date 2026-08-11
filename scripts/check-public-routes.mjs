@@ -92,6 +92,10 @@ const HOOK_BYPASSES = [
   // /api/jkai/tools/promote has NO auth of its own and must stay owner-gated.
   '/api/jkai/tools/manifest', // JKAI_BRIDGE_TOKEN
   '/api/jkai/tools/invoke', // JKAI_BRIDGE_TOKEN
+  // Same bridge token, same reason: scripts/studio-image.mjs runs inside a
+  // build with no session and draws one chapter illustration. POST only, and
+  // the handler caps the subject length before it spends anything.
+  '/api/jkai/studio/image', // JKAI_BRIDGE_TOKEN
 ];
 
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection

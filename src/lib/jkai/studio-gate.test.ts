@@ -35,6 +35,21 @@ describe('injectBaseHref', () => {
     expect(injectBaseHref(html, ROOT)).toBe(html);
   });
 
+  // The bug this caught in its own author's code. The kit's worked example
+  // carries a comment explaining the base-href rule; matching the bare string
+  // meant that sentence suppressed the injection, every asset 404'd, and the
+  // gate reported prose-only about a perfectly good page.
+  it('is not fooled by a comment that merely mentions a base tag', () => {
+    const html = '<head><!-- both surfaces inject a <base href> at the root --><title>t</title></head>';
+    const out = injectBaseHref(html, ROOT);
+    expect(out).toContain(`<head><base href="${ROOT}">`);
+  });
+
+  it('ignores a base tag with no href, which re-roots nothing', () => {
+    const html = '<head><base target="_blank"><title>t</title></head>';
+    expect(injectBaseHref(html, ROOT)).toContain(`<base href="${ROOT}">`);
+  });
+
   it('still injects when there is no head element at all', () => {
     expect(injectBaseHref('<p>fragment</p>', ROOT)).toBe(`<base href="${ROOT}"><p>fragment</p>`);
   });

@@ -76,6 +76,7 @@ rsync -a scripts/studio-gate.mjs "$VPS_DIR/scripts/"
 # system prompt simply does not exist on the VPS, and the agent goes back to
 # working blind — which is the condition this whole change set exists to end.
 rsync -a scripts/studio-verify.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/studio-image.mjs "$VPS_DIR/scripts/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of

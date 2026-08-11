@@ -1,24 +1,53 @@
-/* Explainer kit tokens — derived from the Strange Ramblings palette.
-   Raw hex is legal in this file and nowhere else. */
-:root {
-  --ex-bg: #faf8f4;
-  --ex-surface: #ffffff;
-  --ex-ink: #17150f;
-  --ex-ink-soft: #565043;
-  --ex-rule: #d9d3c6;
-  --ex-accent: #c2410c;
-  --ex-accent-soft: #fde3d3;
+/* Explainer kit tokens — the Engine Room house style.
+   Raw hex is legal in this file and nowhere else.
 
-  /* Sequential ramp for scene tiles and choropleths — perceptually ordered. */
-  --ex-ramp-0: #f4ede2;
-  --ex-ramp-1: #e8cfae;
-  --ex-ramp-2: #d9a86e;
-  --ex-ramp-3: #c2410c;
-  --ex-ramp-4: #7c2408;
+   THE FONTS ARE LOADED HERE. This file used to name Archivo Black and DM Sans
+   and contain no @font-face and no @import, and nothing else in the kit loaded
+   one either — so every studio page ever built rendered in whatever the reader
+   happened to have installed. That was the whole of "the branding isn't
+   applied": the builds were importing these tokens and obeying them, with no
+   fonts behind them.
+
+   The palette is the Engine Room's, not the sitewide one: petrol accent
+   (--accent-ink #0e5b66) on warm cream, Fraunces for display. That is the
+   register these explainers are aiming at. The sitewide burnt orange belongs
+   to the marketing surfaces, not to a study. */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Ground and ink — the Engine Room's warm cream, a shade lighter for long
+     reading at full-page width. */
+  --ex-bg: #f2ead9;
+  --ex-surface: #faf6ec;
+  --ex-ink: #1a1008;
+  --ex-ink-soft: #3d2e1a;
+  --ex-ink-muted: rgba(26, 16, 8, 0.65);
+  --ex-rule: rgba(26, 16, 8, 0.18);
+  --ex-rule-faint: rgba(26, 16, 8, 0.08);
+
+  /* Petrol. The Engine Room's accent, and the one an instrument reads best
+     against on cream. */
+  --ex-accent: #0e5b66;
+  --ex-accent-hover: #094850;
+  --ex-accent-soft: rgba(14, 91, 102, 0.12);
+  --ex-accent-faint: rgba(14, 91, 102, 0.06);
+
+  /* Burnt orange, kept for the one thing on a page that must out-shout the
+     accent — a highlighted value, never a whole series. */
+  --ex-flag: #c4570a;
+
+  /* Sequential ramp for scene tiles and choropleths — perceptually ordered,
+     and legible in greyscale because tile height already carries magnitude. */
+  --ex-ramp-0: #e7dcc6;
+  --ex-ramp-1: #b8c9c2;
+  --ex-ramp-2: #7ba3a6;
+  --ex-ramp-3: #3d7d86;
+  --ex-ramp-4: #0e5b66;
 
   /* Categorical series — max six, distinguishable in greyscale. */
-  --ex-cat-1: #1d4e63;
-  --ex-cat-2: #c2410c;
+  --ex-cat-1: #0e5b66;
+  --ex-cat-2: #c4570a;
   --ex-cat-3: #6b7f3a;
   --ex-cat-4: #8a5a9c;
   --ex-cat-5: #b08900;
@@ -28,12 +57,23 @@
   --ex-warn: #b08900;
   --ex-bad: #a32b1c;
 
-  --font-display: 'Archivo Black', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
+  /* Type scale. rem so a reader's browser setting still works; nothing below
+     12px, and inputs never below 16px or iOS zooms on focus. */
+  --ex-fs-mono: 0.6875rem;
+  --ex-fs-small: 0.8125rem;
+  --ex-fs-body: 1.0625rem;
+  --ex-fs-lede: 1.1875rem;
+  --ex-fs-h2: 1.35rem;
+  --ex-fs-h1: clamp(1.75rem, 3.6vw, 2.5rem);
+
   --ex-radius: 2px;
+  --ex-radius-round: 100px;
   --ex-gap: 1rem;
+  --ex-measure: 68ch;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,9 +81,28 @@
     --ex-bg: #14120e;
     --ex-surface: #1d1a15;
     --ex-ink: #f3efe7;
-    --ex-ink-soft: #a49c8c;
-    --ex-rule: #38332a;
-    --ex-accent: #f97316;
-    --ex-accent-soft: #3a2214;
+    --ex-ink-soft: #c4bcac;
+    --ex-ink-muted: rgba(243, 239, 231, 0.62);
+    --ex-rule: rgba(243, 239, 231, 0.18);
+    --ex-rule-faint: rgba(243, 239, 231, 0.08);
+
+    --ex-accent: #4ea3b0;
+    --ex-accent-hover: #6bbcc8;
+    --ex-accent-soft: rgba(78, 163, 176, 0.18);
+    --ex-accent-faint: rgba(78, 163, 176, 0.09);
+    --ex-flag: #e8834a;
+
+    --ex-ramp-0: #262219;
+    --ex-ramp-1: #33453f;
+    --ex-ramp-2: #3f6b6e;
+    --ex-ramp-3: #4b8f97;
+    --ex-ramp-4: #6bbcc8;
+
+    --ex-cat-1: #4ea3b0;
+    --ex-cat-2: #e8834a;
+    --ex-cat-3: #9db862;
+    --ex-cat-4: #b48ac4;
+    --ex-cat-5: #d4b13c;
+    --ex-cat-6: #9a9a9a;
   }
 }

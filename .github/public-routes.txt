@@ -46,6 +46,7 @@
 /api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/jkai/studio
+/api/jkai/studio/image
 /api/jkai/tools/invoke
 /api/jkai/tools/manifest
 /api/landing/ecg-telemetry

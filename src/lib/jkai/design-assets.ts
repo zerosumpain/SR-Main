@@ -171,13 +171,18 @@ const EXAMPLE_PAGE_SVELTE = `<script lang="ts">
  */
 const EXPLAINER_FILES = [
   'tokens.css',
+  'shell.css',
+  'shell.js',
+  'instruments.js',
   'sim.js',
   'diagram.js',
   'lowpoly.js',
   'chart.js',
   'three.min.js',
   'README.md',
+  'api.md',
   'scenes.md',
+  'SKILL.md',
   'examples/chapter.html',
   // VENDOR.md (three.js provenance) is intentionally NOT listed here — the
   // agent needs the kit to build with, not its licensing paperwork. Omitting

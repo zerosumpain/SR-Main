@@ -70,7 +70,17 @@ const firstLine = (s) => stripAnsi(s).split('\n')[0].slice(0, 300);
 export function injectBaseHref(html, projectRoot) {
   // Never double-inject: a page that already declares its own base is telling
   // us where its root is, and overriding that would be a new lie.
-  if (/<base\s/i.test(html)) return html;
+  //
+  // Comments are stripped before the test and the tag must actually carry an
+  // href. The first version tested /<base\s/ against the raw HTML, so a page
+  // whose COMMENT mentioned "<base href>" was treated as already-based and got
+  // no base tag — every asset then 404'd and the gate reported prose-only,
+  // no-model and no-design-tokens. Which is precisely the bug this function
+  // exists to fix, reintroduced one layer up. Caught by running the kit's own
+  // worked example through the real gate: its comment explains the base-href
+  // rule, and that sentence was enough to break it.
+  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, '');
+  if (/<base\s[^>]*href/i.test(withoutComments)) return html;
   return /<head[^>]*>/i.test(html)
     ? html.replace(/<head[^>]*>/i, (m) => `${m}<base href="${projectRoot}">`)
     : `<base href="${projectRoot}">${html}`;
@@ -266,7 +276,14 @@ async function main() {
         // Distinctness: on /chapter-N/ the reader should see chapter N, not
         // all of them stacked. A client-routed SPA that shows one at a time
         // passes; a single page dumping every chapter does not.
-        const visibleChapters = await page.locator('[data-chapter]:visible').count();
+        // Count DISTINCT chapter numbers, not marked elements. Counting
+        // elements calls a chapter whose wrapper and inner article both carry
+        // data-chapter="3" two chapters — one chapter marked twice is untidy,
+        // not the failure this rule is for, which is eight chapters stacked on
+        // one page and served at every URL.
+        const visibleChapters = await page
+          .locator('[data-chapter]:visible')
+          .evaluateAll((els) => new Set(els.map((e) => e.getAttribute('data-chapter'))).size);
         if (visibleChapters > 1) {
           findings.push({
             chapter: ch.n, rule: 'chapters-not-distinct',

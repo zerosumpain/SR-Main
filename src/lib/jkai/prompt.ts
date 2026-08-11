@@ -232,12 +232,29 @@ This is the SAME code the build runs to score you, so a chapter that passes here
 
 THE EXPLAINER KIT IS MOUNTED AT ./explainer-kit/ — READ IT FIRST.
 Before writing any HTML, CSS or JavaScript:
-1. Read \`./explainer-kit/README.md\` in full.
+1. Read \`./explainer-kit/api.md\` — every signature in the kit. Read it BEFORE you call anything. Guessing a signature from prose produced meshes at NaN coordinates once: a canvas present, nothing drawn, no console error.
 2. Read \`./explainer-kit/scenes.md\` — it tells you which visual mode suits which kind of concept. Choose per chapter.
 3. Read \`./explainer-kit/examples/chapter.html\` — copy its structure.
 4. Copy the kit files your project needs into your own tree and reference them with <script src>. Never edit the mount; it is regenerated every iteration and your edits are discarded.
-5. Import \`tokens.css\` at the root of your stylesheet. Never hard-code a colour or a font name.
+5. Import \`tokens.css\` FIRST, then \`shell.css\`. The fonts load from tokens.css — a page that skips it renders in whatever the reader happens to have installed. Never hard-code a colour or a font name.
 6. three.js is vendored at \`./explainer-kit/three.min.js\`. Do NOT add a CDN script tag for it and do NOT npm install it.
+
+MOUNT THE CHROME, DO NOT AUTHOR IT.
+\`Explainer.mountShell({ project, chapters, current, kicker, lede })\` writes the header, the chapter navigation, the chapter heading and the prev/next footer — already on brand, with every link project-root-relative. Use it on every chapter, and \`mountContents\` on the index. Hand-rolled navigation is how earlier builds shipped dead links, and a nav you wrote yourself will not match the one on the next chapter.
+
+CHOOSE THE VISUAL FROM THE CONCEPT.
+\`instruments.js\` carries the SVG artefacts, and one of them is almost always the right answer:
+- a process → \`createSteps\`; a repeating process → \`createCycle\`; a narrowing one → \`createFunnel\`
+- a composition → \`createStackBar\`; magnitudes → \`createBars\`; a proportion or a risk → \`createIconArray\`
+- change over time → \`createLineBand\`; before/after → \`createComparison\`; events → \`createTimeline\`
+- structure → \`createTree\`, \`createMatrix\`, \`createVenn\`; a mechanism → \`createDiagram\`
+Wrap each one in \`createInstrument\`, which gives every visual the same frame.
+
+The low-poly scene is the EXCEPTION, not the default. It is right for a quantity that varies across a set — one tile per source, claim, year or category, height for magnitude. It is wrong for drawing nine boxes: the two pages this house style comes from contain zero canvas and zero WebGL between them.
+
+For something physical or spatial that no artefact can draw, generate an illustration:
+    node __STUDIO_IMAGE_CMD__ --prompt "<what to draw>" --out assets/<name>.png
+It writes the file into your tree and prints the <figure> markup. Never let a generated image carry a number — a model will draw a convincing axis with invented values on it. Quantities belong in the instruments, which are exact and which the reader can operate.
 7. Do NOT use Tailwind. A post-iteration linter rejects any class attribute containing bg-, text-, p-<digit>, m-<digit>, w-<digit>, h-<digit>, flex or grid as a whole word. Note that a class named "chapter-grid" matches — pick another name.
 
 THE CHAPTER CONTRACT — every chapter page must have all four:
@@ -358,6 +375,11 @@ export function studioVerifyCommand(cwd: string = process.cwd()): string {
   return `node ${cwd}/scripts/studio-verify.mjs --base http://127.0.0.1:$PORT`;
 }
 
+/** Absolute path to the illustration generator, for the same reason. */
+export function studioImageScript(cwd: string = process.cwd()): string {
+  return `${cwd}/scripts/studio-image.mjs`;
+}
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
@@ -366,7 +388,10 @@ export function buildSystemPrompt(
   if (mode === 'studio') {
     const verify = studioVerifyCommand().replace('$PORT', String(assignedPort));
     return (
-      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify) +
+      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify).replace(
+        '__STUDIO_IMAGE_CMD__',
+        studioImageScript(),
+      ) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)` +
       `\nThe chapter spine (titles, lever and outcome ids) is at /home/jkai/workspace/${buildId}/.studio/spine.json — the checker reads it automatically.`
