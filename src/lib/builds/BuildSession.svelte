@@ -717,16 +717,19 @@
     background: var(--text-primary);
     color: var(--bg);
   }
+  /* 12px is the floor the font-size gate enforces, so the badge is sized to fit
+     the glyph rather than the glyph shrunk to fit the badge. */
   .bs-tab-alert {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 15px;
-    height: 15px;
+    width: 18px;
+    height: 18px;
     border-radius: 100px;
     background: var(--error);
     color: var(--bg);
-    font-size: 10px;
+    font-size: var(--fs-label-xs, 12px);
+    line-height: 1;
     font-weight: 700;
     flex-shrink: 0;
   }
