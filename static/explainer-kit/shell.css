@@ -74,9 +74,15 @@ body {
   background: var(--ex-surface);
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   max-width: 22ch;
+  white-space: nowrap;
+}
+/* The truncation lives on the text, not the tab: text-overflow has no effect
+   on a flex container, so a long chapter name was clipped mid-word with no
+   ellipsis — "What this brief cannot establ". */
+.ex-tab-t {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 .ex-tab:hover { border-color: var(--ex-accent); color: var(--ex-accent); }
 .ex-tab.is-here {
@@ -330,6 +336,68 @@ body {
 }
 .ex-inst-mark { color: var(--ex-accent); flex-shrink: 0; }
 .ex-inst-take b { color: var(--ex-ink); font-weight: 700; }
+
+/* ---- createSim's controls and readout -----------------------------------
+   sim.js emits .ex-sim, .ex-lever, .ex-outcome and friends and has never
+   shipped a line of CSS for any of them, so every build either wrote its own
+   or got unstyled inline spans jammed together — observed live as
+   "Highlighted documented consequenceFar-reaching impact", label and value
+   with no space between them. */
+
+.ex-sim { display: flex; flex-direction: column; gap: 0.9rem; }
+
+.ex-sim-controls { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.ex-lever { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.ex-lever-label {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+  flex: 0 0 auto;
+}
+/* 16px floor, or iOS zooms the page when the control takes focus. */
+.ex-lever input {
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  font-size: 1rem;
+  accent-color: var(--ex-accent);
+}
+.ex-lever-value {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--ex-ink);
+  min-width: 3.5ch;
+}
+
+.ex-sim-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--ex-rule-faint);
+}
+.ex-outcome {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.ex-outcome-label {
+  font-family: var(--font-mono);
+  font-size: var(--ex-fs-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ex-ink-muted);
+}
+.ex-outcome-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ex-ink);
+}
+.ex-outcome-unit { font-size: var(--ex-fs-small); color: var(--ex-ink-muted); }
 
 /* ---- stat cards --------------------------------------------------------- */
 
