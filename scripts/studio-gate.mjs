@@ -28,6 +28,8 @@
  * the caller (studio-gate.ts, Task 13) is the one that knows which files the
  * kit sync was supposed to mount (see design-assets.ts EXPLAINER_FILES).
  */
+import { pathToFileURL } from 'node:url';
+
 let out = { ran: false, reason: 'harness did not start' };
 
 // Playwright error messages carry ANSI colour codes and a multi-line call
@@ -58,6 +60,15 @@ const firstLine = (s) => stripAnsi(s).split('\n')[0].slice(0, 300);
  * root, "styles.css" resolves to project-root/styles.css, which is precisely
  * what that fetch asks for. Making it page-relative would break it.
  */
+export function injectBaseHref(html, projectRoot) {
+  // Never double-inject: a page that already declares its own base is telling
+  // us where its root is, and overriding that would be a new lie.
+  if (/<base\s/i.test(html)) return html;
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head[^>]*>/i, (m) => `${m}<base href="${projectRoot}">`)
+    : `<base href="${projectRoot}">${html}`;
+}
+
 async function serveLikeAHuman(page, baseUrl) {
   const projectRoot = new URL('/', baseUrl).toString();
   await page.route('**/*', async (route) => {
@@ -76,14 +87,7 @@ async function serveLikeAHuman(page, baseUrl) {
     } catch {
       return route.fulfill({ response });
     }
-    // Never double-inject: a page that already declares its own base is
-    // telling us where its root is, and overriding that would be a new lie.
-    if (!/<base\s/i.test(body)) {
-      body = /<head[^>]*>/i.test(body)
-        ? body.replace(/<head[^>]*>/i, (m) => `${m}<base href="${projectRoot}">`)
-        : `<base href="${projectRoot}">${body}`;
-    }
-    return route.fulfill({ response, body });
+    return route.fulfill({ response, body: injectBaseHref(body, projectRoot) });
   });
 }
 
@@ -495,6 +499,18 @@ async function main() {
   }
 }
 
-main()
-  .catch((e) => { out = { ran: false, reason: `unexpected: ${e.message}` }; })
-  .finally(() => { process.stdout.write(JSON.stringify(out) + '\n'); });
+// Run only when invoked as a script, so a test can import injectBaseHref
+// without starting a browser and consuming stdin.
+//
+// If this guard ever mis-fires the script prints nothing, which the caller
+// already reports as `ran: false, reason: "the studio gate printed nothing"` —
+// a visible skip, never a silent pass. Verified by running the real script
+// against a real snapshot after the change, not by reading it.
+const invokedDirectly =
+  Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main()
+    .catch((e) => { out = { ran: false, reason: `unexpected: ${e.message}` }; })
+    .finally(() => { process.stdout.write(JSON.stringify(out) + '\n'); });
+}
