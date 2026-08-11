@@ -36,6 +36,7 @@ import './tools/agents';
 import './tools/monitors';
 import './tools/gmail';
 import './tools/apple-calendar';
+import './tools/node-call';
 import './tools/web';
 import './tools/node-builder';
 import './tools/site-signals';
