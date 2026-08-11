@@ -155,9 +155,15 @@ type OrderedFact = {
   confidence: number;
   url: string | null;
   title: string | null;
-  credibilityType: string | null;
-  credibilityScore: number | null;
-  fetchedAt: string | null;
+  /**
+   * Provenance, where the research desk recorded it. Optional because it
+   * genuinely is: credibility is populated for roughly two thirds of sources,
+   * and a fact with none should read as "provenance unverified" rather than
+   * forcing every caller to invent a null.
+   */
+  credibilityType?: string | null;
+  credibilityScore?: number | null;
+  fetchedAt?: string | null;
 };
 
 export function distinctHostCount(rows: Array<{ url: string | null }>): number {
@@ -188,6 +194,9 @@ export function mapHitsToFacts(
     confidence: number;
     sourceUrl: string | null;
     sourceTitle: string | null;
+    credibilityType?: string | null;
+    credibilityScore?: number | null;
+    fetchedAt?: string | null;
   }>,
   cap = BRIEF_FACT_CAP,
 ): OrderedFact[] {
@@ -209,9 +218,9 @@ export function mapHitsToFacts(
       confidence: h.confidence,
       url: h.sourceUrl,
       title: h.sourceTitle,
-      credibilityType: h.credibilityType,
-      credibilityScore: h.credibilityScore,
-      fetchedAt: h.fetchedAt,
+      ...(h.credibilityType ? { credibilityType: h.credibilityType } : {}),
+      ...(h.credibilityScore != null ? { credibilityScore: h.credibilityScore } : {}),
+      ...(h.fetchedAt ? { fetchedAt: h.fetchedAt } : {}),
     });
     if (out.length >= cap) break;
   }
