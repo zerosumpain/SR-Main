@@ -12,6 +12,54 @@ import type { NodeExecutor, NodeResult } from '$lib/workflows/types';
 import { appleCalendarDef } from './apple-calendar.def';
 export { appleCalendarDef } from './apple-calendar.def';
 
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  location: string;
+  start: string;
+  end: string;
+  description: string;
+  /** Present only when the iCalendar body could not be read. */
+  parseError?: string;
+}
+
+/**
+ * Turn one CalDAV resource into an event row.
+ *
+ * `ICAL.parse` returns a jCal triple — `[name, properties, components]` — and
+ * `ICAL.Component` expects that whole triple, not its third element. Passing
+ * `jcal[2]` threw `Cannot read properties of undefined` on **every** event, and
+ * a bare `catch` turned each throw into a row with a blank title, blank dates
+ * and a blank description. So the list operation appeared to work, returned the
+ * right NUMBER of events, and had never once returned a readable one. It went
+ * unnoticed because a calendar of empty rows looks much like a quiet month.
+ *
+ * Extracted from the executor so it can be tested against a real iCalendar
+ * body without a CalDAV server, which is what would have caught it.
+ */
+export function parseCalendarObject(url: string, data: string): CalendarEvent {
+  const blank = { id: url, title: '', location: '', start: '', end: '', description: '' };
+  try {
+    const component = new ical.Component(ical.parse(data));
+    // A VCALENDAR may carry VTIMEZONE and other siblings; take the event.
+    const vevent = component.getFirstSubcomponent('vevent');
+    if (!vevent) return { ...blank, parseError: 'no VEVENT in calendar object' };
+    const event = new ical.Event(vevent);
+    return {
+      id: url,
+      title: event.summary || '',
+      location: event.location || '',
+      start: event.startDate?.toJSDate()?.toISOString() || '',
+      end: event.endDate?.toJSDate()?.toISOString() || '',
+      description: event.description || '',
+    };
+  } catch (err) {
+    // Still return a row — one malformed invite should not empty the list —
+    // but say so, rather than pass a blank off as an event with no title.
+    return { ...blank, parseError: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export const appleCalendarExecutor: NodeExecutor = {
   type: 'apple-calendar',
   async execute(input, config: Record<string, any>, _ctx): Promise<NodeResult> {
@@ -34,23 +82,7 @@ export const appleCalendarExecutor: NodeExecutor = {
             calendar: target,
             timeRange: { start: config.dateRangeStart, end: config.dateRangeEnd },
           });
-          const events = objects.map((obj: any) => {
-            try {
-              const jcal = ical.parse(obj.data);
-              const vcomp = new ical.Component(jcal[2]);
-              const vevent = new ical.Event(vcomp);
-              return {
-                id: obj.url,
-                title: vevent.summary || '',
-                location: vevent.location || '',
-                start: vevent.startDate?.toJSDate()?.toISOString() || '',
-                end: vevent.endDate?.toJSDate()?.toISOString() || '',
-                description: vevent.description || '',
-              };
-            } catch {
-              return { id: obj.url, title: '', location: '', start: '', end: '', description: '' };
-            }
-          });
+          const events = objects.map((obj: any) => parseCalendarObject(obj.url, obj.data));
           return { output: { events }, rowCount: events.length };
         }
         if (config.operation === 'create') {
