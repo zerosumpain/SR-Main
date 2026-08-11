@@ -1004,6 +1004,31 @@ export function seedDevCommand(base: string, keepUnpromotedWork: boolean): strin
 }
 
 /**
+ * Write the chapter spine where the agent's own checker can find it.
+ *
+ * Lives at `<workspace>/.studio/spine.json` — beside dev/, never inside it.
+ * Anything under dev/ is copied to live/ and then served and published, and
+ * the build's internal scaffolding is not part of the published explainer.
+ *
+ * Without this the agent has to remember lever ids from the prompt and the
+ * checker cannot check them; with it, both read the same file, so the agent's
+ * self-check and the orchestrator's verdict cannot disagree about what a
+ * chapter owes.
+ */
+export async function writeStudioSpine(
+  buildId: string,
+  spine: {
+    chapters: Array<{ n: number; title: string; leverId: string; outcomeId: string }>;
+    sourceUrls: string[];
+    kitFiles: string[];
+  },
+): Promise<void> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  await execInSandbox(`mkdir -p ${base}/.studio`, 5000);
+  await writeFileInSandbox(`${base}/.studio/spine.json`, JSON.stringify(spine, null, 2));
+}
+
+/**
  * How many chapters are actually finished in the promoted tree.
  *
  * A chapter counts as built when its page no longer carries the skeleton's

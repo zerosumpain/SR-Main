@@ -15,6 +15,37 @@ import { registerActiveChild, clearActiveChild } from './interrupt-registry';
 import { stripNulls } from './strip-nulls';
 import { describeDbError } from './db-error';
 
+/** pi's built-ins the agent always needs. Never narrowed at runtime. */
+export const BASE_PI_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
+
+/**
+ * Build pi's `--tools` value.
+ *
+ * `--tools` is an allowlist, and pi applies it to extension-registered tools
+ * as well as its own built-ins — `_refreshToolRegistry` filters
+ * `extensionRunner.getAllRegisteredTools()` through the same `isAllowedTool`
+ * predicate. So the previous fixed list silently stripped every one of the
+ * bridged site tools before the model saw a single one, while the executor
+ * logged "Tool bridge OK — 167 site tools available to the agent". Sixty days
+ * of iteration actions contain zero bridged calls.
+ *
+ * Dropping the flag entirely is not the fix: with no allowlist pi's initial
+ * active set is its four defaults (read, bash, edit, write), which would
+ * quietly deactivate grep, find and ls.
+ *
+ * An empty or missing bridge list yields exactly the built-ins — the bridge
+ * failing closed must never widen what the agent can reach.
+ */
+export function buildToolAllowlist(bridgedToolNames?: readonly string[]): string {
+  const seen = new Set<string>(BASE_PI_TOOLS);
+  for (const name of bridgedToolNames ?? []) {
+    // Commas would split one name into two bogus entries; whitespace would
+    // never match a registered tool. Skip rather than mangle.
+    if (typeof name === 'string' && name && !/[\s,]/.test(name)) seen.add(name);
+  }
+  return [...seen].join(',');
+}
+
 const CONTAINER_NAME = 'jkai-sandbox';
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
@@ -234,6 +265,14 @@ export interface PiRunOptions {
   thinkingLevel?: string;
   /** Extra env vars to inject into the sandbox container for this run. */
   extraEnv?: Record<string, string>;
+  /**
+   * Names of the bridged site tools, from the manifest preflight.
+   *
+   * These MUST be added to pi's `--tools` allowlist or the model never sees
+   * them, however healthily the extension registers them. Empty means the
+   * bridge is unusable this iteration; the agent then gets built-ins only.
+   */
+  bridgedToolNames?: string[];
 }
 
 export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
@@ -268,7 +307,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
-    '--tools', 'read,bash,edit,write,grep,find,ls',
+    '--tools', buildToolAllowlist(opts.bridgedToolNames),
   ];
   if (opts.extensions && opts.extensions.length > 0) {
     for (const e of opts.extensions) {

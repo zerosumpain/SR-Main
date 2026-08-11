@@ -11,6 +11,7 @@ import {
   seedDevFromLive,
   promoteDevToLive,
   countBuiltChapters,
+  writeStudioSpine,
   snapshotIteration,
   execInSandbox,
   type GitTargetConfig,
@@ -949,6 +950,28 @@ class Orchestrator {
 
       // Seed dev from live so the LLM starts with the latest working version
       await seedDevFromLive(buildId);
+
+      // Put the spine where the agent's own checker reads it, before the agent
+      // runs. Refreshed every iteration so a re-plan cannot leave a stale copy
+      // that quietly disagrees with what the gate is looking for.
+      if (build.origin === 'studio' && build.chapterPlan.length > 0) {
+        await writeStudioSpine(buildId, {
+          chapters: build.chapterPlan,
+          sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
+          kitFiles: STUDIO_KIT_CHECK_FILES,
+        }).catch(async (err) => {
+          // Not fatal: the checker still runs, it just cannot check lever ids
+          // or citations. Say so rather than letting the agent wonder why.
+          await emitLog(
+            buildId,
+            'system',
+            `Could not write the chapter spine for the checker (${
+              err instanceof Error ? err.message : String(err)
+            }); it will check structure only this iteration.`,
+            iteration.id,
+          );
+        });
+      }
 
       const startTime = Date.now();
 

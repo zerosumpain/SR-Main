@@ -71,6 +71,11 @@ rsync -a scripts/smoke-static-app.mjs "$VPS_DIR/scripts/"
 # production — it reports { ran: false } forever and every studio build sails
 # through unchecked, with nothing to indicate the check never ran.
 rsync -a scripts/studio-gate.mjs "$VPS_DIR/scripts/"
+# The agent's own copy of that check, which it runs by hand via bash between
+# edits. Same allow-list trap: absent here, the command named in the studio
+# system prompt simply does not exist on the VPS, and the agent goes back to
+# working blind — which is the condition this whole change set exists to end.
+rsync -a scripts/studio-verify.mjs "$VPS_DIR/scripts/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of

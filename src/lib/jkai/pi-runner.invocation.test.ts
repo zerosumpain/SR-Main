@@ -2,7 +2,50 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, mkdir, writeFile, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { piInvocation, piThinkingLevel, pinCodexTransport } from './pi-runner';
+import {
+  piInvocation,
+  piThinkingLevel,
+  pinCodexTransport,
+  buildToolAllowlist,
+  BASE_PI_TOOLS,
+} from './pi-runner';
+
+// pi's --tools is an allowlist applied to extension-registered tools as well
+// as built-ins, so the fixed list stripped all 167 bridged site tools before
+// the model saw one — while the executor logged "Tool bridge OK".
+describe('buildToolAllowlist', () => {
+  it('always includes every built-in the agent depends on', () => {
+    const out = buildToolAllowlist([]).split(',');
+    for (const t of BASE_PI_TOOLS) expect(out).toContain(t);
+  });
+
+  it('adds the bridged tool names so they survive the allowlist', () => {
+    const out = buildToolAllowlist(['workflow_list', 'datastore_query']).split(',');
+    expect(out).toContain('workflow_list');
+    expect(out).toContain('datastore_query');
+    expect(out).toContain('bash');
+  });
+
+  // A failing bridge must never widen what the agent can reach.
+  it.each([[undefined], [[]]])('yields exactly the built-ins for %o', (names) => {
+    expect(buildToolAllowlist(names as string[] | undefined).split(',').sort()).toEqual(
+      [...BASE_PI_TOOLS].sort(),
+    );
+  });
+
+  it('drops names that would corrupt the comma-separated list', () => {
+    const out = buildToolAllowlist(['good_tool', 'bad,name', 'bad name', '']).split(',');
+    expect(out).toContain('good_tool');
+    expect(out).not.toContain('bad,name');
+    expect(out).not.toContain('bad name');
+    expect(out.every((n) => n.length > 0)).toBe(true);
+  });
+
+  it('does not repeat a bridged tool that shadows a built-in', () => {
+    const out = buildToolAllowlist(['bash', 'read']).split(',');
+    expect(out.filter((n) => n === 'bash')).toHaveLength(1);
+  });
+});
 
 // A build row stores OUR provider names. Pi has its own registry and knows
 // none of them: handing it `--provider codex` killed every Codex build on

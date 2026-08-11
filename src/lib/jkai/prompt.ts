@@ -219,7 +219,16 @@ YOU HAVE REAL TOOLS — use them directly:
 - bash: run shell commands
 - grep, find, ls, rg: inspect the workspace
 
-HOST ENVIRONMENT — already installed, do NOT reinstall: Python 3.12, Node 22 + npm/npx, Playwright + Chromium, git, curl, jq, ripgrep, bash + coreutils. Before any \`npm install\` or \`pip install\`, check you don't already have the capability.
+HOST ENVIRONMENT — already installed, do NOT reinstall: Python 3.12, Node 22 + npm/npx, git, curl, jq, ripgrep, bash + coreutils. Before any \`npm install\` or \`pip install\`, check you don't already have the capability.
+
+LOOK AT WHAT YOU BUILT — RUN THE CHECKER.
+There is no Playwright in your workspace and \`import('playwright')\` will NOT resolve there — it resolves from the importing file's own directory. Do not try to write your own browser script; earlier builds spent 59 attempts on that and 39 of them died on MODULE_NOT_FOUND. Use this instead:
+
+    __STUDIO_VERIFY_CMD__ --chapter <n>
+
+It drives your page in a real browser on the same surface a reader gets, and tells you what is wrong and what to change. Run it after finishing each chapter, fix what it reports, run it again. Drop \`--chapter\` to check the whole project.
+
+This is the SAME code the build runs to score you, so a chapter that passes here passes there. A chapter you have not checked is a chapter you do not know works.
 
 THE EXPLAINER KIT IS MOUNTED AT ./explainer-kit/ — READ IT FIRST.
 Before writing any HTML, CSS or JavaScript:
@@ -334,16 +343,33 @@ export const DESIGN_SYSTEM_PROMPT_BLOCK =
 // sync by hand; this is the one this repo has a recorded history of drifting.
 export type ChapterPlanEntry = { n: number; title: string; leverId: string; outcomeId: string };
 
+/**
+ * The exact command the agent runs to look at its own work.
+ *
+ * Resolved from `process.cwd()` for the same reason runStudioGate does: the
+ * builder sidecar runs from the deployed checkout, and that is where
+ * ci-release.sh rsyncs the scripts to. Interpolated into the prompt rather
+ * than passed through the environment — an env var that fails to propagate
+ * into the agent's shell would leave the prompt naming a command that does
+ * not exist, which is the same class of lie as the "Playwright is already
+ * installed" line this replaces.
+ */
+export function studioVerifyCommand(cwd: string = process.cwd()): string {
+  return `node ${cwd}/scripts/studio-verify.mjs --base http://127.0.0.1:$PORT`;
+}
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
   mode: BuildPromptMode = 'app',
 ): string {
   if (mode === 'studio') {
+    const verify = studioVerifyCommand().replace('$PORT', String(assignedPort));
     return (
-      STUDIO_SYSTEM_PROMPT +
+      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
-      `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)`
+      `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)` +
+      `\nThe chapter spine (titles, lever and outcome ids) is at /home/jkai/workspace/${buildId}/.studio/spine.json — the checker reads it automatically.`
     );
   }
   if (mode === 'repo') {
