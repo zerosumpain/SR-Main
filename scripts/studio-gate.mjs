@@ -28,6 +28,13 @@
  * the caller (studio-gate.ts, Task 13) is the one that knows which files the
  * kit sync was supposed to mount (see design-assets.ts EXPLAINER_FILES).
  */
+// @ts-nocheck — a standalone node script, deliberately untyped, run by
+// `node scripts/studio-gate.mjs` and never bundled. It sat outside the
+// type-check graph until studio-gate.test.ts began importing injectBaseHref
+// from it; without this line that one import pulls the whole file in and
+// svelte-check reports ~20 implicit-any errors on code that has always been
+// this way. Checking it properly would mean typing Playwright handles in a
+// file that cannot import Playwright's types.
 import { pathToFileURL } from 'node:url';
 
 let out = { ran: false, reason: 'harness did not start' };
