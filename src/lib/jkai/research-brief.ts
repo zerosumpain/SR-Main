@@ -12,7 +12,7 @@
  */
 import { db } from '$lib/db';
 import { researchSessions, facts, sources, jkaiBuilds } from '$lib/db/schema';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, inArray } from 'drizzle-orm';
 import { getLLMClient } from './llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { emitLog } from './log-emitter';
@@ -46,10 +46,33 @@ export interface ResearchBrief {
   topic: string;
   facts: BriefFact[];
   concepts: Array<{ name: string; whyHard: string }>;
-  causalMap: Array<{ from: string; to: string; relationship: string }>;
+  /**
+   * The model the levers are built on. Each link cites the numbered facts it
+   * rests on, and a link that cannot cite them is dropped before the brief is
+   * used — see groundCausalMap. The graph was the obvious place to derive this
+   * from and turns out to be the wrong one: `relationship` holds `employs`,
+   * `part_of`, `located_in` — ontology, not causation — across 353 distinct
+   * types in 698 rows, with from_fact_id populated on none of them. So this
+   * stays synthesised, and is made checkable instead.
+   */
+  causalMap: Array<{ from: string; to: string; relationship: string; facts?: number[] }>;
   liveData: Array<{ name: string; url: string; what: string }>;
   misconceptions: string[];
   gaps: string[];
+  /**
+   * Where the corpus contradicts itself, as CANDIDATES for the agent to judge.
+   *
+   * 291 facts carry `refutes_fact_id` and `searchResearch` excludes every one
+   * of them (`AND NOT f.is_counterfactual`), so they could never arrive by the
+   * normal route — the IBCA build had 31 in its own session and saw none.
+   *
+   * Not rendered as "sources disagree". Sampling five pairs found two genuine
+   * and valuable ("estate eligibility is restricted" against "core awards are
+   * available to eligible estates"), one a fair qualification, and two false
+   * positives that are merely related statements. A 40% artefact rate belongs
+   * in front of a judge, not a renderer.
+   */
+  contested?: Array<{ claim: string; counterClaim: string; claimUrl: string | null; counterUrl: string | null }>;
   sessionId: string | null;
 }
 
@@ -292,7 +315,11 @@ export function formatBriefForPrompt(brief: ResearchBrief): string {
   brief.concepts.forEach((c) => lines.push(`- **${c.name}** — ${c.whyHard}`));
   lines.push('');
   lines.push('## CAUSAL MAP (build your levers and diagrams on this)');
-  brief.causalMap.forEach((c) => lines.push(`- ${c.from} → ${c.to}: ${c.relationship}`));
+  brief.causalMap.forEach((c) =>
+    lines.push(
+      `- ${c.from} → ${c.to}: ${c.relationship}${c.facts?.length ? ` [facts ${c.facts.join(', ')}]` : ''}`,
+    ),
+  );
   lines.push('');
   lines.push('## LIVE DATA AVAILABLE');
   brief.liveData.forEach((d) => lines.push(`- ${d.name} (${d.url}) — ${d.what}`));
@@ -302,6 +329,23 @@ export function formatBriefForPrompt(brief: ResearchBrief): string {
   lines.push('');
   lines.push('## GAPS');
   brief.gaps.forEach((g) => lines.push(`- ${g}`));
+
+  if (brief.contested?.length) {
+    lines.push('');
+    lines.push('## CONTESTED — CANDIDATES, NOT CONCLUSIONS');
+    lines.push(
+      'The corpus records these as contradicting each other. JUDGE EACH ONE. Roughly two in five ' +
+        'are extraction artefacts — two statements that are merely related, or one qualifying the ' +
+        'other rather than refuting it. Build a chapter on a tension ONLY where you can see the ' +
+        'contradiction yourself, and say which source says what. Never render "sources disagree" ' +
+        'on the strength of this list alone.',
+    );
+    brief.contested.forEach((c, i) => {
+      lines.push(`${i + 1}. ${c.claim}`);
+      lines.push(`   against: ${c.counterClaim}`);
+      lines.push(`   ${c.claimUrl ?? 'no source'}  vs  ${c.counterUrl ?? 'no source'}`);
+    });
+  }
   return lines.join('\n');
 }
 
@@ -321,7 +365,7 @@ Return ONLY a JSON object, no prose and no code fence, with exactly these keys:
 
 {
   "concepts": [{ "name": "...", "whyHard": "..." }],
-  "causalMap": [{ "from": "...", "to": "...", "relationship": "..." }],
+  "causalMap": [{ "from": "...", "to": "...", "relationship": "...", "facts": [1, 4] }],
   "liveData": [{ "name": "...", "url": "https://...", "what": "..." }],
   "misconceptions": ["..."],
   "gaps": ["..."]
@@ -330,9 +374,99 @@ Return ONLY a JSON object, no prose and no code fence, with exactly these keys:
 Rules:
 - Ground every concept, every causal link, and every misconception in the numbered facts you were given. Do not introduce a claim, relationship, or figure the facts do not support — if it isn't traceable to one of the numbered facts, it does not belong here.
 - causalMap is the model an interactive simulation will be built on. Prefer relationships with a direction and a rough magnitude, drawn only from what the facts establish.
+- EVERY causal link MUST carry a "facts" array naming the numbered facts it rests on. A link you cannot cite is a link you invented, and it will be dropped before the brief is used — silently weakening the model the levers are built on. Cite the fact numbers as given, not the source URLs.
 - liveData should point to real datasets or APIs the facts actually mention, not invented ones.
 - gaps are what the numbered facts do NOT establish, not general knowledge a search engine might find. Do not leave this empty to look thorough; an empty gaps list on a complex topic is itself a warning sign.
 - Aim for 3-5 concepts, 4-8 causal relationships.`;
+
+/**
+ * Find where the corpus contradicts the facts we selected.
+ *
+ * `searchResearch` filters counterfactuals out entirely (`AND NOT
+ * f.is_counterfactual`), which is right for retrieval — a refutation is not a
+ * fact to cite — and means they can never reach a brief by the normal route.
+ * The IBCA build had 31 in its own session and saw none of them.
+ *
+ * So ask directly: of the facts we chose, which ones does something else in
+ * the corpus refute? Bounded, and never fatal — a brief without this section
+ * is a brief, whereas a research stage that dies looking for one is not.
+ *
+ * `inArray`, not a hand-built `= ANY(...)`: this repo has a scar from a Drizzle
+ * array binding that compiled to a row constructor and broke silently at two
+ * or more elements.
+ */
+export async function contestedPairs(
+  selected: OrderedFact[],
+  cap = 8,
+): Promise<ResearchBrief['contested']> {
+  const ids = selected.map((f) => f.id).filter(Boolean);
+  if (ids.length === 0) return [];
+  const byId = new Map(selected.map((f) => [f.id, f]));
+  try {
+    const rows = await db
+      .select({
+        refutes: facts.refutesFactId,
+        counterClaim: facts.content,
+        counterUrl: sources.url,
+      })
+      .from(facts)
+      .leftJoin(sources, eq(sources.id, facts.sourceId))
+      .where(inArray(facts.refutesFactId, ids))
+      .limit(cap);
+
+    const out: ResearchBrief['contested'] = [];
+    for (const r of rows) {
+      const original = r.refutes ? byId.get(r.refutes) : undefined;
+      if (!original || !r.counterClaim) continue;
+      out.push({
+        claim: original.content,
+        counterClaim: r.counterClaim,
+        claimUrl: original.url,
+        counterUrl: r.counterUrl ?? null,
+      });
+    }
+    return out;
+  } catch (err) {
+    // A missing contested section costs nuance. A research stage that throws
+    // looking for one costs the build.
+    console.error('[studio] contested-pair lookup failed', err);
+    return [];
+  }
+}
+
+/**
+ * Drop causal links the model could not cite.
+ *
+ * causalMap is what the interactive levers are built on, so an invented link
+ * becomes an invented mechanism the reader operates — the most consequential
+ * place in the whole brief for a fabrication to land. Every link must name the
+ * numbered facts it rests on, and a citation that points outside the fact list
+ * is treated as no citation at all.
+ *
+ * Deliberately not derived from the intel graph, which was the obvious
+ * alternative: `relationship` holds `employs`, `part_of`, `located_in` — who
+ * relates to whom, not what drives what — and would ground the levers in an
+ * org chart. Synthesis is the right shape; this makes it checkable.
+ */
+export function groundCausalMap(
+  links: Array<{ from?: unknown; to?: unknown; relationship?: unknown; facts?: unknown }>,
+  factCount: number,
+): Array<{ from: string; to: string; relationship: string; facts: number[] }> {
+  const out: Array<{ from: string; to: string; relationship: string; facts: number[] }> = [];
+  for (const l of links) {
+    const from = typeof l.from === 'string' ? l.from.trim() : '';
+    const to = typeof l.to === 'string' ? l.to.trim() : '';
+    const relationship = typeof l.relationship === 'string' ? l.relationship.trim() : '';
+    if (!from || !to || !relationship) continue;
+    // 1-based, matching the numbering the model was shown.
+    const cited = (Array.isArray(l.facts) ? l.facts : [])
+      .map((n) => Math.trunc(Number(n)))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= factCount);
+    if (cited.length === 0) continue;
+    out.push({ from, to, relationship, facts: [...new Set(cited)] });
+  }
+  return out;
+}
 
 /**
  * Run the research stage. Polls the Deep Dive session for up to 20 minutes.
@@ -577,14 +711,33 @@ async function synthesiseBrief(
     throw new Error('Research stage: the brief conversion returned unparseable JSON.');
   }
 
+  const proposedLinks = parsed.causalMap ?? [];
+  const groundedLinks = groundCausalMap(proposedLinks, briefFacts.length);
+  if (proposedLinks.length > 0 && groundedLinks.length < proposedLinks.length) {
+    // Say it out loud. A silently shrinking causal map is a silently weakening
+    // set of levers, and if the model stops citing altogether the build fails
+    // on "no causal map" with no hint of why.
+    await emitLog(
+      buildId,
+      groundedLinks.length === 0 ? 'error' : 'system',
+      `Research: dropped ${proposedLinks.length - groundedLinks.length} of ${proposedLinks.length} causal link(s) ` +
+        `that cited no fact in range. ${
+          groundedLinks.length === 0
+            ? 'None survived, so this brief has no model for the levers to stand on — the synthesis ignored the citation requirement.'
+            : `${groundedLinks.length} remain.`
+        }`,
+    );
+  }
+
   const brief: ResearchBrief = {
     topic: challenge.slice(0, 500),
     facts: briefFacts,
     concepts: parsed.concepts ?? [],
-    causalMap: parsed.causalMap ?? [],
+    causalMap: groundedLinks,
     liveData: parsed.liveData ?? [],
     misconceptions: parsed.misconceptions ?? [],
     gaps: parsed.gaps ?? [],
+    contested: await contestedPairs(orderedFacts),
     sessionId,
   };
 
