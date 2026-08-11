@@ -52,6 +52,23 @@ interface StandaloneNode {
 /**
  * The fast lane's whole surface. Adding a capability to chat is a line here
  * plus nothing else — which is the point of the file.
+ *
+ * Deliberately short, on two rules.
+ *
+ * Only nodes chat cannot ALREADY reach. Gmail, health, files, research and the
+ * scraper all have their own toolsets with better-shaped tools than a generic
+ * runner; duplicating them here would add a second way to do the same thing and
+ * pay for it in the manifest every turn.
+ *
+ * Only nodes whose write surface is understood. Reading an executor is not
+ * enough: `site-mapper` looked read-only at its own file and turned out to
+ * insert `scraper_target_knowledge` two modules down, and to drive the
+ * homeserv-only browser sandbox — which from the VPS would scrape production
+ * traffic off a Hetzner IP. It is not here. Where a node refreshes an OAuth
+ * token or reads an encrypted credential as part of reading (strava, whoop,
+ * apple-calendar), that is bookkeeping and is fine.
+ *
+ * Growing this list means tracing a candidate's imports, not glancing at it.
  */
 export const ALLOWED: Record<string, StandaloneNode> = {
   'apple-calendar': {
@@ -64,17 +81,11 @@ export const ALLOWED: Record<string, StandaloneNode> = {
         ? null
         : `node_call runs apple-calendar in read-only mode: operation must be "list", not "${String(config.operation ?? 'unset')}". Use apple_calendar_create to add an event — it asks before writing.`,
   },
-  'weather-brief': { why: 'Fetches a forecast.' },
-  'location-context': { why: 'Reads recent location history.' },
-  strava: { why: 'Reads activities.' },
-  whoop: { why: 'Reads recovery and sleep data.' },
-  'tavily-search': { why: 'Web search.' },
-  'research-search': { why: 'Runs a research query.' },
-  'health-query': { why: 'Reads stored health metrics.' },
-  'site-mapper': { why: 'Crawls and returns a site structure.' },
-  'file-search': { why: 'Semantic search over the /drive file store.' },
-  'gmail-search': { why: 'Searches mail; returns matches only.' },
-  'gmail-fetch': { why: 'Reads messages and threads.' },
+  'weather-brief': { why: 'Fetches a forecast. No store, no chat tool covers it.' },
+  'location-context': { why: 'Reads recent location history. No chat tool covers it.' },
+  strava: { why: 'Reads activities. Refreshes its own OAuth token, writes nothing else.' },
+  whoop: { why: 'Reads recovery and sleep. Refreshes its own OAuth token, writes nothing else.' },
+  'tavily-search': { why: 'Web search against a different backend from the research tools.' },
 };
 
 /** Names an allowed type, for error messages and the tool description. */
