@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseChapterPlan,
+  normaliseSpineId,
   buildRevisionInstruction,
   STUDIO_CRITIC_EXTRA,
   STUDIO_PROPOSER_SYSTEM_PROMPT,
@@ -24,6 +25,60 @@ describe('parseChapterPlan', () => {
 
   it('returns an empty array when no table is present rather than throwing', () => {
     expect(parseChapterPlan('## Architecture\nsome prose')).toEqual([]);
+  });
+
+  // The regression that cost build 85dac418 every one of its no-model
+  // findings. This is that build's real spine, copied out of production.
+  it('strips the code-span backticks models put round ids', () => {
+    const md = `
+## Chapter Plan
+
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | The Record Room | \`matchclaim\` | \`claimscope\` |
+| 2 | Associations Without Assumptions | \`placeassociation\` | \`associationboundary\` |
+`;
+    expect(parseChapterPlan(md)).toEqual([
+      { n: 1, title: 'The Record Room', leverId: 'matchclaim', outcomeId: 'claimscope' },
+      {
+        n: 2,
+        title: 'Associations Without Assumptions',
+        leverId: 'placeassociation',
+        outcomeId: 'associationboundary',
+      },
+    ]);
+  });
+
+  it('rejects a row whose id cannot survive into an attribute selector', () => {
+    const md = `
+| # | Chapter | Lever id | Outcome id |
+|---|---------|----------|------------|
+| 1 | Fine | roll | total |
+| 2 | Broken | 123 | ok |
+`;
+    const stats = { rejected: 0 };
+    expect(parseChapterPlan(md, stats).map((c) => c.n)).toEqual([1]);
+    expect(stats.rejected).toBe(1);
+  });
+});
+
+describe('normaliseSpineId', () => {
+  it.each([
+    ['`matchclaim`', 'matchclaim'],
+    ['**roll**', 'roll'],
+    ['Match Claim', 'match-claim'],
+    ['matchClaim', 'matchclaim'],
+    ['fsm_uplift', 'fsm_uplift'],
+    ['a', 'a'],
+  ])('%s -> %s', (raw, want) => {
+    expect(normaliseSpineId(raw)).toBe(want);
+  });
+
+  // Null means "reject the row". Coercing these to something plausible would
+  // reintroduce the original bug in a new costume: an id the gate looks for
+  // and the agent never writes.
+  it.each([['123'], [''], ['   '], ['`` ``'], ['—']])('rejects %s', (raw) => {
+    expect(normaliseSpineId(raw)).toBeNull();
   });
 
   it('skips a malformed row instead of dropping the whole plan', () => {

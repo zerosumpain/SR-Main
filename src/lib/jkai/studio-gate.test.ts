@@ -1,6 +1,63 @@
 import { readFile } from 'node:fs/promises';
 import { describe, it, expect } from 'vitest';
 import { parseGateOutput, describeGate, describeGateSkip } from './studio-gate';
+// The runner is a standalone script (playwright resolves from the script's own
+// directory), but the base-href transform is pure and importable. Its guarded
+// entry point means importing it does not launch a browser.
+import { injectBaseHref } from '../../../scripts/studio-gate.mjs';
+
+// The fix that took build 85dac418 from 24 findings to 1. Both surfaces a
+// reader reaches inject a <base href> at the project root, so the system
+// prompt mandates project-root-relative URLs; the gate drove the bare server
+// with no base tag, where those resolve against the chapter directory and
+// 404. It then reported prose-only, no-model, no-design-tokens and no-scene
+// about a page that was, everywhere anyone looks, fine.
+describe('injectBaseHref', () => {
+  const ROOT = 'http://127.0.0.1:4173/';
+
+  it('puts the base tag directly after <head>, so it precedes every asset', () => {
+    const html = '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body>x</body></html>';
+    const out = injectBaseHref(html, ROOT);
+    expect(out).toContain(`<head><base href="${ROOT}">`);
+    // Order is load-bearing: a <base> after a <link> does not retarget it.
+    expect(out.indexOf('<base')).toBeLessThan(out.indexOf('<link'));
+  });
+
+  it('handles a head tag carrying attributes', () => {
+    const out = injectBaseHref('<head lang="en"><title>t</title></head>', ROOT);
+    expect(out).toContain(`<head lang="en"><base href="${ROOT}">`);
+  });
+
+  it('leaves a page that already declares its own base completely alone', () => {
+    // Such a page is telling us where its root is; overriding it would be a
+    // new lie rather than a fix.
+    const html = '<head><base href="/projects/thing/"><title>t</title></head>';
+    expect(injectBaseHref(html, ROOT)).toBe(html);
+  });
+
+  // The bug this caught in its own author's code. The kit's worked example
+  // carries a comment explaining the base-href rule; matching the bare string
+  // meant that sentence suppressed the injection, every asset 404'd, and the
+  // gate reported prose-only about a perfectly good page.
+  it('is not fooled by a comment that merely mentions a base tag', () => {
+    const html = '<head><!-- both surfaces inject a <base href> at the root --><title>t</title></head>';
+    const out = injectBaseHref(html, ROOT);
+    expect(out).toContain(`<head><base href="${ROOT}">`);
+  });
+
+  it('ignores a base tag with no href, which re-roots nothing', () => {
+    const html = '<head><base target="_blank"><title>t</title></head>';
+    expect(injectBaseHref(html, ROOT)).toContain(`<base href="${ROOT}">`);
+  });
+
+  it('still injects when there is no head element at all', () => {
+    expect(injectBaseHref('<p>fragment</p>', ROOT)).toBe(`<base href="${ROOT}"><p>fragment</p>`);
+  });
+
+  it('is case-insensitive about the head tag', () => {
+    expect(injectBaseHref('<HEAD><title>t</title></HEAD>', ROOT)).toContain(`<HEAD><base href="${ROOT}">`);
+  });
+});
 
 describe('parseGateOutput', () => {
   it('reads a clean pass', () => {

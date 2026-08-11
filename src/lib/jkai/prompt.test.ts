@@ -113,3 +113,63 @@ describe('studio prompt mode', () => {
     expect(msgs[0].content).toContain('iteration 4');
   });
 });
+
+// The agent could not see its own work. Across eight builds it made 59
+// attempts to open a browser and 39 died on MODULE_NOT_FOUND, because the
+// prompt promised a Playwright that does not resolve from the workspace.
+describe('the studio prompt tells the agent how to look at its own work', () => {
+  const prompt = buildSystemPrompt('b1', 4310, 'studio');
+
+  it('names a runnable command with the real port substituted', () => {
+    expect(prompt).toContain('scripts/studio-verify.mjs');
+    expect(prompt).toContain('http://127.0.0.1:4310');
+  });
+
+  // A leaked placeholder would name a command that does not exist — the same
+  // class of lie as the claim it replaced.
+  it('leaves no placeholder behind', () => {
+    expect(prompt).not.toContain('__STUDIO_VERIFY_CMD__');
+    expect(prompt).not.toContain('$PORT');
+  });
+
+  it('no longer claims Playwright is installed and ready to use', () => {
+    const hostLine = prompt.split('\n').find((l) => l.startsWith('HOST ENVIRONMENT'));
+    expect(hostLine).toBeDefined();
+    expect(hostLine).not.toContain('Playwright');
+  });
+
+  it('warns the agent off writing its own browser script', () => {
+    expect(prompt).toContain("import('playwright')");
+    expect(prompt.toLowerCase()).toContain('will not resolve');
+  });
+
+  it('points at the spine file the checker reads', () => {
+    expect(prompt).toContain('.studio/spine.json');
+  });
+});
+
+describe('the studio prompt points at the real materials', () => {
+  const prompt = buildSystemPrompt('b1', 4310, 'studio');
+
+  it('names the illustration generator with no placeholder left', () => {
+    expect(prompt).toContain('scripts/studio-image.mjs');
+    expect(prompt).not.toContain('__STUDIO_IMAGE_CMD__');
+  });
+
+  it('tells the agent to mount the chrome rather than author it', () => {
+    expect(prompt).toContain('mountShell');
+    expect(prompt).toContain('api.md');
+  });
+
+  // The 3D mandate pointed at the one technique the house style does not use:
+  // policy-engine is 40 inline SVGs with zero canvas.
+  it('makes the SVG instruments the default and the scene the exception', () => {
+    expect(prompt).toContain('createSteps');
+    expect(prompt).toContain('createInstrument');
+    expect(prompt).toMatch(/EXCEPTION, not the default/i);
+  });
+
+  it('forbids a generated image carrying a number', () => {
+    expect(prompt).toContain('Never let a generated image carry a number');
+  });
+});

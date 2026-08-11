@@ -12,6 +12,39 @@ import { getOpenRouterApiKey } from '$lib/server/models/settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { registerActiveChild, clearActiveChild } from './interrupt-registry';
+import { stripNulls } from './strip-nulls';
+import { describeDbError } from './db-error';
+
+/** pi's built-ins the agent always needs. Never narrowed at runtime. */
+export const BASE_PI_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
+
+/**
+ * Build pi's `--tools` value.
+ *
+ * `--tools` is an allowlist, and pi applies it to extension-registered tools
+ * as well as its own built-ins — `_refreshToolRegistry` filters
+ * `extensionRunner.getAllRegisteredTools()` through the same `isAllowedTool`
+ * predicate. So the previous fixed list silently stripped every one of the
+ * bridged site tools before the model saw a single one, while the executor
+ * logged "Tool bridge OK — 167 site tools available to the agent". Sixty days
+ * of iteration actions contain zero bridged calls.
+ *
+ * Dropping the flag entirely is not the fix: with no allowlist pi's initial
+ * active set is its four defaults (read, bash, edit, write), which would
+ * quietly deactivate grep, find and ls.
+ *
+ * An empty or missing bridge list yields exactly the built-ins — the bridge
+ * failing closed must never widen what the agent can reach.
+ */
+export function buildToolAllowlist(bridgedToolNames?: readonly string[]): string {
+  const seen = new Set<string>(BASE_PI_TOOLS);
+  for (const name of bridgedToolNames ?? []) {
+    // Commas would split one name into two bogus entries; whitespace would
+    // never match a registered tool. Skip rather than mangle.
+    if (typeof name === 'string' && name && !/[\s,]/.test(name)) seen.add(name);
+  }
+  return [...seen].join(',');
+}
 
 const CONTAINER_NAME = 'jkai-sandbox';
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
@@ -232,6 +265,14 @@ export interface PiRunOptions {
   thinkingLevel?: string;
   /** Extra env vars to inject into the sandbox container for this run. */
   extraEnv?: Record<string, string>;
+  /**
+   * Names of the bridged site tools, from the manifest preflight.
+   *
+   * These MUST be added to pi's `--tools` allowlist or the model never sees
+   * them, however healthily the extension registers them. Empty means the
+   * bridge is unusable this iteration; the agent then gets built-ins only.
+   */
+  bridgedToolNames?: string[];
 }
 
 export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
@@ -266,7 +307,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     '--no-prompt-templates',
     '--no-themes',
     '--no-context-files',
-    '--tools', 'read,bash,edit,write,grep,find,ls',
+    '--tools', buildToolAllowlist(opts.bridgedToolNames),
   ];
   if (opts.extensions && opts.extensions.length > 0) {
     for (const e of opts.extensions) {
@@ -479,6 +520,9 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
 
   let stdoutBuf = '';
   let stderrBuf = '';
+  // One log line per iteration for a failing incremental write — see the
+  // catch below. A repeat is always the same cause.
+  let incrementalWriteFailed = false;
 
   child.stdout.setEncoding('utf-8');
   child.stderr.setEncoding('utf-8');
@@ -505,7 +549,13 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   async function handleLine(line: string): Promise<void> {
     let ev: PiEvent;
     try {
-      ev = JSON.parse(line);
+      // Sanitise here and nowhere else. Everything the iteration persists —
+      // tool arguments, tool output, assistant text, the incremental messages
+      // write below — descends from this object, so one call covers the lot.
+      // A U+0000 anywhere in it makes Postgres reject the whole parameter with
+      // 22P05 and costs the iteration its evaluation and next steps; see
+      // ./strip-nulls for what that did to build 85dac418.
+      ev = stripNulls(JSON.parse(line) as PiEvent);
     } catch {
       return;
     }
@@ -657,12 +707,29 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       if (text) messages.push({ role: 'user', content: text.slice(0, 32000) });
     }
 
-    // Persist incrementally
+    // Persist incrementally.
+    //
+    // This used to swallow every error. It was failing on exactly the same
+    // NUL bytes as the end-of-iteration write, which turned a hard error into
+    // invisible data truncation for a whole build — the transcript simply
+    // stopped growing and nothing said so. Log once per iteration: a repeated
+    // failure is the same cause, and 400KB of parameter dump per message would
+    // bury the build log.
     await db
       .update(jkaiIterations)
       .set({ messages, tokensUsed })
       .where(eq(jkaiIterations.id, iteration.id))
-      .catch(() => {});
+      .catch((err) => {
+        if (incrementalWriteFailed) return;
+        incrementalWriteFailed = true;
+        void emitLog(
+          build.id,
+          'error',
+          `Could not persist the running transcript: ${describeDbError(err)}. ` +
+            `The iteration continues; its message history may be incomplete.`,
+          iteration.id,
+        );
+      });
   }
 
   const exitCode: number = await new Promise((resolve) => {

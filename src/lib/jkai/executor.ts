@@ -30,12 +30,28 @@ import { formatBriefForPrompt, type ResearchBrief } from './research-brief';
  * the build, it does not invalidate it. The agent still has its own file and
  * shell tools.
  */
+/**
+ * Check the bridge, and return the tool names the agent should be allowed to
+ * call.
+ *
+ * The names matter, not just the count. pi's `--tools` is an allowlist that is
+ * applied to extension-registered tools as well as built-ins
+ * (agent-session.js `_refreshToolRegistry`: registered tools are filtered
+ * through the same `isAllowedTool`). So a fixed allowlist of
+ * read,bash,edit,write,grep,find,ls stripped every bridged tool before the
+ * model ever saw it — while this function logged "Tool bridge OK — 167 site
+ * tools available to the agent". Sixty days of iteration actions contain zero
+ * bridged calls.
+ *
+ * Returns [] whenever the bridge is unusable, which the caller must treat as
+ * "no site tools", never as "allow everything".
+ */
 async function preflightToolBridge(
   buildId: string,
   apiUrl: string,
   token: string,
   iterationId: string,
-): Promise<void> {
+): Promise<string[]> {
   try {
     const res = await fetch(`${apiUrl}/api/jkai/tools/manifest`, {
       headers: { authorization: `Bearer ${token}` },
@@ -53,15 +69,23 @@ async function preflightToolBridge(
           `after editing .env.`,
         iterationId,
       );
-      return;
+      return [];
     }
-    const body = (await res.json().catch(() => null)) as { tools?: unknown[] } | null;
+    const body = (await res.json().catch(() => null)) as
+      | { tools?: Array<{ name?: unknown }> }
+      | null;
+    const names = (body?.tools ?? [])
+      .map((t) => (typeof t?.name === 'string' ? t.name : null))
+      .filter((n): n is string => Boolean(n));
     await emitLog(
       buildId,
       'system',
-      `Tool bridge OK — ${body?.tools?.length ?? 0} site tools available to the agent.`,
+      names.length > 0
+        ? `Tool bridge OK — ${names.length} site tools available to the agent.`
+        : `Tool bridge reachable but published no usable tool names — this iteration runs with NO site tools.`,
       iterationId,
     );
+    return names;
   } catch (err) {
     await emitLog(
       buildId,
@@ -72,6 +96,7 @@ async function preflightToolBridge(
       iterationId,
     );
   }
+  return [];
 }
 
 // --- Section extraction (used by orchestrator for completion detection) ---
@@ -142,6 +167,7 @@ export async function executeIteration(
   const skillDirs: string[] = [];
   const extensions: string[] = [];
   const extraEnv: Record<string, string> = {};
+  let bridgedToolNames: string[] = [];
   if (isStudio) {
     try {
       const { syncExplainerKit } = await import('./sandbox');
@@ -187,7 +213,10 @@ export async function executeIteration(
     // appearing perfectly healthy — builds #125/#126 each burned ~1.5M tokens
     // that way before dying of something unrelated (2026-08-07). A tool-less
     // build is worth knowing about at second zero, not at minute twenty.
-    await preflightToolBridge(
+    // The names are the point, not just the count — they go into pi's
+    // --tools allowlist below, which is the only way a bridged tool reaches
+    // the model.
+    bridgedToolNames = await preflightToolBridge(
       build.id,
       extraEnv.JKAI_API_URL,
       extraEnv.JKAI_BRIDGE_TOKEN,
@@ -303,6 +332,7 @@ export async function executeIteration(
     skillDirs,
     thinkingLevel,
     extraEnv,
+    bridgedToolNames,
   });
 
   const tailText = result.finalAssistantText || '';

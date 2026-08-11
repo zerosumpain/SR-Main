@@ -938,24 +938,131 @@ export async function startProjectServer(
 
 // --- Dev/Live Workspace Management ---
 
+/**
+ * Marker touched at the end of every successful promotion.
+ *
+ * Deliberately outside both trees: anything inside live/ is copied into dev/
+ * by the seed and then served and published.
+ */
+const promoteMarker = (base: string) => `${base}/.last-promote`;
+
 export async function promoteDevToLive(buildId: string): Promise<void> {
   const base = `/home/jkai/workspace/${buildId}`;
-  // Clear live (except node_modules) then copy dev contents
+  // Clear live (except node_modules) then copy dev contents.
+  // The marker is touched LAST and only on success, so a promotion that dies
+  // half way leaves the previous marker in place and `seedDevFromLive` treats
+  // dev/ as unpromoted — which is the safe reading.
   await execInSandbox(
-    `find ${base}/live -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null; cp -a ${base}/dev/. ${base}/live/ 2>/dev/null; echo done`,
+    `find ${base}/live -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null; cp -a ${base}/dev/. ${base}/live/ 2>/dev/null && touch ${promoteMarker(base)}; echo done`,
     120000,
   );
 }
 
+/**
+ * Restore dev/ from the last promoted state — without destroying work that was
+ * never promoted.
+ *
+ * This function used to open with an unconditional
+ * `find dev -mindepth 1 -maxdepth 1 -exec rm -rf {} +`. Promotion happens only
+ * on the happy path, so any iteration that ended early — a provider 503, a
+ * token cap, a failed database write — had its files deleted at the start of
+ * the next one. On build 85dac418 that destroyed 57% of the tokens the build
+ * ever spent, across seven iterations, while the in-code comments promised
+ * "partial work is preserved in dev/".
+ *
+ * The orchestrator now promotes before it can return early, so in the normal
+ * case nothing in dev/ is newer than the marker and the wipe is safe. This
+ * guard is the backstop for the case that promotion itself did not run: if
+ * dev/ holds anything written since the last promotion, overlay live/ on top
+ * instead of clearing first, and keep the unpromoted work.
+ */
 export async function seedDevFromLive(buildId: string): Promise<void> {
   const base = `/home/jkai/workspace/${buildId}`;
   const liveCheck = await execInSandbox(`ls ${base}/live/ 2>/dev/null | head -1`, 5000);
-  if (liveCheck.stdout.trim()) {
-    await execInSandbox(
-      `find ${base}/dev -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; cp -a ${base}/live/. ${base}/dev/ 2>/dev/null; echo done`,
-      120000,
-    );
-  }
+  if (!liveCheck.stdout.trim()) return;
+
+  const marker = promoteMarker(base);
+  // No marker at all means this build predates the marker (or has never
+  // promoted). Treat that as "cannot prove dev/ is disposable" and keep it.
+  const unpromoted = await execInSandbox(
+    `test -e ${marker} || { echo UNPROMOTED; exit 0; }; find ${base}/dev -mindepth 1 -newer ${marker} -print -quit 2>/dev/null | head -1`,
+    10000,
+  );
+  const keepDev = unpromoted.stdout.trim().length > 0;
+
+  await execInSandbox(seedDevCommand(base, keepDev), 120000);
+}
+
+/**
+ * The two shapes of the seed step, split out so the destructive one can be
+ * pinned by a test. `keepUnpromotedWork` overlays; the other clears first.
+ */
+export function seedDevCommand(base: string, keepUnpromotedWork: boolean): string {
+  const copy = `cp -a ${base}/live/. ${base}/dev/ 2>/dev/null; echo done`;
+  if (keepUnpromotedWork) return copy;
+  return `find ${base}/dev -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null; ${copy}`;
+}
+
+/**
+ * Write the chapter spine where the agent's own checker can find it.
+ *
+ * Lives at `<workspace>/.studio/spine.json` — beside dev/, never inside it.
+ * Anything under dev/ is copied to live/ and then served and published, and
+ * the build's internal scaffolding is not part of the published explainer.
+ *
+ * Without this the agent has to remember lever ids from the prompt and the
+ * checker cannot check them; with it, both read the same file, so the agent's
+ * self-check and the orchestrator's verdict cannot disagree about what a
+ * chapter owes.
+ */
+export async function writeStudioSpine(
+  buildId: string,
+  spine: {
+    chapters: Array<{ n: number; title: string; leverId: string; outcomeId: string }>;
+    sourceUrls: string[];
+    kitFiles: string[];
+  },
+): Promise<void> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  await execInSandbox(`mkdir -p ${base}/.studio`, 5000);
+  await writeFileInSandbox(`${base}/.studio/spine.json`, JSON.stringify(spine, null, 2));
+}
+
+/**
+ * How many chapters are actually finished in the promoted tree.
+ *
+ * A chapter counts as built when its page no longer carries the skeleton's
+ * `data-chapter-status="placeholder"` marker — the same signal the studio gate
+ * reads, so the two cannot disagree about what "done" means.
+ *
+ * This exists because the gate's deadline used to be `iterationNumber - 1`,
+ * which assumes exactly one chapter per iteration. It rises whether or not a
+ * chapter landed, so on build 85dac418 each delivered chapter cleared one
+ * still-placeholder finding and added two others — a net +1 for succeeding.
+ * Progress has to be measured against the artefact, not the clock.
+ */
+export async function countBuiltChapters(buildId: string): Promise<number> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  // grep -L lists files NOT containing the marker. `|| true` because grep
+  // exits non-zero when nothing matches, which is a legitimate zero here.
+  const res = await execInSandbox(
+    `grep -L 'data-chapter-status="placeholder"' ${base}/live/chapter-*/index.html 2>/dev/null | wc -l || true`,
+    10000,
+  );
+  return parseBuiltChapterCount(res.stdout);
+}
+
+/**
+ * Read `wc -l` output into a count.
+ *
+ * Anything unreadable becomes 0, which makes only chapter 1 due — the
+ * conservative direction. Guessing high would invent still-placeholder
+ * findings for chapters the agent has not reached, which is the exact failure
+ * this whole change exists to remove.
+ */
+export function parseBuiltChapterCount(stdout: string): number {
+  const n = Number.parseInt((stdout ?? '').trim(), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 // --- Iteration Snapshots ---

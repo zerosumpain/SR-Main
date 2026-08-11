@@ -248,6 +248,27 @@ function extractChapterPlanSection(planMarkdown: string): string {
  * this count (plus a `### Chapter N:` heading cross-check) to log that the
  * spine came out short.
  */
+/**
+ * Reduce a plan-table id to something an agent can write and a gate can find.
+ *
+ * The gate builds an attribute selector from this value, so anything that
+ * cannot appear unescaped in `[data-lever="..."]` has to go. Returns null when
+ * nothing usable survives, which the caller treats as a rejected row.
+ */
+export function normaliseSpineId(raw: string): string | null {
+  const id = raw
+    .toLowerCase()
+    .replace(/[`*'"]/g, '')
+    .trim()
+    // Models write "match claim", "match-claim" and "matchClaim" for the same
+    // thing; collapse the separators rather than rejecting two of the three.
+    .replace(/[\s.]+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '');
+  // {0,63}, not {1,63}: a one-character id is legal in an attribute selector
+  // and the existing plans use them. Length is a sanity bound, not a style rule.
+  return /^[a-z][a-z0-9_-]{0,63}$/.test(id) ? id : null;
+}
+
 export function parseChapterPlan(
   planMarkdown: string,
   stats?: { rejected: number },
@@ -260,7 +281,16 @@ export function parseChapterPlan(
     // "| **1** | **Title** | ... |" must still parse as n=1 with a clean
     // title, not NaN (silently dropping the row) or a title carrying raw
     // asterisks into jkai_builds.chapterPlan.
-    const cells = line.split('|').map((c) => c.replace(/\*+/g, '').trim());
+    //
+    // Backticks matter as much as asterisks, and cost more. Models write ids
+    // as code spans by reflex — build 85dac418's whole spine was stored as
+    // "`matchclaim`" — and the gate then looks for a control tagged
+    // data-lever="`matchclaim`" which no sane agent writes. That build's
+    // agent wrote the clean id every time, so `no-model` fired on all eight
+    // chapters, every iteration, permanently unsatisfiable. Replaying the
+    // real gate against the surviving snapshot with the backticks stripped
+    // took it from 24 findings to 8.
+    const cells = line.split('|').map((c) => c.replace(/[*`]+/g, '').trim());
     // ['', '#', 'Chapter', 'Lever id', 'Outcome id', ''] -> 6 cells
     if (cells.length < 6) {
       if (stats) stats.rejected++;
@@ -271,9 +301,20 @@ export function parseChapterPlan(
     // row ("---...") — both structural and present in every well-formed
     // table — so this is not counted as a rejected chapter.
     if (!Number.isFinite(n)) continue;
-    const [, , title, leverId, outcomeId] = cells;
+    const [, , title, rawLeverId, rawOutcomeId] = cells;
     if (/^-+$/.test(title)) continue; // defensive: a divider row whose number cell happened to parse
-    if (!title || !leverId || !outcomeId) {
+    if (!title || !rawLeverId || !rawOutcomeId) {
+      if (stats) stats.rejected++;
+      continue;
+    }
+    // An id has to survive the round trip into an HTML attribute selector, so
+    // normalise to the same shape the gate will look for. Anything left
+    // unusable is a rejected row rather than a silent time bomb: the spine
+    // coming out short is logged by the caller, whereas a malformed id looks
+    // healthy right up until every gate run fails on it.
+    const leverId = normaliseSpineId(rawLeverId);
+    const outcomeId = normaliseSpineId(rawOutcomeId);
+    if (!leverId || !outcomeId) {
       if (stats) stats.rejected++;
       continue;
     }

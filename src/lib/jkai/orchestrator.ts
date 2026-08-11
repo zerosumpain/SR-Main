@@ -9,11 +9,15 @@ import {
   publishViaGit,
   listWorkspaceFiles,
   seedDevFromLive,
+  promoteDevToLive,
+  countBuiltChapters,
+  writeStudioSpine,
   snapshotIteration,
   execInSandbox,
   type GitTargetConfig,
 } from './sandbox';
 import { manageServeConfig } from './serve-manager';
+import { describeDbError } from './db-error';
 import {
   isTransientProviderFailure,
   transientBackoffMs,
@@ -947,6 +951,28 @@ class Orchestrator {
       // Seed dev from live so the LLM starts with the latest working version
       await seedDevFromLive(buildId);
 
+      // Put the spine where the agent's own checker reads it, before the agent
+      // runs. Refreshed every iteration so a re-plan cannot leave a stale copy
+      // that quietly disagrees with what the gate is looking for.
+      if (build.origin === 'studio' && build.chapterPlan.length > 0) {
+        await writeStudioSpine(buildId, {
+          chapters: build.chapterPlan,
+          sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
+          kitFiles: STUDIO_KIT_CHECK_FILES,
+        }).catch(async (err) => {
+          // Not fatal: the checker still runs, it just cannot check lever ids
+          // or citations. Say so rather than letting the agent wonder why.
+          await emitLog(
+            buildId,
+            'system',
+            `Could not write the chapter spine for the checker (${
+              err instanceof Error ? err.message : String(err)
+            }); it will check structure only this iteration.`,
+            iteration.id,
+          );
+        });
+      }
+
       const startTime = Date.now();
 
       const retryNudge = isEmptyOutputRetry
@@ -972,6 +998,32 @@ class Orchestrator {
       const durationMs = Date.now() - startTime;
       const failure = result.failure;
       const iterationStatus: 'completed' | 'failed' = failure ? 'failed' : 'completed';
+
+      // Promote FIRST — before the transcript write, before the counters,
+      // before every early return below.
+      //
+      // Promotion used to happen only via manageServeConfig on the happy path.
+      // Anything that returned early skipped it, and seedDevFromLive then
+      // deleted dev/ at the top of the next iteration. Build 85dac418 lost 57%
+      // of its total tokens that way: 33% to ordinary provider overload and
+      // 24% to a database write that threw on NUL bytes, each one costing a
+      // completed chapter's worth of files.
+      //
+      // Ordering is the whole point, so this cannot move below the write that
+      // was throwing. Its own failure is logged and swallowed: a promotion
+      // problem must not cost us the transcript as well as the files.
+      try {
+        await promoteDevToLive(buildId);
+      } catch (err) {
+        await emitLog(
+          buildId,
+          'error',
+          `Could not promote dev → live after iteration #${iterationNumber}: ${
+            err instanceof Error ? err.message : String(err)
+          }. The work is still in the workspace at dev/ and the next iteration will keep it.`,
+          iteration.id,
+        );
+      }
 
       await db
         .update(jkaiIterations)
@@ -1330,12 +1382,17 @@ class Orchestrator {
             // unchecked, so both are errors.
             await emitLog(buildId, 'error', `${skip} (iteration #${iterationNumber})`, iteration.id);
           } else {
+            // What the build actually owes: everything it has finished, plus
+            // the next one. Derived from the promoted tree rather than the
+            // iteration counter, so an iteration that delivers two chapters
+            // moves the deadline two, and one that delivers none moves it
+            // none. The old `iterationNumber - 1` moved it every time
+            // regardless, which made the score get worse for shipping.
+            const built = await countBuiltChapters(buildId);
+            const chaptersDue = Math.min(built + 1, build.chapterPlan.length);
             const outcome = await runStudioGate({
               baseUrl: `http://127.0.0.1:${port}`,
-              // Iteration 1 is the skeleton; iteration 2 delivers chapter 1. So
-              // after iteration N, chapters 1..N-1 are due and anything later is
-              // legitimately still a placeholder.
-              chaptersDue: iterationNumber - 1,
+              chaptersDue,
               chapters: build.chapterPlan.map((c) => ({ ...c, path: `/chapter-${c.n}/` })),
               sourceUrls: (build.researchBrief?.facts ?? []).map((f) => f.sourceUrl),
               kitFiles: STUDIO_KIT_CHECK_FILES,
@@ -1540,7 +1597,13 @@ class Orchestrator {
 
       this.scheduleNext(buildId, 1000);
     } catch (err: any) {
-      await emitLog(buildId, 'error', `Iteration error: ${err.message}`);
+      // `err.message` alone is what made the 85dac418 investigation take a
+      // day: for a Drizzle failure it is the query plus every bound parameter
+      // — 400KB per occurrence — and the actual reason lives on `err.cause`,
+      // which never reached the log. describeDbError reads the cause and drops
+      // the dump; for a non-database error it falls through to the message.
+      await emitLog(buildId, 'error', `Iteration error: ${describeDbError(err)}`);
+      console.error(`[orchestrator] iteration error for ${buildId}:`, err);
       this.scheduleNext(buildId, 30000);
     } finally {
       clearInterval(liveness);

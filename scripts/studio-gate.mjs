@@ -28,6 +28,15 @@
  * the caller (studio-gate.ts, Task 13) is the one that knows which files the
  * kit sync was supposed to mount (see design-assets.ts EXPLAINER_FILES).
  */
+// @ts-nocheck — a standalone node script, deliberately untyped, run by
+// `node scripts/studio-gate.mjs` and never bundled. It sat outside the
+// type-check graph until studio-gate.test.ts began importing injectBaseHref
+// from it; without this line that one import pulls the whole file in and
+// svelte-check reports ~20 implicit-any errors on code that has always been
+// this way. Checking it properly would mean typing Playwright handles in a
+// file that cannot import Playwright's types.
+import { pathToFileURL } from 'node:url';
+
 let out = { ran: false, reason: 'harness did not start' };
 
 // Playwright error messages carry ANSI colour codes and a multi-line call
@@ -35,6 +44,69 @@ let out = { ran: false, reason: 'harness did not start' };
 // and keep only the first line — the rest is noise for that reader.
 const stripAnsi = (s) => String(s).replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
 const firstLine = (s) => stripAnsi(s).split('\n')[0].slice(0, 300);
+
+/**
+ * Make the browser see the page the way a human does.
+ *
+ * Both surfaces a reader ever reaches — the preview proxy and
+ * /projects/<slug>/ — inject a <base href> at the project root, and the system
+ * prompt therefore MANDATES project-root-relative URLs ("styles.css",
+ * "assets/three.min.js"). This harness drove the bare static server with no
+ * base tag, where exactly those URLs resolve against the chapter directory and
+ * 404. No stylesheet, no scripts, so no canvas, no diagram, no controls and no
+ * tokens — and the gate duly reported prose-only, no-model, no-design-tokens
+ * and no-scene about a page that was, on every surface anyone looks at, fine.
+ *
+ * Measured on the surviving snapshot of build 85dac418: 24 findings without
+ * this, 8 with it (and 7 of those 8 were an artefact of the replay passing no
+ * source URLs). The build had been marked failed for fifteen iterations.
+ *
+ * Note what is deliberately NOT changed: the broken-link check resolves hrefs
+ * against the server root via `new URL(href, baseUrl)`. That looks like the
+ * same bug and is in fact already correct — with a base tag at the project
+ * root, "styles.css" resolves to project-root/styles.css, which is precisely
+ * what that fetch asks for. Making it page-relative would break it.
+ */
+export function injectBaseHref(html, projectRoot) {
+  // Never double-inject: a page that already declares its own base is telling
+  // us where its root is, and overriding that would be a new lie.
+  //
+  // Comments are stripped before the test and the tag must actually carry an
+  // href. The first version tested /<base\s/ against the raw HTML, so a page
+  // whose COMMENT mentioned "<base href>" was treated as already-based and got
+  // no base tag — every asset then 404'd and the gate reported prose-only,
+  // no-model and no-design-tokens. Which is precisely the bug this function
+  // exists to fix, reintroduced one layer up. Caught by running the kit's own
+  // worked example through the real gate: its comment explains the base-href
+  // rule, and that sentence was enough to break it.
+  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, '');
+  if (/<base\s[^>]*href/i.test(withoutComments)) return html;
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head[^>]*>/i, (m) => `${m}<base href="${projectRoot}">`)
+    : `<base href="${projectRoot}">${html}`;
+}
+
+async function serveLikeAHuman(page, baseUrl) {
+  const projectRoot = new URL('/', baseUrl).toString();
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    let response;
+    try {
+      response = await route.fetch();
+    } catch {
+      return route.continue(); // a fetch failure is the navigation's problem to report, not ours
+    }
+    const type = response.headers()['content-type'] || '';
+    if (!type.includes('html')) return route.fulfill({ response });
+    let body;
+    try {
+      body = await response.text();
+    } catch {
+      return route.fulfill({ response });
+    }
+    return route.fulfill({ response, body: injectBaseHref(body, projectRoot) });
+  });
+}
 
 async function main() {
   const baseUrl = process.argv[2];
@@ -136,6 +208,7 @@ async function main() {
         const rawCandidates = [ch.path, `/chapter/${ch.n}/`, `/chapter-${ch.n}`, `/chapters/${ch.n}/`];
         const attempted = [];
         page = await browser.newPage();
+        await serveLikeAHuman(page, baseUrl);
         let resp = null;
         for (const cand of rawCandidates) {
           if (attempted.includes(cand)) continue; // ch.path often already is one of the fallbacks
@@ -203,7 +276,14 @@ async function main() {
         // Distinctness: on /chapter-N/ the reader should see chapter N, not
         // all of them stacked. A client-routed SPA that shows one at a time
         // passes; a single page dumping every chapter does not.
-        const visibleChapters = await page.locator('[data-chapter]:visible').count();
+        // Count DISTINCT chapter numbers, not marked elements. Counting
+        // elements calls a chapter whose wrapper and inner article both carry
+        // data-chapter="3" two chapters — one chapter marked twice is untidy,
+        // not the failure this rule is for, which is eight chapters stacked on
+        // one page and served at every URL.
+        const visibleChapters = await page
+          .locator('[data-chapter]:visible')
+          .evaluateAll((els) => new Set(els.map((e) => e.getAttribute('data-chapter'))).size);
         if (visibleChapters > 1) {
           findings.push({
             chapter: ch.n, rule: 'chapters-not-distinct',
@@ -443,6 +523,18 @@ async function main() {
   }
 }
 
-main()
-  .catch((e) => { out = { ran: false, reason: `unexpected: ${e.message}` }; })
-  .finally(() => { process.stdout.write(JSON.stringify(out) + '\n'); });
+// Run only when invoked as a script, so a test can import injectBaseHref
+// without starting a browser and consuming stdin.
+//
+// If this guard ever mis-fires the script prints nothing, which the caller
+// already reports as `ran: false, reason: "the studio gate printed nothing"` —
+// a visible skip, never a silent pass. Verified by running the real script
+// against a real snapshot after the change, not by reading it.
+const invokedDirectly =
+  Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main()
+    .catch((e) => { out = { ran: false, reason: `unexpected: ${e.message}` }; })
+    .finally(() => { process.stdout.write(JSON.stringify(out) + '\n'); });
+}

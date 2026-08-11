@@ -106,6 +106,13 @@ describe('explainer kit', () => {
     expect(html).toContain('data-chapter');
     expect(html).toContain('data-citation');
     expect(html).toMatch(/Explainer\.createSim\(/);
-    expect(html).toMatch(/Explainer\.createDiagram\(/);
+    // Any kit visual, not createDiagram specifically. The contract is "at
+    // least one canvas or svg produced by the kit"; the example now shows a
+    // composition, which createStackBar draws better than a diagram would.
+    // Pinning one factory name would make every future improvement to the
+    // example look like a regression.
+    expect(html).toMatch(/Explainer\.create(Diagram|StackBar|Bars|Chart|Scene|Steps|Cycle|Funnel|Timeline|Tree|Matrix|Venn|IconArray|Gauge|LineBand|Comparison)\(/);
+    // The chrome is mounted, not authored — the reason nav stopped 404ing.
+    expect(html).toMatch(/Explainer\.mountShell\(/);
   });
 });

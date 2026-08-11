@@ -1,6 +1,53 @@
 import { describe, it, expect, vi } from 'vitest';
 import { randomBytes } from 'node:crypto';
-import { sliceBase64, writeFileInSandboxChunked, type ExecResult } from './sandbox';
+import {
+  sliceBase64,
+  writeFileInSandboxChunked,
+  seedDevCommand,
+  parseBuiltChapterCount,
+  type ExecResult,
+} from './sandbox';
+
+// The seed step opens every iteration. Its unconditional `rm -rf` across dev/
+// destroyed 57% of build 85dac418's tokens: promotion only ran on the happy
+// path, so any iteration that ended early had its files deleted at the start
+// of the next one — while the in-code comments promised the opposite.
+describe('seedDevCommand', () => {
+  const BASE = '/home/jkai/workspace/b1';
+
+  it('does NOT delete dev/ when the previous iteration never promoted', () => {
+    const cmd = seedDevCommand(BASE, true);
+    expect(cmd).not.toContain('rm -rf');
+    expect(cmd).toContain(`cp -a ${BASE}/live/. ${BASE}/dev/`);
+  });
+
+  it('clears dev/ first in the normal case, so a deleted file stays deleted', () => {
+    // The overlay-only form is a data-loss guard, not a general improvement:
+    // used unconditionally it would resurrect files the agent meant to remove.
+    const cmd = seedDevCommand(BASE, false);
+    expect(cmd).toContain(`find ${BASE}/dev -mindepth 1 -maxdepth 1 -exec rm -rf {} +`);
+    expect(cmd.indexOf('rm -rf')).toBeLessThan(cmd.indexOf('cp -a'));
+  });
+});
+
+describe('parseBuiltChapterCount', () => {
+  it.each([
+    ['3\n', 3],
+    ['0\n', 0],
+    ['  12  ', 12],
+  ])('reads %o as %i', (stdout, want) => {
+    expect(parseBuiltChapterCount(stdout)).toBe(want);
+  });
+
+  // Unreadable output must make FEWER chapters due, never more — a high guess
+  // manufactures still-placeholder findings for chapters nobody has reached.
+  it.each([[''], ['grep: no such file'], ['   '], [undefined as unknown as string]])(
+    'falls back to 0 for %o',
+    (stdout) => {
+      expect(parseBuiltChapterCount(stdout)).toBe(0);
+    },
+  );
+});
 
 // syncExplainerKit needs to chunk three.min.js's base64 (~893KB) into pieces
 // small enough to survive as individual shell arguments (Linux caps a single
