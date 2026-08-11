@@ -270,6 +270,19 @@ jobs:
       - name: Stage the release
         run: ./scripts/ci-prebuild.sh
 
+      # The sidecar owns the build-orchestrator loop and CI has never shipped
+      # it, so a fix merged in the morning could still be absent at teatime —
+      # which is exactly how a build died of a fault that had been fixed five
+      # hours earlier. Staging is safe at any moment; jkai-builder-maintain.sh
+      # applies it once no build is in flight, because a restart kills the
+      # agent process of any build that is.
+      #
+      # `|| true`: a stale sidecar is a far smaller problem than a web release
+      # that did not happen, and this job's real output is the release directory.
+      - name: Stage the jkai-builder sidecar
+        run: ./scripts/ci-stage-builder.sh || echo "::warning::staging the jkai-builder sidecar failed — it will keep running the previous bundle"
+
+
   release:
     name: Release (VPS)
     # Both, and plain `needs:` semantics — the job runs only when BOTH succeed,
