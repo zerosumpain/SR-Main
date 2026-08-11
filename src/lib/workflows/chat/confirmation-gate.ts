@@ -59,6 +59,8 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'gmail_send':               return `Send email to ${(args.to as string) ?? 'unknown recipient'}?`;
     case 'gmail_reply':              return `Send reply on thread ${args.threadId ?? 'unknown'}?`;
     case 'apple_calendar_create':    return `Create calendar event "${args.title ?? 'untitled'}" on ${args.calendar ?? 'the selected calendar'} (${args.allDayStart ?? args.start ?? 'unknown start'} to ${args.allDayEnd ?? args.end ?? 'unknown end'})?`;
+    case 'apple_calendar_update':    return `Update calendar event "${args.eventId ?? 'unknown'}" on ${args.calendar ?? 'the selected calendar'}?`;
+    case 'apple_calendar_delete':    return `Delete calendar event "${args.eventId ?? 'unknown'}" from ${args.calendar ?? 'the selected calendar'}? This cannot be undone.`;
     case 'whatsapp_send':            return `Send WhatsApp message to ${(args.to as string) ?? 'default contact'}?`;
     default: {
       // No hand-written case: show the arguments rather than nothing, so the

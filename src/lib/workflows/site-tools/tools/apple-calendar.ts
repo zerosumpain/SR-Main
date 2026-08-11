@@ -124,6 +124,46 @@ export async function handleAppleCalendarList(args: Record<string, unknown>): Pr
   }
 }
 
+function eventId(args: Record<string, unknown>): string | { error: string } {
+  const id = typeof args.eventId === 'string' ? args.eventId.trim() : '';
+  return id || { error: 'eventId is required. Use the event resource URL returned when listing events.' };
+}
+
+function updatePatch(args: Record<string, unknown>): Record<string, unknown> | { error: string } {
+  const patch: Record<string, unknown> = {};
+  for (const [argument, config] of [['title', 'eventTitle'], ['location', 'eventLocation'], ['notes', 'eventNotes']] as const) {
+    if (args[argument] !== undefined) {
+      if (typeof args[argument] !== 'string') return { error: `${argument} must be a string.` };
+      patch[config] = args[argument];
+    }
+  }
+  const timed = args.start !== undefined || args.end !== undefined;
+  const allDay = args.allDayStart !== undefined || args.allDayEnd !== undefined;
+  if (timed && allDay) return { error: 'Use either start/end or allDayStart/allDayEnd, not both.' };
+  if (timed) {
+    if (args.start !== undefined) {
+      const start = toUtcIcalDateTime(args.start);
+      if (typeof start !== 'string') return start;
+      patch.eventStart = start;
+    }
+    if (args.end !== undefined) {
+      const end = toUtcIcalDateTime(args.end);
+      if (typeof end !== 'string') return end;
+      patch.eventEnd = end;
+    }
+    patch.allDay = false;
+  }
+  if (allDay) {
+    // Switching to (or editing) an all-day event needs a complete inclusive range.
+    const range = allDayRange(args.allDayStart, args.allDayEnd);
+    if ('error' in range) return range;
+    patch.eventStart = range.start;
+    patch.eventEnd = range.end;
+    patch.allDay = true;
+  }
+  return Object.keys(patch).length ? patch : { error: 'Provide at least one field to edit.' };
+}
+
 export async function handleAppleCalendarCreate(args: Record<string, unknown>): Promise<ToolResult> {
   const selected = await selectedCalendar(args);
   if ('error' in selected) return { success: false, error: selected.error };
@@ -155,6 +195,38 @@ export async function handleAppleCalendarCreate(args: Record<string, unknown>): 
   }
 }
 
+export async function handleAppleCalendarUpdate(args: Record<string, unknown>): Promise<ToolResult> {
+  const selected = await selectedCalendar(args);
+  if ('error' in selected) return { success: false, error: selected.error };
+  const id = eventId(args);
+  if (typeof id !== 'string') return { success: false, error: id.error };
+  const patch = updatePatch(args);
+  if ('error' in patch) return { success: false, error: patch.error };
+  try {
+    const result = await appleCalendarExecutor.execute({}, {
+      credentialId: selected.credentialId, operation: 'update', calendar: selected.calendar.value, eventId: id, ...patch,
+    }, standaloneContext());
+    return { success: true, data: result.output };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? `Unable to update Apple Calendar event: ${err.message}` : 'Unable to update Apple Calendar event.' };
+  }
+}
+
+export async function handleAppleCalendarDelete(args: Record<string, unknown>): Promise<ToolResult> {
+  const selected = await selectedCalendar(args);
+  if ('error' in selected) return { success: false, error: selected.error };
+  const id = eventId(args);
+  if (typeof id !== 'string') return { success: false, error: id.error };
+  try {
+    const result = await appleCalendarExecutor.execute({}, {
+      credentialId: selected.credentialId, operation: 'delete', calendar: selected.calendar.value, eventId: id,
+    }, standaloneContext());
+    return { success: true, data: result.output };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? `Unable to delete Apple Calendar event: ${err.message}` : 'Unable to delete Apple Calendar event.' };
+  }
+}
+
 export const appleCalendarTools: ToolDefinition[] = [
   {
     name: 'apple_calendar_list',
@@ -167,6 +239,18 @@ export const appleCalendarTools: ToolDefinition[] = [
     description: 'Create an iCloud Calendar event on a selected existing credential and calendar. Use start/end ISO date-times, or allDayStart/allDayEnd inclusive YYYY-MM-DD dates. This is an external write and requires user confirmation. Identical retries are de-duplicated by a deterministic UID based on credential, calendar, title, start and end.',
     parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name (for example Family).' }, title: { type: 'string' }, start: { type: 'string', description: 'ISO-8601 event start date-time.' }, end: { type: 'string', description: 'ISO-8601 event end date-time.' }, allDayStart: { type: 'string', description: 'Inclusive all-day start date, YYYY-MM-DD.' }, allDayEnd: { type: 'string', description: 'Inclusive all-day end date, YYYY-MM-DD.' }, location: { type: 'string' }, notes: { type: 'string' } }, required: ['credentialId', 'calendar', 'title'] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarCreate,
+  },
+  {
+    name: 'apple_calendar_update', destructive: true,
+    description: 'Edit an existing iCloud Calendar event, such as renaming it or changing its time, all-day dates, location, or notes. Only supplied fields change; omitted fields are preserved. This external write requires user confirmation and verifies the event belongs to the selected credential and calendar.',
+    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, eventId: { type: 'string', description: 'Event resource URL returned by listing events; it must belong to this calendar.' }, title: { type: 'string', description: 'Replacement event title.' }, start: { type: 'string', description: 'Replacement ISO-8601 timed start; omit to preserve it.' }, end: { type: 'string', description: 'Replacement ISO-8601 timed end; omit to preserve it.' }, allDayStart: { type: 'string', description: 'Replacement inclusive all-day start, YYYY-MM-DD; provide with allDayEnd.' }, allDayEnd: { type: 'string', description: 'Replacement inclusive all-day end, YYYY-MM-DD; provide with allDayStart.' }, location: { type: 'string', description: 'Replacement location; an empty string clears it.' }, notes: { type: 'string', description: 'Replacement notes; an empty string clears them.' } }, required: ['credentialId', 'calendar', 'eventId'] },
+    category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarUpdate,
+  },
+  {
+    name: 'apple_calendar_delete', destructive: true,
+    description: 'Delete an existing iCloud Calendar event from the selected credential and calendar. This cannot be undone, requires user confirmation, and verifies the event belongs to that calendar before deletion.',
+    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, eventId: { type: 'string', description: 'Event resource URL returned by listing events; it must belong to this calendar.' } }, required: ['credentialId', 'calendar', 'eventId'] },
+    category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarDelete,
   },
 ];
 

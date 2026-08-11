@@ -15,7 +15,9 @@ import {
   allDayRange,
   appleCalendarTools,
   handleAppleCalendarCreate,
+  handleAppleCalendarDelete,
   handleAppleCalendarList,
+  handleAppleCalendarUpdate,
   resolveCalendar,
   toUtcIcalDateTime,
 } from './apple-calendar';
@@ -24,11 +26,13 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('Apple Calendar chat tools', () => {
   it('registers direct general-chat read and confirmation-gated write actions', () => {
-    expect(appleCalendarTools.map((tool) => tool.name)).toEqual(['apple_calendar_list', 'apple_calendar_create']);
+    expect(appleCalendarTools.map((tool) => tool.name)).toEqual(['apple_calendar_list', 'apple_calendar_create', 'apple_calendar_update', 'apple_calendar_delete']);
     expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_create')?.destructive).toBe(true);
+    expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_update')?.destructive).toBe(true);
+    expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_delete')?.destructive).toBe(true);
     expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_list')?.destructive).not.toBe(true);
     expect(inferToolsets('Add a meeting to my iCloud calendar')).toContain('apple-calendar');
-    expect(getToolsetDefinitions('apple-calendar').map((tool) => tool.function.name)).toEqual(['apple_calendar_list', 'apple_calendar_create']);
+    expect(getToolsetDefinitions('apple-calendar').map((tool) => tool.function.name)).toEqual(['apple_calendar_list', 'apple_calendar_create', 'apple_calendar_update', 'apple_calendar_delete']);
   });
 
   it('safely discovers configured credential ids and labels before CalDAV access', async () => {
@@ -107,5 +111,31 @@ describe('Apple Calendar chat tools', () => {
     const result = await handleAppleCalendarCreate({ credentialId: 'cred', calendar: 'Family', title: 'Lunch', start: '2026-09-23T10:00:00+01:00', end: '2026-09-23T11:00:00+01:00' });
     expect(result.success).toBe(false);
     expect(appleCalendarExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  it('updates only supplied fields and sends the selected credential and calendar for ownership validation', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { id: '/family/event.ics', title: 'John @ Big Data London', location: 'ExCeL', notes: 'existing notes' }, rowCount: 1 } as never);
+    const result = await handleAppleCalendarUpdate({ credentialId: 'cred', calendar: 'Family', eventId: '/family/event.ics', title: 'John @ Big Data London' });
+    expect(result).toMatchObject({ success: true, data: { title: 'John @ Big Data London', location: 'ExCeL', notes: 'existing notes' } });
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith({}, expect.objectContaining({
+      credentialId: 'cred', calendar: '/family/', operation: 'update', eventId: '/family/event.ics', eventTitle: 'John @ Big Data London',
+    }), expect.anything());
+    expect(vi.mocked(appleCalendarExecutor.execute).mock.calls[0][1]).not.toHaveProperty('eventLocation');
+  });
+
+  it('updates location and notes without clearing other omitted fields', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { id: '/family/event.ics', title: 'Big Data LDN 2026', location: 'ExCeL London', notes: 'Bring badge' }, rowCount: 1 } as never);
+    await handleAppleCalendarUpdate({ credentialId: 'cred', calendar: 'Family', eventId: '/family/event.ics', location: 'ExCeL London', notes: 'Bring badge' });
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith({}, expect.objectContaining({ eventLocation: 'ExCeL London', eventNotes: 'Bring badge' }), expect.anything());
+    expect(vi.mocked(appleCalendarExecutor.execute).mock.calls[0][1]).not.toHaveProperty('eventTitle');
+  });
+
+  it('deletes only after sending the selected calendar for event ownership validation', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { id: '/family/event.ics', title: 'Disposable', deleted: true }, rowCount: 1 } as never);
+    await handleAppleCalendarDelete({ credentialId: 'cred', calendar: 'Family', eventId: '/other/event.ics' });
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith({}, expect.objectContaining({ credentialId: 'cred', calendar: '/family/', operation: 'delete', eventId: '/other/event.ics' }), expect.anything());
   });
 });

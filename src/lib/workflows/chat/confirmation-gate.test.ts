@@ -23,6 +23,11 @@ describe('describeDestructiveAction', () => {
     expect(describeDestructiveAction('workflow_delete', { name: 'canvas-x' })).toContain('canvas-x');
     expect(describeDestructiveAction('gmail_send', { to: 'a@b.com' })).toContain('a@b.com');
   });
+  it('describes Apple Calendar edits and irreversible deletes', () => {
+    expect(describeDestructiveAction('apple_calendar_update', { eventId: '/family/event.ics', calendar: 'Family' })).toContain('/family/event.ics');
+    expect(describeDestructiveAction('apple_calendar_delete', { eventId: '/family/event.ics', calendar: 'Family' })).toMatch(/cannot be undone/i);
+  });
+
   it('has a default for unknown tools', () => {
     expect(describeDestructiveAction('mystery_tool', {})).toContain('mystery_tool');
   });

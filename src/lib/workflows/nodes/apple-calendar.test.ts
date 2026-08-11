@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { parseCalendarObject } from './apple-calendar';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('$lib/integrations/credentials', () => ({ getCredential: vi.fn() }));
+vi.mock('tsdav', () => ({ default: { createDAVClient: vi.fn() } }));
+
+import { getCredential } from '$lib/integrations/credentials';
+import tsdav from 'tsdav';
+import { appleCalendarExecutor, parseCalendarObject } from './apple-calendar';
 
 const ics = (...lines: string[]) =>
   ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN', ...lines, 'END:VCALENDAR'].join('\r\n');
@@ -82,5 +88,80 @@ describe('parseCalendarObject', () => {
   it('says so when the object holds no event at all', () => {
     const noEvent = parseCalendarObject('/e/5.ics', ics('BEGIN:VTODO', 'UID:t1', 'END:VTODO'));
     expect(noEvent.parseError).toMatch(/no VEVENT/);
+  });
+});
+
+describe('Apple Calendar event mutations', () => {
+  const family = { url: '/family/', displayName: 'Family' };
+  const work = { url: '/work/', displayName: 'Work' };
+  const events = new Map<string, { url: string; etag: string; data: string }[]>();
+  const client = {
+    fetchCalendars: vi.fn(async () => [family, work]),
+    fetchCalendarObjects: vi.fn(async ({ calendar }: { calendar: { url: string } }) => events.get(calendar.url) ?? []),
+    createCalendarObject: vi.fn(async ({ calendar, filename, iCalString }) => {
+      const url = `${calendar.url}${filename}`;
+      events.set(calendar.url, [...(events.get(calendar.url) ?? []), { url, etag: 'one', data: iCalString }]);
+      return { headers: new Headers({ Location: url }) };
+    }),
+    updateCalendarObject: vi.fn(async ({ calendarObject }: { calendarObject: { url: string; data: string } }) => {
+      for (const [calendar, objects] of events) {
+        const index = objects.findIndex((object) => object.url === calendarObject.url);
+        if (index >= 0) events.set(calendar, objects.with(index, { ...objects[index], data: calendarObject.data, etag: 'two' }));
+      }
+    }),
+    deleteCalendarObject: vi.fn(async ({ calendarObject }: { calendarObject: { url: string } }) => {
+      for (const [calendar, objects] of events) events.set(calendar, objects.filter((object) => object.url !== calendarObject.url));
+    }),
+  };
+
+  beforeEach(() => {
+    events.clear();
+    vi.clearAllMocks();
+    vi.mocked(getCredential).mockResolvedValue({ kind: 'basic', payload: { username: 'user', password: 'secret' } } as never);
+    vi.mocked(tsdav.createDAVClient).mockResolvedValue(client as never);
+  });
+
+  it('creates, updates, lists, and deletes an event while preserving omitted fields', async () => {
+    const created = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'create', calendar: family.url, eventUid: 'disposable', eventTitle: 'Big Data LDN 2026',
+      eventStart: '20260923T093000Z', eventEnd: '20260923T103000Z', eventLocation: 'ExCeL', eventNotes: 'Bring badge',
+    }, {} as never);
+    const eventId = (created.output as { url: string }).url;
+
+    const renamed = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'update', calendar: family.url, eventId, eventTitle: 'John @ Big Data London',
+    }, {} as never);
+    expect(renamed.output).toMatchObject({ title: 'John @ Big Data London', location: 'ExCeL', notes: 'Bring badge' });
+
+    const updated = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'update', calendar: family.url, eventId, eventLocation: 'ExCeL London', eventNotes: 'Reception at 9',
+    }, {} as never);
+    expect(updated.output).toMatchObject({ title: 'John @ Big Data London', location: 'ExCeL London', notes: 'Reception at 9' });
+
+    const dated = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'update', calendar: family.url, eventId, allDay: true, eventStart: '20260924', eventEnd: '20260926',
+    }, {} as never);
+    expect(dated.output).toMatchObject({ title: 'John @ Big Data London', start: expect.stringMatching(/^2026-09-24/), end: expect.stringMatching(/^2026-09-26/) });
+
+    const listed = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url, dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
+    }, {} as never);
+    expect((listed.output as { events: Array<{ title: string }> }).events).toEqual([expect.objectContaining({ title: 'John @ Big Data London' })]);
+
+    const deleted = await appleCalendarExecutor.execute({}, { credentialId: 'cred', operation: 'delete', calendar: family.url, eventId }, {} as never);
+    expect(deleted.output).toMatchObject({ id: eventId, title: 'John @ Big Data London', deleted: true });
+    const afterDelete = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url, dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
+    }, {} as never);
+    expect((afterDelete.output as { events: unknown[] }).events).toEqual([]);
+  });
+
+  it('rejects update and delete IDs outside the selected calendar', async () => {
+    events.set(work.url, [{ url: '/work/event.ics', etag: 'one', data: EVENT }]);
+    const config = { credentialId: 'cred', calendar: family.url, eventId: '/work/event.ics' };
+    await expect(appleCalendarExecutor.execute({}, { ...config, operation: 'update', eventTitle: 'Nope' }, {} as never)).rejects.toThrow(/selected calendar/i);
+    await expect(appleCalendarExecutor.execute({}, { ...config, operation: 'delete' }, {} as never)).rejects.toThrow(/selected calendar/i);
+    expect(client.updateCalendarObject).not.toHaveBeenCalled();
+    expect(client.deleteCalendarObject).not.toHaveBeenCalled();
   });
 });
