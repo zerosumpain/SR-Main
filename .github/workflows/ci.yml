@@ -33,8 +33,21 @@ on:
 
 # Never let two deploys touch the VPS at once. Do not cancel in progress: a
 # half-finished deploy is worse than a queued one.
+#
+# KEY IT ON THE REF. A single global group put every pull-request gate in the
+# same queue as the production deploy, and with cancel-in-progress: false
+# GitHub keeps only ONE run pending per group — a newly queued run cancels the
+# one already waiting. So opening a PR while a master deploy sat in the queue
+# cancelled the deploy. On 2026-08-11 that silently stranded the Apple Calendar
+# merge: the run was cancelled before a single job started, master said merged,
+# and production stayed on the previous commit.
+#
+# Per-ref keeps the property that actually matters — only master runs prebuild
+# and release, so master's own group is still the one lane into the VPS — while
+# PR gates, which touch nothing, stop evicting it. It also stops PRs queueing
+# behind each other for no reason.
 concurrency:
-  group: sr-main-deploy
+  group: sr-main-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
