@@ -36,6 +36,57 @@ let out = { ran: false, reason: 'harness did not start' };
 const stripAnsi = (s) => String(s).replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
 const firstLine = (s) => stripAnsi(s).split('\n')[0].slice(0, 300);
 
+/**
+ * Make the browser see the page the way a human does.
+ *
+ * Both surfaces a reader ever reaches — the preview proxy and
+ * /projects/<slug>/ — inject a <base href> at the project root, and the system
+ * prompt therefore MANDATES project-root-relative URLs ("styles.css",
+ * "assets/three.min.js"). This harness drove the bare static server with no
+ * base tag, where exactly those URLs resolve against the chapter directory and
+ * 404. No stylesheet, no scripts, so no canvas, no diagram, no controls and no
+ * tokens — and the gate duly reported prose-only, no-model, no-design-tokens
+ * and no-scene about a page that was, on every surface anyone looks at, fine.
+ *
+ * Measured on the surviving snapshot of build 85dac418: 24 findings without
+ * this, 8 with it (and 7 of those 8 were an artefact of the replay passing no
+ * source URLs). The build had been marked failed for fifteen iterations.
+ *
+ * Note what is deliberately NOT changed: the broken-link check resolves hrefs
+ * against the server root via `new URL(href, baseUrl)`. That looks like the
+ * same bug and is in fact already correct — with a base tag at the project
+ * root, "styles.css" resolves to project-root/styles.css, which is precisely
+ * what that fetch asks for. Making it page-relative would break it.
+ */
+async function serveLikeAHuman(page, baseUrl) {
+  const projectRoot = new URL('/', baseUrl).toString();
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() !== 'document') return route.continue();
+    let response;
+    try {
+      response = await route.fetch();
+    } catch {
+      return route.continue(); // a fetch failure is the navigation's problem to report, not ours
+    }
+    const type = response.headers()['content-type'] || '';
+    if (!type.includes('html')) return route.fulfill({ response });
+    let body;
+    try {
+      body = await response.text();
+    } catch {
+      return route.fulfill({ response });
+    }
+    // Never double-inject: a page that already declares its own base is
+    // telling us where its root is, and overriding that would be a new lie.
+    if (!/<base\s/i.test(body)) {
+      body = /<head[^>]*>/i.test(body)
+        ? body.replace(/<head[^>]*>/i, (m) => `${m}<base href="${projectRoot}">`)
+        : `<base href="${projectRoot}">${body}`;
+    }
+    return route.fulfill({ response, body });
+  });
+}
+
 async function main() {
   const baseUrl = process.argv[2];
   if (!baseUrl) { out = { ran: false, reason: 'no base url given' }; return; }
@@ -136,6 +187,7 @@ async function main() {
         const rawCandidates = [ch.path, `/chapter/${ch.n}/`, `/chapter-${ch.n}`, `/chapters/${ch.n}/`];
         const attempted = [];
         page = await browser.newPage();
+        await serveLikeAHuman(page, baseUrl);
         let resp = null;
         for (const cand of rawCandidates) {
           if (attempted.includes(cand)) continue; // ch.path often already is one of the fallbacks
