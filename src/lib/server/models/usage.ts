@@ -34,6 +34,8 @@ export async function recordBuildUsage(
   await db.execute(sql`
     UPDATE jkai_builds
     SET tokens_used = tokens_used + ${usage.promptTokens + usage.completionTokens},
+        prompt_tokens = prompt_tokens + ${usage.promptTokens},
+        completion_tokens = completion_tokens + ${usage.completionTokens},
         cost_usd = cost_usd + ${cost}
     WHERE id = ${buildId}
   `);

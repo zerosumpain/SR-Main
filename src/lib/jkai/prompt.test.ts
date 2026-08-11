@@ -173,3 +173,26 @@ describe('the studio prompt points at the real materials', () => {
     expect(prompt).toContain('Never let a generated image carry a number');
   });
 });
+
+// Two builds filled chapter after chapter with "the record does not establish
+// this". They were not being careful — the brief is assembled once, before
+// planning, and they had no way to ask a second question.
+describe('the studio prompt lets a chapter ask its own question', () => {
+  const prompt = buildSystemPrompt('b1', 4310, 'studio');
+
+  it('names a runnable corpus search with no placeholder left', () => {
+    expect(prompt).toContain('scripts/studio-research.mjs');
+    expect(prompt).not.toContain('__STUDIO_RESEARCH_CMD__');
+  });
+
+  it('tells it to search before declaring something unestablished', () => {
+    expect(prompt).toMatch(/before you write that a thing is unestablished/i);
+  });
+
+  // The distinction the previous builds could not make, and which changes what
+  // the reader is being told.
+  it('separates "nobody researched it" from "the record establishes nothing"', () => {
+    expect(prompt).toContain('nobody has researched this');
+    expect(prompt).toContain('the record establishes nothing');
+  });
+});

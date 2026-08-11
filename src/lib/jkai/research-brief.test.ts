@@ -211,3 +211,50 @@ describe('research modes', () => {
     expect(declared).toEqual([...RESEARCH_MODES].sort());
   });
 });
+
+// A compensation scheme explained from GOV.UK primary material and one
+// explained from Facebook posts are different artefacts. Until now the brief
+// could not tell them apart: every fact arrived as a bare URL, and an earlier
+// studio build cited Facebook posts as evidence with nothing objecting.
+describe('source provenance reaches the prompt', () => {
+  const brief = {
+    topic: 'T',
+    facts: [
+      {
+        claim: 'The scheme opened in 2025.',
+        sourceUrl: 'https://gov.uk/x',
+        sourceTitle: 'Scheme summary',
+        sourceType: 'government',
+        credibility: 0.95,
+        asOf: '2025-02-14',
+      },
+      { claim: 'Someone said a thing.', sourceUrl: 'https://facebook.com/p/1' },
+    ],
+    concepts: [],
+    causalMap: [],
+    liveData: [],
+    misconceptions: [],
+    gaps: [],
+    sessionId: null,
+  };
+
+  it('marks the type, credibility and date beside the source', () => {
+    const out = formatBriefForPrompt(brief as never);
+    expect(out).toContain('type: government');
+    expect(out).toContain('credibility: 0.95');
+    expect(out).toContain('as of: 2025-02-14');
+  });
+
+  it('leaves a fact with no provenance bare rather than inventing any', () => {
+    const out = formatBriefForPrompt(brief as never);
+    expect(out).toContain('source: https://facebook.com/p/1');
+    // No parenthesised marks on the unprovenanced one.
+    expect(out).not.toContain('https://facebook.com/p/1 (');
+  });
+
+  it('tells the agent to weigh them rather than treating all sources alike', () => {
+    const out = formatBriefForPrompt(brief as never);
+    expect(out).toMatch(/WEIGH THEM/);
+    expect(out.toLowerCase()).toContain('not equivalent evidence');
+  });
+});

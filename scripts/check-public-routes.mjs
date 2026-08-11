@@ -96,6 +96,9 @@ const HOOK_BYPASSES = [
   // build with no session and draws one chapter illustration. POST only, and
   // the handler caps the subject length before it spends anything.
   '/api/jkai/studio/image', // JKAI_BRIDGE_TOKEN
+  // Read-only search over research the owner has already gathered, POST only,
+  // same per-build bridge token. Publishes no new data.
+  '/api/jkai/studio/research', // JKAI_BRIDGE_TOKEN
 ];
 
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection

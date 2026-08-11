@@ -452,6 +452,19 @@ body {
   margin: 0 0 1.75rem;
   min-height: 12rem;
 }
+/* An unused stage must take no room. The shell creates it for every `open`
+   chapter, and an agent that mounts its visual further down the page left a
+   12rem hole between the nav and the title — seen on the first chapter of the
+   reuse build. A container the author declined to use should disappear, not
+   reserve space. Applies to every shell-created mount point for the same
+   reason. */
+.ex-stage:empty,
+.ex-split:empty,
+.ex-ledger:empty,
+.ex-aside:empty { display: none; }
+/* :empty does not match when a container holds only whitespace text, and the
+   split always holds two side divs — so collapse it when both sides are bare. */
+.ex-split:not(:has(.ex-side > *)) { display: none; }
 .ex-form-open .ex-chap-head { margin-bottom: 1.5rem; }
 
 /* question — the title is asked, so it gets the weight of a question. */
@@ -589,3 +602,13 @@ body {
    not happen, which is how seven identical chapters got shipped. */
 .ex-split .ex-side { min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .ex-ledger { display: flex; flex-direction: column; }
+
+/* A diagram authored at 640 units wide, dropped into a ~380px column, scales
+   its text down to about 7px — legible in the fixture, illegible in a
+   `compare` chapter. Seen on chapter 3 of the reuse build. Give the visual a
+   readable floor and let it scroll inside its own frame, which is the rule the
+   rest of this stylesheet already follows for wide content. */
+.ex-split .ex-inst-body,
+.ex-ledger .ex-entry-viz { overflow-x: auto; }
+.ex-split .ex-inst-body > svg,
+.ex-ledger .ex-entry-viz > svg { min-width: 26rem; }
