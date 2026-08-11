@@ -1,6 +1,7 @@
 import {
   buildSystemPrompt,
   buildIterationContext,
+  DESIGN_SYSTEM_PROMPT_BLOCK,
   type BuildPromptMode,
   type ChapterPlanEntry,
 } from './prompt';
@@ -132,7 +133,7 @@ export async function executeIteration(
   let systemPrompt = buildSystemPrompt(build.id, assignedPort, promptMode);
   const enforceDesign = (build as JkaiBuild & { enforceDesignSystem?: boolean }).enforceDesignSystem !== false;
   if (enforceDesign && !isStudio) {
-    systemPrompt += `\n\n--- Design System (REQUIRED) ---\nA read-only design-system reference is mounted at \`./design-system/\` (relative to your workdir). BEFORE writing any HTML, CSS, or Svelte:\n1. Read \`./design-system/README.md\`.\n2. Read \`./design-system/components.md\` and \`./design-system/examples/page.svelte\`.\n3. Import \`./design-system/tokens.css\` (or copy its \`:root\` block) at the root of your stylesheet.\n4. Use the documented classes (\`.nm-sec\`, \`.nm-text-input\`, \`.nm-save-btn\`, \`.row-link\`, \`.status-dot\`, \`.kicker\`, \`.page-hdr\`).\n5. Never hard-code hex colours or font names. Always go through \`var(--…)\`.\nA post-iteration linter will reject this iteration on violations and feed the findings into the next iteration.`;
+    systemPrompt += DESIGN_SYSTEM_PROMPT_BLOCK;
   }
   if (systemPromptSuffix) systemPrompt = `${systemPrompt}\n\n${systemPromptSuffix}`;
 

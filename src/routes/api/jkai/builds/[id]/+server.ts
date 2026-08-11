@@ -4,6 +4,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
 import { eq, asc } from 'drizzle-orm';
 import { builderClient } from '$lib/jkai/builder-client';
+import { sanitiseBuildPatch, mergeBudget } from '$lib/builds/settings';
 
 export const GET: RequestHandler = async ({ params }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
@@ -12,41 +13,33 @@ export const GET: RequestHandler = async ({ params }) => {
   return json({ ...build, iterations });
 };
 
-const PATCHABLE_FIELDS = new Set([
-  'enforceDesignSystem',
-  'thinkingLevel',
-  'requireIterationApproval',
-  'enabledToolsets',
-  'modelProvider',
-  'modelId',
-]);
-
+/**
+ * Validation lives in `$lib/builds/settings` so the Controls panel offers
+ * exactly the ranges this route enforces. Every field it accepts is one the
+ * orchestrator re-reads at the top of each iteration, which is what makes these
+ * live controls on a running build rather than creation-time options.
+ */
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, params.id));
   if (!build) return json({ error: 'Not found' }, { status: 404 });
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return json({ error: 'invalid body' }, { status: 400 });
 
-  const updates: Record<string, unknown> = { updatedAt: new Date() };
-  for (const [k, v] of Object.entries(body)) {
-    if (!PATCHABLE_FIELDS.has(k)) continue;
-    if (k === 'thinkingLevel' && typeof v === 'string') {
-      const allowed = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
-      if (!allowed.has(v)) continue;
-      updates[k] = v;
-    } else if (k === 'enabledToolsets' && Array.isArray(v)) {
-      updates[k] = v.filter((s) => typeof s === 'string');
-    } else if (k === 'enforceDesignSystem' || k === 'requireIterationApproval') {
-      updates[k] = Boolean(v);
-    } else if ((k === 'modelProvider' || k === 'modelId') && typeof v === 'string' && v.length > 0) {
-      updates[k] = v;
-    }
+  const patch = sanitiseBuildPatch(body);
+  if (Object.keys(patch).length === 0) return json({ ok: true, noop: true });
+
+  // The UI edits one budget field at a time; merge onto the stored config so a
+  // single-field patch cannot erase the other caps.
+  const updates: Record<string, unknown> = { ...patch, updatedAt: new Date() };
+  if (patch.budgetConfig) {
+    updates.budgetConfig = mergeBudget(
+      build.budgetConfig as Record<string, unknown> | null,
+      patch.budgetConfig,
+    );
   }
 
-  if (Object.keys(updates).length === 1) return json({ ok: true, noop: true });
-
   await db.update(jkaiBuilds).set(updates).where(eq(jkaiBuilds.id, params.id));
-  return json({ ok: true });
+  return json({ ok: true, applied: Object.keys(patch) });
 };
 
 export const DELETE: RequestHandler = async ({ params }) => {

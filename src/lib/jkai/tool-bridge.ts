@@ -88,9 +88,13 @@ export function manifestForBuild(enabledToolsets: string[]) {
 export function definitionsForBuild(enabledToolsets: string[]) {
   const allDefs = getToolDefinitions().filter((d) => isBridgeable(d.function.name));
   if (enabledToolsets.includes('all')) return allDefs;
-  const allowedSets = manifestForBuild(enabledToolsets).map((m) => m.toolset);
   const allowedNames = new Set(
     manifestForBuild(enabledToolsets).flatMap((m) => m.tools.map((t) => t.name)),
   );
-  return allDefs.filter((d) => allowedNames.has(d.function.name) || allowedSets.length === 0);
+  // No fail-open. This used to end `|| allowedSets.length === 0`, so a list
+  // that matched no toolset — `[]`, or a stale/misspelt name — handed the agent
+  // EVERY tool, the exact opposite of what the list asked for. `['all']` is the
+  // wildcard and it is checked above; anything else means "only these", and
+  // matching nothing means nothing.
+  return allDefs.filter((d) => allowedNames.has(d.function.name));
 }
