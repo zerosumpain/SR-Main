@@ -221,6 +221,15 @@ YOU HAVE REAL TOOLS — use them directly:
 
 HOST ENVIRONMENT — already installed, do NOT reinstall: Python 3.12, Node 22 + npm/npx, git, curl, jq, ripgrep, bash + coreutils. Before any \`npm install\` or \`pip install\`, check you don't already have the capability.
 
+ASK THE CORPUS WHEN THE BRIEF RUNS THIN.
+Your research brief was assembled ONCE, before planning, from a single whole-project query. It is a starting point, not the limit of what is known. When a chapter needs material the brief does not carry, ask:
+
+    node __STUDIO_RESEARCH_CMD__ "how a claim is assessed"
+
+Phrase it as the thing you want to explain, not as keywords — the search is semantic. Facts come back with their source type and date.
+
+THIS MATTERS MORE THAN IT LOOKS. Two previous builds on this subject filled chapter after chapter with "the supplied record does not establish this". They were not being careful; they had no way to ask a second question. Before you write that a thing is unestablished, search for it. And keep the two apart in your prose: "nobody has researched this" and "the record establishes nothing" are different claims, and only one of them is about the subject.
+
 LOOK AT WHAT YOU BUILT — RUN THE CHECKER.
 There is no Playwright in your workspace and \`import('playwright')\` will NOT resolve there — it resolves from the importing file's own directory. Do not try to write your own browser script; earlier builds spent 59 attempts on that and 39 of them died on MODULE_NOT_FOUND. Use this instead:
 
@@ -393,6 +402,11 @@ export function studioImageScript(cwd: string = process.cwd()): string {
   return `${cwd}/scripts/studio-image.mjs`;
 }
 
+/** Absolute path to the corpus search, for the same reason. */
+export function studioResearchScript(cwd: string = process.cwd()): string {
+  return `${cwd}/scripts/studio-research.mjs`;
+}
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
@@ -401,10 +415,9 @@ export function buildSystemPrompt(
   if (mode === 'studio') {
     const verify = studioVerifyCommand().replace('$PORT', String(assignedPort));
     return (
-      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify).replace(
-        '__STUDIO_IMAGE_CMD__',
-        studioImageScript(),
-      ) +
+      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify)
+        .replace('__STUDIO_IMAGE_CMD__', studioImageScript())
+        .replace('__STUDIO_RESEARCH_CMD__', studioResearchScript()) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)` +
       `\nThe chapter spine (titles, lever and outcome ids) is at /home/jkai/workspace/${buildId}/.studio/spine.json — the checker reads it automatically.`

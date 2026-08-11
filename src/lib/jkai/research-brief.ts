@@ -24,6 +24,22 @@ export interface BriefFact {
   claim: string;
   sourceUrl: string;
   detail?: string;
+  /** Publication the claim came from, for a citation a reader can weigh. */
+  sourceTitle?: string;
+  /**
+   * What kind of source this is — 'government', 'news', 'social' and so on —
+   * and how much weight the research desk gave it.
+   *
+   * A compensation scheme explained from GOV.UK primary material and one
+   * explained from Facebook posts are different artefacts, and until now the
+   * brief could not tell the difference: every fact arrived as a bare URL. A
+   * previous studio build cited Facebook posts as evidence and nothing in the
+   * system objected.
+   */
+  sourceType?: string;
+  credibility?: number;
+  /** Date the source was fetched. A 2019 page is not a 2025 fact. */
+  asOf?: string;
 }
 
 export interface ResearchBrief {
@@ -139,6 +155,9 @@ type OrderedFact = {
   confidence: number;
   url: string | null;
   title: string | null;
+  credibilityType: string | null;
+  credibilityScore: number | null;
+  fetchedAt: string | null;
 };
 
 export function distinctHostCount(rows: Array<{ url: string | null }>): number {
@@ -190,6 +209,9 @@ export function mapHitsToFacts(
       confidence: h.confidence,
       url: h.sourceUrl,
       title: h.sourceTitle,
+      credibilityType: h.credibilityType,
+      credibilityScore: h.credibilityScore,
+      fetchedAt: h.fetchedAt,
     });
     if (out.length >= cap) break;
   }
@@ -241,9 +263,20 @@ export function formatBriefForPrompt(brief: ResearchBrief): string {
   lines.push('Every factual claim you render must trace to a FACT below. Do not invent figures, and do not smooth over the GAPS — the final chapter should state them honestly.');
   lines.push('');
   lines.push('## FACTS');
+  lines.push(
+    'Each fact carries what kind of source it came from and when it was fetched. WEIGH THEM. ' +
+      'A government publication and a social-media post are not equivalent evidence, and a chapter ' +
+      'that leans on the weaker one should say so rather than presenting both as the record. ' +
+      'Where a fact has no source type, treat it as unverified provenance.',
+  );
   brief.facts.forEach((f, i) => {
     lines.push(`${i + 1}. ${f.claim}${f.detail ? ` — ${f.detail}` : ''}`);
-    lines.push(`   source: ${f.sourceUrl}`);
+    const marks = [
+      f.sourceType ? `type: ${f.sourceType}` : null,
+      f.credibility != null ? `credibility: ${f.credibility.toFixed(2)}` : null,
+      f.asOf ? `as of: ${f.asOf}` : null,
+    ].filter(Boolean);
+    lines.push(`   source: ${f.sourceUrl}${marks.length ? ` (${marks.join(', ')})` : ''}`);
   });
   lines.push('');
   lines.push('## CONCEPTS THAT ARE GENUINELY HARD');
@@ -485,7 +518,10 @@ async function synthesiseBrief(
   const briefFacts: BriefFact[] = orderedFacts.map((f) => ({
     claim: f.content,
     sourceUrl: f.url as string,
-    ...(f.title ? { detail: f.title } : {}),
+    ...(f.title ? { detail: f.title, sourceTitle: f.title } : {}),
+    ...(f.credibilityType ? { sourceType: f.credibilityType } : {}),
+    ...(f.credibilityScore != null ? { credibility: f.credibilityScore } : {}),
+    ...(f.fetchedAt ? { asOf: f.fetchedAt } : {}),
   }));
   const factsForPrompt = orderedFacts
     .map((f, i) => `${i + 1}. ${f.content}\n   source: ${f.url}`)

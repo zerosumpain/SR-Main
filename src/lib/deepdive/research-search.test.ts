@@ -41,6 +41,9 @@ describe('searchResearch', () => {
           source_title: 'DfE evaluation',
           source_url: 'https://gov.uk/x',
           domain: 'gov.uk',
+          credibility_type: 'government',
+          credibility_score: 0.95,
+          fetched_at: '2025-02-14T09:31:00.000Z',
           similarity: 0.7134,
         },
         {
@@ -74,6 +77,14 @@ describe('searchResearch', () => {
       sourceTitle: 'DfE evaluation',
       sourceUrl: 'https://gov.uk/x',
       domain: 'gov.uk',
+      // Weight the reader is entitled to: these have been on `source` since
+      // the research desk was built and were dropped everywhere downstream,
+      // which is how a studio explainer came to cite Facebook posts as
+      // evidence with nothing objecting.
+      credibilityType: 'government',
+      credibilityScore: 0.95,
+      // Date only — the time of day a page was fetched is noise.
+      fetchedAt: '2025-02-14',
     });
     expect(hits[1].kind).toBe('source');
     expect(hits[1].factId).toBe('sc1');

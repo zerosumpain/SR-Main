@@ -27,6 +27,16 @@ export type ResearchSearchHit = {
   sourceTitle: string | null;
   sourceUrl: string | null;
   domain: string | null;
+  /**
+   * How much weight this source can carry. Stored on `source` since the
+   * research desk was built, and until now dropped on the floor everywhere
+   * downstream — which is how a studio explainer came to cite Facebook posts
+   * as evidence with nothing in the system objecting.
+   */
+  credibilityType: string | null;
+  credibilityScore: number | null;
+  /** When the source was fetched. A 2019 page is not a 2025 fact. */
+  fetchedAt: string | null;
 };
 
 export type ResearchSearchOptions = {
@@ -124,6 +134,9 @@ export async function searchResearch(
         s.title        AS source_title,
         s.url          AS source_url,
         s.domain       AS domain,
+        s.credibility_type  AS credibility_type,
+        s.credibility_score AS credibility_score,
+        s.fetched_at        AS fetched_at,
         1 - (f.embedding <=> ${vectorStr}::vector) AS similarity
       FROM fact f
       JOIN research_session rs ON rs.id = f.session_id
@@ -152,6 +165,11 @@ export async function searchResearch(
         s2.title       AS source_title,
         s2.url         AS source_url,
         s2.domain      AS domain,
+        -- The UNION ALL arms must agree column-for-column. A chunk is raw page
+        -- text, so it carries its source's credibility just as a fact does.
+        s2.credibility_type  AS credibility_type,
+        s2.credibility_score AS credibility_score,
+        s2.fetched_at        AS fetched_at,
         1 - (sc.embedding <=> ${vectorStr}::vector) AS similarity
       FROM source_chunk sc
       JOIN research_session rs2 ON rs2.id = sc.session_id
@@ -179,6 +197,11 @@ export async function searchResearch(
       sourceTitle: r.source_title != null ? String(r.source_title) : null,
       sourceUrl: safeHttpUrl(r.source_url), // http(s) only — see safeHttpUrl
       domain: r.domain != null ? String(r.domain) : null,
+      credibilityType: r.credibility_type != null ? String(r.credibility_type) : null,
+      credibilityScore: r.credibility_score != null ? Number(r.credibility_score) : null,
+      // Date only. The time of day a page was fetched is noise to a reader and
+      // to a model deciding how current a claim is.
+      fetchedAt: r.fetched_at != null ? new Date(String(r.fetched_at)).toISOString().slice(0, 10) : null,
     };
   });
 }

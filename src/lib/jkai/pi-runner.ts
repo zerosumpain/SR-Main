@@ -717,7 +717,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     // bury the build log.
     await db
       .update(jkaiIterations)
-      .set({ messages, tokensUsed })
+      .set({ messages, tokensUsed, outputTokens: outputTokensUsed })
       .where(eq(jkaiIterations.id, iteration.id))
       .catch((err) => {
         if (incrementalWriteFailed) return;

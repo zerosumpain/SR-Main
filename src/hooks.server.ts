@@ -370,7 +370,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (
     pathname === '/api/jkai/tools/manifest' ||
     pathname === '/api/jkai/tools/invoke' ||
-    pathname === '/api/jkai/studio/image'
+    pathname === '/api/jkai/studio/image' ||
+    pathname === '/api/jkai/studio/research'
   ) {
     return resolve(event);
   }

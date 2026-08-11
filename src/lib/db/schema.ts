@@ -642,6 +642,14 @@ export const jkaiBuilds = pgTable('jkai_builds', {
   status: text('status').notNull().default('pending'),
   budgetConfig: jsonb('budget_config').notNull().default(sql`'{}'::jsonb`),
   tokensUsed: integer('tokens_used').notNull().default(0),
+  // The split, kept rather than collapsed. recordBuildUsage receives prompt
+  // and completion separately and used to add them together on the way in, so
+  // every question about cost was answered by derivation: a 2.5M-token build
+  // looks alarming until you know that ~40 tool calls per chapter each re-send
+  // the same resident context, and that Codex caches that prefix server-side.
+  // Without the split there is no way to see which it is.
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
   iterationsCompleted: integer('iterations_completed').notNull().default(0),
   activeMinutesUsed: doublePrecision('active_minutes_used').notNull().default(0),
   serveConfig: jsonb('serve_config'),
@@ -952,6 +960,9 @@ export const jkaiIterations = pgTable('jkai_iterations', {
   evaluation: text('evaluation'),
   nextSteps: text('next_steps'),
   tokensUsed: integer('tokens_used').notNull().default(0),
+  /** Output only. The per-iteration cap counts these, and they are the part
+   *  of an iteration that is genuinely new work rather than re-sent context. */
+  outputTokens: integer('output_tokens').notNull().default(0),
   durationMs: integer('duration_ms'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   failure: jsonb('failure'),
