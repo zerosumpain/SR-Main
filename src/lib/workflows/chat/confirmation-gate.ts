@@ -58,6 +58,7 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'node_builder_commit_and_deploy': return `Commit to origin/master and DEPLOY TO PRODUCTION? This ships live.`;
     case 'gmail_send':               return `Send email to ${(args.to as string) ?? 'unknown recipient'}?`;
     case 'gmail_reply':              return `Send reply on thread ${args.threadId ?? 'unknown'}?`;
+    case 'apple_calendar_create':    return `Create calendar event "${args.title ?? 'untitled'}" on ${args.calendar ?? 'the selected calendar'} (${args.allDayStart ?? args.start ?? 'unknown start'} to ${args.allDayEnd ?? args.end ?? 'unknown end'})?`;
     case 'whatsapp_send':            return `Send WhatsApp message to ${(args.to as string) ?? 'default contact'}?`;
     default: {
       // No hand-written case: show the arguments rather than nothing, so the

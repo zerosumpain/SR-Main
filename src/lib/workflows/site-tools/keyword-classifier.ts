@@ -8,6 +8,7 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'workflows', pattern: /workflow|automat|schedule|trigger|cron/i },
   { toolset: 'home', pattern: /light|temperature|thermostat|speaker|room|house|home|blind|curtain|switch(?:es)?|heat(?:ing)?|sensor|door|camera|ring|alexa|tado|hue|media\s*player|tv\b|bravia/i },
   { toolset: 'gmail', pattern: /gmail|\bemails?\b|\be-?mails?\b|inbox|reply\s+to\s+(?:the\s+)?(?:email|message|thread)/i },
+  { toolset: 'apple-calendar', pattern: /\b(?:apple|icloud|i\s*cloud)\s+calendar\b|\bcalendar\s+(?:event|appointment|meeting)\b|\b(?:add|create|put|schedule)\b.*\b(?:calendar|appointment|meeting|event)\b|\b(?:what(?:'s| is)|show|list|check)\b.*\b(?:my\s+)?calendar\b/i },
   { toolset: 'node-builder', pattern: /node\s*builder|new\s+node\s+type|build\s+(?:a\s+)?(?:new\s+)?(?:canvas\s+)?node|create\s+(?:a\s+)?node\s+type/i },
   { toolset: 'whatsapp', pattern: /whatsapp|message|text\s+me|send\s*(me\s+)?a?\s*msg|notify\s+me/i },
   { toolset: 'diagnostics', pattern: /\blog\b|logs|scheduler|system\s+(status|health|check)|debug|diagnos|service|journal/i },

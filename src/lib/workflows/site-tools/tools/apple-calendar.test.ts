@@ -1,0 +1,111 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('$lib/workflows/nodes/apple-calendar', () => ({
+  appleCalendarDef: { type: 'apple-calendar' },
+  resolveOptions_calendar: vi.fn(),
+  appleCalendarExecutor: { execute: vi.fn() },
+}));
+vi.mock('$lib/integrations/credentials', () => ({ listCredentials: vi.fn() }));
+
+import { appleCalendarExecutor, resolveOptions_calendar } from '$lib/workflows/nodes/apple-calendar';
+import { listCredentials } from '$lib/integrations/credentials';
+import { inferToolsets } from '../keyword-classifier';
+import { getToolsetDefinitions } from '../registry';
+import {
+  allDayRange,
+  appleCalendarTools,
+  handleAppleCalendarCreate,
+  handleAppleCalendarList,
+  resolveCalendar,
+  toUtcIcalDateTime,
+} from './apple-calendar';
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('Apple Calendar chat tools', () => {
+  it('registers direct general-chat read and confirmation-gated write actions', () => {
+    expect(appleCalendarTools.map((tool) => tool.name)).toEqual(['apple_calendar_list', 'apple_calendar_create']);
+    expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_create')?.destructive).toBe(true);
+    expect(appleCalendarTools.find((tool) => tool.name === 'apple_calendar_list')?.destructive).not.toBe(true);
+    expect(inferToolsets('Add a meeting to my iCloud calendar')).toContain('apple-calendar');
+    expect(getToolsetDefinitions('apple-calendar').map((tool) => tool.function.name)).toEqual(['apple_calendar_list', 'apple_calendar_create']);
+  });
+
+  it('safely discovers configured credential ids and labels before CalDAV access', async () => {
+    vi.mocked(listCredentials).mockResolvedValue([{ id: 'cred', label: 'iCloud', integrationType: 'apple-calendar' }] as never);
+    const result = await handleAppleCalendarList({});
+    expect(result).toEqual({ success: true, data: { credentials: [{ id: 'cred', label: 'iCloud', integrationType: 'apple-calendar' }] } });
+    expect(resolveOptions_calendar).not.toHaveBeenCalled();
+  });
+
+  it('resolves the displayed Family calendar only when unambiguous', () => {
+    expect(resolveCalendar([{ value: '/family/', label: 'Family' }], 'family')).toEqual({ value: '/family/', label: 'Family' });
+    expect(resolveCalendar([{ value: '/a/', label: 'Family' }, { value: '/b/', label: 'Family' }], 'Family')).toMatchObject({ error: expect.stringMatching(/ambiguous/i) });
+  });
+
+  it('reads a bare date-time as London wall-clock and emits a UTC instant, on both sides of DST', () => {
+    // An offset-bearing input already names its instant.
+    expect(toUtcIcalDateTime('2026-09-23T10:30:00+01:00')).toBe('20260923T093000Z');
+    // A bare one is what the user said out loud: 10:30 in London. September is
+    // BST, so that is 09:30 UTC...
+    expect(toUtcIcalDateTime('2026-09-23T10:30')).toBe('20260923T093000Z');
+    // ...and January is GMT, where the same wall clock is 10:30 UTC. This pair
+    // is the whole point of resolving the zone rather than tagging a TZID.
+    expect(toUtcIcalDateTime('2026-01-23T10:30')).toBe('20260123T103000Z');
+    expect(toUtcIcalDateTime('not a date')).toMatchObject({ error: expect.stringMatching(/invalid/i) });
+  });
+
+  it('converts an inclusive two-day all-day range to an exclusive DTEND', () => {
+    expect(allDayRange('2026-09-23', '2026-09-24')).toEqual({
+      start: '20260923', end: '20260925', rangeStart: '2026-09-23T00:00:00Z', rangeEnd: '2026-09-25T00:00:00Z',
+    });
+    expect(allDayRange('2026-09-24', '2026-09-23')).toMatchObject({ error: expect.stringMatching(/on or after/i) });
+  });
+
+  it('lists resources before delegating an event read to the workflow executor', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { events: [{ title: 'Lunch' }] }, rowCount: 1 } as never);
+    const result = await handleAppleCalendarList({ credentialId: 'cred', calendar: 'Family', dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z' });
+    expect(result.success).toBe(true);
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ operation: 'list', calendar: '/family/' }),
+      expect.objectContaining({ dryRun: false }),
+    );
+  });
+
+  it('delegates a create with a deterministic UID and never accepts credentials as arguments', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { id: 'event', title: 'Lunch' }, rowCount: 1 } as never);
+    const result = await handleAppleCalendarCreate({ credentialId: 'cred', calendar: 'Family', title: 'Lunch', allDayStart: '2026-09-23', allDayEnd: '2026-09-24' });
+    expect(result).toMatchObject({ success: true, data: { id: 'event' } });
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        credentialId: 'cred', eventUid: expect.stringMatching(/^jkai-/), allDay: true, eventEnd: '20260925',
+      }),
+      expect.objectContaining({ dryRun: false }),
+    );
+  });
+
+  it('gives the duplicate check a resolved instant, not the caller’s unanchored string', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { id: 'event' }, rowCount: 1 } as never);
+    await handleAppleCalendarCreate({ credentialId: 'cred', calendar: 'Family', title: 'Lunch', start: '2026-09-23T10:30', end: '2026-09-23T11:30' });
+    expect(appleCalendarExecutor.execute).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        allDay: false, eventStart: '20260923T093000Z', eventEnd: '20260923T103000Z',
+        duplicateRangeStart: '2026-09-23T09:30:00Z', duplicateRangeEnd: '2026-09-23T10:30:00Z',
+      }),
+      expect.objectContaining({ dryRun: false }),
+    );
+  });
+
+  it('does not access CalDAV when the calendar cannot be resolved', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([]);
+    const result = await handleAppleCalendarCreate({ credentialId: 'cred', calendar: 'Family', title: 'Lunch', start: '2026-09-23T10:00:00+01:00', end: '2026-09-23T11:00:00+01:00' });
+    expect(result.success).toBe(false);
+    expect(appleCalendarExecutor.execute).not.toHaveBeenCalled();
+  });
+});

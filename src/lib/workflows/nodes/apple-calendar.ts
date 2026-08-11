@@ -26,7 +26,7 @@ export const appleCalendarExecutor: NodeExecutor = {
         });
         const calendars = await client.fetchCalendars();
         const target = calendars.find((c: any) => c.url === config.calendar);
-        if (!target && config.operation !== 'create') throw new Error('Unknown calendar: ' + config.calendar);
+        if (!target) throw new Error('Unknown calendar: ' + config.calendar);
 
         if (config.operation === 'list') {
           if (!target) throw new Error('No calendar selected');
@@ -54,12 +54,28 @@ export const appleCalendarExecutor: NodeExecutor = {
           return { output: { events }, rowCount: events.length };
         }
         if (config.operation === 'create') {
-          const uid = crypto.randomUUID();
+          const uid = config.eventUid || crypto.randomUUID();
+          // A deterministic UID makes a retry safe. Check only this event's
+          // requested range, then return the existing CalDAV resource.
+          const existing = await client.fetchCalendarObjects({
+            calendar: target!,
+            timeRange: { start: config.duplicateRangeStart || config.eventStart, end: config.duplicateRangeEnd || config.eventEnd },
+          });
+          const duplicate = existing.find((obj: any) => obj.data?.includes('UID:' + uid));
+          if (duplicate) {
+            return { output: { id: uid, url: duplicate.url, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd, duplicate: true }, rowCount: 1 };
+          }
           const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+          // All-day events are dates, so they carry VALUE=DATE and no zone.
+          // A timed event is expected to arrive as a UTC instant (…Z) and needs
+          // no parameter at all. Deliberately NOT ';TZID=<zone>': RFC 5545 wants
+          // a matching VTIMEZONE component for any zone referenced, this object
+          // has none, and a CalDAV server may reject the lot on that basis.
+          const datePrefix = config.allDay ? ';VALUE=DATE' : '';
           const icalStr = [
             'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//jkai//EN', 'BEGIN:VEVENT',
-            'UID:' + uid, 'DTSTAMP:' + now, 'DTSTART:' + config.eventStart,
-            'DTEND:' + config.eventEnd, 'SUMMARY:' + (config.eventTitle || ''),
+            'UID:' + uid, 'DTSTAMP:' + now, 'DTSTART' + datePrefix + ':' + config.eventStart,
+            'DTEND' + datePrefix + ':' + config.eventEnd, 'SUMMARY:' + (config.eventTitle || ''),
             ...(config.eventLocation ? ['LOCATION:' + config.eventLocation] : []),
             ...(config.eventNotes ? ['DESCRIPTION:' + config.eventNotes] : []),
             'END:VEVENT', 'END:VCALENDAR',
@@ -69,7 +85,7 @@ export const appleCalendarExecutor: NodeExecutor = {
             filename: uid + '.ics',
             iCalString: icalStr,
           });
-          return { output: { id: uid, url: resp.headers?.get('Location') || uid }, rowCount: 1 };
+          return { output: { id: uid, url: resp.headers?.get('Location') || uid, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd }, rowCount: 1 };
         }
         if (config.operation === 'update') {
           const uid = crypto.randomUUID();

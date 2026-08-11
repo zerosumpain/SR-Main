@@ -35,6 +35,7 @@ import './tools/intel-graph';
 import './tools/agents';
 import './tools/monitors';
 import './tools/gmail';
+import './tools/apple-calendar';
 import './tools/web';
 import './tools/node-builder';
 import './tools/site-signals';
@@ -104,6 +105,7 @@ export function getToolsetManifest(): Array<{
     scraper: 'Scraper intelligence — look up target domain knowledge (CAPTCHA requirements, CSS selectors, interactive hints) before planning scraper workflows',
     files: 'Workflow file store — list, read, and semantically SEARCH files uploaded via /drive (file_search finds files by their content, including image visuals/OCR and audio transcripts). PDFs, DOCX, audio, and video are auto-extracted to text on read.',
     gmail: 'Gmail — search/read messages and threads on connected accounts, list labels, send/reply/modify-labels (write actions require user confirmation)',
+    'apple-calendar': 'Apple Calendar — list iCloud calendars/events and create events on a selected calendar (creation requires user confirmation)',
     web: 'Web — fetch the readable contents of a public HTTP/HTTPS URL (HTML or plain text). Use when the user shares a link or you need to look up the page behind a URL.',
     'node-builder': 'Workflow node codegen — scaffold, validate, and commit/deploy new canvas node types (repo-modifying; deploy ships to production and is confirmation-gated)',
     'custom-tools': 'Custom/ephemeral tools — author a throwaway tool for the current turn and promote a useful one into a persistent tool',
