@@ -220,6 +220,22 @@
     // wrapper is persuasion, and persuasion is what produced seven identical
     // chapters in the first place. So the shell makes the container and hands
     // it over; the agent only has to put things in it.
+    /**
+     * Put a shell-made container where the author asked for it.
+     *
+     * Appending to the end put the comparison AFTER the chapter's closing
+     * prose and its source list — seen on chapter 3 of the reuse build, where
+     * the two columns landed below "Sources in this chapter". Leave a
+     * `<div id="ex-<name>-slot">` in your markup and the container replaces it;
+     * with no slot it appends, which is the old behaviour and still sensible
+     * for a chapter that ends on its centrepiece.
+     */
+    const place = (node, name) => {
+      const slot = document.getElementById(`ex-${name}-slot`);
+      if (slot && slot.parentNode) slot.parentNode.replaceChild(node, slot);
+      else main.appendChild(node);
+    };
+
     if (form && form.split) {
       const split = el('div', 'ex-split');
       const left = el('div', 'ex-side');
@@ -227,17 +243,17 @@
       left.id = 'ex-left';
       right.id = 'ex-right';
       split.append(left, right);
-      main.appendChild(split);
+      place(split, 'split');
     }
     if (form && form.list) {
       const list = el('div', 'ex-ledger');
       list.id = 'ex-ledger';
-      main.appendChild(list);
+      place(list, 'ledger');
     }
     if (form && form.aside) {
       const aside = el('div', 'ex-aside');
       aside.id = 'ex-aside';
-      main.appendChild(aside);
+      place(aside, 'aside');
     }
 
     // --- footer: previous / next -------------------------------------------
