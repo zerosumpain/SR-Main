@@ -60,13 +60,28 @@ export function parseCalendarObject(url: string, data: string): CalendarEvent {
   }
 }
 
-/** ical.js accepts extended ISO values, while the workflow stores iCalendar basics. */
-function icalTime(value: string): ical.Time {
+/**
+ * ical.js accepts extended ISO values, while the workflow stores iCalendar basics.
+ *
+ * Calls the date and date-time constructors directly rather than `fromString`,
+ * which takes a second `aProperty` argument and only exists to pick between
+ * these two by length — a choice this function has already made from the regex.
+ * The one-argument `fromString` call this replaces was the single type error
+ * that stopped change request #216 reaching production: `vitest` transpiles
+ * without typechecking, so the focused tests passed, and the gate's complaint
+ * fell outside the slice of output the agent is shown.
+ */
+export function icalTime(value: string): ical.Time {
   const date = value.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (date) return ical.Time.fromString(`${date[1]}-${date[2]}-${date[3]}`);
+  if (date) return ical.Time.fromDateString(`${date[1]}-${date[2]}-${date[3]}`);
   const dateTime = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-  if (dateTime) return ical.Time.fromString(`${dateTime[1]}-${dateTime[2]}-${dateTime[3]}T${dateTime[4]}:${dateTime[5]}:${dateTime[6]}${dateTime[7] ?? ''}`);
-  return ical.Time.fromString(value);
+  if (dateTime) {
+    return ical.Time.fromDateTimeString(
+      `${dateTime[1]}-${dateTime[2]}-${dateTime[3]}T${dateTime[4]}:${dateTime[5]}:${dateTime[6]}${dateTime[7] ?? ''}`,
+    );
+  }
+  // Already an extended value. Same length rule fromString uses.
+  return value.length > 10 ? ical.Time.fromDateTimeString(value) : ical.Time.fromDateString(value);
 }
 
 export const appleCalendarExecutor: NodeExecutor = {

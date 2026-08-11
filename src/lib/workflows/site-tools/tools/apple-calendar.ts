@@ -129,7 +129,16 @@ function eventId(args: Record<string, unknown>): string | { error: string } {
   return id || { error: 'eventId is required. Use the event resource URL returned when listing events.' };
 }
 
-function updatePatch(args: Record<string, unknown>): Record<string, unknown> | { error: string } {
+/**
+ * Returns `{ patch }` rather than the patch itself, so that `'error' in result`
+ * actually discriminates. A `Record<string, unknown> | { error: string }` union
+ * does not: any record is allowed an `error` key, so TypeScript cannot narrow
+ * it and `result.error` stays `unknown`. That was the second of the two type
+ * errors that kept change request #216 out of production.
+ */
+function updatePatch(
+  args: Record<string, unknown>,
+): { patch: Record<string, unknown> } | { error: string } {
   const patch: Record<string, unknown> = {};
   for (const [argument, config] of [['title', 'eventTitle'], ['location', 'eventLocation'], ['notes', 'eventNotes']] as const) {
     if (args[argument] !== undefined) {
@@ -161,7 +170,7 @@ function updatePatch(args: Record<string, unknown>): Record<string, unknown> | {
     patch.eventEnd = range.end;
     patch.allDay = true;
   }
-  return Object.keys(patch).length ? patch : { error: 'Provide at least one field to edit.' };
+  return Object.keys(patch).length ? { patch } : { error: 'Provide at least one field to edit.' };
 }
 
 export async function handleAppleCalendarCreate(args: Record<string, unknown>): Promise<ToolResult> {
@@ -204,7 +213,7 @@ export async function handleAppleCalendarUpdate(args: Record<string, unknown>): 
   if ('error' in patch) return { success: false, error: patch.error };
   try {
     const result = await appleCalendarExecutor.execute({}, {
-      credentialId: selected.credentialId, operation: 'update', calendar: selected.calendar.value, eventId: id, ...patch,
+      credentialId: selected.credentialId, operation: 'update', calendar: selected.calendar.value, eventId: id, ...patch.patch,
     }, standaloneContext());
     return { success: true, data: result.output };
   } catch (err) {
