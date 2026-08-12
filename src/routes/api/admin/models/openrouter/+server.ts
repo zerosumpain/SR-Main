@@ -171,6 +171,10 @@ export const GET: RequestHandler = async ({ url }) => {
   // (not as SQL on hugging_face_id) so the chip and the OPEN badge are driven by
   // exactly the same resolver — including the models OpenRouter leaves blank.
   const openOnly = url.searchParams.get('openOnly') === '1';
+  // imageOut: restrict to models that EMIT images, for the image-generation
+  // workload. Mutually sensible with toolsOnly=0 — image models rarely
+  // advertise tool support, so asking for both returns nothing.
+  const imageOut = url.searchParams.get('imageOut') === '1';
   // Hybrid-score weights (quality / price / throughput). Scores are computed on
   // every request so the Score column is populated in any sort mode.
   // Which Artificial Analysis index the quality axis reads. Unknown values fall
@@ -199,6 +203,14 @@ export const GET: RequestHandler = async ({ url }) => {
   }
   if (toolsOnly) {
     conditions.push(sql`(${openrouterModels.raw} -> 'supported_parameters') @> '["tools"]'::jsonb`);
+  }
+  if (imageOut) {
+    // Modality reads `inputs->outputs`, so the OUTPUT side is everything after
+    // the arrow. Matching the whole string would return every vision model —
+    // which reads images and can only write text, and is exactly the wrong
+    // answer for a picker choosing an image GENERATOR (11 rows qualify, ~200
+    // would otherwise). Mirrors `emitsImages()` in $lib/models/workloads.
+    conditions.push(sql`split_part(${openrouterModels.modality}, '->', 2) LIKE '%image%'`);
   }
 
   const where = conditions.length ? and(...conditions) : undefined;

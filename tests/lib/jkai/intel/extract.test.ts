@@ -5,8 +5,10 @@ vi.mock('$lib/jkai/llm-client', () => ({
 }));
 vi.mock('$lib/server/models/settings', () => ({
   resolveDefaultModel: vi.fn().mockResolvedValue({ provider: 'zai', modelId: 'test' }),
-  // Extraction resolves its own model — the one deliberate exception to the
-  // site-wide single default. See DEFAULT_EXTRACTION_MODEL_ID.
+}));
+// Extraction resolves its own model — a deliberate carve-out from the site-wide
+// single default, now declared in $lib/models/workloads and resolved here.
+vi.mock('$lib/server/models/workload-settings', () => ({
   resolveExtractionModel: vi.fn().mockResolvedValue({ provider: 'openrouter', modelId: 'test' }),
 }));
 vi.mock('$lib/db', () => {

@@ -24,8 +24,11 @@ export const COLLECTIONS = {
  * Model for every doctor gateway call. Pinned rather than `resolveDefaultModel()`
  * so a change to the chat default cannot silently alter diagnosis quality
  * overnight — the same reasoning as SELFIMPROVE_MODEL.
+ *
+ * The FALLBACK, not the pin: `jkai.workflowdoctor.model` overrides it and is
+ * settable from the model picker (the `doctor` entry in `$lib/models/workloads`).
  */
-export const DOCTOR_MODEL = 'deepseek/deepseek-v4-flash';
+export { DEFAULT_DOCTOR_MODEL_ID as DOCTOR_MODEL } from '$lib/constants/default-models';
 
 /**
  * app_settings kill switch. House semantics: unset/null is treated as ENABLED,

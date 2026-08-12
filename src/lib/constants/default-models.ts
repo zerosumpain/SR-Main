@@ -38,6 +38,34 @@ export const DEFAULT_AGENTIC_MODEL_ID = DEFAULT_CHAT_MODEL_ID;
 // in 2026-07 and the column carries forward — see reference_openrouter_throughput_source.
 export const DEFAULT_EXTRACTION_MODEL_ID = 'openai/gpt-oss-120b';
 
+// ── The remaining workload fallbacks ────────────────────────────────────────
+//
+// Each of these is the model a role uses when its `app_settings` key is unset.
+// They live here, beside the site default, so there is exactly one literal per
+// role: `$lib/models/workloads` reads them to render the picker, and the domain
+// module that actually makes the call re-exports the same constant. Two copies
+// of a model id drift, and a drifted default is invisible until you diff the
+// bill (the "four places must agree" problem this file already exists to
+// contain).
+
+/** Nightly self-improvement engine. Pinned off the chat default since
+ *  2026-07-29: it authors code that ships unattended, so what writes it should
+ *  not change because the chat default changed. */
+export const DEFAULT_SELFIMPROVE_MODEL_ID = 'deepseek/deepseek-v4-flash';
+
+/** Workflow doctor diagnosis calls — pinned for the same reason. */
+export const DEFAULT_DOCTOR_MODEL_ID = 'deepseek/deepseek-v4-flash';
+
+/** Image captioning + OCR. MUST accept image input: the site default may be a
+ *  Codex model, which is text-only and would caption the prompt, not the file. */
+export const DEFAULT_VISION_MODEL_ID = 'openai/gpt-4o-mini';
+
+/** Image GENERATION. Must emit an image; no text model can serve this at all. */
+export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
+
+/** Embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
+export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.

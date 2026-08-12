@@ -18,10 +18,9 @@
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { resolveVisionModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/server/models/types';
 
-/** Pinned vision model for image captions (served by OpenRouter, cheap, reliable vision). */
-const VISION_MODEL = 'openai/gpt-4o-mini';
 /** Pinned audio-capable multimodal model for transcription. */
 const AUDIO_MODEL = 'google/gemini-2.0-flash-001';
 
@@ -80,10 +79,16 @@ export async function describeImage(buf: Buffer, mimeType: string): Promise<stri
     return text ? text : null;
   };
 
+  // The `vision` workload rather than a module constant, so this is settable
+  // from the model picker. Its save guard requires image input, so the model
+  // that arrives here can always actually see the picture.
+  const visionCtx = await resolveVisionModel();
   try {
-    return await attempt({ provider: 'openrouter', modelId: VISION_MODEL });
+    return await attempt(visionCtx);
   } catch (err) {
-    console.warn(`[file-index] ${VISION_MODEL} caption failed (${(err as Error).message}); trying builder default`);
+    console.warn(
+      `[file-index] ${visionCtx.modelId} caption failed (${(err as Error).message}); trying site default`,
+    );
     try {
       const fallback = await resolveDefaultModel();
       // The site default is now allowed to be a Codex model, and Codex is

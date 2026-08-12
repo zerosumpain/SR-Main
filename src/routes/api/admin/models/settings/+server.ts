@@ -1,6 +1,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getSetting, setSetting, clearSettingsCache } from '$lib/server/models/settings';
+import {
+  getSetting,
+  setSetting,
+  deleteSetting,
+  clearSettingsCache,
+} from '$lib/server/models/settings';
 import { loadKeys } from '$lib/deepdive/keys';
 import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import { siteDefaultBlockReason } from '$lib/server/models/capabilities';
@@ -50,7 +55,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (body.chatAltOpenRouterModelId !== undefined) {
     if (body.chatAltOpenRouterModelId === null) {
-      await setSetting('jkai.chat.alt_openrouter_model', null);
+      // deleteSetting, not setSetting(…, null): app_settings.value is jsonb NOT
+      // NULL, so the null write this used to do failed at the driver and 500ed.
+      // Clearing the alt pill has therefore never worked.
+      await deleteSetting('jkai.chat.alt_openrouter_model');
     } else if (isValidOpenRouterId(body.chatAltOpenRouterModelId)) {
       await setSetting('jkai.chat.alt_openrouter_model', { modelId: body.chatAltOpenRouterModelId });
     } else {

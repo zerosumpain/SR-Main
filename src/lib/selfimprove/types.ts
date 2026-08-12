@@ -40,8 +40,14 @@ export const COLLECTIONS = {
  * Model for every self-improvement gateway call (owner's standing choice,
  * 2026-07-29). Pinned rather than using `resolveDefaultModel()` so a change to
  * the chat default cannot silently alter code-authoring quality overnight.
+ *
+ * This is now the FALLBACK, not the pin: `jkai.selfimprove.model` overrides it
+ * and is settable from the model picker (the `selfimprove` entry in
+ * `$lib/models/workloads`). Re-exported from the shared constants rather than
+ * re-typed, so the picker and the engine cannot disagree about what "unset"
+ * means.
  */
-export const SELFIMPROVE_MODEL = 'deepseek/deepseek-v4-flash';
+export { DEFAULT_SELFIMPROVE_MODEL_ID as SELFIMPROVE_MODEL } from '$lib/constants/default-models';
 
 /** app_settings kill-switch key. Default (unset/null) is treated as enabled. */
 export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';

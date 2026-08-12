@@ -36,8 +36,9 @@
 
   type SortKey = 'name' | 'qualityIndex' | 'promptPrice' | 'completionPrice' | 'throughput';
 
-  /** list = the sortable table; compare = the quality-vs-cost exhibits. */
-  type Tab = 'list' | 'compare';
+  /** list = the sortable table; compare = the quality-vs-cost exhibits;
+   *  workloads = what every LLM role on the site is actually running. */
+  type Tab = 'list' | 'compare' | 'workloads';
 
   /** Which Artificial Analysis index feeds the quality axis. "Quality" is not
    *  one number — a model can drive tools well and code badly — so the metric
@@ -70,9 +71,22 @@
   ] as const;
 
   /** What a row-tap applies to. 'chat' is this conversation only (the original
-   *  behaviour); 'site' is the site-wide default every LLM task uses; the rest
-   *  pin a routing profile, beating the nightly auto-selection. */
-  type Target = 'chat' | 'site' | 'general' | 'tool' | 'rag' | 'agentic';
+   *  behaviour); 'site' is the site-wide default every LLM task uses; the four
+   *  profile names pin a routing profile, beating the nightly auto-selection;
+   *  and `workload:<id>` points one named LLM role (see $lib/models/workloads)
+   *  at a model — the roles that do NOT follow the site default. */
+  /** The targets written through /api/jkai/routing/overrides. */
+  type PinTarget = 'site' | 'general' | 'tool' | 'rag' | 'agentic';
+  const PIN_TARGETS: PinTarget[] = ['site', 'general', 'tool', 'rag', 'agentic'];
+  function isPinTarget(t: Target): t is PinTarget {
+    return (PIN_TARGETS as string[]).includes(t);
+  }
+
+  type Target = 'chat' | PinTarget | `workload:${string}`;
+
+  function workloadIdOf(t: Target): string | null {
+    return t.startsWith('workload:') ? t.slice('workload:'.length) : null;
+  }
 
   interface ProfileInfo {
     profile: string;
@@ -136,14 +150,6 @@
 
   /** Client-side search over the Codex group, matching the server-side `q`
    *  behaviour on the OpenRouter table so one search box filters both. */
-  const visibleCodexRows = $derived(
-    q.trim()
-      ? codexRows.filter((r) =>
-          `${r.id} ${r.name}`.toLowerCase().includes(q.trim().toLowerCase()),
-        )
-      : codexRows,
-  );
-
   let tab = $state<Tab>('list');
   // Owned here, not in the chart, so Escape collapses the expanded chart before
   // it closes the whole picker.
@@ -202,7 +208,39 @@
     return m.huggingFaceId ? `Open weights — ${m.huggingFaceId} (${why})` : `Open weights — ${why}`;
   }
 
+  /** One LLM role and what it is actually running. Mirrors `WorkloadState`
+   *  server-side; kept as a local interface so the component does not import
+   *  from $lib/server. */
+  interface WorkloadRow {
+    id: string;
+    scope: 'site' | 'hermes';
+    label: string;
+    blurb: string;
+    key: string;
+    reason: string | null;
+    requires: 'tools' | 'embeddings' | 'image-input' | 'image-output' | null;
+    catalogue: 'tools' | 'image-out' | 'none';
+    setModelId: string | null;
+    effectiveModelId: string;
+    source: 'pinned' | 'code' | 'default' | 'hermes';
+    divergesFromDefault: boolean;
+  }
+
+  interface WorkloadPicture {
+    siteDefaultModelId: string;
+    site: WorkloadRow[];
+    hermes: WorkloadRow[];
+    hermesError: string | null;
+    hermesManageable: boolean;
+  }
+
   let target = $state<Target>('chat');
+  let workloads = $state<WorkloadPicture | null>(null);
+  let workloadsLoading = $state(false);
+  let workloadsLoaded = $state(false);
+  /** Free-text slug entry, for roles whose models are not in the catalogue at
+   *  all (embeddings — OpenRouter's feed carries no embedding models). */
+  let manualModelId = $state('');
   let picture = $state<Picture | null>(null);
   let applying = $state<string | null>(null);
   let notice = $state<{ text: string; bad: boolean } | null>(null);
@@ -216,12 +254,55 @@
     noticeTimer = setTimeout(() => { notice = null; }, 3200);
   }
 
+  const divergingCount = $derived(
+    workloads
+      ? [...workloads.site, ...workloads.hermes].filter((w) => w.divergesFromDefault).length
+      : 0,
+  );
+
+  /** What the source badge says. The raw `source` value is internal jargon —
+   *  "code" means nothing to someone reading the tab to find out why their
+   *  default is not being used. */
+  const SOURCE_LABEL: Record<string, string> = {
+    pinned: 'pinned',
+    code: 'code default',
+    default: 'site default',
+    hermes: 'engine config',
+  };
+
+  /** The workload the list is currently choosing a model FOR, if any. */
+  const activeWorkload = $derived.by(() => {
+    const id = workloadIdOf(target);
+    if (!id || !workloads) return null;
+    return [...workloads.site, ...workloads.hermes].find((w) => w.id === id) ?? null;
+  });
+
+  const visibleCodexRows = $derived.by(() => {
+    // Codex is text-in, text-out and has no embeddings endpoint, so for a
+    // workload requiring any of those every Codex row is a guaranteed rejection.
+    // The server refuses them with a reason, but offering a choice that can only
+    // fail is worse than not offering it — the same rule this list already
+    // applies by hiding Codex when the bridge is down.
+    const needs = activeWorkload?.requires;
+    if (needs === 'image-output' || needs === 'image-input' || needs === 'embeddings') return [];
+    const needle = q.trim().toLowerCase();
+    return needle
+      ? codexRows.filter((r) => `${r.id} ${r.name}`.toLowerCase().includes(needle))
+      : codexRows;
+  });
+
   /** Filters both views share. The orchestrator is an agent — only models that
-   *  support tool use can run the chat (apply/edit models like morph 404). */
+   *  support tool use can run the chat (apply/edit models like morph 404).
+   *
+   *  A workload target overrides that: image generation needs models that EMIT
+   *  images, and almost none of those advertise tool support, so keeping
+   *  toolsOnly on would show an empty table for the one role that has a
+   *  perfectly good list of candidates. */
   function baseParams(): URLSearchParams {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
-    params.set('toolsOnly', '1');
+    if (activeWorkload?.catalogue === 'image-out') params.set('imageOut', '1');
+    else params.set('toolsOnly', '1');
     if (openOnly) params.set('openOnly', '1');
     // Both views read the same quality metric, so the Quality column and the
     // chart's y axis can never disagree about what "quality" means.
@@ -305,7 +386,18 @@
     page;
     openOnly;
     qualityMetric;
+    // Switching to (or away from) a workload target can change which catalogue
+    // the table should show — see baseParams().
+    target;
     untrack(() => load());
+  });
+
+  // Workloads are fetched the first time that tab is shown, then reused: the
+  // reads shell out to the Hermes CLI, and every later change refreshes the
+  // picture from its own POST response.
+  $effect(() => {
+    if (tab !== 'workloads' || workloadsLoaded) return;
+    untrack(() => loadWorkloads());
   });
 
   // Chart data is fetched only while the compare tab is showing — the list tab
@@ -395,7 +487,7 @@
   ];
 
   function profileInfo(t: Target): ProfileInfo | null {
-    if (t === 'chat' || t === 'site') return null;
+    if (t === 'chat' || t === 'site' || workloadIdOf(t)) return null;
     return picture?.profiles.find((p) => p.profile === t) ?? null;
   }
 
@@ -403,17 +495,93 @@
   function targetModelId(t: Target): string | null {
     if (t === 'chat') return current.modelId;
     if (t === 'site') return picture?.siteDefaultModelId ?? defaultModelId;
+    const workloadId = workloadIdOf(t);
+    if (workloadId) {
+      const all = workloads ? [...workloads.site, ...workloads.hermes] : [];
+      return all.find((w) => w.id === workloadId)?.effectiveModelId ?? null;
+    }
     return profileInfo(t)?.effectiveModelId ?? null;
   }
 
   function targetLabel(t: Target): string {
+    const workloadId = workloadIdOf(t);
+    if (workloadId) {
+      const all = workloads ? [...workloads.site, ...workloads.hermes] : [];
+      return all.find((w) => w.id === workloadId)?.label ?? workloadId;
+    }
     return TARGETS.find((x) => x.id === t)?.label ?? t;
   }
 
   /** Highlight the row that the ACTIVE target currently uses. */
   const activeModelId = $derived(targetModelId(target));
 
+  /**
+   * Load what every LLM role is running.
+   *
+   * Lazy — only when the Workloads tab is first opened. The Hermes half shells
+   * out to `hermes config get` on homeserv (proxied from the VPS), which costs
+   * roughly a second; making the modal pay that on every open, to populate a tab
+   * most visits never look at, would be a poor trade.
+   */
+  async function loadWorkloads() {
+    if (workloadsLoading) return;
+    workloadsLoading = true;
+    try {
+      const res = await fetch('/api/jkai/models/workloads');
+      if (res.ok) {
+        workloads = await res.json();
+        workloadsLoaded = true;
+      } else {
+        flash('Could not load workloads', true);
+      }
+    } catch {
+      flash('Network error loading workloads', true);
+    } finally {
+      workloadsLoading = false;
+    }
+  }
+
+  /** Point one workload at a model, or clear it back to its default. Keeps the
+   *  modal open so several roles can be set in one visit, exactly like the
+   *  profile pins. */
+  async function applyWorkload(id: string, modelId: string | null) {
+    applying = `workload:${id}:${modelId ?? 'clear'}`;
+    try {
+      const res = await fetch('/api/jkai/models/workloads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workloadId: id, modelId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The server refuses a model that cannot serve the role and says why —
+        // surface that verbatim rather than a generic failure, since the reason
+        // is the useful part ("gpt-oss-120b cannot accept images").
+        flash(body?.message ?? 'Could not update that workload', true);
+        return;
+      }
+      workloads = body;
+      const row = [...(body.site ?? []), ...(body.hermes ?? [])].find(
+        (w: WorkloadRow) => w.id === id,
+      );
+      flash(
+        modelId
+          ? `${row?.label ?? id} → ${shortName(modelId)}`
+          : `${row?.label ?? id} back to its default`,
+      );
+    } catch {
+      flash('Network error', true);
+    } finally {
+      applying = null;
+    }
+  }
+
   async function pick(modelId: string) {
+    const workloadId = workloadIdOf(target);
+    if (workloadId) {
+      await applyWorkload(workloadId, modelId);
+      return;
+    }
     if (target === 'chat') {
       // Provider comes from the id prefix, not from which table the row was in
       // — the same rule coerceModelContext applies server-side, so a persisted
@@ -422,12 +590,13 @@
       onclose();
       return;
     }
-    await applyTo(target, modelId);
+    if (isPinTarget(target)) await applyTo(target, modelId);
   }
 
   /** Write the site default or a profile pin. Keeps the modal open so several
-   *  targets can be set in one visit. */
-  async function applyTo(t: Exclude<Target, 'chat'>, modelId: string | null) {
+   *  targets can be set in one visit. Workload targets go through
+   *  `applyWorkload` instead — a different endpoint and a different mechanism. */
+  async function applyTo(t: PinTarget, modelId: string | null) {
     applying = `${t}:${modelId ?? 'clear'}`;
     try {
       const res = await fetch('/api/jkai/routing/overrides', {
@@ -471,6 +640,14 @@
   const activeTargetHint = $derived.by(() => {
     if (target === 'chat') return 'Applies to this conversation only — locks after the first message.';
     if (target === 'site') return 'The default every LLM task on the site uses: chats, deep research, workflow nodes, project pages, briefings.';
+    const w = activeWorkload;
+    if (w) {
+      const applies =
+        w.scope === 'hermes'
+          ? 'Writes the engine\'s own config and restarts it — takes a few seconds.'
+          : 'Applies immediately.';
+      return `${w.blurb} ${applies}`;
+    }
     const info = profileInfo(target);
     if (!info) return `Pins the ${targetLabel(target)} profile, overriding the nightly auto-selection.`;
     return info.overrideModelId
@@ -543,11 +720,29 @@
               aria-label={`Clear the ${t.label} pin`}
               title="Clear the pin — hand this profile back to the nightly auto-selection"
               disabled={applying === `${t.id}:clear`}
-              onclick={() => applyTo(t.id as Exclude<Target, 'chat'>, null)}
+              onclick={() => applyTo(t.id as PinTarget, null)}
             >✕</button>
           {/if}
         </span>
       {/each}
+      <!-- A workload target has no chip of its own in TARGETS, so it gets one
+           here while it is active. Without it the whole chip row would read as
+           unselected while a row-tap silently rewrote an engine role. -->
+      {#if activeWorkload}
+        <span class="target-wrap">
+          <button type="button" class="target-chip active" title={activeWorkload.blurb}>
+            <span class="target-label">{activeWorkload.label}</span>
+            <span class="target-model">{shortName(activeWorkload.effectiveModelId)}</span>
+          </button>
+          <button
+            type="button"
+            class="target-clear"
+            aria-label="Stop choosing a model for this workload"
+            title="Back to this chat"
+            onclick={() => (target = 'chat')}
+          >✕</button>
+        </span>
+      {/if}
     </div>
     <p class="target-hint" class:is-pinned={!!profileInfo(target)?.overrideModelId}>{activeTargetHint}</p>
 
@@ -605,6 +800,14 @@
         role="tab"
         aria-selected={tab === 'compare'}
         onclick={() => (tab = 'compare')}>Compare</button
+      >
+      <button
+        type="button"
+        class="picker-tab"
+        class:active={tab === 'workloads'}
+        role="tab"
+        aria-selected={tab === 'workloads'}
+        onclick={() => { tab = 'workloads'; chartExpanded = false; }}>Workloads</button
       >
     </div>
 
@@ -713,6 +916,90 @@
           onpick={pick}
           onexpandchange={(v) => (chartExpanded = v)}
         />
+      </div>
+    {:else if tab === 'workloads'}
+      <div class="wl-wrap">
+        <p class="picker-hint">
+          Every LLM role on the site and what it is actually running. A role showing
+          <strong>site default</strong> follows your pick above; anything else is a carve-out, and
+          says why. Tap <em>Change</em> to choose a model for one.
+        </p>
+
+        {#if workloadsLoading && !workloads}
+          <p class="wl-empty">Loading…</p>
+        {:else if !workloads}
+          <p class="wl-empty">Could not load workloads.</p>
+        {:else}
+          {#each [{ title: 'Site', rows: workloads.site }, { title: 'Engine (Hermes)', rows: workloads.hermes }] as group (group.title)}
+            {#if group.rows.length}
+              <div class="wl-group">{group.title}</div>
+              {#each group.rows as w (w.id)}
+                {@const isTarget = target === `workload:${w.id}`}
+                <div class="wl-row" class:active={isTarget}>
+                  <div class="wl-main">
+                    <div class="wl-head">
+                      <span class="wl-label">{w.label}</span>
+                      <span
+                        class="wl-src"
+                        class:diverges={w.divergesFromDefault}
+                        title={`Setting: ${w.key}`}
+                      >{SOURCE_LABEL[w.source] ?? w.source}</span>
+                    </div>
+                    <div class="wl-model" title={w.effectiveModelId}>{w.effectiveModelId}</div>
+                    <p class="wl-blurb">{w.blurb}</p>
+                    {#if w.reason}<p class="wl-reason">{w.reason}</p>{/if}
+                  </div>
+                  <div class="wl-actions">
+                    {#if w.catalogue === 'none'}
+                      <!-- Nothing in the OpenRouter catalogue serves this role,
+                           so the table cannot offer candidates. A slug field is
+                           the honest control; the save is still validated. -->
+                      <input
+                        class="wl-input"
+                        placeholder="vendor/model"
+                        bind:value={manualModelId}
+                        aria-label={`Model slug for ${w.label}`}
+                      />
+                      <button
+                        type="button"
+                        class="wl-btn"
+                        disabled={!manualModelId.trim() || applying !== null}
+                        onclick={() => applyWorkload(w.id, manualModelId.trim())}
+                      >Set</button>
+                    {:else}
+                      <button
+                        type="button"
+                        class="wl-btn"
+                        class:active={isTarget}
+                        disabled={applying !== null}
+                        onclick={() => { target = `workload:${w.id}`; tab = 'list'; }}
+                      >Change</button>
+                    {/if}
+                    {#if w.scope === 'site' && w.setModelId}
+                      <button
+                        type="button"
+                        class="wl-clear"
+                        title="Clear — hand this role back to its default"
+                        aria-label={`Clear the ${w.label} pin`}
+                        disabled={applying === `workload:${w.id}:clear`}
+                        onclick={() => applyWorkload(w.id, null)}
+                      >✕</button>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          {/each}
+
+          {#if workloads.hermesError}
+            <div class="wl-group">Engine (Hermes)</div>
+            <p class="wl-empty">
+              Could not read the engine's config: {workloads.hermesError}
+              <br />Its roles — engine default, delegation, fallback and the auxiliary models — are
+              set in <code>~/.hermes-jkai/config.yaml</code> and are NOT covered by the site default.
+            </p>
+          {/if}
+        {/if}
       </div>
     {:else}
     <!-- Mobile-only sort control (the sortable column headers are hidden there). -->
@@ -835,6 +1122,16 @@
       {:else if tab === 'compare'}
         <span class="foot-info">
           {chartRows.length} models · tap a point to apply{#if chartLoading} · loading…{/if}
+        </span>
+      {:else if tab === 'workloads'}
+        <!-- The list tab's "N models · page x/y" is meaningless here, and a
+             stale count under a table of roles reads as a count OF the roles. -->
+        <span class="foot-info">
+          {#if workloadsLoading}
+            reading engine config…
+          {:else if workloads}
+            {divergingCount} of {workloads.site.length + workloads.hermes.length} roles differ from the site default
+          {/if}
         </span>
       {:else}
         <span class="foot-info">
@@ -976,6 +1273,119 @@
     color: var(--text-ghost);
   }
   .target-hint.is-pinned { color: var(--accent); }
+
+  /* ── workloads tab ── */
+  .wl-wrap {
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    min-height: 0;
+  }
+  .wl-group {
+    margin: 14px 0 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+  }
+  .wl-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--card-border);
+  }
+  .wl-row.active { border-color: var(--accent); }
+  .wl-main { flex: 1; min-width: 0; }
+  .wl-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wl-label { font-size: var(--fs-body-sm); color: var(--text-primary); }
+  .wl-src {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: var(--radius-round);
+    border: 1px solid var(--card-border);
+    color: var(--text-ghost);
+    white-space: nowrap;
+  }
+  /* The whole point of the tab: a role that is NOT on the site default should
+     be legible at a glance, without reading the model id. */
+  .wl-src.diverges { color: var(--accent); border-color: var(--accent); }
+  .wl-model {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+  .wl-blurb {
+    margin: 4px 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-ghost);
+  }
+  .wl-reason {
+    margin: 4px 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-ghost);
+    border-left: 2px solid var(--card-border);
+    padding-left: 8px;
+  }
+  .wl-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .wl-btn {
+    padding: 5px 10px;
+    border-radius: var(--radius-round);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+  .wl-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-ghost); }
+  .wl-btn.active { border-color: var(--accent); color: var(--accent); }
+  .wl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .wl-clear {
+    padding: 4px 7px;
+    border-radius: var(--radius-round);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-ghost);
+    font-size: var(--fs-label-xs);
+    cursor: pointer;
+  }
+  .wl-clear:hover:not(:disabled) { color: var(--error); border-color: var(--error); }
+  .wl-clear:disabled { opacity: 0.4; cursor: not-allowed; }
+  .wl-input {
+    /* 16px so iOS does not zoom the whole sheet on focus — the same floor the
+       search box uses. */
+    font-size: 16px;
+    font-family: var(--font-mono);
+    width: 190px;
+    max-width: 42vw;
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--card-border);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+  }
+  .wl-empty {
+    margin: 8px 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--text-ghost);
+  }
+
+  @media (max-width: 620px) {
+    .wl-row { flex-direction: column; gap: 8px; }
+    .wl-actions { align-self: flex-start; }
+    .wl-input { max-width: 100%; }
+  }
 
   .quick-row {
     display: flex;
