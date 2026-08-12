@@ -65,6 +65,8 @@ import { siteMapperDef } from './nodes/site-mapper.def';
 import { fileStoreDef } from './nodes/file-store.def';
 import { fileExtractDef } from './nodes/file-extract.def';
 import { appleCalendarDef } from './nodes/apple-calendar.def';
+import { infrastructureStatusDef } from './nodes/infrastructure-status.def';
+import { infrastructureUpdateDef } from './nodes/infrastructure-update.def';
 // Client-safe node files (type-only / template-only imports, no $lib server
 // deps) imported directly for their definition.
 import { triggerDef } from './nodes/trigger';
@@ -929,6 +931,8 @@ const builtInDefinitions: NodeDefinition[] = [
   postitDef,
   annotationDef,
   appleCalendarDef,
+  infrastructureStatusDef,
+  infrastructureUpdateDef,
 ];
 
 export const nodeDefinitions: NodeDefinition[] = builtInDefinitions;
