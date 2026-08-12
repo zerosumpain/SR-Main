@@ -82,14 +82,27 @@ export const PI_VERSION = '0.72.1';
  */
 let piVersionProbe: Promise<string | null> | null = null;
 
-export function resolvePiVersion(): Promise<string | null> {
-  piVersionProbe ??= new Promise<string | null>((resolve) => {
-    const [cmd, args] = HOST_MODE
-      ? (['pi', ['--version']] as const)
-      : (['docker', ['exec', CONTAINER_NAME, 'pi', '--version']] as const);
-    const child = spawn(cmd, [...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+/**
+ * Run `<cmd> <args>` and pull a semver out of its output.
+ *
+ * Reads stdout AND stderr, which is not fastidiousness: **`pi --version` writes
+ * to stderr.** A stdout-only probe returns null for a perfectly healthy pi, and
+ * since a null probe is deliberately not treated as a mismatch, the whole
+ * version gate would silently never fire — a pin that looks enforced and is
+ * decorative. Exported so a test can prove the stderr case with a stub command.
+ */
+export function readVersionFrom(cmd: string, args: string[]): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch {
+      resolve(null);
+      return;
+    }
     let out = '';
     child.stdout?.on('data', (c) => (out += String(c)));
+    child.stderr?.on('data', (c) => (out += String(c)));
     // A probe that cannot answer must not block builds forever.
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
@@ -106,6 +119,12 @@ export function resolvePiVersion(): Promise<string | null> {
       resolve(code === 0 && m ? m[1] : null);
     });
   });
+}
+
+export function resolvePiVersion(): Promise<string | null> {
+  piVersionProbe ??= HOST_MODE
+    ? readVersionFrom('pi', ['--version'])
+    : readVersionFrom('docker', ['exec', CONTAINER_NAME, 'pi', '--version']);
   return piVersionProbe;
 }
 

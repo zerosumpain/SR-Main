@@ -73,8 +73,8 @@ ARG PI_VERSION
 RUN set -eu; \
     test -n "$PI_VERSION" || { echo "ERROR: --build-arg PI_VERSION is required (see package.json jkai.piVersion)"; exit 1; }; \
     npm install -g typescript tsx "@mariozechner/pi-coding-agent@${PI_VERSION}"; \
-    installed="$(pi --version)"; \
-    test "$installed" = "$PI_VERSION" || { echo "ERROR: installed pi $installed != requested $PI_VERSION"; exit 1; }
+    installed="$(pi --version 2>&1 | head -1)"; \
+    test "$installed" = "$PI_VERSION" || { echo "ERROR: installed pi '$installed' != requested $PI_VERSION"; exit 1; }
 
 RUN useradd -m -s /bin/bash jkai
 WORKDIR /home/jkai/workspace
