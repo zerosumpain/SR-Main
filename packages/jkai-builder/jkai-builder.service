@@ -34,11 +34,34 @@ RestartSec=5
 # gate run took 7m54s here against 1m59s for the same workload on the same box
 # outside the cgroup.
 #
-# 600%/7G leaves 2 cores and ~8.6 GB for the web app, Postgres, cloudflared and
-# the Actions runner, so the cap still does its job — it just stops being the
-# reason a build is slow. Raise deliberately, not reflexively: this is a
-# ceiling, not a reservation.
-MemoryMax=7G
+# 7G was not enough, and the reason took three wrong turns to find. What lives
+# in this cgroup during a build is the gate, the sidecar, pi, AND the agent's
+# own verification runs. Measured individually, in an identical 7G scope:
+#
+#   gate (svelte-check ‖ vitest, concurrent)   5.24 GB   ← the consumer
+#   agent's own `npm run gate:test`            1.50 GB
+#   sidecar 0.26 GB + pi 0.13 GB
+#
+# 5.24 of 7 leaves ~1.7 GB, so anything overlapping the gate tips it over —
+# hence memory.peak pinned to the ceiling with 925 hits, and a vitest worker
+# returning `Error: No such built-in module: node:`, a specifier truncated
+# mid-string, which is what a worker dying under reclaim looks like from
+# outside. It reads as a real defect in a file the change never touched, and it
+# cost change requests #228 and #231 their runs.
+#
+# The tempting fix was to cap the worker pool, on the theory that vitest sizes
+# it from the machine (8 cores → 7 workers) and NODE_OPTIONS' 4 GB heap is
+# inherited by each. That arithmetic is wrong: `--max-old-space-size` is a
+# CEILING, not a reservation, and the whole suite peaks at 1.5 GB. Capping the
+# agent's runs was measured at −0.37 GB for +57% wall clock — a net loss. Every
+# clean-room test of the cap passed because an isolated scope was never the
+# failing condition; the shared cgroup was.
+#
+# So: give it headroom. 10G of 15.6, against ~4.4 GB resident for everything
+# else, leaves the gate its 5.24 GB with room to overlap. Still a ceiling, not
+# a reservation — a runaway agent is still bounded, just not by less than one
+# gate run.
+MemoryMax=10G
 CPUQuota=600%
 
 [Install]
