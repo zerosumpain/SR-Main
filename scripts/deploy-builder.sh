@@ -40,6 +40,32 @@ fi
 echo "==> Building jkai-builder bundle..."
 npm run build:builder
 
+# --- pi version pin --------------------------------------------------------
+# The builder runs `pi` from the host PATH (JKAI_BUILDS_HOSTMODE=1), and nothing
+# in ci-deploy.sh installs or updates it — a merge to master leaves whatever
+# binary happens to be on the box. That is how the host ended up on 0.72.1 while
+# the jkai-sandbox image still carried 0.69.0.
+#
+# package.json's jkai.piVersion is the single pin. This makes the host match it,
+# and the builder's own assertPiVersion() refuses to run if it ever doesn't.
+# Upgrading pi = move the pin in a PR, run a canary build, then deploy — never
+# `npm i -g` straight onto the box, which leaves nothing to roll back to.
+PI_VERSION="$(node -p "require('./package.json').jkai.piVersion")"
+echo "==> Ensuring pi $PI_VERSION on the build host..."
+ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "
+  set -eu
+  installed=\"\$(pi --version 2>/dev/null || echo none)\"
+  if [ \"\$installed\" = \"$PI_VERSION\" ]; then
+    echo \"    pi $PI_VERSION already installed.\"
+  else
+    echo \"    pi is \$installed — installing $PI_VERSION ...\"
+    sudo npm install -g '@mariozechner/pi-coding-agent@$PI_VERSION'
+    now=\"\$(pi --version)\"
+    [ \"\$now\" = \"$PI_VERSION\" ] || { echo \"    ERROR: pi is \$now after install, expected $PI_VERSION\"; exit 1; }
+    echo \"    pi $PI_VERSION installed.\"
+  fi
+"
+
 echo "==> Syncing bundle + unit + sources to VPS..."
 ssh -i "$VPS_KEY" "$VPS_USER@$VPS_HOST" "mkdir -p $VPS_DIR/packages/jkai-builder/{bin,src,dist}"
 rsync -avz --delete \

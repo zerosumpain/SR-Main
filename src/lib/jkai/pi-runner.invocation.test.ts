@@ -8,6 +8,8 @@ import {
   pinCodexTransport,
   buildToolAllowlist,
   BASE_PI_TOOLS,
+  PI_VERSION,
+  assertPiVersion,
 } from './pi-runner';
 
 // pi's --tools is an allowlist applied to extension-registered tools as well
@@ -145,5 +147,41 @@ describe('piThinkingLevel', () => {
       expect(piThinkingLevel('openrouter', level)).toBe(level);
     }
     expect(piThinkingLevel('openrouter', 'minimal')).toBe('minimal');
+  });
+});
+
+// The pin only works if every consumer agrees on one number. package.json is
+// canonical (the Dockerfile and the host install read it without a TS
+// toolchain); this is the guard that the runner's literal copy tracks it.
+describe('PI_VERSION pin', () => {
+  it('matches jkai.piVersion in package.json', async () => {
+    const pkg = JSON.parse(
+      await readFile(new URL('../../../package.json', import.meta.url), 'utf8'),
+    );
+    expect(pkg.jkai?.piVersion).toBe(PI_VERSION);
+  });
+
+  it('is a bare semver, so the Dockerfile can interpolate it into an npm spec', () => {
+    expect(PI_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+});
+
+describe('assertPiVersion', () => {
+  it('passes when the installed version is the pin', () => {
+    expect(assertPiVersion(PI_VERSION)).toBeNull();
+  });
+
+  // An unreadable probe has its own, better diagnosis later in the run
+  // (pi missing, docker down). Reporting it as a mismatch would be a lie.
+  it('passes when the probe could not read a version', () => {
+    expect(assertPiVersion(null)).toBeNull();
+  });
+
+  it('fails a mismatch, naming both versions so the fix is one line', () => {
+    const f = assertPiVersion('0.73.1');
+    expect(f).not.toBeNull();
+    expect(f!.kind).toBe('tooling_unavailable');
+    expect(f!.message).toContain('0.73.1');
+    expect(f!.message).toContain(PI_VERSION);
   });
 });

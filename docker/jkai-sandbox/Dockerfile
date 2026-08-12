@@ -58,7 +58,23 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 RUN playwright install chromium \
  && chmod -R a+rX /opt/playwright-browsers
 
-RUN npm install -g typescript tsx @mariozechner/pi-coding-agent
+# Pi is PINNED, not floated. Pass the pin in from package.json's jkai.piVersion:
+#
+#   docker build -t jkai-sandbox:latest \
+#     --build-arg PI_VERSION="$(node -p "require('./package.json').jkai.piVersion")" \
+#     docker/jkai-sandbox
+#
+# The unpinned `npm install -g @mariozechner/pi-coding-agent` this replaces is
+# how the running container ended up on 0.69.0 while the build host ran 0.72.1 —
+# two pi installs, months apart, neither recorded anywhere. The builder's
+# assertPiVersion() refuses to run against a mismatch, so a stale image now
+# announces itself instead of silently changing how builds behave.
+ARG PI_VERSION
+RUN set -eu; \
+    test -n "$PI_VERSION" || { echo "ERROR: --build-arg PI_VERSION is required (see package.json jkai.piVersion)"; exit 1; }; \
+    npm install -g typescript tsx "@mariozechner/pi-coding-agent@${PI_VERSION}"; \
+    installed="$(pi --version)"; \
+    test "$installed" = "$PI_VERSION" || { echo "ERROR: installed pi $installed != requested $PI_VERSION"; exit 1; }
 
 RUN useradd -m -s /bin/bash jkai
 WORKDIR /home/jkai/workspace
