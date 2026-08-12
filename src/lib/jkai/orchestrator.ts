@@ -1779,7 +1779,7 @@ class Orchestrator {
     );
 
     const body = [
-      `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the gate did not pass.`,
+      `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the builder's gate, run in the build workspace, did not pass. CI runs its own gate on this PR and may reach a different result, so read the CI checks before judging the work.`,
       '',
       `> ${(failure.message ?? '').slice(0, 500)}`,
       '',
