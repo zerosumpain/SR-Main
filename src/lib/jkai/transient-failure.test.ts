@@ -84,3 +84,25 @@ describe('transientBackoffMs', () => {
     expect(total).toBeLessThanOrEqual(25 * 60_000);
   });
 });
+
+// undici's stream-ended-early message. It carries no status and no error code,
+// so every pattern that looks for one misses it — and the failure kinds that
+// are "continuable" do not include provider_error, so a build aborted on its
+// FIRST occurrence. Change request #231 lost a finished iteration to it.
+describe('a stream that dies mid-flight', () => {
+  it('treats a bare `terminated` as transient', () => {
+    expect(isTransientProviderFailure({ kind: 'provider_error', message: 'terminated' })).toBe(true);
+  });
+
+  it('catches it inside a longer message too', () => {
+    expect(
+      isTransientProviderFailure({ kind: 'provider_error', message: 'Pi error: terminated' }),
+    ).toBe(true);
+  });
+
+  it('still refuses kinds that are genuinely the build being wrong', () => {
+    // The kind allowlist is what stops a test whose name contains "terminated"
+    // from making a red gate look like an outage.
+    expect(isTransientProviderFailure({ kind: 'nonzero_exit', message: 'terminated' })).toBe(false);
+  });
+});
