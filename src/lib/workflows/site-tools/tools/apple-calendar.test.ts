@@ -47,6 +47,34 @@ describe('Apple Calendar chat tools', () => {
     expect(resolveCalendar([{ value: '/a/', label: 'Family' }, { value: '/b/', label: 'Family' }], 'Family')).toMatchObject({ error: expect.stringMatching(/ambiguous/i) });
   });
 
+  it('lists available calendar labels when no calendar matches', () => {
+    expect(resolveCalendar([
+      { value: '/family/', label: 'Family' },
+      { value: '/family-calendar/', label: 'Family Calendar' },
+      { value: '/personal/', label: 'Personal Calendar' },
+      { value: '/home/', label: 'Home' },
+    ], 'Famly')).toEqual({
+      error: 'No calendar named "Famly" was found for this Apple Calendar credential. Available: Family, Family Calendar, Personal Calendar, Home. Use the calendar resource URL returned by apple_calendar_list when names are similar.',
+    });
+  });
+
+  it('caps available calendar labels and reports how many were omitted', () => {
+    const options = Array.from({ length: 12 }, (_, index) => ({ value: `/calendar-${index + 1}/`, label: `Calendar ${index + 1}` }));
+    expect(resolveCalendar(options, 'Missing')).toMatchObject({
+      error: expect.stringContaining('Available: Calendar 1, Calendar 2, Calendar 3, Calendar 4, Calendar 5, Calendar 6, Calendar 7, Calendar 8, Calendar 9, Calendar 10, +2 more.'),
+    });
+  });
+
+  it('lists available labels and resource-URL advice for ambiguous calendar names', () => {
+    expect(resolveCalendar([
+      { value: '/family-a/', label: 'Family' },
+      { value: '/family-b/', label: 'Family' },
+      { value: '/personal/', label: 'Personal Calendar' },
+    ], 'Family')).toEqual({
+      error: 'Calendar name "Family" is ambiguous. Available: Family, Family, Personal Calendar. Use the calendar resource URL returned by apple_calendar_list.',
+    });
+  });
+
   it('reads a bare date-time as London wall-clock and emits a UTC instant, on both sides of DST', () => {
     // An offset-bearing input already names its instant.
     expect(toUtcIcalDateTime('2026-09-23T10:30:00+01:00')).toBe('20260923T093000Z');

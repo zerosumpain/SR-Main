@@ -8,14 +8,20 @@ const TIMEZONE = 'Europe/London';
 
 type CalendarOption = { value: string; label: string };
 
+function availableCalendarLabels(options: CalendarOption[]): string {
+  const labels = options.slice(0, 10).map((option) => option.label);
+  const omitted = options.length - labels.length;
+  return [...labels, ...(omitted ? [`+${omitted} more`] : [])].join(', ');
+}
+
 export function resolveCalendar(options: CalendarOption[], requested: unknown): CalendarOption | { error: string } {
   const selection = typeof requested === 'string' ? requested.trim() : '';
   if (!selection) return { error: 'calendar is required. Call apple_calendar_list with credentialId first to see available calendars.' };
   const exact = options.filter((option) => option.value === selection || option.label === selection);
   const named = exact.length ? exact : options.filter((option) => option.label.toLowerCase() === selection.toLowerCase());
   if (named.length === 1) return named[0];
-  if (named.length > 1) return { error: `Calendar name "${selection}" is ambiguous. Use the calendar resource URL returned by apple_calendar_list.` };
-  return { error: `No calendar named "${selection}" was found for this Apple Calendar credential. Call apple_calendar_list with credentialId to choose one.` };
+  if (named.length > 1) return { error: `Calendar name "${selection}" is ambiguous. Available: ${availableCalendarLabels(options)}. Use the calendar resource URL returned by apple_calendar_list.` };
+  return { error: `No calendar named "${selection}" was found for this Apple Calendar credential. Available: ${availableCalendarLabels(options)}. Use the calendar resource URL returned by apple_calendar_list when names are similar.` };
 }
 
 function dateParts(value: Date): Record<string, string> {
