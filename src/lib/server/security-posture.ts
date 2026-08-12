@@ -140,7 +140,15 @@ export function isValidIp(ip: string): boolean {
 
 async function sh(cmd: string, args: string[]): Promise<string | null> {
   try {
-    const { stdout } = await execFileP(cmd, args, { timeout: EXEC_TIMEOUT_MS });
+    const { stdout } = await execFileP(cmd, args, {
+      timeout: EXEC_TIMEOUT_MS,
+      // Node defaults maxBuffer to 1MB and THROWS past it. A day of ssh journal
+      // on the VPS is 1.35MB, so the exposure read failed there and nowhere
+      // else — the panel reported "unknown" on the one host that is actually
+      // under attack, which is precisely backwards. The --grep below keeps the
+      // real payload to ~50KB; this is the belt to that pair of braces.
+      maxBuffer: 16 * 1024 * 1024,
+    });
     return stdout;
   } catch {
     return null;
@@ -167,24 +175,31 @@ async function readFail2ban(jail = 'sshd'): Promise<Fail2banPosture | null> {
  * is brute-forced constantly, a private one is silent. homeserv measured 0 in
  * seven days while the VPS took 7,914 in three.
  */
-async function readExposure(windowHours = 24): Promise<ExposurePosture | null> {
-  const out = await sh('sudo', [
-    '-n', 'journalctl', '-u', 'ssh', '--since', `-${windowHours}h`, '--no-pager',
-  ]);
-  if (out === null) return null;
-  const failures = out
-    .split('\n')
-    .filter((l) => /Failed password|Invalid user|authentication failure/i.test(l));
+const FAILURE_PATTERN = 'Failed password|Invalid user|authentication failure';
+
+/** Pure half of the exposure read, so the counting is testable without a journal. */
+export function parseExposure(text: string, windowHours: number): ExposurePosture {
+  const failures = text.split('\n').filter((l) => new RegExp(FAILURE_PATTERN, 'i').test(l));
   const ips = new Set<string>();
   for (const line of failures) {
     const m = line.match(/from (\d{1,3}(?:\.\d{1,3}){3})/);
     if (m) ips.add(m[1]);
   }
-  return {
-    failedAttempts: failures.length,
-    distinctSourceIps: ips.size,
-    windowHours,
-  };
+  return { failedAttempts: failures.length, distinctSourceIps: ips.size, windowHours };
+}
+
+async function readExposure(windowHours = 24): Promise<ExposurePosture | null> {
+  // Filter in journalctl, not in Node. `-o cat` drops the timestamp/host prefix
+  // (the message still carries "from <ip>") and --grep discards the ~96% of
+  // lines we do not count: 1.35MB and 161ms becomes 53KB and 81ms on the VPS.
+  const out = await sh('sudo', [
+    '-n', 'journalctl', '-u', 'ssh',
+    '--since', `-${windowHours}h`,
+    '--no-pager', '-o', 'cat',
+    '--grep', FAILURE_PATTERN,
+  ]);
+  if (out === null) return null;
+  return parseExposure(out, windowHours);
 }
 
 /** Posture of the host this process is running on. */
