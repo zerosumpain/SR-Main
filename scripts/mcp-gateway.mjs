@@ -304,8 +304,19 @@ function sleep(ms) {
 }
 
 // Hermes pools connections to us; don't be the reason one gets dropped.
-server.keepAliveTimeout = 120_000;
-server.headersTimeout = 125_000;
+//
+// These MUST outlast the longest exchange we will legitimately hold open —
+// CALL_TIMEOUT_MS upstream, plus HOLD_MS spent waiting for a restarting site.
+// They used to be 120s/125s, which was shorter than a single tool call: Node
+// closed the pooled socket underneath Hermes, whose MCP client does not fail a
+// call when its transport dies. The pending `jkai_extended` then sat until its
+// OWN 900s timeout expired, so one severed socket cost 15 minutes of silence in
+// chat — and, because a per-server RPC lock serialises calls, it blocked every
+// other jkai tool for the same 15 minutes. Measured 2026-08-12: idle sockets
+// were being closed at 121.2s.
+const SOCKET_IDLE_MS = CALL_TIMEOUT_MS + HOLD_MS + 60_000;
+server.keepAliveTimeout = SOCKET_IDLE_MS;
+server.headersTimeout = SOCKET_IDLE_MS + 5_000; // must exceed keepAliveTimeout
 server.requestTimeout = 0; // a tool call may legitimately run for minutes
 
 server.listen(PORT, HOST, () => {
