@@ -4,7 +4,7 @@ export const infrastructureStatusDef: NodeDefinition = {
   type: 'infrastructure-status',
   label: 'Infrastructure status',
   category: 'integration',
-  description: 'Read-only infrastructure audit. Reports only live evidence and explicitly labels unavailable sources.',
+  description: 'Read-only current-to-latest infrastructure review. Uses bounded official publisher releases and explicitly labels unavailable evidence.',
   configSchema: {
     type: 'object',
     properties: {
@@ -26,6 +26,6 @@ export const infrastructureStatusDef: NodeDefinition = {
     ], description: 'Unavailable server-side integrations remain explicitly unavailable; no inferred health is shown.' },
     { key: 'historyLimit', label: 'History retained', type: 'number', min: 1, max: 52, description: 'Durable audit records retained for this workflow.' },
   ],
-  llmDescription: 'Read-only, reusable infrastructure audit. It has separately-scoped collectors for Home Assistant, production app, homeserv, Pi runner and Hermes. It never runs shell commands or installs updates. Missing integrations are returned as unavailable with their source named.',
+  llmDescription: 'Read-only, reusable infrastructure version-position review. For each detected capability it returns versionReviews with installed evidence, official latest stable release URL/date, bounded release-note benefits, compatibility implications and recommendation. It has separately-scoped collectors for Home Assistant, production app, homeserv, Pi runner and Hermes. It never runs shell commands or installs updates. Missing current-version or publisher evidence is returned as unavailable; never infer it.',
   llmExamples: [{ scope: 'all', historyLimit: 12 }],
 };
