@@ -4,6 +4,7 @@ import {
   parseFail2banStatus,
   parseIgnoreIps,
   isValidIp,
+  parseExposure,
 } from './security-posture';
 
 // Fixtures are verbatim output captured from the two real hosts on 2026-08-12,
@@ -117,4 +118,36 @@ describe('isValidIp', () => {
     '1.2.3.4 --flag',
     '',
   ])('rejects %s', (ip) => expect(isValidIp(ip)).toBe(false));
+});
+
+// `-o cat` output: no timestamp or host prefix, the message only. Captured from
+// the VPS, where the exposure read silently returned null for weeks' worth of
+// attacks because 1.35MB of journal blew execFile's 1MB default maxBuffer —
+// the panel showed "unknown" on the one host actually under attack.
+const JOURNAL_CAT = `Invalid user sol from 195.178.110.30 port 60792
+Failed password for invalid user sol from 195.178.110.30 port 60792 ssh2
+Invalid user admin from 118.139.164.171 port 41022
+Failed password for root from 45.148.10.99 port 55110 ssh2
+Accepted publickey for johnk from 90.208.50.64 port 51234 ssh2
+Connection closed by 195.178.110.30 port 60792 [preauth]`;
+
+describe('parseExposure', () => {
+  it('counts only failures, not the successful login or the noise', () => {
+    const e = parseExposure(JOURNAL_CAT, 24);
+    expect(e.failedAttempts).toBe(4);
+  });
+
+  it('counts distinct attacking addresses', () => {
+    expect(parseExposure(JOURNAL_CAT, 24).distinctSourceIps).toBe(3);
+  });
+
+  it('reports a quiet host as genuinely zero — the homeserv case', () => {
+    const e = parseExposure('', 24);
+    expect(e.failedAttempts).toBe(0);
+    expect(e.distinctSourceIps).toBe(0);
+  });
+
+  it('carries the window through so the UI can say "in 24h"', () => {
+    expect(parseExposure('', 168).windowHours).toBe(168);
+  });
 });
