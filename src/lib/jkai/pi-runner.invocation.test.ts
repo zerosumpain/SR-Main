@@ -178,11 +178,17 @@ describe('assertPiVersion', () => {
     expect(assertPiVersion(null)).toBeNull();
   });
 
+  // Derived from PI_VERSION, never hardcoded: a literal "wrong" version
+  // silently becomes a passing no-op the day the pin moves onto it. That is
+  // exactly what happened moving the pin to 0.73.1.
   it('fails a mismatch, naming both versions so the fix is one line', () => {
-    const f = assertPiVersion('0.73.1');
+    const [maj, min, patch] = PI_VERSION.split('.').map(Number);
+    const other = `${maj}.${min}.${patch + 1}`;
+    expect(other).not.toBe(PI_VERSION);
+    const f = assertPiVersion(other);
     expect(f).not.toBeNull();
     expect(f!.kind).toBe('tooling_unavailable');
-    expect(f!.message).toContain('0.73.1');
+    expect(f!.message).toContain(other);
     expect(f!.message).toContain(PI_VERSION);
   });
 });
