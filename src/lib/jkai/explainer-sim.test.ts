@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import SRC from '../../../static/explainer-kit/sim.js?raw';
 
 /**
  * static/explainer-kit/sim.js, executed for real in a DOM.
@@ -16,8 +16,6 @@ import { readFileSync } from 'node:fs';
  * The kit is plain browser JS with no module system, so it is evaluated here
  * the way a served chapter loads it: as a script against window/document.
  */
-const SRC = readFileSync('static/explainer-kit/sim.js', 'utf-8');
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function loadKit(): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

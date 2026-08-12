@@ -7,7 +7,6 @@
 # coupled test cannot be added without landing here too.
 #
 src/lib/jkai/explainer-kit.test.ts
-src/lib/jkai/explainer-sim.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
 src/lib/jkai/studio-gate.test.ts

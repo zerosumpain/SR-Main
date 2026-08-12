@@ -25,7 +25,7 @@ import {
 } from './transient-failure';
 import { failOrphanedIterations } from './orchestrator-helpers';
 import { executeIteration } from './executor';
-import { runTests, extractDiagnostics } from './test-runner';
+import { runTests, extractDiagnostics, formatTestSummary } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
@@ -1366,8 +1366,7 @@ class Orchestrator {
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         testResult = await runTests(buildId, `/home/jkai/workspace/${buildId}/dev`);
       }
-      const testEmoji = testResult.passed ? 'PASS' : 'FAIL';
-      const testSummary = `${testEmoji} Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? ` (${testResult.failCount} failed)` : ''}`;
+      const testSummary = formatTestSummary(testResult, durationMs);
       // Show the human what the AGENT was shown, not the head of the transcript.
       // The stored log for every failed gate on change request #223 was 1,996
       // characters of green banners — `check-public-routes: OK`,
