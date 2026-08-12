@@ -116,3 +116,54 @@ describe('classifyFailure', () => {
     ).toBeNull();
   });
 });
+
+// A provider error must survive pi's exit code.
+//
+// The classifier used to require `exitCode === 0` to call something a
+// `provider_error`, on the (currently true) observation that pi reports the
+// error and then exits cleanly. That coupling was load-bearing in the wrong
+// direction: `isTransientProviderFailure` only accepts `provider_error`,
+// `stalled` and `rate_limited`, so a Codex overload arriving with a non-zero
+// exit would have become `nonzero_exit` and aborted the build on the FIRST
+// blip. Change request #223 absorbed four of them.
+describe('classifyFailure — provider errors vs pi’s exit code', () => {
+  const OVERLOADED =
+    '{"type":"error","error":{"type":"service_unavailable_error","code":"server_is_overloaded"}}';
+
+  it('still classifies the ordinary case (provider reports, pi exits 0)', () => {
+    const f = classifyFailure(base({ errorMessage: OVERLOADED, exitCode: 0, providerReportedError: true }));
+    expect(f?.kind).toBe('provider_error');
+  });
+
+  it('classifies a provider error that arrives with a NON-ZERO exit', () => {
+    const f = classifyFailure(base({ errorMessage: OVERLOADED, exitCode: 1, providerReportedError: true }));
+    expect(f?.kind).toBe('provider_error');
+  });
+
+  it('does NOT promote a crash whose stderr merely mentions a 5xx', () => {
+    // `errorMessage` is synthesised from stderr on a non-zero exit, and the
+    // transient patterns match a bare "503" anywhere in the string. Retrying
+    // this forever is the failure mode the flag exists to prevent.
+    const f = classifyFailure(
+      base({
+        errorMessage: 'TypeError: cannot read x\n  at foo (bar.ts:503)',
+        exitCode: 1,
+        providerReportedError: false,
+      }),
+    );
+    expect(f?.kind).toBe('nonzero_exit');
+  });
+
+  it('falls back to the exit code when nobody said who wrote the message', () => {
+    // Older callers and fixtures do not set the flag; absent must behave as
+    // before rather than throwing or silently reclassifying.
+    expect(classifyFailure(base({ errorMessage: OVERLOADED, exitCode: 0 }))?.kind).toBe('provider_error');
+    expect(classifyFailure(base({ errorMessage: 'boom', exitCode: 1 }))?.kind).toBe('nonzero_exit');
+  });
+
+  it('the whole point: the non-zero case is now retryable', async () => {
+    const { isTransientProviderFailure } = await import('./transient-failure');
+    const f = classifyFailure(base({ errorMessage: OVERLOADED, exitCode: 1, providerReportedError: true }));
+    expect(isTransientProviderFailure(f)).toBe(true);
+  });
+});

@@ -402,6 +402,11 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   // `tokensUsed` stays as-is for reporting and comparability with history.
   let outputTokensUsed = 0;
   let errorMessage: string | null = null;
+  // Did the PROVIDER report this, or did we synthesise it from stderr below?
+  // The two are indistinguishable once both are in `errorMessage`, and they
+  // must not be treated alike: a provider error may be transient and worth
+  // retrying, whereas a crash whose stderr happens to contain "500" is not.
+  let providerReportedError = false;
   let providerHttpStatus: number | undefined;
   let providerErrorCode: string | undefined;
   let wallClockHit = false;
@@ -634,6 +639,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       }
       if (m.errorMessage) {
         errorMessage = m.errorMessage;
+        providerReportedError = true;
         if (typeof m.httpStatus === 'number') providerHttpStatus = m.httpStatus;
         if (typeof m.errorCode === 'string') providerErrorCode = m.errorCode;
         await emitLog(build.id, 'error', `Pi error: ${m.errorMessage}`, iteration.id);
@@ -752,6 +758,7 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     tokenCapHit,
     exitCode,
     errorMessage,
+    providerReportedError,
     providerHttpStatus,
     providerErrorCode,
     stderrTail: stderrBuf.slice(-2000),
@@ -776,6 +783,13 @@ export interface ClassifyInput {
   tokenCapHit: boolean;
   exitCode: number;
   errorMessage: string | null;
+  /**
+   * True when `errorMessage` came from pi's `message_end` — i.e. the provider
+   * said so — rather than being synthesised from stderr after a non-zero exit.
+   * Optional so existing callers and fixtures keep compiling; absent is
+   * treated as "we do not know", which falls back to the old exit-code test.
+   */
+  providerReportedError?: boolean;
   providerHttpStatus: number | undefined;
   providerErrorCode: string | undefined;
   stderrTail: string;
@@ -897,8 +911,20 @@ export function classifyFailure(i: ClassifyInput): FailureEnvelope | null {
       'Sandbox container disappeared mid-run.', i);
   }
 
-  // Provider error with an explicit error message but exit 0 (pi reports then exits)
-  if (i.errorMessage && i.exitCode === 0) {
+  // A provider error is a provider error whatever pi's exit code turns out to
+  // be. This used to require `exitCode === 0`, on the observation that pi
+  // reports the error and then exits cleanly — true today, and load-bearing:
+  // a Codex `server_is_overloaded` that arrived alongside a non-zero exit would
+  // have fallen through to `nonzero_exit`, which `isTransientProviderFailure`
+  // rejects, so the build would have aborted on the FIRST blip instead of
+  // retrying. Change request #223 survived four of them.
+  //
+  // The exit code is still what separates the two cases when we do not know
+  // who wrote the message: `providerReportedError` is set only where pi's
+  // `message_end` carries one. A crash whose stderr merely contains "503" must
+  // stay `nonzero_exit`, or the transient patterns would retry it forever.
+  const fromProvider = i.providerReportedError ?? i.exitCode === 0;
+  if (i.errorMessage && fromProvider) {
     return base('provider_error',
       i.errorMessage, i);
   }
