@@ -1,0 +1,31 @@
+import type { NodeDefinition } from '../types';
+
+export const infrastructureStatusDef: NodeDefinition = {
+  type: 'infrastructure-status',
+  label: 'Infrastructure status',
+  category: 'integration',
+  description: 'Read-only infrastructure audit. Reports only live evidence and explicitly labels unavailable sources.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      scope: { type: 'string', description: 'all | home_assistant | production_app | homeserv | pi_runner | hermes' },
+      historyLimit: { type: 'number', description: 'Number of audit records retained per workflow (1–52).' },
+    },
+  },
+  defaultConfig: { scope: 'all', historyLimit: 12 },
+  inputs: [{ name: 'input', type: 'object', label: 'Optional context' }],
+  outputs: [{ name: 'report', type: 'object', label: 'Audit report' }],
+  basicConfig: [
+    { key: 'scope', label: 'Audit scope', type: 'dropdown', options: [
+      { value: 'all', label: 'All available sources' },
+      { value: 'home_assistant', label: 'Home Assistant and integrations' },
+      { value: 'production_app', label: 'Production app and scheduler' },
+      { value: 'homeserv', label: 'Homeserv host' },
+      { value: 'pi_runner', label: 'Pi runner' },
+      { value: 'hermes', label: 'Hermes runtime' },
+    ], description: 'Unavailable server-side integrations remain explicitly unavailable; no inferred health is shown.' },
+    { key: 'historyLimit', label: 'History retained', type: 'number', min: 1, max: 52, description: 'Durable audit records retained for this workflow.' },
+  ],
+  llmDescription: 'Read-only, reusable infrastructure audit. It has separately-scoped collectors for Home Assistant, production app, homeserv, Pi runner and Hermes. It never runs shell commands or installs updates. Missing integrations are returned as unavailable with their source named.',
+  llmExamples: [{ scope: 'all', historyLimit: 12 }],
+};
