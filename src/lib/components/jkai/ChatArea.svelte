@@ -602,6 +602,8 @@
     // Refocus the composer when the active conversation changes or the
     // assistant finishes responding, so the cursor lives in the input.
     conversationId;
+    // A new thread means a new history list — never resume mid-cycle in it.
+    resetHistoryCycle();
     if (!loading) {
       tick().then(() => textareaEl?.focus());
     }
@@ -1445,12 +1447,58 @@
     paletteIndex = 0;
     mentionDismissed = false;
     mentionIndex = 0;
+    // Editing a recalled message makes it the live draft: stop treating Up/Down
+    // as history navigation until the next recall.
+    historyOffset = 0;
+  }
+
+  // Grow the composer with its content instead of scrolling a one-row box.
+  // Reset to `auto` first so the box can shrink again on delete, then take the
+  // content height; the stylesheet's max-height caps it and hands over to
+  // scrolling, so no pixel budget is duplicated here. Tracks `input` rather
+  // than hooking `oninput`, so programmatic writes — history recall, slash
+  // inserts, send() clearing it — resize too.
+  $effect(() => {
+    input;
+    const el = textareaEl;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  });
+
+  // ── Composer history — Up/Down recall previous sends, shell-style ──────────
+  // Sourced from the thread's own user messages, so it survives a reload and
+  // follows you between threads. Newest last.
+  const composerHistory = $derived(
+    messages.filter((m) => m.role === 'user' && m.content.trim()).map((m) => m.content)
+  );
+  // Neither of these is read from the template or a $derived — plain `let`, so
+  // no effect can ever subscribe to them.
+  let historyOffset = 0; // 0 = live draft, 1 = last message, 2 = the one before…
+  let historyDraft = '';
+
+  function resetHistoryCycle() {
+    historyOffset = 0;
+    historyDraft = '';
+  }
+
+  function recallHistory(text: string) {
+    input = text;
+    // Caret to the end, so the recalled text is ready to edit or re-send and a
+    // further Down keeps cycling rather than moving the caret.
+    tick().then(() => {
+      if (!textareaEl) return;
+      const end = textareaEl.value.length;
+      textareaEl.focus();
+      textareaEl.setSelectionRange(end, end);
+    });
   }
 
   function selectPaletteCommand(cmd: { command: string; mode: 'send' | 'insert' }) {
     paletteDismissed = true;
     if (cmd.mode === 'send') {
       input = '';
+      resetHistoryCycle();
       void silentSend(cmd.command);
     } else {
       input = cmd.command + ' ';
@@ -1885,6 +1933,7 @@
     const isFirstMessage = messages.length === 0;
 
     input = '';
+    resetHistoryCycle();
     loading = true;
     heartbeat = null;
     pendingPlan = null;
@@ -2146,10 +2195,48 @@
         return;
       }
     }
+    // History recall. Reached only once every typeahead above has declined the
+    // arrows. Up starts cycling from the caret at the very start of the box
+    // (always true when it's empty) so ordinary multi-line editing keeps its
+    // arrows; Down only answers at the very end, and only mid-cycle.
+    if (e.key === 'ArrowUp' && (historyOffset > 0 || atComposerStart())) {
+      const hist = composerHistory;
+      if (hist.length === 0) return;
+      e.preventDefault();
+      if (historyOffset === 0) historyDraft = input;
+      if (historyOffset >= hist.length) return; // already at the oldest — hold
+      historyOffset += 1;
+      recallHistory(hist[hist.length - historyOffset]);
+      return;
+    }
+    if (e.key === 'ArrowDown' && historyOffset > 0 && atComposerEnd()) {
+      e.preventDefault();
+      historyOffset -= 1;
+      const hist = composerHistory;
+      // Stepping past the newest restores whatever was being typed before.
+      recallHistory(historyOffset === 0 ? historyDraft : hist[hist.length - historyOffset]);
+      return;
+    }
+    if (e.key === 'Escape' && historyOffset > 0) {
+      e.preventDefault();
+      recallHistory(historyDraft);
+      resetHistoryCycle();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send();
     }
+  }
+
+  function atComposerStart(): boolean {
+    return textareaEl != null && textareaEl.selectionStart === 0 && textareaEl.selectionEnd === 0;
+  }
+
+  function atComposerEnd(): boolean {
+    if (!textareaEl) return false;
+    const end = textareaEl.value.length;
+    return textareaEl.selectionStart === end && textareaEl.selectionEnd === end;
   }
 </script>
 
@@ -3141,6 +3228,9 @@
     line-height: 1.5;
     color: var(--text-primary);
     resize: none;
+    /* Height is driven by the autosize effect; this is where it stops growing
+       and starts scrolling. */
+    overflow-y: auto;
   }
   .composer-textarea::placeholder {
     color: var(--text-ghost);
