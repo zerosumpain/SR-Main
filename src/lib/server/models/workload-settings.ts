@@ -81,6 +81,12 @@ export const resolveImageModel = () => resolveById('image');
 /** RAG / file embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const resolveEmbeddingModel = () => resolveById('embeddings');
 
+/** Audio transcription for the @files index. Must accept audio input. */
+export const resolveAudioModel = () => resolveById('audio');
+
+/** Deck slide art direction. */
+export const resolveArtDirectorModel = () => resolveById('art-director');
+
 function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
   if (set) return 'pinned';
   return def.fallbackModelId ? 'code' : 'default';
@@ -149,6 +155,11 @@ export async function workloadBlockReason(
       return getModelCapabilities(ctx).image
         ? null
         : `${modelId} cannot accept images, so it cannot serve ${def.label}. It would answer the prompt and ignore the picture.`;
+
+    case 'audio-input':
+      return getModelCapabilities(ctx).audio
+        ? null
+        : `${modelId} cannot accept audio, so it cannot serve ${def.label}.`;
 
     case 'image-output': {
       if (ctx.provider === 'codex') {

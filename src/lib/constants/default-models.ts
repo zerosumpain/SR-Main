@@ -66,6 +66,16 @@ export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
 /** Embeddings. Always OpenRouter — Codex has no embeddings endpoint. */
 export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
 
+/** Audio transcription for the @files index. Must accept an `input_audio`
+ *  content part — OpenAI's whisper endpoint is not reachable through this
+ *  repo's OpenRouter-only gateway, so transcription rides a multimodal chat
+ *  model instead. */
+export const DEFAULT_AUDIO_MODEL_ID = 'google/gemini-2.0-flash-001';
+
+/** Deck slide art direction. A one-shot composition rather than an agentic
+ *  loop, so quality is worth the latency here. */
+export const DEFAULT_ART_DIRECTOR_MODEL_ID = 'z-ai/glm-5.2';
+
 // Bare GLM ids from the direct-z.ai era → OpenRouter slugs. Persisted state
 // (jkai_conversations/jkai_builds rows, saved workflow node configs, client
 // localStorage) can still carry bare ids; coerce instead of 400ing at OpenRouter.

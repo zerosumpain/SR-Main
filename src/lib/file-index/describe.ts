@@ -18,11 +18,9 @@
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
-import { resolveVisionModel } from '$lib/server/models/workload-settings';
+import { resolveVisionModel, resolveAudioModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/server/models/types';
 
-/** Pinned audio-capable multimodal model for transcription. */
-const AUDIO_MODEL = 'google/gemini-2.0-flash-001';
 
 /** Skip captioning images larger than this (data-URL request bloat). */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -120,7 +118,9 @@ export async function transcribeAudioBestEffort(buf: Buffer, mimeType: string): 
   if (!format) return null;
 
   try {
-    const { client, model } = await getLLMClient({ provider: 'openrouter', modelId: AUDIO_MODEL });
+    // The `audio` workload rather than a module constant, so this is settable
+    // from the model picker; its save guard requires audio input.
+    const { client, model } = await getLLMClient(await resolveAudioModel());
     const response = await client.chat.completions.create({
       model,
       max_tokens: 4096,
