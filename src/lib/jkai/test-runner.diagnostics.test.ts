@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractDiagnostics } from './test-runner';
+import { extractDiagnostics, formatTestSummary } from './test-runner';
 
 // The real thing, reconstructed from build 81ac1714 (change request #216).
 // 2,034 characters, first `Error:` at 1,185 — past the 1,000-character head
@@ -33,6 +33,13 @@ const GATE_216 = [
   '',
   'svelte-check found 1 error and 743 warnings',
 ].join('\n');
+
+describe('formatTestSummary', () => {
+  it('includes the supplied gate duration in whole seconds only for a passing test gate', () => {
+    expect(formatTestSummary({ passed: true, testCount: 1, failCount: 0 }, 114_000)).toBe('PASS Tests: 1/1 passed (114s)');
+    expect(formatTestSummary({ passed: false, testCount: 1, failCount: 1 }, 114_000)).toBe('FAIL Tests: 0/1 passed (1 failed)');
+  });
+});
 
 describe('extractDiagnostics', () => {
   it('finds the error that the head of the log hides', () => {
