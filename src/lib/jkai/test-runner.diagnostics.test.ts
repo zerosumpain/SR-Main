@@ -102,3 +102,112 @@ describe('extractDiagnostics', () => {
     expect(extractDiagnostics('')).toBe('');
   });
 });
+
+// The real thing, reconstructed from build eb57c2fb (change request #223).
+//
+// #216 died of head-truncation and #221 fixed it. #223 then died of the
+// OPPOSITE fault in the same function: the suite deliberately exercises its own
+// failure paths, so a green vitest run prints dozens of `Error:` and
+// `TypeError:` lines to stderr from tests that PASS. Every one matched
+// DIAGNOSTIC_LINE, they arrive long before the summary, and source order plus a
+// 2,000-character ceiling meant they filled the window and the real failure was
+// cut off behind `… (truncated)`.
+//
+// The agent was handed this and told "fix these before doing anything else".
+// It investigated, found those tests passing, reported "no further code changes
+// needed", and did that for three iterations at an eight-minute gate apiece
+// until the idle breaker stopped the build 65 minutes in.
+const VITEST_CAPTURE_NOISE = [
+  'RUN v4.1.0 /home/jkai/workspace/eb57c2fb/dev',
+  '',
+  'stderr | src/lib/workflows/site-tools/tools/workflows.discovery.test.ts',
+  '[canvas-migrate] Boot migration failed: TypeError: all is not iterable',
+  '    at migrateWorkflowsToCanvas (/home/jkai/workspace/eb57c2fb/dev/src/lib/canvas/migrate.ts:29:20)',
+  '',
+  'stderr | tests/lib/health/hero-copy-service.test.ts > getHeroCopy > returns fallback when LLM throws',
+  '[hero-copy] background LLM failed Error: boom',
+  '',
+  'stderr | src/lib/canvas/audit.test.ts > recordAudit > still swallows a pool write failure',
+  "[audit] failed to record { workflowId: 'w1' } Error: insert failed",
+  '',
+].join('\n');
+
+const VITEST_REAL_FAILURE = [
+  '⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯',
+  'FAIL src/lib/workflows/nodes/apple-calendar.test.ts > parses rawProperties',
+  'AssertionError: expected undefined to be defined',
+  '',
+  'Test Files  1 failed | 312 passed (313)',
+  'Tests  1 failed | 4102 passed (4103)',
+].join('\n');
+
+describe('extractDiagnostics — a suite that tests its own failure paths', () => {
+  const GATE_223 = `${VITEST_CAPTURE_NOISE}\n${VITEST_REAL_FAILURE}`;
+
+  it('does not report stderr from a PASSING test as the thing to fix', () => {
+    const d = extractDiagnostics(GATE_223);
+    expect(d).not.toContain('[canvas-migrate]');
+    expect(d).not.toContain('[hero-copy]');
+    expect(d).not.toContain('[audit] failed to record');
+  });
+
+  it('never quotes a bare `stderr |` header as the blocker', () => {
+    // This exact line was recorded as the build's failure reason: the context
+    // window either side of a matching line dragged the capture header in.
+    const d = extractDiagnostics(GATE_223);
+    expect(d).not.toContain('stderr | src/lib/workflows/site-tools');
+  });
+
+  it('reports the failure that actually stopped the gate', () => {
+    const d = extractDiagnostics(GATE_223);
+    expect(d).toContain('apple-calendar.test.ts > parses rawProperties');
+    expect(d).toContain('AssertionError: expected undefined to be defined');
+  });
+
+  it('keeps vitest’s own count summary, which says how bad it is', () => {
+    const d = extractDiagnostics(GATE_223);
+    expect(d).toContain('Tests  1 failed');
+  });
+
+  it('keeps the TAIL when the noise would overflow the window', () => {
+    // A `&&` chain stops at the first failing stage, so the failure is always
+    // the last thing in the log. Overflow must therefore drop the head.
+    const flood = `${'stderr | src/x.test.ts\n[boot] failed: TypeError: nope\n\n'.repeat(200)}${VITEST_REAL_FAILURE}`;
+    const d = extractDiagnostics(flood, 800);
+    expect(d).toContain('parses rawProperties');
+    expect(d.length).toBeLessThanOrEqual(900);
+  });
+
+  it('still finds a svelte-check error, which has no capture blocks at all', () => {
+    const d = extractDiagnostics(GATE_216);
+    expect(d).toContain('Expected 2 arguments, but got 1.');
+    expect(d).toContain('apple-calendar.ts:66:30');
+  });
+
+  it('sees through the colour vitest writes even into a pipe', () => {
+    // Verbatim bytes from iteration 5 of build eb57c2fb, escapes and all. The
+    // visible text does not start the line, so every line-anchored pattern in
+    // this module misses unless the colour comes off first. This is what made
+    // the recorded abort reason the literal string `[90ms`.
+    const ansi = [
+      '[90mstderr[2m | src/lib/workflows/site-tools/tools/workflows.discovery.test.ts',
+      '[22m[39m[canvas-migrate] Boot migration failed: TypeError: all is not iterable',
+      '',
+      VITEST_REAL_FAILURE,
+    ].join('\n');
+    const d = extractDiagnostics(ansi);
+    expect(d).not.toContain('[canvas-migrate]');
+    expect(d).not.toContain('[');
+    expect(d).toContain('parses rawProperties');
+  });
+
+  it('names the gate stage that failed, so the agent knows where to look', () => {
+    const out = [
+      '> strange-rambling-svelte@0.0.1 gate:check',
+      'svelte-check found 0 errors',
+      '> strange-rambling-svelte@0.0.1 gate:test',
+      VITEST_REAL_FAILURE,
+    ].join('\n');
+    expect(extractDiagnostics(out)).toContain('gate:test');
+  });
+});

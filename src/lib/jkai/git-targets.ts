@@ -33,7 +33,32 @@ export const SR_MAIN_GIT_TARGET = {
   repoUrl: 'git@github.com:zerosumpain/SR-Main.git',
   baseBranch: 'master',
   branchPrefix: 'agent/',
-  gateCommand: 'npm run gate',
+  // The per-iteration gate. This used to be `npm run gate`, the full five-stage
+  // chain, and it ran after EVERY iteration: measured at 7m54s on change
+  // request #223, whose seven iterations of agent work totalled 24 minutes
+  // inside a 65-minute build. More than half the wall clock was gate.
+  //
+  // Two changes, neither of which verifies less per iteration:
+  //
+  //   1. svelte-check and vitest run CONCURRENTLY via the script CI already
+  //      uses. Serially they cost their sum; together they cost the longer of
+  //      the two. Its own measurement is ~109s saved per run. Note GATE_LEVEL
+  //      is deliberately left unset — that means the WHOLE suite. Scoping is
+  //      not available here: `select-tests.mjs` diffs `base...HEAD`, and the
+  //      agent's work is uncommitted while it iterates, so the selector would
+  //      see an empty change set. It fails safe (falls back to the full suite),
+  //      but there is no saving in asking.
+  //   2. `gate:build` moves to `finalGateCommand` below — a full vite build is
+  //      the most expensive stage, and re-proving it on an iteration that only
+  //      edited a test fixture buys nothing.
+  //
+  // The workspace is a full clone of the repo with node_modules installed, so
+  // `scripts/` is present. This is NOT true of /opt/strange-rambling-svelte,
+  // which ci-deploy syncs by allow-list and where these scripts do not exist.
+  gateCommand: 'npm run gate:public-routes && npm run gate:font-sizes && ./scripts/gate-concurrent.sh',
+  // What the per-iteration gate no longer proves, proved once before the PR.
+  // The union of the two is exactly the old `npm run gate`.
+  finalGateCommand: 'npm run gate:build',
   openPr: true,
   prTitlePrefix: 'Agent: ',
 } as const satisfies GitTargetConfig;
