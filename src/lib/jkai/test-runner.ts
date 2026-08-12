@@ -15,6 +15,14 @@ export interface TestRunResult {
   diagnostics: string;
 }
 
+/** The test-gate result line stored in the build log. */
+export function formatTestSummary(result: Pick<TestRunResult, 'passed' | 'testCount' | 'failCount'>, durationMs: number): string {
+  const testEmoji = result.passed ? 'PASS' : 'FAIL';
+  const counts = `${result.testCount - result.failCount}/${result.testCount} passed`;
+  if (result.passed) return `${testEmoji} Tests: ${counts} (${(durationMs / 1000).toFixed(0)}s)`;
+  return `${testEmoji} Tests: ${counts}${result.failCount > 0 ? ` (${result.failCount} failed)` : ''}`;
+}
+
 /** Lines worth showing an agent that has just been told its gate failed. */
 const DIAGNOSTIC_LINE =
   /(^|\s)(Error:|error TS\d+|AssertionError|FAIL\b|✗|×\s|not ok\b|Expected .* but got|Cannot find|is not assignable|Property .* does not exist|SyntaxError|TypeError|ReferenceError)/;
