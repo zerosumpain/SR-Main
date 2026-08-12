@@ -55,7 +55,18 @@ export const SR_MAIN_GIT_TARGET = {
   // The workspace is a full clone of the repo with node_modules installed, so
   // `scripts/` is present. This is NOT true of /opt/strange-rambling-svelte,
   // which ci-deploy syncs by allow-list and where these scripts do not exist.
-  gateCommand: 'npm run gate:public-routes && npm run gate:font-sizes && ./scripts/gate-concurrent.sh',
+  //
+  // GATE_TEST_MAX_WORKERS: running the two halves together means their memory
+  // ceilings add, and vitest sizes its pool from the machine — seven workers on
+  // the VPS, each inheriting `gate:test`'s 4 GB NODE_OPTIONS, alongside
+  // svelte-check's own 4 GB inside a 7 GB cgroup. Measured on the first real
+  // build after the split: 1,026 hits against the ceiling and a worker returning
+  // `Error: No such built-in module: node:` — a truncated specifier, i.e. a
+  // worker dying under reclaim, reported as a defect in a file the change never
+  // touched. CI never sees it (2 cores, one worker), which is exactly why it
+  // has to be pinned here rather than in the shared script's defaults.
+  gateCommand:
+    'npm run gate:public-routes && npm run gate:font-sizes && GATE_TEST_MAX_WORKERS=3 ./scripts/gate-concurrent.sh',
   // What the per-iteration gate no longer proves, proved once before the PR.
   // The union of the two is exactly the old `npm run gate`.
   finalGateCommand: 'npm run gate:build',

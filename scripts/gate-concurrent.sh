@@ -61,6 +61,32 @@ else
   echo "==> level ${GATE_LEVEL:-<unset>}: running the whole suite"
 fi
 
+# Bound the test pool when asked. Running the two halves together means their
+# memory ceilings ADD, and vitest's does not scale the way it looks: it sizes
+# its worker pool from the machine (cores - 1), NODE_OPTIONS is inherited by
+# every one of those workers, and `gate:test` asks for a 4 GB heap — so on an
+# 8-core box that is seven workers each permitted 4 GB, alongside
+# svelte-check's own 4 GB.
+#
+# On the 2-core CI runner this never bit: one worker, one heap. It bit the
+# autonomous builder immediately. Its cgroup (7 GB) recorded 1,026 hits against
+# the ceiling and memory.peak pinned to it, and a vitest worker came back with
+# `Error: No such built-in module: node:` — a specifier truncated mid-string,
+# which is what a worker dying under reclaim looks like from the outside. The
+# test passes alone, and passed in CI, so it reads as a real defect in a file
+# the change never touched. That is the most expensive kind of wrong answer
+# this system can give an agent.
+#
+# Unset means unbounded, which is CI's behaviour today and stays that way.
+#
+# NOTE THE `--`. `npm run gate:test --maxWorkers=3` hands the flag to npm, which
+# ignores it, and vitest fans out exactly as before — a fix that changes nothing
+# while reading as though it did.
+if [ -n "${GATE_TEST_MAX_WORKERS:-}" ] && [ "${TEST_CMD[0]}" = "npm" ]; then
+  TEST_CMD+=(-- --maxWorkers="$GATE_TEST_MAX_WORKERS")
+  echo "==> test pool capped at ${GATE_TEST_MAX_WORKERS} workers"
+fi
+
 echo "==> Starting svelte-check and vitest concurrently"
 START=$(date +%s)
 
