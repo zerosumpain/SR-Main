@@ -15,7 +15,6 @@ import {
   BUDGET_CAPS,
   COLLECTIONS,
   IDLE_WINDOW_MS,
-  SELFIMPROVE_MODEL,
   SYSTEM_ACTOR,
   asData,
   emptyPhases,
@@ -99,13 +98,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { getLLMClient } = await import('$lib/jkai/llm-client');
       const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
 
-      // Pinned to SELFIMPROVE_MODEL rather than resolveDefaultModel(): this
-      // pipeline writes code that ships unattended, so a change to the chat
-      // default must not silently change what authors it.
-      const { client, model } = await getLLMClient({
-        provider: 'openrouter',
-        modelId: SELFIMPROVE_MODEL,
-      });
+      // Still pinned off the chat default — this pipeline writes code that
+      // ships unattended, so the model that authors it should not move because
+      // the chat default moved. What changed is that the pin is now a SETTING
+      // (`jkai.selfimprove.model`, falling back to SELFIMPROVE_MODEL) instead of
+      // a constant, so it can be seen and changed from the model picker rather
+      // than only by editing this file.
+      const { resolveSelfimproveModel } = await import('$lib/server/models/workload-settings');
+      const { client, model } = await getLLMClient(await resolveSelfimproveModel());
       // max_tokens >= 3000 so GLM reasoning tokens don't truncate the answer
       // (feedback_glm_reasoning_tokens). No response_format — we parse loosely.
       const resp = await client.chat.completions.create({

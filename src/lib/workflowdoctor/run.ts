@@ -26,7 +26,6 @@ import {
   BUDGET_CAPS,
   COLLECTIONS,
   DOCTOR_LOCK_LANE,
-  DOCTOR_MODEL,
   IDLE_WINDOW_MS,
   SETTINGS_AUTOAPPLY_KEY,
   SETTINGS_BREAKER_KEY,
@@ -132,13 +131,14 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
       const { getLLMClient } = await import('$lib/jkai/llm-client');
       const { priceFor, computeCost } = await import('$lib/jkai/llm-pricing');
 
-      // Pinned to DOCTOR_MODEL rather than resolveDefaultModel(): this pipeline
-      // decides what gets written to a live canvas, so a change to the chat
-      // default must not silently change the quality of that judgement.
-      const { client, model } = await getLLMClient({
-        provider: 'openrouter',
-        modelId: DOCTOR_MODEL,
-      });
+      // Still pinned off the chat default: this pipeline decides what gets
+      // written to a live canvas, so a change to the chat default must not
+      // silently change the quality of that judgement. The pin is now the
+      // `jkai.workflowdoctor.model` setting (falling back to DOCTOR_MODEL), so
+      // it can be read and changed from the model picker instead of only here.
+      const { resolveDoctorModel } = await import('$lib/server/models/workload-settings');
+      const modelCtx = await resolveDoctorModel();
+      const { client, model } = await getLLMClient(modelCtx);
       // max_tokens >= 3000 so a reasoning model doesn't burn the allowance
       // before it emits the object (feedback_glm_reasoning_tokens).
       const resp = await client.chat.completions.create({
@@ -155,7 +155,11 @@ export function createBudget(caps: Partial<Caps> = {}): Budget {
         const tout = usage.completion_tokens ?? 0;
         budget.tokensIn += tin;
         budget.tokensOut += tout;
-        const pricing = priceFor('openrouter', resp.model || model);
+        // Price against the provider we actually called. Hardcoding 'openrouter'
+        // was harmless while the model was pinned to an OpenRouter slug; now
+        // that it is settable, a Codex pick would otherwise be priced off an
+        // OpenRouter table it does not appear in.
+        const pricing = priceFor(modelCtx.provider, resp.model || model);
         if (pricing) budget.costUsd += computeCost(pricing, tin, tout);
       }
       const content = resp.choices?.[0]?.message?.content ?? '';

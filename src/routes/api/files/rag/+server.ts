@@ -7,7 +7,7 @@ import { db } from '$lib/db';
 import { workflowFiles, ragCollections } from '$lib/db/schema';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { buildCollection, reconcileStale } from '$lib/rag/pipeline';
-import { PRIMARY_EMBEDDING_MODEL } from '$lib/rag/embed';
+import { primaryEmbeddingModel } from '$lib/rag/embed';
 
 export const GET: RequestHandler = async ({ locals }) => {
   const session = await locals.auth();
@@ -47,7 +47,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       name,
       owner,
       status: 'pending',
-      embeddingModel: PRIMARY_EMBEDDING_MODEL,
+      // Resolve rather than read the constant: the embeddings model is
+      // settable, and this row is what query time embeds against.
+      embeddingModel: await primaryEmbeddingModel(),
       fileIds: orderedIds,
       fileNames,
     })

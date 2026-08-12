@@ -9,7 +9,7 @@ import {
 } from '$lib/db/schema';
 import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveExtractionModel } from '$lib/server/models/settings';
+import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
 import type {

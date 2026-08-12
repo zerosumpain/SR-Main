@@ -6,10 +6,26 @@
 // the chosen model + dim are recorded on the collection so query-time matches.
 
 import { getLLMClient } from '$lib/jkai/llm-client';
+import { resolveEmbeddingModel } from '$lib/server/models/workload-settings';
+import { DEFAULT_EMBEDDING_MODEL_ID } from '$lib/constants/default-models';
 import { normalize } from './retrieve';
 
-export const PRIMARY_EMBEDDING_MODEL = 'openai/text-embedding-3-large';
+/** The compiled-in default. The live value is the `embeddings` workload —
+ *  `primaryEmbeddingModel()` below — which this backs when unset. */
+export const PRIMARY_EMBEDDING_MODEL = DEFAULT_EMBEDDING_MODEL_ID;
 export const FALLBACK_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
+
+/**
+ * The embedding model in force right now.
+ *
+ * Callers that RECORD which model a collection was built with must use this
+ * rather than the constant: a collection is queried with the model named on its
+ * row, so a row that names one model while its vectors came from another
+ * returns quietly wrong neighbours rather than an error.
+ */
+export async function primaryEmbeddingModel(): Promise<string> {
+  return (await resolveEmbeddingModel()).modelId;
+}
 
 /** Max chars per input (well under the 8191-token per-input limit). */
 const MAX_INPUT_CHARS = 24000;
@@ -42,9 +58,10 @@ export type EmbedResult = { vectors: number[][]; model: string; dim: number };
  * collection shares one model + dimension.
  */
 export async function embedBatch(texts: string[]): Promise<EmbedResult> {
-  if (!texts.length) return { vectors: [], model: PRIMARY_EMBEDDING_MODEL, dim: 0 };
+  const primary = await primaryEmbeddingModel();
+  if (!texts.length) return { vectors: [], model: primary, dim: 0 };
 
-  let model = PRIMARY_EMBEDDING_MODEL;
+  let model = primary;
   const vectors: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -55,9 +72,9 @@ export async function embedBatch(texts: string[]): Promise<EmbedResult> {
     } catch (err) {
       // Only fall back before any vector was produced (i === 0); mid-run failure
       // of the primary would mix dimensions, so surface it instead.
-      if (model === PRIMARY_EMBEDDING_MODEL && i === 0) {
+      if (model === primary && i === 0) {
         console.warn(
-          `[rag] ${PRIMARY_EMBEDDING_MODEL} embedding failed (${(err as Error).message}); falling back to ${FALLBACK_EMBEDDING_MODEL}`,
+          `[rag] ${primary} embedding failed (${(err as Error).message}); falling back to ${FALLBACK_EMBEDDING_MODEL}`,
         );
         model = FALLBACK_EMBEDDING_MODEL;
         out = await embedOnce(model, batch);

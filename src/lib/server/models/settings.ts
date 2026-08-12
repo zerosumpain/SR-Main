@@ -2,11 +2,7 @@ import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { loadKeys } from '$lib/deepdive/keys';
-import {
-  DEFAULT_CHAT_MODEL_ID,
-  DEFAULT_EXTRACTION_MODEL_ID,
-  coerceModelContext,
-} from '$lib/constants/default-models';
+import { DEFAULT_CHAT_MODEL_ID, coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from './types';
 
 const TTL_MS = 30_000;
@@ -65,23 +61,17 @@ export async function resolveDefaultModel(): Promise<ModelContext> {
 }
 
 /**
- * The model for intel entity extraction and resolution — the single deliberate
- * exception to the one-default rule above (John, 2026-07-27).
+ * Every deliberate exception to the one-default rule above now lives in the
+ * workload registry — `$lib/models/workloads` for the definitions,
+ * `./workload-settings` for the resolvers (`resolveExtractionModel` and
+ * friends). They are not here because this module is the primitive the registry
+ * is built on, and importing it back would make the graph circular.
  *
- * Used by exactly two call sites, both on the post-reply ER path:
- * `intel/extract.ts` (extract entities from a note) and `intel/graph.ts`
- * (resolve/dedupe them). Everything else, including the vision OCR in
- * `intel/preprocess.ts`, still resolves the site default — gpt-oss-120b is
- * text-only, so switching OCR to it would break handwriting transcription.
- *
- * Exists because ER is latency-visible in a way no other background call is:
- * until it lands, a delivered reply is missing its entity links. See
- * DEFAULT_EXTRACTION_MODEL_ID for why this model.
+ * If you are adding a role that needs its own model, add it there: the registry
+ * is what the model picker renders, so a carve-out declared in it is one the
+ * operator can see and change, and a carve-out declared anywhere else is one
+ * only a `grep` will ever find.
  */
-export async function resolveExtractionModel(): Promise<ModelContext> {
-  const v = await getSetting<{ provider?: string; modelId?: string }>('jkai.intel.extract_model');
-  return coerceModelContext({ modelId: v?.modelId ?? DEFAULT_EXTRACTION_MODEL_ID });
-}
 
 /**
  * Orchestrator-only: a smarter / larger-context model used for "thinking"
@@ -98,8 +88,16 @@ export async function resolveThinkingModel(): Promise<ModelContext | null> {
   if (v && typeof v === 'object' && 'modelId' in v && typeof v.modelId === 'string') {
     return coerceModelContext({ modelId: v.modelId });
   }
-  // Thinking tier is one-shot reasoning (plan/clarify), not agentic — use the flagship.
-  return coerceModelContext({ modelId: DEFAULT_CHAT_MODEL_ID });
+  // Unset follows the SITE DEFAULT, not the code constant.
+  //
+  // This used to return DEFAULT_CHAT_MODEL_ID directly, which quietly made the
+  // thinking tier the one role that ignored the operator's choice: with the
+  // default on codex/gpt-5.6-terra, an unset thinking model still resolved to
+  // deepseek/deepseek-v4-flash. It cost nothing in practice only because the
+  // sole caller (general-chat.ts) is dormant behind the Hermes engine — which
+  // is exactly the kind of latent divergence that surfaces the day that path
+  // wakes up.
+  return resolveDefaultModel();
 }
 
 /** Chat-only: the alternate OpenRouter model that the in-chat toggle flips to. */

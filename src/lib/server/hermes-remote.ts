@@ -22,6 +22,7 @@ import type {
 } from './hermes-sessions';
 import type { HermesStatus, ActionResult, ServiceAction } from './hermes-control';
 import type { CronJob, CronOp, CronOpResult } from './hermes-cron';
+import type { HermesWorkloadRow } from './hermes-models';
 
 export const IS_HOMESERV = os.hostname() === 'homeserv';
 
@@ -141,6 +142,15 @@ export async function rCron(): Promise<CronJob[]> {
   }
   return proxyGet<CronJob[]>('/cron');
 }
+/** What model each Hermes role is on. Reads shell out to `hermes config get`
+ *  on homeserv, so the VPS has to ask homeserv — it cannot infer these. */
+export async function rHermesModels(): Promise<HermesWorkloadRow[]> {
+  if (IS_HOMESERV) {
+    const { readHermesWorkloads } = await import('./hermes-models');
+    return readHermesWorkloads();
+  }
+  return proxyGet<HermesWorkloadRow[]>('/models');
+}
 
 // ── Writes ──
 export async function rServiceAction(action: ServiceAction): Promise<ActionResult> {
@@ -156,4 +166,21 @@ export async function rCronOp(op: CronOp): Promise<CronOpResult> {
     return runCronOp(op);
   }
   return proxyPost<CronOpResult>('/cron', op, 35_000);
+}
+/** Point a Hermes role at a model. Generous timeout: the write is followed by a
+ *  gateway restart, without which the change would not be live. */
+export async function rSetHermesModel(
+  workloadId: string,
+  modelId: string,
+): Promise<ActionResult> {
+  if (IS_HOMESERV) {
+    const [{ setHermesWorkload }, { getWorkload }] = await Promise.all([
+      import('./hermes-models'),
+      import('$lib/models/workloads'),
+    ]);
+    const def = getWorkload(workloadId);
+    if (!def || def.scope !== 'hermes') throw new Error(`not a Hermes workload: ${workloadId}`);
+    return setHermesWorkload(def, modelId);
+  }
+  return proxyPost<ActionResult>('/models', { workloadId, modelId }, 4 * 60_000);
 }

@@ -24,13 +24,18 @@
  * stated again in the kit docs.
  */
 import { getLLMClient } from './llm-client';
-import { coerceModelContext } from '$lib/constants/default-models';
+import { DEFAULT_IMAGE_MODEL_ID } from '$lib/constants/default-models';
+import { resolveImageModel } from '$lib/server/models/workload-settings';
 
 /**
  * Cheap, fast, and good at labelled diagrams. Not the site default — the
  * default is a text model and cannot return an image at all.
+ *
+ * The compiled-in fallback for the `image` workload; the live value comes from
+ * `resolveImageModel()`, and its save guard requires a model whose modality
+ * puts `image` on the OUTPUT side.
  */
-export const STUDIO_IMAGE_MODEL = 'google/gemini-3.1-flash-image';
+export const STUDIO_IMAGE_MODEL = DEFAULT_IMAGE_MODEL_ID;
 
 /** Bytes plus the mime type, ready to write to a file. */
 export interface GeneratedImage {
@@ -76,9 +81,7 @@ export function extractImage(message: unknown): GeneratedImage | null {
 export async function generateExplainerImage(subject: string): Promise<GeneratedImage> {
   if (!subject || !subject.trim()) throw new Error('no subject given');
 
-  const { client, model } = await getLLMClient(
-    coerceModelContext({ provider: 'openrouter', modelId: STUDIO_IMAGE_MODEL }),
-  );
+  const { client, model } = await getLLMClient(await resolveImageModel());
 
   const completion = await client.chat.completions.create({
     model,

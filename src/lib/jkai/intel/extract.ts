@@ -1,6 +1,6 @@
 import type OpenAI from 'openai';
 import { getLLMClient } from '$lib/jkai/llm-client';
-import { resolveExtractionModel } from '$lib/server/models/settings';
+import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { db } from '$lib/db';
 import { intelEntities, intelEntityTypes } from '$lib/db/schema';
 import { eq, isNull, sql } from 'drizzle-orm';
