@@ -832,23 +832,54 @@ export async function syncExplainerKit(buildId: string): Promise<string> {
 }
 
 export async function syncJkaiExtension(buildId: string): Promise<string> {
-  const { readFile } = await import('node:fs/promises');
+  const { readFile, stat } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const dest = `/home/jkai/workspace/${buildId}/extensions/jkai-tools`;
   await execInSandbox(`mkdir -p ${dest}`);
-  // Try the source path first (dev), then the production build artifact
-  // path that vite-build emits to. SvelteKit copies static/* into
-  // build/client/*, so on the deployed VPS only build/client/jkai-extensions
-  // exists.
+
+  // NEWEST wins, not first-found.
+  //
+  // This used to take `static/` first and fall back to `build/client/`, on the
+  // assumption that "on the deployed VPS only build/client/jkai-extensions
+  // exists". That assumption was false and cost four months: the VPS carries a
+  // `static/` left over from an old full copy of the repo, ci-deploy only ever
+  // syncs the BUILD OUTPUT, and so every production build was handed a
+  // 2026-04-26 copy of the extension while the freshly deployed one sat
+  // unread in build/client. The tool-bridge fix of 2026-08-12 was live on disk
+  // and had no effect on a single build until this changed.
+  //
+  // Ordering by mtime is right in both environments: on homeserv `static/` is
+  // the file being edited and wins; on the VPS the deploy writes build/client
+  // and that wins. Neither needs to know which environment it is in.
   const candidates = [
     join(process.cwd(), 'static/jkai-extensions/jkai-tools.js'),
     join(process.cwd(), 'build/client/jkai-extensions/jkai-tools.js'),
   ];
-  let src = '';
+  let best: { path: string; mtimeMs: number } | null = null;
   for (const c of candidates) {
-    try { src = await readFile(c, 'utf-8'); break; } catch { /* try next */ }
+    try {
+      const s = await stat(c);
+      if (!best || s.mtimeMs > best.mtimeMs) best = { path: c, mtimeMs: s.mtimeMs };
+    } catch {
+      /* candidate absent — fine */
+    }
   }
-  if (!src) throw new Error(`jkai-tools.js not found in any of: ${candidates.join(', ')}`);
+  if (!best) throw new Error(`jkai-tools.js not found in any of: ${candidates.join(', ')}`);
+  const src = await readFile(best.path, 'utf-8');
+
+  // Staleness canary. Tools reach pi ONLY through `api.registerTool`; an
+  // extension without it registers nothing and the agent silently runs on pi's
+  // built-ins, which is precisely the failure this whole path keeps producing.
+  // Refuse rather than hand the agent a copy we can see is dead — the caller
+  // logs the throw against the build, so it is visible at second zero.
+  if (!src.includes('api.registerTool')) {
+    throw new Error(
+      `jkai-tools.js at ${best.path} does not call api.registerTool — it is stale ` +
+        `(modified ${new Date(best.mtimeMs).toISOString()}). A build using it would have ` +
+        `NO site tools. Redeploy so the built copy is current.`,
+    );
+  }
+
   await writeFileInSandbox(`${dest}/index.js`, src);
   return `${dest}/index.js`;
 }
