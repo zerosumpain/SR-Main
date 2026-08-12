@@ -10,6 +10,7 @@ import {
   BASE_PI_TOOLS,
   PI_VERSION,
   assertPiVersion,
+  readVersionFrom,
 } from './pi-runner';
 
 // pi's --tools is an allowlist applied to extension-registered tools as well
@@ -183,5 +184,39 @@ describe('assertPiVersion', () => {
     expect(f!.kind).toBe('tooling_unavailable');
     expect(f!.message).toContain('0.73.1');
     expect(f!.message).toContain(PI_VERSION);
+  });
+});
+
+// `pi --version` writes to STDERR. A stdout-only probe returns null for a
+// healthy pi, and because a null probe is deliberately not a mismatch, the
+// version gate would never fire — enforced-looking and decorative. Caught for
+// real when deploy-builder.sh reported `pi is  after install`.
+describe('readVersionFrom', () => {
+  it('reads a version printed to stderr', async () => {
+    await expect(
+      readVersionFrom(process.execPath, ['-e', "console.error('0.72.1')"]),
+    ).resolves.toBe('0.72.1');
+  });
+
+  it('reads a version printed to stdout', async () => {
+    await expect(
+      readVersionFrom(process.execPath, ['-e', "console.log('0.73.1')"]),
+    ).resolves.toBe('0.73.1');
+  });
+
+  it('tolerates a prefix around the semver', async () => {
+    await expect(
+      readVersionFrom(process.execPath, ['-e', "console.error('pi version 1.2.3 (build x)')"]),
+    ).resolves.toBe('1.2.3');
+  });
+
+  it('is null when the command is missing, so a broken probe never reads as a mismatch', async () => {
+    await expect(readVersionFrom('definitely-not-a-real-binary-xyz', [])).resolves.toBeNull();
+  });
+
+  it('is null on a non-zero exit even if the output contains a number', async () => {
+    await expect(
+      readVersionFrom(process.execPath, ['-e', "console.error('9.9.9'); process.exit(1)"]),
+    ).resolves.toBeNull();
   });
 });
