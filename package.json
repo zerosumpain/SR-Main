@@ -5,7 +5,7 @@
   "type": "module",
   "jkai": {
     "//piVersion": "The pi coding-agent version the autonomous builder runs. THE canonical pin: the sandbox Dockerfile, the host install in scripts/deploy-builder.sh, and PI_VERSION in src/lib/jkai/pi-runner.ts all derive from this, and a unit test fails if the runner's copy drifts. Upgrading pi means changing this value in a PR and letting a canary build prove it — not running `npm i -g` on the box. Read pi-runner.ts's assertPiVersion() for why an unpinned floating install is dangerous here.",
-    "piVersion": "0.72.1"
+    "piVersion": "0.73.1"
   },
   "scripts": {
     "dev": "vite dev",

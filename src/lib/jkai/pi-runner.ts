@@ -72,7 +72,7 @@ const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
  *  - `npm install -g` floats to latest and overwrites in place, so without a
  *    recorded number there is nothing to roll back TO.
  */
-export const PI_VERSION = '0.72.1';
+export const PI_VERSION = '0.73.1';
 
 /**
  * `pi --version` for the binary we are actually about to run, cached per
