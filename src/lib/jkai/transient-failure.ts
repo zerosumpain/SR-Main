@@ -27,6 +27,19 @@ const TRANSIENT_PATTERNS = [
   /rate.?limit/i,
   /\bECONNRESET\b/i,
   /\bETIMEDOUT\b/i,
+  // undici's message when a response stream ends before it should — the fetch
+  // equivalent of ECONNRESET, and it arrives with no status and no code, so the
+  // patterns above cannot catch it. Observed 2026-08-12 on change request #231:
+  // the agent had written the whole change and its evaluation, pi reported
+  // `terminated`, and the build aborted on its FIRST iteration with the work
+  // stranded in a draft PR. Nothing was wrong with the build or the machine —
+  // the cgroup showed zero ceiling hits, zero CPU throttling and no OOM.
+  //
+  // Not in the same class as a build fault: a stream that dies mid-flight is
+  // the upstream saying "not now" as much as a 503 is, and the work survives in
+  // dev/ either way. Worst case if this is ever something permanent, the six
+  // -attempt ceiling and the growing backoff stop it inside a few minutes.
+  /\bterminated\b/i,
 ];
 
 export function isTransientProviderFailure(failure: { kind: string; message?: string } | null): boolean {
