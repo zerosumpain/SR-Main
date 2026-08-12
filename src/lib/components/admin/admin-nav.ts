@@ -96,7 +96,10 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     label: 'Access',
     href: '/admin/access',
     match: (p) => p.startsWith('/admin/access'),
-    items: [],
+    items: [
+      { label: 'Allow-list', href: '/admin/access', match: (p) => p === '/admin/access' },
+      { label: 'Security', href: '/admin/access/security' },
+    ],
   },
 ];
 
