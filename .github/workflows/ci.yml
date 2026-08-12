@@ -362,8 +362,17 @@ jobs:
   auto-merge:
     name: Auto-merge (low tier, agent branches)
     needs: [gate, risk-tier]
+    # Draft PRs are skipped, not attempted. A failed build rescues its work into
+    # a DRAFT pull request (`rescueFailedGitBuild`), which GitHub refuses to
+    # merge — `GraphQL: Pull Request is still a draft (mergePullRequest)`. This
+    # job used to try anyway and go red, stamping a false failure onto work that
+    # had actually passed the gate (seen on #234, whose gate was green). Note
+    # that `on: pull_request` does not include `ready_for_review`, so marking a
+    # rescue PR ready does not re-run this job — un-drafted rescues are merged
+    # by hand on purpose.
     if: >-
       github.event_name == 'pull_request' &&
+      github.event.pull_request.draft == false &&
       needs.risk-tier.outputs.tier == 'low' &&
       startsWith(github.head_ref, 'agent/')
     runs-on: ubuntu-latest
