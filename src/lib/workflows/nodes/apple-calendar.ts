@@ -19,8 +19,43 @@ export interface CalendarEvent {
   start: string;
   end: string;
   description: string;
+  uid?: string;
+  organizer?: { cn?: string; address: string };
+  attendees?: Array<{ cn?: string; address: string; partstat?: string; role?: string }>;
+  created?: string;
+  lastModified?: string;
+  dtstamp?: string;
+  sequence?: string;
+  status?: string;
+  /** The unmodified CalDAV calendar object, including its VEVENT. */
+  rawIcs?: string;
+  /** Vendor/extension properties carried by the VEVENT. */
+  rawProperties?: Array<{ name: string; value: string; parameters?: Record<string, string | string[]> }>;
   /** Present only when the iCalendar body could not be read. */
   parseError?: string;
+}
+
+function propertyValue(property: ical.Property | null): string | undefined {
+  const value = property?.getFirstValue();
+  return value == null ? undefined : String(value);
+}
+
+function person(property: ical.Property): { cn?: string; address: string; partstat?: string; role?: string } {
+  const result = { address: String(property.getFirstValue() ?? '') } as { cn?: string; address: string; partstat?: string; role?: string };
+  for (const name of ['cn', 'partstat', 'role'] as const) {
+    const value = property.getFirstParameter(name);
+    if (value) result[name] = value;
+  }
+  return result;
+}
+
+function rawExtensionProperty(property: ical.Property): { name: string; value: string; parameters?: Record<string, string | string[]> } {
+  const parameters = Object.fromEntries(Object.entries(property.jCal[1] ?? {}).map(([name, value]) => [name.toUpperCase(), value as string | string[]]));
+  return {
+    name: property.name.toUpperCase(),
+    value: String(property.getFirstValue() ?? ''),
+    ...(Object.keys(parameters).length ? { parameters } : {}),
+  };
 }
 
 /**
@@ -38,13 +73,16 @@ export interface CalendarEvent {
  * body without a CalDAV server, which is what would have caught it.
  */
 export function parseCalendarObject(url: string, data: string): CalendarEvent {
-  const blank = { id: url, title: '', location: '', start: '', end: '', description: '' };
+  const blank = { id: url, title: '', location: '', start: '', end: '', description: '', rawIcs: data };
   try {
     const component = new ical.Component(ical.parse(data));
     // A VCALENDAR may carry VTIMEZONE and other siblings; take the event.
     const vevent = component.getFirstSubcomponent('vevent');
     if (!vevent) return { ...blank, parseError: 'no VEVENT in calendar object' };
     const event = new ical.Event(vevent);
+    const organizer = vevent.getFirstProperty('organizer');
+    const attendees = vevent.getAllProperties('attendee').map(person);
+    const rawProperties = vevent.getAllProperties().filter((property) => property.name.startsWith('x-')).map(rawExtensionProperty);
     return {
       id: url,
       title: event.summary || '',
@@ -52,6 +90,16 @@ export function parseCalendarObject(url: string, data: string): CalendarEvent {
       start: event.startDate?.toJSDate()?.toISOString() || '',
       end: event.endDate?.toJSDate()?.toISOString() || '',
       description: event.description || '',
+      ...(propertyValue(vevent.getFirstProperty('uid')) ? { uid: propertyValue(vevent.getFirstProperty('uid')) } : {}),
+      ...(organizer ? { organizer: person(organizer) } : {}),
+      ...(attendees.length ? { attendees } : {}),
+      ...(propertyValue(vevent.getFirstProperty('created')) ? { created: propertyValue(vevent.getFirstProperty('created')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('last-modified')) ? { lastModified: propertyValue(vevent.getFirstProperty('last-modified')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('dtstamp')) ? { dtstamp: propertyValue(vevent.getFirstProperty('dtstamp')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('sequence')) ? { sequence: propertyValue(vevent.getFirstProperty('sequence')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('status')) ? { status: propertyValue(vevent.getFirstProperty('status')) } : {}),
+      rawIcs: data,
+      ...(rawProperties.length ? { rawProperties } : {}),
     };
   } catch (err) {
     // Still return a row — one malformed invite should not empty the list —
