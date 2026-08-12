@@ -35,6 +35,8 @@ import {
   DEFAULT_VISION_MODEL_ID,
   DEFAULT_IMAGE_MODEL_ID,
   DEFAULT_EMBEDDING_MODEL_ID,
+  DEFAULT_AUDIO_MODEL_ID,
+  DEFAULT_ART_DIRECTOR_MODEL_ID,
 } from '$lib/constants/default-models';
 
 /** Where the setting lives, which decides how a change is applied. */
@@ -60,6 +62,8 @@ export type WorkloadRequirement =
   | 'embeddings'
   /** Accepts images as INPUT (vision / OCR). */
   | 'image-input'
+  /** Accepts audio as INPUT (transcription). */
+  | 'audio-input'
   /** Emits images as OUTPUT (generation). */
   | 'image-output'
   | null;
@@ -191,6 +195,30 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'image-out',
     reason:
       "Must emit an image; a text model cannot serve this role at all. Note this does NOT cover the canvas `generate_image` tool, which calls OpenRouter's separate /images/generations endpoint with FLUX — a different API that these models do not serve. That one is set with the JKAI_IMAGE_MODEL env var.",
+  },
+  {
+    id: 'audio',
+    scope: 'site',
+    label: 'Audio transcription',
+    blurb: 'Speech-to-text for audio files in the @files index.',
+    key: 'jkai.audio.model',
+    fallbackModelId: DEFAULT_AUDIO_MODEL_ID,
+    requires: 'audio-input',
+    catalogue: 'tools',
+    reason:
+      "Must accept an `input_audio` content part. OpenAI's whisper endpoint is not reachable through this repo's OpenRouter-only gateway, so transcription rides a multimodal chat model rather than a dedicated speech API.",
+  },
+  {
+    id: 'art-director',
+    scope: 'site',
+    label: 'Deck art director',
+    blurb: 'Composing slide layouts and block choices in the decks builder.',
+    key: 'jkai.decks.art_director_model',
+    fallbackModelId: DEFAULT_ART_DIRECTOR_MODEL_ID,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it.',
   },
   {
     id: 'embeddings',

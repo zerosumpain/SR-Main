@@ -18,12 +18,15 @@ import { isLayout, layoutDocsForLLM } from '$lib/presentation/layouts';
 import { BLOCK_DOCS, BLOCK_SCHEMAS, validateBlocks } from '$lib/presentation/registry';
 import type { Block, QuoteBlock } from '$lib/presentation/types';
 
-/** Art direction is a one-shot composition, not an agentic loop — GLM 5.2's
- *  quality is worth its latency here (turbo/5.1 stay the agentic models).
- *  Both slugs are the same OpenRouter model; the gateway's same-model guard
- *  suppresses a self-fallback, so this just pins 5.2 as the art director. */
-const ART_DIRECTOR_MODEL = 'z-ai/glm-5.2';
-const ART_DIRECTOR_FALLBACK = 'z-ai/glm-5.2';
+/** Art direction is a one-shot composition, not an agentic loop, so a slower
+ *  higher-quality model earns its latency here where the agentic roles cannot
+ *  afford it. Settable from the model picker as the `art-director` workload;
+ *  DEFAULT_ART_DIRECTOR_MODEL_ID is the fallback. Resolved per call rather than
+ *  captured at module load, or a change would need a restart to take effect. */
+async function artDirectorModel(): Promise<string> {
+  const { resolveArtDirectorModel } = await import('$lib/server/models/workload-settings');
+  return (await resolveArtDirectorModel()).modelId;
+}
 
 export interface ComposeContext {
   deckTitle?: string;
@@ -226,7 +229,8 @@ export async function composeSlide(
   for (let attempt = 0; attempt < 2; attempt++) {
     let text = '';
     try {
-      const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
+      const artDirector = await artDirectorModel();
+      const completion = await resilientChatCompletion(artDirector, {
         messages,
         temperature: 0.4,
         // GLM burns reasoning tokens from max_tokens and 5.2 reasons hard — an
@@ -234,7 +238,7 @@ export async function composeSlide(
         // (see feedback_glm_reasoning_tokens). Keep this very generous.
         max_tokens: 8000,
         response_format: { type: 'json_object' },
-      }, { fallbackModel: ART_DIRECTOR_FALLBACK });
+      }, { fallbackModel: artDirector });
       text = completion.choices[0]?.message?.content ?? '';
     } catch (err) {
       console.warn('[decks composer] LLM unavailable:', err instanceof Error ? err.message : err);
@@ -293,13 +297,14 @@ export async function reviseSlide(
   for (let attempt = 0; attempt < 2; attempt++) {
     let text = '';
     try {
-      const completion = await resilientChatCompletion(ART_DIRECTOR_MODEL, {
+      const artDirector = await artDirectorModel();
+      const completion = await resilientChatCompletion(artDirector, {
         messages,
         temperature: 0.3,
         // Same generous ceiling as composeSlide — GLM reasoning burns from it.
         max_tokens: 8000,
         response_format: { type: 'json_object' },
-      }, { fallbackModel: ART_DIRECTOR_FALLBACK });
+      }, { fallbackModel: artDirector });
       text = completion.choices[0]?.message?.content ?? '';
     } catch (err) {
       console.warn('[decks composer] revise LLM unavailable:', err instanceof Error ? err.message : err);
