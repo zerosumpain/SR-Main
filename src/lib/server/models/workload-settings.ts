@@ -16,7 +16,13 @@
 import { db } from '$lib/db';
 import { openrouterModels } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { getSetting, setSetting, clearSettingsCache, resolveDefaultModel } from './settings';
+import {
+  getSetting,
+  setSetting,
+  deleteSetting,
+  clearSettingsCache,
+  resolveDefaultModel,
+} from './settings';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { getModelCapabilities, getProviderFeatures } from './capabilities';
 import {
@@ -179,7 +185,8 @@ export async function setWorkloadModel(
   modelId: string | null,
 ): Promise<void> {
   if (modelId === null) {
-    await setSetting(def.key, null);
+    // Delete, not a null write — see deleteSetting: the column is jsonb NOT NULL.
+    await deleteSetting(def.key);
   } else {
     await setSetting(def.key, coerceModelContext({ modelId }));
   }

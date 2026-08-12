@@ -11,6 +11,7 @@
 # called — then run `npm run gate:public-routes -- --write` and commit.
 /api/admin/hermes/callefficiency
 /api/admin/hermes/cron
+/api/admin/hermes/models
 /api/admin/hermes/service
 /api/admin/hermes/sessions
 /api/admin/hermes/sessions/[id]

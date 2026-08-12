@@ -29,16 +29,24 @@ vi.mock('$lib/db/schema', () => ({ openrouterModels: { id: 'id', modality: 'moda
 vi.mock('drizzle-orm', () => ({ eq: (_col: unknown, value: string) => ({ modelId: value }) }));
 
 const getSetting = vi.fn();
+const setSetting = vi.fn();
+const deleteSetting = vi.fn();
 vi.mock('./settings', () => ({
   getSetting: (...args: unknown[]) => getSetting(...args),
-  setSetting: vi.fn(),
+  setSetting: (...args: unknown[]) => setSetting(...args),
+  deleteSetting: (...args: unknown[]) => deleteSetting(...args),
   clearSettingsCache: vi.fn(),
   resolveDefaultModel: vi
     .fn()
     .mockResolvedValue({ provider: 'codex', modelId: 'codex/gpt-5.6-terra' }),
 }));
 
-import { workloadBlockReason, resolveWorkloadModel, describeSiteWorkloads } from './workload-settings';
+import {
+  workloadBlockReason,
+  resolveWorkloadModel,
+  describeSiteWorkloads,
+  setWorkloadModel,
+} from './workload-settings';
 import { getWorkload } from '$lib/models/workloads';
 
 const wl = (id: string) => getWorkload(id)!;
@@ -138,5 +146,29 @@ describe('describeSiteWorkloads', () => {
     expect(thinking.source).toBe('default');
     expect(thinking.effectiveModelId).toBe('codex/gpt-5.6-terra');
     expect(thinking.divergesFromDefault).toBe(false);
+  });
+});
+
+describe('setWorkloadModel', () => {
+  beforeEach(() => {
+    setSetting.mockReset();
+    deleteSetting.mockReset();
+  });
+
+  it('DELETES the row to clear, never writing a null', async () => {
+    // app_settings.value is jsonb NOT NULL, so `setSetting(key, null)` fails at
+    // the driver and 500s the request. Caught by exercising the clear path
+    // against a real database — the mocks alone would happily have accepted it.
+    await setWorkloadModel(wl('doctor'), null);
+    expect(deleteSetting).toHaveBeenCalledWith('jkai.workflowdoctor.model');
+    expect(setSetting).not.toHaveBeenCalled();
+  });
+
+  it('stores a Codex pick as a Codex context, not an OpenRouter one', async () => {
+    await setWorkloadModel(wl('extraction'), 'codex/gpt-5.6-terra');
+    expect(setSetting).toHaveBeenCalledWith('jkai.intel.extract_model', {
+      provider: 'codex',
+      modelId: 'codex/gpt-5.6-terra',
+    });
   });
 });

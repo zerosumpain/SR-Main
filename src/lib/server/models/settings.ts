@@ -28,6 +28,21 @@ export async function getSetting<T = unknown>(key: string): Promise<T | null> {
   return value;
 }
 
+/**
+ * Unset a key entirely.
+ *
+ * `setSetting(key, null)` CANNOT do this: `app_settings.value` is `jsonb NOT
+ * NULL`, so a JS null binds as empty and the insert fails outright — every
+ * "clear this setting" path that reached for it 500s. Deleting the row is also
+ * the honest encoding: `getSetting` already returns null for a missing key, so
+ * absent and "explicitly nothing" resolve identically without a row that says
+ * neither.
+ */
+export async function deleteSetting(key: string): Promise<void> {
+  await db.delete(appSettings).where(eq(appSettings.key, key));
+  cache.delete(key);
+}
+
 export async function setSetting(key: string, value: unknown): Promise<void> {
   await db
     .insert(appSettings)

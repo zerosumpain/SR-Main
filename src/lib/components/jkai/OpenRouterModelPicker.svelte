@@ -150,14 +150,6 @@
 
   /** Client-side search over the Codex group, matching the server-side `q`
    *  behaviour on the OpenRouter table so one search box filters both. */
-  const visibleCodexRows = $derived(
-    q.trim()
-      ? codexRows.filter((r) =>
-          `${r.id} ${r.name}`.toLowerCase().includes(q.trim().toLowerCase()),
-        )
-      : codexRows,
-  );
-
   let tab = $state<Tab>('list');
   // Owned here, not in the chart, so Escape collapses the expanded chart before
   // it closes the whole picker.
@@ -262,11 +254,41 @@
     noticeTimer = setTimeout(() => { notice = null; }, 3200);
   }
 
+  const divergingCount = $derived(
+    workloads
+      ? [...workloads.site, ...workloads.hermes].filter((w) => w.divergesFromDefault).length
+      : 0,
+  );
+
+  /** What the source badge says. The raw `source` value is internal jargon —
+   *  "code" means nothing to someone reading the tab to find out why their
+   *  default is not being used. */
+  const SOURCE_LABEL: Record<string, string> = {
+    pinned: 'pinned',
+    code: 'code default',
+    default: 'site default',
+    hermes: 'engine config',
+  };
+
   /** The workload the list is currently choosing a model FOR, if any. */
   const activeWorkload = $derived.by(() => {
     const id = workloadIdOf(target);
     if (!id || !workloads) return null;
     return [...workloads.site, ...workloads.hermes].find((w) => w.id === id) ?? null;
+  });
+
+  const visibleCodexRows = $derived.by(() => {
+    // Codex is text-in, text-out and has no embeddings endpoint, so for a
+    // workload requiring any of those every Codex row is a guaranteed rejection.
+    // The server refuses them with a reason, but offering a choice that can only
+    // fail is worse than not offering it — the same rule this list already
+    // applies by hiding Codex when the bridge is down.
+    const needs = activeWorkload?.requires;
+    if (needs === 'image-output' || needs === 'image-input' || needs === 'embeddings') return [];
+    const needle = q.trim().toLowerCase();
+    return needle
+      ? codexRows.filter((r) => `${r.id} ${r.name}`.toLowerCase().includes(needle))
+      : codexRows;
   });
 
   /** Filters both views share. The orchestrator is an agent — only models that
@@ -921,7 +943,7 @@
                         class="wl-src"
                         class:diverges={w.divergesFromDefault}
                         title={`Setting: ${w.key}`}
-                      >{w.source === 'default' ? 'site default' : w.source}</span>
+                      >{SOURCE_LABEL[w.source] ?? w.source}</span>
                     </div>
                     <div class="wl-model" title={w.effectiveModelId}>{w.effectiveModelId}</div>
                     <p class="wl-blurb">{w.blurb}</p>
@@ -1100,6 +1122,16 @@
       {:else if tab === 'compare'}
         <span class="foot-info">
           {chartRows.length} models · tap a point to apply{#if chartLoading} · loading…{/if}
+        </span>
+      {:else if tab === 'workloads'}
+        <!-- The list tab's "N models · page x/y" is meaningless here, and a
+             stale count under a table of roles reads as a count OF the roles. -->
+        <span class="foot-info">
+          {#if workloadsLoading}
+            reading engine config…
+          {:else if workloads}
+            {divergingCount} of {workloads.site.length + workloads.hermes.length} roles differ from the site default
+          {/if}
         </span>
       {:else}
         <span class="foot-info">
