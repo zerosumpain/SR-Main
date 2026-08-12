@@ -586,11 +586,17 @@ class Orchestrator {
     const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!buildRecord || this.stopped) return;
 
+    // Per-BUILD state, not per-process. This reset used to sit inside the
+    // git-target branch below, so a studio or ordinary build dequeued after a
+    // change request inherited its count — and one that arrived on 3 would
+    // abort as `no_progress` on its first iteration that happened to write
+    // nothing, having done nothing wrong.
+    this.consecutiveIdleIterations = 0;
+
     // Workspace creation branch-point. Normal builds get the empty dev/live
     // skeleton; git-target builds clone the target repo + branch off base.
     if (buildRecord.gitTargetConfig) {
       await emitLog(buildId, 'system', `Git-target mode — cloning ${buildRecord.gitTargetConfig.repoUrl} and branching off ${buildRecord.gitTargetConfig.baseBranch}.`);
-      this.consecutiveIdleIterations = 0;
       await ensureGitWorkspace(buildId, buildRecord.gitTargetConfig as GitTargetConfig);
     } else {
       await ensureWorkspace(buildId);
@@ -1145,6 +1151,20 @@ class Orchestrator {
         return;
       }
 
+      // A clean iteration proves the provider is answering, so the transient
+      // streak is over.
+      //
+      // The only other reset is inside the failure block above, BELOW the
+      // transient branch's own `return` — so it was unreachable from a
+      // transient failure and never ran on success either. That made
+      // `consecutiveTransient` a build-lifetime tally wearing the word
+      // "consecutive": on change request #223 four Codex overloads spread
+      // across eight iterations escalated the backoff 30s → 60s → 120s → 240s
+      // (210 seconds of pure sleep already spent), and two more anywhere in the
+      // remaining seventeen iterations would have aborted a working build as an
+      // "upstream outage".
+      this.consecutiveTransient = 0;
+
       // Run design-system linter (when enabled). If it finds issues, mark the
       // iteration failed so promotion is skipped and the next iteration's user
       // prompt receives the findings as required fixes.
@@ -1261,20 +1281,46 @@ class Orchestrator {
       // downstream post-processing is unchanged).
       let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string };
       if (build.gitTargetConfig) {
-        await emitLog(buildId, 'system', `Running gate: ${build.gitTargetConfig.gateCommand} ...`, iteration.id);
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         const dev = `/home/jkai/workspace/${buildId}/dev`;
-        const gate = await execInSandbox(`cd ${dev} && ${build.gitTargetConfig.gateCommand} 2>&1`, 1_200_000);
-        const gateOut = (gate.stdout + '\n' + gate.stderr).trim();
-        const gatePassed = gate.exitCode === 0;
+        const runGate = async (cmd: string) => {
+          await emitLog(buildId, 'system', `Running gate: ${cmd} ...`, iteration.id);
+          // NO_COLOR/FORCE_COLOR: vitest colours its output even through a
+          // pipe, and the escapes cost budget in a 2,000-character diagnostic
+          // window while making the stored log unreadable. `extractDiagnostics`
+          // strips them defensively too — this just stops them being written.
+          const g = await execInSandbox(
+            `cd ${dev} && NO_COLOR=1 FORCE_COLOR=0 ${cmd} 2>&1`,
+            1_200_000,
+          );
+          return { out: (g.stdout + '\n' + g.stderr).trim(), passed: g.exitCode === 0 };
+        };
+
+        let gate = await runGate(build.gitTargetConfig.gateCommand);
+
+        // The expensive stage runs only when the fast gate is green — i.e. only
+        // on the iteration that is actually about to publish. Folding it into
+        // `testResult` here rather than at the publish site is deliberate:
+        // everything downstream (the failure log, the idle breaker, the text
+        // appended to the agent's next context) then treats a broken build
+        // exactly like any other failed gate, with no second code path.
+        const finalCmd = build.gitTargetConfig.finalGateCommand;
+        if (gate.passed && finalCmd) {
+          gate = await runGate(finalCmd);
+        }
+
         testResult = {
-          passed: gatePassed,
-          output: gateOut.slice(0, 5000),
+          passed: gate.passed,
+          // The TAIL of a failed run. A downstream fallback reads
+          // `output.slice(-1000)` when diagnostics come back empty, and taking
+          // the head here meant that "tail" was the tail of the first 5,000
+          // characters — still inside the passing banners.
+          output: gate.passed ? gate.out.slice(0, 5000) : gate.out.slice(-5000),
           testCount: 1,
-          failCount: gatePassed ? 0 : 1,
+          failCount: gate.passed ? 0 : 1,
           // From the FULL output, not the truncated copy: a gate prints its
           // passing steps first, so the useful part is always near the end.
-          diagnostics: gatePassed ? '' : extractDiagnostics(gateOut),
+          diagnostics: gate.passed ? '' : extractDiagnostics(gate.out),
         };
       } else {
         await emitLog(buildId, 'system', 'Running tests...', iteration.id);
@@ -1283,7 +1329,19 @@ class Orchestrator {
       }
       const testEmoji = testResult.passed ? 'PASS' : 'FAIL';
       const testSummary = `${testEmoji} Tests: ${testResult.testCount - testResult.failCount}/${testResult.testCount} passed${testResult.failCount > 0 ? ` (${testResult.failCount} failed)` : ''}`;
-      await emitLog(buildId, testResult.passed ? 'system' : 'error', `${testSummary}\n${testResult.output.slice(0, 2000)}`, iteration.id);
+      // Show the human what the AGENT was shown, not the head of the transcript.
+      // The stored log for every failed gate on change request #223 was 1,996
+      // characters of green banners — `check-public-routes: OK`,
+      // `svelte-check found 0 errors` — because it was the first 2,000
+      // characters of a log whose failure was 14,000 characters further down.
+      // Anyone opening the build page saw a gate that looked fine and a build
+      // that had stopped, and had to query the database to find out why.
+      await emitLog(
+        buildId,
+        testResult.passed ? 'system' : 'error',
+        `${testSummary}\n${testResult.passed ? testResult.output.slice(0, 2000) : testResult.diagnostics || testResult.output.slice(-2000)}`,
+        iteration.id,
+      );
 
       // Idle-iteration breaker. An agent that believes it is finished but
       // cannot prove it will re-verify forever — build #131 spent iterations
@@ -1294,6 +1352,13 @@ class Orchestrator {
       const budgetCfg = (build.budgetConfig ?? {}) as BudgetConfig;
       const idleCap = budgetCfg.maxIdleIterations ?? 0;
       if (idleCap > 0) {
+        // Deliberately below the abort paths, so an iteration the provider
+        // never answered is NEITHER idle nor progress. Moving this up to make
+        // the breaker trip sooner was tried and reverted: a Codex overload is
+        // not an agent that thinks it has finished, and three of them in a row
+        // would abort a healthy build with the words "changed no files", which
+        // is both wrong and the hardest kind of wrong to debug. Provider
+        // outages are MAX_CONSECUTIVE_TRANSIENT's job.
         const wroteSomething = (result.actions ?? []).some(
           (a) => a.lang === 'write' || a.lang === 'edit',
         );
@@ -1493,7 +1558,9 @@ class Orchestrator {
               ``,
               `**Prompt:** ${build.prompt.slice(0, 1000)}`,
               ``,
-              `**Gate:** \`${build.gitTargetConfig.gateCommand}\` passed.`,
+              `**Gate:** \`${build.gitTargetConfig.gateCommand}\`${
+                build.gitTargetConfig.finalGateCommand ? ` and \`${build.gitTargetConfig.finalGateCommand}\`` : ''
+              } passed.`,
               ``,
               result.evaluation ? `**Summary:**\n${result.evaluation.slice(0, 1500)}` : '',
             ].filter(Boolean).join('\n');

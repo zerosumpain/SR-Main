@@ -20,8 +20,26 @@ Restart=always
 RestartSec=5
 
 # Resource caps — a runaway agent shouldn't eat the whole VPS.
-MemoryMax=4G
-CPUQuota=200%
+#
+# These were 4G/200% on an 8-core, 15.6 GB box, and the gate runs inside them:
+# `execInSandbox` in host mode is a `bash -c` child of this unit, so it inherits
+# the cgroup. Measured on 2026-08-12 with change request #223 in flight, the
+# cost was not subtle — cpu.stat showed 7,898 throttled periods out of 34,481
+# (22.9%), and memory.peak was 4,294,971,392 against a memory.max of
+# 4,294,967,296: pinned to the ceiling, with 37,144 recorded hits against it.
+#
+# vitest sizes its pool from the machine (8 cores → 7 workers) and cannot see
+# the quota, so it forked seven workers to share two cores' worth. `gate:build`
+# asks for a 6 GB heap (package.json) inside a 4 GB cap, so it swapped. One
+# gate run took 7m54s here against 1m59s for the same workload on the same box
+# outside the cgroup.
+#
+# 600%/7G leaves 2 cores and ~8.6 GB for the web app, Postgres, cloudflared and
+# the Actions runner, so the cap still does its job — it just stops being the
+# reason a build is slow. Raise deliberately, not reflexively: this is a
+# ceiling, not a reservation.
+MemoryMax=7G
+CPUQuota=600%
 
 [Install]
 WantedBy=multi-user.target

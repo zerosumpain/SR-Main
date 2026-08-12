@@ -696,6 +696,8 @@ export const jkaiBuilds = pgTable('jkai_builds', {
     baseBranch: string;
     branchPrefix: string;
     gateCommand: string;
+    /** Ran once before the PR rather than every iteration — see GitTargetConfig. */
+    finalGateCommand?: string;
     openPr: boolean;
     prTitlePrefix?: string;
   } | null>().default(null),

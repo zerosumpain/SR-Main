@@ -23,6 +23,89 @@ const DIAGNOSTIC_LINE =
 const DIAGNOSTIC_NOISE = /npm ERR!|ELIFECYCLE|Command failed: bash -c|^\s*at\s+\S+\s+\(/;
 
 /**
+ * Remove ANSI colour before anything tries to read the transcript.
+ *
+ * MUST run first. vitest colours its output even through a pipe, so the real
+ * lines arrive as `ESC[90mstderr ESC[2m | src/x.test.ts` — the visible text
+ * does not start the line, and neither `^\s*(stderr|stdout)` nor
+ * DIAGNOSTIC_NOISE's `^\s*at\s+\S+\s+\(` can match through the escape. On
+ * change request #223 that last one is why every benign stack frame cost three
+ * lines of a 2,000-character budget, and why the recorded abort reason came out
+ * as the literal string `[90ms`.
+ */
+export function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+}
+
+/**
+ * The lines that are authoritative about a failure rather than merely
+ * error-shaped. A vitest summary says how many tests failed; `DIAGNOSTIC_LINE`
+ * never matched any of them, because none of them contain the word "Error".
+ */
+const DIAGNOSTIC_SUMMARY =
+  /(^\s*(Test Files|Tests)\s+\d+\s+failed)|(Failed Tests\s+\d+)|(^\s*FAIL\s)|(svelte-check found [1-9])/;
+
+/** The npm banner a gate stage prints when it starts: `> pkg@1.0.0 gate:test`. */
+const STAGE_BANNER = /^>\s+\S+@\S+\s+(gate\S*)\s*$/;
+
+/**
+ * Vitest prints console output captured from tests under a `stderr | file` or
+ * `stdout | file` header — INCLUDING from tests that pass.
+ *
+ * This suite deliberately exercises its own failure paths (a boot migration
+ * that throws, an LLM call that rejects, an audit write that fails), so a
+ * perfectly green run emits dozens of lines reading `... failed: TypeError:`
+ * and `... Error: boom`. Every one matches `DIAGNOSTIC_LINE`, they are printed
+ * long before the summary, and the picked lines are kept in source order — so
+ * on change request #223 they filled the 2,000-character window and the real
+ * failure was cut off behind `… (truncated)`.
+ *
+ * The agent was handed that and told to fix it. It went looking, found those
+ * tests passing, concluded "no further code changes needed", and repeated that
+ * for three iterations at an eight-minute gate apiece before the idle breaker
+ * stopped the build — 65 minutes in, having finished the actual work in the
+ * first one.
+ *
+ * A capture block runs from its header to the next blank line. Dropping the
+ * blocks wholesale is right: a genuine failure is never reported only inside
+ * one — vitest repeats it in the `Failed Tests` section either way.
+ */
+function stripCaptureBlocks(lines: string[]): string[] {
+  const kept: string[] = [];
+  let inCapture = false;
+  for (const line of lines) {
+    if (/^\s*(stderr|stdout)\s*\|/.test(line)) {
+      inCapture = true;
+      continue;
+    }
+    if (inCapture) {
+      if (line.trim() === '') inCapture = false;
+      continue;
+    }
+    kept.push(line);
+  }
+  return kept;
+}
+
+/**
+ * Name the stage that failed.
+ *
+ * The gate is an `&&` chain, so it stops at the first stage to exit non-zero:
+ * the LAST banner printed is the stage that broke. That one line turns "the
+ * gate failed" into "the gate failed in gate:test", which is the difference
+ * between the agent re-running `gate:check:only` — seeing it exit 0, as it did
+ * six times on #223 — and running the thing that actually failed.
+ */
+function failingStage(lines: string[]): string | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].match(STAGE_BANNER);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
  * Pull the failing lines out of a gate run.
  *
  * The alternative — and what this replaces — was handing the agent the FIRST
@@ -41,9 +124,23 @@ const DIAGNOSTIC_NOISE = /npm ERR!|ELIFECYCLE|Command failed: bash -c|^\s*at\s+\
  * at the end of a log, never at the start.
  */
 export function extractDiagnostics(output: string, limit = 2000): string {
-  const lines = output.split('\n');
+  // Colour first, or none of the line-shape matching below works — see stripAnsi.
+  const plain = stripAnsi(output);
+  const raw = plain.split('\n');
+  const stage = failingStage(raw);
+  // Captured console output from PASSING tests goes first — see
+  // `stripCaptureBlocks`. Everything below scans what survives, so a capture
+  // header can no longer be dragged in as a context line either, which is how
+  // a bare `stderr | …discovery.test.ts` came to be recorded as the reason
+  // change request #223 stopped.
+  const lines = stripCaptureBlocks(raw);
   const keep = new Set<number>();
   lines.forEach((line, i) => {
+    if (DIAGNOSTIC_SUMMARY.test(line)) {
+      keep.add(i);
+      keep.add(i + 1);
+      return;
+    }
     if (DIAGNOSTIC_LINE.test(line) && !DIAGNOSTIC_NOISE.test(line)) {
       keep.add(i - 1);
       keep.add(i);
@@ -59,9 +156,12 @@ export function extractDiagnostics(output: string, limit = 2000): string {
     .filter((i) => !DIAGNOSTIC_NOISE.test(lines[i]))
     .sort((a, b) => a - b);
 
+  const prefix = stage ? `The gate failed in \`${stage}\`. Run that stage, not a narrower one.\n` : '';
+
   if (picked.length === 0) {
     // Nothing recognisable. The end of the log beats the beginning every time.
-    return output.length <= limit ? output : `…\n${output.slice(-limit)}`;
+    const body = plain.length <= limit ? plain : `…\n${plain.slice(-limit)}`;
+    return plain ? `${prefix}${body}` : '';
   }
 
   const out: string[] = [];
@@ -72,7 +172,11 @@ export function extractDiagnostics(output: string, limit = 2000): string {
     previous = i;
   }
   const joined = out.join('\n');
-  return joined.length <= limit ? joined : `${joined.slice(0, limit)}\n… (truncated)`;
+  // Overflow drops the HEAD, not the tail. The gate is an `&&` chain, so it
+  // stops at the stage that failed and the failure is the last thing in the
+  // log; keeping the first n characters keeps whatever ran before the problem.
+  const body = joined.length <= limit ? joined : `… (earlier output dropped)\n${joined.slice(-limit)}`;
+  return `${prefix}${body}`;
 }
 
 export async function runTests(buildId: string, workdir: string): Promise<TestRunResult> {

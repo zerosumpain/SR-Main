@@ -248,6 +248,17 @@ export interface GitTargetConfig {
   baseBranch: string;
   branchPrefix: string;
   gateCommand: string;
+  /**
+   * A slower, more complete gate run ONCE before the PR is opened, rather than
+   * on every iteration.
+   *
+   * `gateCommand` is the feedback loop: it runs after every iteration, so its
+   * cost is multiplied by the iteration count. Anything it verifies that the
+   * agent cannot act on faster than it costs to run belongs here instead.
+   * Together the two must still cover everything the old single gate did —
+   * this is a split, not a reduction.
+   */
+  finalGateCommand?: string;
   openPr: boolean;
   prTitlePrefix?: string;
   /**
@@ -345,7 +356,72 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
     throw new Error(`npm install failed in git workspace: ${installRes.stdout}\n${installRes.stderr}`.slice(0, 2000));
   }
 
+  await writeGateEnv(buildId, dev);
+
   return dev;
+}
+
+/**
+ * Give the workspace the environment its own gate needs.
+ *
+ * Without this the gate CANNOT PASS, for reasons that have nothing to do with
+ * the change being made — which is the single most expensive fault in this
+ * system, because the agent is asked to fix a failure that is not its fault and
+ * cannot be fixed from the diff. Measured in the workspace of change request
+ * #223 (2026-08-12), a clean clone fails its own gate two ways:
+ *
+ *   svelte-check  1 error: `Module '"$env/static/public"' has no exported
+ *                 member 'PUBLIC_VAPID_PUBLIC_KEY'` — `svelte-kit sync`
+ *                 generates the ambient types for `$env/static/public` from
+ *                 the environment it can see, so an unset variable is a type
+ *                 error in every file that imports it.
+ *   vitest        19 failures, all `SASL: SCRAM-SERVER-FIRST-MESSAGE: client
+ *                 password must be a string` — i.e. no DATABASE_URL, so every
+ *                 DB-backed test dies on connect.
+ *
+ * The same suite passes in CI, which supplies exactly these three variables
+ * plus a throwaway Postgres (see the `gate` job in .github/workflows/ci.yml).
+ * That is the mismatch this closes, and the values are deliberately copied
+ * from there rather than invented.
+ *
+ * DATABASE_URL is the one that needs provisioning, so it is read from the host
+ * environment rather than hardcoded: point `BUILDER_GATE_DATABASE_URL` at a
+ * database that exists only to be gated against. It must NOT be the production
+ * database — these tests delete rows (`delete from integration_credentials
+ * where integration_type like 'test-creds-%'`) and push schema. When it is
+ * unset the DB-backed tests still fail, but the type check now passes and the
+ * gate log says why the rest did not, which is the difference between a build
+ * that can be diagnosed and one that loops.
+ */
+async function writeGateEnv(buildId: string, dev: string): Promise<void> {
+  const gateDb = process.env.BUILDER_GATE_DATABASE_URL;
+  const lines = [
+    '# Written by ensureGitWorkspace so the gate can run. Mirrors the `gate`',
+    '# job in .github/workflows/ci.yml — see writeGateEnv for why.',
+    'PUBLIC_VAPID_PUBLIC_KEY=ci-gate-placeholder',
+    'SCRAPER_ALLOW_NON_HOMESERV=1',
+    ...(gateDb ? [`DATABASE_URL=${gateDb}`] : []),
+  ];
+  // `>` a heredoc rather than echo: the URL may contain characters a shell
+  // would otherwise interpret, and this file must never be half-written.
+  const res = await execInSandbox(
+    `cd ${dev} && cat > .env <<'JKAI_GATE_ENV'\n${lines.join('\n')}\nJKAI_GATE_ENV`,
+    15000,
+  );
+  if (res.exitCode !== 0) {
+    // Not fatal — the gate will fail loudly and legibly instead of silently.
+    await emitLog(buildId, 'system', `Could not write the gate .env: ${res.stderr.slice(0, 300)}`);
+    return;
+  }
+  await emitLog(
+    buildId,
+    'system',
+    gateDb
+      ? 'Gate environment written (.env: vapid placeholder, scraper flag, gate database).'
+      : 'Gate environment written (.env: vapid placeholder, scraper flag). ' +
+          'BUILDER_GATE_DATABASE_URL is not set, so DB-backed tests in the gate will fail on connect — ' +
+          'that is the environment, not this change.',
+  );
 }
 
 export interface PublishViaGitOptions {
