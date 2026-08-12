@@ -18,6 +18,7 @@ import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
+import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
@@ -328,13 +329,10 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // Public API routes — read-only, used by public pages (plus the write-only
-  // heartbeat-renderer telemetry beacon, which stores nothing).
-  const PUBLIC_API_PATHS = [
-    '/api/biome/state',
-    '/api/family-presence/stats',
-    '/api/landing/ecg-telemetry',
-  ];
-  if (PUBLIC_API_PATHS.some((p) => pathname === p)) {
+  // heartbeat-renderer telemetry beacon, which stores nothing). The list lives
+  // in $lib/server/public-api-paths so the security panel can display exactly
+  // what this gate enforces, rather than a second copy that drifts from it.
+  if (isPublicApiPath(pathname)) {
     return resolve(event);
   }
 
