@@ -76,6 +76,13 @@ const PUBLIC_PATHS = [
   // is the VPS reaching homeserv over Tailscale. Dropping the cookie gate here
   // does NOT make the data public; the bearer is the real gate.
   '/api/admin/hermes',
+  // Same shape, opposite direction: the security panel reads the PEER host's
+  // sshd/fail2ban posture, and each host can only read its own. The cookie gate
+  // is dropped so the bearer can be the gate — and the handler still refuses
+  // anything without either a valid HERMES_BRIDGE_SECRET or an owner session,
+  // so this does not make posture public. The one mutating action (unban) is
+  // owner-session ONLY and rejects the bearer outright.
+  '/api/admin/security',
   // Broads Speed Tracker — live map + stats, needs to be accessible from
   // a WhatsApp link without signing in. API serves the dashboard data.
   '/broads',
