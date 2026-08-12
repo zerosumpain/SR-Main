@@ -49,6 +49,102 @@ export function buildToolAllowlist(bridgedToolNames?: readonly string[]): string
 const CONTAINER_NAME = 'jkai-sandbox';
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
+/**
+ * The pi version this code is written against.
+ *
+ * MUST equal `jkai.piVersion` in package.json — `pi-runner.invocation.test.ts`
+ * fails if they drift. package.json is the canonical pin because the Dockerfile
+ * and the host install step can read it without a TypeScript toolchain; this
+ * constant is a literal rather than an import so nothing has to resolve a JSON
+ * file at runtime inside the bundled server.
+ *
+ * Why pin at all, when pi is "just a CLI":
+ *
+ *  - Two behaviours we depend on are pi INTERNALS with no compatibility
+ *    promise. `--tools` filtering extension-registered tools was found by
+ *    reading 0.72.1's `dist/core/agent-session.js`; the Codex `transport: auto`
+ *    hang is worked around by writing a `.pi/settings.json` because there is no
+ *    flag and no env var. Either could change in a patch release.
+ *  - Both failures are SILENT. The allowlist one stripped all 167 bridged site
+ *    tools for sixty days while the log said "Tool bridge OK". A version bump
+ *    that reintroduces it would not crash anything — builds would just quietly
+ *    get worse.
+ *  - `npm install -g` floats to latest and overwrites in place, so without a
+ *    recorded number there is nothing to roll back TO.
+ */
+export const PI_VERSION = '0.72.1';
+
+/**
+ * `pi --version` for the binary we are actually about to run, cached per
+ * process. Container mode asks the container, host mode asks the host — the two
+ * are different installs and have drifted before (host 0.72.1 against a sandbox
+ * image carrying 0.69.0).
+ */
+let piVersionProbe: Promise<string | null> | null = null;
+
+export function resolvePiVersion(): Promise<string | null> {
+  piVersionProbe ??= new Promise<string | null>((resolve) => {
+    const [cmd, args] = HOST_MODE
+      ? (['pi', ['--version']] as const)
+      : (['docker', ['exec', CONTAINER_NAME, 'pi', '--version']] as const);
+    const child = spawn(cmd, [...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout?.on('data', (c) => (out += String(c)));
+    // A probe that cannot answer must not block builds forever.
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve(null);
+    }, 15_000);
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve(null);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      // pi prints a bare semver, but tolerate a `pi 0.72.1` style prefix.
+      const m = out.match(/(\d+\.\d+\.\d+)/);
+      resolve(code === 0 && m ? m[1] : null);
+    });
+  });
+  return piVersionProbe;
+}
+
+/** Test seam — drop the cached probe so a test can re-stub it. */
+export function resetPiVersionProbe(): void {
+  piVersionProbe = null;
+}
+
+/**
+ * Fail the build when the installed pi is not the pinned one.
+ *
+ * Deliberately hard-fails rather than warning. The drift this guards against
+ * does not announce itself: it degrades what the agent can do while every log
+ * line still reads healthy, which is exactly how the `--tools` regression
+ * survived sixty days. A build that stops with the two version numbers in the
+ * message is diagnosed in one line and fixed in one command.
+ *
+ * An unreadable probe (pi missing, docker down, timeout) is NOT treated as a
+ * mismatch — that failure has its own, better diagnosis further down the run.
+ * Returns null when it is happy.
+ */
+export function assertPiVersion(found: string | null): FailureEnvelope | null {
+  if (found === null || found === PI_VERSION) return null;
+  const where = HOST_MODE ? `the build host` : `the ${CONTAINER_NAME} container`;
+  const fix = HOST_MODE
+    ? `sudo npm install -g @mariozechner/pi-coding-agent@${PI_VERSION}`
+    : `rebuild the sandbox image (docker/jkai-sandbox/Dockerfile pins it via ARG PI_VERSION)`;
+  return {
+    kind: 'tooling_unavailable',
+    message:
+      `pi ${found} is installed on ${where}, but this build expects ${PI_VERSION} ` +
+      `(jkai.piVersion in package.json). Refusing to run: pi's tool-allowlist and ` +
+      `Codex-transport behaviour are internals we depend on, and a mismatch degrades ` +
+      `builds silently rather than crashing them. Either install the pin — ${fix} — ` +
+      `or, if the new version is wanted, move the pin in a PR and let a canary build prove it.`,
+    attempts: 1,
+  };
+}
+
 // --- Pi JSON event shape (based on pi 0.68 actual output) ---
 //
 // message_end events carry the canonical shape:
@@ -293,6 +389,23 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     modelId: build.modelId ?? 'anthropic/claude-sonnet-4.5',
   });
   const auth = apiKeyEnv ? await resolveApiKey(apiKeyEnv) : null;
+
+  // Version gate, before any work is done. Cached per process, so this costs
+  // one `pi --version` for the lifetime of the sidecar, not one per iteration.
+  const installedPiVersion = await resolvePiVersion();
+  const versionFailure = assertPiVersion(installedPiVersion);
+  if (versionFailure) {
+    await emitLog(build.id, 'system', versionFailure.message, iteration.id);
+    return {
+      actions: [],
+      messages: [],
+      finalAssistantText: '',
+      tokensUsed: 0,
+      errorMessage: versionFailure.message,
+      failure: versionFailure,
+    };
+  }
+
   if (provider === 'openai-codex' && HOST_MODE) {
     // Host mode only: in container mode `workdir` is a path inside the sandbox,
     // not one this process can write to. Codex builds need host mode anyway —
@@ -334,8 +447,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   const piCmd = piParts.join(' ');
 
   // Host-mode: run pi directly on the host shell with cwd=workdir. No
-  // docker. The pi binary must be installed on the host (npm install -g
-  // @mariozechner/pi-coding-agent). When deploying, deploy.sh ensures this.
+  // docker. The pi binary must be installed on the host at the pinned version
+  // (`npm install -g @mariozechner/pi-coding-agent@<jkai.piVersion>`).
+  // scripts/deploy-builder.sh installs it; ci-deploy.sh does NOT — it never
+  // syncs packages/ and has no pi step, so a plain merge to master leaves the
+  // host binary exactly as it was. assertPiVersion above is what catches the
+  // gap. (This comment previously claimed deploy.sh handled it. It never did.)
   //
   // Container-mode (legacy): docker exec -i -w workdir jkai-sandbox bash -c '<piCmd>'.
   // Workdir lives inside the container's jkai-workspace volume. Pi binary
@@ -385,7 +502,11 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   await emitLog(
     build.id,
     'system',
-    `Launching pi agent (${provider}/${modelId})${HOST_MODE ? ' on host' : ' in sandbox'}`,
+    // The version goes in the durable build log on purpose. When a build starts
+    // behaving differently, "which pi ran it" is the first question and there
+    // was previously no way to answer it after the fact.
+    `Launching pi agent (${provider}/${modelId}) on pi ${installedPiVersion ?? 'unknown'}` +
+      `${HOST_MODE ? ' on host' : ' in sandbox'}`,
     iteration.id,
   );
 
