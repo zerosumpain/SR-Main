@@ -586,12 +586,12 @@ class Orchestrator {
     const [buildRecord] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
     if (!buildRecord || this.stopped) return;
 
-    // Per-BUILD state, not per-process. This reset used to sit inside the
-    // git-target branch below, so a studio or ordinary build dequeued after a
-    // change request inherited its count — and one that arrived on 3 would
-    // abort as `no_progress` on its first iteration that happened to write
-    // nothing, having done nothing wrong.
+    // Belt and braces: `runIteration` keys the streak counters to the build id
+    // and zeroes them when it changes, which covers the paths that never come
+    // through here (restart/resume/continue). This keeps the planning entry
+    // point honest on its own terms.
     this.consecutiveIdleIterations = 0;
+    this.consecutiveTransient = 0;
 
     // Workspace creation branch-point. Normal builds get the empty dev/live
     // skeleton; git-target builds clone the target repo + branch off base.
@@ -876,6 +876,20 @@ class Orchestrator {
 
       if (!build || build.status !== 'running') return;
 
+      // The streak counters below are per-BUILD, but they live on the
+      // orchestrator instance, which outlives any one build. Only
+      // `initAndPlan` ever zeroed them, and `restartBuild`, `resumeBuild` and
+      // `continueBuild` all reach an iteration without passing through it — so
+      // a build dequeued after one that ended on three idle iterations began
+      // life on three, and aborted as `no_progress` the first time it wrote
+      // nothing. Keying them to the build makes that unreachable by
+      // construction, including from entry points added later.
+      if (this.countersBuildId !== buildId) {
+        this.countersBuildId = buildId;
+        this.consecutiveIdleIterations = 0;
+        this.consecutiveTransient = 0;
+      }
+
       const budget = await checkBudget(build);
       if (!budget.canProceed) {
         if (budget.shouldComplete) {
@@ -1067,7 +1081,17 @@ class Orchestrator {
       await db
         .update(jkaiBuilds)
         .set({
-          iterationsCompleted: build.iterationsCompleted + 1,
+          // A transient upstream failure does not spend an iteration. The
+          // provider never answered, so there is no work to have used one up,
+          // and this counter feeds exactly one thing: the `maxIterations` check
+          // in budget.ts. (Iteration NUMBERING comes from the last iteration
+          // row, not from here, so nothing collides.)
+          //
+          // Change request #223 lost 3 of its 25 slots to Codex
+          // `server_is_overloaded` — and because budget.ts files a build that
+          // exhausts maxIterations as `completed`, a build killed by someone
+          // else's load would have been recorded as having finished.
+          iterationsCompleted: transient ? build.iterationsCompleted : build.iterationsCompleted + 1,
           tokensUsed: build.tokensUsed + result.tokensUsed,
           // Wall-clock accrues whatever the iteration actually burned, pass or
           // fail. It used to accrue only on success, so a build whose every
@@ -1296,17 +1320,32 @@ class Orchestrator {
           return { out: (g.stdout + '\n' + g.stderr).trim(), passed: g.exitCode === 0 };
         };
 
-        let gate = await runGate(build.gitTargetConfig.gateCommand);
+        // Re-proving a tree nobody touched is the single largest piece of dead
+        // time in a stuck build. On change request #223 the gate ran after
+        // iterations 1, 4, 5 and 7; iterations 4 and 5 wrote nothing at all, so
+        // half the runs re-derived a verdict that could not have changed —
+        // ~16 minutes at the gate's old cost.
+        //
+        // The fingerprint is the working tree against HEAD, with untracked
+        // files pulled in by `add -A -N`, so it moves whenever anything the
+        // gate could read moves. It fails SAFE: no fingerprint, run the gate.
+        const fingerprint = await this.workspaceFingerprint(dev);
+        const cached = this.lastGate;
+        let gate: { out: string; passed: boolean };
 
-        // The expensive stage runs only when the fast gate is green — i.e. only
-        // on the iteration that is actually about to publish. Folding it into
-        // `testResult` here rather than at the publish site is deliberate:
-        // everything downstream (the failure log, the idle breaker, the text
-        // appended to the agent's next context) then treats a broken build
-        // exactly like any other failed gate, with no second code path.
-        const finalCmd = build.gitTargetConfig.finalGateCommand;
-        if (gate.passed && finalCmd) {
-          gate = await runGate(finalCmd);
+        if (fingerprint && cached && cached.buildId === buildId && cached.fingerprint === fingerprint) {
+          gate = { out: cached.out, passed: cached.passed };
+          await emitLog(
+            buildId,
+            'system',
+            `Gate skipped — the workspace is unchanged since the last run, which ${
+              cached.passed ? 'passed' : 'failed'
+            }. Reusing that verdict rather than re-proving it.`,
+            iteration.id,
+          );
+        } else {
+          gate = await this.runGateChain(runGate, build.gitTargetConfig);
+          if (fingerprint) this.lastGate = { buildId, fingerprint, out: gate.out, passed: gate.passed };
         }
 
         testResult = {
@@ -1760,6 +1799,58 @@ class Orchestrator {
   }
 
   /** Consecutive iterations that changed no files — see the idle breaker. */
+  /**
+   * The last gate verdict and the tree that produced it, so an iteration that
+   * changed nothing can reuse it instead of re-running the gate. Holds the
+   * FINAL verdict — after `finalGateCommand`, when that ran — because that is
+   * what the caller acts on.
+   */
+  private lastGate: { buildId: string; fingerprint: string; out: string; passed: boolean } | null = null;
+
+  /**
+   * Hash of the working tree against HEAD, or null when it cannot be computed.
+   *
+   * `add -A -N` records untracked files as intent-to-add so `git diff HEAD`
+   * includes them — without it, a whole new file would leave the fingerprint
+   * unmoved and its gate run would be skipped. Node modules and `.env` are
+   * gitignored and so excluded, which is what we want: they do not change
+   * within a build.
+   *
+   * Returning null on anything unexpected is deliberate. The caller runs the
+   * gate when there is no fingerprint, so the failure mode of this function is
+   * "no saving", never "wrong verdict".
+   */
+  private async workspaceFingerprint(dev: string): Promise<string | null> {
+    try {
+      const res = await execInSandbox(
+        `cd ${dev} && git add -A -N >/dev/null 2>&1; git diff HEAD 2>/dev/null | sha1sum | cut -d' ' -f1`,
+        30_000,
+      );
+      const hash = res.stdout.trim();
+      return /^[0-9a-f]{40}$/.test(hash) ? hash : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The per-iteration gate, then the expensive one only if it passed.
+   *
+   * Keeping both behind one call is what lets the result be cached as a single
+   * verdict: the caller cannot then reuse a "passed" that never included the
+   * build. See `finalGateCommand` in git-targets.ts for the split.
+   */
+  private async runGateChain(
+    runGate: (cmd: string) => Promise<{ out: string; passed: boolean }>,
+    cfg: { gateCommand: string; finalGateCommand?: string },
+  ): Promise<{ out: string; passed: boolean }> {
+    const gate = await runGate(cfg.gateCommand);
+    if (gate.passed && cfg.finalGateCommand) return runGate(cfg.finalGateCommand);
+    return gate;
+  }
+
+  /** Which build `consecutiveIdleIterations` / `consecutiveTransient` describe. */
+  private countersBuildId: string | null = null;
   private consecutiveIdleIterations = 0;
   /** Consecutive transient provider failures; see ./transient-failure. */
   private consecutiveTransient = 0;
