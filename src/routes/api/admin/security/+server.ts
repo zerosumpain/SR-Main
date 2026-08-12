@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { isOwnerEmail } from '$lib/server/access';
 import { localPosture, unbanIp } from '$lib/server/security-posture';
 
@@ -27,7 +28,10 @@ async function requireOwner(locals: App.Locals): Promise<Response | null> {
 }
 
 function hasBridgeSecret(request: Request): boolean {
-  const expected = process.env.HERMES_BRIDGE_SECRET;
+  // `$env/dynamic/private`, not process.env — the .env file is loaded by
+  // SvelteKit, so a raw process.env read is empty in dev and the peer card
+  // silently never authenticates.
+  const expected = env.HERMES_BRIDGE_SECRET;
   if (!expected) return false;
   const got = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   // Length check first so a mismatched length can't be distinguished by timing

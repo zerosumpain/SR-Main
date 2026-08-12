@@ -18,6 +18,7 @@
 /api/admin/hermes/status
 /api/admin/hermes/telemetry
 /api/admin/hermes/toolaudit
+/api/admin/security
 /api/agent/actions
 /api/agent/activity
 /api/agent/activity/stream
