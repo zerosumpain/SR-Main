@@ -30,7 +30,7 @@ import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
 import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
 import { extractReasoningDelta } from './reasoning-delta';
-import { extractPlan, awaitPlanApproval } from './plan-phase';
+import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 
 const MAX_HISTORY = 30;
@@ -651,7 +651,7 @@ export async function generalChat(
   const supportsGates = options.jobId && (options.subagentDepth ?? 0) === 0 && !options.workflowId;
 
   const planSection = supportsGates
-    ? `\n\n--- Plan phase ---\nIf the user's request will require more than one tool call OR any write/modify/delete action, FIRST emit a plan as a JSON block:\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval. For trivial single-read lookups (e.g. one web_search for a factual question, checking a single piece of intel) you may skip the plan and answer directly.`
+    ? `\n\n--- Plan phase ---\nA plan exists to get the user's consent BEFORE something happens that they cannot simply undo by reading the answer. Emit one ONLY if the turn will write, modify, delete, publish, send, spend, run code, or change state anywhere — on the site, a device, an inbox, or a third party.\n\nDo NOT emit a plan for read-only work. Looking things up, searching, walking the graph, reading files, checking status — just call the tools and answer, however many lookups it takes. Nobody needs to approve a question.\n\n<plan>{\n  "summary": "one sentence of what you will do",\n  "steps": [\n    {"id": "s1", "title": "Short step title", "detail": "One-line detail of what this step does", "kind": "read" | "write" | "run" | "external"}\n  ],\n  "filesToTouch": [{"path": "...", "action": "create" | "modify" | "delete"}]\n}</plan>\n\nSet each step's "kind" accurately — it is load-bearing, not decoration. A plan whose steps are all "read" with no filesToTouch is treated as having nothing to approve and runs immediately; mislabelling a write as a read skips the user's say-so entirely.\n\nAfter emitting this block, STOP. Do not call any tools in the same message. The system will return with one of: "Plan approved — proceed.", "Plan rejected — stop.", or "Adjust the plan: <user feedback>". If the plan is adjusted, revise and emit a new <plan>. Only call tools after approval.`
     : '';
 
   const clarifySection = supportsGates
@@ -1105,7 +1105,18 @@ export async function generalChat(
         // thing the model emitted was the plan block.
         msg.content = extracted.cleaned || '(plan emitted)';
 
-        const decision = await awaitPlanApproval(options.jobId, extracted.plan);
+        // A plan with no side effects has nothing to approve (see
+        // isReadOnlyPlan), so proceed as though the user had said yes rather
+        // than stalling the turn on a card whose only sensible answer is
+        // "approve". Anything that writes, runs, sends or touches a file still
+        // goes to the user.
+        const autoApproved = isReadOnlyPlan(extracted.plan);
+        if (autoApproved) {
+          onProgress?.(`[plan] read-only plan (${extracted.plan.steps.length} step(s)) — proceeding without an approval card\n`);
+        }
+        const decision = autoApproved
+          ? ({ decision: 'approved' } as const)
+          : await awaitPlanApproval(options.jobId, extracted.plan);
 
         if (decision.decision === 'rejected') {
           responseText = extracted.cleaned || 'Plan rejected — stopping here.';

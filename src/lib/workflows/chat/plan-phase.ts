@@ -30,6 +30,27 @@ export function extractPlan(text: string): { plan: PlanPayload; cleaned: string 
 }
 
 /**
+ * Whether a plan describes work with no side effects, and so has nothing worth
+ * approving.
+ *
+ * The gate exists to get consent BEFORE something is written, run or sent. A
+ * pure lookup has no such moment: blocking it on approval buys the user
+ * nothing and costs them the turn, because an unapproved plan just sits there
+ * and the turn ends looking like the model ignored its tools. That was firing
+ * on roughly one ordinary ask in three on the in-process loop.
+ *
+ * `kind` is optional on PlanStep, so a step that omits it counts as NOT
+ * read-only. That is the safe direction: the cost of being wrong here is one
+ * unnecessary approval card, where the opposite mistake would silently
+ * auto-approve a plan that deletes something.
+ */
+export function isReadOnlyPlan(plan: PlanPayload): boolean {
+  if (!plan.steps.length) return false;
+  if (plan.filesToTouch.length) return false;
+  return plan.steps.every((s) => s.kind === 'read');
+}
+
+/**
  * Emit a plan event and await the user's decision. Throws if the job is
  * cancelled/times out (via failAllWaiters in job-store).
  */

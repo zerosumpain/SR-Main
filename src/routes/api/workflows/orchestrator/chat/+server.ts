@@ -1176,6 +1176,14 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
   const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
+  // Durable copy of this turn's tool chain, for /jkai/trace/<id>. The Hermes
+  // branch has recorded one since the cutover; this branch did not, so
+  // bypassing Hermes silently turned the trace viewer off. `job.toolSteps`
+  // still feeds the live tool cards and survives a reload in message metadata,
+  // but it carries no server-side timestamps — durations and ordering only
+  // exist here. Same recorder, fed the same JobEvents.
+  const traceRecorder = createTraceRecorder();
+
   // Run the orchestrator in the background
   (async () => {
     console.log(`[orchestrator] Job ${jobId} started — kind=${contextKind} workflowId=${workflowId ?? 'none'} conversationId=${conversationId ?? 'none'} message: "${message.slice(0, 100)}"`);
@@ -1357,6 +1365,14 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
             if (event.type === 'token' && typeof event.delta === 'string') {
               job.partialResponse += event.delta;
             }
+            // Observe before publishing so a throw in the recorder cannot cost
+            // the user the event — it is wrapped for the same reason: a trace
+            // is a diagnostic and must never take the reply down with it.
+            try {
+              traceRecorder.observe(event);
+            } catch (err) {
+              console.warn('[general-chat] trace recorder failed:', err instanceof Error ? err.message : err);
+            }
             publishJobEvent(jobId, event);
           },
           modelContext,
@@ -1387,8 +1403,42 @@ async function handleWithLoop({ request }: Parameters<RequestHandler>[0]): Promi
           };
           return extractEphemeralSidecar(stored);
         });
+        // Durable tool-chain copy for /jkai/trace/<id>, mirroring
+        // persistToolTrace on the Hermes branch. Best-effort throughout: a
+        // trace is a diagnostic and must never cost the user their reply.
+        // Keyed by jobId like the Hermes one, so the two branches cannot
+        // collide and a re-run is idempotent. `costUsd` stays null — there is
+        // no per-turn stamp to read it from on this branch, and a wrong number
+        // is worse than an absent one.
+        let traceId: string | null = null;
+        if (traceRecorder.hasSteps() && (conversationId || workflowId)) {
+          try {
+            const trace = traceRecorder.snapshot();
+            await db
+              .insert(jkaiToolTraces)
+              .values({
+                id: jobId,
+                conversationId: conversationId ?? null,
+                workflowId: workflowId ?? null,
+                prompt: (message ?? '').slice(0, 500),
+                model: modelContext.modelId,
+                provider: modelContext.provider,
+                costUsd: null,
+                stepCount: trace.stepCount,
+                errorCount: trace.errorCount,
+                durationMs: trace.durationMs,
+                steps: trace,
+              })
+              .onConflictDoNothing();
+            traceId = jobId;
+          } catch (err) {
+            console.error('[general-chat] failed to persist tool trace:', err instanceof Error ? err.message : err);
+          }
+        }
+
         const assistantMetaParts: Record<string, unknown> = {};
         if (cleanedToolSteps.length > 0) assistantMetaParts.toolSteps = cleanedToolSteps;
+        if (traceId) assistantMetaParts.traceId = traceId;
         if (chatNodeId) assistantMetaParts.chatNodeId = chatNodeId;
         const assistantMetadata = Object.keys(assistantMetaParts).length > 0 ? assistantMetaParts : undefined;
         let assistantMsgId: string | null = null;
