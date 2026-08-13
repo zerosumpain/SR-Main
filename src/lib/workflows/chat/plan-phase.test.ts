@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { extractPlan, awaitPlanApproval } from './plan-phase';
+import { extractPlan, awaitPlanApproval, isReadOnlyPlan } from './plan-phase';
 import { createJob, respondToWaiter, cleanOldJobs, subscribeJob } from './job-store';
 import type { JobEvent } from './job-store';
 
@@ -52,5 +52,40 @@ describe('awaitPlanApproval', () => {
     respondToWaiter(jobId, `plan:${planEv!.planId}`, { decision: 'approved' });
 
     await expect(pending).resolves.toEqual({ decision: 'approved' });
+  });
+});
+
+/**
+ * The plan gate exists to get approval BEFORE side effects. Blocking a
+ * read-only lookup on approval buys nothing and costs the turn: observed on
+ * the in-process loop firing on roughly one ordinary ask in three, where an
+ * unapproved plan just ends the turn looking like the tools were ignored.
+ *
+ * `kind` is optional on PlanStep, so "missing" deliberately counts as NOT
+ * read-only. Erring the other way would auto-approve a plan that writes.
+ */
+describe('isReadOnlyPlan', () => {
+  const step = (kind?: string) => ({ id: 's1', title: 't', detail: 'd', ...(kind ? { kind } : {}) }) as never;
+
+  it('is true when every step reads and nothing is touched', () => {
+    expect(isReadOnlyPlan({ steps: [step('read'), step('read')], filesToTouch: [] })).toBe(true);
+  });
+
+  it.each(['write', 'run', 'external'])('is false when any step is %j', (kind) => {
+    expect(isReadOnlyPlan({ steps: [step('read'), step(kind)], filesToTouch: [] })).toBe(false);
+  });
+
+  it('is false when a step has no kind at all', () => {
+    expect(isReadOnlyPlan({ steps: [step('read'), step()], filesToTouch: [] })).toBe(false);
+  });
+
+  it('is false when files would be touched, however read-only the steps claim to be', () => {
+    expect(
+      isReadOnlyPlan({ steps: [step('read')], filesToTouch: [{ path: 'a.ts', action: 'delete' }] }),
+    ).toBe(false);
+  });
+
+  it('is false for an empty plan rather than vacuously true', () => {
+    expect(isReadOnlyPlan({ steps: [], filesToTouch: [] })).toBe(false);
   });
 });

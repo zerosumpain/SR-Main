@@ -1,5 +1,11 @@
 // src/lib/workflows/site-tools/keyword-classifier.ts
 
+/** Slide-deck work spans two toolsets — `decks` holds the build/read/update
+ *  tools and `presentations` the vocabulary helper that describes the spec they
+ *  take — so one trigger has to load both or the model gets the builders with
+ *  no way to look up what it may put in the spec. */
+const DECK_PATTERN = /\bdecks?\b|\bslides?\b|\bpresentations?\b|\bpitch\b|\bkeynote\b|\bpowerpoint\b|\bppt\b/i;
+
 const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'health', pattern: /sleep|heart|readiness|train(?:ing)?|health|hrv|recovery|workout|exercise|strain|\brun\b|\bruns\b|cycling|fitness|activity|strava/i },
   { toolset: 'blog', pattern: /blog|post|draft|publish|article|write\s+about/i },
@@ -23,6 +29,17 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   { toolset: 'knowledge', pattern: /@?knowledge|search\s+(?:everything|all\s+(?:my|the)\s+(?:stores?|sources?|knowledge))|across\s+(?:my\s+)?(?:files,?\s*research|everything)|unified\s+(?:search|recall)/i },
   { toolset: 'agents', pattern: /\bdelegate\b|\bagent\s+team\b|\bspecialists?\b|ask\s+the\s+(?:researcher|analyst|writer|reviewer)|team\s+memory/i },
   { toolset: 'monitors', pattern: /\bmonitors?\b|watch\s+(?:for|this|that|the)|tell\s+me\s+when|alert\s+me\s+(?:when|if)|keep\s+an\s+eye\s+on/i },
+  // The entity graph. Distinct from `knowledge` above: that one loads
+  // knowledge_search (a flat ranked recall across every store), this one loads
+  // the graph walkers — intel_find / intel_path / intel_neighbourhood /
+  // intel_insights / intel_unlikely_relations. Asking about "the knowledge
+  // graph" matches both, which is intended: you want the recall AND the walk.
+  // Without an entry here the whole toolset was unreachable unless the model
+  // thought to call activate_toolset('intel-graph') off its own bat.
+  { toolset: 'intel-graph', pattern: /knowledge\s*graph|entity\s*graph|\bentities\b|\bdossiers?\b|connect(?:ed|ion)s?\s+(?:between|to)|\brelationships?\b|\bpath\b[^.]*\bbetween\b|\bunlikely\s+(?:relation|connection)/i },
+  { toolset: 'decks', pattern: DECK_PATTERN },
+  { toolset: 'presentations', pattern: DECK_PATTERN },
+  { toolset: 'capabilities', pattern: /what\s+can\s+you\s+do|what\s+are\s+you\s+(?:able|capable)|your\s+capabilit|\bcapabilit(?:y|ies)\b/i },
 ];
 
 export function inferToolsets(message: string): string[] {
