@@ -137,12 +137,81 @@ export async function runOnce(req: RunRequest): Promise<RunResult> {
  * treats it as an ordinary completion.
  */
 export async function runCapturingToolCalls(req: RunRequest): Promise<RunResult> {
+  // Drains the streaming path rather than duplicating it. The tool-capture
+  // logic used to live here and the diffing logic lived in `runStreamed`, so a
+  // tool-bearing request could not stream and a streaming request could not
+  // use tools. One generator now does both; this is the non-streaming face of
+  // it, for callers that want the whole turn in one object.
+  let text = '';
+  let usage: Usage | null = null;
+  let toolCalls: CapturedToolCall[] | undefined;
+
+  for await (const chunk of runStreamed(req)) {
+    text += chunk.delta;
+    if (chunk.done) {
+      usage = chunk.usage ?? null;
+      toolCalls = chunk.toolCalls;
+    }
+  }
+  // Reasoning is intentionally dropped here: this shape has nowhere to put it
+  // that isn't the answer, and its tokens are still counted in usage.
+  return { text, usage, toolCalls };
+}
+
+export interface StreamChunk {
+  /** Newly-produced assistant text since the last chunk. */
+  delta: string;
+  /**
+   * Newly-produced REASONING text since the last chunk.
+   *
+   * On its own field, never merged into `delta`: reasoning is the model
+   * deliberating, not the answer, and interleaving the two produces a reply
+   * that argues with itself. The HTTP layer puts this on `delta.reasoning`,
+   * which is where OpenRouter puts it too, so a caller that already handles
+   * one handles both.
+   */
+  reasoning?: string;
+  /** Present on the final chunk only. */
+  usage?: Usage | null;
+  /** Present on the final chunk when the model dispatched caller tools. */
+  toolCalls?: CapturedToolCall[];
+  done: boolean;
+}
+
+/**
+ * Streaming turn.
+ *
+ * Codex emits ITEM-level events, not tokens: an `agent_message` item is
+ * repeatedly updated with its full text so far. We diff against what we have
+ * already forwarded and emit the difference, which gives the caller normal
+ * incremental deltas. Chunk size is therefore whatever Codex's update cadence
+ * is — coarser than per-token, but the OpenAI-shaped consumer can't tell the
+ * difference.
+ *
+ * `reasoning` items ARE forwarded, but on `chunk.reasoning`, never as content:
+ * interleaved into the assistant message they read as though the model were
+ * answering, when it is only thinking. Their tokens are also counted in
+ * usage.reasoning_output_tokens, as before.
+ *
+ * With `toolServerUrl` set this doubles as the tool-capture path: caller tools
+ * are published over MCP, and the turn stops at the first dispatch (plus a
+ * short grace window for siblings dispatched in the same breath). Text and
+ * reasoning still stream up to that point — previously a tool-bearing request
+ * could not stream at all, which is why every jkai chat turn arrived as one
+ * silent block.
+ */
+export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk> {
+  // Tool-bearing turns end on OUR abort, so the caller's signal is chained
+  // rather than passed straight through.
   const ac = new AbortController();
   const onOuterAbort = () => ac.abort();
   req.signal?.addEventListener('abort', onOuterAbort, { once: true });
 
+  // Per-item high-water mark of text already emitted, keyed by kind+id: a turn
+  // can hold several agent_messages and several reasoning items, and an id is
+  // only unique within its kind.
+  const emitted = new Map<string, number>();
   const seen = new Map<string, CapturedToolCall>();
-  let text = '';
   let usage: Usage | null = null;
   let failure: string | null = null;
   let graceTimer: NodeJS.Timeout | undefined;
@@ -167,89 +236,36 @@ export async function runCapturingToolCalls(req: RunRequest): Promise<RunResult>
         continue;
       }
 
-      if (item?.type === 'agent_message' && typeof item.text === 'string') text = item.text;
+      if ((item?.type === 'agent_message' || item?.type === 'reasoning') && typeof item.text === 'string') {
+        const key = `${item.type}:${String(item.id ?? '')}`;
+        const already = emitted.get(key) ?? 0;
+        if (item.text.length > already) {
+          emitted.set(key, item.text.length);
+          const slice = item.text.slice(already);
+          yield item.type === 'reasoning'
+            ? { delta: '', reasoning: slice, done: false }
+            : { delta: slice, done: false };
+        }
+        continue;
+      }
+
       if (event.type === 'turn.completed') usage = event.usage;
-      if (event.type === 'turn.failed') failure = event.error?.message ?? 'Codex turn failed';
-      if (event.type === 'error') failure = event.message ?? 'Codex stream error';
+      else if (event.type === 'turn.failed') failure = event.error?.message ?? 'Codex turn failed';
+      else if (event.type === 'error') failure = event.message ?? 'Codex stream error';
     }
   } catch (err) {
-    // Our own abort after capturing is the success path, not an error.
+    // Our own abort after capturing a tool call is the success path, not an
+    // error. Anything else is real and must surface.
     if (!seen.size) throw err;
   } finally {
     if (graceTimer) clearTimeout(graceTimer);
     req.signal?.removeEventListener('abort', onOuterAbort);
   }
 
-  if (failure && !seen.size) throw new Error(failure);
-  return { text, usage, toolCalls: seen.size ? [...seen.values()] : undefined };
-}
-
-export interface StreamChunk {
-  /** Newly-produced assistant text since the last chunk. */
-  delta: string;
-  /** Present on the final chunk only. */
-  usage?: Usage | null;
-  done: boolean;
-}
-
-/**
- * Streaming turn.
- *
- * Codex emits ITEM-level events, not tokens: an `agent_message` item is
- * repeatedly updated with its full text so far. We diff against what we have
- * already forwarded and emit the difference, which gives the caller normal
- * incremental deltas. Chunk size is therefore whatever Codex's update cadence
- * is — coarser than per-token, but the OpenAI-shaped consumer can't tell the
- * difference.
- *
- * `reasoning` items are intentionally NOT forwarded as content: they'd be
- * interleaved into the assistant message as though they were the answer. Their
- * tokens still show up in usage.reasoning_output_tokens.
- */
-export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk> {
-  const thread = client().startThread(threadOptions(req));
-  const { events } = await thread.runStreamed(req.prompt, {
-    ...(req.outputSchema ? { outputSchema: req.outputSchema } : {}),
-    ...(req.signal ? { signal: req.signal } : {}),
-  });
-
-  // Per-item high-water mark of text already emitted. Keyed by item id because
-  // a turn can contain more than one agent_message.
-  const emitted = new Map<string, number>();
-  let usage: Usage | null = null;
-  let failure: string | null = null;
-
-  for await (const event of events as AsyncGenerator<ThreadEvent>) {
-    switch (event.type) {
-      case 'item.started':
-      case 'item.updated':
-      case 'item.completed': {
-        const item = event.item;
-        if (item.type !== 'agent_message') break;
-        const seen = emitted.get(item.id) ?? 0;
-        const full = item.text ?? '';
-        if (full.length > seen) {
-          emitted.set(item.id, full.length);
-          yield { delta: full.slice(seen), done: false };
-        }
-        break;
-      }
-      case 'turn.completed':
-        usage = event.usage;
-        break;
-      case 'turn.failed':
-        failure = event.error?.message ?? 'Codex turn failed';
-        break;
-      case 'error':
-        failure = event.message ?? 'Codex stream error';
-        break;
-      default:
-        break;
-    }
-  }
-
   // Surface a mid-stream failure as a thrown error rather than a silent short
-  // reply — a truncated answer that looks complete is the worse outcome.
-  if (failure) throw new Error(failure);
-  yield { delta: '', usage, done: true };
+  // reply — a truncated answer that looks complete is the worse outcome. A
+  // turn that produced tool calls is not a failure even if it also errored on
+  // the way out, since the caller can still run them.
+  if (failure && !seen.size) throw new Error(failure);
+  yield { delta: '', usage, done: true, ...(seen.size ? { toolCalls: [...seen.values()] } : {}) };
 }

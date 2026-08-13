@@ -270,80 +270,53 @@ async function handleChatCompletions(
       });
       const write = (payload: unknown) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
 
-      // A tool-bearing request cannot stream token deltas meaningfully — the
-      // useful output is a tool call that only exists once the model dispatches
-      // it. Run it as a single capture and emit the result as one well-formed
-      // SSE sequence, rather than fake incremental tool_call deltas.
-      if (wantsTools) {
-        const captured = await withSlot(() =>
-          runOnce({ model, prompt, outputSchema, reasoningEffort, signal: controller.signal, toolServerUrl }),
-        );
-        write({
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model,
-          choices: [
-            {
-              index: 0,
-              delta: captured.toolCalls?.length
-                ? { role: 'assistant', tool_calls: toOpenAiToolCalls(captured.toolCalls) }
-                : { role: 'assistant', content: captured.text },
-              finish_reason: null,
-            },
-          ],
-        });
-        write({
-          id,
-          object: 'chat.completion.chunk',
-          created,
-          model,
-          choices: [
-            { index: 0, delta: {}, finish_reason: captured.toolCalls?.length ? 'tool_calls' : 'stop' },
-          ],
-          usage: toOpenAiUsage(captured.usage),
-        });
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
+      // One streaming path whether or not tools are attached. It used to fork:
+      // a tool-bearing request ran as a single blocking capture and arrived as
+      // one block, on the reasoning that the useful output is a tool call which
+      // only exists once dispatched. But most tool-bearing turns answer in
+      // prose without calling anything, and those turns streamed nothing at
+      // all — which is every jkai chat turn, since they all carry tools.
+      const frame = (delta: Record<string, unknown>, finish: string | null, usage?: unknown) => ({
+        id,
+        object: 'chat.completion.chunk',
+        created,
+        model,
+        choices: [{ index: 0, delta, finish_reason: finish }],
+        ...(usage !== undefined ? { usage } : {}),
+      });
 
       await withSlot(async () => {
+        // The role belongs on the first delta only, per the OpenAI stream
+        // contract — SDK consumers assemble on that assumption.
         let first = true;
+        const withRole = (d: Record<string, unknown>) => {
+          const out = first ? { role: 'assistant', ...d } : d;
+          first = false;
+          return out;
+        };
+
         for await (const chunk of runStreamed({
           model,
           prompt,
           outputSchema,
           reasoningEffort,
           signal: controller.signal,
+          toolServerUrl,
         })) {
           if (chunk.done) {
-            write({
-              id,
-              object: 'chat.completion.chunk',
-              created,
-              model,
-              choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-              usage: toOpenAiUsage(chunk.usage ?? null),
-            });
+            const calls = chunk.toolCalls?.length ? toOpenAiToolCalls(chunk.toolCalls) : null;
+            // Tool calls ride their own delta before the terminator, so a
+            // consumer sees them the same way it would from any provider.
+            if (calls) write(frame(withRole({ tool_calls: calls }), null));
+            write(frame({}, calls ? 'tool_calls' : 'stop', toOpenAiUsage(chunk.usage ?? null)));
             break;
           }
-          write({
-            id,
-            object: 'chat.completion.chunk',
-            created,
-            model,
-            choices: [
-              {
-                index: 0,
-                // The role belongs on the first delta only, per the OpenAI
-                // stream contract — SDK consumers assemble on that assumption.
-                delta: first ? { role: 'assistant', content: chunk.delta } : { content: chunk.delta },
-                finish_reason: null,
-              },
-            ],
-          });
-          first = false;
+          // `reasoning` is where OpenRouter puts it, so a caller that already
+          // renders one renders both. Guarded because a reasoning chunk
+          // carries an empty `delta` and an empty content frame reads as the
+          // model having said nothing.
+          if (chunk.reasoning) write(frame(withRole({ reasoning: chunk.reasoning }), null));
+          if (chunk.delta) write(frame(withRole({ content: chunk.delta }), null));
         }
       });
       res.write('data: [DONE]\n\n');
