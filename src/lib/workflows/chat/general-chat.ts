@@ -29,6 +29,7 @@ import type { HistoryMessage } from './conversation-history';
 import { buildKnowledgeContext } from '$lib/jkai/intel/context';
 import { createNote, processNote } from '$lib/jkai/intel/ingest';
 import { summarizeToolResult, summarizeRunningTool } from './tool-summary';
+import { extractReasoningDelta } from './reasoning-delta';
 import { extractPlan, awaitPlanApproval } from './plan-phase';
 import { extractClarify, awaitClarifyAnswers } from './clarify-phase';
 
@@ -909,9 +910,18 @@ export async function generalChat(
     // SSE event, which resets the watchdog idle timer (defended-in-depth
     // against the 120s watchdog kill).
     let firstTokenSeen = false;
+    // Wall-clock of the last reasoning delta. While the model is actually
+    // streaming its reasoning the user can watch it happen in the Reasoning
+    // panel, so the synthetic narration below would just be talking over it.
+    // Left as a timestamp rather than a boolean so narration comes BACK if
+    // reasoning stalls — a model that thinks for 10s then goes quiet for two
+    // minutes still needs the "bear with me" line, and still needs the
+    // watchdog-resetting SSE event that comes with it.
+    let lastReasoningAt = 0;
     const turnStartedAt = Date.now();
     const narrationTicker = options.jobId ? setInterval(() => {
       if (firstTokenSeen) return;
+      if (lastReasoningAt && Date.now() - lastReasoningAt < 20_000) return;
       const elapsedSec = Math.round((Date.now() - turnStartedAt) / 1000);
       let text: string;
       if (elapsedSec < 30) text = `Still thinking — model is reasoning through it (${elapsedSec}s).`;
@@ -940,6 +950,20 @@ export async function generalChat(
           continue;
         }
         const delta = choice.delta ?? {};
+        // Reasoning goes to the collapsible Reasoning panel, never into the
+        // answer bubble. Emitted before the content branch because that is the
+        // order it actually arrives in: reasoning models deliberate first and
+        // answer second, and surfacing it is the whole point — it removes the
+        // dead-air window that the narration ticker above only papered over.
+        // Deliberately not accumulated into `fullContent` or persisted: the
+        // Hermes path treats reasoning as live-only too, so a reload drops it
+        // on both engines rather than one.
+        const reasoningDelta = extractReasoningDelta(delta);
+        if (reasoningDelta) {
+          if (!lastReasoningAt && options.jobId) setJobPhase(options.jobId, 'thinking', 'Reasoning…');
+          lastReasoningAt = Date.now();
+          options.onStreamEvent?.({ type: 'thinking', delta: reasoningDelta });
+        }
         if (typeof delta.content === 'string' && delta.content.length > 0) {
           if (!firstTokenSeen) {
             firstTokenSeen = true;
