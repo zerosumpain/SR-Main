@@ -27,15 +27,76 @@ describe('parseCalendarObject', () => {
   // components array — where ICAL.Component wants the whole jCal triple. It
   // threw on every event, and a bare catch turned each throw into a blank row,
   // so the list returned the right NUMBER of events and never a readable one.
-  it('reads the fields off a real iCalendar body', () => {
-    expect(parseCalendarObject('/e/1.ics', EVENT)).toEqual({
+  it('preserves the existing event fields and includes the original ICS', () => {
+    expect(parseCalendarObject('/e/1.ics', EVENT)).toMatchObject({
       id: '/e/1.ics',
       title: 'Lunch with Sam',
       location: 'The cafe',
       start: '2026-09-23T09:30:00.000Z',
       end: '2026-09-23T10:30:00.000Z',
       description: 'bring the thing',
+      uid: 'u1',
+      dtstamp: '2026-08-11T12:00:00Z',
+      rawIcs: EVENT,
     });
+  });
+
+  it('returns provenance and Apple extension properties from a manually-created event', () => {
+    const manual = ics(
+      'BEGIN:VEVENT',
+      'UID:manual-1',
+      'DTSTAMP:20260811T120000Z',
+      'CREATED:20260801T090000Z',
+      'LAST-MODIFIED:20260810T110000Z',
+      'SEQUENCE:3',
+      'STATUS:CONFIRMED',
+      'DTSTART:20260923T093000Z',
+      'DTEND:20260923T103000Z',
+      'SUMMARY:School run',
+      'X-APPLE-TRAVEL-ADVISORY-BEHAVIOR:AUTOMATIC',
+      'X-APPLE-STRUCTURED-LOCATION;VALUE=URI;X-ADDRESS=School:geo:51.5,-0.1',
+      'END:VEVENT',
+    );
+    expect(parseCalendarObject('/e/manual.ics', manual)).toMatchObject({
+      title: 'School run', uid: 'manual-1', created: '2026-08-01T09:00:00Z', lastModified: '2026-08-10T11:00:00Z',
+      dtstamp: '2026-08-11T12:00:00Z', sequence: '3', status: 'CONFIRMED', rawIcs: manual,
+      rawProperties: [
+        { name: 'X-APPLE-TRAVEL-ADVISORY-BEHAVIOR', value: 'AUTOMATIC' },
+        { name: 'X-APPLE-STRUCTURED-LOCATION', value: 'geo:51.5,-0.1', parameters: { 'X-ADDRESS': 'School' } },
+      ],
+    });
+  });
+
+  it('returns meeting organizer and attendee parameters for an invite', () => {
+    const invite = ics(
+      'BEGIN:VEVENT',
+      'UID:invite-1',
+      'DTSTAMP:20260811T120000Z',
+      'DTSTART:20260923T093000Z',
+      'DTEND:20260923T103000Z',
+      'SUMMARY:Planning',
+      'ORGANIZER;CN=Alex Smith:mailto:alex@example.test',
+      'ATTENDEE;CN=Sam Jones;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:sam@example.test',
+      'ATTENDEE;CN=Pat Lee;PARTSTAT=TENTATIVE;ROLE=OPT-PARTICIPANT:mailto:pat@example.test',
+      'END:VEVENT',
+    );
+    expect(parseCalendarObject('/e/invite.ics', invite)).toMatchObject({
+      organizer: { cn: 'Alex Smith', address: 'mailto:alex@example.test' },
+      attendees: [
+        { cn: 'Sam Jones', address: 'mailto:sam@example.test', partstat: 'ACCEPTED', role: 'REQ-PARTICIPANT' },
+        { cn: 'Pat Lee', address: 'mailto:pat@example.test', partstat: 'TENTATIVE', role: 'OPT-PARTICIPANT' },
+      ],
+    });
+  });
+
+  it('omits unavailable provenance fields from a minimal event', () => {
+    const minimal = ics('BEGIN:VEVENT', 'DTSTART:20260923T093000Z', 'DTEND:20260923T103000Z', 'SUMMARY:Minimal', 'END:VEVENT');
+    const parsed = parseCalendarObject('/e/minimal.ics', minimal);
+    expect(parsed).toMatchObject({ title: 'Minimal', rawIcs: minimal });
+    expect(parsed).not.toHaveProperty('uid');
+    expect(parsed).not.toHaveProperty('organizer');
+    expect(parsed).not.toHaveProperty('attendees');
+    expect(parsed).not.toHaveProperty('rawProperties');
   });
 
   it('finds the event past a VTIMEZONE sibling', () => {
@@ -82,11 +143,14 @@ describe('parseCalendarObject', () => {
     const bad = parseCalendarObject('/e/4.ics', 'this is not iCalendar');
     expect(bad.id).toBe('/e/4.ics');
     expect(bad.title).toBe('');
+    expect(bad.rawIcs).toBe('this is not iCalendar');
     expect(bad.parseError).toBeTruthy();
   });
 
   it('says so when the object holds no event at all', () => {
-    const noEvent = parseCalendarObject('/e/5.ics', ics('BEGIN:VTODO', 'UID:t1', 'END:VTODO'));
+    const data = ics('BEGIN:VTODO', 'UID:t1', 'END:VTODO');
+    const noEvent = parseCalendarObject('/e/5.ics', data);
+    expect(noEvent.rawIcs).toBe(data);
     expect(noEvent.parseError).toMatch(/no VEVENT/);
   });
 });
