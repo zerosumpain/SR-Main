@@ -312,7 +312,7 @@ async function runResearch(sessionId: string): Promise<void> {
     emitStatus(sessionId, 'post_processing');
     emitLog(sessionId, '\u2139\uFE0F', 'Starting post-processing');
     try {
-      await runPostProcessing(sessionId, session);
+      await runPostProcessing(sessionId, session, isTimeUp);
     } catch (err: any) {
       console.error('[deepdive] Post-processing error:', err);
       emitLog(sessionId, '\u26A0\uFE0F', `Post-processing error: ${err.message ?? 'unknown'}`);

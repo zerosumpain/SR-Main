@@ -431,6 +431,14 @@ export const sources = pgTable('source', {
   deskState: text('desk_state').notNull().default('unfiled'), // 'unfiled'|'filed'|'synthesized'|'archived'
   deskCategory: text('desk_category'),
   synthesisRunId: text('synthesis_run_id'), // FK -> synthesis_runs.id (nullable, no DB constraint)
+  /**
+   * The frontier lead that found this source. Null for sources gathered before
+   * the frontier existed, and for red-team sources (phase 3 searches a claim,
+   * not a line of enquiry). This is what lets phase 2 attribute extracted facts
+   * back to the query that produced them — without it a lead cannot be judged,
+   * because gathering and extraction happen in different phases.
+   */
+  leadId: text('lead_id'),
 });
 
 export type Source = typeof sources.$inferSelect;
@@ -491,6 +499,58 @@ export const sourceChunks = pgTable(
 
 export type SourceChunk = typeof sourceChunks.$inferSelect;
 export type NewSourceChunk = typeof sourceChunks.$inferInsert;
+
+/**
+ * The research frontier: one row per line of enquiry.
+ *
+ * This is deliberately three things at once, because they are the same thing:
+ *
+ *  - the WORK QUEUE the engine pulls from (replacing an in-memory FIFO array
+ *    that had no scores and vanished on restart),
+ *  - the GRAPH the user watches — lead nodes, parent edges, and the branches
+ *    that got abandoned,
+ *  - the RESUME RECORD, since a durable queue is what lets a worker that died
+ *    mid-run be picked up instead of stranding the session forever. Seven of
+ *    thirty-one production sessions were stranded in a non-terminal state
+ *    before this existed, the oldest for four months.
+ */
+export const researchLeads = pgTable(
+  'research_lead',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => researchSessions.id, { onDelete: 'cascade' }),
+    /** The search query this lead represents. */
+    query: text('query').notNull(),
+    /** Lead this one was spawned from; null for the seed round. */
+    parentId: text('parent_id'),
+    /** Hops from a seed lead — used to bound how far a branch may run. */
+    depth: integer('depth').notNull().default(0),
+    /** What spawned it: 'seed' | 'entity' | 'gap' | 'hypothesis' | 'followup'. */
+    origin: text('origin').notNull().default('seed'),
+    /** Human-readable provenance, e.g. the entity name that suggested it. */
+    originDetail: text('origin_detail'),
+    /** queued | running | productive | exhausted | drifted | failed | pruned */
+    status: text('status').notNull().default('queued'),
+    /** Why it ended up in that status, in words a person can read. */
+    reason: text('reason'),
+    /** Yield score; orders the frontier. */
+    score: doublePrecision('score'),
+    /** The measured signals behind the verdict, kept for the UI and for tuning. */
+    metrics: jsonb('metrics'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => ({
+    bySession: index('research_lead_session_idx').on(table.sessionId),
+    byStatus: index('research_lead_status_idx').on(table.sessionId, table.status),
+  }),
+);
+
+export type ResearchLead = typeof researchLeads.$inferSelect;
+export type NewResearchLead = typeof researchLeads.$inferInsert;
 
 export const entities = pgTable('entity', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),

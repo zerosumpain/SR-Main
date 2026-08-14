@@ -114,6 +114,12 @@ import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // lenses. Each of those had a batch half nothing was calling — a watchlist that
 // only diffs when you open its endpoint is not a watchlist.
 import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
+// Research runs whose worker was lost. Worker state is process-local and
+// `startResearch` is fire-and-forget, so a deploy landing mid-run used to strand
+// the session permanently — seven of thirty-one production sessions were stuck
+// in a non-terminal status before this existed, the oldest for four months. CI
+// deploys on every merge, so the exposure is continuous.
+import { runResumeSweep } from '$lib/deepdive/resume';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
@@ -122,6 +128,12 @@ if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startConnectorMonitor();
   startModelRouting();
   startIntelEngine();
+  // Deliberately delayed: a redeploy restarts this process while the OLD one
+  // may still be finishing its graceful drain, and adopting a session its
+  // previous owner is still working on would run it twice.
+  setTimeout(() => {
+    runResumeSweep().catch((err) => console.error('[hooks.server] research resume sweep:', err));
+  }, 30_000).unref?.();
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
