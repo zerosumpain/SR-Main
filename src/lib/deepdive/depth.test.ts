@@ -140,6 +140,14 @@ describe('depthPreset', () => {
     expect(DEFAULT_FAST_MODEL).not.toMatch(/glm|reason|thinking/i);
   });
 
+  // Regression: relationship extraction in phase 2 is gated on
+  // `analysisDepth === 'deep'`. Pinning 'standard' gave investigations entities
+  // and no edges at all — the entity network drew as isolated dots and the Word
+  // export embedded an empty graph.
+  it('investigation asks for deep analysis, which is what extracts relationships', () => {
+    expect(depthPreset('investigation').config.analysisDepth).toBe('deep');
+  });
+
   it('produces a SessionConfig the existing phases can consume', () => {
     const p = depthPreset('investigation');
     expect(p.config.maxSources).toBeGreaterThan(0);

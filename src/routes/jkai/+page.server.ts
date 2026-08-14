@@ -33,7 +33,15 @@ async function loadFreshBriefing(): Promise<{ id: string; title: string; markdow
   }
 }
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ url }) => {
+  /**
+   * A question handed over from another surface — "Ask jkai about this" on a
+   * research run. Read on the server so the composer is seeded when the page
+   * first renders; reading it in `onMount` is too late, because the chat
+   * component is constructed before the parent's mount hook runs.
+   */
+  const pendingQuestion = (url.searchParams.get('q') ?? '').trim().slice(0, 2000);
+
   // Load conversations with preview
   const convList = await getConversationList();
 
@@ -76,6 +84,7 @@ export const load: PageServerLoad = async () => {
   ]);
 
   return {
+    pendingQuestion,
     conversations: convList,
     whatsappThread,
     defaultChatModel,

@@ -88,6 +88,19 @@
       createConversation();
     }
 
+    // `q` was consumed by the server load and seeded into the composer. Strip it
+    // for the same reason `new` is stripped: left in place, a refresh would
+    // silently re-seed the box over whatever the user had started typing.
+    if (data.pendingQuestion) {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('q');
+        history.replaceState(history.state, '', url);
+      } catch {
+        // ignore
+      }
+    }
+
     // Drop `new` from the URL once it has been acted on. Left in place, a
     // refresh would create yet another empty conversation every time.
     if (forceNew) {
@@ -318,6 +331,7 @@
     <ChatArea
       conversationId={activeConversationId}
       initialMessages={activeMessages}
+      initialDraft={data.pendingQuestion}
       conversation={activeConversation}
       modelContextLength={activeContextLength}
       modelCapabilities={activeModelCaps}

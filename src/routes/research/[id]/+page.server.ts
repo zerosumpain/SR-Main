@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, sources, entities } from '$lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { researchSessions, sources, entities, relationships, facts } from '$lib/db/schema';
+import { eq, desc, and, count } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
 import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
 import { coerceScope, describeScope } from '$lib/deepdive/scope';
@@ -52,6 +52,70 @@ export const load: PageServerLoad = async ({ params }) => {
         ).map((e) => [e.id, e.name])
       : [],
   );
+  /**
+   * The entity network. Capped at the most-connected 60 nodes: a finished
+   * session averages 253 entities and 151 relationships, and drawing all of
+   * them produces a hairball that answers no question.
+   */
+  const [allEntities, allRels] = await Promise.all([
+    db
+      .select({ id: entities.id, name: entities.name, type: entities.type })
+      .from(entities)
+      .where(eq(entities.sessionId, params.id)),
+    db
+      .select({
+        source: relationships.fromEntityId,
+        target: relationships.toEntityId,
+        kind: relationships.relationshipType,
+        strength: relationships.strength,
+      })
+      .from(relationships)
+      .where(eq(relationships.sessionId, params.id)),
+  ]);
+
+  const degree = new Map<string, number>();
+  for (const r of allRels) {
+    if (r.source) degree.set(r.source, (degree.get(r.source) ?? 0) + 1);
+    if (r.target) degree.set(r.target, (degree.get(r.target) ?? 0) + 1);
+  }
+  const keep = new Set(
+    allEntities
+      .map((e) => ({ id: e.id, d: degree.get(e.id) ?? 0, c: centrality[e.id] ?? 0 }))
+      .sort((a, b) => b.d - a.d || b.c - a.c)
+      .slice(0, 60)
+      .map((e) => e.id),
+  );
+  const graph = {
+    nodes: allEntities
+      .filter((e) => keep.has(e.id))
+      .map((e) => ({
+        id: e.id,
+        name: e.name,
+        type: e.type,
+        degree: degree.get(e.id) ?? 0,
+        weight: centrality[e.id] ?? 0,
+      })),
+    edges: allRels
+      .filter((r) => r.source && r.target && keep.has(r.source) && keep.has(r.target))
+      .map((r) => ({
+        source: r.source as string,
+        target: r.target as string,
+        kind: r.kind,
+        strength: r.strength ?? 0.5,
+      })),
+  };
+
+  const [[factTotal], [counterTotal]] = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(facts)
+      .where(and(eq(facts.sessionId, params.id), eq(facts.isCounterfactual, false))),
+    db
+      .select({ n: count() })
+      .from(facts)
+      .where(and(eq(facts.sessionId, params.id), eq(facts.isCounterfactual, true))),
+  ]);
+
   const topEntities = centralIds
     .map(([id, score]) => ({ name: nameById.get(id) ?? null, score }))
     .filter((e): e is { name: string; score: number } => !!e.name);
@@ -78,6 +142,14 @@ export const load: PageServerLoad = async ({ params }) => {
     // nothing rendering them.
     report: report ?? {},
     topEntities,
+    graph,
+    counts: {
+      sources: srcs.length,
+      entities: allEntities.length,
+      relationships: allRels.length,
+      facts: factTotal?.n ?? 0,
+      counterfactuals: counterTotal?.n ?? 0,
+    },
     tier: { label: preset.label, budgetMs: preset.budgetMs, extractsFacts: preset.extractsFacts },
     sources: srcs,
     leads: leads.map((l) => ({
