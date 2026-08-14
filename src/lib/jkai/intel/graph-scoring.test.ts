@@ -2,7 +2,13 @@
 // evidence excerpt. Both are written on every ingest, so a regression here
 // silently degrades the whole graph rather than throwing.
 import { describe, it, expect } from 'vitest';
-import { weightFor, strengthBucket, findExcerpt, normaliseTypeName } from './graph';
+import {
+  weightFor,
+  strengthBucket,
+  findExcerpt,
+  normaliseTypeName,
+  summaryTokenBudget,
+} from './graph';
 
 describe('weightFor', () => {
   it('rises with corroboration and never falls', () => {
@@ -106,5 +112,35 @@ describe('normaliseTypeName', () => {
 
   it('keeps genuinely different types apart', () => {
     expect(normaliseTypeName('person')).not.toBe(normaliseTypeName('project'));
+  });
+});
+
+describe('summaryTokenBudget', () => {
+  it('gives a full batch room for what a full batch actually costs', () => {
+    // Measured against openai/gpt-oss-120b on production-shaped input: a batch
+    // of 25 spends 2,400–2,900 completion tokens. The old budget was 2,850 —
+    // sitting on the mean of the distribution it was meant to bound — and two
+    // runs in three came back finish_reason=length.
+    expect(summaryTokenBudget(25)).toBeGreaterThan(2900);
+  });
+
+  it('covers the reasoning floor even for a single entity', () => {
+    // Reasoning is 270–420 tokens on this model regardless of batch size, and
+    // it is spent before any content appears. A budget that only scales with
+    // entity count starves a small batch entirely.
+    expect(summaryTokenBudget(1)).toBeGreaterThan(1000);
+  });
+
+  it('scales with the batch', () => {
+    expect(summaryTokenBudget(25)).toBeGreaterThan(summaryTokenBudget(10));
+  });
+
+  it('stays bounded for an implausibly large batch', () => {
+    expect(summaryTokenBudget(100000)).toBe(16000);
+  });
+
+  it('does not go negative on a nonsense input', () => {
+    expect(summaryTokenBudget(0)).toBeGreaterThan(0);
+    expect(summaryTokenBudget(-5)).toBeGreaterThan(0);
   });
 });
