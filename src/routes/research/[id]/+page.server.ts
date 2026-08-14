@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { researchSessions, sources } from '$lib/db/schema';
+import { researchSessions, sources, entities } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
 import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
@@ -31,9 +31,33 @@ export const load: PageServerLoad = async ({ params }) => {
     .limit(50);
 
   const leads = await loadFrontier(params.id);
+
+  /**
+   * `entity_centrality` is keyed by entity ID, not name — rendering it raw put
+   * a row of UUIDs on screen. Resolve to names here rather than in the
+   * component, which has no database.
+   */
+  const centrality = ((session.report as { entity_centrality?: Record<string, number> } | null)
+    ?.entity_centrality ?? {}) as Record<string, number>;
+  const centralIds = Object.entries(centrality)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12);
+  const nameById = new Map(
+    centralIds.length
+      ? (
+          await db
+            .select({ id: entities.id, name: entities.name })
+            .from(entities)
+            .where(eq(entities.sessionId, params.id))
+        ).map((e) => [e.id, e.name])
+      : [],
+  );
+  const topEntities = centralIds
+    .map(([id, score]) => ({ name: nameById.get(id) ?? null, score }))
+    .filter((e): e is { name: string; score: number } => !!e.name);
   const depth = coerceDepth(session.depth);
   const preset = depthPreset(depth);
-  const report = session.report as { executive_summary?: string } | null;
+  const report = (session.report ?? null) as (Record<string, unknown> & { executive_summary?: string }) | null;
 
   return {
     session: {
@@ -47,7 +71,13 @@ export const load: PageServerLoad = async ({ params }) => {
       errorMessage: session.errorMessage,
       createdAt: session.createdAt.toISOString(),
       scopeLabel: describeScope(coerceScope(session.scope)),
+      shareToken: session.shareToken,
     },
+    // The report has carried gaps, hypotheses, contradictions, clusters,
+    // diversity and centrality on every completed investigation for months with
+    // nothing rendering them.
+    report: report ?? {},
+    topEntities,
     tier: { label: preset.label, budgetMs: preset.budgetMs, extractsFacts: preset.extractsFacts },
     sources: srcs,
     leads: leads.map((l) => ({
