@@ -96,19 +96,26 @@ describe('cluster_merging', () => {
 });
 
 describe('cluster_emerging', () => {
+  /**
+   * A long-established cluster, present in every emerging test so the roster
+   * has a history to judge newness against — see `rosterHasHistory`.
+   */
+  const established = cluster({ key: 'old', firstSeenAt: ago(200), size: 30 });
+
   it('reports a substantial cluster that formed recently', () => {
-    const found = run([cluster({ key: 'a', firstSeenAt: ago(5), size: 30 })]);
+    const found = run([established, cluster({ key: 'a', firstSeenAt: ago(5), size: 30 })]);
     expect(found.map((f) => f.kind)).toContain('cluster_emerging');
     expect(found[0].detail).toContain('5 days');
   });
 
   it('ignores one that has been there all along', () => {
-    const found = run([cluster({ key: 'a', firstSeenAt: ago(EMERGING_AGE_DAYS + 5), size: 30 })]);
+    const found = run([established, cluster({ key: 'a', firstSeenAt: ago(EMERGING_AGE_DAYS + 5), size: 30 })]);
     expect(found).toEqual([]);
   });
 
   it('ignores one too small for its appearance to mean anything', () => {
     const found = run([
+      established,
       cluster({ key: 'a', firstSeenAt: ago(3), size: EMERGING_MIN_SIZE - 1 }),
     ]);
     expect(found).toEqual([]);
@@ -118,13 +125,26 @@ describe('cluster_emerging', () => {
     // The same area described more finely is not a new area of interest, and
     // saying "new" about it is technically true and useless.
     const found = run([
+      established,
       cluster({ key: 'a', firstSeenAt: ago(2), size: 30, splitFrom: 'parent' }),
     ]);
     expect(found).toEqual([]);
   });
 
+  it('says nothing at all on the run that first builds the roster', () => {
+    // Every cluster is minted at once, so every one looks new. Reporting that
+    // would fire a hundred findings on the day the feature ships, about
+    // clusters that have been there for months.
+    const found = run([
+      cluster({ key: 'a', firstSeenAt: ago(0), size: 40 }),
+      cluster({ key: 'b', firstSeenAt: ago(0), size: 60 }),
+      cluster({ key: 'c', firstSeenAt: ago(0), size: 30 }),
+    ]);
+    expect(found.filter((f) => f.kind === 'cluster_emerging')).toEqual([]);
+  });
+
   it('prefers the name the user gave it', () => {
-    const found = run([cluster({ key: 'a', firstSeenAt: ago(2), size: 30, name: 'Broads pilot' })]);
+    const found = run([established, cluster({ key: 'a', firstSeenAt: ago(2), size: 30, name: 'Broads pilot' })]);
     expect(found[0].title).toContain('Broads pilot');
   });
 });

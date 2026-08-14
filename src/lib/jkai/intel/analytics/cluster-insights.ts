@@ -88,9 +88,32 @@ function detectMerging(input: ClusterInsightInput): Insight[] {
     .filter((i): i is NonNullable<typeof i> => Boolean(i));
 }
 
+/**
+ * Is the roster old enough for "new" to mean anything?
+ *
+ * On the run that first builds the roster, every cluster is minted at once and
+ * every one of them looks brand new — which on the production graph would fire
+ * a hundred "this is a new area" findings simultaneously, on the day the
+ * feature ships, about clusters that have been there for months. The roster has
+ * to have been watching for longer than the window it reports against before
+ * anything it says about newness is worth reading.
+ *
+ * Judged from the OLDEST cluster: that is when the roster started, regardless of
+ * how much has been minted since.
+ */
+function rosterHasHistory(clusters: StoredCluster[], now: number): boolean {
+  const oldest = clusters.reduce((min, c) => {
+    const at = Date.parse(c.firstSeenAt);
+    return Number.isFinite(at) && at < min ? at : min;
+  }, Number.POSITIVE_INFINITY);
+  if (!Number.isFinite(oldest)) return false;
+  return (now - oldest) / DAY_MS > EMERGING_AGE_DAYS;
+}
+
 /** A neighbourhood that did not exist a few weeks ago. */
 function detectEmerging(input: ClusterInsightInput): Insight[] {
   const now = input.now ?? Date.now();
+  if (!rosterHasHistory(input.clusters, now)) return [];
   return input.clusters
     .filter((c) => c.live && c.size >= EMERGING_MIN_SIZE)
     .filter((c) => {
