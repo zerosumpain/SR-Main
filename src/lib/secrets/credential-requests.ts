@@ -22,6 +22,7 @@
 
 import { classifyBindingChange, type BindingChange, type SecretBinding, type SecretInjection } from './registry';
 import { OAUTH_PROVIDERS } from './oauth-refresh';
+export { customCredentialSavePayload, parseCustomAllowedHosts } from './custom-credential';
 
 export interface CredentialField {
   key: string;
@@ -154,6 +155,8 @@ export function customSpec(input: {
   label?: string;
   suggestedHost?: string;
   suggestedHandle?: string;
+  /** Owner-reviewed custom hosts submitted by the credential form. */
+  allowedHosts?: string[];
 }): CredentialRequestSpec {
   const handle = String(input.suggestedHandle ?? '')
     .toLowerCase()
@@ -168,7 +171,7 @@ export function customSpec(input: {
       handle: handle || 'new-credential',
       source: 'vault',
       injection: { kind: 'bearer' },
-      allowedHosts: [String(input.suggestedHost ?? '').trim()].filter(Boolean),
+      allowedHosts: input.allowedHosts ?? [String(input.suggestedHost ?? '').trim()].filter(Boolean),
       allowedMethods: ['GET', 'HEAD'],
     },
   };

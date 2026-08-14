@@ -13,7 +13,12 @@ import {
   type SecretInjection,
   type SecretSource,
 } from '$lib/secrets/registry';
-import { CREDENTIAL_REQUEST_SPECS, customSpec } from '$lib/secrets/credential-requests';
+import {
+  CREDENTIAL_REQUEST_SPECS,
+  customSpec,
+  parseCustomAllowedHosts,
+  type CredentialRequestSpec,
+} from '$lib/secrets/credential-requests';
 import { bindingAfterConfirmation, consumePendingUpdate } from '$lib/secrets/pending-updates';
 
 // There is deliberately NO endpoint that returns a secret value — not even for
@@ -142,20 +147,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
   }
 
-  // Credential-modal CREATE path. The browser sends only { provider, value }: the
-  // handle, source, injection, hosts, methods and path scoping all come from the
-  // code catalogue, so the page cannot choose where a credential lands or which
-  // host it may be sent to. That is the same reason `request_credential` has no
-  // binding parameters — see $lib/secrets/credential-requests.
+  // Credential-modal CREATE path. Catalogue providers use a fixed binding. A
+  // custom credential is the exception: its owner-reviewed host list comes from
+  // the form, is restricted to bare API hostnames here, then revalidated by the
+  // registry before the encrypted value is written.
   if (typeof body.provider === 'string') {
-    const spec =
-      body.provider === 'custom'
-        ? customSpec({
-            label: typeof body.label === 'string' ? body.label : undefined,
-            suggestedHost: typeof body.suggestedHost === 'string' ? body.suggestedHost : undefined,
-            suggestedHandle: typeof body.suggestedHandle === 'string' ? body.suggestedHandle : undefined,
-          })
-        : CREDENTIAL_REQUEST_SPECS[body.provider];
+    let spec: CredentialRequestSpec | undefined;
+    if (body.provider === 'custom') {
+      if (!Array.isArray(body.allowedHosts)) {
+        return json({ error: 'at least one allowed host is required for a custom credential' }, { status: 400 });
+      }
+      try {
+        spec = customSpec({
+          label: typeof body.label === 'string' ? body.label : undefined,
+          suggestedHandle: typeof body.suggestedHandle === 'string' ? body.suggestedHandle : undefined,
+          allowedHosts: parseCustomAllowedHosts(body.allowedHosts.map((host) => String(host)).join(',')),
+        });
+      } catch (err) {
+        return json({ error: err instanceof Error ? err.message : 'invalid allowed hosts' }, { status: 400 });
+      }
+    } else {
+      spec = CREDENTIAL_REQUEST_SPECS[body.provider];
+    }
     if (!spec) return json({ error: `unknown provider "${body.provider}"` }, { status: 400 });
     if (typeof body.value !== 'string' || !body.value.trim()) {
       return json({ error: 'value is required' }, { status: 400 });

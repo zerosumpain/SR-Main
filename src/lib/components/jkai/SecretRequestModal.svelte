@@ -13,6 +13,7 @@
   // and is rendered as QUOTED TEXT, never as instruction.
 
   import { onMount } from 'svelte';
+  import { customCredentialSavePayload, parseCustomAllowedHosts } from '$lib/secrets/custom-credential';
   import type { SecretRequestEvent, SecretUpdateEvent } from '$lib/secrets/credential-requests';
 
   let {
@@ -25,6 +26,8 @@
   } = $props();
 
   let values = $state<Record<string, string>>({});
+  /** Owner-reviewable custom binding; known providers keep their catalogue binding. */
+  let customAllowedHosts = $state('');
   /** What the owner has typed to confirm each newly-reachable host. */
   let typedHosts = $state<Record<string, string>>({});
   let saving = $state(false);
@@ -39,6 +42,16 @@
   const proposed = $derived(upd?.proposed ?? null);
   const change = $derived(upd?.change ?? null);
   const mustType = $derived(upd?.requiresTypedHosts ?? []);
+  const isCustomCreate = $derived(!upd && (request as SecretRequestEvent).provider === 'custom');
+  const customHostError = $derived.by(() => {
+    if (!isCustomCreate) return null;
+    try {
+      parseCustomAllowedHosts(customAllowedHosts);
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Enter at least one allowed API hostname.';
+    }
+  });
 
   const normHost = (h: string) => h.trim().toLowerCase().replace(/\.+$/, '');
 
@@ -63,10 +76,12 @@
       const any = request.fields.some((f) => String(values[f.key] ?? '').trim());
       return any ? [] : ['at least one field'];
     }
-    return request.fields.filter((f) => f.required && !String(values[f.key] ?? '').trim()).map((f) => f.label);
+    const required = request.fields.filter((f) => f.required && !String(values[f.key] ?? '').trim()).map((f) => f.label);
+    return isCustomCreate && customHostError ? [...required, 'a valid allowed host'] : required;
   });
 
   onMount(() => {
+    if (isCustomCreate) customAllowedHosts = (request as SecretRequestEvent).destination.hosts.join(', ');
     panel?.querySelector<HTMLInputElement>('input, textarea')?.focus();
   });
 
@@ -108,7 +123,16 @@
             ),
           )
         : String(values[request.fields[0]?.key] ?? '').trim();
-    return { provider: (request as SecretRequestEvent).provider, value };
+    const create = request as SecretRequestEvent;
+    if (create.provider === 'custom') {
+      return customCredentialSavePayload({
+        value,
+        label: create.title,
+        handle: create.destination.handle,
+        allowedHosts: customAllowedHosts,
+      });
+    }
+    return { provider: create.provider, value };
   }
 
   async function save() {
@@ -324,6 +348,22 @@
         <p class="sr-warn">
           jkai suggested this destination. Check the host matches the vendor — this is where your key will be sent.
         </p>
+        <label class="sr-field">
+          <span class="sr-label">Allowed hosts<span class="sr-req">*</span></span>
+          <input
+            class="nm-text-input"
+            type="text"
+            bind:value={customAllowedHosts}
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            aria-describedby="custom-host-help"
+          />
+          <span id="custom-host-help" class="sr-help">
+            Required. Enter one or more bare API hostnames, separated by commas (for example, realtime.nationalrail.co.uk).
+          </span>
+          {#if customHostError}<span class="sr-error">{customHostError}</span>{/if}
+        </label>
       {/if}
     {/if}
 
@@ -341,6 +381,7 @@
             ></textarea>
           {:else}
             <input
+              class="nm-text-input"
               type={f.type === 'password' ? 'password' : 'text'}
               bind:value={values[f.key]}
               placeholder={f.placeholder ?? ''}
@@ -387,6 +428,8 @@
 </div>
 
 <style>
+  @import '../../../../design-system/tokens.css';
+
   .sr-backdrop {
     position: fixed;
     inset: 0;
@@ -489,7 +532,7 @@
     font-size: var(--fs-body-sm);
     color: var(--text-primary);
     background: var(--bg);
-    border-left: 2px solid var(--status-error, #c0392b);
+    border-left: 2px solid var(--status-error);
   }
   .sr-fields {
     display: flex;
@@ -508,7 +551,7 @@
     text-transform: uppercase;
   }
   .sr-req {
-    color: var(--status-error, #c0392b);
+    color: var(--status-error);
   }
   .sr-field input,
   .sr-field textarea {
@@ -536,7 +579,7 @@
   .sr-error {
     margin: 0;
     font-size: var(--fs-body-sm);
-    color: var(--status-error, #c0392b);
+    color: var(--status-error);
   }
   .sr-foot {
     display: flex;

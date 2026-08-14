@@ -19,7 +19,10 @@ describe('scraper crypto', () => {
   it('rejects tampered ciphertext', () => {
     const enc = encryptCredential({ a: 1 });
     const parts = enc.split(':');
-    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + '00'].join(':');
+    const last = parts[2].slice(-2);
+    const flipped = last.toLowerCase() === '00' ? '01' : '00';
+    const tampered = [parts[0], parts[1], parts[2].slice(0, -2) + flipped].join(':');
+    expect(tampered).not.toBe(enc);
     expect(() => decryptCredential(tampered)).toThrow();
   });
 });
