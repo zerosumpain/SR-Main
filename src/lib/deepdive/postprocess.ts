@@ -130,7 +130,43 @@ export async function runPostProcessing(
     facts: factIds,
   }));
 
-  // 3.5. Identity disambiguation
+  /**
+   * The executive summary — deliberately produced BEFORE anything skippable.
+   *
+   * It used to sit at step 5, behind identity disambiguation and clustering.
+   * Once post-processing became budget-aware, a tight allowance skipped
+   * everything from step 3.5 onward and the run finished with an EMPTY summary
+   * — losing the single most valuable output while keeping the enrichment. It
+   * depends only on the fact ranking and centrality computed above, so it can
+   * run first and does.
+   */
+  // 4. Executive summary
+  emitLog(sessionId, '\u2139\uFE0F', 'Writing executive summary...');
+
+  const topFacts = factScores.slice(0, 20).map((f) => f.content);
+  const topEntities = allEntities
+    .sort((a, b) => (centralityScores[b.id] ?? 0) - (centralityScores[a.id] ?? 0))
+    .slice(0, 10)
+    .map((e) => `${e.name} (${e.type})`);
+
+  // Count counterfactuals
+  const counterfactuals = await db
+    .select()
+    .from(facts)
+    .where(and(eq(facts.sessionId, sessionId), eq(facts.isCounterfactual, true)));
+
+  try {
+    report.executive_summary = await chatCompletion(
+      systemPrompt + '\n\nCRITICAL: You must ONLY reference information that appears in the facts provided below. Do NOT add any claims, context, background knowledge, or speculation that is not directly stated in these facts. Every sentence in your summary must be traceable to one or more of the listed facts.',
+      `Write a summary of the research findings in **markdown**: a short opening paragraph, then '##' sections with the substance, bold for the figures that matter, and bullets where a list genuinely reads better than prose. No title heading — the page supplies one. ONLY use information from the facts listed below — do not add anything else.\n\nFacts:\n${topFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nKey entities mentioned: ${topEntities.join(', ')}\n\nCounterfactuals found: ${counterfactuals.length}\n\nResearch goals: ${goals.join('; ')}`,
+      { maxTokens: 2048 },
+    );
+  } catch (err) {
+    console.error('[deepdive] Executive summary failed:', err);
+    report.executive_summary = 'Executive summary generation failed.';
+  }
+
+  // 5. Identity disambiguation
   if (isTimeUp()) {
     emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping identity disambiguation and what follows.');
     await finalise();
@@ -179,7 +215,7 @@ export async function runPostProcessing(
     }
   }
 
-  // 4. Topic clustering
+  // 6. Topic clustering
   if (isTimeUp()) {
     emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping topic clustering and what follows.');
     await finalise();
@@ -225,33 +261,7 @@ export async function runPostProcessing(
     }
   }
 
-  // 5. Executive summary
-  emitLog(sessionId, '\u2139\uFE0F', 'Writing executive summary...');
-
-  const topFacts = factScores.slice(0, 20).map((f) => f.content);
-  const topEntities = allEntities
-    .sort((a, b) => (centralityScores[b.id] ?? 0) - (centralityScores[a.id] ?? 0))
-    .slice(0, 10)
-    .map((e) => `${e.name} (${e.type})`);
-
-  // Count counterfactuals
-  const counterfactuals = await db
-    .select()
-    .from(facts)
-    .where(and(eq(facts.sessionId, sessionId), eq(facts.isCounterfactual, true)));
-
-  try {
-    report.executive_summary = await chatCompletion(
-      systemPrompt + '\n\nCRITICAL: You must ONLY reference information that appears in the facts provided below. Do NOT add any claims, context, background knowledge, or speculation that is not directly stated in these facts. Every sentence in your summary must be traceable to one or more of the listed facts.',
-      `Write a 3-5 paragraph summary of the research findings. ONLY use information from the facts listed below — do not add anything else.\n\nFacts:\n${topFacts.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nKey entities mentioned: ${topEntities.join(', ')}\n\nCounterfactuals found: ${counterfactuals.length}\n\nResearch goals: ${goals.join('; ')}`,
-      { maxTokens: 2048 },
-    );
-  } catch (err) {
-    console.error('[deepdive] Executive summary failed:', err);
-    report.executive_summary = 'Executive summary generation failed.';
-  }
-
-  // 6. Chronological fact ordering
+  // 7. Chronological fact ordering
   if (isTimeUp()) {
     emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping chronological ordering and what follows.');
     await finalise();
@@ -276,7 +286,7 @@ export async function runPostProcessing(
     }
   }
 
-  // 7. Knowledge Gap Analysis
+  // 8. Knowledge Gap Analysis
   if (isTimeUp()) {
     emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping knowledge gap analysis and what follows.');
     await finalise();

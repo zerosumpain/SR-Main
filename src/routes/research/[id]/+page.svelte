@@ -4,6 +4,9 @@
   import FrontierGraph, { type FrontierLead } from '$lib/components/research/FrontierGraph.svelte';
   import ReportPanels, { type ReportView } from '$lib/components/research/ReportPanels.svelte';
   import ActionsRow from '$lib/components/research/ActionsRow.svelte';
+  import Markdown from '$lib/components/research/Markdown.svelte';
+  import StatTiles, { type Stat } from '$lib/components/research/StatTiles.svelte';
+  import EntityGraph from '$lib/components/research/EntityGraph.svelte';
   import { goto } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
@@ -31,6 +34,38 @@
   let elapsedMs = $state(0);
   const running = $derived(!['complete', 'failed', 'draft'].includes(status) || status === 'draft');
   const finished = $derived(status === 'complete' || status === 'failed');
+
+  /**
+   * Headline numbers. Single magnitudes, so tiles rather than a chart — a bar
+   * chart of "sources / facts / entities" would encode nothing the digits do
+   * not. `tone` is reserved for genuine states and always ships with its label.
+   */
+  const tiles = $derived.by((): Stat[] => {
+    const c = data.counts;
+    const div = (data.report as { source_diversity?: { total_domains?: number; concentration_index?: number } })
+      ?.source_diversity;
+    const out: Stat[] = [
+      { label: 'Sources', value: c.sources, note: div?.total_domains ? `${div.total_domains} domains` : null },
+    ];
+    if (data.tier.extractsFacts) {
+      out.push({ label: 'Facts', value: c.facts });
+      out.push({ label: 'Entities', value: c.entities, note: c.relationships ? `${c.relationships} links` : null });
+    }
+    if (c.counterfactuals > 0) {
+      out.push({ label: 'Challenged', value: c.counterfactuals, note: 'claims with counter-evidence', tone: 'warn' });
+    }
+    out.push({ label: 'Took', value: fmtMs(durationMs) });
+    if (div?.concentration_index != null) {
+      const narrow = div.concentration_index >= 0.5;
+      out.push({
+        label: 'Source spread',
+        value: narrow ? 'Narrow' : div.concentration_index >= 0.3 ? 'Moderate' : 'Broad',
+        note: narrow ? 'most sources are one kind' : null,
+        tone: narrow ? 'warn' : undefined,
+      });
+    }
+    return out;
+  });
 
   function fmtMs(ms: number | null): string {
     if (ms == null) return '—';
@@ -202,13 +237,27 @@
 
   <section class="answer">
     {#if summary}
-      <div class="prose">{summary}</div>
+      <Markdown text={summary} />
     {:else if status === 'failed'}
       <p class="note">No answer was produced.</p>
     {:else}
       <p class="note">Working…</p>
     {/if}
   </section>
+
+  {#if finished}
+    <StatTiles stats={tiles} />
+  {/if}
+
+  {#if finished && data.graph.nodes.length > 1}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Entity network</span>
+        <span class="hint">{data.graph.nodes.length} shown of {data.counts.entities} · scroll to zoom</span>
+      </div>
+      <EntityGraph nodes={data.graph.nodes} edges={data.graph.edges} />
+    </section>
+  {/if}
 
   {#if finished && summary}
     <ReportPanels
@@ -221,6 +270,7 @@
       sessionId={data.session.id}
       depth={data.session.depth}
       hasReport={!!summary}
+      topic={data.session.topic}
       shareToken={data.session.shareToken}
     />
   {/if}

@@ -230,7 +230,12 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
         config: {
           maxSources: 40,
           diversityThreshold: 'medium',
-          analysisDepth: 'standard',
+          // MUST be 'deep'. Relationship extraction in phase 2 is gated on this
+          // exact value, so 'standard' produced investigations with entities and
+          // ZERO edges — an entity network of isolated dots, and an empty graph
+          // in the Word export. It is the full-engine tier; this is what makes
+          // it full.
+          analysisDepth: 'deep',
           redTeamAggression: 'standard',
           maxFactsBeforePhase3: 200,
         },

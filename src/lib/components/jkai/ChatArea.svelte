@@ -47,6 +47,12 @@
   let {
     conversationId,
     initialMessages = [],
+    /**
+     * Text to seed the composer with on first mount. Used by "Ask jkai about
+     * this" links, which previously carried a query param nothing read — the
+     * user landed on an empty box and had to retype the question.
+     */
+    initialDraft = '',
     conversation = null,
     modelContextLength = null,
     defaultChatModelId,
@@ -63,6 +69,7 @@
     graphRailOpen = true,
   }: {
     conversationId: string | null;
+    initialDraft?: string;
     initialMessages?: Array<{
       id: string;
       role: string;
@@ -208,7 +215,9 @@
   }
 
   let messages = $state<Message[]>([]);
-  let input = $state('');
+  // Seeded once at construction, not in an effect: an effect that writes what
+  // it reads would fight the user as soon as they edited the box.
+  let input = $state(initialDraft ?? '');
   let loading = $state(false);
   let currentJobId = $state<string | null>(null);
   // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in

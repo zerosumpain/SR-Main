@@ -238,18 +238,44 @@ async function runResearch(sessionId: string): Promise<void> {
       return;
     }
 
+    /**
+     * Per-phase deadlines, not one shared clock.
+     *
+     * A single whole-run deadline lets phase 1 spend everything: a budgeted
+     * investigation measured 18 sources gathered and then ZERO facts, because
+     * phase 2 found the budget already gone and broke on its first batch. That
+     * is the same starvation the fast tiers reserve synthesis time to avoid,
+     * and the phase chain needs the equivalent.
+     *
+     * The split is deliberately extraction-heavy: sources nobody analysed are
+     * worth less than fewer sources turned into facts, entities and edges.
+     */
+    const PHASE_SHARE: Record<string, number> = { phase1: 0.3, phase2: 0.4, phase3: 0.15, post: 0.15 };
+    let phaseDeadline = Infinity;
+
+    function startPhase(name: string): void {
+      if (budgetMs == null) {
+        phaseDeadline = Infinity;
+        return;
+      }
+      // Share of the ORIGINAL budget, floored at what is actually left, so an
+      // overrunning phase cannot hand its debt to the next one.
+      phaseDeadline = Date.now() + Math.min(budget.remaining(), budgetMs * (PHASE_SHARE[name] ?? 0.25));
+    }
+
     function isTimeUp(): boolean {
       if (shouldStop(sessionId)) return true;
       if (shouldSkipPhase(sessionId)) return true;
       // `beat` is throttled, so calling it on every check is cheap and keeps
       // the heartbeat alive through long phases without extra plumbing.
       beat(sessionId);
-      return budget.expired();
+      return budget.expired() || Date.now() > phaseDeadline;
     }
 
     // Phase 1
     if (!shouldStop(sessionId)) {
       skipSignals.delete(sessionId);
+      startPhase('phase1');
       await updateSessionStatus(sessionId, 'phase1');
       emitStatus(sessionId, 'phase1');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 1: Lead Generation');
@@ -271,6 +297,7 @@ async function runResearch(sessionId: string): Promise<void> {
     // Phase 2
     if (!shouldStop(sessionId)) {
       skipSignals.delete(sessionId);
+      startPhase('phase2');
       await updateSessionStatus(sessionId, 'phase2');
       emitStatus(sessionId, 'phase2');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 2: Deep Research');
@@ -292,6 +319,7 @@ async function runResearch(sessionId: string): Promise<void> {
     // Phase 3
     if (!shouldStop(sessionId)) {
       skipSignals.delete(sessionId);
+      startPhase('phase3');
       await updateSessionStatus(sessionId, 'phase3');
       emitStatus(sessionId, 'phase3');
       emitLog(sessionId, '\u{1F50D}', 'Starting Phase 3: Red Teaming');
@@ -308,6 +336,7 @@ async function runResearch(sessionId: string): Promise<void> {
     }
 
     // Post-processing
+    startPhase('post');
     await updateSessionStatus(sessionId, 'post_processing');
     emitStatus(sessionId, 'post_processing');
     emitLog(sessionId, '\u2139\uFE0F', 'Starting post-processing');
@@ -318,9 +347,11 @@ async function runResearch(sessionId: string): Promise<void> {
       emitLog(sessionId, '\u26A0\uFE0F', `Post-processing error: ${err.message ?? 'unknown'}`);
     }
 
-    // Cross-session entity linking
+    // Cross-session entity linking. Skipped when the budget is spent — it is
+    // useful housekeeping, not part of the answer, and it used to run
+    // unconditionally after a run had already overshot.
     try {
-      await linkSessionEntitiesToGlobal(sessionId);
+      if (!budget.expired()) await linkSessionEntitiesToGlobal(sessionId);
     } catch (err: any) {
       console.error('[deepdive] Cross-session linking error:', err);
       emitLog(sessionId, '\u26A0\uFE0F', `Cross-session linking error: ${err.message ?? 'unknown'}`);
@@ -332,7 +363,7 @@ async function runResearch(sessionId: string): Promise<void> {
     // of jkai reasons over. One LLM call per completed session, on the report
     // digest rather than every fact.
     try {
-      await extractResearchIntoIntel(sessionId);
+      if (!budget.expired()) await extractResearchIntoIntel(sessionId);
     } catch (err: any) {
       console.error('[deepdive] Intel extraction error:', err);
     }

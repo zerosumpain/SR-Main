@@ -14,9 +14,11 @@ import {
   WidthType,
   BorderStyle,
   FootnoteReferenceRun,
+  ImageRun,
 } from 'docx';
 import { db } from '$lib/db';
-import { researchSessions, facts, entities, sources, entityMentions, narrativeItems } from '$lib/db/schema';
+import { researchSessions, facts, entities, sources, entityMentions, narrativeItems, relationships } from '$lib/db/schema';
+import { renderGraphSvg, describeGraph, fallbackPng } from './graph-image';
 import { eq, and, sql, asc } from 'drizzle-orm';
 import type { ResearchReport } from './types';
 
@@ -178,6 +180,81 @@ export async function generateReport(sessionId: string): Promise<{ buffer: Buffe
       spacing: { before: 400, after: 200 },
     }),
   );
+
+  // The entity network, drawn. The report could describe entities in prose but
+  // never showed their shape, which is the one thing a graph is for.
+  const rels = await db
+    .select({
+      source: relationships.fromEntityId,
+      target: relationships.toEntityId,
+    })
+    .from(relationships)
+    .where(eq(relationships.sessionId, sessionId));
+
+  const degree = new Map<string, number>();
+  for (const r of rels) {
+    if (r.source) degree.set(r.source, (degree.get(r.source) ?? 0) + 1);
+    if (r.target) degree.set(r.target, (degree.get(r.target) ?? 0) + 1);
+  }
+  const graphNodes = allEntities.map((e) => ({
+    id: e.id,
+    name: e.name,
+    degree: degree.get(e.id) ?? 0,
+    weight: entityCentrality[e.id] ?? 0,
+  }));
+  const graphEdges = rels
+    .filter((r): r is { source: string; target: string } => !!r.source && !!r.target)
+    .map((r) => ({ source: r.source, target: r.target }));
+
+  const svg = graphNodes.length > 1 ? renderGraphSvg(graphNodes, graphEdges) : '';
+  if (svg) {
+    sections.push(
+      new Paragraph({
+        children: [
+          new ImageRun({
+            type: 'svg',
+            data: Buffer.from(svg, 'utf-8'),
+            transformation: { width: 600, height: 373 },
+            // Required slot. Word 2016+ renders the SVG; the text rendering
+            // below is what actually serves a viewer stuck on this fallback.
+            fallback: { type: 'png', data: fallbackPng() },
+          }),
+        ],
+        spacing: { after: 120 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Entity network — ${graphNodes.length} entities, ${graphEdges.length} relationships. Circle size is how many links an entity has; shading is its centrality.`,
+            size: 18,
+            color: '666666',
+            italics: true,
+          }),
+        ],
+        spacing: { after: 240 },
+      }),
+    );
+
+    // Same structure in text, so a reader whose viewer cannot show the SVG is
+    // not left with a grey box.
+    const described = describeGraph(graphNodes, graphEdges);
+    if (described.length) {
+      sections.push(
+        new Paragraph({
+          children: [new TextRun({ text: 'Network, in words', bold: true, size: 22 })],
+          spacing: { before: 120, after: 100 },
+        }),
+        ...described.map(
+          (line) =>
+            new Paragraph({
+              children: [new TextRun({ text: line, size: 20 })],
+              bullet: { level: 0 },
+              spacing: { after: 40 },
+            }),
+        ),
+      );
+    }
+  }
 
   const sortedEntities = [...allEntities].sort(
     (a, b) => (entityCentrality[b.id] ?? 0) - (entityCentrality[a.id] ?? 0),
