@@ -51,11 +51,32 @@ export const SEED_DOMAIN_RULES: ReadonlyArray<{ domain: string; kind: EmailKind 
   { domain: 'tldrnewsletter.com', kind: 'bulk' },
   { domain: 'pmg.academy', kind: 'bulk' },
   { domain: 'thelostestate.com', kind: 'bulk' },
+  // Retail and travel marketing sent from ESP subdomains the heuristic cannot
+  // generalise about. `hb.`, `eg.`, `mp1.`, `01.`, `selections.`, `uk-news.` are
+  // all sending platforms, and that is a fact about each brand's mail provider
+  // rather than a pattern — enumerating them by hand is the only honest way.
+  { domain: 'hb.huckberry.com', kind: 'bulk' },
+  { domain: 'eg.vrbo.com', kind: 'bulk' },
+  { domain: 'eg.hotels.com', kind: 'bulk' },
+  { domain: 'mp1.tripadvisor.com', kind: 'bulk' },
+  { domain: 'selections.aliexpress.com', kind: 'bulk' },
+  { domain: 'microsoftstore.microsoft.com', kind: 'bulk' },
+  { domain: 'uk-news.adidas.com', kind: 'bulk' },
+  { domain: '01.halfords.com', kind: 'bulk' },
+  { domain: 'comms.mandmdirect.com', kind: 'bulk' },
+  { domain: 'meet.borrowmydoggy.com', kind: 'bulk' },
+  { domain: 'info.carfinance247.co.uk', kind: 'bulk' },
+  { domain: 'info.national-lottery.co.uk', kind: 'bulk' },
+  { domain: 'kendalmint.co.uk', kind: 'bulk' },
+  { domain: 'emmabridgewater.co.uk', kind: 'bulk' },
+  { domain: 'oswinhyde.com', kind: 'bulk' },
   // Transactional post from services in use — real, but not correspondence.
   { domain: 'amazon.co.uk', kind: 'notification' },
   { domain: 'uber.com', kind: 'notification' },
   { domain: 'classdojo.com', kind: 'notification' },
   { domain: 'googlemail.com', kind: 'notification' },
+  { domain: 'stripe.com', kind: 'notification' },
+  { domain: 'openrouter.ai', kind: 'notification' },
 ];
 
 export async function ensureEmailDomainRules(): Promise<void> {

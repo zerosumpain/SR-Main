@@ -67,9 +67,19 @@
   const filesInPlay = $derived(!activeSources.length || activeSources.includes('file'));
   const total = $derived(sources.reduce((sum, s) => sum + s.count, 0));
 
-  /** Plain words for the three kinds — the stored values are slugs. */
+  /**
+   * Plain words for the three kinds — the stored values are slugs.
+   *
+   * `correspondence` is deliberately NOT called "from a person". Two of the
+   * three kinds are positively identified; the third is what is left over once
+   * they have been taken out, and on the live mailbox it is still 39% of the
+   * post with a long tail of unrecognised senders in it. Calling that "people"
+   * would be the filter asserting something it has not established — and a
+   * filter that overclaims is worse than one that admits its edge, because you
+   * stop checking it.
+   */
   const KIND_LABELS: Record<string, string> = {
-    correspondence: 'from a person',
+    correspondence: 'everything else',
     notification: 'service notices',
     bulk: 'marketing and newsletters',
   };
