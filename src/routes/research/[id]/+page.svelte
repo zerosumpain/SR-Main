@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { PageData } from './$types';
+  import FrontierGraph, { type FrontierLead } from '$lib/components/research/FrontierGraph.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -13,6 +14,7 @@
   let sources = $state<Src[]>(data.sources);
   let stats = $state({ sourcesFound: 0, factsExtracted: 0, entitiesIdentified: 0, counterfactualsRaised: 0 });
   let logLines = $state<string[]>([]);
+  let leads = $state<FrontierLead[]>(data.leads as FrontierLead[]);
 
   let showReasoning = $state(false);
   let reasoning = $state('');
@@ -70,6 +72,17 @@
         case 'reasoning':
           if (typeof msg.data?.token === 'string') reasoning += msg.data.token;
           break;
+        case 'lead': {
+          // Merge by id — a lead is emitted repeatedly as it moves through
+          // queued → running → its verdict.
+          const l = msg.data as unknown as FrontierLead;
+          if (l?.id) {
+            const i = leads.findIndex((x) => x.id === l.id);
+            if (i === -1) leads = [...leads, l];
+            else leads = [...leads.slice(0, i), l, ...leads.slice(i + 1)];
+          }
+          break;
+        }
         case 'synthesis':
           if (typeof msg.data?.executive_summary === 'string') summary = msg.data.executive_summary;
           break;
@@ -151,6 +164,12 @@
     </section>
   {/if}
 
+  {#if leads.length}
+    <section class="frontier-panel">
+      <FrontierGraph {leads} />
+    </section>
+  {/if}
+
   <section class="answer">
     {#if summary}
       <div class="prose">{summary}</div>
@@ -210,6 +229,7 @@
   .reasoning pre { margin: 0.4rem 0 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); max-height: 300px; overflow-y: auto; }
 
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
+  .frontier-panel { margin-bottom: 1.5rem; }
   .answer { margin-bottom: 1.75rem; }
   .prose { white-space: pre-wrap; line-height: 1.65; font-size: 1rem; }
   .note { color: var(--text-muted); font-style: italic; }

@@ -18,6 +18,13 @@ import type { ResearchReport, IdentityCluster, KnowledgeGap, Hypothesis, Contrad
 export async function runPostProcessing(
   sessionId: string,
   session: ResearchSession,
+  /**
+   * Out-of-time check. Post-processing used to have NO time awareness at all —
+   * it ran seven LLM steps unconditionally, which is how a session with a
+   * seven-minute budget took 877 seconds. The steps below degrade in order of
+   * least value first: the report keeps whatever was finished.
+   */
+  isTimeUp: () => boolean = () => false,
 ): Promise<void> {
   const goals = (session.goals ?? []) as string[];
   const systemPrompt = `You are a research summariser. Topic: "${session.topic}"\nGoals: ${goals.join('; ')}`;
@@ -28,6 +35,18 @@ export async function runPostProcessing(
     clusters: [],
     executive_summary: '',
     entity_centrality: {},
+  };
+
+  /**
+   * Persist whatever has been computed and stop.
+   *
+   * Every step below is optional enrichment on top of a report that is already
+   * useful, so running out of time must leave the finished parts intact rather
+   * than discarding the lot.
+   */
+  const finalise = async (): Promise<void> => {
+    await db.update(researchSessions).set({ report }).where(eq(researchSessions.id, sessionId));
+    emitLog(sessionId, '\u2139\uFE0F', 'Post-processing stopped early — report saved with what was finished.');
   };
 
   // 1. Fact ranking
@@ -112,6 +131,11 @@ export async function runPostProcessing(
   }));
 
   // 3.5. Identity disambiguation
+  if (isTimeUp()) {
+    emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping identity disambiguation and what follows.');
+    await finalise();
+    return;
+  }
   emitLog(sessionId, '\u2139\uFE0F', 'Checking for identity disambiguation...');
 
   const personEntities = allEntities.filter((e) => e.type === 'person');
@@ -156,6 +180,11 @@ export async function runPostProcessing(
   }
 
   // 4. Topic clustering
+  if (isTimeUp()) {
+    emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping topic clustering and what follows.');
+    await finalise();
+    return;
+  }
   emitLog(sessionId, '\u2139\uFE0F', 'Clustering topics...');
 
   if (allFacts.length > 0) {
@@ -223,6 +252,11 @@ export async function runPostProcessing(
   }
 
   // 6. Chronological fact ordering
+  if (isTimeUp()) {
+    emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping chronological ordering and what follows.');
+    await finalise();
+    return;
+  }
   emitLog(sessionId, '\u2139\uFE0F', 'Ordering facts chronologically...');
 
   const topFactsForOrdering = factScores.slice(0, 20);
@@ -243,6 +277,11 @@ export async function runPostProcessing(
   }
 
   // 7. Knowledge Gap Analysis
+  if (isTimeUp()) {
+    emitLog(sessionId, '\u23F1\uFE0F', 'Out of time — skipping knowledge gap analysis and what follows.');
+    await finalise();
+    return;
+  }
   emitLog(sessionId, '\u2139\uFE0F', 'Analysing knowledge gaps...');
 
   try {

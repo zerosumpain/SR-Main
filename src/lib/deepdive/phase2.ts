@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { sources, facts, entities, entityMentions, relationships } from '$lib/db/schema';
+import { sources, facts, entities, entityMentions, relationships, researchLeads } from '$lib/db/schema';
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, generateEmbedding } from './ai';
@@ -13,6 +13,8 @@ import { emitArtefact } from './desk-events';
 import { loadKeys } from './keys';
 import { pLimit, getLlmConcurrencyLimit } from './concurrency';
 import type { SessionConfig, SessionStats } from './types';
+import { completeLead, measureAlignment, countConnectedEntities } from './frontier';
+import { generateEmbedding as embedText } from './ai';
 
 function normalise(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -102,6 +104,39 @@ export async function runPhase2(
   let recentNewFacts = 0;
   let sourcesProcessed = 0;
 
+  /**
+   * Per-lead tallies. Phase 1 gathered the sources but could not judge the lead
+   * that found them — novelty, alignment and connectivity are properties of
+   * facts, which only exist once this phase has run. These accumulate here and
+   * are settled at the end.
+   */
+  type Tally = {
+    sourcesFound: number;
+    novelFacts: number;
+    duplicateFacts: number;
+    novelEntityIds: string[];
+    factEmbeddings: (number[] | null)[];
+  };
+  const tallies = new Map<string, Tally>();
+  const tallyFor = (leadId: string): Tally => {
+    let t = tallies.get(leadId);
+    if (!t) {
+      t = { sourcesFound: 0, novelFacts: 0, duplicateFacts: 0, novelEntityIds: [], factEmbeddings: [] };
+      tallies.set(leadId, t);
+    }
+    return t;
+  };
+
+  // The anchor every branch is measured against: the question itself, not
+  // whatever the first search happened to return. Without this an early wrong
+  // turn becomes the reference point and the CORRECT material scores as drift.
+  let anchor: number[] | null = null;
+  try {
+    anchor = await embedText([session.topic, ...goals].join('\n'));
+  } catch {
+    anchor = null; // Unjudgeable rather than wrongly judged.
+  }
+
   // Process in batches of 8
   for (let i = 0; i < allSources.length; i += 8) {
     if (isTimeUp()) break;
@@ -132,12 +167,57 @@ export async function runPhase2(
     }
   }
 
+  // Every lead phase 1 claimed must reach a terminal state. Phase 2 stops early
+  // on its own novelty check and on the budget, so some leads' sources are never
+  // analysed — and a lead left `running` forever both lies on the graph and
+  // looks like abandoned work to the resume sweep.
+  const claimed = await db
+    .select({ id: researchLeads.id, metrics: researchLeads.metrics })
+    .from(researchLeads)
+    .where(and(eq(researchLeads.sessionId, sessionId), eq(researchLeads.status, 'running')));
+
+  for (const lead of claimed) {
+    if (tallies.has(lead.id)) continue;
+    await db
+      .update(researchLeads)
+      .set({
+        status: 'stalled',
+        reason: 'gathered sources, but the run ended before they were analysed',
+        completedAt: new Date(),
+      })
+      .where(eq(researchLeads.id, lead.id));
+  }
+
+  // Settle each lead against what it actually produced. This is where a branch
+  // is recognised as a dead end and its unstarted descendants are pruned, so a
+  // run stops paying for a line of enquiry the moment it goes off-question
+  // rather than when a global average finally sags.
+  for (const [leadId, t] of tallies) {
+    try {
+      const verdict = await completeLead(sessionId, leadId, {
+        sourcesFound: t.sourcesFound,
+        novelFacts: t.novelFacts,
+        duplicateFacts: t.duplicateFacts,
+        novelEntities: t.novelEntityIds.length,
+        connectedEntities: await countConnectedEntities(sessionId, t.novelEntityIds),
+        goalAlignment: await measureAlignment(anchor, t.factEmbeddings),
+        searchFailed: false,
+      });
+      if (verdict.status === 'drifted') {
+        emitLog(sessionId, '\u{1F6AB}', `Abandoned a line of enquiry — ${verdict.reason}`);
+      }
+    } catch (err) {
+      console.error('[deepdive] settling lead failed:', err);
+    }
+  }
+
   emitLog(sessionId, '\u2139\uFE0F', `Phase 2 complete: ${stats.factsExtracted} facts, ${stats.entitiesIdentified} entities`);
 
   async function processSource(source: Source): Promise<number> {
     if (isTimeUp()) return 0;
 
     emitLog(sessionId, '\u{1F50D}', `Analysing: ${source.title?.slice(0, 50) ?? source.url}`);
+    if (source.leadId) tallyFor(source.leadId).sourcesFound++;
 
     // Fetch content — skip extraction if snippet is already rich
     let content = source.snippet ?? '';
@@ -228,6 +308,14 @@ export async function runPhase2(
       for (const f of extractedFacts) {
         if (!f.content || f.content.length < 10) continue;
         const { duplicate, embedding } = await isDuplicate(sessionId, f.content);
+        if (src.leadId) {
+          const t = tallyFor(src.leadId);
+          if (duplicate) t.duplicateFacts++;
+          else {
+            t.novelFacts++;
+            t.factEmbeddings.push(embedding);
+          }
+        }
         if (duplicate) continue;
         const extractedConf = Math.max(0, Math.min(1, f.confidence ?? 0.5));
         const srcCredibility = src.credibilityScore ?? 0.5;
@@ -298,6 +386,7 @@ export async function runPhase2(
             .returning();
           entityId = created.id;
           stats.entitiesIdentified++;
+          if (src.leadId) tallyFor(src.leadId).novelEntityIds.push(created.id);
 
           // Desk: drop the entity chip (only for newly-created entities).
           emitArtefact(sessionId, 'entity', 2, {

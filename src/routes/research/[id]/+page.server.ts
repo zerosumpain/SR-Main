@@ -5,6 +5,7 @@ import { eq, desc } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
 import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
 import { coerceScope, describeScope } from '$lib/deepdive/scope';
+import { loadFrontier } from '$lib/deepdive/frontier';
 
 export const load: PageServerLoad = async ({ params }) => {
   const [session] = await db
@@ -29,6 +30,7 @@ export const load: PageServerLoad = async ({ params }) => {
     .orderBy(desc(sources.credibilityScore))
     .limit(50);
 
+  const leads = await loadFrontier(params.id);
   const depth = coerceDepth(session.depth);
   const preset = depthPreset(depth);
   const report = session.report as { executive_summary?: string } | null;
@@ -48,5 +50,16 @@ export const load: PageServerLoad = async ({ params }) => {
     },
     tier: { label: preset.label, budgetMs: preset.budgetMs, extractsFacts: preset.extractsFacts },
     sources: srcs,
+    leads: leads.map((l) => ({
+      id: l.id,
+      query: l.query,
+      parentId: l.parentId,
+      depth: l.depth,
+      origin: l.origin,
+      originDetail: l.originDetail,
+      status: l.status,
+      reason: l.reason,
+      score: l.score,
+    })),
   };
 };

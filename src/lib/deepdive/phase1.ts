@@ -5,6 +5,7 @@ import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
 import { emitLog, emitStats, shouldStop, getAbortSignal, throwIfStopped } from './worker';
+import { addLeads, takeLeads, recordLeadSources, MAX_LEAD_DEPTH } from './frontier';
 import { emitArtefact } from './desk-events';
 import { classifyDomain } from './credibility';
 import { DIVERSITY_THRESHOLDS } from './types';
@@ -64,8 +65,16 @@ export async function runPhase1(
     queryPrompt,
   );
 
-  let queries = queryResult.queries ?? [];
-  if (queries.length === 0) return;
+  const seedQueries = queryResult.queries ?? [];
+  if (seedQueries.length === 0) return;
+
+  // The frontier replaces the old in-memory `followUpQueue`: a plain FIFO with
+  // no scores, which spawned children from an unproductive query exactly as
+  // eagerly as from a productive one, and evaporated on restart.
+  await addLeads(
+    sessionId,
+    seedQueries.map((q) => ({ query: q, origin: 'seed' as const, depth: 0 })),
+  );
 
   const seenUrls = new Set<string>();
   const allCategories = new Set<string>();
@@ -79,19 +88,22 @@ export async function runPhase1(
     counterfactualsRaised: 0,
   };
 
-  const followUpQueue: string[] = [];
-
-  // Process queries in batches
-  while (queries.length > 0 && totalSourcesStored < maxSources && !isTimeUp()) {
-    const batch = queries.splice(0, 3);
+  // Process leads in batches, highest expected value first.
+  while (totalSourcesStored < maxSources && !isTimeUp()) {
+    const batch = await takeLeads(sessionId, 3);
+    if (batch.length === 0) break;
 
     const batchNewCategories = new Set<string>();
     let batchSourceCount = 0;
 
-    for (const query of batch) {
+    for (const lead of batch) {
+      const query = lead.query;
       if (totalSourcesStored >= maxSources || isTimeUp()) break;
 
       emitLog(sessionId, '\u{1F50D}', `Searching: "${query}"`);
+      let leadSources = 0;
+      let leadSearchFailed = false;
+      const followUps: string[] = [];
 
       try {
         const results = await search(query, { maxResults: 10 });
@@ -116,6 +128,7 @@ export async function runPhase1(
               phase: 1,
               credibilityScore: credibility.score,
               credibilityType: credibility.type,
+              leadId: lead.id,
             })
             .returning();
 
@@ -133,6 +146,7 @@ export async function runPhase1(
 
           totalSourcesStored++;
           batchSourceCount++;
+          leadSources++;
           stats.sourcesFound = totalSourcesStored;
 
           emitLog(sessionId, '\u{1F4C4}', `Source: ${result.title?.slice(0, 60) ?? result.url}`);
@@ -162,8 +176,8 @@ export async function runPhase1(
               }
             }
 
-            if (analysis.follow_up_queries) {
-              followUpQueue.push(...analysis.follow_up_queries);
+            if (analysis.follow_up_queries?.length && lead.depth < MAX_LEAD_DEPTH) {
+              followUps.push(...analysis.follow_up_queries);
             }
           } catch (err) {
             console.error('[deepdive] Source analysis failed:', err);
@@ -172,6 +186,25 @@ export async function runPhase1(
       } catch (err) {
         console.error('[deepdive] Search failed:', err);
         emitLog(sessionId, '\u2139\uFE0F', `Search failed for: "${query}"`);
+        leadSearchFailed = true;
+      }
+
+      // Phase 1 only gathers; facts and entities arrive in phase 2, so the
+      // lead cannot be judged yet. Park it as `running` with what we know and
+      // let phase 2 close it out against the material it actually produced.
+      await recordLeadSources(sessionId, lead.id, leadSources, leadSearchFailed);
+
+      if (followUps.length) {
+        await addLeads(
+          sessionId,
+          followUps.splice(0, 3).map((q) => ({
+            query: q,
+            parentId: lead.id,
+            depth: lead.depth + 1,
+            origin: 'followup' as const,
+            originDetail: lead.query,
+          })),
+        );
       }
     }
 
@@ -191,10 +224,6 @@ export async function runPhase1(
       }
     }
 
-    // Refill queries from follow-up queue
-    if (queries.length === 0 && followUpQueue.length > 0) {
-      queries = followUpQueue.splice(0, 6);
-    }
   }
 
   emitLog(sessionId, '\u2139\uFE0F', `Phase 1 complete: ${totalSourcesStored} sources, ${allCategories.size} categories`);
