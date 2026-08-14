@@ -2,6 +2,9 @@
   import { onMount } from 'svelte';
   import type { PageData } from './$types';
   import FrontierGraph, { type FrontierLead } from '$lib/components/research/FrontierGraph.svelte';
+  import ReportPanels, { type ReportView } from '$lib/components/research/ReportPanels.svelte';
+  import ActionsRow from '$lib/components/research/ActionsRow.svelte';
+  import { goto } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
 
@@ -110,6 +113,33 @@
     };
   });
 
+  /**
+   * Spawn a child investigation from a gap or hypothesis. `seedContext` and
+   * `parentSessionId` have existed on the session row all along — this is the
+   * first thing that actually sets them from the UI.
+   */
+  async function investigate(topic: string, seed: { kind: 'gap' | 'hypothesis'; text: string }) {
+    const res = await fetch('/api/research', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        depth: 'brief',
+        parentSessionId: data.session.id,
+        seedContext: {
+          type: seed.kind,
+          parentTopic: data.session.topic,
+          parentGoals: data.session.goals,
+          ...(seed.kind === 'gap' ? { gapDescription: seed.text } : { hypothesisText: seed.text }),
+        },
+      }),
+    });
+    if (res.ok) {
+      const child = await res.json();
+      await goto(`/research/${child.id}`);
+    }
+  }
+
   function stopClock() {
     if (elapsedTimer) {
       clearInterval(elapsedTimer);
@@ -179,6 +209,21 @@
       <p class="note">Working…</p>
     {/if}
   </section>
+
+  {#if finished && summary}
+    <ReportPanels
+      report={data.report as ReportView}
+      goals={data.session.goals}
+      topEntities={data.topEntities}
+      onInvestigate={investigate}
+    />
+    <ActionsRow
+      sessionId={data.session.id}
+      depth={data.session.depth}
+      hasReport={!!summary}
+      shareToken={data.session.shareToken}
+    />
+  {/if}
 
   {#if sources.length}
     <section class="sources">
