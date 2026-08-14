@@ -9,6 +9,7 @@ import {
 } from '$lib/db/schema';
 import { eq, desc, sql, and, inArray, isNull } from 'drizzle-orm';
 import { getLLMClient } from '$lib/jkai/llm-client';
+import { salvageSummaries, type SalvagedSummary } from './summary-salvage';
 import { resolveExtractionModel } from '$lib/server/models/workload-settings';
 import { decayWeight } from './staleness';
 import { canonicalName } from './resolve/match';
@@ -343,6 +344,34 @@ async function upsertEntity(
 const SUMMARY_BATCH = 25;
 
 /**
+ * How many output tokens one batch of summaries is allowed.
+ *
+ * The old figure — `600 + entities * 90`, so 2,850 for a full batch — is the
+ * reason this call failed nightly. Measured against the production model
+ * (`openai/gpt-oss-120b`) on production-shaped input, a full batch of 25 spends
+ * roughly 2,400–2,900 completion tokens, so the budget sat exactly on the mean
+ * of the distribution it was meant to bound. Two runs in three came back
+ * `finish_reason: length` at precisely the cap and threw "Unterminated string
+ * in JSON" — which is what the production logs had been showing for weeks.
+ *
+ * Two components, because the cost has two parts and only one of them scales:
+ *
+ *   reasoning   a fixed 270–420 tokens on this model regardless of batch size,
+ *               spent before a single character of content appears.
+ *   content     ~90 tokens per entity for a 2-3 sentence summary plus its JSON
+ *               scaffolding and a 36-character uuid.
+ *
+ * 1,200 covers reasoning three times over, and 160 per entity gives the content
+ * comfortable headroom over the ~90 it actually uses. A full batch is therefore
+ * 5,200 rather than 2,850. The extra costs a fraction of a penny per call — the
+ * whole measured request came to $0.0025 — and buys the difference between a
+ * summary pass that works and one that silently loses a batch of 25.
+ */
+export function summaryTokenBudget(entities: number): number {
+  return Math.min(1200 + Math.max(0, entities) * 160, 16000);
+}
+
+/**
  * Write summaries for entities that don't have one yet.
  *
  * This used to be one LLM call PER entity, sequentially, on every extraction —
@@ -405,35 +434,66 @@ async function updateEntitySummaries(entityIds: string[]): Promise<void> {
     const modelCtx = await resolveExtractionModel();
     const { client, model } = await getLLMClient(modelCtx);
 
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0.3,
-      max_tokens: Math.min(600 + payload.length * 90, 8000),
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            'For each entity, write a concise 2-3 sentence summary from the evidence given. Focus on role, key relationships, and current concerns. ' +
-            'Return ONLY a JSON object of the form {"summaries":[{"id":"<entity id>","summary":"..."}]} covering every entity you were given. ' +
-            'If the evidence says nothing useful about an entity, omit it rather than inventing detail.',
-        },
-        { role: 'user', content: JSON.stringify({ entities: payload }) },
-      ],
-    });
+    // Two attempts, as the extraction path does. A truncation is a matter of
+    // how long this particular sample happened to run, so resampling fixes what
+    // reparsing cannot — measured against the production model, two runs in
+    // three overran and the third finished comfortably on identical input.
+    let summaries: SalvagedSummary[] = [];
+    let diag = '';
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.3,
+        max_tokens: summaryTokenBudget(payload.length),
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'For each entity, write a concise 2-3 sentence summary from the evidence given. Focus on role, key relationships, and current concerns. ' +
+              'Return ONLY a JSON object of the form {"summaries":[{"id":"<entity id>","summary":"..."}]} covering every entity you were given. ' +
+              'If the evidence says nothing useful about an entity, omit it rather than inventing detail.',
+          },
+          { role: 'user', content: JSON.stringify({ entities: payload }) },
+        ],
+      });
 
-    const raw = response.choices[0]?.message?.content ?? '{}';
-    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
-    const parsed = JSON.parse(cleaned) as { summaries?: Array<{ id?: string; summary?: string }> };
+      const choice = response.choices[0];
+      const raw = choice?.message?.content ?? '';
+      // finish_reason is the whole diagnosis and was not being recorded. Every
+      // one of these failures logged only "Unterminated string in JSON at
+      // position N", which reads as a malformed reply when it is in fact a
+      // complete reply that was cut off at the budget.
+      diag =
+        `attempt=${attempt} finish=${choice?.finish_reason} entities=${payload.length} ` +
+        `budget=${summaryTokenBudget(payload.length)} completion_tokens=${response.usage?.completion_tokens ?? '?'} chars=${raw.length}`;
+
+      summaries = salvageSummaries(raw);
+      const complete = choice?.finish_reason !== 'length' && summaries.length >= payload.length;
+      if (complete) break;
+
+      if (attempt === 1) {
+        console.warn(`[intel] summary batch incomplete, retrying — ${diag} salvaged=${summaries.length}`);
+      } else {
+        // Second attempt also short. Whatever arrived is still worth writing —
+        // the alternative is discarding paid-for work and leaving the entities
+        // with no summary at all until some later sweep happens to pick them up.
+        console.warn(`[intel] summary batch still incomplete, keeping what parsed — ${diag} salvaged=${summaries.length}`);
+      }
+    }
+
+    if (!summaries.length) {
+      console.error(`[intel] Batched summary update produced nothing — ${diag}`);
+      return;
+    }
+
     const valid = new Set(batch.map((e) => e.id));
-
     const { embedEntity } = await import('./embed');
-    for (const item of parsed.summaries ?? []) {
-      const summary = item.summary?.trim();
-      if (!item.id || !summary || !valid.has(item.id)) continue;
+    for (const item of summaries) {
+      if (!valid.has(item.id)) continue;
       await db
         .update(intelEntities)
-        .set({ summary, updatedAt: new Date() })
+        .set({ summary: item.summary, updatedAt: new Date() })
         .where(eq(intelEntities.id, item.id));
       await embedEntity(item.id);
     }
