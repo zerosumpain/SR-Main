@@ -5,9 +5,18 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import {
   isRateLimitError,
   isOurTimeoutAbort,
+  isCreditHeadroomError,
   combineSignals,
   withRetry,
 } from '$lib/llm/resilience';
+
+/**
+ * Ceiling to retry at when the provider rejects a call for lacking credit
+ * headroom for the requested `max_tokens`. Low enough to clear a nearly-spent
+ * balance (measured: 1,000 cleared where 2,000 did not), high enough to still
+ * produce a usable answer.
+ */
+const CREDIT_FALLBACK_MAX_TOKENS = 1_000;
 
 // Re-export so existing importers of these from $lib/deepdive/ai keep working.
 export { isRateLimitError };
@@ -158,9 +167,15 @@ function parseJsonText<T>(text: string): T {
 export async function jsonCompletion<T>(
   systemPrompt: string,
   userPrompt: string,
-  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal },
+  options?: { temperature?: number; maxTokens?: number; signal?: AbortSignal; model?: string },
 ): Promise<T> {
-  const { client, model } = await getPrimary();
+  // A pinned model is the caller's deliberate choice — the budgeted research
+  // tiers pin a fast non-reasoning id precisely because the site default may be
+  // slow, and silently falling back to `getPrimary()` would hand them back the
+  // latency they pinned to avoid.
+  const { client, model } = options?.model
+    ? { client: getOpenRouterClient(), model: options.model }
+    : await getPrimary();
   const jsonSystemPrompt = systemPrompt + '\n\nYou MUST respond with valid JSON only. No markdown, no code blocks, no explanation.';
   const messages = [
     { role: 'system' as const, content: jsonSystemPrompt },
@@ -186,7 +201,27 @@ export async function jsonCompletion<T>(
     );
     return parseJsonText<T>(response.choices[0]?.message?.content ?? '{}');
   } catch (err: any) {
-    if ((isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) && getFallbackModel() !== model) {
+    if (isCreditHeadroomError(err) && maxTokens > CREDIT_FALLBACK_MAX_TOKENS) {
+      console.log(
+        `[deepdive] jsonCompletion: ${model} lacks credit headroom for max_tokens=${maxTokens}, retrying at ${CREDIT_FALLBACK_MAX_TOKENS}`,
+      );
+      const retry = await client.chat.completions.create(
+        {
+          model,
+          messages,
+          temperature,
+          max_tokens: CREDIT_FALLBACK_MAX_TOKENS,
+          response_format: { type: 'json_object' },
+        },
+        { signal: combineSignals(options?.signal, PRIMARY_NONSTREAM_TIMEOUT_MS) as any },
+      );
+      return parseJsonText<T>(retry.choices[0]?.message?.content ?? '{}');
+    }
+    if (
+      !options?.model &&
+      (isRateLimitError(err) || isOurTimeoutAbort(err, options?.signal)) &&
+      getFallbackModel() !== model
+    ) {
       const why = isRateLimitError(err) ? 'rate-limited' : 'timed out';
       console.log(`[deepdive] jsonCompletion: ${model} ${why}, falling back to ${getFallbackModel()}`);
       // json: true signals openRouterChat to omit response_format (Anthropic models don't support it)
@@ -201,8 +236,14 @@ async function runStream(
   client: import('openai').default,
   model: string,
   messages: ChatCompletionMessageParam[],
-  opts: { temperature: number; maxTokens: number; signal: AbortSignal; onToken?: (t: string) => void },
-): Promise<{ text: string; tokensUsed: number }> {
+  opts: {
+    temperature: number;
+    maxTokens: number;
+    signal: AbortSignal;
+    onToken?: (t: string) => void;
+    onReasoning?: (t: string) => void;
+  },
+): Promise<{ text: string; tokensUsed: number; reasoning: string }> {
   // Watchdog: abort the stream if no token arrives within PRIMARY_STREAM_IDLE_TIMEOUT_MS.
   const idleAc = new AbortController();
   const onExternalAbort = () => idleAc.abort(opts.signal.reason);
@@ -233,19 +274,35 @@ async function runStream(
     )) as AsyncIterable<import('openai/resources').ChatCompletionChunk>;
 
     let text = '';
+    let reasoning = '';
     let tokensUsed = 0;
     for await (const chunk of stream) {
       resetIdleTimer();
-      const delta = chunk.choices[0]?.delta?.content;
+      const choice = chunk.choices[0];
+      const delta = choice?.delta?.content;
       if (delta) {
         text += delta;
         opts.onToken?.(delta);
+      }
+      // OpenRouter surfaces a model's chain-of-thought as `delta.reasoning`
+      // (some providers use `reasoning_content`). This used to be dropped on
+      // the floor, which is why the research stream had no reasoning to show
+      // even on models that emit plenty of it. Codex emits none by design —
+      // its SDK returns one completed message per turn — so callers must not
+      // treat an empty reasoning string as a fault.
+      const rawDelta = choice?.delta as
+        | { reasoning?: string; reasoning_content?: string }
+        | undefined;
+      const think = rawDelta?.reasoning ?? rawDelta?.reasoning_content;
+      if (think) {
+        reasoning += think;
+        opts.onReasoning?.(think);
       }
       if (chunk.usage?.total_tokens) {
         tokensUsed = chunk.usage.total_tokens;
       }
     }
-    return { text, tokensUsed };
+    return { text, tokensUsed, reasoning };
   } finally {
     if (idleTimer) clearTimeout(idleTimer);
     opts.signal.removeEventListener('abort', onExternalAbort);
@@ -261,8 +318,10 @@ export async function streamCompletion(
     signal?: AbortSignal;
     model?: string;
     onToken?: (token: string) => void;
+    /** Reasoning deltas, when the model emits them. Never fires for codex ids. */
+    onReasoning?: (token: string) => void;
   },
-): Promise<{ text: string; tokensUsed: number }> {
+): Promise<{ text: string; tokensUsed: number; reasoning: string }> {
   // An explicitly-passed model is the caller's deliberate choice — no fallback.
   const explicitModel = !!options?.model;
   const { client, model } = explicitModel
@@ -297,8 +356,25 @@ export async function streamCompletion(
       maxTokens,
       signal: externalAc.signal,
       onToken,
+      onReasoning: options?.onReasoning,
     });
   } catch (err: any) {
+    // The provider wants a smaller reservation, not a different model. Retrying
+    // the SAME model at a lower ceiling is what keeps a thin balance answering
+    // instead of failing outright — and it is only safe before the first token,
+    // since a re-stream would otherwise duplicate what the caller already saw.
+    if (!emittedAny && isCreditHeadroomError(err) && maxTokens > CREDIT_FALLBACK_MAX_TOKENS) {
+      console.log(
+        `[deepdive] streamCompletion: ${model} lacks credit headroom for max_tokens=${maxTokens}, retrying at ${CREDIT_FALLBACK_MAX_TOKENS}`,
+      );
+      return runStream(client, model, messages, {
+        temperature,
+        maxTokens: CREDIT_FALLBACK_MAX_TOKENS,
+        signal: externalAc.signal,
+        onToken,
+        onReasoning: options?.onReasoning,
+      });
+    }
     // Only fall back on the INITIAL create error (before any tokens); never mid-stream.
     // Skip fallback if the caller explicitly chose a model, or if the fallback
     // id equals the primary (retrying the same model would hit the same limit).
@@ -318,6 +394,7 @@ export async function streamCompletion(
         maxTokens,
         signal: fallbackAc.signal,
         onToken,
+        onReasoning: options?.onReasoning,
       });
     }
     throw err;

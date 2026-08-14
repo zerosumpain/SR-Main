@@ -20,6 +20,29 @@ export function isRateLimitError(err: any): boolean {
 }
 
 /**
+ * True when the provider refused the call for lack of credit HEADROOM rather
+ * than lack of credit outright.
+ *
+ * OpenRouter reserves budget for the full `max_tokens` before running a request
+ * and answers `402 — "This request requires more credits, or fewer max_tokens"`
+ * when the balance cannot cover the reservation. The wording matters: the
+ * account is not necessarily empty, and the SAME account will happily serve the
+ * SAME prompt at a smaller ceiling. Measured 2026-08-14 on a spent balance:
+ * `max_tokens` of 500 and 1,000 returned 200, while 2,000 and above returned
+ * 402.
+ *
+ * That makes it a retryable condition, not a terminal one — which matters
+ * because reasoning models need a HIGH ceiling to answer at all, so the two
+ * pressures pull in opposite directions and only the provider knows where the
+ * line currently sits.
+ */
+export function isCreditHeadroomError(err: any): boolean {
+  const message = String(err?.message ?? '') + ' ' + String(err?.error?.message ?? '');
+  if (/fewer max_tokens/i.test(message)) return true;
+  return err?.status === 402 && /credit/i.test(message);
+}
+
+/**
  * True for any abort/timeout error.
  *
  * The OpenAI SDK throws `APIUserAbortError` when an AbortSignal fires and

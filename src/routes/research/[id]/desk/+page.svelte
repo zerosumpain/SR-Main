@@ -1,4 +1,3 @@
-<!-- src/routes/deepdive/[id]/+page.svelte -->
 <script lang="ts">
   import type { PageData } from './$types';
   import ResearchDesk from '$lib/canvas/intelligence/ResearchDesk.svelte';
@@ -18,11 +17,5 @@
 </div>
 
 <style>
-  .desk-host {
-    position: fixed;
-    inset: 0;
-    background: var(--bg);
-    overflow: hidden;
-    z-index: 0;
-  }
+  .desk-host { position: fixed; inset: 0; background: var(--bg); overflow: hidden; z-index: 0; }
 </style>

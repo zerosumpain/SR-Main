@@ -380,6 +380,33 @@ export const researchSessions = pgTable('research_session', {
   seedContext: jsonb('seed_context'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+
+  // --- v3: depth tiers, scope, budget (see $lib/deepdive/depth, /scope) ---
+  /**
+   * 'instant' | 'scan' | 'brief' | 'investigation'. The single thing a user
+   * picks; expands server-side into config + phases + budget + pinned model.
+   * Defaults to 'investigation' so pre-v3 rows read as what they actually were.
+   */
+  depth: text('depth').notNull().default('investigation'),
+  /** ResearchScope — domain binding, seed urls, recency. */
+  scope: jsonb('scope'),
+  /** Wall-clock allowance in ms; null for unbudgeted investigations. */
+  budgetMs: integer('budget_ms'),
+  /** The agreed query plan from the definition stage, before any spend. */
+  plan: jsonb('plan'),
+  /** Total wall-clock, written on completion. Mirrors quick_answer.duration_ms. */
+  durationMs: integer('duration_ms'),
+  /**
+   * Explicit worker heartbeat. Liveness is NEVER derived by subtracting
+   * `updatedAt` — a row touched by an unrelated write would read as alive, and
+   * a worker busy inside one long call would read as dead. Only the worker
+   * writes this, and only while it is genuinely running.
+   */
+  heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
+  /** Set when a run is adopted by the resume sweep, for provenance. */
+  resumedAt: timestamp('resumed_at', { withTimezone: true }),
+  /** Why a run failed. Previously only ever reached console.error. */
+  errorMessage: text('error_message'),
 });
 
 export type ResearchSession = typeof researchSessions.$inferSelect;

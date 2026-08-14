@@ -23,8 +23,36 @@ export type SessionStatus =
   | 'complete'
   | 'failed';
 
+/**
+ * One event shape for every research tier.
+ *
+ * v3 folded the separate quick-answer stream into this union so the dashboard,
+ * the desk and the workflow nodes all read one stream rather than two
+ * incompatible ones.
+ *
+ *  - `token`     — a content delta from a streamed synthesis.
+ *  - `reasoning` — a reasoning delta, shown only when the user toggles it on.
+ *                  Carries `stage` so it attaches to the right activity instead
+ *                  of forming one undifferentiated firehose. Never emitted by
+ *                  models that cannot stream reasoning (any `codex/` id).
+ *  - `sources`   — the ranked source set, emitted once by the fast tiers.
+ *  - `graph`     — frontier node/edge deltas (phase 2 of the v3 work).
+ *  - `lead`      — a lead changing status, including being pruned as a dead end.
+ */
 export interface SSEEvent {
-  type: 'log' | 'stats' | 'status' | 'error' | 'artefact' | 'synthesis';
+  type:
+    | 'log'
+    | 'stats'
+    | 'status'
+    | 'error'
+    | 'artefact'
+    | 'synthesis'
+    | 'token'
+    | 'reasoning'
+    | 'sources'
+    | 'graph'
+    | 'lead'
+    | 'complete';
   message?: string;
   data?: Record<string, unknown>;
 }

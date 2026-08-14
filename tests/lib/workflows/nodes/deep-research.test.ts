@@ -27,7 +27,68 @@ describe('deep-research executor', () => {
     expect(res.output.error).toMatch(/topic/i);
   });
 
-  it('happy path: starts, polls until complete, returns report', async () => {
+  // A budgeted tier (instant/scan/brief) finishes inside research_start, which
+  // awaits the run rather than backgrounding it. Polling it would only re-read
+  // a row that is already terminal, so the node returns straight from the start
+  // call. Only `investigation` is unbounded enough to need the poll loop.
+  describe('budgeted tiers return without polling', () => {
+    it('returns the answer straight from research_start', async () => {
+      executeSiteToolMock.mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sess-b',
+          status: 'complete',
+          depth: 'brief',
+          answer: 'The short answer.',
+          durationMs: 41_000,
+        },
+      });
+
+      const res = await deepResearchExecutor.execute(
+        {},
+        { topic: 'AI impact', depth: 'brief', pollIntervalMs: 1, maxWaitMs: 5000 },
+        ctx(),
+      );
+
+      expect(executeSiteToolMock).toHaveBeenCalledTimes(1);
+      expect(executeSiteToolMock).toHaveBeenCalledWith(
+        'research_start',
+        expect.objectContaining({ topic: 'AI impact', depth: 'brief' }),
+      );
+      expect(res.output.success).toBe(true);
+      expect(res.output.researchDepth).toBe('brief');
+      expect(res.output.researchReport).toBe('The short answer.');
+      expect(res.output.researchDurationMs).toBe(41_000);
+    });
+
+    // The legacy vocabulary used to be dropped on the floor: the node passed
+    // `depth` to a research_start that never declared the parameter.
+    it('maps the legacy medium/shallow vocabulary onto real tiers', async () => {
+      executeSiteToolMock.mockResolvedValue({
+        success: true,
+        data: { id: 'sess-l', status: 'complete', answer: 'ok' },
+      });
+
+      await deepResearchExecutor.execute({}, { topic: 'x', depth: 'medium' }, ctx());
+      expect(executeSiteToolMock).toHaveBeenCalledWith(
+        'research_start',
+        expect.objectContaining({ depth: 'brief' }),
+      );
+    });
+
+    it('surfaces a failed budgeted run as an error rather than a timeout', async () => {
+      executeSiteToolMock.mockResolvedValueOnce({
+        success: false,
+        data: { id: 'sess-x', status: 'failed', error: 'No sources matched your scope' },
+      });
+
+      const res = await deepResearchExecutor.execute({}, { topic: 'y', depth: 'scan' }, ctx());
+      expect(res.output.success).toBe(false);
+      expect(res.output.error).toMatch(/no sources matched/i);
+    });
+  });
+
+  it('investigation: starts, polls until complete, returns report', async () => {
     // research_start → returns session id
     executeSiteToolMock
       .mockResolvedValueOnce({ success: true, data: { id: 'sess-42', status: 'pending' } })
@@ -47,7 +108,7 @@ describe('deep-research executor', () => {
 
     const res = await deepResearchExecutor.execute(
       {},
-      { topic: 'AI impact', goals: 'understand risks', depth: 'medium', pollIntervalMs: 1, maxWaitMs: 5000 },
+      { topic: 'AI impact', goals: 'understand risks', depth: 'investigation', pollIntervalMs: 1, maxWaitMs: 5000 },
       ctx(),
     );
 
@@ -66,7 +127,7 @@ describe('deep-research executor', () => {
 
     const res = await deepResearchExecutor.execute(
       {},
-      { topic: 'something', pollIntervalMs: 1, maxWaitMs: 5000 },
+      { topic: 'something', depth: 'investigation', pollIntervalMs: 1, maxWaitMs: 5000 },
       ctx(),
     );
 
@@ -82,7 +143,7 @@ describe('deep-research executor', () => {
 
     const res = await deepResearchExecutor.execute(
       {},
-      { topic: 'timeout test', pollIntervalMs: 1, maxWaitMs: 10 },
+      { topic: 'timeout test', depth: 'investigation', pollIntervalMs: 1, maxWaitMs: 10 },
       ctx(),
     );
 

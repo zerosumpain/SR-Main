@@ -208,7 +208,7 @@
     {/if}
     {#if status === 'complete' && sessionId}
       <a
-        href="/deepdive/{sessionId}"
+        href="/research/{sessionId}"
         target="_blank"
         rel="noreferrer"
         class="open-link"

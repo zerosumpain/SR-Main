@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeDefinition, NodeResult, ExecutionContext } from '../types';
 import { executeSiteTool } from '$lib/workflows/site-tools/executor';
 import { interpolateTemplate } from './template';
+import { coerceDepth, depthPreset, RESEARCH_DEPTHS } from '$lib/deepdive/depth';
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -22,7 +23,11 @@ export const deepResearchExecutor: NodeExecutor = {
 
     const goalsRaw = typeof config.goals === 'string' ? (config.goals as string) : '';
     const goals = interpolateTemplate(goalsRaw, input).trim();
-    const depth = typeof config.depth === 'string' ? (config.depth as string) : 'medium';
+    // `depth` used to be passed into a research_start that did not declare the
+    // parameter, so every run silently got the same default. It is a real tier
+    // now; the legacy shallow/medium/deep vocabulary maps in coerceDepth.
+    const depth = coerceDepth(config.depth);
+    const preset = depthPreset(depth);
 
     const pollIntervalMs =
       typeof config.pollIntervalMs === 'number' ? (config.pollIntervalMs as number) : 5000;
@@ -30,12 +35,13 @@ export const deepResearchExecutor: NodeExecutor = {
       typeof config.maxWaitMs === 'number' ? (config.maxWaitMs as number) : 900_000;
 
     // Start the research session.
-    const startArgs: Record<string, unknown> = { topic };
-    if (goals) startArgs.goals = goals;
-    if (depth) startArgs.depth = depth;
+    const startArgs: Record<string, unknown> = { topic, depth };
+    if (goals) startArgs.goals = goals.split('\n').map((g) => g.trim()).filter(Boolean);
+    if (config.scope) startArgs.scope = config.scope;
 
     const startResult = await executeSiteTool('research_start', startArgs);
-    const sessionId = (startResult as { data?: { id?: string } })?.data?.id;
+    const startData = (startResult as { data?: Record<string, unknown> })?.data ?? {};
+    const sessionId = startData.id as string | undefined;
     if (!sessionId) {
       return {
         output: {
@@ -44,6 +50,30 @@ export const deepResearchExecutor: NodeExecutor = {
           error: 'Failed to start research session',
           researchEngine: 'deep' as const,
           researchStatus: 'failed',
+        },
+        rowCount: 1,
+      };
+    }
+
+    // A budgeted tier has already finished inside research_start (it awaits the
+    // run rather than backgrounding it), so polling would just re-read a
+    // terminal row. Only the unbounded investigation needs the poll loop.
+    if (preset.budgetMs != null) {
+      const status = (startData.status as string) ?? 'unknown';
+      const ok = status === 'complete';
+      return {
+        output: {
+          ...input,
+          success: ok,
+          ...(ok ? {} : { error: (startData.error as string) ?? `Research ${status}` }),
+          researchEngine: 'deep' as const,
+          researchDepth: depth,
+          researchStatus: status,
+          researchTopic: topic,
+          researchReport: (startData.answer as string) ?? '',
+          researchSources: [],
+          researchSessionId: sessionId,
+          researchDurationMs: startData.durationMs as number | undefined,
         },
         rowCount: 1,
       };
@@ -144,7 +174,7 @@ export const deepResearchDef: NodeDefinition = {
     properties: {
       topic: { type: 'string' },
       goals: { type: 'string' },
-      depth: { type: 'string', enum: ['shallow', 'medium', 'deep'] },
+      depth: { type: 'string', enum: [...RESEARCH_DEPTHS] },
       pollIntervalMs: { type: 'number' },
       maxWaitMs: { type: 'number' },
     },
@@ -153,7 +183,7 @@ export const deepResearchDef: NodeDefinition = {
   defaultConfig: {
     topic: '{{item.title}}',
     goals: '',
-    depth: 'medium',
+    depth: 'brief',
     pollIntervalMs: 5000,
     maxWaitMs: 900000,
   },
@@ -181,9 +211,10 @@ export const deepResearchDef: NodeDefinition = {
       label: 'Depth',
       type: 'dropdown',
       options: [
-        { value: 'shallow', label: 'Shallow (quick skim)' },
-        { value: 'medium', label: 'Medium (balanced)' },
-        { value: 'deep', label: 'Deep (thorough)' },
+        { value: 'instant', label: 'Instant — model knowledge, no sources' },
+        { value: 'scan', label: 'Scan — one search round, cited (~90s)' },
+        { value: 'brief', label: 'Brief — sources + facts (under 2 min)' },
+        { value: 'investigation', label: 'Investigation — full engine (20 min+)' },
       ],
       section: 'QUERY',
     },
@@ -199,7 +230,7 @@ export const deepResearchDef: NodeDefinition = {
   llmDescription:
     "Commission a long-running deep-research session and block until it finishes (or maxWaitMs elapses). Outputs { researchEngine: 'deep', researchSessionId, researchStatus, researchReport, sources }. Use for thorough investigations where you want a multi-paragraph synthesis with citations — costs minutes of wall-clock time and several LLM calls. For a fast 1-2 paragraph answer use `quick-answer` instead. Pair with a `research-result` display node downstream if you want the canvas to render the report nicely. Templates allowed in topic/goals (e.g. {{input.title}}).",
   llmExamples: [
-    { topic: '{{input.title}}', depth: 'medium' },
-    { topic: 'Latest advances in solid-state batteries 2026', goals: 'Players, technical readiness, commercialisation timelines', depth: 'deep' },
+    { topic: '{{input.title}}', depth: 'brief' },
+    { topic: 'Latest advances in solid-state batteries 2026', goals: 'Players, technical readiness, commercialisation timelines', depth: 'investigation' },
   ],
 };
