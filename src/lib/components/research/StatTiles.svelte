@@ -6,6 +6,12 @@
     note?: string | null;
     /** Reserved status colouring. Absent means ordinary ink. */
     tone?: 'good' | 'warn' | 'bad';
+    /**
+     * Where this number is explained. A headline figure with nowhere to go is
+     * the thing that made the dashboard feel like a summary rather than a way
+     * in — every tile that has a panel behind it now links to it.
+     */
+    href?: string;
   }
 </script>
 
@@ -31,17 +37,25 @@
 
 <div class="tiles">
   {#each stats as s (s.label)}
-    <div class="tile">
+    <svelte:element
+      this={s.href ? 'a' : 'div'}
+      class="tile"
+      class:linked={!!s.href}
+      href={s.href}
+    >
       <div class="value {s.tone ?? ''}">{display(s.value)}</div>
       <div class="label">{s.label}</div>
       {#if s.note}<div class="note">{s.note}</div>{/if}
-    </div>
+    </svelte:element>
   {/each}
 </div>
 
 <style>
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
-  .tile { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.65rem 0.7rem; }
+  .tile { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.65rem 0.7rem; display: block; text-decoration: none; }
+  .tile.linked { cursor: pointer; }
+  .tile.linked:hover { border-color: var(--accent); }
+  .tile.linked:hover .label { color: var(--accent); }
   .value { font-family: var(--font-display); font-size: 1.6rem; font-weight: 900; line-height: 1.05; color: var(--text-primary); }
   .value.good { color: var(--success); }
   .value.warn { color: var(--warn); }

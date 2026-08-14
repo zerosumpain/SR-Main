@@ -95,6 +95,8 @@
       try {
         const url = new URL(window.location.href);
         url.searchParams.delete('q');
+        // `send` goes with it: a refresh must not re-ask the question.
+        url.searchParams.delete('send');
         history.replaceState(history.state, '', url);
       } catch {
         // ignore
@@ -332,6 +334,7 @@
       conversationId={activeConversationId}
       initialMessages={activeMessages}
       initialDraft={data.pendingQuestion}
+      autoSend={data.pendingSend}
       conversation={activeConversation}
       modelContextLength={activeContextLength}
       modelCapabilities={activeModelCaps}

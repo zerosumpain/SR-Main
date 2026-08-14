@@ -1,11 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { researchSessions, sources, entities, relationships, facts } from '$lib/db/schema';
-import { eq, desc, and, count } from 'drizzle-orm';
+import { eq, desc, and, count, inArray } from 'drizzle-orm';
 import { redirect } from '@sveltejs/kit';
 import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
 import { coerceScope, describeScope } from '$lib/deepdive/scope';
 import { loadFrontier } from '$lib/deepdive/frontier';
+import { rankSources, mediaMix } from '$lib/deepdive/media-type';
 
 export const load: PageServerLoad = async ({ params }) => {
   const [session] = await db
@@ -16,19 +17,46 @@ export const load: PageServerLoad = async ({ params }) => {
 
   if (!session) throw redirect(302, '/research');
 
-  const srcs = await db
-    .select({
-      id: sources.id,
-      url: sources.url,
-      title: sources.title,
-      domain: sources.domain,
-      credibilityScore: sources.credibilityScore,
-      credibilityType: sources.credibilityType,
-    })
-    .from(sources)
-    .where(eq(sources.sessionId, params.id))
-    .orderBy(desc(sources.credibilityScore))
-    .limit(50);
+  /**
+   * Sources, plus how many facts each one actually produced.
+   *
+   * The fact count is the whole point of the join. Ordering by credibility
+   * alone put six government pages that yielded nothing above the two
+   * trade-press articles that carried the entire report — see
+   * `$lib/deepdive/media-type` for the ranking that replaces it.
+   */
+  const [srcRows, factsBySource] = await Promise.all([
+    db
+      .select({
+        id: sources.id,
+        url: sources.url,
+        title: sources.title,
+        snippet: sources.snippet,
+        domain: sources.domain,
+        credibilityScore: sources.credibilityScore,
+        credibilityType: sources.credibilityType,
+      })
+      .from(sources)
+      .where(eq(sources.sessionId, params.id))
+      .orderBy(desc(sources.credibilityScore))
+      .limit(80),
+    db
+      .select({ sourceId: facts.sourceId, n: count() })
+      .from(facts)
+      .where(eq(facts.sessionId, params.id))
+      .groupBy(facts.sourceId),
+  ]);
+
+  const factCountBySource = new Map(factsBySource.map((r) => [r.sourceId, Number(r.n)]));
+  const rankedSources = rankSources(
+    srcRows.map((s) => ({ ...s, factCount: factCountBySource.get(s.id) ?? 0 })),
+  );
+  const mix = mediaMix(rankedSources);
+  /** Per media kind, how many of its sources produced at least one fact. */
+  const contributors: Record<string, number> = {};
+  for (const s of rankedSources) {
+    if (s.factCount > 0) contributors[s.media.kind] = (contributors[s.media.kind] ?? 0) + 1;
+  }
 
   const leads = await loadFrontier(params.id);
 
@@ -53,57 +81,59 @@ export const load: PageServerLoad = async ({ params }) => {
       : [],
   );
   /**
-   * The entity network. Capped at the most-connected 60 nodes: a finished
-   * session averages 253 entities and 151 relationships, and drawing all of
-   * them produces a hairball that answers no question.
+   * The network itself is no longer built here. `SessionNetwork.svelte` fetches
+   * `/api/research/<id>/network`, which runs the Intel graph's own PageRank and
+   * community detection and returns the shape `NetworkGraph.svelte` consumes —
+   * so the dashboard renders the same component the intel dashboard does
+   * instead of a second, thinner force layout. Only the counts stay, for the
+   * headline tiles.
    */
-  const [allEntities, allRels] = await Promise.all([
-    db
-      .select({ id: entities.id, name: entities.name, type: entities.type })
-      .from(entities)
-      .where(eq(entities.sessionId, params.id)),
-    db
-      .select({
-        source: relationships.fromEntityId,
-        target: relationships.toEntityId,
-        kind: relationships.relationshipType,
-        strength: relationships.strength,
-      })
-      .from(relationships)
-      .where(eq(relationships.sessionId, params.id)),
+  const [entityTotal, relTotal] = await Promise.all([
+    db.select({ n: count() }).from(entities).where(eq(entities.sessionId, params.id)),
+    db.select({ n: count() }).from(relationships).where(eq(relationships.sessionId, params.id)),
   ]);
 
-  const degree = new Map<string, number>();
-  for (const r of allRels) {
-    if (r.source) degree.set(r.source, (degree.get(r.source) ?? 0) + 1);
-    if (r.target) degree.set(r.target, (degree.get(r.target) ?? 0) + 1);
-  }
-  const keep = new Set(
-    allEntities
-      .map((e) => ({ id: e.id, d: degree.get(e.id) ?? 0, c: centrality[e.id] ?? 0 }))
-      .sort((a, b) => b.d - a.d || b.c - a.c)
-      .slice(0, 60)
-      .map((e) => e.id),
+  /**
+   * The timeline, with its facts resolved.
+   *
+   * `report.timeline` stores fact IDs; rendering it needed the contents, and
+   * without them a period on the chart was a bar you could not open. This is
+   * the only genuine series the report carries.
+   */
+  const rawTimeline = (
+    (session.report as { timeline?: { date: string; facts?: string[] }[] } | null)?.timeline ?? []
+  ).filter(
+    (p) =>
+      p &&
+      typeof p.date === 'string' &&
+      // `1970-01` is epoch zero wearing a date — what an undated fact becomes
+      // when something upstream coerces null through a timestamp. Left in, one
+      // bogus point at the far left compressed 2007–2025 into the right-hand
+      // third of the axis. A genuine January 1970 datum is a price worth paying.
+      !/^1970-01(-01)?$/.test(p.date.trim()),
   );
-  const graph = {
-    nodes: allEntities
-      .filter((e) => keep.has(e.id))
-      .map((e) => ({
-        id: e.id,
-        name: e.name,
-        type: e.type,
-        degree: degree.get(e.id) ?? 0,
-        weight: centrality[e.id] ?? 0,
-      })),
-    edges: allRels
-      .filter((r) => r.source && r.target && keep.has(r.source) && keep.has(r.target))
-      .map((r) => ({
-        source: r.source as string,
-        target: r.target as string,
-        kind: r.kind,
-        strength: r.strength ?? 0.5,
-      })),
-  };
+  const timelineFactIds = [...new Set(rawTimeline.flatMap((p) => p.facts ?? []))];
+  const factContent = new Map<string, string>(
+    timelineFactIds.length
+      ? (
+          await db
+            .select({ id: facts.id, content: facts.content })
+            .from(facts)
+            .where(and(eq(facts.sessionId, params.id), inArray(facts.id, timelineFactIds)))
+        ).map((f) => [f.id, f.content])
+      : [],
+  );
+  const timeline = rawTimeline
+    .map((p) => ({
+      date: p.date,
+      facts: (p.facts ?? [])
+        .map((id) => ({ id, content: factContent.get(id) ?? '' }))
+        // The synthesis occasionally cites a fact id that no longer resolves
+        // (placeholders like `fact_1` appear in follow-ups). Dropping them beats
+        // rendering an empty bullet.
+        .filter((f) => f.content),
+    }))
+    .filter((p) => p.facts.length > 0);
 
   const [[factTotal], [counterTotal]] = await Promise.all([
     db
@@ -142,16 +172,20 @@ export const load: PageServerLoad = async ({ params }) => {
     // nothing rendering them.
     report: report ?? {},
     topEntities,
-    graph,
+    timeline,
     counts: {
-      sources: srcs.length,
-      entities: allEntities.length,
-      relationships: allRels.length,
+      sources: rankedSources.length,
+      keySources: rankedSources.filter((s) => s.keyMaterial).length,
+      entities: entityTotal[0]?.n ?? 0,
+      relationships: relTotal[0]?.n ?? 0,
       facts: factTotal?.n ?? 0,
       counterfactuals: counterTotal?.n ?? 0,
+      domains: new Set(rankedSources.map((s) => s.domain).filter(Boolean)).size,
     },
     tier: { label: preset.label, budgetMs: preset.budgetMs, extractsFacts: preset.extractsFacts },
-    sources: srcs,
+    sources: rankedSources,
+    mix,
+    contributors,
     leads: leads.map((l) => ({
       id: l.id,
       query: l.query,

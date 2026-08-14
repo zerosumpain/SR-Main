@@ -6,18 +6,26 @@
   import ActionsRow from '$lib/components/research/ActionsRow.svelte';
   import Markdown from '$lib/components/research/Markdown.svelte';
   import StatTiles, { type Stat } from '$lib/components/research/StatTiles.svelte';
-  import EntityGraph from '$lib/components/research/EntityGraph.svelte';
-  import { goto } from '$app/navigation';
+  import SessionNetwork from '$lib/components/research/SessionNetwork.svelte';
+  import ResearchTimeline from '$lib/components/research/ResearchTimeline.svelte';
+  import SourceMix from '$lib/components/research/SourceMix.svelte';
+  import SourceTable from '$lib/components/research/SourceTable.svelte';
+  import AskJkaiPanel from '$lib/components/research/AskJkaiPanel.svelte';
+  import { goto, invalidateAll } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
-
-  type Src = (typeof data.sources)[number];
 
   let status = $state(data.session.status);
   let summary = $state(data.session.summary);
   let durationMs = $state<number | null>(data.session.durationMs);
   let errorMessage = $state<string | null>(data.session.errorMessage);
-  let sources = $state<Src[]>(data.sources);
+  /**
+   * Live source count while the run is in flight. The RANKED list comes from
+   * the loader — media flags and per-source fact counts are a database join,
+   * not something the SSE frame carries — so this drives the tile only, and the
+   * table below reads `data.sources` after the completion refresh.
+   */
+  let liveSourceCount = $state(data.sources.length);
   let stats = $state({ sourcesFound: 0, factsExtracted: 0, entitiesIdentified: 0, counterfactualsRaised: 0 });
   let logLines = $state<string[]>([]);
   let leads = $state<FrontierLead[]>(data.leads as FrontierLead[]);
@@ -45,11 +53,29 @@
     const div = (data.report as { source_diversity?: { total_domains?: number; concentration_index?: number } })
       ?.source_diversity;
     const out: Stat[] = [
-      { label: 'Sources', value: c.sources, note: div?.total_domains ? `${div.total_domains} domains` : null },
+      {
+        label: 'Sources',
+        value: c.sources,
+        note: c.domains ? `${c.domains} domains` : null,
+        href: '#sources',
+      },
+      // The count that answers "how much of this actually mattered". It is the
+      // one the old list made impossible to see.
+      {
+        label: 'Key material',
+        value: c.keySources,
+        note: 'fed the report, or substantial',
+        href: '#sources',
+      },
     ];
     if (data.tier.extractsFacts) {
-      out.push({ label: 'Facts', value: c.facts });
-      out.push({ label: 'Entities', value: c.entities, note: c.relationships ? `${c.relationships} links` : null });
+      out.push({ label: 'Facts', value: c.facts, href: data.timeline.length ? '#timeline' : undefined });
+      out.push({
+        label: 'Entities',
+        value: c.entities,
+        note: c.relationships ? `${c.relationships} links` : 'no links extracted',
+        href: '#network',
+      });
     }
     if (c.counterfactuals > 0) {
       out.push({ label: 'Challenged', value: c.counterfactuals, note: 'claims with counter-evidence', tone: 'warn' });
@@ -62,9 +88,22 @@
         value: narrow ? 'Narrow' : div.concentration_index >= 0.3 ? 'Moderate' : 'Broad',
         note: narrow ? 'most sources are one kind' : null,
         tone: narrow ? 'warn' : undefined,
+        href: '#source-mix',
       });
     }
     return out;
+  });
+
+  /** What the Ask panel opens with, pushed from the network or a report panel. */
+  let pendingQuestion = $state<string | null>(null);
+  /** Media kind the source list is narrowed to, driven by the mix chart. */
+  let sourceFilter = $state<string | null>(null);
+
+  const askContext = $derived({
+    sessionId: data.session.id,
+    topic: data.session.topic,
+    topEntities: data.topEntities.map((e) => e.name),
+    report: data.report as Record<string, never>,
   });
 
   function fmtMs(ms: number | null): string {
@@ -101,7 +140,7 @@
           if (msg.message) logLines = [...logLines.slice(-60), msg.message];
           break;
         case 'sources':
-          if (Array.isArray(msg.data?.sources)) sources = msg.data.sources as Src[];
+          if (Array.isArray(msg.data?.sources)) liveSourceCount = msg.data.sources.length;
           break;
         case 'token':
           // The synthesis streams in; the summary IS the accumulating text.
@@ -128,6 +167,12 @@
           status = 'complete';
           durationMs = (msg.data?.durationMs as number) ?? null;
           stopClock();
+          // Everything the finished view needs — the report, the ranked
+          // sources with their media flags, the resolved timeline, the counts —
+          // is assembled by the loader from tables the stream does not carry.
+          // Watching a run to completion used to leave all of it empty until a
+          // manual refresh.
+          void invalidateAll();
           break;
         case 'error':
           status = 'failed';
@@ -197,10 +242,14 @@
 
   <section class="statusbar">
     <span class="pill" class:done={status === 'complete'} class:failed={status === 'failed'}>{status}</span>
-    <span class="metric"><b>{stats.sourcesFound || sources.length}</b> sources</span>
+    <!-- The SSE counters only ever tick DURING a run, so on a finished one they
+         are all zero. Reading "0 facts 0 entities" directly above tiles saying
+         51 and 53 made the header look broken; once the run is over the loader's
+         counts are the true ones. -->
+    <span class="metric"><b>{finished ? data.counts.sources : stats.sourcesFound || liveSourceCount}</b> sources</span>
     {#if data.tier.extractsFacts}
-      <span class="metric"><b>{stats.factsExtracted}</b> facts</span>
-      <span class="metric"><b>{stats.entitiesIdentified}</b> entities</span>
+      <span class="metric"><b>{finished ? data.counts.facts : stats.factsExtracted}</b> facts</span>
+      <span class="metric"><b>{finished ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
     {/if}
     <span class="metric spacer">
       {#if finished}{fmtMs(durationMs)}{:else}{fmtMs(elapsedMs)} elapsed{/if}
@@ -229,64 +278,101 @@
     </section>
   {/if}
 
+  {#if finished}
+    <StatTiles stats={tiles} />
+  {/if}
+
+  <!-- The answer and the two things you do with it, side by side. Asking jkai
+       and exporting are the actions a reader reaches for while still looking at
+       the summary, so they sit next to it rather than at the foot of the page. -->
+  <div class="main-grid">
+    <div class="col-answer">
+      <section class="answer">
+        {#if summary}
+          <Markdown text={summary} />
+        {:else if status === 'failed'}
+          <p class="note">No answer was produced.</p>
+        {:else if finished}
+          <!-- A run can finish with everything else intact and no summary: a
+               tight budget used to skip the synthesis step and keep the
+               enrichment. Saying "Working…" under a COMPLETE pill was the page
+               contradicting itself. -->
+          <p class="note">
+            This run finished without writing a summary — the evidence below is still here.
+          </p>
+        {:else}
+          <p class="note">Working…</p>
+        {/if}
+      </section>
+    </div>
+
+    <!-- Gated on `finished`, not on there being a summary: asking jkai about a
+         run and exporting it are exactly what you want when the summary is the
+         thing that came out empty. -->
+    {#if finished}
+      <aside class="col-rail">
+        <AskJkaiPanel context={askContext} pending={pendingQuestion} />
+        <ActionsRow
+          sessionId={data.session.id}
+          depth={data.session.depth}
+          hasReport={!!summary}
+          shareToken={data.session.shareToken}
+        />
+      </aside>
+    {/if}
+  </div>
+
   {#if leads.length}
     <section class="frontier-panel">
       <FrontierGraph {leads} />
     </section>
   {/if}
 
-  <section class="answer">
-    {#if summary}
-      <Markdown text={summary} />
-    {:else if status === 'failed'}
-      <p class="note">No answer was produced.</p>
-    {:else}
-      <p class="note">Working…</p>
+  {#if finished}
+    <ResearchTimeline periods={data.timeline} />
+
+    {#if data.counts.entities > 0}
+      <SessionNetwork
+        sessionId={data.session.id}
+        onAsk={(q) => {
+          pendingQuestion = q;
+          document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
     {/if}
-  </section>
+  {/if}
 
   {#if finished}
-    <StatTiles stats={tiles} />
-  {/if}
-
-  {#if finished && data.graph.nodes.length > 1}
-    <section class="nm-sec">
-      <div class="nm-sec-hd">
-        <span class="sr-label-tight">Entity network</span>
-        <span class="hint">{data.graph.nodes.length} shown of {data.counts.entities} · scroll to zoom</span>
-      </div>
-      <EntityGraph nodes={data.graph.nodes} edges={data.graph.edges} />
-    </section>
-  {/if}
-
-  {#if finished && summary}
     <ReportPanels
       report={data.report as ReportView}
       goals={data.session.goals}
       topEntities={data.topEntities}
       onInvestigate={investigate}
-    />
-    <ActionsRow
-      sessionId={data.session.id}
-      depth={data.session.depth}
-      hasReport={!!summary}
-      topic={data.session.topic}
-      shareToken={data.session.shareToken}
+      onAsk={(q) => {
+        pendingQuestion = q;
+        document.getElementById('ask')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }}
     />
   {/if}
 
-  {#if sources.length}
-    <section class="sources">
-      <div class="sr-label-tight">Sources</div>
-      <ol>
-        {#each sources as s, i (s.id ?? s.url)}
-          <li>
-            <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title || s.url}</a>
-            <span class="src-meta">{s.domain}{#if s.credibilityType} · {s.credibilityType}{/if}</span>
-          </li>
-        {/each}
-      </ol>
-    </section>
+  {#if finished && data.mix.length > 1}
+    <SourceMix
+      mix={data.mix}
+      contributors={data.contributors}
+      selected={sourceFilter}
+      onSelect={(kind) => {
+        sourceFilter = kind;
+        document.getElementById('sources')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }}
+    />
+  {/if}
+
+  {#if data.sources.length}
+    <SourceTable
+      sources={data.sources}
+      filterKind={sourceFilter}
+      onClearFilter={() => (sourceFilter = null)}
+    />
   {/if}
 
   {#if logLines.length}
@@ -300,7 +386,20 @@
 </div>
 
 <style>
-  .wrap { max-width: 860px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+  /* Wider than the 860px reading column it used to be: this is a dashboard now,
+     and the answer keeps its own measure inside the grid below rather than the
+     whole page being sized to it. */
+  .wrap { max-width: 1180px; margin: 2rem auto 4rem; padding: 0 1.5rem; color: var(--text-primary); font-family: var(--font-body); }
+
+  /* Answer left, actions right. The rail collapses under the answer before the
+     answer gets too narrow to read. */
+  .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.25rem; align-items: start; margin-bottom: 1.25rem; }
+  .col-answer { min-width: 0; }
+  .col-rail { min-width: 0; position: sticky; top: 1rem; }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: minmax(0, 1fr); }
+    .col-rail { position: static; }
+  }
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-end; gap: 1.5rem; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 2px solid var(--text-primary); }
   .kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); margin-bottom: 0.35rem; }
   .page-hdr h1 { margin: 0; font-family: var(--font-display); font-size: 1.8rem; font-weight: 900; line-height: 1.1; }
@@ -323,16 +422,10 @@
   .reasoning { border: 1px dashed rgba(26, 16, 8, 0.25); padding: 0.75rem 0.9rem; margin-bottom: 1.25rem; background: var(--surface-elevated, #faf6ee); }
   .reasoning pre { margin: 0.4rem 0 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); max-height: 300px; overflow-y: auto; }
 
-  .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
+  /* .sr-label-tight comes from $lib/styles/nm-tokens.css. */
   .frontier-panel { margin-bottom: 1.5rem; }
-  .answer { margin-bottom: 1.75rem; }
-  .prose { white-space: pre-wrap; line-height: 1.65; font-size: 1rem; }
+  .answer { margin-bottom: 0; }
   .note { color: var(--text-muted); font-style: italic; }
-
-  .sources { margin-bottom: 1.5rem; }
-  .sources ol { margin: 0.5rem 0 0; padding-left: 1.4rem; display: grid; gap: 0.4rem; }
-  .sources a { color: var(--text-primary); }
-  .src-meta { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .activity summary { font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); cursor: pointer; }
   .activity ul { margin: 0.5rem 0 0; padding-left: 1.2rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); display: grid; gap: 0.2rem; }

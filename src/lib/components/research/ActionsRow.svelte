@@ -16,25 +16,13 @@
     sessionId,
     depth,
     hasReport,
-    topic,
     shareToken = null,
   }: {
     sessionId: string;
     depth: string;
     hasReport: boolean;
-    /** Seeds the question the chat composer opens with. */
-    topic: string;
     shareToken?: string | null;
   } = $props();
-
-  /**
-   * The question jkai should open with. The old link carried a `research=<id>`
-   * param that nothing read, so the button dropped you on an empty composer and
-   * you retyped the question yourself.
-   */
-  const askUrl = $derived(
-    `/jkai?q=${encodeURIComponent(`About my research on "${topic}" — `)}`,
-  );
 
   let busy = $state<string | null>(null);
   let message = $state<string | null>(null);
@@ -92,8 +80,9 @@
   <div class="nm-sec-hd"><span class="sr-label-tight">Do something with this</span></div>
 
   <div class="actions">
-    <a class="act" href={askUrl}>Ask jkai about it</a>
-
+<!-- "Ask jkai about it" now lives in AskJkaiPanel above, which asks a real
+         question from this report rather than seeding the composer with a
+         fragment for the reader to finish. -->
     {#if hasReport}
       <button class="act" type="button" disabled={busy === 'intel'} onclick={pushToIntel}>
         {busy === 'intel' ? 'Adding…' : 'Add to Intel'}
