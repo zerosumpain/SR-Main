@@ -54,6 +54,19 @@ export const MIN_TRACKED_SIZE = 5;
 /** Palette slots available; mirrors CLUSTER_COLOURS in components/intel/graph-visual. */
 const COLOUR_SLOTS = 10;
 
+/** How many changed ids are kept. Enough to list; not enough to bloat a record. */
+export const DELTA_SAMPLE = 25;
+
+export interface ClusterDelta {
+  /** Up to DELTA_SAMPLE entity ids that arrived. */
+  joined: string[];
+  /** Up to DELTA_SAMPLE entity ids that left. */
+  left: string[];
+  joinedCount: number;
+  leftCount: number;
+  at: string;
+}
+
 export interface StoredCluster {
   key: string;
   /** User-set name. Null means "show the generated label". */
@@ -76,6 +89,20 @@ export interface StoredCluster {
   splitFrom: string | null;
   /** False once a reconcile no longer finds it. The record is kept regardless. */
   live: boolean;
+  /**
+   * What changed at the last reconcile that moved this cluster.
+   *
+   * Computed here because this is the only place both member lists exist at
+   * once. Storing the ids rather than a bare count is what lets the card say
+   * WHICH entities arrived, which is the version of "what changed" worth
+   * reading; the counts are kept separately because the id lists are capped and
+   * would otherwise understate a large intake.
+   *
+   * Null until the cluster moves, and left alone by a reconcile that changes
+   * nothing — so "nothing joined this run" and "nothing has ever joined" stay
+   * distinguishable, and a quiet run does not erase yesterday's intake.
+   */
+  delta: ClusterDelta | null;
   /** When the user last named this cluster. Null while it is unnamed. */
   namedAt: string | null;
   /**
@@ -301,8 +328,22 @@ export function reconcileClusters(input: ReconcileInput): ReconcileResult {
 
     if (existingKey) {
       const previous = byKey.get(existingKey)!;
+      const wasMember = new Set(previous.members);
+      const isMember = new Set(members);
+      const joined = members.filter((id) => !wasMember.has(id));
+      const left = previous.members.filter((id) => !isMember.has(id));
       result.push({
         ...previous,
+        delta:
+          joined.length || left.length
+            ? {
+                joined: joined.slice(0, DELTA_SAMPLE),
+                left: left.slice(0, DELTA_SAMPLE),
+                joinedCount: joined.length,
+                leftCount: left.length,
+                at: now,
+              }
+            : previous.delta,
         // `name` is deliberately untouched — it is the user's judgement, and the
         // same protection PROTECTED_STATUSES gives a dismissed insight.
         autoLabel,
@@ -356,6 +397,9 @@ export function reconcileClusters(input: ReconcileInput): ReconcileResult {
       mergedFrom: absorbed,
       splitFrom,
       live: true,
+      // A cluster that has just appeared has not changed — everything in it
+      // arriving at once is what "new" means, not an intake worth reporting.
+      delta: null,
       namedAt: null,
       namedMembers: null,
     });

@@ -5,6 +5,7 @@ import {
   fingerprint,
   nameDrift,
   MIN_TRACKED_SIZE,
+  DELTA_SAMPLE,
   type StoredCluster,
 } from './cluster-identity';
 
@@ -33,11 +34,88 @@ function stored(over: Partial<StoredCluster> & Pick<StoredCluster, 'key' | 'memb
     mergedFrom: [],
     splitFrom: null,
     live: true,
+    delta: null,
     namedAt: null,
     namedMembers: null,
     ...over,
   };
 }
+
+describe('delta', () => {
+  it('is null for a cluster that has just appeared', () => {
+    const r = reconcileClusters({
+      ...base,
+      detected: new Map([[0, ids('a', 10)]]),
+      stored: [],
+      mintKey: mint(),
+    });
+    expect(r.clusters[0].delta).toBeNull();
+  });
+
+  it('records exactly what arrived and what left', () => {
+    const first = reconcileClusters({
+      ...base,
+      detected: new Map([[0, ids('a', 10)]]),
+      stored: [],
+      mintKey: mint(),
+    });
+    const second = reconcileClusters({
+      ...base,
+      detected: new Map([[0, [...ids('a', 8), 'x', 'y', 'z']]]),
+      stored: first.clusters,
+      mintKey: mint(),
+    });
+    const delta = second.clusters[0].delta!;
+    expect(delta.joined).toEqual(['x', 'y', 'z']);
+    expect(delta.left).toEqual(['a8', 'a9']);
+    expect(delta.joinedCount).toBe(3);
+    expect(delta.leftCount).toBe(2);
+    expect(delta.at).toBe(NOW);
+  });
+
+  it('caps the id lists but not the counts', () => {
+    // A big intake that is still recognisably the same cluster — 100 members
+    // taking on 60 is well inside the match threshold.
+    const first = reconcileClusters({
+      ...base,
+      detected: new Map([[0, ids('a', 100)]]),
+      stored: [],
+      mintKey: mint(),
+    });
+    const second = reconcileClusters({
+      ...base,
+      detected: new Map([[0, [...ids('a', 100), ...ids('n', 60)]]]),
+      stored: first.clusters,
+      mintKey: mint(),
+    });
+    const delta = second.clusters[0].delta!;
+    expect(delta.joined).toHaveLength(DELTA_SAMPLE);
+    expect(delta.joinedCount).toBe(60);
+  });
+
+  it('keeps the last real change through a reconcile that moves nothing', () => {
+    const first = reconcileClusters({
+      ...base,
+      detected: new Map([[0, ids('a', 10)]]),
+      stored: [],
+      mintKey: mint(),
+    });
+    const changed = reconcileClusters({
+      ...base,
+      detected: new Map([[0, [...ids('a', 10), 'x']]]),
+      stored: first.clusters,
+      mintKey: mint(),
+    });
+    const quiet = reconcileClusters({
+      ...base,
+      now: '2026-08-20T00:00:00.000Z',
+      detected: new Map([[0, [...ids('a', 10), 'x']]]),
+      stored: changed.clusters,
+      mintKey: mint(),
+    });
+    expect(quiet.clusters[0].delta).toEqual(changed.clusters[0].delta);
+  });
+});
 
 describe('nameDrift', () => {
   it('is null for a cluster nobody has named', () => {
