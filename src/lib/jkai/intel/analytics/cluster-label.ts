@@ -86,7 +86,33 @@ export interface ClusterComposition {
   sourceless: number;
   /** Total note links across the cluster. */
   noteTotal: number;
+  /**
+   * How evenly the cluster's evidence is spread across kinds of source, 0..1.
+   *
+   * Shannon entropy of the source mix. This is the figure that separates a
+   * SUBJECT from a FEED, and it was arrived at by measurement after two more
+   * obvious ideas failed on the real graph:
+   *
+   *   size            puts four retail-email clusters above both work clusters.
+   *   median relevance made it WORSE — relevance is confidence times freshness,
+   *                   and marketing email is both recent and confidently
+   *                   extracted, so it rewards precisely the noise. IBCA fell
+   *                   from 7th to 10th, DfE Data Spine from 9th to 12th.
+   *
+   * Diversity ranks IBCA 1st and DfE 2nd, and drops the mailshots off the list
+   * entirely: Brakeburn scores 0.04, Zavvi 0.04, CMaxOwnersClub 0.00, because
+   * every entity in them came from one source. IBCA is 0.70 and DfE 0.72 —
+   * file, chat and research all corroborating the same body.
+   */
+  diversity: number;
 }
+
+/**
+ * The note sources an entity can carry, from `intel_notes.source`. Used only to
+ * put `diversity` on a 0..1 scale — the ranking is unaffected by the choice,
+ * since rescaling by a constant cannot reorder anything.
+ */
+export const KNOWN_SOURCES = ['email', 'chat', 'file', 'research', 'web', 'whatsapp', 'workflow'];
 
 function pluralise(typeName: string, count: number): string {
   const readable = typeName.replace(/_/g, ' ');
@@ -173,12 +199,23 @@ export function describeComposition(members: readonly GraphNode[]): ClusterCompo
     for (const source of seen) sources.set(source, (sources.get(source) ?? 0) + 1);
   }
 
+  const total = [...sources.values()].reduce((sum, n) => sum + n, 0);
+  let entropy = 0;
+  if (total > 0) {
+    for (const n of sources.values()) {
+      const p = n / total;
+      if (p > 0) entropy -= p * Math.log(p);
+    }
+    entropy /= Math.log(KNOWN_SOURCES.length);
+  }
+
   return {
     size: members.length,
     types: ranked(types),
     sources: ranked(sources),
     sourceless,
     noteTotal,
+    diversity: Number(entropy.toFixed(4)),
   };
 }
 

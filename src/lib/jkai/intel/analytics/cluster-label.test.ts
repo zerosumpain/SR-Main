@@ -4,6 +4,7 @@ import {
   describeComposition,
   findUbiquitousEntities,
   UBIQUITY_REACH,
+  KNOWN_SOURCES,
 } from './cluster-label';
 import type { GraphNode } from './model';
 
@@ -213,6 +214,55 @@ describe('describeComposition', () => {
 
   it('handles an empty cluster without dividing by zero', () => {
     const c = describeComposition([]);
-    expect(c).toEqual({ size: 0, types: [], sources: [], sourceless: 0, noteTotal: 0 });
+    expect(c).toEqual({
+      size: 0,
+      types: [],
+      sources: [],
+      sourceless: 0,
+      noteTotal: 0,
+      diversity: 0,
+    });
+  });
+});
+
+describe('diversity', () => {
+  const from = (sources: string[][]) =>
+    describeComposition(sources.map((s, i) => n(String(i), `e${i}`, 'product', s))).diversity;
+
+  it('is 0 for a cluster whose every entity came from one source', () => {
+    // The real case: Brakeburn, Zavvi, CMaxOwnersClub — single-source mailshots.
+    expect(from([['email'], ['email'], ['email']])).toBe(0);
+  });
+
+  it('rises as evidence spreads across kinds of source', () => {
+    const single = from([['email'], ['email'], ['email'], ['email']]);
+    const two = from([['email'], ['email'], ['file'], ['file']]);
+    const three = from([['email'], ['file'], ['chat'], ['research']]);
+    expect(two).toBeGreaterThan(single);
+    expect(three).toBeGreaterThan(two);
+  });
+
+  it('separates a corroborated subject from a feed', () => {
+    // IBCA-shaped: file-led, corroborated by chat and research.
+    const subject = from([
+      ...Array.from({ length: 14 }, () => ['file']),
+      ...Array.from({ length: 6 }, () => ['chat']),
+      ['research'],
+      ['research'],
+    ]);
+    // Costco-shaped: everything from one mailbox.
+    const feed = from(Array.from({ length: 22 }, () => ['email']));
+    expect(subject).toBeGreaterThan(feed);
+    expect(feed).toBe(0);
+  });
+
+  it('stays within 0..1', () => {
+    const spread = from(KNOWN_SOURCES.map((s) => [s]));
+    expect(spread).toBeGreaterThan(0);
+    expect(spread).toBeLessThanOrEqual(1);
+  });
+
+  it('ignores entities with no provenance rather than counting them as a source', () => {
+    expect(from([['email'], ['email'], []])).toBe(0);
   });
 });

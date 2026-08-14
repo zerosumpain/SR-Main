@@ -726,7 +726,9 @@ Read the `svelte5-pitfalls` skill first. Fully controlled, no state of its own b
 
 Two changes, both justified by the baseline:
 
-1. **Order by signal, not size.** `signal = medianRelevance × ln(1 + size)`. Size alone puts four retail-email clusters (Costco 250, Brakeburn 229, UKCC 212, competitions 288) above DfE Data Spine (206) and IBCA (205). Show the sort in the hint text so the order is explicable.
+1. **Order by signal, not size.** `signal = sourceDiversity × ln(1 + size)`, where diversity is the normalised Shannon entropy of the cluster's source mix. Size alone puts four retail-email clusters (Costco 250, Brakeburn 229, UKCC 212, competitions 288) above DfE Data Spine (206) and IBCA (205). Show the sort in the hint text so the order is explicable.
+
+   **`medianRelevance` was tried first and measured worse — do not go back to it.** Relevance is confidence × freshness, and marketing email is both recent and confidently extracted, so it promotes precisely the noise it was meant to demote: IBCA fell 7th→10th and DfE 9th→12th. Diversity ranks IBCA 1st and DfE 2nd and drops the mailshots off the list entirely (Brakeburn 0.04, Zavvi 0.04, CMaxOwnersClub 0.00, against IBCA 0.70 and DfE 0.72). The principle: a cluster corroborated across several kinds of source is a subject you engage with; one whose every entity came from a single source is a feed.
 2. **Roll up the tail.** List clusters of ≥5 (89 today, ~106 after tuning); replace the 2,632 singletons with one row — "2,632 unconnected entities" — linking to `/jkai/intel/quality`. Change the stat strip from `communities` (2,937, a number that means nothing) to the tracked-cluster count.
 
 - [ ] **Step 1:** Implement. **Step 2:** `npm run check`. **Step 3:** Verify DfE and IBCA now rank above the retail clusters. **Step 4:** Commit.
