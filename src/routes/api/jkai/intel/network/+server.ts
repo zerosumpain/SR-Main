@@ -196,9 +196,25 @@ export const GET: RequestHandler = async ({ url }) => {
       sourceCounts.set(s, (sourceCounts.get(s) ?? 0) + 1);
     }
   }
-  const sources = [...sourceCounts.entries()]
-    .map(([id, count]) => ({ id, count }))
-    .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+  // Split into the three levels the picker offers. A facet is a source value
+  // carrying a separator — 'email:bulk' is a kind, 'email@linkedin.com' is a
+  // sender. Grouping them here rather than in the component keeps the parsing
+  // in one place and lets the picker stay a renderer.
+  const sources: Array<{ id: string; count: number }> = [];
+  const sourceKinds: Array<{ id: string; source: string; kind: string; count: number }> = [];
+  const sourceDomains: Array<{ id: string; source: string; domain: string; count: number }> = [];
+  for (const [id, count] of sourceCounts) {
+    const colon = id.indexOf(':');
+    const at = id.indexOf('@');
+    if (at > 0) sourceDomains.push({ id, source: id.slice(0, at), domain: id.slice(at + 1), count });
+    else if (colon > 0) sourceKinds.push({ id, source: id.slice(0, colon), kind: id.slice(colon + 1), count });
+    else sources.push({ id, count });
+  }
+  const byCount = <T extends { count: number; id: string }>(a: T, b: T) =>
+    b.count - a.count || a.id.localeCompare(b.id);
+  sources.sort(byCount);
+  sourceKinds.sort(byCount);
+  sourceDomains.sort(byCount);
 
   return json({
     nodes,
@@ -206,6 +222,8 @@ export const GET: RequestHandler = async ({ url }) => {
     types,
     categories,
     sources,
+    sourceKinds,
+    sourceDomains,
     // The literal keyword hits, kept separate from `nodes` so the client can
     // highlight them rather than pretending the expanded neighbourhood matched.
     matched: filtered.matched.filter((id) => keep.has(id)),

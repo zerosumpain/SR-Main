@@ -109,6 +109,53 @@ async function findDerivedNote(kind: AutoKind, refId: string) {
   return row ?? null;
 }
 
+
+/**
+ * What kind of email this note came from, where it came from one.
+ *
+ * `source: 'email'` covers 62% of the entities in the graph and describes a
+ * colleague writing to you, a service reporting a build, and a shop announcing
+ * a sale — all as one thing, which is why the source filter could not narrow
+ * anything. These two fields are what let it.
+ *
+ * Derived HERE, where the note's metadata is assembled, rather than in the
+ * Gmail ingest specifically: anything that supplies `participants` gets
+ * classified, and nothing that does not is affected.
+ *
+ * The mailbox owner comes from `gmailAccount`, which the ingest already writes
+ * on every email note. Without it the owner would be treated as the sender, and
+ * since the owner is on every thread by definition, every email would classify
+ * identically.
+ */
+async function emailFacets(
+  metadata: Record<string, unknown> | undefined,
+): Promise<Record<string, string> | undefined> {
+  const participants = metadata?.participants;
+  if (!Array.isArray(participants) || participants.length === 0) return undefined;
+
+  try {
+    const [{ classifyEmail }, { emailDomainOverrides }] = await Promise.all([
+      import('./email-kind'),
+      import('./email-domain-rules'),
+    ]);
+    const owner = typeof metadata?.gmailAccount === 'string' ? [metadata.gmailAccount] : [];
+    const result = classifyEmail(
+      participants.map((p) => String(p)),
+      owner,
+      await emailDomainOverrides(),
+    );
+    return {
+      emailKind: result.kind,
+      ...(result.domain ? { senderDomain: result.domain } : {}),
+    };
+  } catch (err) {
+    // A note with no facets is filterable by source as it always was. A note
+    // that failed to be written at all is a lost thread.
+    console.warn('[intel] could not classify email note', err);
+    return undefined;
+  }
+}
+
 /**
  * Extract entities/relationships/timeline events from an upstream knowledge
  * item into the intel graph. Idempotent per (kind, refId, contentHash).
@@ -133,6 +180,7 @@ export async function extractIntoIntel(input: AutoExtractInput): Promise<AutoExt
       refId: input.refId,
       contentHash: input.contentHash,
       sourceTag: input.kind,
+      ...(await emailFacets(input.metadata)),
     };
 
     // One derived note per source item, reused across re-indexes so the graph

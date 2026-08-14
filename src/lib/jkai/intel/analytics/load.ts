@@ -172,7 +172,24 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
              -- an eleven-week-old thread exactly as fresh as this morning's.
              MAX(COALESCE(n.observed_at, n.created_at)) AS last_seen_at,
              ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories,
-             ARRAY_AGG(DISTINCT n.source)   FILTER (WHERE n.source IS NOT NULL) AS sources
+             -- Plain source values, plus the finer facets as qualified ones.
+             --
+             -- Emitted into the SAME array rather than as a new column, because
+             -- the filter chain already matches "any of these sources" and the
+             -- picker already counts them — so 'email:bulk' and
+             -- 'email@mailer.humblebundle.com' become selectable everywhere
+             -- without a second dimension to thread through five call sites.
+             -- The separators are chosen so a plain source can never collide
+             -- with a facet: neither ':' nor '@' appears in a source value.
+             ARRAY_CAT(
+               ARRAY_CAT(
+                 COALESCE(ARRAY_AGG(DISTINCT n.source) FILTER (WHERE n.source IS NOT NULL), ARRAY[]::text[]),
+                 COALESCE(ARRAY_AGG(DISTINCT n.source || ':' || (n.metadata->>'emailKind'))
+                          FILTER (WHERE n.metadata->>'emailKind' IS NOT NULL), ARRAY[]::text[])
+               ),
+               COALESCE(ARRAY_AGG(DISTINCT n.source || '@' || (n.metadata->>'senderDomain'))
+                        FILTER (WHERE n.metadata->>'senderDomain' IS NOT NULL), ARRAY[]::text[])
+             ) AS sources
       FROM intel_note_entities ne
       JOIN intel_notes n ON n.id = ne.note_id
       LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(n.categories, '[]'::jsonb))
@@ -251,7 +268,14 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
     WHERE r.suppressed IS NOT TRUE
   `);
 
-  const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>).map((r) => ({
+  const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>)
+    // An edge to an excluded entity goes with it. `buildIndex` already refuses
+    // to create phantom nodes from one, so leaving them in changed no analysis —
+    // but `snapshot.edges` is also what the stat strip counts, and reporting 521
+    // connections in a graph that has 508 is the kind of quiet inconsistency
+    // that makes someone distrust the whole panel.
+    .filter((r) => !artefacts.has(String(r.source)) && !artefacts.has(String(r.target)))
+    .map((r) => ({
     id: String(r.id),
     source: String(r.source),
     target: String(r.target),
