@@ -47,6 +47,16 @@
    */
   const NAMED_CLUSTERS = 8;
 
+  /**
+   * Advance width of one character at the caption size, in user units.
+   *
+   * JetBrains Mono is 0.6em wide and the captions sit at the 12px floor, so a
+   * caption is 7.2px per character. Kept as a constant because the character
+   * budget and the stylesheet have to agree — when they drifted, labels were
+   * computed to fit and then rendered wider than their own bubble.
+   */
+  const CHAR_PX = 7.2;
+
   const layout = $derived.by(() => {
     const nodes = [...graph.nodes].sort((a, b) => b.size - a.size);
     if (!nodes.length) return { placed: [], links: [], height };
@@ -183,8 +193,8 @@
           <!-- How many characters fit INSIDE this bubble, at the mono cap size.
                A caption wider than its own circle reads as belonging to whatever
                it spills over, which on a packed map is another cluster. -->
-          {@const fits = Math.floor((n.r * 1.7) / 5.6)}
-          {@const named = i < NAMED_CLUSTERS && n.r > 20 && fits >= 5}
+          {@const fits = Math.floor((n.r * 1.7) / CHAR_PX)}
+          {@const named = i < NAMED_CLUSTERS && n.r > 26 && fits >= 5}
           <g
             class="node"
             class:dim={dim(n.key)}
@@ -217,10 +227,10 @@
                  circle reads as belonging to whatever it spills over, which on
                  a packed map is always something else's bubble. -->
             {#if named}
-              <text x={n.x} y={n.y + 2} text-anchor="middle" class="cap">
+              <text x={n.x} y={n.y} text-anchor="middle" class="cap">
                 {n.label.length > fits ? `${n.label.slice(0, fits - 1)}…` : n.label}
               </text>
-              <text x={n.x} y={n.y + 14} text-anchor="middle" class="num">{n.size}</text>
+              <text x={n.x} y={n.y + 15} text-anchor="middle" class="num">{n.size}</text>
             {:else}
               <text x={n.x} y={n.y + 4} text-anchor="middle" class="num">{n.size}</text>
             {/if}
@@ -268,15 +278,18 @@
     outline: none;
   }
 
+  /* Both at the 12px floor, not below it. An SVG caption is still text
+     somebody has to read, and the type scale's floor is not waived by the
+     label happening to live inside a circle. */
   .cap {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-primary);
     pointer-events: none;
   }
   .num {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-ghost);
     pointer-events: none;
   }
