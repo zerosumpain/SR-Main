@@ -53,6 +53,13 @@
      * user landed on an empty box and had to retype the question.
      */
     initialDraft = '',
+    /**
+     * Send `initialDraft` as soon as there is a conversation to send it into,
+     * instead of leaving it in the box. This is what makes "Ask jkai about it"
+     * on a research run actually ask: the reply streams here rather than the
+     * user arriving at a primed composer and pressing enter themselves.
+     */
+    autoSend = false,
     conversation = null,
     modelContextLength = null,
     defaultChatModelId,
@@ -70,6 +77,7 @@
   }: {
     conversationId: string | null;
     initialDraft?: string;
+    autoSend?: boolean;
     initialMessages?: Array<{
       id: string;
       role: string;
@@ -1931,6 +1939,26 @@
     const ctx = coerceModelContext(currentModel);
     await tellHermesModel(ctx.provider, ctx.modelId);
   }
+
+  /**
+   * Fire the handed-over question once, as soon as it can actually be sent.
+   *
+   * A plain `let`, never `$state`: nothing renders it, and the effect below
+   * both reads it and writes it — as reactive state that is the documented
+   * route to `effect_update_depth_exceeded`.
+   */
+  let autoSendDone = false;
+
+  $effect(() => {
+    if (!autoSend || autoSendDone) return;
+    // `?new=1` creates the conversation in the parent's mount hook, so there is
+    // usually no id on the first run — wait for one rather than dropping the
+    // question on the floor.
+    if (!conversationId || !input.trim() || loading) return;
+    autoSendDone = true;
+    // `send()` writes `input` and `loading`, which this effect reads.
+    untrack(() => void send());
+  });
 
   async function send() {
     const text = input.trim();

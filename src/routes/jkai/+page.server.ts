@@ -41,6 +41,12 @@ export const load: PageServerLoad = async ({ url }) => {
    * component is constructed before the parent's mount hook runs.
    */
   const pendingQuestion = (url.searchParams.get('q') ?? '').trim().slice(0, 2000);
+  /**
+   * `send=1` means the caller asked a question rather than offering one to
+   * finish, so it goes straight to the model. Only honoured alongside `q` —
+   * on its own it would send an empty message.
+   */
+  const pendingSend = pendingQuestion.length > 0 && url.searchParams.get('send') === '1';
 
   // Load conversations with preview
   const convList = await getConversationList();
@@ -85,6 +91,7 @@ export const load: PageServerLoad = async ({ url }) => {
 
   return {
     pendingQuestion,
+    pendingSend,
     conversations: convList,
     whatsappThread,
     defaultChatModel,
