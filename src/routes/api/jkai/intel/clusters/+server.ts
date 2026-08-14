@@ -3,6 +3,7 @@
 //   GET                             the roster, ranked, with the cluster-level map
 //   POST { action: 'recalculate' }  re-tune, re-detect, reconcile, return the roster
 //   POST { action: 'rename', … }    name a cluster, or clear the name
+//   POST { action: 'narrate', key } write (or rewrite) a cluster's narrative
 //
 // The roster is deliberately NOT part of /network: that route ships the entity
 // graph trimmed to its 600 most central nodes, and cluster-level questions are
@@ -15,7 +16,13 @@ import { autoTuneResolution, detectCommunities } from '$lib/jkai/intel/analytics
 import { nameDrift, NAME_DRIFT_WARNING } from '$lib/jkai/intel/analytics/cluster-identity';
 import { describeComposition } from '$lib/jkai/intel/analytics/cluster-label';
 import { fingerprint } from '$lib/jkai/intel/analytics/cluster-identity';
-import { reconcileFromAnalysis, renameCluster } from '$lib/jkai/intel/cluster-store';
+import {
+  reconcileFromAnalysis,
+  renameCluster,
+  loadClusters,
+  setClusterNarrative,
+} from '$lib/jkai/intel/cluster-store';
+import { assembleClusterBriefContext, generateBrief } from '$lib/jkai/intel/brief';
 import { entityRelevance } from '$lib/jkai/intel/staleness';
 import { components } from '$lib/jkai/intel/analytics/model';
 import type { GraphAnalysis } from '$lib/jkai/intel/analytics/load';
@@ -245,6 +252,61 @@ export const POST: RequestHandler = async ({ request }) => {
       name: updated.name,
       label: updated.name ?? updated.autoLabel,
       namedAt: updated.namedAt,
+    });
+  }
+
+  if (action === 'narrate') {
+    const key = String(body.key ?? '').trim();
+    if (!key) throw error(400, 'key is required');
+
+    const analysis = await getGraphAnalysis();
+    const roster = await buildRoster(analysis);
+    const view = roster.clusters.find((c) => c.key === key);
+    if (!view) throw error(404, 'no such cluster');
+
+    const stored = (await loadClusters()).find((c) => c.key === key);
+    if (!stored) throw error(404, 'no such cluster');
+
+    // Served from store unless the membership has moved or a rewrite is asked
+    // for. A narrative costs a model call and does not go stale with time — only
+    // when the cluster it describes stops being the same set of entities.
+    if (stored.narrative && !view.narrativeStale && body.force !== true) {
+      return json({
+        key,
+        narrative: stored.narrative,
+        narrativeAt: stored.narrativeAt,
+        cached: true,
+      });
+    }
+
+    const ranked = [...stored.members].sort(
+      (a, b) => (analysis.centrality.pagerank.get(b) ?? 0) - (analysis.centrality.pagerank.get(a) ?? 0),
+    );
+
+    const context = await assembleClusterBriefContext(ranked, {
+      label: view.label,
+      size: view.size,
+      types: view.composition.types,
+      sources: view.composition.sources,
+      sourceless: view.composition.sourceless,
+      noteTotal: view.composition.noteTotal,
+      diversity: view.composition.diversity,
+      span: view.span,
+      bridges: view.bridges.map((b) => ({ name: b.name, reaches: b.reaches })),
+    });
+
+    const result = await generateBrief(context);
+    // Persisted against the membership it was written for, so the card can tell
+    // "written about this cluster" from "written about what this cluster was".
+    await setClusterNarrative(key, result.markdown, stored.members);
+
+    return json({
+      key,
+      narrative: result.markdown,
+      narrativeAt: new Date().toISOString(),
+      cached: false,
+      citations: result.citations,
+      droppedMarkers: result.droppedMarkers,
     });
   }
 
