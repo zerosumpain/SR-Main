@@ -25,6 +25,9 @@
   import {
     recencyFade,
     clusterColour,
+    clusterColourOf,
+    clusterSlotOf,
+    clusterSeedOf,
     nodeRelevance,
     relevanceScale,
     washOut,
@@ -232,7 +235,7 @@
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collide', d3.forceCollide<SimNode>().radius((d) => radius(d) + 4))
       // Pull clusters apart along x so communities read as separate regions.
-      .force('x', d3.forceX<SimNode>((d) => width / 2 + (((d.community % 5) - 2) * width) / 7).strength(0.045))
+      .force('x', d3.forceX<SimNode>((d) => width / 2 + (((clusterSeedOf(d) % 5) - 2) * width) / 7).strength(0.045))
       .force('y', d3.forceY(height / 2).strength(0.045));
 
     // Behind everything: the outlined extent of each selected cluster. Appended
@@ -298,7 +301,7 @@
       // Age was moved OFF opacity for this: opacity is shared with three other
       // meanings, and a colour receding towards the surface it sits on is what
       // "no longer current" actually looks like.
-      .attr('fill', (d) => washOut(clusterColour(d.community), nodeRelevance(d)))
+      .attr('fill', (d) => washOut(clusterColourOf(d), nodeRelevance(d)))
       .attr('fill-opacity', (d) =>
         // Keyword dimming first, then cluster focus. Focus is a view state
         // rather than a filter, so it dims rather than removes.
@@ -420,21 +423,21 @@
 
   function drawHulls(simNodes: SimNode[]) {
     if (!hullGroup) return;
-    type Blob = { community: number; path: string };
+    type Blob = { community: number; slot: number; path: string };
     const blobs: Blob[] = [];
 
     if (focusSet.size) {
-      const byCommunity = new Map<number, Array<[number, number]>>();
+      const byCommunity = new Map<number, { slot: number; points: Array<[number, number]> }>();
       for (const n of simNodes) {
         if (!focusSet.has(n.community) || n.x == null || n.y == null) continue;
-        const list = byCommunity.get(n.community);
-        if (list) list.push([n.x, n.y]);
-        else byCommunity.set(n.community, [[n.x, n.y]]);
+        const entry = byCommunity.get(n.community);
+        if (entry) entry.points.push([n.x, n.y]);
+        else byCommunity.set(n.community, { slot: clusterSlotOf(n), points: [[n.x, n.y]] });
       }
 
-      for (const [community, points] of byCommunity) {
+      for (const [community, { slot, points }] of byCommunity) {
         const path = blobPath(points);
-        if (path) blobs.push({ community, path });
+        if (path) blobs.push({ community, slot, path });
       }
     }
 
@@ -443,10 +446,10 @@
       .data(blobs, (d) => String(d.community))
       .join('path')
       .attr('d', (d) => d.path)
-      .attr('fill', (d) => clusterColour(d.community))
+      .attr('fill', (d) => clusterColour(d.slot))
       // Barely there: the fill says "this region", the stroke says where it ends.
       .attr('fill-opacity', 0.07)
-      .attr('stroke', (d) => clusterColour(d.community))
+      .attr('stroke', (d) => clusterColour(d.slot))
       .attr('stroke-width', 2.5)
       .attr('stroke-opacity', 0.85)
       .attr('stroke-linejoin', 'round')

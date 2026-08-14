@@ -45,6 +45,9 @@
   import {
     recencyFade,
     clusterColour,
+    clusterColourOf,
+    clusterSlotOf,
+    clusterSeedOf,
     nodeRelevance,
     relevanceScale,
     washOut,
@@ -99,7 +102,7 @@
      */
     explode?: number;
     /** Cluster ids with their names, so a shell can be labelled. */
-    communities?: Array<{ id: number; size: number; label: string }>;
+    communities?: Array<{ id: number; size: number; label: string; colourIndex?: number | null; key?: string | null }>;
     /** Draw the translucent cluster shells. */
     showShells?: boolean;
     onSelect?: (id: string | null) => void;
@@ -472,7 +475,7 @@
     // Washed towards the page by staleness, using the LIVE background token
     // rather than the literal the 2D view can fall back to — the scene reads its
     // palette off the element so it follows the design system.
-    return rgba(washOut(clusterColour(node.community), nodeRelevance(node), palette.bg), nodeAlpha(node));
+    return rgba(washOut(clusterColourOf(node), nodeRelevance(node), palette.bg), nodeAlpha(node));
   }
 
   function linkColour(edge: Sim3DEdge): string {
@@ -639,6 +642,11 @@
 
     const scene = fg.scene();
     for (const [community, members] of byCommunity) {
+      // The cluster's DURABLE palette slot, taken from any member — every member
+      // of a community carries the same one. Colouring a shell by the community
+      // index would repaint it on every run, exactly as the nodes inside it used
+      // to be repainted.
+      const slot = clusterSlotOf(members[0]);
       const points = members.map((n) => new THREE.Vector3(n.x!, n.y!, n.z!));
       const centre = points
         .reduce((acc, p) => acc.add(p), new THREE.Vector3())
@@ -700,7 +708,7 @@
       }
 
       const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(clusterColour(community)),
+        color: new THREE.Color(clusterColour(slot)),
         transparent: true,
         opacity: 0.1,
         // BackSide + no depth write, copying the selection halo: the shell has to
@@ -729,7 +737,7 @@
       // stroked polygon for the same reason.
       const outline = new THREE.EdgesGeometry(geometry, 18);
       const outlineMaterial = new THREE.LineBasicMaterial({
-        color: new THREE.Color(clusterColour(community)),
+        color: new THREE.Color(clusterColour(slot)),
         transparent: true,
         opacity: 0.9,
         depthWrite: false,
@@ -775,9 +783,9 @@
 
   function applySeparation(fg: IntelGraph) {
     const reach = (SPAN / 7) * Math.max(0, explode);
-    fg.d3Force('x', forceX((d: Sim3DNode) => communityDirection(d.community).x * reach).strength(0.045));
-    fg.d3Force('y', forceY((d: Sim3DNode) => communityDirection(d.community).y * reach).strength(0.045));
-    fg.d3Force('z', forceZ((d: Sim3DNode) => communityDirection(d.community).z * reach).strength(0.045));
+    fg.d3Force('x', forceX((d: Sim3DNode) => communityDirection(clusterSeedOf(d)).x * reach).strength(0.045));
+    fg.d3Force('y', forceY((d: Sim3DNode) => communityDirection(clusterSeedOf(d)).y * reach).strength(0.045));
+    fg.d3Force('z', forceZ((d: Sim3DNode) => communityDirection(clusterSeedOf(d)).z * reach).strength(0.045));
   }
 
   async function build() {

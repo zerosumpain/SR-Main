@@ -20,7 +20,7 @@
   // Fully controlled, holding no state of its own except how much of the list is
   // shown, matching SourcePicker.
 
-  import { clusterColour } from './graph-visual';
+  import { clusterColour, clusterSlotOf } from './graph-visual';
 
   let {
     communities = [],
@@ -30,7 +30,7 @@
     onClearFocus,
     onFilter,
   }: {
-    communities: Array<{ id: number; size: number; label: string }>;
+    communities: Array<{ id: number; size: number; label: string; colourIndex?: number | null; key?: string | null }>;
     /** Brought forward in the graph and outlined. Empty means all of them. */
     focused: number[];
     /** Filtered to server-side, or null. */
@@ -94,7 +94,7 @@
             type="button"
             class="row"
             class:on
-            style="--sw: {clusterColour(c.id)}"
+            style="--sw: {clusterColour(clusterSlotOf({ clusterColourIndex: c.colourIndex, community: c.id }))}"
             aria-pressed={on}
             title={on ? 'Stop highlighting this cluster' : 'Bring this cluster forward'}
             onclick={() => onToggleFocus(c.id)}
