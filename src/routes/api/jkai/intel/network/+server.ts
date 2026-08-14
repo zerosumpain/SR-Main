@@ -6,6 +6,7 @@ import type { RequestHandler } from './$types';
 import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
 import { hopNeighbourhood, components } from '$lib/jkai/intel/analytics/model';
 import { applyGraphFilter, parseCsv } from '$lib/jkai/intel/analytics/filter';
+import { reconcileFromAnalysis } from '$lib/jkai/intel/cluster-store';
 import { brokerageScore } from '$lib/jkai/intel/analytics/centrality';
 import { db } from '$lib/db';
 import { intelCategories, intelEntityTypes } from '$lib/db/schema';
@@ -32,6 +33,30 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const analysis = await getGraphAnalysis();
   const { index, centrality, community } = analysis;
+
+  // The durable identity behind each detected community. Colouring and placing
+  // by the community INDEX repaints and rearranges the graph on every run — the
+  // index is a size rank, and a day of ingest moves 70% of entities to a
+  // different one. The roster's colour slot is assigned once and kept.
+  //
+  // Failing soft on purpose: the graph is the most-used surface here and must
+  // render even if the roster is unavailable, in which case the client falls
+  // back to the community index exactly as it did before.
+  let clusterByCommunity = new Map<number, { key: string; colourIndex: number }>();
+  const clusterLabels = new Map<number, string>();
+  try {
+    const roster = await reconcileFromAnalysis(analysis);
+    const byKey = new Map(roster.clusters.map((c) => [c.key, c]));
+    for (const [communityIndex, key] of roster.keyByIndex) {
+      const stored = byKey.get(key);
+      if (!stored) continue;
+      clusterByCommunity.set(communityIndex, { key, colourIndex: stored.colourIndex });
+      clusterLabels.set(communityIndex, stored.name ?? stored.autoLabel);
+    }
+  } catch (err) {
+    console.warn('[intel/network] cluster roster unavailable; colouring by community index', err);
+    clusterByCommunity = new Map();
+  }
   // One clock for the whole response, so two nodes of identical age cannot come
   // back with different recency because the loop took a millisecond.
   const now = Date.now();
@@ -87,6 +112,9 @@ export const GET: RequestHandler = async ({ url }) => {
       betweenness: centrality.betweenness.get(id) ?? 0,
       brokerage: brokerageScore(id, centrality, index),
       community: community.membership.get(id) ?? 0,
+      clusterKey: clusterByCommunity.get(community.membership.get(id) ?? 0)?.key ?? null,
+      clusterColourIndex:
+        clusterByCommunity.get(community.membership.get(id) ?? 0)?.colourIndex ?? null,
       hops: hopsFrom?.get(id) ?? null,
       categories: n.categories,
       sources: n.sources,
@@ -198,14 +226,21 @@ export const GET: RequestHandler = async ({ url }) => {
       .map(([id, ids]) => ({
         id,
         size: ids.length,
-        // Name a cluster after its most central member — far more useful than
-        // "Community 3".
+        key: clusterByCommunity.get(id)?.key ?? null,
+        colourIndex: clusterByCommunity.get(id)?.colourIndex ?? null,
+        // The roster's label, which is the name the user gave it where there is
+        // one. Falls back to the old rule — the most central member's name —
+        // only when the roster could not be read; that rule produced "jkai",
+        // "John Kelly" and "United Kingdom" for three of the biggest clusters,
+        // which is why it is now the fallback rather than the rule.
         label:
+          clusterLabels.get(id) ??
           ids
             .slice()
             .sort((a, b) => (centrality.pagerank.get(b) ?? 0) - (centrality.pagerank.get(a) ?? 0))
             .map((i) => index.byId.get(i)?.name)
-            .find(Boolean) ?? `Cluster ${id}`,
+            .find(Boolean) ??
+          `Cluster ${id}`,
       })),
   });
 };

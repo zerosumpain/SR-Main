@@ -17,31 +17,64 @@
   // nearly always about a second — do these two overlap, and what lives in the
   // overlap — and a control holding one answer at a time cannot ask it.
   //
+  // A row now also OPENS, into a card describing what the cluster actually
+  // holds: three fields (index, size, most central member) is enough to colour a
+  // dot and nothing else.
+  //
   // Fully controlled, holding no state of its own except how much of the list is
-  // shown, matching SourcePicker.
+  // shown and which row is open, matching SourcePicker.
 
-  import { clusterColour } from './graph-visual';
+  import { clusterColour, clusterSlotOf } from './graph-visual';
+  import ClusterCard from './ClusterCard.svelte';
+  import type { ClusterView } from './cluster-types';
 
   let {
     communities = [],
+    roster = [],
     focused = [],
     filtered = null,
+    stats = null,
+    resolution = null,
+    recalculating = false,
+    narrating = null,
     onToggleFocus,
     onClearFocus,
     onFilter,
+    onRecalculate,
+    onRename,
+    onNarrate,
+    onOpen,
   }: {
-    communities: Array<{ id: number; size: number; label: string }>;
+    communities: Array<{
+      id: number;
+      size: number;
+      label: string;
+      colourIndex?: number | null;
+      key?: string | null;
+    }>;
+    /** The rich roster, joined to `communities` by key. */
+    roster?: ClusterView[];
     /** Brought forward in the graph and outlined. Empty means all of them. */
     focused: number[];
     /** Filtered to server-side, or null. */
     filtered: number | null;
+    stats?: { isolated: number; tracked: number; untracked: number } | null;
+    resolution?: number | null;
+    recalculating?: boolean;
+    /** Key of the cluster currently having its narrative written. */
+    narrating?: string | null;
     onToggleFocus: (id: number) => void;
     onClearFocus: () => void;
     onFilter: (id: number | null) => void;
+    onRecalculate?: () => void;
+    onRename?: (key: string, name: string | null) => void;
+    onNarrate?: (key: string) => void;
+    onOpen?: (key: string) => void;
   } = $props();
 
   const total = $derived(communities.reduce((sum, c) => sum + c.size, 0));
   const focusSet = $derived(new Set(focused));
+  const rosterByKey = $derived(new Map(roster.map((c) => [c.key, c])));
 
   /**
    * How many rows are shown before the list has to be asked for.
@@ -53,7 +86,15 @@
    */
   const PREVIEW = 8;
   let showAll = $state(false);
+  let openKey = $state<string | null>(null);
 
+  /**
+   * Ordered by SIGNAL where the roster knows it, size otherwise.
+   *
+   * Size alone is what put four retail-email clusters above both clusters
+   * carrying real work. The roster ranks by how many kinds of source corroborate
+   * a cluster, which is what separates a subject from a feed.
+   */
   const ordered = $derived(
     [...communities].sort((a, b) => {
       // Anything selected stays in view even when the tail is collapsed —
@@ -61,17 +102,31 @@
       // the row you just used.
       const fa = focusSet.has(a.id) ? 1 : 0;
       const fb = focusSet.has(b.id) ? 1 : 0;
-      return fb - fa || b.size - a.size;
+      if (fa !== fb) return fb - fa;
+      const sa = a.key ? rosterByKey.get(a.key)?.signal : undefined;
+      const sb = b.key ? rosterByKey.get(b.key)?.signal : undefined;
+      if (sa !== undefined && sb !== undefined && sa !== sb) return sb - sa;
+      return b.size - a.size;
     }),
   );
   const visible = $derived(showAll ? ordered : ordered.slice(0, PREVIEW));
+  const ranked = $derived(ordered.some((c) => c.key && rosterByKey.has(c.key)));
 </script>
 
 <div class="ctl">
-  <!-- No heading of its own — the rail section above already says "Clusters".
-       Only `reset` survives, because it has nowhere else to live. -->
-  {#if focused.length || filtered !== null}
-    <div class="ctl-actions">
+  <div class="ctl-actions">
+    {#if onRecalculate}
+      <button
+        type="button"
+        class="recalc"
+        disabled={recalculating}
+        title="Re-detect clusters against the current graph, at the resolution that reads best"
+        onclick={() => onRecalculate?.()}
+      >
+        {recalculating ? 'recalculating…' : 'recalculate'}
+      </button>
+    {/if}
+    {#if focused.length || filtered !== null}
       <button
         type="button"
         class="clear"
@@ -80,8 +135,8 @@
           onFilter(null);
         }}>reset</button
       >
-    </div>
-  {/if}
+    {/if}
+  </div>
 
   {#if !communities.length}
     <p class="hint">No clusters detected yet.</p>
@@ -89,20 +144,36 @@
     <div class="rows">
       {#each visible as c (c.id)}
         {@const on = focusSet.has(c.id)}
+        {@const rich = c.key ? rosterByKey.get(c.key) : undefined}
+        {@const isOpen = Boolean(c.key) && openKey === c.key}
         <div class="line" class:on>
           <button
             type="button"
             class="row"
             class:on
-            style="--sw: {clusterColour(c.id)}"
+            style="--sw: {clusterColour(
+              clusterSlotOf({ clusterColourIndex: c.colourIndex, community: c.id }),
+            )}"
             aria-pressed={on}
             title={on ? 'Stop highlighting this cluster' : 'Bring this cluster forward'}
             onclick={() => onToggleFocus(c.id)}
           >
             <span class="swatch" aria-hidden="true"></span>
-            <span class="name">{c.label}</span>
+            <span class="name">{rich?.label ?? c.label}</span>
+            {#if rich?.name}<span class="named" title="You named this cluster">·</span>{/if}
             <span class="count">{c.size}</span>
           </button>
+          {#if rich}
+            <button
+              type="button"
+              class="only"
+              class:on={isOpen}
+              aria-expanded={isOpen}
+              title={isOpen ? 'Close this cluster' : 'What is in this cluster'}
+              onclick={() => (openKey = isOpen ? null : (c.key ?? null))}
+              >{isOpen ? '−' : '?'}</button
+            >
+          {/if}
           <button
             type="button"
             class="only"
@@ -112,6 +183,16 @@
             onclick={() => onFilter(filtered === c.id ? null : c.id)}>only</button
           >
         </div>
+
+        {#if isOpen && rich}
+          <ClusterCard
+            cluster={rich}
+            busy={narrating === rich.key}
+            onRename={(key, name) => onRename?.(key, name)}
+            onNarrate={(key) => onNarrate?.(key)}
+            onOpen={onOpen ? (key) => onOpen(key) : undefined}
+          />
+        {/if}
       {/each}
     </div>
 
@@ -126,9 +207,33 @@
         {focused.length} cluster{focused.length === 1 ? '' : 's'} outlined. Everything else is dimmed,
         not removed — pick another to compare them.
       {:else}
-        {communities.length} clusters covering {total} entities. Pick one or several to outline them.
+        {communities.length} clusters covering {total} entities{#if ranked}, strongest first — ranked by
+          how many kinds of source corroborate them, not by size{/if}.
       {/if}
     </p>
+
+    <!-- The graph is bigger than the clusters in it, and saying so is the only
+         honest way to present a list that covers half of it. The isolated pile
+         is a data-quality finding, so it links to the page that owns that. -->
+    {#if stats && (stats.isolated > 0 || stats.untracked > 0)}
+      <p class="tail">
+        {#if stats.isolated > 0}
+          <a href="/jkai/intel/quality"
+            >{stats.isolated.toLocaleString()} entities are connected to nothing</a
+          >
+          and cannot be clustered at any setting.
+        {/if}
+        {#if stats.untracked > 0}
+          A further {stats.untracked.toLocaleString()} sit in fragments too small to name.
+        {/if}
+      </p>
+    {/if}
+
+    {#if resolution !== null}
+      <p class="tail">
+        Resolution {resolution}, chosen to keep any one cluster under a twelfth of the graph.
+      </p>
+    {/if}
   {/if}
 </div>
 
@@ -141,8 +246,10 @@
   .ctl-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 10px;
   }
-  .clear {
+  .clear,
+  .recalc {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
@@ -152,6 +259,10 @@
     padding: 0;
     color: var(--accent);
     cursor: pointer;
+  }
+  .recalc:disabled {
+    color: var(--text-ghost);
+    cursor: default;
   }
 
   /* No max-height and no overflow: the rail is the only scroller. */
@@ -215,6 +326,11 @@
     white-space: nowrap;
   }
 
+  .named {
+    flex: none;
+    color: var(--accent);
+  }
+
   .count {
     flex: none;
     font-family: var(--font-mono);
@@ -258,10 +374,19 @@
     cursor: pointer;
   }
 
-  .hint {
+  .hint,
+  .tail {
     margin: 0;
     font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: var(--text-ghost);
+  }
+  .tail a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px solid var(--accent-tint-35);
+  }
+  .tail a:hover {
+    color: var(--accent);
   }
 </style>

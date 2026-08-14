@@ -460,3 +460,48 @@ describe('slugify / nextFreeSlug', () => {
     expect(nextFreeSlug('work', ['work', 'work-2', 'work-3'])).toBe('work-4');
   });
 });
+
+describe('cluster keys', () => {
+  it('an empty lens still matches everything', () => {
+    expect(matchesLens({ id: 'e1', clusterKey: 'anything' }, EMPTY_LENS_FILTERS)).toBe(true);
+  });
+
+  it('keeps an entity in one of the named clusters', () => {
+    const filters = { ...EMPTY_LENS_FILTERS, clusterKeys: ['abc', 'def'] };
+    expect(matchesLens({ id: 'e1', clusterKey: 'abc' }, filters)).toBe(true);
+  });
+
+  it('rejects an entity in a cluster the lens does not name', () => {
+    const filters = { ...EMPTY_LENS_FILTERS, clusterKeys: ['abc'] };
+    expect(matchesLens({ id: 'e1', clusterKey: 'zzz' }, filters)).toBe(false);
+  });
+
+  it('rejects an entity in no cluster at all', () => {
+    const filters = { ...EMPTY_LENS_FILTERS, clusterKeys: ['abc'] };
+    expect(matchesLens({ id: 'e1', clusterKey: null }, filters)).toBe(false);
+  });
+
+  it('skips the filter when the caller never loaded a cluster key', () => {
+    // Absent evidence skips; answering an unanswerable question with "no" would
+    // empty the view for a reason nobody can see. Rule 2 in the module header.
+    const filters = { ...EMPTY_LENS_FILTERS, clusterKeys: ['abc'] };
+    expect(matchesLens({ id: 'e1', name: 'thing' }, filters)).toBe(true);
+  });
+
+  it('counts as one active facet and reads as clusters', () => {
+    const filters = { ...EMPTY_LENS_FILTERS, clusterKeys: ['a', 'b'] };
+    expect(activeLensFilterCount(filters)).toBe(1);
+    expect(describeLensFilters(filters)).toContain('2 clusters');
+    expect(isEmptyLensFilters(filters)).toBe(false);
+  });
+
+  it('parses cluster keys off a stored lens', () => {
+    expect(normaliseLensFilters({ clusterKeys: ['a', 'b'] }).clusterKeys).toEqual(['a', 'b']);
+  });
+
+  it('still parses a lens saved before cluster keys existed', () => {
+    const parsed = normaliseLensFilters({ communityIds: [3] });
+    expect(parsed.clusterKeys).toEqual([]);
+    expect(parsed.communityIds).toEqual([3]);
+  });
+});

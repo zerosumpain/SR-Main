@@ -51,7 +51,22 @@ export interface LensFilters {
   /** `intel_notes.source` values — where the evidence came from. */
   sources: string[];
   lens: LensScope | null;
-  /** Louvain community indices. Not a column — see rule 3 in the header. */
+  /**
+   * Durable cluster keys. Not a column — see rule 3 in the header.
+   *
+   * This is what `communityIds` should have been. A Louvain community index is
+   * a SIZE RANK recomputed from scratch, and on the production graph a single
+   * day of ingest moves 70% of entities to a different one — so a lens saved on
+   * Monday filtered a different set of entities by Tuesday, silently. The keys
+   * come from the cluster roster and survive recomputation.
+   */
+  clusterKeys: string[];
+  /**
+   * Louvain community indices. DEPRECATED and kept only so a lens saved before
+   * the roster existed still parses; nothing writes it any more. It is applied
+   * where the caller supplies a community, which mostly means "within one
+   * session" — see the note in `matchesLens`.
+   */
   communityIds: number[];
   /** 0..1 against `confidence_score`. Null means "no floor". */
   minConfidence: number | null;
@@ -63,6 +78,7 @@ export const EMPTY_LENS_FILTERS: LensFilters = {
   typeIds: [],
   sources: [],
   lens: null,
+  clusterKeys: [],
   communityIds: [],
   minConfidence: null,
   query: '',
@@ -93,6 +109,8 @@ export interface LensCandidate {
   sources?: string[];
   /** Louvain community index, or null when the entity is in no community. */
   community?: number | null;
+  /** The durable cluster key, where the caller loaded one. */
+  clusterKey?: string | null;
 }
 
 // ── Parsing (pure, total) ────────────────────────────────────────────────────
@@ -138,6 +156,7 @@ export function normaliseLensFilters(raw: unknown): LensFilters {
     typeIds: stringList(src.typeIds),
     sources: stringList(src.sources),
     lens: (LENS_SCOPES as readonly string[]).includes(scope) ? (scope as LensScope) : null,
+    clusterKeys: stringList(src.clusterKeys),
     communityIds: numberList(src.communityIds),
     // A floor of 0 excludes nothing but still costs a clause, so it collapses
     // to "no floor" — which keeps `isEmptyLensFilters` honest.
@@ -152,6 +171,7 @@ export function isEmptyLensFilters(filters: LensFilters): boolean {
     filters.typeIds.length === 0 &&
     filters.sources.length === 0 &&
     filters.lens === null &&
+    filters.clusterKeys.length === 0 &&
     filters.communityIds.length === 0 &&
     filters.minConfidence === null &&
     filters.query === ''
@@ -164,6 +184,7 @@ export function activeLensFilterCount(filters: LensFilters): number {
   if (filters.typeIds.length) n++;
   if (filters.sources.length) n++;
   if (filters.lens) n++;
+  if (filters.clusterKeys.length) n++;
   if (filters.communityIds.length) n++;
   if (filters.minConfidence !== null) n++;
   if (filters.query) n++;
@@ -176,7 +197,8 @@ export function describeLensFilters(filters: LensFilters): string {
   if (filters.lens) parts.push(filters.lens);
   if (filters.typeIds.length) parts.push(`${filters.typeIds.length} type${filters.typeIds.length > 1 ? 's' : ''}`);
   if (filters.sources.length) parts.push(`source: ${filters.sources.join(', ')}`);
-  if (filters.communityIds.length) parts.push(`${filters.communityIds.length} cluster${filters.communityIds.length > 1 ? 's' : ''}`);
+  const clusters = filters.clusterKeys.length || filters.communityIds.length;
+  if (clusters) parts.push(`${clusters} cluster${clusters > 1 ? 's' : ''}`);
   if (filters.minConfidence !== null) parts.push(`confidence ≥ ${filters.minConfidence.toFixed(2)}`);
   if (filters.query) parts.push(`“${filters.query}”`);
   return parts.length ? parts.join(' · ') : 'everything';
@@ -212,6 +234,16 @@ export function matchesLens(candidate: LensCandidate, filters: LensFilters): boo
     if (!candidate.sources.some((s) => filters.sources.includes(s))) return false;
   }
 
+  if (filters.clusterKeys.length && candidate.clusterKey !== undefined) {
+    if (candidate.clusterKey === null || !filters.clusterKeys.includes(candidate.clusterKey)) {
+      return false;
+    }
+  }
+
+  // A community index means nothing across runs, so an old lens carrying one is
+  // only honoured where the caller actually supplied a community to compare it
+  // against — within one session, where the two came from the same partition.
+  // Absent evidence skips rather than fails, per rule 2 in the header.
   if (filters.communityIds.length && candidate.community !== undefined) {
     if (candidate.community === null || !filters.communityIds.includes(candidate.community)) return false;
   }
@@ -241,6 +273,8 @@ export interface LensFilterPlan {
   empty: boolean;
   /** Conditions over `intel_entities`. Spread into a drizzle `and(...)`. */
   conditions: SQL[];
+  /** Durable cluster keys the SQL could not express — post-filter with these. */
+  clusterKeys: string[];
   /** Louvain indices the SQL could not express — post-filter with these. */
   communityIds: number[];
   /** True when `conditions` alone does NOT decide membership. */
@@ -301,8 +335,9 @@ export function buildLensFilter(filters: LensFilters): LensFilterPlan {
   return {
     empty: isEmptyLensFilters(filters),
     conditions,
+    clusterKeys: filters.clusterKeys,
     communityIds: filters.communityIds,
-    needsAnalysis: filters.communityIds.length > 0,
+    needsAnalysis: filters.clusterKeys.length > 0 || filters.communityIds.length > 0,
     summary: describeLensFilters(filters),
     matches: (candidate) => matchesLens(candidate, filters),
   };

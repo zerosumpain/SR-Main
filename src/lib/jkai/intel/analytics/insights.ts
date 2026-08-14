@@ -25,7 +25,13 @@ export type InsightKind =
   | 'stale_hub'
   | 'thin_evidence'
   | 'type_outlier'
-  | 'dominant_cluster';
+  | 'dominant_cluster'
+  // Roster-derived — see ./cluster-insights. These are the only findings that
+  // can speak about CHANGE, because the roster is the only thing here that
+  // survives recomputation.
+  | 'cluster_emerging'
+  | 'cluster_merging'
+  | 'cluster_dormant';
 
 export type SuggestedAction =
   | 'research'

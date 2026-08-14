@@ -12,6 +12,8 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getGraphAnalysis, ensureEmbeddings } from '$lib/jkai/intel/analytics/load';
 import { generateInsights } from '$lib/jkai/intel/analytics/insights';
+import { generateClusterInsights } from '$lib/jkai/intel/analytics/cluster-insights';
+import { reconcileFromAnalysis } from '$lib/jkai/intel/cluster-store';
 import { scoreSurprisingLinks, predictMissingLinks } from '$lib/jkai/intel/analytics/surprise';
 import {
   dedupeKeyFor,
@@ -73,6 +75,42 @@ async function persistOnce(computedAt: number, insights: StorableInsight[]): Pro
   }
 }
 
+/**
+ * The roster-derived findings, or none if the roster is unavailable.
+ *
+ * Freshest evidence is measured from the GRAPH rather than the roster: the
+ * roster records when the cluster was last SEEN by a reconcile, which happens
+ * every time anyone opens the dashboard and says nothing about whether new
+ * material arrived. `evidenceAt` is when the thing was actually observed.
+ *
+ * Deliberately NOT exported — a non-handler export from a +server.ts breaks the
+ * route at runtime.
+ */
+async function clusterFindings(analysis: Awaited<ReturnType<typeof getGraphAnalysis>>) {
+  try {
+    const reconciled = await reconcileFromAnalysis(analysis);
+    const freshestEvidence = new Map<string, number>();
+    for (const cluster of reconciled.clusters) {
+      if (!cluster.live) continue;
+      let newest = 0;
+      for (const id of cluster.members) {
+        const node = analysis.index.byId.get(id);
+        const at = node?.evidenceAt || node?.lastSeenAt || 0;
+        if (at > newest) newest = at;
+      }
+      if (newest) freshestEvidence.set(cluster.key, newest);
+    }
+    return generateClusterInsights({
+      clusters: reconciled.clusters,
+      changes: reconciled.changes,
+      freshestEvidence,
+    });
+  } catch (err) {
+    console.warn('[intel/insights] cluster findings unavailable', err);
+    return [];
+  }
+}
+
 /** Statuses a finding is hidden at unless explicitly asked for. */
 const HIDDEN_STATUSES = new Set(['dismissed', 'snoozed']);
 
@@ -114,7 +152,12 @@ export const GET: RequestHandler = async ({ url }) => {
       computedAt: analysis.computedAt,
       // Persist the FULL set, not the filtered one: a `?kind=` view must not
       // stop findings of other kinds from being recorded.
-      all: await generateInsights(analysis),
+      //
+      // Cluster findings are appended rather than folded into `generateInsights`
+      // because they are the only ones that need the stored roster, and that
+      // module is pure over a snapshot and tested without a database. A roster
+      // that cannot be read costs the three cluster findings and nothing else.
+      all: [...(await generateInsights(analysis)), ...(await clusterFindings(analysis))],
       surprising: await scoreSurprisingLinks(
         { index, membership: community.membership, embeddings },
         { maxHops: 3, limit: 20, minScore: 0.08 },

@@ -52,6 +52,60 @@ export const CLUSTER_COLOURS = [
 export const clusterColour = (c: number): string =>
   CLUSTER_COLOURS[((c % CLUSTER_COLOURS.length) + CLUSTER_COLOURS.length) % CLUSTER_COLOURS.length];
 
+/**
+ * The palette slot to draw something in, preferring the cluster's DURABLE one.
+ *
+ * `community` is a size rank recomputed from scratch on every run, and on the
+ * production graph one day of ingest moves 70% of entities to a different index
+ * — so colouring by it repaints the whole graph every night, and the cluster you
+ * learned to recognise as teal is orange in the morning. `clusterColourIndex`
+ * comes from the roster and is assigned once, at first sight, for life.
+ *
+ * Falls back to the community index so a payload from before the roster existed
+ * — a tab left open across a deploy — still draws something sensible.
+ */
+export function clusterSlotOf(node: {
+  clusterColourIndex?: number | null;
+  community?: number | null;
+}): number {
+  const stable = node.clusterColourIndex;
+  if (typeof stable === 'number' && Number.isFinite(stable)) return stable;
+  return typeof node.community === 'number' && Number.isFinite(node.community) ? node.community : 0;
+}
+
+/** Convenience: the colour for a node or cluster, from its durable slot. */
+export const clusterColourOf = (node: {
+  clusterColourIndex?: number | null;
+  community?: number | null;
+}): string => clusterColour(clusterSlotOf(node));
+
+/**
+ * A stable integer per cluster, for anything that needs to SPREAD clusters
+ * rather than colour them — the 2D x-regions and the 3D direction spiral.
+ *
+ * Not the colour slot: there are ten of those and a hundred clusters, so
+ * clusters sharing a colour would be flung to the same corner and the
+ * separation forces would fight each other. Hashed from the durable key
+ * instead, which gives full range and the same answer every run — the property
+ * the 3D direction spiral was always documented as needing and, while the
+ * community index was feeding it, never actually had.
+ */
+export function clusterSeedOf(node: {
+  clusterKey?: string | null;
+  community?: number | null;
+}): number {
+  const key = node.clusterKey;
+  if (typeof key === 'string' && key.length) {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+      hash ^= key.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0) % 4096;
+  }
+  return typeof node.community === 'number' && Number.isFinite(node.community) ? node.community : 0;
+}
+
 // ── Relevance: how big and how vivid ────────────────────────────────────────
 //
 // Age used to be carried by opacity alone, which is the one channel already

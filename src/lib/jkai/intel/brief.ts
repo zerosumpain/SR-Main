@@ -100,6 +100,35 @@ export interface BriefResearch {
   createdAt: string;
 }
 
+/**
+ * What a cluster is, as opposed to what its members are.
+ *
+ * A brief over a cluster's twelve most central entities describes those twelve
+ * entities. It cannot, from the subjects alone, say that they sit in a body of
+ * two hundred, that the evidence is four fifths files and one fifth chat, or
+ * that it spans eleven weeks — and those are the facts that make it a
+ * description of the CLUSTER rather than a description of a dozen things that
+ * happen to be in one.
+ */
+export interface ClusterBriefFacts {
+  label: string;
+  /** Entities in the whole cluster, not just the ones written up. */
+  size: number;
+  /** How many of them are subjects of this brief. */
+  subjectCount: number;
+  types: Array<[string, number]>;
+  sources: Array<[string, number]>;
+  /** Members with no provenance at all. */
+  sourceless: number;
+  noteTotal: number;
+  /** Normalised source-mix entropy, 0..1. */
+  diversity: number;
+  /** Observed span of the evidence, ISO dates. */
+  span: { from: string; to: string } | null;
+  /** Members holding this cluster to others, and which others. */
+  bridges: Array<{ name: string; reaches: string[] }>;
+}
+
 export interface BriefContext {
   title: string;
   subjects: BriefSubject[];
@@ -111,6 +140,8 @@ export interface BriefContext {
   /** Analyst-set questions the brief should try to answer (dossier briefs). */
   openQuestions: string[];
   generatedAt: string;
+  /** Set only for a cluster narrative. Absent for entity and dossier briefs. */
+  cluster?: ClusterBriefFacts;
 }
 
 /** A source plus whether the finished brief actually leant on it. */
@@ -159,6 +190,27 @@ Use these headings, in this order, omitting any the context cannot fill:
 ## Gaps
 
 Keep the whole brief under 500 words.`;
+
+/**
+ * Appended for a cluster narrative.
+ *
+ * The subjects are a SAMPLE of the cluster, not the cluster, and a narrative
+ * that quietly treats twelve entities as the whole of two hundred is wrong in
+ * the way that is hardest to notice. Saying so in the prompt is cheaper than
+ * detecting it afterwards.
+ */
+const SYSTEM_CLUSTER = `
+
+THIS IS A CLUSTER NARRATIVE, not a brief about one subject.
+
+The cluster is a group the graph detected on its own; nobody chose its members. The SUBJECTS below are its most connected members, NOT all of it — the CLUSTER section gives the real size and shape. Write about the cluster as a whole:
+
+- "Bottom line" says what this cluster IS, in one or two sentences, from the material itself. Do NOT guess whether it matters to the reader or how it was acquired — the CLUSTER section states how its evidence arrived, and that is the only basis for saying so.
+- "What we know" describes the material, and must state where the evidence came from and over what period — the source mix and span are given to you.
+- "Connections" covers what holds this cluster to the rest of the graph.
+- "Gaps" must name the weaknesses in the CLUSTER, including members with no evidence at all, a source mix resting on one channel, and any period the evidence does not cover.
+
+Never imply the sample is the whole. Where a claim only holds for the members listed, say so.`;
 
 /** Appended when there is no evidence at all — see the note in `buildBriefPrompt`. */
 const SYSTEM_UNSOURCED = `
@@ -241,6 +293,59 @@ function renderTimeline(events: readonly BriefEvent[]): string {
 }
 
 /**
+ * The cluster's own shape, stated as facts the subjects cannot carry.
+ *
+ * The source mix is spelled out per channel rather than summarised, because
+ * "80% email" and "file 140, chat 63, research 19" invite different sentences —
+ * and the second is what lets the narrative say which material the cluster
+ * actually rests on.
+ */
+/**
+ * Below this, a cluster's evidence is effectively all from one channel.
+ *
+ * Matches what the real graph does at the extremes — Brakeburn 0.04, Zavvi 0.04,
+ * CMaxOwnersClub 0.00 are single-mailbox feeds; IBCA 0.70 and DfE 0.72 are
+ * corroborated bodies of work.
+ */
+const SINGLE_SOURCE_DIVERSITY = 0.1;
+
+function renderCluster(cluster: ClusterBriefFacts): string {
+  const lines = [
+    `${cluster.label} — ${cluster.size} entities, of which the ${cluster.subjectCount} most connected are written up below.`,
+    `Composition: ${cluster.types.map(([t, n]) => `${t} ${n}`).join(', ') || 'unknown'}.`,
+    `Evidence: ${cluster.sources.map(([s, n]) => `${s} ${n}`).join(', ') || 'none'} — ${cluster.noteTotal} note links in total.`,
+  ];
+
+  // The subject/feed call is made HERE, from the source mix, and handed to the
+  // model as a fact. Asking the model to judge it instead produced a confident
+  // wrong answer on the first real run: it labelled a cluster of hand-written
+  // policy documents "a feed arriving on its own", because nothing in a list of
+  // entities tells you how they were acquired. The data does.
+  lines.push(
+    cluster.diversity < SINGLE_SOURCE_DIVERSITY
+      ? `Every member of this cluster came from ONE kind of source (${cluster.sources[0]?.[0] ?? 'unknown'}). It is a feed arriving on its own, not material gathered deliberately — say so in the bottom line.`
+      : `Corroborated across ${cluster.sources.length} kinds of source (diversity ${cluster.diversity.toFixed(2)}), which is material engaged with deliberately rather than a feed — say so in the bottom line.`,
+  );
+
+  if (cluster.span) {
+    lines.push(`Observed span: ${cluster.span.from.slice(0, 10)} to ${cluster.span.to.slice(0, 10)}.`);
+  }
+  if (cluster.sourceless > 0) {
+    lines.push(
+      `${cluster.sourceless} member${cluster.sourceless === 1 ? '' : 's'} carry NO evidence at all — name this under Gaps.`,
+    );
+  }
+  if (cluster.bridges.length) {
+    lines.push(
+      `Held to the rest of the graph by: ${cluster.bridges
+        .map((b) => `${b.name} (reaches ${b.reaches.length} other cluster${b.reaches.length === 1 ? '' : 's'})`)
+        .join(', ')}.`,
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
  * The prompt for one brief. PURE — no clock, no DB, no randomness, so the same
  * context always produces the same instructions and the citation contract can
  * be tested without a model.
@@ -255,6 +360,11 @@ export function buildBriefPrompt(context: BriefContext): BriefPrompt {
   const parts: string[] = [
     `BRIEF: ${context.title}`,
     `Generated: ${context.generatedAt.slice(0, 10)}`,
+  ];
+
+  if (context.cluster) parts.push('', '## CLUSTER', renderCluster(context.cluster));
+
+  parts.push(
     '',
     '## SUBJECTS',
     context.subjects.length
@@ -263,7 +373,7 @@ export function buildBriefPrompt(context: BriefContext): BriefPrompt {
     '',
     '## CONNECTIONS',
     renderNeighbours(context),
-  ];
+  );
 
   if (context.links.length) {
     parts.push(
@@ -294,10 +404,11 @@ export function buildBriefPrompt(context: BriefContext): BriefPrompt {
 
   parts.push('', '## SOURCES', renderSources(context.sources));
 
-  return {
-    system: hasSources ? SYSTEM_BASE : SYSTEM_BASE + SYSTEM_UNSOURCED,
-    user: parts.join('\n'),
-  };
+  const system =
+    (context.cluster ? SYSTEM_BASE + SYSTEM_CLUSTER : SYSTEM_BASE) +
+    (hasSources ? '' : SYSTEM_UNSOURCED);
+
+  return { system, user: parts.join('\n') };
 }
 
 // ── Citations (pure) ─────────────────────────────────────────────────────────
@@ -635,6 +746,33 @@ export async function assembleBriefContext(
     research,
     openQuestions: options.openQuestions ?? [],
     generatedAt,
+  };
+}
+
+/**
+ * A narrative describing one detected cluster.
+ *
+ * Reuses the brief pipeline rather than growing a second one, which is the whole
+ * point: `assembleBriefContext` already gathers subjects, their neighbours, the
+ * links between them and — the part that matters here — the actual NOTES behind
+ * them as numbered sources, and `reconcileCitations` already strips markers the
+ * model invents. A cluster narrative that could not be traced back to real notes
+ * would not be worth generating.
+ *
+ * Only the most connected members are written up; the rest of the cluster is
+ * described by `facts` instead. Twelve is `MAX_SUBJECTS` — a two-hundred-entity
+ * cluster cannot be rendered entity by entity into any usable context window,
+ * and the central ones are the ones the others hang off.
+ */
+export async function assembleClusterBriefContext(
+  memberIds: readonly string[],
+  facts: Omit<ClusterBriefFacts, 'subjectCount'>,
+): Promise<BriefContext> {
+  const subjects = memberIds.slice(0, MAX_SUBJECTS);
+  const context = await assembleBriefContext(subjects, { title: facts.label });
+  return {
+    ...context,
+    cluster: { ...facts, subjectCount: context.subjects.length },
   };
 }
 
