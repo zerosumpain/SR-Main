@@ -57,7 +57,20 @@ describe('isReasoningModel', () => {
 
   it('does not match plain non-reasoning models', () => {
     expect(isReasoningModel('openai/gpt-4o-mini')).toBe(false);
-    expect(isReasoningModel('google/gemini-3.5-flash')).toBe(false);
+    expect(isReasoningModel('mistralai/mistral-small')).toBe(false);
+  });
+
+  /**
+   * Gemini 3.x Flash used to be asserted here as non-reasoning. Measured
+   * 2026-08-14 against `google/gemini-3.5-flash` on a research synthesis: the
+   * stream carried 3,251 characters of `delta.reasoning` and returned a
+   * 421-character answer from a 2,000-token cap, the answer starting
+   * mid-sentence because thinking had already spent the budget. It needs the
+   * floor like any other reasoning model.
+   */
+  it('covers the gemini-3 flash family, which bills reasoning against max_tokens', () => {
+    expect(isReasoningModel('google/gemini-3.5-flash')).toBe(true);
+    expect(isReasoningModel('google/gemini-3.1-flash-lite-preview')).toBe(true);
   });
 });
 

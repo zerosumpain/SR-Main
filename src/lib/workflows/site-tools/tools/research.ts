@@ -3,6 +3,8 @@ import { db } from '$lib/db';
 import { researchSessions } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { searchResearch } from '$lib/deepdive/research-search';
+import { coerceDepth, depthPreset, RESEARCH_DEPTHS } from '$lib/deepdive/depth';
+import { coerceScope } from '$lib/deepdive/scope';
 
 // ==========================================
 // Existing Tools (moved)
@@ -10,12 +12,36 @@ import { searchResearch } from '$lib/deepdive/research-search';
 
 register({
   name: 'research_start',
-  description: 'Start a new Deep Dive research session on a topic',
+  description:
+    'Start a research session on a topic. `depth` picks how much work to do: ' +
+    "'instant' answers from model knowledge with no sources (seconds); " +
+    "'scan' is one round of web search with citations (under 90s); " +
+    "'brief' adds extracted facts and entities (under 2 minutes); " +
+    "'investigation' is the full multi-phase engine with red-teaming (20+ minutes). " +
+    'Use `scope` to bind the search to particular domains.',
   parameters: {
     type: 'object',
     properties: {
       topic: { type: 'string', description: 'Research topic' },
       goals: { type: 'array', items: { type: 'string' }, description: 'Specific research goals' },
+      depth: {
+        type: 'string',
+        enum: [...RESEARCH_DEPTHS],
+        description: 'How much research to do. Defaults to brief.',
+      },
+      scope: {
+        type: 'object',
+        description:
+          "Optional source binding. mode 'open' (anywhere), 'bounded' (prefer these domains), " +
+          "'exclusive' (only these domains).",
+        properties: {
+          mode: { type: 'string', enum: ['open', 'bounded', 'exclusive'] },
+          includeDomains: { type: 'array', items: { type: 'string' } },
+          excludeDomains: { type: 'array', items: { type: 'string' } },
+          seedUrls: { type: 'array', items: { type: 'string' } },
+          recency: { type: 'object', properties: { days: { type: 'number' } } },
+        },
+      },
     },
     required: ['topic'],
   },
@@ -23,11 +49,41 @@ register({
   toolset: 'research',
   producesLongRunningTask: { kind: 'research', idPath: 'id', cadenceSeconds: 60 },
   handler: async (args) => {
-    const { startResearch } = await import('$lib/deepdive/worker');
-    const [session] = await db.insert(researchSessions).values({
-      topic: args.topic as string,
-      goals: (args.goals as string[]) ?? [],
-    }).returning();
+    const { startResearch, runResearchSync } = await import('$lib/deepdive/worker');
+    const depth = coerceDepth(args.depth);
+    const preset = depthPreset(depth);
+
+    const [session] = await db
+      .insert(researchSessions)
+      .values({
+        topic: args.topic as string,
+        goals: (args.goals as string[]) ?? [],
+        depth,
+        scope: coerceScope(args.scope),
+        budgetMs: preset.budgetMs,
+        config: preset.config,
+      })
+      .returning();
+
+    // A budgeted tier finishes inside the caller's patience, so returning the
+    // ANSWER beats returning an id and making the caller poll for it. Only the
+    // unbounded investigation goes to the background.
+    if (preset.budgetMs != null) {
+      const finished = await runResearchSync(session.id);
+      const report = finished.report as { executive_summary?: string } | null;
+      return {
+        success: finished.status === 'complete',
+        data: {
+          id: finished.id,
+          depth,
+          status: finished.status,
+          durationMs: finished.durationMs,
+          answer: report?.executive_summary ?? '',
+          error: finished.errorMessage ?? undefined,
+        },
+      };
+    }
+
     startResearch(session.id);
     return { success: true, data: session };
   },

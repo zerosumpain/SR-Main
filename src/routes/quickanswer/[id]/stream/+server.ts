@@ -1,3 +1,12 @@
+/**
+ * Quick-answer stream — retained for the CANVAS explore node.
+ *
+ * The research launcher moved to /research and the unified
+ * /api/research/<id>/stream, but the canvas's per-node exploration is a
+ * different feature that still runs on the quick-answer engine and streams
+ * from here. Consolidating the launcher was the brief; breaking node
+ * exploration was not.
+ */
 import type { RequestHandler } from './$types';
 import { getEmitter, startQuickAnswer } from '$lib/quickanswer/worker';
 import { db } from '$lib/db';

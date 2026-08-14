@@ -1,22 +1,12 @@
 import type { PageServerLoad } from './$types';
-import { db } from '$lib/db';
-import { quickAnswers } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { error } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 
+/**
+ * Old quick-answer permalinks.
+ *
+ * The backfill preserved each row's id when moving it into `research_session`,
+ * so the id in the URL is still the right id — only the route changed.
+ */
 export const load: PageServerLoad = async ({ params }) => {
-  const [row] = await db
-    .select()
-    .from(quickAnswers)
-    .where(eq(quickAnswers.id, params.id));
-
-  if (!row) throw error(404, 'Quick answer not found');
-
-  return {
-    answer: {
-      ...row,
-      createdAt: row.createdAt.toISOString(),
-      completedAt: row.completedAt?.toISOString() ?? null,
-    },
-  };
+  throw redirect(308, `/research/${params.id}`);
 };

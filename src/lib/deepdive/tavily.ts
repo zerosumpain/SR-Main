@@ -42,6 +42,12 @@ export async function search(
     topic?: 'general' | 'news';
     days?: number;
     excludeDomains?: string[];
+    /**
+     * Restrict results to these domains. Used only by an `exclusive` research
+     * scope — a `bounded` scope expresses its preference through ranking so a
+     * thin allow-list cannot starve the run. See `$lib/deepdive/scope`.
+     */
+    includeDomains?: string[];
     signal?: AbortSignal;
   },
 ): Promise<TavilySearchResponse> {
@@ -63,6 +69,7 @@ export async function search(
         // it otherwise is ignored by the server but harmless.
         ...(options?.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
         ...(options?.excludeDomains?.length ? { exclude_domains: options.excludeDomains } : {}),
+        ...(options?.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
       }),
       signal: combineSignals(options?.signal, TAVILY_TIMEOUT_MS),
     });

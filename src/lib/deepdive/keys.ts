@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import OpenAI from 'openai';
 import { installUsageCapture } from '$lib/jkai/usage-capture';
+import { env as dynamicEnv } from '$env/dynamic/private';
 
 const KEYS_PATH = join(process.cwd(), 'keys.json');
 
@@ -25,7 +26,14 @@ export function loadKeys(): DeepDiveKeys {
 
   // Env vars fill in any keys the file didn't provide. A populated
   // keys.json still takes precedence when both are set.
-  const env = process.env;
+  //
+  // Read through `$env/dynamic/private`, not bare `process.env`: Vite loads
+  // `.env` into its own env object and does NOT copy it into `process.env`, so
+  // a key that lived only in `.env` read as "not configured" in dev while
+  // working fine in production (where systemd/docker set real process env).
+  // That asymmetry made TAVILY_API_KEY invisible to every local research run.
+  // `$env/dynamic/private` reads both, so dev and prod finally agree.
+  const env = { ...process.env, ...dynamicEnv };
   return {
     tavilyApiKey: fileKeys.tavilyApiKey ?? env.TAVILY_API_KEY,
     openrouterApiKey: fileKeys.openrouterApiKey ?? env.OPENROUTER_API_KEY,

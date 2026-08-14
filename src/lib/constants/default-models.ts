@@ -187,6 +187,12 @@ export function isReasoningModel(modelId: string): boolean {
     // `codex/` prefix long before a request is built, so matching on that
     // prefix would be dead code.
     id.startsWith('gpt-5.') ||
-    id.startsWith('openai/gpt-5')
+    id.startsWith('openai/gpt-5') ||
+    // Gemini 3.x Flash emits reasoning out of the same budget. Measured
+    // 2026-08-14 on a research synthesis: 3,251 characters of reasoning against
+    // a 421-character answer from a 2,000-token cap — the answer began
+    // mid-sentence because thinking had already spent the budget. The family
+    // reads like a cheap non-reasoning model and is not one.
+    id.startsWith('google/gemini-3')
   );
 }

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { db } from '$lib/db';
 import { researchSessions } from '$lib/db/schema';
+import type { ResearchSession } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import type { SSEEvent, SessionStats, SessionStatus } from './types';
 import { runPhase1 } from './phase1';
@@ -9,7 +10,11 @@ import { runPhase3 } from './phase3';
 import { runPostProcessing } from './postprocess';
 import { linkSessionEntitiesToGlobal } from './cross-session';
 import { extractResearchIntoIntel } from './intel-bridge';
-import { disposeArtefacts } from './desk-events';
+import { disposeArtefacts, flushArtefacts } from './desk-events';
+import { coerceDepth, depthPreset } from './depth';
+import { createBudget, NO_BUDGET } from './budget';
+import { runInstant, runScan } from './fast';
+import { runBrief } from './brief';
 
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();
@@ -64,6 +69,17 @@ export function shouldStop(sessionId: string): boolean {
   return stopSignals.get(sessionId) === true;
 }
 
+/**
+ * Whether THIS process is currently running the session.
+ *
+ * Process-local by design: it answers "should I start work" for the node that
+ * asks, and a second node must be free to reach its own conclusion. Durable
+ * cross-process liveness is what `heartbeatAt` is for.
+ */
+export function isRunning(sessionId: string): boolean {
+  return abortControllers.has(sessionId);
+}
+
 export function shouldSkipPhase(sessionId: string): boolean {
   return skipSignals.get(sessionId) === true;
 }
@@ -92,6 +108,31 @@ export function requestSkipPhase(sessionId: string): void {
   skipSignals.set(sessionId, true);
 }
 
+/**
+ * Worker heartbeat.
+ *
+ * Liveness is written EXPLICITLY, never derived by subtracting `updatedAt`: a
+ * row touched by an unrelated write would read as alive, and a worker sitting
+ * inside one long LLM call would read as dead. Only a running worker calls
+ * this, so a stale `heartbeatAt` means exactly one thing — nobody is working on
+ * this session — which is what lets the resume sweep adopt it safely.
+ *
+ * Throttled, because the natural call sites are inside per-source loops and a
+ * write per source would be hundreds of pointless UPDATEs on a long run.
+ */
+const HEARTBEAT_INTERVAL_MS = 10_000;
+const lastBeat = new Map<string, number>();
+
+export function beat(sessionId: string, force = false): void {
+  const now = Date.now();
+  if (!force && now - (lastBeat.get(sessionId) ?? 0) < HEARTBEAT_INTERVAL_MS) return;
+  lastBeat.set(sessionId, now);
+  db.update(researchSessions)
+    .set({ heartbeatAt: new Date() })
+    .where(eq(researchSessions.id, sessionId))
+    .catch((err) => console.error('[deepdive] heartbeat failed:', err));
+}
+
 async function updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void> {
   const update: Record<string, unknown> = { status };
   if (status === 'complete' || status === 'failed') {
@@ -100,19 +141,68 @@ async function updateSessionStatus(sessionId: string, status: SessionStatus): Pr
   await db.update(researchSessions).set(update).where(eq(researchSessions.id, sessionId));
 }
 
+/**
+ * Terminal bookkeeping shared by every tier: stamp the wall-clock duration,
+ * mark the session complete and tell the stream.
+ *
+ * `durationMs` is stored rather than recomputed from `completedAt - createdAt`,
+ * because a session can sit in `draft` for minutes before a worker picks it up
+ * and a resumed session's createdAt is older still. The tier picker quotes
+ * measured p50s off this column, so it has to mean "time actually spent
+ * researching".
+ */
+async function finish(sessionId: string, startTime: number): Promise<void> {
+  const durationMs = Date.now() - startTime;
+  await db
+    .update(researchSessions)
+    .set({ status: 'complete', completedAt: new Date(), durationMs })
+    .where(eq(researchSessions.id, sessionId));
+  emitStatus(sessionId, 'complete');
+  emit(sessionId, { type: 'complete', data: { durationMs } });
+  emitLog(sessionId, 'ℹ️', `Research complete in ${Math.round(durationMs / 1000)}s.`);
+}
+
 export async function startResearch(sessionId: string): Promise<void> {
   // Don't await — run in background
   runResearch(sessionId).catch((err) => {
     console.error(`[deepdive] Research failed for session ${sessionId}:`, err);
     emit(sessionId, { type: 'error', message: err.message });
-    updateSessionStatus(sessionId, 'failed').catch(console.error);
+    db.update(researchSessions)
+      .set({ status: 'failed', completedAt: new Date(), errorMessage: err?.message ?? 'Unknown error' })
+      .where(eq(researchSessions.id, sessionId))
+      .catch(console.error);
   });
+}
+
+/**
+ * Run a session to completion in-process and return the final row.
+ *
+ * The workflow node used to start a session and then poll `research_status`
+ * every five seconds for up to fifteen minutes. For the budgeted tiers that is
+ * both slower than the work itself and a source of phantom timeouts, so they
+ * get a direct await instead.
+ */
+export async function runResearchSync(sessionId: string): Promise<ResearchSession> {
+  try {
+    await runResearch(sessionId);
+  } catch (err: any) {
+    console.error(`[deepdive] Research failed for session ${sessionId}:`, err);
+    await db
+      .update(researchSessions)
+      .set({ status: 'failed', completedAt: new Date(), errorMessage: err?.message ?? 'Unknown error' })
+      .where(eq(researchSessions.id, sessionId))
+      .catch(() => {});
+  }
+  const [row] = await db.select().from(researchSessions).where(eq(researchSessions.id, sessionId)).limit(1);
+  if (!row) throw new Error('Research session missing after run');
+  return row;
 }
 
 async function runResearch(sessionId: string): Promise<void> {
   const emitter = getEmitter(sessionId);
   const ac = new AbortController();
   abortControllers.set(sessionId, ac);
+  const startTime = Date.now();
 
   try {
     // Load session
@@ -123,16 +213,38 @@ async function runResearch(sessionId: string): Promise<void> {
 
     if (!session) throw new Error('Session not found');
 
-    const startTime = Date.now();
-    const timeLimitMs = session.timeLimitMinutes
-      ? session.timeLimitMinutes * 60 * 1000
-      : null;
+    const preset = depthPreset(coerceDepth(session.depth));
+    beat(sessionId, true);
+
+    // The stored budget wins over the preset's (a caller may have narrowed it),
+    // then the legacy timeLimitMinutes, then the preset default.
+    const budgetMs =
+      session.budgetMs ??
+      (session.timeLimitMinutes ? session.timeLimitMinutes * 60_000 : null) ??
+      preset.budgetMs;
+    const budget = budgetMs ? createBudget(budgetMs, preset.reserves) : NO_BUDGET;
+
+    // The budgeted tiers each have a purpose-built runner; only `investigation`
+    // walks the phase chain. See $lib/deepdive/depth for why the chain cannot
+    // be squeezed into a clock by configuration alone.
+    if (preset.runner !== 'phases') {
+      const run =
+        preset.runner === 'instant' ? runInstant : preset.runner === 'scan' ? runScan : runBrief;
+      await updateSessionStatus(sessionId, 'phase1');
+      emitStatus(sessionId, 'phase1');
+      await run(sessionId, session, budget);
+      flushArtefacts(sessionId);
+      await finish(sessionId, startTime);
+      return;
+    }
 
     function isTimeUp(): boolean {
       if (shouldStop(sessionId)) return true;
       if (shouldSkipPhase(sessionId)) return true;
-      if (!timeLimitMs) return false;
-      return Date.now() - startTime > timeLimitMs;
+      // `beat` is throttled, so calling it on every check is cheap and keeps
+      // the heartbeat alive through long phases without extra plumbing.
+      beat(sessionId);
+      return budget.expired();
     }
 
     // Phase 1
@@ -226,9 +338,7 @@ async function runResearch(sessionId: string): Promise<void> {
     }
 
     // Complete
-    await updateSessionStatus(sessionId, 'complete');
-    emitStatus(sessionId, 'complete');
-    emitLog(sessionId, '\u2139\uFE0F', 'Research complete!');
+    await finish(sessionId, startTime);
   } finally {
     // Cleanup
     setTimeout(() => {
