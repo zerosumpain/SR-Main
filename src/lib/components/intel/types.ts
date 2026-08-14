@@ -91,6 +91,10 @@ export interface NetworkPayload {
    *  whole graph, not the filtered view, so deselecting one does not remove the
    *  control you would use to bring it back. */
   sources: Array<{ id: string; count: number }>;
+  /** Finer facets under a source — e.g. email split by kind of sender. */
+  sourceKinds?: Array<{ id: string; source: string; kind: string; count: number }>;
+  /** Finer still — the individual sender domains under a source. */
+  sourceDomains?: Array<{ id: string; source: string; domain: string; count: number }>;
   /** Ids that literally matched the keyword filter (the rest is context). */
   matched: string[];
   trimmed: boolean;

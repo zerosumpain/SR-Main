@@ -12,6 +12,7 @@ import type { GraphSnapshot, GraphNode, GraphEdge, AdjacencyIndex } from './mode
 import { buildIndex } from './model';
 import { computeCentrality, type CentralityScores } from './centrality';
 import { detectCommunities, type CommunityResult } from './community';
+import { channelArtefactIds } from '../channel-artefacts';
 
 export interface GraphAnalysis {
   snapshot: GraphSnapshot;
@@ -54,8 +55,15 @@ export function pairKeyFor(a: string, b: string): string {
  */
 const TTL_MS = 60_000;
 
-let cached: GraphAnalysis | null = null;
-let inflight: Promise<GraphAnalysis> | null = null;
+/**
+ * One cache per variant. The analysed graph excludes channel artefacts; the
+ * `withArtefacts` variant exists only so a surface can SHOW them on request,
+ * and keying them separately is what stops a request for the display variant
+ * poisoning the analytic one for the rest of the TTL.
+ */
+const cached = new Map<string, GraphAnalysis>();
+const inflight = new Map<string, Promise<GraphAnalysis>>();
+const variantKey = (includeArtefacts: boolean) => (includeArtefacts ? 'with-artefacts' : 'analysed');
 /**
  * Bumped on every invalidation. A computation that started before the bump is
  * reading pre-write data, so it must not install itself as the cache when it
@@ -66,7 +74,7 @@ let generation = 0;
 
 /** Drop the cache — call after any write that changes the graph. */
 export function invalidateGraphAnalysis(): void {
-  cached = null;
+  cached.clear();
   generation++;
 }
 
@@ -99,10 +107,19 @@ function parseVector(raw: unknown): number[] | null {
   return out.every((n) => Number.isFinite(n)) ? out : null;
 }
 
-async function loadSnapshot(): Promise<{
+async function loadSnapshot(includeArtefacts: boolean): Promise<{
   snapshot: GraphSnapshot;
   suppressedPairs: Set<string>;
 }> {
+  // Channel artefacts are excluded HERE and nowhere else.
+  //
+  // This is the one place the whole analytics layer gets its data — clustering,
+  // centrality, insights, path finding and the cluster roster all read the
+  // snapshot this returns — so gating here covers every one of them by
+  // construction. A flag honoured in six places is a flag that will be
+  // forgotten in the seventh.
+  const artefacts = includeArtefacts ? new Set<string>() : await channelArtefactIds();
+
   // Merged entities are excluded: they are aliases resolved into a survivor and
   // would otherwise show as duplicate nodes.
   const entityRes = await db.execute(sql`
@@ -155,7 +172,24 @@ async function loadSnapshot(): Promise<{
              -- an eleven-week-old thread exactly as fresh as this morning's.
              MAX(COALESCE(n.observed_at, n.created_at)) AS last_seen_at,
              ARRAY_AGG(DISTINCT cat.value) FILTER (WHERE cat.value IS NOT NULL) AS categories,
-             ARRAY_AGG(DISTINCT n.source)   FILTER (WHERE n.source IS NOT NULL) AS sources
+             -- Plain source values, plus the finer facets as qualified ones.
+             --
+             -- Emitted into the SAME array rather than as a new column, because
+             -- the filter chain already matches "any of these sources" and the
+             -- picker already counts them — so 'email:bulk' and
+             -- 'email@mailer.humblebundle.com' become selectable everywhere
+             -- without a second dimension to thread through five call sites.
+             -- The separators are chosen so a plain source can never collide
+             -- with a facet: neither ':' nor '@' appears in a source value.
+             ARRAY_CAT(
+               ARRAY_CAT(
+                 COALESCE(ARRAY_AGG(DISTINCT n.source) FILTER (WHERE n.source IS NOT NULL), ARRAY[]::text[]),
+                 COALESCE(ARRAY_AGG(DISTINCT n.source || ':' || (n.metadata->>'emailKind'))
+                          FILTER (WHERE n.metadata->>'emailKind' IS NOT NULL), ARRAY[]::text[])
+               ),
+               COALESCE(ARRAY_AGG(DISTINCT n.source || '@' || (n.metadata->>'senderDomain'))
+                        FILTER (WHERE n.metadata->>'senderDomain' IS NOT NULL), ARRAY[]::text[])
+             ) AS sources
       FROM intel_note_entities ne
       JOIN intel_notes n ON n.id = ne.note_id
       LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(n.categories, '[]'::jsonb))
@@ -165,7 +199,9 @@ async function loadSnapshot(): Promise<{
     WHERE e.merged_into_id IS NULL
   `);
 
-  const nodes: GraphNode[] = (entityRes.rows as Array<Record<string, unknown>>).map((r) => {
+  const nodes: GraphNode[] = (entityRes.rows as Array<Record<string, unknown>>)
+    .filter((r) => !artefacts.has(String(r.id)))
+    .map((r) => {
     const id = String(r.id);
     const created = r.created_at ? new Date(String(r.created_at)).getTime() : 0;
     const updated = r.updated_at ? new Date(String(r.updated_at)).getTime() : created;
@@ -232,7 +268,14 @@ async function loadSnapshot(): Promise<{
     WHERE r.suppressed IS NOT TRUE
   `);
 
-  const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>).map((r) => ({
+  const edges: GraphEdge[] = (edgeRes.rows as Array<Record<string, unknown>>)
+    // An edge to an excluded entity goes with it. `buildIndex` already refuses
+    // to create phantom nodes from one, so leaving them in changed no analysis —
+    // but `snapshot.edges` is also what the stat strip counts, and reporting 521
+    // connections in a graph that has 508 is the kind of quiet inconsistency
+    // that makes someone distrust the whole panel.
+    .filter((r) => !artefacts.has(String(r.source)) && !artefacts.has(String(r.target)))
+    .map((r) => ({
     id: String(r.id),
     source: String(r.source),
     target: String(r.target),
@@ -347,14 +390,20 @@ export async function ensureEmbeddings(analysis: GraphAnalysis): Promise<Map<str
  * The current graph analysis, computed at most once per TTL. Concurrent callers
  * share one in-flight computation rather than each running Louvain.
  */
-export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
+export async function getGraphAnalysis(
+  force = false,
+  { includeArtefacts = false }: { includeArtefacts?: boolean } = {},
+): Promise<GraphAnalysis> {
+  const key = variantKey(includeArtefacts);
   const now = Date.now();
-  if (!force && cached && now - cached.computedAt < TTL_MS) return cached;
-  if (inflight) return inflight;
+  const hit = cached.get(key);
+  if (!force && hit && now - hit.computedAt < TTL_MS) return hit;
+  const running = inflight.get(key);
+  if (running) return running;
 
   const startedAt = generation;
-  inflight = (async () => {
-    const { snapshot, suppressedPairs } = await loadSnapshot();
+  const work = (async () => {
+    const { snapshot, suppressedPairs } = await loadSnapshot(includeArtefacts);
     const index = buildIndex(snapshot);
     const analysis: GraphAnalysis = {
       snapshot,
@@ -369,13 +418,14 @@ export async function getGraphAnalysis(force = false): Promise<GraphAnalysis> {
     // Only cache if nothing invalidated while we were reading. The caller still
     // gets this result — it is the best available right now — but the next
     // caller recomputes rather than being served data known to be stale.
-    if (generation === startedAt) cached = analysis;
+    if (generation === startedAt) cached.set(key, analysis);
     return analysis;
   })();
 
+  inflight.set(key, work);
   try {
-    return await inflight;
+    return await work;
   } finally {
-    inflight = null;
+    inflight.delete(key);
   }
 }

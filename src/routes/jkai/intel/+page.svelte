@@ -717,6 +717,8 @@
       <RailSection title="Sources" badge={sourceFilterCount || null}>
         <SourcePicker
           sources={network?.sources ?? []}
+          sourceKinds={network?.sourceKinds ?? []}
+          sourceDomains={network?.sourceDomains ?? []}
           categories={network?.categories ?? []}
           {activeSources}
           {activeCategories}

@@ -20,6 +20,8 @@
 
   let {
     sources = [],
+    sourceKinds = [],
+    sourceDomains = [],
     categories = [],
     activeSources = [],
     activeCategories = [],
@@ -29,6 +31,13 @@
   }: {
     /** Every source present in the graph, with its entity count. */
     sources: Array<{ id: string; count: number }>;
+    /**
+     * Finer facets under a source — email split into correspondence,
+     * notification and bulk. `source` says which source they sit under.
+     */
+    sourceKinds?: Array<{ id: string; source: string; kind: string; count: number }>;
+    /** Finer still: the individual sender domains under a source. */
+    sourceDomains?: Array<{ id: string; source: string; domain: string; count: number }>;
     categories: NetCategory[];
     activeSources: string[];
     activeCategories: string[];
@@ -57,6 +66,27 @@
   /** Files are selected, or nothing is — either way categories are meaningful. */
   const filesInPlay = $derived(!activeSources.length || activeSources.includes('file'));
   const total = $derived(sources.reduce((sum, s) => sum + s.count, 0));
+
+  /**
+   * Plain words for the three kinds — the stored values are slugs.
+   *
+   * `correspondence` is deliberately NOT called "from a person". Two of the
+   * three kinds are positively identified; the third is what is left over once
+   * they have been taken out, and on the live mailbox it is still 39% of the
+   * post with a long tail of unrecognised senders in it. Calling that "people"
+   * would be the filter asserting something it has not established — and a
+   * filter that overclaims is worse than one that admits its edge, because you
+   * stop checking it.
+   */
+  const KIND_LABELS: Record<string, string> = {
+    correspondence: 'everything else',
+    notification: 'service notices',
+    bulk: 'marketing and newsletters',
+  };
+
+  /** Senders shown before the list has to be asked for. */
+  const DOMAIN_PREVIEW = 5;
+  let expanded = $state(new Set<string>());
 </script>
 
 <div class="ctl">
@@ -76,6 +106,8 @@
     <div class="rows">
       {#each sources as s (s.id)}
         {@const on = activeSources.includes(s.id)}
+        {@const kinds = sourceKinds.filter((k) => k.source === s.id)}
+        {@const domains = sourceDomains.filter((d) => d.source === s.id)}
         <button
           type="button"
           class="row"
@@ -90,6 +122,58 @@
           </span>
           <span class="count">{s.count}</span>
         </button>
+
+        <!-- One word covers a colleague writing to you, a service reporting a
+             build and a shop announcing a sale. These are how you tell them
+             apart; the senders under them are how you get to one shop. -->
+        {#each kinds as k (k.id)}
+          {@const kindOn = activeSources.includes(k.id)}
+          <button
+            type="button"
+            class="row sub"
+            class:on={kindOn}
+            aria-pressed={kindOn}
+            title="Only {k.kind} {k.source}"
+            onclick={() => onToggleSource(k.id)}
+          >
+            <span class="mark" aria-hidden="true"></span>
+            <span class="name">{KIND_LABELS[k.kind] ?? k.kind}</span>
+            <span class="count">{k.count}</span>
+          </button>
+        {/each}
+
+        {#if domains.length}
+          {@const shown = expanded.has(s.id) ? domains : domains.slice(0, DOMAIN_PREVIEW)}
+          {#each shown as d (d.id)}
+            {@const domOn = activeSources.includes(d.id)}
+            <button
+              type="button"
+              class="row sub deep"
+              class:on={domOn}
+              aria-pressed={domOn}
+              title="Only mail from {d.domain}"
+              onclick={() => onToggleSource(d.id)}
+            >
+              <span class="mark" aria-hidden="true"></span>
+              <span class="name">{d.domain}</span>
+              <span class="count">{d.count}</span>
+            </button>
+          {/each}
+          {#if domains.length > DOMAIN_PREVIEW}
+            <button
+              type="button"
+              class="more"
+              onclick={() => {
+                const next = new Set(expanded);
+                if (next.has(s.id)) next.delete(s.id);
+                else next.add(s.id);
+                expanded = next;
+              }}
+            >
+              {expanded.has(s.id) ? 'Fewer senders' : `All ${domains.length} senders`}
+            </button>
+          {/if}
+        {/if}
       {/each}
     </div>
 
@@ -199,6 +283,22 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
+  }
+
+  /* Indented, lighter, and smaller-capped: a facet is a narrowing OF the row
+     above it, and reading as a sibling would make the list look like eleven
+     sources rather than four with detail under them. */
+  .row.sub {
+    padding-left: 20px;
+    color: var(--text-ghost);
+  }
+  .row.sub.deep {
+    padding-left: 34px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .row.sub.on {
+    color: var(--text-primary);
   }
 
   .count {
