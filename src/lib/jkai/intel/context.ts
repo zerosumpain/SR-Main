@@ -17,13 +17,27 @@ interface KnowledgeContext {
     excerpt: string;
     date: string;
   }>;
+  /**
+   * The named neighbourhoods the graph divides into.
+   *
+   * Included unconditionally rather than by similarity search, because a cluster
+   * name is often something the embedding has never seen — the user typed it —
+   * and "tell me about the DfE cluster" has to resolve on the name itself. It is
+   * a short list of short strings; the whole roster costs less than one note
+   * excerpt.
+   */
+  clusters: Array<{ label: string; size: number; sources: string; narrative: string | null }>;
 }
 
 export async function buildKnowledgeContext(userMessage: string): Promise<string> {
   try {
     const context = await findRelevantContext(userMessage);
 
-    if (context.entities.length === 0 && context.noteExcerpts.length === 0) {
+    if (
+      context.entities.length === 0 &&
+      context.noteExcerpts.length === 0 &&
+      context.clusters.length === 0
+    ) {
       return '';
     }
 
@@ -39,7 +53,7 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
   try {
     embedding = await generateEmbedding(query);
   } catch {
-    return { entities: [], noteExcerpts: [] };
+    return { entities: [], noteExcerpts: [], clusters: await describeClusters() };
   }
 
   const vectorStr = `[${embedding.join(',')}]`;
@@ -121,7 +135,70 @@ async function findRelevantContext(query: string): Promise<KnowledgeContext> {
       excerpt: n.excerpt,
       date: new Date(n.created_at).toLocaleDateString(),
     })),
+    clusters: await describeClusters(),
   };
+}
+
+/**
+ * The tracked clusters, as one short line each.
+ *
+ * Reads the roster directly rather than reconciling: this runs on every chat
+ * turn, and re-detecting communities to answer a question about them would put
+ * a Louvain sweep in the latency path of ordinary conversation. A roster that
+ * has never been built yields nothing, which is correct — there are no named
+ * clusters until someone has opened the graph.
+ *
+ * The first sentence of the narrative only. A dozen full narratives is several
+ * thousand tokens on every turn, and the opening line is the part that says
+ * what the cluster is.
+ */
+async function describeClusters(): Promise<KnowledgeContext['clusters']> {
+  try {
+    const { loadClusters } = await import('./cluster-store');
+    const clusters = await loadClusters();
+    return clusters
+      .filter((c) => c.live)
+      .sort((a, b) => b.size - a.size)
+      .slice(0, MAX_CLUSTERS)
+      .map((c) => ({
+        label: c.name ?? c.autoLabel,
+        size: c.size,
+        sources: sourceMixOf(c.members.length),
+        narrative: firstSentence(c.narrative),
+      }));
+  } catch (err) {
+    console.error('[intel] Failed to read the cluster roster:', err);
+    return [];
+  }
+}
+
+/** How many clusters the chat context carries. */
+const MAX_CLUSTERS = 12;
+
+/**
+ * A short provenance phrase for a cluster.
+ *
+ * The roster stores membership, not composition, and resolving the source mix
+ * would mean loading every member of every cluster on every chat turn. The
+ * member count is what the roster can say for free and is enough for the model
+ * to know how much weight a cluster carries.
+ */
+function sourceMixOf(members: number): string {
+  return `${members} linked entities`;
+}
+
+/** The opening claim of a narrative, with its markdown heading stripped. */
+function firstSentence(narrative: string | null): string | null {
+  if (!narrative) return null;
+  const body = narrative
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#') && line.trim().length > 0)
+    .join(' ')
+    .replace(/\[\d+\]/g, '')
+    .trim();
+  if (!body) return null;
+  const stop = body.indexOf('. ');
+  return stop === -1 ? body.slice(0, 240) : body.slice(0, stop + 1);
 }
 
 function formatContext(context: KnowledgeContext): string {
@@ -145,6 +222,14 @@ function formatContext(context: KnowledgeContext): string {
       if (entity.relationships.length > 0) {
         parts.push(`  Relationships: ${entity.relationships.join('; ')}`);
       }
+    }
+  }
+
+  if (context.clusters.length > 0) {
+    parts.push('\n**Clusters** — the named neighbourhoods this graph divides into:');
+    for (const cluster of context.clusters) {
+      parts.push(`\n- **${cluster.label}** — ${cluster.size} entities, from ${cluster.sources}`);
+      if (cluster.narrative) parts.push(`  ${cluster.narrative}`);
     }
   }
 

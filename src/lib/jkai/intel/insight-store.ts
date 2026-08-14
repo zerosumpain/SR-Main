@@ -101,6 +101,12 @@ export const SAMPLE_KINDS: ReadonlySet<string> = new Set([
   'dominant_cluster',
 ]);
 
+// Deliberately NOT sampled, though their entityIds are a slice of a much larger
+// membership: a cluster finding is ABOUT one specific cluster, and two different
+// clusters emerging in the same week are two different findings. Keying them on
+// kind and score alone would collapse them into one and let dismissing either
+// dismiss both. Their ids are stable because the member list is ordered.
+
 /** 0..1, clamped; anything unparseable scores 0 rather than poisoning the key. */
 export function clampScore(score: unknown): number {
   const n = Number(score);
