@@ -20,6 +20,7 @@
   import NetworkGraph from '$lib/components/intel/NetworkGraph.svelte';
   import NetworkGraph3D from '$lib/components/intel/NetworkGraph3D.svelte';
   import ClusterPicker from '$lib/components/intel/ClusterPicker.svelte';
+  import type { ClusterRoster } from '$lib/components/intel/cluster-types';
   import SourcePicker from '$lib/components/intel/SourcePicker.svelte';
   import RailSection from '$lib/components/intel/RailSection.svelte';
   import GmailSweepPanel from '$lib/components/intel/GmailSweepPanel.svelte';
@@ -197,6 +198,112 @@
   let commissions = $state<Commission[]>([]);
   let watchedCount = $state(0);
 
+  // ── Cluster roster ─────────────────────────────────────────────────────────
+  //
+  // Fetched separately from the graph, and deliberately NOT filtered with it.
+  // The graph ships the 600 most central nodes of nine thousand and narrows
+  // further with every filter; the roster describes the clusters as they
+  // actually are. Joining them by key in the picker is what lets a filtered view
+  // still tell you what a cluster holds.
+  let roster = $state<ClusterRoster | null>(null);
+  let recalculating = $state(false);
+  let narrating = $state<string | null>(null);
+  let clusterError = $state<string | null>(null);
+
+  async function loadRoster() {
+    try {
+      const res = await fetch('/api/jkai/intel/clusters');
+      if (!res.ok) throw new Error(`the cluster roster came back ${res.status}`);
+      roster = await res.json();
+      clusterError = null;
+    } catch (err) {
+      clusterError = err instanceof Error ? err.message : 'the cluster roster failed to load';
+    }
+  }
+
+  async function recalculateClusters() {
+    if (recalculating) return;
+    recalculating = true;
+    clusterError = null;
+    try {
+      const res = await fetch('/api/jkai/intel/clusters', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'recalculate' }),
+      });
+      if (!res.ok) throw new Error(`recalculation came back ${res.status}`);
+      roster = await res.json();
+      // The graph's colours and labels come from the same roster, so it has to
+      // be refetched or the picture disagrees with the legend beside it.
+      networkAttempt++;
+    } catch (err) {
+      clusterError = err instanceof Error ? err.message : 'recalculation failed';
+    } finally {
+      recalculating = false;
+    }
+  }
+
+  async function renameCluster(key: string, name: string | null) {
+    // Optimistic: renaming is the one cluster action with an obvious correct
+    // outcome, and waiting on a round trip to see your own typing is worse than
+    // reverting on the rare failure.
+    const previous = roster;
+    if (roster) {
+      roster = {
+        ...roster,
+        clusters: roster.clusters.map((c) =>
+          c.key === key ? { ...c, name, label: name ?? c.autoLabel } : c,
+        ),
+      };
+    }
+    try {
+      const res = await fetch('/api/jkai/intel/clusters', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'rename', key, name }),
+      });
+      if (!res.ok) throw new Error(`the rename came back ${res.status}`);
+      // Refetched rather than trusted: the rename also resets the drift baseline
+      // and the server is the one that knows the new one.
+      await loadRoster();
+      networkAttempt++;
+    } catch (err) {
+      roster = previous;
+      clusterError = err instanceof Error ? err.message : 'the rename failed';
+    }
+  }
+
+  async function narrateCluster(key: string) {
+    if (narrating) return;
+    narrating = key;
+    clusterError = null;
+    try {
+      const res = await fetch('/api/jkai/intel/clusters', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        // `force` because this button is only ever pressed to (re)write: the
+        // card shows the cached narrative already.
+        body: JSON.stringify({ action: 'narrate', key, force: true }),
+      });
+      if (!res.ok) throw new Error(`the narrative request came back ${res.status}`);
+      const body = await res.json();
+      if (roster) {
+        roster = {
+          ...roster,
+          clusters: roster.clusters.map((c) =>
+            c.key === key
+              ? { ...c, narrative: body.narrative, narrativeAt: body.narrativeAt, narrativeStale: false }
+              : c,
+          ),
+        };
+      }
+    } catch (err) {
+      clusterError = err instanceof Error ? err.message : 'the narrative failed';
+    } finally {
+      narrating = null;
+    }
+  }
+
   const query = $derived.by(() => {
     const p = new URLSearchParams();
     if (typeId) p.set('typeId', typeId);
@@ -280,6 +387,10 @@
     } catch {
       // Unreadable storage just means the default stands.
     }
+
+    // The cluster roster. Cheap — the analysis it reads is the same cached
+    // snapshot the graph request just built.
+    void loadRoster();
 
     // Two cheap counts for the tiles. The expensive analysis behind the findings
     // section is deliberately NOT here — see loadFindings.
@@ -540,7 +651,11 @@
       <span class="l">Connections</span>
     </div>
     <div class="tile">
-      <span class="n">{network?.stats.communities ?? '—'}</span>
+      <!-- The TRACKED count, not the raw community count. Louvain detects one
+           community per isolated entity, so the raw figure on the live graph is
+           ~2,900 — a true number that describes nothing, since 2,632 of them are
+           a single entity connected to nothing. -->
+      <span class="n">{roster?.stats.tracked ?? network?.stats.communities ?? '—'}</span>
       <span class="l">Clusters</span>
     </div>
     <div class="tile" class:warn={fragmentation > 0.2}>
@@ -614,12 +729,24 @@
       <RailSection title="Clusters" badge={focusCommunities.length || null}>
         <ClusterPicker
           communities={network?.communities ?? []}
+          roster={roster?.clusters ?? []}
+          stats={roster?.stats ?? null}
+          resolution={roster?.resolution ?? null}
+          {recalculating}
+          {narrating}
           focused={focusCommunities}
           filtered={communityId === '' ? null : Number(communityId)}
           onToggleFocus={toggleCluster}
           onClearFocus={() => (focusCommunities = [])}
           onFilter={(id) => (communityId = id === null ? '' : String(id))}
+          onRecalculate={recalculateClusters}
+          onRename={renameCluster}
+          onNarrate={narrateCluster}
+          onOpen={(key) => goto(`/jkai/intel/clusters/${key}`)}
         />
+        {#if clusterError}
+          <p class="cluster-err">{clusterError}</p>
+        {/if}
       </RailSection>
 
       <RailSection title="Shape" badge={shapeFilterCount || null} open={false}>
@@ -944,6 +1071,16 @@
 {/if}
 
 <style>
+  /* The cluster rail's own failure line. Kept beside the control that failed
+     rather than in the page-level toast: a roster that did not load is a
+     statement about the cluster list, not about the graph. */
+  .cluster-err {
+    margin: 0;
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: var(--error);
+  }
+
   /*
    * Full-bleed, and exactly one page-height column.
    *
