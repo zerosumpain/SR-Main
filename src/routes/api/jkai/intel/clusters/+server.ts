@@ -11,9 +11,8 @@
 // the whole graph while the entity views stay a readable size.
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getGraphAnalysis, invalidateGraphAnalysis } from '$lib/jkai/intel/analytics/load';
-import { autoTuneResolution } from '$lib/jkai/intel/analytics/community';
-import { buildClusterRoster } from '$lib/jkai/intel/cluster-roster';
+import { getGraphAnalysis } from '$lib/jkai/intel/analytics/load';
+import { buildClusterRoster, recalculateClusterRoster } from '$lib/jkai/intel/cluster-roster';
 import { renameCluster, loadClusters, setClusterNarrative } from '$lib/jkai/intel/cluster-store';
 import { assembleClusterBriefContext, generateBrief } from '$lib/jkai/intel/brief';
 import type { StoredCluster } from '$lib/jkai/intel/analytics/cluster-identity';
@@ -33,18 +32,11 @@ export const POST: RequestHandler = async ({ request }) => {
   const action = String(body.action ?? '');
 
   if (action === 'recalculate') {
-    // Drop the analysis as well as the roster memo: recalculating is the button
-    // for "the graph has changed since you last looked", and reusing a cached
-    // snapshot would make it a no-op for up to a minute.
-    invalidateGraphAnalysis();
-    const analysis = await getGraphAnalysis(true);
     const requested = body.resolution === undefined ? undefined : Number(body.resolution);
     if (requested !== undefined && (!Number.isFinite(requested) || requested <= 0)) {
       throw error(400, 'resolution must be a positive number');
     }
-    const tuning = requested === undefined ? autoTuneResolution(analysis.index) : null;
-    const roster = await buildClusterRoster(analysis, requested ?? tuning?.resolution);
-    return json({ ...roster, candidates: tuning?.candidates ?? null });
+    return json(await recalculateClusterRoster(requested));
   }
 
   if (action === 'rename') {

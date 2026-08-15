@@ -474,7 +474,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
     pathname === '/api/jkai/intel/backfill' ||
-    pathname === '/api/jkai/intel/source-facets'
+    pathname === '/api/jkai/intel/source-facets' ||
+    pathname === '/api/jkai/intel/clusters/recalculate'
   ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }

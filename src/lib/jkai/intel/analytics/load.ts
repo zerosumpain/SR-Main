@@ -183,9 +183,17 @@ async function loadSnapshot(includeArtefacts: boolean): Promise<{
              -- with a facet: neither ':' nor '@' appears in a source value.
              ARRAY_CAT(
                ARRAY_CAT(
-                 COALESCE(ARRAY_AGG(DISTINCT n.source) FILTER (WHERE n.source IS NOT NULL), ARRAY[]::text[]),
-                 COALESCE(ARRAY_AGG(DISTINCT n.source || ':' || (n.metadata->>'emailKind'))
-                          FILTER (WHERE n.metadata->>'emailKind' IS NOT NULL), ARRAY[]::text[])
+                 ARRAY_CAT(
+                   COALESCE(ARRAY_AGG(DISTINCT n.source) FILTER (WHERE n.source IS NOT NULL), ARRAY[]::text[]),
+                   COALESCE(ARRAY_AGG(DISTINCT n.source || ':' || (n.metadata->>'emailKind'))
+                            FILTER (WHERE n.metadata->>'emailKind' IS NOT NULL), ARRAY[]::text[])
+                 ),
+                 -- Gmail's own "important" verdict, as a facet on the same
+                 -- axis as the kinds. Orthogonal to them by design: important
+                 -- correspondence and an important newsletter are both real,
+                 -- so this is a fourth branch rather than a fourth kind.
+                 COALESCE(ARRAY_AGG(DISTINCT n.source || ':important')
+                          FILTER (WHERE n.metadata->>'important' = 'true'), ARRAY[]::text[])
                ),
                COALESCE(ARRAY_AGG(DISTINCT n.source || '@' || (n.metadata->>'senderDomain'))
                         FILTER (WHERE n.metadata->>'senderDomain' IS NOT NULL), ARRAY[]::text[])

@@ -213,6 +213,48 @@ export class GmailService {
     return (res.data.messages ?? []).map((m: any) => m.id as string).filter(Boolean);
   }
 
+  /**
+   * Thread ids matching a query, paged to `max`.
+   *
+   * `messages.list` returns `{ id, threadId }` per hit and `listMessages`
+   * discards half of it, which leaves anything that works in threads — the
+   * intel sweep does — with no way to answer "which THREADS match this query"
+   * short of fetching every message individually. For a mailbox-wide question
+   * like "which of these are marked important" that is one cheap paged call
+   * against seventeen hundred.
+   *
+   * Deduped, because a matching thread usually has several matching messages.
+   */
+  async listThreadIdsMatching(
+    account: GmailAccount,
+    query: string,
+    max = 2000,
+  ): Promise<string[]> {
+    const oauth = await this.getAuthenticatedClient(account);
+    const gmail = this.gmailClientFor(oauth);
+    const seen = new Set<string>();
+    let pageToken: string | undefined;
+
+    // Gmail caps a page at 500 regardless of what is asked for.
+    do {
+      const res = await gmail.users.messages.list({
+        userId: 'me',
+        q: query,
+        maxResults: Math.min(500, max),
+        pageToken,
+      });
+      for (const m of res.data.messages ?? []) {
+        const threadId = (m as any).threadId as string | undefined;
+        if (threadId) seen.add(threadId);
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+      // Counted in THREADS, which is what the caller asked for. Paging on until
+      // Gmail runs out would walk an entire mailbox on a loose query.
+    } while (pageToken && seen.size < max);
+
+    return [...seen];
+  }
+
   // -------------------------------------------------------------------------
   // History list since a given historyId
   // -------------------------------------------------------------------------
