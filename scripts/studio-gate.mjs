@@ -197,6 +197,36 @@ async function main() {
         missing.push(rel);
       }
     }
+    // A build copies the kit into its own tree on the iteration it first needs
+    // it, and then never looks again — so a kit fix landing at iteration 5
+    // reaches the MOUNT but not the copy, and the pages keep rendering against
+    // a snapshot taken days earlier. That is exactly how a corrected palette
+    // failed to reach a finished build: explainer-kit/tokens.css said
+    // #ede4d4 and assets/tokens.css, four iterations older, still said
+    // #f2ead9. Nothing anywhere reported the difference.
+    //
+    // Compared by CONTENT, not by timestamp: the workspace has no useful mtimes
+    // by the time this runs, and a byte difference is the thing that matters.
+    for (const rel of kitFiles) {
+      const copied = rel.replace(/^explainer-kit\//, 'assets/');
+      if (copied === rel) continue;
+      try {
+        const [a, b] = await Promise.all([
+          fetch(new URL(rel, baseUrl).toString()).then((r) => (r.ok ? r.text() : null)),
+          fetch(new URL(copied, baseUrl).toString()).then((r) => (r.ok ? r.text() : null)),
+        ]);
+        if (a && b && a.trim() !== b.trim()) {
+          findings.push({
+            chapter: 0, rule: 'stale-kit-copy',
+            message: `${copied} is an older copy of ${rel} — the mount has been updated since it was copied, and the pages are rendering against the stale one.`,
+            remedy: `Re-copy ${rel} over ${copied}. The mount is regenerated every iteration and is always current; your copy is a snapshot from whenever you first took it.`,
+          });
+        }
+      } catch {
+        // A fetch failure here is the missing-file check's business, above.
+      }
+    }
+
     if (missing.length > 0) {
       findings.push({
         chapter: 0,
