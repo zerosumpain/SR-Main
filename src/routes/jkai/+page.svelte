@@ -8,6 +8,7 @@
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
   import { hub, setLiveRuns, closeGraphSheet } from '$lib/jkai/hub-bus.svelte';
+  import { forgetQueued } from '$lib/jkai/queued-sends.svelte';
   import {
     openTabs,
     openTab,
@@ -350,6 +351,7 @@
       await fetch(`/api/jkai/conversations/${id}`, { method: 'DELETE' });
       conversationList = conversationList.filter((c) => c.id !== id);
       forgetTab(id);
+      forgetQueued(id);
       delete panes[id];
     } catch (err) {
       console.error('Failed to delete conversation:', err);

@@ -42,6 +42,13 @@
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
+  import {
+    hydrateQueuedSends,
+    queuedFor,
+    pushQueued,
+    takeQueued,
+    dropQueued,
+  } from '$lib/jkai/queued-sends.svelte';
   import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { onMount, tick, untrack } from 'svelte';
 
@@ -671,6 +678,9 @@
       history.replaceState(history.state, '', url);
     }
 
+    // Bring back any follow-up left pending at the last reload. Idempotent, so
+    // every mounted pane can call it.
+    hydrateQueuedSends();
     if (active) textareaEl?.focus();
     void fetchMentionIndex().then((list) => {
       entityMentions = list;
@@ -750,11 +760,16 @@
   //
   // The composer used to be `disabled={loading}`, so a second message simply
   // could not be sent — which made the gateway's queue/interrupt setting almost
-  // unreachable from the UI. Holding them HERE rather than posting them straight
-  // away serialises at our own door: the gateway never sees an overlap from the
+  // unreachable from the UI. Holding them rather than posting them straight away
+  // serialises at our own door: the gateway never sees an overlap from the
   // composer, so this is correct whichever mode it is in, and each message still
   // gets its own turn and its own answer.
-  let queuedSends = $state<string[]>([]);
+  //
+  // Kept in $lib/jkai/queued-sends, keyed by conversation, so they survive a
+  // reload — which is exactly when you would most want them back — and so one
+  // pane per open tab can each have their own without four copies of the storage
+  // logic.
+  const queuedSends = $derived(queuedFor(conversationId));
   let pendingAttachments = $state<PendingAttachment[]>([]);
   let dragOver = $state(false);
   let fileInputEl: HTMLInputElement | undefined = $state();
@@ -2048,7 +2063,7 @@
         showToast('Finish the current reply before sending files.');
         return;
       }
-      queuedSends = [...queuedSends, text];
+      pushQueued(conversationId, text);
       input = '';
       resetHistoryCycle();
       return;
@@ -2234,15 +2249,27 @@
 
   /** Send the next follow-up typed while the last reply was streaming. */
   async function drainQueuedSends() {
-    if (loading || queuedSends.length === 0) return;
-    const [next, ...rest] = queuedSends;
-    queuedSends = rest;
+    if (loading || !conversationId) return;
+    const next = takeQueued(conversationId);
+    if (next === null) return;
     await send(next);
   }
 
   function dropQueuedSend(index: number) {
-    queuedSends = queuedSends.filter((_, i) => i !== index);
+    if (!conversationId) return;
+    dropQueued(conversationId, index);
   }
+
+  // A queue restored from the last visit goes out as soon as this pane is idle —
+  // the same rule it followed before the reload. Tracked read is `loading` alone;
+  // the drain is untracked because `send` writes `loading` and reads the queue,
+  // and an effect that tracked either would re-enter itself.
+  $effect(() => {
+    const busy = loading;
+    untrack(() => {
+      if (!busy) void drainQueuedSends();
+    });
+  });
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {

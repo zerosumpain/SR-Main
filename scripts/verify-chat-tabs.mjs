@@ -14,7 +14,7 @@
 //       BASE=http://localhost:5173 node scripts/verify-chat-tabs.mjs
 //       node scripts/verify-chat-tabs.mjs overlap     (one section)
 //
-// Sections: overlap · limits · reattach · typeahead · viewports
+// Sections: overlap · limits · reattach · typeahead · persist · viewports
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -280,6 +280,55 @@ if (runs('typeahead')) {
   check('the follow-up gets its own answer', /DELTA/.test(text));
 
   await page.screenshot({ path: `${SHOTS}/typeahead.png` });
+}
+
+// ---------------------------------------------------------------- persist ----
+// A queued follow-up must survive a reload — that is exactly when you would most
+// want it back, and it used to be plain component state that vanished.
+if (runs('persist')) {
+  log('\n=== persist: a queued follow-up across a reload ===');
+  await openChat(page);
+  const box = () => paneFor(page).locator('textarea.composer-textarea');
+  const queued = () => paneFor(page).locator('.queued-strip .queued-text');
+
+  await send(page, 'Write roughly 500 words on the history of the Norfolk Broads. Be thorough.');
+  await page.waitForTimeout(3000);
+
+  for (const w of ['ECHO', 'FOXTROT']) {
+    await box().fill(`Reply with exactly the word ${w} and nothing else.`);
+    await paneFor(page).locator('button[aria-label="Send"]').click();
+    await page.waitForTimeout(400);
+  }
+  const before = await queued().allTextContents();
+  check('two follow-ups are held', before.length === 2, JSON.stringify(before.map((t) => t.match(/word (\w+)/)?.[1])));
+
+  // Reload mid-reply, with both still pending.
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 90_000 });
+  await page.locator(`${STRIP} [role="tab"]`).first().waitFor({ timeout: 60_000 });
+  await box().waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+
+  const after = await queued().allTextContents();
+  log(`   after reload: ${JSON.stringify(after.map((t) => t.match(/word (\w+)/)?.[1]))}`);
+  check('they are still there after the reload', after.length > 0,
+    'they used to be plain component state and vanished');
+  await page.screenshot({ path: `${SHOTS}/persist-restored.png` });
+
+  // And they go out, in order.
+  const deadline = Date.now() + 240_000;
+  let text = '';
+  while (Date.now() < deadline) {
+    text = (await transcript(page)).join(' | ');
+    if (/FOXTROT/.test(text)) break;
+    await page.waitForTimeout(3000);
+  }
+  const order = [...text.matchAll(/\b(ECHO|FOXTROT)\b/g)].map((m) => m[1]);
+  const firstEach = order.filter((w, i) => order.indexOf(w) === i);
+  check('the restored queue is sent, in the order it was typed',
+    JSON.stringify(firstEach) === JSON.stringify(['ECHO', 'FOXTROT']),
+    JSON.stringify(firstEach));
+  check('the queue is empty afterwards', (await queued().count()) === 0);
+  await page.screenshot({ path: `${SHOTS}/persist-drained.png` });
 }
 
 // -------------------------------------------------------------- viewports ----
