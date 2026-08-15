@@ -7,6 +7,10 @@ import {
   createWaiter,
   cancelJob,
   cancelForScope,
+  listJobs,
+  markJobQueued,
+  clearJobQueued,
+  whenJobSettles,
   respondToWaiter,
 } from './job-store';
 import type { JobEvent } from './job-store';
@@ -268,5 +272,55 @@ describe('cancelForScope — reporting what was superseded', () => {
     const j = createJob('keep me', { conversationId: 'conv-3' });
     expect(cancelForScope({}, 'no scope')).toEqual([]);
     cancelJob(j.jobId);
+  });
+});
+
+
+describe('whenJobSettles — serialising a queued turn behind a running one', () => {
+  it('resolves when the job it waits on stops running', async () => {
+    // The tool-step bus keys its confirmer and its listeners by CHAT, on the
+    // documented assumption that a chat has one live job at a time — an
+    // assumption `cancelForScope` used to guarantee. With the gateway queueing we
+    // no longer cancel, so the queued turn has to hold here instead of
+    // registering a confirmer that would answer for the turn ahead of it.
+    const ahead = createJob('first', { conversationId: 'conv-q' });
+    let settled = false;
+    const wait = whenJobSettles(ahead.jobId).then(() => { settled = true; });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+    cancelJob(ahead.jobId);
+    await wait;
+    expect(settled).toBe(true);
+  });
+
+  it('resolves immediately for a job that is already gone', async () => {
+    // Its turn finished between us reading the running-job map and getting here.
+    await expect(whenJobSettles('no-such-job')).resolves.toBeUndefined();
+  });
+
+  it('does not wait on a job that already finished', async () => {
+    const j = createJob('done already', { conversationId: 'conv-q2' });
+    cancelJob(j.jobId);
+    await expect(whenJobSettles(j.jobId)).resolves.toBeUndefined();
+  });
+
+  it('reports a queued turn as waiting, not stuck', () => {
+    // A queued turn is silent for exactly as long as the turn ahead of it runs,
+    // which the 4-min idle watchdog reads as stuck. The flag is what exempts it,
+    // and surfacing it means an operator reading the running-job list can tell
+    // the two apart.
+    const ahead = createJob('ahead', { conversationId: 'conv-q3' });
+    const behind = createJob('behind', { conversationId: 'conv-q3' });
+    markJobQueued(behind.jobId, ahead.jobId);
+
+    const listed = listJobs().find((j) => j.id === behind.jobId);
+    expect(listed?.queuedBehind).toBe(ahead.jobId);
+    expect(listJobs().find((j) => j.id === ahead.jobId)?.queuedBehind).toBeNull();
+
+    clearJobQueued(behind.jobId);
+    expect(listJobs().find((j) => j.id === behind.jobId)?.queuedBehind).toBeNull();
+
+    cancelJob(ahead.jobId);
+    cancelJob(behind.jobId);
   });
 });

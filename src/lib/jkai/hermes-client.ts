@@ -200,6 +200,20 @@ export interface HermesHealth {
    * untagged frames must be accepted or every reply would be dropped.
    */
   turnTagging: string | null;
+  /**
+   * How the gateway treats a message that lands while a turn is running.
+   *
+   * `'queue'` runs them in order, one answer each. `'interrupt'` / `'redirect'` /
+   * `'steer'` fold the new message into the RUNNING turn, so two messages produce
+   * ONE run carrying the first turn's id.
+   *
+   * The consumer has to know, because the correct behaviour is OPPOSITE in the
+   * two cases. Under interrupt it must adopt the turn it superseded, or it
+   * rejects the output that is answering it. Under queue it must NOT adopt it, or
+   * it renders the previous turn's answer as this one's — measured, with the
+   * continuation of a "count to 200" landing under "reply with BRAVO".
+   */
+  busyInputMode: string | null;
 }
 
 export class HermesClient {
@@ -261,11 +275,13 @@ export class HermesClient {
         boot_id?: string;
         started_at?: number;
         turn_tagging?: string;
+        busy_input_mode?: string;
       };
       return {
         bootId: body.boot_id ?? null,
         startedAt: body.started_at ?? null,
         turnTagging: body.turn_tagging ?? null,
+        busyInputMode: body.busy_input_mode ?? null,
       };
     } catch {
       return null;

@@ -262,19 +262,42 @@ if (runs('overlap')) {
   const saved = await rows(conv.id);
   printRows(saved.messages);
 
-  check("the superseded turn's stream carries only its own output",
+  const health = await fetch(`${HERMES}/platforms/jkai/health`).then((r) => r.json()).catch(() => ({}));
+  const queues = health.busy_input_mode === 'queue';
+  log(`  gateway busy_input_mode = ${JSON.stringify(health.busy_input_mode)}`);
+
+  check("the first turn's stream carries only its own output",
     !/READY/.test(a.text),
     `A streamed ${JSON.stringify(a.text.slice(0, 40))} — a leading READY is the previous turn's answer`);
   check('the second message is answered', b.finalMessage !== null && /BRAVO/.test(b.finalMessage),
     JSON.stringify(b.finalMessage?.slice(0, 60)));
+  check("the second turn's answer is not the first turn's",
+    b.finalMessage !== null && !/\b\d+\n\d+\n\d+/.test(b.finalMessage),
+    `a run of numbers in the BRAVO reply is the first turn's count: ${JSON.stringify(b.finalMessage?.slice(0, 50))}`);
   check("the gateway's redirect notice is not part of the answer",
     b.finalMessage !== null && !/Redirected current run/.test(b.finalMessage));
-  check('the second turn actually closes', b.closedAt !== null,
-    'no terminator: a redirected run never emits one of its own, so the superseded turn\'s is the only ending there is');
+  check('the second turn actually closes', b.closedAt !== null);
+
+  if (queues) {
+    // Queueing means the turn ahead runs to completion, so it must NOT be
+    // superseded — cancelling it there threw away an answer that was still
+    // coming, and its frames were then drained by the next job and rendered as
+    // the reply to a question they did not answer.
+    check('the first turn is allowed to finish rather than being superseded',
+      !a.events.includes('error'),
+      `A's events: ${a.events.join(',')}`);
+    check('the first turn keeps a complete answer of its own',
+      a.finalMessage !== null && /\b1\b/.test(a.finalMessage) && /\b40\b|\b100\b|\b200\b/.test(a.finalMessage),
+      JSON.stringify(a.finalMessage?.slice(-40)));
+    check('the second turn is told it is waiting rather than left silent',
+      b.events.includes('status'), `B's events: ${b.events.join(',')}`);
+  }
 
   const answers = saved.messages.filter((m) => m.role === 'assistant');
+  check('every message got exactly one answer', answers.length === 3,
+    `${answers.length} assistant rows: ${JSON.stringify(answers.map((m) => m.content.slice(0, 24)))}`);
   check('no row answers a question it was not asked',
-    !answers.some((m) => /READY/.test(m.content) && /^\s*1\b/.test(m.content.replace(/^READY/, ''))),
+    !answers.some((m) => /READY/.test(m.content) && /\d+\n\d+/.test(m.content)),
     JSON.stringify(answers.map((m) => m.content.slice(0, 40))));
 }
 

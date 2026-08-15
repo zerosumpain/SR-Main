@@ -746,6 +746,15 @@
     error?: string;
     incompatible?: boolean;
   }
+  // Follow-ups typed while a reply is still streaming.
+  //
+  // The composer used to be `disabled={loading}`, so a second message simply
+  // could not be sent — which made the gateway's queue/interrupt setting almost
+  // unreachable from the UI. Holding them HERE rather than posting them straight
+  // away serialises at our own door: the gateway never sees an overlap from the
+  // composer, so this is correct whichever mode it is in, and each message still
+  // gets its own turn and its own answer.
+  let queuedSends = $state<string[]>([]);
   let pendingAttachments = $state<PendingAttachment[]>([]);
   let dragOver = $state(false);
   let fileInputEl: HTMLInputElement | undefined = $state();
@@ -2030,16 +2039,27 @@
     untrack(() => void send());
   });
 
-  async function send() {
-    const text = input.trim();
-    if (!text || loading || !conversationId) return;
+  async function send(queuedText?: string) {
+    const text = (queuedText ?? input).trim();
+    if (!text || !conversationId) return;
+    if (loading) {
+      // Mid-reply. Hold it and send when this turn closes.
+      if (pendingAttachments.length > 0) {
+        showToast('Finish the current reply before sending files.');
+        return;
+      }
+      queuedSends = [...queuedSends, text];
+      input = '';
+      resetHistoryCycle();
+      return;
+    }
 
     // Snapshot before `messages` is mutated below — routing applies to the first
     // message of a conversation only, and the optimistic bubble we now append
     // BEFORE routing would otherwise make every conversation look started.
     const isFirstMessage = messages.length === 0;
 
-    input = '';
+    if (queuedText === undefined) input = '';
     resetHistoryCycle();
     loading = true;
     heartbeat = null;
@@ -2209,6 +2229,19 @@
     // fallback) must not leave the meter stuck on "live". No-op once settled.
     meterSettle();
     scrollToBottom();
+    void drainQueuedSends();
+  }
+
+  /** Send the next follow-up typed while the last reply was streaming. */
+  async function drainQueuedSends() {
+    if (loading || queuedSends.length === 0) return;
+    const [next, ...rest] = queuedSends;
+    queuedSends = rest;
+    await send(next);
+  }
+
+  function dropQueuedSend(index: number) {
+    queuedSends = queuedSends.filter((_, i) => i !== index);
   }
 
   function phaseHumanLabel(phase: string): string {
@@ -2901,6 +2934,26 @@
         </div>
       {/if}
       <div class="composer-inner">
+        <!-- Follow-ups typed while the reply was still streaming. Shown rather
+             than dropped into the transcript as optimistic bubbles: they have not
+             been sent, and each one is still cancellable. -->
+        {#if queuedSends.length > 0}
+          <div class="queued-strip" aria-label="Queued follow-ups">
+            {#each queuedSends as q, i (i)}
+              <div class="queued-row">
+                <span class="queued-mark" aria-hidden="true">⏳</span>
+                <span class="queued-text">{q}</span>
+                <button
+                  type="button"
+                  class="queued-drop"
+                  aria-label={`Remove queued message: ${q.slice(0, 40)}`}
+                  title="Don't send this"
+                  onclick={() => dropQueuedSend(i)}
+                >×</button>
+              </div>
+            {/each}
+          </div>
+        {/if}
         {#if paletteOpen}
           <div class="cmd-palette" role="listbox" aria-label="Slash commands">
             {#each paletteMatches as cmd, i (cmd.command)}
@@ -3063,8 +3116,7 @@
             onkeydown={handleKeydown}
             oninput={onComposerInput}
             onpaste={onPaste}
-            placeholder={composerPlaceholder}
-            disabled={loading}
+            placeholder={loading ? 'Type a follow-up — it goes next…' : composerPlaceholder}
             class="composer-textarea"
             rows="1"
           ></textarea>
@@ -3079,8 +3131,8 @@
           </button>
           <button
             type="button"
-            onclick={send}
-            disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
+            onclick={() => send()}
+            disabled={!input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
             class="composer-send"
             aria-label="Send"
           >
@@ -3346,6 +3398,49 @@
     align-items: flex-end;
     gap: 8px;
   }
+  .queued-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+  .queued-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 8px;
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--accent-ink-tint-35);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .queued-mark {
+    flex: none;
+  }
+  .queued-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .queued-drop {
+    flex: none;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    line-height: 1;
+    color: var(--text-muted);
+    padding: 0 2px;
+  }
+  .queued-drop:hover {
+    color: var(--status-fail);
+  }
+
   /* One hairline field on the page ground — the 2px card border read as a
      second frame inside the composer's own top rule. */
   .composer-textarea {
