@@ -339,6 +339,69 @@ async function main() {
           });
         }
 
+        // ——— Field Study invariants ———
+        //
+        // The mechanical half of field-study-system/CHECKLIST.md. The
+        // judgement calls in that list (is the risk column honest? is the
+        // lesson transferable?) stay with a human; these four are the ones a
+        // browser can settle, and leaving them to review is how three studies
+        // ended up with three different confidence palettes.
+        const claimChips = await root.locator('.fs-chip').count();
+        if (claimChips === 0) {
+          findings.push({
+            chapter: ch.n, rule: 'no-confidence',
+            message: `Chapter ${ch.n} (${ch.title}) states no confidence — no .fs-chip anywhere in the beat.`,
+            remedy: `Every claim carries one of exactly three: <span class="fs-chip fs-chip--fact">Fact</span>, --hypothesis, or --contested. Put one on the beat's claim in ${ch.path}. See ./explainer-kit/field-study/TEMPLATES.md.`,
+          });
+        } else {
+          // A fourth level is the failure this catches: the scale is three
+          // words, and a study that invents "likely" or "probable" has quietly
+          // stopped being comparable with every other study on the site.
+          const badLevels = await root.locator('.fs-chip').evaluateAll((els) =>
+            [
+              ...new Set(
+                els
+                  .map((e) => [...e.classList].find((c) => c.startsWith('fs-chip--')) ?? 'fs-chip--none')
+                  .filter((c) => !['fs-chip--fact', 'fs-chip--hypothesis', 'fs-chip--contested'].includes(c)),
+              ),
+            ].join(', '),
+          );
+          if (badLevels) {
+            findings.push({
+              chapter: ch.n, rule: 'confidence-invented',
+              message: `Chapter ${ch.n} uses confidence levels that are not in the scale: ${badLevels}.`,
+              remedy: `The scale is fact | hypothesis | contested and does not grow. Map the level onto one of those three in ${ch.path} — anything short of well-evidenced is a hypothesis.`,
+            });
+          }
+        }
+
+        // The close is what stops a study being a tour of the author's notes:
+        // it says what follows, and what would prove it wrong.
+        const hasFalsifier = (await root.locator('.fs-falsifier').count()) > 0;
+        const hasOpen = (await root.locator('.fs-open').count()) > 0;
+        if (!hasOpen || !hasFalsifier) {
+          findings.push({
+            chapter: ch.n, rule: 'no-close',
+            message: `Chapter ${ch.n} ends without ${!hasOpen ? 'an open question' : ''}${!hasOpen && !hasFalsifier ? ' or ' : ''}${!hasFalsifier ? 'a falsifier' : ''}.`,
+            remedy: `Close ${ch.path} with the beat close: a .fs-open aside carrying the open question, and a .fs-falsifier line naming what would change your mind.`,
+          });
+        }
+
+        // No emoji. The system says so, and a build that slips one in has
+        // stopped reading the system.
+        const emoji = await root.evaluate((el) => {
+          const t = el.textContent ?? '';
+          const m = t.match(/\p{Extended_Pictographic}/gu);
+          return m ? [...new Set(m)].slice(0, 5).join(' ') : '';
+        }).catch(() => '');
+        if (emoji) {
+          findings.push({
+            chapter: ch.n, rule: 'emoji',
+            message: `Chapter ${ch.n} contains emoji: ${emoji}`,
+            remedy: `Remove them from ${ch.path}. The system allows Unicode glyphs only — the arrows, dots and diamonds in ./explainer-kit/field-study/README.md.`,
+          });
+        }
+
         const lever = root.locator(`[data-lever="${ch.leverId}"]`).first();
         const outcome = root.locator(`[data-outcome="${ch.outcomeId}"]`).first();
         const haveLever = (await lever.count()) > 0;

@@ -84,6 +84,22 @@ export const STUDIO_PROPOSER_SYSTEM_PROMPT = `You are designing an interactive e
 
 You are given a research brief. Every chapter must be grounded in it.
 
+This is a FIELD STUDY. The system it is built against is mounted at ./explainer-kit/field-study/ — nine templates, a fixed beat arc, and a ship gate. Read its TEMPLATES.md and README.md before you plan. The arc, always in this order, always numbered:
+
+| 01 the problem | what is being claimed, and by whom? |
+| 02 the estate & evidence | what exists today, and how do we know? |
+| 03 the options | what are the ways to do it, and who has tried them? |
+| 04 the recommendation | which one, and why that one? |
+| 05 what it does & who wins | who is better off, who is worse off? |
+| 06 trust & safeguards | what could go wrong, and what stops it? |
+| 07 what happens next | what would change the picture, and when? |
+
+You may merge two beats and you may rename them to the subject freely — the QUESTIONS are what is fixed. You may not reorder them or add an eighth.
+
+Every beat carries: ONE question printed at the top; ONE claim answering it, with a confidence of exactly \`fact\`, \`hypothesis\` or \`contested\`; a "so what" in the author's voice; and an open question WITH a falsifier — the thing that would change the author's mind. The front matter states the study's three findings BEFORE beat 01: a study that withholds its conclusions to build suspense reads as a tour of the author's notes.
+
+At least one claim in the study must be a \`hypothesis\`. A study whose every claim is a fact is not being honest about its own reasoning.
+
 CONSTRAINTS YOUR PLAN MUST RESPECT:
 1. 6-10 chapters. Each is a real route the reader can link to.
 2. Every chapter has ONE idea and follows explain → manipulate → consequence: say what the thing is, let the reader change something, show them what that did.
@@ -102,13 +118,26 @@ Format your response as:
 
 ## Chapter Plan
 
-| # | Chapter | Form | Control | Lever id | Outcome id |
-|---|---------|------|---------|----------|------------|
-| 1 | ... | ... | ... | ... | ... |
+| # | Chapter | Template | Form | Control | Lever id | Outcome id |
+|---|---------|----------|------|---------|----------|------------|
+| 1 | ... | ... | ... | ... | ... | ... |
 
 (one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
 
-FORM IS YOUR EDITORIAL DECISION — how this chapter is TOLD, not what it is about. Pick per chapter:
+TEMPLATE IS THE SHAPE OF THE ARGUMENT — what kind of beat this is. The system is mounted at ./explainer-kit/field-study/; read its TEMPLATES.md before you plan. Pick from the beat's verb:
+- T0 front matter — declaring. The landing page. Once, at the front. States the study's three findings BEFORE beat 01.
+- T1 argument — reasoning. Prose carries it. Two figures at most.
+- T2 survey — accounting. A landscape counted, every row with the same fields and its own basis.
+- T3 position — recommending. One recommendation, defended, with the rejected options named fairly. Once per study.
+- T4 ledger — weighing. Two sides, re-lensed by actor. The risk column is never shorter than the benefit column.
+- T5 instrument — operating. A control surface, deliberately not editorial.
+- T6 anatomy — decomposing. One thing, N layers.
+- T7 chronicle — narrating time. Two named threads, not one undifferentiated one.
+- T8 precedent — judging cases. N cases, each with a fate and a transferable lesson.
+
+Two verbs apply → it is two beats. T0 once, at the front. Never two of the same template consecutively except T1. A study that is all T2 is a database; all T1 is an essay.
+
+FORM IS HOW THAT ARGUMENT IS ARRANGED on the page — orthogonal to the template, and what the shell actually renders. Pick per chapter:
 - open — the visual runs full width above the words. For a chapter whose picture IS the argument.
 - question — the title is a question; evidence; then a bounded answer.
 - walk — numbered movements, one beat each. For a process or a sequence.
@@ -187,13 +216,26 @@ Start with a ## Changes Made section listing each marker you received and what y
 
 ## Chapter Plan
 
-| # | Chapter | Form | Control | Lever id | Outcome id |
-|---|---------|------|---------|----------|------------|
-| 1 | ... | ... | ... | ... | ... |
+| # | Chapter | Template | Form | Control | Lever id | Outcome id |
+|---|---------|----------|------|---------|----------|------------|
+| 1 | ... | ... | ... | ... | ... | ... |
 
 (one row per chapter; lever id and outcome id are the data-attribute ids the post-iteration gate will drive — lowercase, no spaces)
 
-FORM IS YOUR EDITORIAL DECISION — how this chapter is TOLD, not what it is about. Pick per chapter:
+TEMPLATE IS THE SHAPE OF THE ARGUMENT — what kind of beat this is. The system is mounted at ./explainer-kit/field-study/; read its TEMPLATES.md before you plan. Pick from the beat's verb:
+- T0 front matter — declaring. The landing page. Once, at the front. States the study's three findings BEFORE beat 01.
+- T1 argument — reasoning. Prose carries it. Two figures at most.
+- T2 survey — accounting. A landscape counted, every row with the same fields and its own basis.
+- T3 position — recommending. One recommendation, defended, with the rejected options named fairly. Once per study.
+- T4 ledger — weighing. Two sides, re-lensed by actor. The risk column is never shorter than the benefit column.
+- T5 instrument — operating. A control surface, deliberately not editorial.
+- T6 anatomy — decomposing. One thing, N layers.
+- T7 chronicle — narrating time. Two named threads, not one undifferentiated one.
+- T8 precedent — judging cases. N cases, each with a fate and a transferable lesson.
+
+Two verbs apply → it is two beats. T0 once, at the front. Never two of the same template consecutively except T1. A study that is all T2 is a database; all T1 is an essay.
+
+FORM IS HOW THAT ARGUMENT IS ARRANGED on the page — orthogonal to the template, and what the shell actually renders. Pick per chapter:
 - open — the visual runs full width above the words. For a chapter whose picture IS the argument.
 - question — the title is a question; evidence; then a bounded answer.
 - walk — numbered movements, one beat each. For a process or a sequence.
@@ -295,8 +337,21 @@ function extractChapterPlanSection(planMarkdown: string): string {
 export const CHAPTER_FORMS = ['open', 'question', 'walk', 'compare', 'annotate', 'ledger', 'close'] as const;
 export const CONTROL_KINDS = ['choice', 'toggle', 'step', 'slider'] as const;
 
+/**
+ * The Field Study System's nine templates — the shape of the ARGUMENT a beat
+ * makes, which is orthogonal to `CHAPTER_FORMS` (how the shell arranges it on
+ * the page) and to `CONTROL_KINDS` (what the reader touches).
+ *
+ * The registry these mirror is `static/explainer-kit/field-study/templates.json`,
+ * mounted into every studio workspace. `explainer-kit.test.ts` pins the two
+ * together, because a template id the plan names and the mount does not carry
+ * is a chapter the agent has no instructions for.
+ */
+export const STUDY_TEMPLATES = ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8'] as const;
+
 export type ChapterForm = (typeof CHAPTER_FORMS)[number];
 export type ControlKind = (typeof CONTROL_KINDS)[number];
+export type StudyTemplate = (typeof STUDY_TEMPLATES)[number];
 
 /**
  * Coerce a plan cell to a known form/control, or null.
@@ -334,6 +389,8 @@ export function normaliseSpineId(raw: string): string | null {
 export interface ChapterSpineRow {
   n: number;
   title: string;
+  /** The Field Study template this beat's argument takes (T0-T8). */
+  template: StudyTemplate;
   form: ChapterForm;
   control: ControlKind;
   leverId: string;
@@ -372,17 +429,22 @@ export function parseChapterPlan(
     // row ("---...") — both structural and present in every well-formed
     // table — so this is not counted as a rejected chapter.
     if (!Number.isFinite(n)) continue;
-    // Two table shapes are accepted. The six-column one is current:
+    // Three table shapes are accepted, newest first:
+    //   | # | Chapter | Template | Form | Control | Lever id | Outcome id |
     //   | # | Chapter | Form | Control | Lever id | Outcome id |
-    // The four-column one predates chapter forms and is still parsed, so a
-    // plan written by an older prompt — or a model that drops the two new
-    // columns — yields a working spine instead of nothing.
+    //   | # | Chapter | Lever id | Outcome id |
+    // Every older shape still parses. A plan written by an older prompt — or by
+    // a model that drops a column — yields a working spine rather than nothing,
+    // which matters because the studio gate is guarded on the spine being
+    // non-empty and an empty one turns the gate off silently.
+    const study = cells.length >= 9;
     const wide = cells.length >= 8;
     const title = cells[2];
-    const rawForm = wide ? cells[3] : '';
-    const rawControl = wide ? cells[4] : '';
-    const rawLeverId = wide ? cells[5] : cells[3];
-    const rawOutcomeId = wide ? cells[6] : cells[4];
+    const rawTemplate = study ? cells[3] : '';
+    const rawForm = study ? cells[4] : wide ? cells[3] : '';
+    const rawControl = study ? cells[5] : wide ? cells[4] : '';
+    const rawLeverId = study ? cells[6] : wide ? cells[5] : cells[3];
+    const rawOutcomeId = study ? cells[7] : wide ? cells[6] : cells[4];
 
     if (/^-+$/.test(title)) continue; // defensive: a divider row whose number cell happened to parse
     if (!title || !rawLeverId || !rawOutcomeId) {
@@ -395,6 +457,10 @@ export function parseChapterPlan(
     // honest for a continuous quantity.
     const form = normaliseVocab(rawForm, CHAPTER_FORMS) ?? 'question';
     const control = normaliseVocab(rawControl, CONTROL_KINDS) ?? 'choice';
+    // Defaulted, never rejected — same reasoning as form. `t1` (argument) is
+    // the plainest beat shape, and a chapter whose template cell is missing or
+    // unrecognised is still a chapter.
+    const template = normaliseVocab(rawTemplate, STUDY_TEMPLATES) ?? 't1';
     // An id has to survive the round trip into an HTML attribute selector, so
     // normalise to the same shape the gate will look for. Anything left
     // unusable is a rejected row rather than a silent time bomb: the spine
@@ -406,7 +472,7 @@ export function parseChapterPlan(
       if (stats) stats.rejected++;
       continue;
     }
-    out.push({ n, title, form, control, leverId, outcomeId });
+    out.push({ n, title, template, form, control, leverId, outcomeId });
   }
   return out;
 }

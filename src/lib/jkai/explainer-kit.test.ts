@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHAPTER_FORMS, CONTROL_KINDS } from './planner';
+import { CHAPTER_FORMS, CONTROL_KINDS, STUDY_TEMPLATES } from './planner';
 import { readFile } from 'node:fs/promises';
 import { lintDesignSystem } from './design-lint';
 
@@ -20,6 +20,55 @@ describe('explainer kit', () => {
   it('tokens.css passes the design linter', async () => {
     const { findings } = lintDesignSystem({ 'explainer/tokens.css': await read('tokens.css') });
     expect(findings).toEqual([]);
+  });
+
+  it('mounts the Field Study System beside the kit', async () => {
+    // A studio build is an information project and this is the system it is
+    // built against. The prompt tells the agent to read TEMPLATES.md and to
+    // link field-study.css; both have to actually arrive in the workspace.
+    for (const rel of [
+      'field-study/README.md',
+      'field-study/TEMPLATES.md',
+      'field-study/templates.json',
+      'field-study/field-study.css',
+      'field-study/CHECKLIST.md',
+    ]) {
+      await expect(read(rel)).resolves.toBeTruthy();
+    }
+  });
+
+  it('carries every template the planner can emit', async () => {
+    // The plan's Template cell is parsed against STUDY_TEMPLATES; a template
+    // the spine names and the registry does not describe is a chapter the
+    // agent has no instructions for.
+    const registry = JSON.parse(await read('field-study/templates.json'));
+    const ids = JSON.stringify(registry).toLowerCase();
+    for (const t of STUDY_TEMPLATES) expect(ids).toContain(t);
+  });
+
+  it("field-study.css is written against the kit's tokens, not the site's", async () => {
+    // A studio build loads tokens.css and never loads app.css. A straight copy
+    // of the site layer would reference --accent / --bg / --text-primary, find
+    // nothing, and fall back to initial values — black on transparent.
+    const css = await read('field-study/field-study.css');
+    expect(css).toMatch(/--ex-ink/);
+    expect(css).toMatch(/--ex-accent/);
+    expect(css).not.toMatch(/var\(--text-primary\)/);
+    expect(css).not.toMatch(/var\(--accent-tint-08\)/);
+    // The three confidence levels are the whole scale, and the chip classes
+    // are what the studio gate asserts on.
+    for (const level of ['fs-chip--fact', 'fs-chip--hypothesis', 'fs-chip--contested']) {
+      expect(css).toContain(level);
+    }
+  });
+
+  it('does not import a second copy of the fonts tokens.css already loads', async () => {
+    // Two @imports of Fraunces is a second network round trip for a face the
+    // page already has. Matched as an at-rule at the start of a line, not as
+    // the word anywhere — the file's own comment tells the reader not to add
+    // one, and a blunter regex fails on that sentence.
+    const css = await read('field-study/field-study.css');
+    expect(css).not.toMatch(/^\s*@import/m);
   });
 
   it('sim.js exposes createSim on window.Explainer', async () => {
