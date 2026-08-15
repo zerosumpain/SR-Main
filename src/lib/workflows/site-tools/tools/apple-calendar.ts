@@ -1,6 +1,6 @@
 import { register } from '../registry-internal';
 import type { ToolDefinition, ToolResult } from '../registry-internal';
-import { appleCalendarExecutor, resolveOptions_calendar } from '$lib/workflows/nodes/apple-calendar';
+import { appleCalendarExecutor, parseCalendarDateRange, resolveOptions_calendar } from '$lib/workflows/nodes/apple-calendar';
 import { standaloneContext } from '$lib/workflows/standalone-context';
 import { listCredentials } from '$lib/integrations/credentials';
 
@@ -123,7 +123,13 @@ export async function handleAppleCalendarList(args: Record<string, unknown>): Pr
     const start = typeof args.dateRangeStart === 'string' ? args.dateRangeStart : '';
     const end = typeof args.dateRangeEnd === 'string' ? args.dateRangeEnd : '';
     if (!start || !end) return { success: false, error: 'dateRangeStart and dateRangeEnd are required when listing events.' };
-    const result = await appleCalendarExecutor.execute({}, { credentialId, operation: 'list', calendar: calendar.value, dateRangeStart: start, dateRangeEnd: end }, standaloneContext());
+    const range = parseCalendarDateRange(start, end);
+    if ('error' in range) return { success: false, error: range.error };
+    if (args.includeRawIcs !== undefined && typeof args.includeRawIcs !== 'boolean') return { success: false, error: 'includeRawIcs must be a boolean.' };
+    const result = await appleCalendarExecutor.execute({}, {
+      credentialId, operation: 'list', calendar: calendar.value, dateRangeStart: start, dateRangeEnd: end,
+      includeRawIcs: args.includeRawIcs === true,
+    }, standaloneContext());
     return { success: true, data: { calendar: calendar.label, ...(result.output as Record<string, unknown>) } };
   } catch (err) {
     return { success: false, error: err instanceof Error ? `Unable to list Apple Calendar events: ${err.message}` : 'Unable to list Apple Calendar events.' };
@@ -245,8 +251,8 @@ export async function handleAppleCalendarDelete(args: Record<string, unknown>): 
 export const appleCalendarTools: ToolDefinition[] = [
   {
     name: 'apple_calendar_list',
-    description: 'List configured Apple Calendar credentials, then calendars, or events in a specified date range, from a selected existing credential. Event results include available iCalendar provenance and raw ICS; ORGANIZER identifies a meeting organiser, not a guaranteed creator or audit identity for manually added shared-calendar events. Pass a calendar resource URL, or a displayed name copied EXACTLY from apple_calendar_list — names are matched exactly, and this account has several that differ only by a suffix, so a near-miss silently returns an empty calendar rather than an error. Prefer the resource URL. Credentials are resolved server-side; only their safe ids and labels are returned.',
-    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit to list configured credential ids and labels.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, dateRangeStart: { type: 'string', description: 'ISO-8601 range start.' }, dateRangeEnd: { type: 'string', description: 'ISO-8601 range end.' } }, required: [] },
+    description: 'List configured Apple Calendar credentials, then calendars, or events in a specified ISO-8601 date range, from a selected existing credential. Event reads are server-side range filtered and return at most 100 compact event rows; totalCount and truncated report when more match. Set includeRawIcs only for intentional diagnostics. ORGANIZER identifies a meeting organiser, not a guaranteed creator or audit identity for manually added shared-calendar events. Pass a calendar resource URL, or a displayed name copied EXACTLY from apple_calendar_list. Prefer the resource URL. Credentials are resolved server-side; only their safe ids and labels are returned.',
+    parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit to list configured credential ids and labels.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, dateRangeStart: { type: 'string', description: 'ISO-8601 range start.' }, dateRangeEnd: { type: 'string', description: 'ISO-8601 range end.' }, includeRawIcs: { type: 'boolean', description: 'Include raw ICS and extension properties for diagnostics. Defaults to false.' } }, required: [] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarList,
   },
   {
