@@ -41,7 +41,9 @@
       f: readiness.factors.hrvTrend,
       note:
         readiness.factors.hrvTrend.raw != null
-          ? `${arrow} ${readiness.factors.hrvTrend.raw}ms`
+          // Raw HRV is a float off the sensor — printed unrounded it read
+          // "35.03193MS" on the live page.
+          ? `${arrow} ${Math.round(readiness.factors.hrvTrend.raw)}ms`
           : arrow,
     },
     { key: 'SLEEP', f: readiness.factors.sleepQuality, note: '' },
