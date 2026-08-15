@@ -20,10 +20,12 @@
      than headings. */
   --fs-serif: 'Fraunces', Georgia, serif;
 
-  /* Confidence — the shipped three levels. Petrol for fact, the kit's flag
-     colour for hypothesis, claret for contested. */
-  --fs-fact: var(--ex-accent);
-  --fs-hypothesis: var(--ex-flag, #c4570a);
+  /* Confidence — the shipped three levels, named explicitly rather than
+     inherited from whichever token happens to be the accent. Petrol for fact
+     (the settled one), burnt orange for hypothesis (the one still being
+     argued), claret for contested. */
+  --fs-fact: var(--ex-accent-ink, #0e5b66);
+  --fs-hypothesis: var(--ex-accent, #c4570a);
   --fs-contested: #8a2d3a;
 
   /* Categorical hues — LEGEND ONLY. Never chrome, never a claim. The kit's own

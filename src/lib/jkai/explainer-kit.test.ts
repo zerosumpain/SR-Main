@@ -17,6 +17,39 @@ describe('explainer kit', () => {
     expect(css).toMatch(/--font-mono\s*:/);
   });
 
+  it('carries the SITE palette, not a register of its own', async () => {
+    // A studio build is a field study, and the Field Study System extends the
+    // site's language with the SAME palette. The kit used to make petrol the
+    // accent on a lighter cream, so a studio build came out petrol-on-#f2ead9
+    // while every hand-built study is orange-on-#ede4d4 — which is what "the
+    // layout is applied but not the palette" looked like on the page.
+    const css = await read('tokens.css');
+    expect(css).toMatch(/--ex-bg:\s*#ede4d4/);
+    expect(css).toMatch(/--ex-accent:\s*#c4570a/);
+    expect(css).toMatch(/--ex-accent-ink:\s*#0e5b66/);
+  });
+
+  it('keeps the accent relationship the same in both themes', async () => {
+    // Burnt orange is primary and petrol is the counter-accent. The dark block
+    // had them the other way round, so a study changed its mind about which
+    // colour meant "primary" depending on the reader's OS setting.
+    const css = await read('tokens.css');
+    const dark = css.slice(css.indexOf('prefers-color-scheme'));
+    expect(dark).toMatch(/--ex-accent:\s*#e8834a/);
+    expect(dark).toMatch(/--ex-accent-ink:\s*#4ea3b0/);
+  });
+
+  it('binds the confidence colours to the two accents by name', async () => {
+    // Not `var(--ex-accent)` for fact: the whole point is that fact is the
+    // SETTLED colour (petrol) and hypothesis is the one still being argued
+    // (orange). Inheriting whichever token is currently "the accent" is how
+    // they silently swapped.
+    const css = await read('field-study/field-study.css');
+    expect(css).toMatch(/--fs-fact:\s*var\(--ex-accent-ink/);
+    expect(css).toMatch(/--fs-hypothesis:\s*var\(--ex-accent[,)]/);
+    expect(css).toMatch(/--fs-contested:\s*#8a2d3a/);
+  });
+
   it('tokens.css passes the design linter', async () => {
     const { findings } = lintDesignSystem({ 'explainer/tokens.css': await read('tokens.css') });
     expect(findings).toEqual([]);
