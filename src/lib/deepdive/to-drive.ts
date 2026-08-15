@@ -30,6 +30,7 @@ import { reindexFileInBackground } from '$lib/file-index/store';
 import { syncSourcePolicy } from '$lib/jkai/intel/source-policy.server';
 import { assertPublicUrl } from '$lib/server/ssrf-guard';
 import { fetchPageText } from './fetch-page-text';
+import { readableFromHtml } from './extract-local';
 
 /** Matches `MAX_INDEXABLE_BYTES` in `$lib/file-index/store` — anything larger
  *  would be stored and then skipped by the indexer, which is a download nobody
@@ -221,6 +222,8 @@ export async function saveSourceToDrive(
 ): Promise<SaveOutcome> {
   const stem = driveFileStem(folder, source);
   let name = `${stem}.md`;
+  /** Improved in place when Readability recovers the real page title. */
+  let title = source.title ?? null;
   try {
     await assertPublicUrl(source.url);
 
@@ -248,13 +251,34 @@ export async function saveSourceToDrive(
       mime = classified.mime;
       kind = 'document';
     } else {
-      // Not a document — get readable text the way the rest of deep research
-      // does, which knows about Tavily Extract and the residential fallback.
-      const page = await fetchPageText(source.url);
-      if (!page.text.trim()) {
+      /**
+       * Read the bytes we already downloaded before paying anyone to fetch them
+       * again.
+       *
+       * This used to go straight to `fetchPageText`, which tries **Tavily
+       * Extract first** — so archiving a page cost a Tavily credit to re-fetch
+       * a page the line above had just downloaded in full. Readability over the
+       * HTML in hand costs nothing and needs no network at all.
+       *
+       * `fetchPageText` is still the fallback, and earns its keep: a paywall, a
+       * JavaScript-rendered page or a 403 to our user-agent are exactly what
+       * Tavily and the residential scraper are for. It just should not be the
+       * FIRST thing tried against a page that came back fine.
+       */
+      const local = got ? readableFromHtml(got.buf.toString('utf8'), source.url) : null;
+      let text = local?.content ?? '';
+      // Readability also recovers the real page title, which beats the slug the
+      // file name is built from.
+      if (local?.title?.trim()) title = local.title.trim();
+
+      if (!text.trim()) {
+        const page = await fetchPageText(source.url);
+        text = page.text;
+      }
+      if (!text.trim()) {
         return { sourceId: source.id, name, status: 'failed', reason: 'No readable text at that URL' };
       }
-      buf = Buffer.from(pageMarkdown(source, topic, page.text, new Date()), 'utf8');
+      buf = Buffer.from(pageMarkdown({ ...source, title }, topic, text, new Date()), 'utf8');
       mime = 'text/markdown';
       kind = 'page';
     }
