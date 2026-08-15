@@ -6,6 +6,7 @@ import {
   cleanOldJobs,
   createWaiter,
   cancelJob,
+  cancelForScope,
   respondToWaiter,
 } from './job-store';
 import type { JobEvent } from './job-store';
@@ -237,5 +238,35 @@ describe('watchdog — delegations are busy, not idle', () => {
     publishJobEvent(jobId, { type: 'tool_result', tool: 'workflow_run', result: 'ok', status: 'done' });
     // The delegation is still live, so the phase must not drop to 'thinking'.
     expect(job.phase).toBe('subagent');
+  });
+});
+
+
+describe('cancelForScope — reporting what was superseded', () => {
+  it('names the jobs it cancelled, not just how many', () => {
+    // The newest job has to adopt the turn ids it superseded. A second message
+    // while the agent is answering does not start a second Hermes run: the
+    // running one is redirected (or the text merged into it) and keeps the FIRST
+    // turn's stamp, so without these ids the newest job rejects the output that
+    // is answering it. A count cannot carry that.
+    const a = createJob('first', { conversationId: 'conv-1' });
+    const b = createJob('second', { conversationId: 'conv-1' });
+    const elsewhere = createJob('other', { conversationId: 'conv-2' });
+
+    const superseded = cancelForScope({ conversationId: 'conv-1' }, 'Superseded by new request');
+
+    expect(new Set(superseded)).toEqual(new Set([a.jobId, b.jobId]));
+    expect(superseded).not.toContain(elsewhere.jobId);
+    cancelJob(elsewhere.jobId);
+  });
+
+  it('returns an empty list when nothing matched', () => {
+    expect(cancelForScope({ conversationId: 'conv-nothing' }, 'why not')).toEqual([]);
+  });
+
+  it('returns an empty list for an unscoped call rather than cancelling everything', () => {
+    const j = createJob('keep me', { conversationId: 'conv-3' });
+    expect(cancelForScope({}, 'no scope')).toEqual([]);
+    cancelJob(j.jobId);
   });
 });

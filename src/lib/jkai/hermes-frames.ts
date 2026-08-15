@@ -95,7 +95,29 @@ const STATUS_PREFIXES: ReadonlyArray<{ prefix: string; kind: HermesStatusFrame['
   // run.py:243 — emitted with the ⏱️ presentation form; normaliseGlyphs makes
   // that compare equal to the bare glyph written here.
   { prefix: '⏱ The model provider is rate-limiting', kind: 'notice' },
+  // run.py:9137's sibling under busy_input_mode: redirect. `⏩ Steered` was
+  // listed and this was not, so the notice was persisted as the answer's opening
+  // words — every superseding message read "↪ Redirected current run. I'll
+  // adjust using your correction." followed by the reply.
+  { prefix: '↪ Redirected current run', kind: 'notice' },
 ];
+
+/**
+ * Slash-command output Hermes echoes onto the SAME assistant text channel as a
+ * reply — `/model` being the one that matters here, because the chat pushes it
+ * itself to re-pin a conversation's model after a gateway restart.
+ *
+ * It has no glyph, unlike every prefix above, so it is kept separate: the
+ * allowlist's glyph-then-phrase shape is what protects real replies that open
+ * with `✅ Corrected:`, and this is a deliberate exception rather than a
+ * loosening of it.
+ *
+ * Shared with `$lib/jkai/intel/chat-extract`, which strips the same echoes from
+ * a transcript before extraction — one definition, because a detector kept in
+ * two places here has drifted before.
+ */
+export const COMMAND_ECHO_RE =
+  /^\s*(?:Model switched to|Usage:|Unknown command\b|Available (?:commands|models)\b)/i;
 
 /** Drop emoji variation selectors so `⏱️` and `⏱` compare equal — Hermes emits
  *  the presentation form, and a copy of the same string elsewhere may not. */
@@ -134,6 +156,15 @@ function stripIterationCounter(text: string): string {
  */
 export function classifyHermesStatusText(content: string): HermesStatusFrame | null {
   const probe = normaliseGlyphs(content).trimStart();
+  // A command echo is not an answer. The `/model` re-pin the chat sends itself
+  // produced "Model switched to `z-ai/glm-5.1` …", and that got drained by the
+  // next job and persisted as its reply — a turn whose answer was a settings
+  // dump for a question nobody asked.
+  if (COMMAND_ECHO_RE.test(probe)) {
+    // First line only: the `/model` ack runs to five lines of provider, context
+    // window and capabilities, and none of that belongs in the thread.
+    return { kind: 'notice', text: probe.split('\n')[0].trim(), elapsedMin: null, detail: null };
+  }
   const hit = STATUS_PREFIXES.find((p) => probe.startsWith(normaliseGlyphs(p.prefix)));
   if (!hit) return null;
 
@@ -182,22 +213,77 @@ export interface HermesTextFrame {
  * closed in milliseconds. Every reply after it landed one message behind, and
  * nothing ever resynchronised (production, 2026-08-08).
  *
- * The plugin now stamps `metadata.turn_id` on everything a turn emits.
+ * The plugin stamps `metadata.turn_id` on everything a turn emits — but for a
+ * long while it stamped on ARRIVAL, which is why tagging alone did not fix this.
+ * A message landing mid-turn took the running turn's stamp, so the tag named the
+ * newest message rather than the producing turn and separated nothing. The
+ * plugin now binds the stamp to the task actually executing the turn, and
+ * advertises that on `/health` as `turn_tagging: 'execution'`.
  *
- * Untagged frames are ACCEPTED, deliberately. Two kinds arrive untagged: the
- * gateway's own status bubbles and cron pushes, which are produced outside any
- * inbound turn and have always been welcome; and every frame at all if the
- * plugin has not been restarted since this shipped. Rejecting by default would
- * turn a stale gateway into a silent total outage — a chat that streams
- * nothing — which is a far worse failure than the one being fixed.
+ * `strict` follows that advertisement, and is the difference between a tag that
+ * is evidence of ownership and a tag that is merely a hint:
+ *
+ * - **lenient** (default, and what a gateway with no such advertisement gets):
+ *   untagged frames are accepted. Stamps cannot be trusted to separate turns, so
+ *   the only safe reading of "no tag" is "might be mine". A gateway that has not
+ *   been restarted stamps NOTHING, and rejecting by default would turn that into
+ *   a silent total outage — a chat that streams nothing — which is worse than
+ *   the bug being fixed.
+ * - **strict**: untagged frames are foreign. This is what actually closes the
+ *   hole, because the frames doing the damage are untagged ones: the model-pin
+ *   side-channel notice was being drained by the next job, rendered as its
+ *   answer and persisted against the wrong question.
+ *
+ * A malformed tag (non-string, empty) counts as absent in both modes.
+ *
+ * `inherited` names turns whose output is also this turn's to render. A second
+ * message sent while the agent is answering does NOT start a second run: Hermes
+ * either redirects the running one (`busy_input_mode: interrupt`) or merges the
+ * text into it (`queue`). Both are deliberate, and both mean two user messages
+ * produce ONE run, stamped with the FIRST turn. The endpoint also supersedes the
+ * earlier job, so the newest job must adopt the id it superseded or it rejects
+ * the very output that is answering it and shows nothing but the gateway's
+ * "↪ Redirected current run" notice.
+ *
+ * Inheritance is narrow on purpose: only a turn THIS one superseded. A turn that
+ * finished on its own, or a side-channel turn like the model re-pin, is still
+ * foreign — that separation is the actual fix for answering one message behind.
  */
 export function frameBelongsToTurn(
-  frame: { metadata?: Record<string, unknown> | null },
+  frame: { kind?: string; metadata?: Record<string, unknown> | null },
   turnId: string,
+  opts: {
+    strict?: boolean;
+    inherited?: readonly string[];
+    /**
+     * Whether an inherited turn's `finalize` may end this one. Set it once this
+     * turn has streamed content of its own — see below for why that is the
+     * discriminator.
+     */
+    acceptInheritedEnd?: boolean;
+  } = {},
 ): boolean {
   const stamped = frame.metadata?.['turn_id'];
-  if (typeof stamped !== 'string' || !stamped) return true;
-  return stamped === turnId;
+  if (typeof stamped !== 'string' || !stamped) return opts.strict !== true;
+  if (stamped === turnId) return true;
+  const isInherited = opts.inherited?.includes(stamped) ?? false;
+  if (!isInherited) return false;
+  // Output from an inherited turn is always ours to render. Its ENDING depends on
+  // which kind of inherited turn it is, and the two are opposites:
+  //
+  // - The model re-pin is a DIFFERENT request. Its run finishes before this turn
+  //   has produced a word, so its terminator is not ours. Taking it closed the
+  //   job at +611ms with an empty reply and pushed the answer onto the next turn
+  //   — the "closes in milliseconds" half of answering one message behind.
+  // - A turn this one SUPERSEDED is the same run continuing: Hermes redirects it
+  //   to answer the new message, so this turn never gets a terminator of its own
+  //   and the superseded turn's is the only one there will ever be. Ignoring it
+  //   left the stream open until the watchdog, and the reply unpersisted.
+  //
+  // "Has this turn said anything yet" separates them without having to guess
+  // which mode the gateway is in.
+  if (frame.kind === 'finalize') return opts.acceptInheritedEnd === true;
+  return true;
 }
 
 export interface HermesTextAccumulator {

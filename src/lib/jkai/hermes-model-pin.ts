@@ -18,7 +18,7 @@
  */
 import { hermesModelCommand } from './hermes-model-command';
 import type { ModelProvider } from '$lib/server/models/types';
-import type { HermesClient } from './hermes-client';
+import type { HermesClient, HermesHealth } from './hermes-client';
 import type { TokenKind } from '$lib/mcp/auth';
 
 /** chatId → the Hermes boot id we last pinned this chat's model against. */
@@ -29,6 +29,18 @@ export function resetModelPinCache(): void {
   pinnedAgainstBoot.clear();
 }
 
+/**
+ * The turn id a model re-pin sends under.
+ *
+ * Exported so the chat endpoint can name the same turn: the re-pin runs
+ * concurrently with the message that triggered it, Hermes redirects that run to
+ * answer the message, and the answer therefore comes out under THIS id. The
+ * endpoint has to inherit it. Two hand-written copies of the string would drift.
+ */
+export function modelPinTurnId(chatId: string): string {
+  return `model-pin:${chatId}`;
+}
+
 export interface EnsureModelPinnedArgs {
   client: Pick<HermesClient, 'health' | 'sendMessage'>;
   chatId: string;
@@ -37,6 +49,12 @@ export interface EnsureModelPinnedArgs {
   kindId: string;
   /** The conversation's pinned model, or null when it just uses the default. */
   model: { provider: ModelProvider; modelId: string } | null;
+  /**
+   * A health probe the caller has already made. The chat endpoint needs the same
+   * response to decide whether the gateway's turn stamps can be trusted, so
+   * passing it in saves a second round trip rather than adding one.
+   */
+  health?: HermesHealth | null;
 }
 
 /**
@@ -51,7 +69,7 @@ export interface EnsureModelPinnedArgs {
 export async function ensureModelPinned(args: EnsureModelPinnedArgs): Promise<boolean> {
   if (!args.model) return false;
 
-  const health = await args.client.health();
+  const health = args.health !== undefined ? args.health : await args.client.health();
   const bootId = health?.bootId;
   // No boot id means an older Hermes that doesn't publish one. Do nothing
   // rather than re-pushing on every single turn.
@@ -66,6 +84,12 @@ export async function ensureModelPinned(args: EnsureModelPinnedArgs): Promise<bo
       kind: args.kind,
       kindId: args.kindId,
       sessionId: args.sessionId,
+      // A turn id of its own, so the notice this produces ("Model switched to
+      // ...") is attributable and no chat job can mistake it for its answer. It
+      // used to go out untagged, and an untagged frame was accepted by whichever
+      // job was attached — so the re-pin notice got persisted as the reply to
+      // whatever the user had just asked. It matches no job id by construction.
+      turnId: modelPinTurnId(args.chatId),
     });
     pinnedAgainstBoot.set(args.chatId, bootId);
     console.log(

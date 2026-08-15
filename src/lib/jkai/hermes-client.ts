@@ -186,6 +186,22 @@ export interface SseFrame {
   tool?: SseFrameToolCall;
 }
 
+export interface HermesHealth {
+  /** Identifies the runtime PROCESS, not the service — changes on every restart. */
+  bootId: string | null;
+  startedAt: number | null;
+  /**
+   * How the gateway stamps `metadata.turn_id` on outbound frames.
+   *
+   * `'execution'` — bound to the task actually producing the frame, so an
+   * untagged frame provably belongs to no turn and a consumer may reject it.
+   * `null` — an older gateway. It stamped on ARRIVAL, where a message landing
+   * mid-turn relabelled the running turn's output, so tags separate nothing and
+   * untagged frames must be accepted or every reply would be dropped.
+   */
+  turnTagging: string | null;
+}
+
 export class HermesClient {
   constructor(private config: HermesClientConfig) {}
 
@@ -235,14 +251,22 @@ export class HermesClient {
    *
    * Returns null rather than throwing: a failed probe must never block a turn.
    */
-  async health(): Promise<{ bootId: string | null; startedAt: number | null } | null> {
+  async health(): Promise<HermesHealth | null> {
     try {
       const resp = await fetch(`${this.config.baseUrl}/platforms/jkai/health`, {
         signal: AbortSignal.timeout(3_000),
       });
       if (!resp.ok) return null;
-      const body = (await resp.json()) as { boot_id?: string; started_at?: number };
-      return { bootId: body.boot_id ?? null, startedAt: body.started_at ?? null };
+      const body = (await resp.json()) as {
+        boot_id?: string;
+        started_at?: number;
+        turn_tagging?: string;
+      };
+      return {
+        bootId: body.boot_id ?? null,
+        startedAt: body.started_at ?? null,
+        turnTagging: body.turn_tagging ?? null,
+      };
     } catch {
       return null;
     }

@@ -19,7 +19,7 @@ import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import { HermesClient, type SseFrame } from '$lib/jkai/hermes-client';
 import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJobEvents } from '$lib/jkai/sse-adapter';
 import { createHermesTextAccumulator, frameBelongsToTurn, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
-import { ensureModelPinned } from '$lib/jkai/hermes-model-pin';
+import { ensureModelPinned, modelPinTurnId } from '$lib/jkai/hermes-model-pin';
 import {
   subscribeToolSteps,
   registerToolConfirmer,
@@ -210,9 +210,19 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // Supersede any in-flight job on the same scope BEFORE we start the new
   // one. Mirrors legacy semantics: a new message on the same canvas cancels
   // the old one (issue #2 from the Phase 1 cross-cutting review).
-  if (workflowId || conversationId) {
-    cancelForScope({ workflowId, conversationId }, 'Superseded by new request');
-  }
+  //
+  // Keep the ids. A second message does NOT start a second Hermes run — the
+  // running one is redirected (or the text merged into it) and keeps the FIRST
+  // turn's stamp, so this job has to adopt what it superseded or it rejects the
+  // output that is answering it and shows only "↪ Redirected current run".
+  const supersededTurnIds =
+    workflowId || conversationId
+      ? cancelForScope({ workflowId, conversationId }, 'Superseded by new request')
+      : [];
+  // Turns whose output belongs to this one. Seeded with what we just superseded
+  // and added to below if a model re-pin is in flight; both are cases where
+  // Hermes folds two requests into a single run that keeps the FIRST turn's id.
+  const inheritedTurnIds: string[] = [...supersededTurnIds];
   cleanOldJobs();
 
   // chatId = the workflow we're chatting against (or a synthetic id when no
@@ -719,6 +729,16 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // rebuilt agent falls back to config.yaml's default — so a restart
       // silently moves the conversation onto a different model while every
       // surface still reports the chosen one. No-op unless the boot id changed.
+      // One probe, two uses: the model re-pin needs the boot id, and the stream
+      // loop below needs to know whether this gateway's turn stamps can be
+      // trusted. Probing separately would double a per-turn round trip.
+      const health = await client.health();
+      // Only a gateway that stamps frames at EXECUTION can be read strictly. An
+      // older one stamped on arrival, where a message landing mid-turn took the
+      // running turn's id, so its tags separate nothing and its untagged frames
+      // have to be accepted — dropping them would leave the chat streaming
+      // nothing at all until the gateway was restarted.
+      const strictTurnFrames = health?.turnTagging === 'execution';
       if (conversationId) {
         try {
           const [conv] = await db
@@ -727,14 +747,22 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             .where(eq(conversations.id, conversationId))
             .limit(1);
           if (conv?.modelId) {
-            await ensureModelPinned({
+            const rePinned = await ensureModelPinned({
               client,
               chatId,
               sessionId,
               kind,
               kindId,
+              health,
               model: coerceModelContext({ provider: conv.provider, modelId: conv.modelId }),
             });
+            // A re-pin is a turn of its own, and this message lands while it is
+            // still running — so Hermes redirects that run to answer THIS
+            // message, and the answer comes out under the re-pin's turn id.
+            // Inherit it or the turn renders nothing at all. (Its "Model
+            // switched to ..." notice rides along; that is pre-existing, and far
+            // better than the answer going missing.)
+            if (rePinned) inheritedTurnIds.push(modelPinTurnId(chatId));
           }
         } catch (err) {
           console.error('[hermes-chat] model re-pin check failed:', err);
@@ -767,6 +795,12 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // Log the first foreign frame only. A superseded turn's leftovers are
       // mostly token deltas — one line each would bury the useful signal.
       let foreignFrames = 0;
+      // Whether this turn has streamed any answer text yet. It decides whether an
+      // inherited turn's `finalize` ends this one: before we have said anything
+      // that terminator belongs to a different request (the model re-pin's), and
+      // after, it is the only ending a redirected run will ever produce. See
+      // frameBelongsToTurn.
+      let streamedContent = false;
 
       for await (const frame of client.openStream({
         chatId,
@@ -779,9 +813,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         // ours: rendering them would answer this message with the previous
         // one's reply, and taking their `finalize` would end this turn before
         // it started. See frameBelongsToTurn for why untagged frames pass.
-        if (!frameBelongsToTurn(frame, jobId)) {
+        if (!frameBelongsToTurn(frame, jobId, {
+          strict: strictTurnFrames,
+          inherited: inheritedTurnIds,
+          acceptInheritedEnd: streamedContent,
+        })) {
           if (foreignFrames++ === 0) {
-            console.warn(`[hermes-chat] Job ${jobId} is dropping frames left by turn ${String(frame.metadata?.['turn_id'])} (first: ${frame.kind})`);
+            console.warn(`[hermes-chat] Job ${jobId} is dropping frames left by turn ${String(frame.metadata?.['turn_id'] ?? 'untagged')} (first: ${frame.kind}, strict=${strictTurnFrames})`);
           }
           continue;
         }
@@ -794,6 +832,7 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
             // it is what gets persisted, so it has to match what the bubble
             // shows exactly.
             job.partialResponse = update.text;
+            streamedContent = true;
             publishJobEvent(
               jobId,
               update.kind === 'append'

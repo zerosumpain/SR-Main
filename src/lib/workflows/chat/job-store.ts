@@ -526,10 +526,17 @@ function scopeMatches(job: OrchestratorJob, scope: JobScope): boolean {
  * conversationId. A new request within the same canvas/conversation
  * supersedes its own prior in-flight job, but leaves other users' or
  * other canvases' jobs alone.
+ *
+ * Returns the ids it cancelled, because the superseding job needs them: a second
+ * message sent while the agent is answering does NOT start a second Hermes run —
+ * the running one is redirected, or the text merged into it, and it keeps the
+ * FIRST turn's stamp. The new job adopts these ids so it renders the output that
+ * is actually answering it instead of rejecting it as another turn's. See
+ * `frameBelongsToTurn`.
  */
-export function cancelForScope(scope: JobScope, reason: string): number {
-  if (!scope.workflowId && !scope.conversationId) return 0;
-  let cancelled = 0;
+export function cancelForScope(scope: JobScope, reason: string): string[] {
+  if (!scope.workflowId && !scope.conversationId) return [];
+  const cancelled: string[] = [];
   for (const [id, job] of jobs) {
     if (job.status !== 'running') continue;
     if (!scopeMatches(job, scope)) continue;
@@ -542,7 +549,7 @@ export function cancelForScope(scope: JobScope, reason: string): number {
     if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
     publishJobEvent(id, { type: 'error', message: reason });
     failAllWaiters(id, reason);
-    cancelled += 1;
+    cancelled.push(id);
   }
   return cancelled;
 }
