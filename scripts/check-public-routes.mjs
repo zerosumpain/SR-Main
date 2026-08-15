@@ -79,6 +79,7 @@ const HOOK_BYPASSES = [
   '/api/deepdive/index-sources',
   '/api/deepdive/reindex-facts',
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
+  '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
   // Starting a studio build. POST only, STUDIO_SERVICE_TOKEN as a Bearer,
   // constant-time compared, refused entirely when the var is unset or under 32
   // chars — see $lib/server/studio-auth. Re-checked in the handler, which also
