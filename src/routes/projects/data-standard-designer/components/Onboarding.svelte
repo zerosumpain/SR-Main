@@ -79,18 +79,18 @@
 <style>
   .scrim { position: fixed; inset: 0; z-index: 200; background: rgba(26, 16, 8, 0.45); backdrop-filter: blur(2px); }
   .modal { position: fixed; z-index: 201; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(460px, 92vw);
-    background: var(--surface-elevated); border: 2px solid var(--text-primary); border-radius: var(--radius-round); padding: 26px 26px 18px; }
-  .x { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 15px; color: var(--text-muted); cursor: pointer; }
+    background: var(--surface-elevated); border: 2px solid var(--text-primary); border-radius: var(--radius-sharp); padding: 26px 26px 18px; }
+  .x { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: var(--fs-body-sm); color: var(--text-muted); cursor: pointer; }
   .x:hover { color: var(--text-primary); }
   .icon { line-height: 1; color: var(--accent); margin-bottom: 10px; }
-  .step-no { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-ghost); }
+  .step-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-ghost); }
   h2 { font-family: var(--font-display); text-transform: uppercase; font-size: 22px; line-height: 1.05; letter-spacing: -0.01em; margin: 6px 0 10px; color: var(--text-primary); }
-  p { font-size: 14px; line-height: 1.6; color: var(--text-secondary); margin: 0 0 16px; }
+  p { font-size: var(--fs-nav); line-height: 1.6; color: var(--text-secondary); margin: 0 0 16px; }
   .dots { display: flex; gap: 6px; margin-bottom: 16px; }
   .dots .d { width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--card-border); }
   .dots .d.on { background: var(--accent); }
   .actions { display: flex; align-items: center; justify-content: space-between; }
-  .skip { background: none; border: none; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+  .skip { background: none; border: none; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
   .skip:hover { color: var(--text-primary); }
   .nav { display: flex; gap: 8px; margin-left: auto; }
 </style>

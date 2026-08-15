@@ -98,58 +98,58 @@
   .vg { display: flex; flex-direction: column; gap: 11px; }
 
   .vg-picks { display: flex; gap: 6px; flex-wrap: wrap; }
-  .vg-picks button { font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--text-primary);
-    background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round);
+  .vg-picks button { font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary);
+    background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp);
     padding: 6px 12px; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
   .vg-picks button:hover { background: rgba(28,22,17,0.07); border-color: rgba(28,22,17,0.36); }
   .vg-picks button.on { background: #8a2d3a; border-color: #8a2d3a; color: #fff; }
 
   .vg-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
   .vg-code { display: flex; flex-direction: column; min-width: 0; }
-  .c-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.09em;
+  .c-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.09em;
     text-transform: uppercase; color: rgba(28,22,17,0.55); }
   .c-lab i { font-style: normal; text-transform: none; letter-spacing: 0; color: rgba(28,22,17,0.7); }
   .vg-code pre { margin: 6px 0 8px; padding: 11px 13px; background: var(--code-bg); color: var(--code-text);
-    border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    border-radius: var(--radius-sharp); font-family: var(--font-mono); font-size: var(--fs-label-xs);
     line-height: 1.55; overflow-x: auto; white-space: pre; }
-  .run { align-self: flex-start; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600;
-    color: #fff; background: #8a2d3a; border: none; border-radius: var(--radius-round);
+  .run { align-self: flex-start; font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600;
+    color: #fff; background: #8a2d3a; border: none; border-radius: var(--radius-sharp);
     padding: 8px 16px; cursor: pointer; }
   .run span { margin-right: 6px; }
   .run:disabled { opacity: 0.45; cursor: default; }
 
-  .vg-result { border: 1px dashed rgba(28,22,17,0.2); border-radius: var(--radius-round);
+  .vg-result { border: 1px dashed rgba(28,22,17,0.2); border-radius: var(--radius-sharp);
     padding: 11px 13px; min-width: 0; min-height: 150px; }
   .vg-result.shown { border-style: solid; background: rgba(255,255,255,0.55); }
-  .idle { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.55); }
+  .idle { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.55); }
   .idle b { color: var(--text-primary); }
 
   .step { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center;
-    padding: 7px 9px; border-radius: var(--radius-round); margin-bottom: 6px; background: rgba(28,22,17,0.04); }
+    padding: 7px 9px; border-radius: var(--radius-sharp); margin-bottom: 6px; background: rgba(28,22,17,0.04); }
   .step.pass { background: color-mix(in srgb, var(--success) 10%, transparent); }
   .step.fail { background: color-mix(in srgb, var(--error) 10%, transparent); }
   .step.skip { background: rgba(28,22,17,0.05); opacity: 0.7; }
-  .s-n { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: rgba(28,22,17,0.5);
+  .s-n { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: rgba(28,22,17,0.5);
     background: rgba(255,255,255,0.7); border-radius: var(--radius-pill); text-align: center; padding: 2px 0; }
   .s-name { display: flex; flex-direction: column; gap: 1px; min-width: 0;
-    font-size: 12.5px; font-weight: 500; color: var(--text-primary); line-height: 1.25; }
-  .s-name em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    font-size: var(--fs-label); font-weight: 500; color: var(--text-primary); line-height: 1.25; }
+  .s-name em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.04em; color: rgba(28,22,17,0.5); }
-  .s-verdict { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.62); }
+  .s-verdict { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.62); }
   .step.pass .s-verdict { color: var(--success); }
   .step.fail .s-verdict { color: var(--error); }
 
   .viol { margin: 0 0 8px; padding-left: 30px; list-style: none; }
-  .viol li { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.7); margin-bottom: 3px; }
-  .viol code { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--error);
+  .viol li { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.7); margin-bottom: 3px; }
+  .viol code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error);
     background: color-mix(in srgb, var(--error) 10%, transparent); padding: 1px 5px;
     border-radius: var(--radius-sharp); margin-right: 6px; }
 
-  .final { margin-top: 9px; padding: 9px 12px; border-radius: var(--radius-round);
+  .final { margin-top: 9px; padding: 9px 12px; border-radius: var(--radius-sharp);
     background: var(--error-bg); border-left: 3px solid var(--error); }
   .final.in { background: var(--success-bg); border-left-color: var(--success); }
-  .f-lab { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--error); }
+  .f-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; color: var(--error); }
   .f-lab span { margin-right: 5px; }
   .final.in .f-lab { color: var(--success); }
-  .final p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.78); }
+  .final p { margin: 4px 0 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.78); }
 </style>

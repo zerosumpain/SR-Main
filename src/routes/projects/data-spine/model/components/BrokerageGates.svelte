@@ -229,23 +229,23 @@
     gap: 6px;
   }
   .eyebrow {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--accent-ink, #0e5b66);
   }
   .q {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: clamp(16px, 1.9vw, 21px);
     line-height: 1.3;
     color: var(--ink, #1a1008);
   }
   .q-mark {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.6);
@@ -270,7 +270,7 @@
     min-width: 720px;
     background: var(--surface-elevated, #e8dece);
     border: 1.5px solid rgba(26, 16, 8, 0.45);
-    border-radius: var(--radius-round, 12px);
+    border-radius: var(--radius-sharp);
     padding: 16px 16px 14px;
   }
 
@@ -284,16 +284,16 @@
     text-align: center;
   }
   .port-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     line-height: 1.5;
     color: rgba(26, 16, 8, 0.72);
   }
   .port-chip {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     line-height: 1.35;
     color: var(--ink, #1a1008);
     background: #faf6ec;
@@ -302,7 +302,7 @@
     padding: 6px 8px;
   }
   .port-chip.out {
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     color: rgba(26, 16, 8, 0.55);
     border-style: dashed;
@@ -381,7 +381,7 @@
     background: #ffffff;
     border: 1.5px solid rgba(26, 16, 8, 0.45);
     border-top: 4px solid var(--gc);
-    border-radius: var(--radius-round, 12px);
+    border-radius: var(--radius-sharp);
     padding: 10px 11px 30px;
     min-height: 108px;
     font-family: inherit;
@@ -400,7 +400,7 @@
     position: absolute;
     inset: -3px;
     border: 2px solid var(--gc);
-    border-radius: var(--radius-round, 12px);
+    border-radius: var(--radius-sharp);
     pointer-events: none;
   }
   .gate.open {
@@ -416,8 +416,8 @@
     justify-content: space-between;
   }
   .g-no {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--gc);
     font-weight: 600;
@@ -430,7 +430,7 @@
     border-radius: var(--radius-pill, 100px);
     background: var(--gc);
     color: #fff;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     transform: scale(0);
     transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -439,15 +439,15 @@
     transform: scale(1);
   }
   .g-label {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.2;
     color: var(--ink, #1a1008);
   }
   .g-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.03em;
     color: rgba(26, 16, 8, 0.72);
     line-height: 1.4;
@@ -462,8 +462,8 @@
     padding-top: 5px;
   }
   .ol-nums {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     color: #2f7d4f;
   }
@@ -472,8 +472,8 @@
     margin: 0 1px;
   }
   .ol-note {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.02em;
     line-height: 1.35;
     color: #2f7d4f;
@@ -490,8 +490,8 @@
     position: absolute;
     bottom: 8px;
     left: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.6);
@@ -506,8 +506,8 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.82);
@@ -517,7 +517,7 @@
     padding: 7px 14px;
   }
   .hold-badge b {
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--ink, #1a1008);
   }
   .hb-dot {
@@ -547,18 +547,18 @@
     gap: 8px;
   }
   .step-read {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     color: rgba(26, 16, 8, 0.72);
     min-width: 116px;
     text-align: center;
   }
   .btn {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
-    border-radius: var(--radius-round, 12px);
+    border-radius: var(--radius-sharp);
     padding: 8px 14px;
     cursor: pointer;
     transition: background 0.18s, border-color 0.18s, opacity 0.18s;
@@ -588,7 +588,7 @@
     text-decoration: underline;
     text-underline-offset: 3px;
     padding: 8px 4px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
   }
   .btn.link:hover:not(:disabled) {
     color: var(--accent, #c4570a);
@@ -602,8 +602,8 @@
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: rgba(26, 16, 8, 0.82);
     background: #faf6ec;
@@ -648,7 +648,7 @@
     background: #ffffff;
     border: 1.5px solid rgba(26, 16, 8, 0.5);
     border-left: 5px solid var(--gc);
-    border-radius: var(--radius-round, 12px);
+    border-radius: var(--radius-sharp);
     padding: 14px 16px 16px;
   }
   .ins-head {
@@ -658,22 +658,22 @@
     gap: 12px;
   }
   .ins-eyebrow {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--gc);
   }
   .ins-head h4 {
     margin: 3px 0 2px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: 18px;
     color: var(--ink, #1a1008);
   }
   .ins-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.03em;
     color: rgba(26, 16, 8, 0.72);
   }
@@ -685,7 +685,7 @@
     background: #faf6ec;
     border: 1.5px solid rgba(26, 16, 8, 0.45);
     color: var(--ink, #1a1008);
-    font-size: 13px;
+    font-size: var(--fs-label);
     cursor: pointer;
   }
   .ins-close:hover {
@@ -693,8 +693,8 @@
   }
   .ins-desc {
     margin: 10px 0 12px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-family: var(--font-body);
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: rgba(26, 16, 8, 0.82);
   }
@@ -712,28 +712,28 @@
     align-items: baseline;
   }
   .im-k {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(26, 16, 8, 0.6);
   }
   .im-v {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--ink, #1a1008);
   }
   .im-v.mono {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(26, 16, 8, 0.82);
   }
 
   .takeaway {
     margin: 0;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
+    font-family: var(--font-body);
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: rgba(26, 16, 8, 0.82);
     border-left: 3px solid var(--accent-ink, #0e5b66);
@@ -745,7 +745,7 @@
 
   .eli-note {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-label);
     font-style: italic;
     line-height: 1.6;
     color: rgba(26, 16, 8, 0.72);

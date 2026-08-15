@@ -94,8 +94,8 @@
     border-top: 1px dashed rgba(28,22,17,0.18);
     display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px 16px; }
   .pats li { display: flex; align-items: baseline; gap: 8px; min-width: 0;
-    font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.72); }
-  .pats code { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.72); }
+  .pats code { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-primary); background: color-mix(in srgb, #8a2d3a 12%, transparent);
     padding: 2px 6px; border-radius: var(--radius-sharp); }
   .pats span { min-width: 0; overflow-wrap: anywhere; }

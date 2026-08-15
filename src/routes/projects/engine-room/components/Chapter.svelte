@@ -78,14 +78,14 @@
 
   .ch-no {
     display: inline-block; margin-bottom: 10px;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.22em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.22em;
     text-transform: uppercase; color: var(--tone);
     padding-bottom: 5px; border-bottom: 2px solid var(--tone);
   }
 
   .ch-title {
     margin: 0 0 12px;
-    font-family: 'Fraunces', serif; font-weight: 600;
+    font-family: var(--fs-serif); font-weight: 600;
     font-size: clamp(30px, 4.6vw, 52px);
     line-height: 1.04; letter-spacing: -0.015em;
     color: var(--text-primary);

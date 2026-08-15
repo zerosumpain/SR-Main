@@ -98,11 +98,11 @@
 <style>
   .note { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 22px;
     padding: 10px 14px; border-left: 3px solid var(--accent);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--accent); }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
 
   .blast { display: flex; align-items: center; gap: 14px 22px; flex-wrap: wrap; }
   .dots { display: flex; flex-wrap: wrap; gap: 5px; max-width: 260px; min-width: 0; }
@@ -112,13 +112,13 @@
 
   .strip { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-family: 'DM Sans', sans-serif; font-size: 11.5px; line-height: 1.25;
+  .chip { font-family: var(--font-body); font-size: var(--fs-label-xs); line-height: 1.25;
     color: var(--text-primary); background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp);
     padding: 5px 11px; cursor: pointer; transition: background 0.12s, border-color 0.12s; }
   .chip:hover { background: rgba(28,22,17,0.07); border-color: rgba(28,22,17,0.34); }
   .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .why { margin: 0; min-height: 3em; font-size: 12.5px; line-height: 1.55;
+  .why { margin: 0; min-height: 3em; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.72); max-width: 80ch; }
 
   @media (max-width: 560px) {

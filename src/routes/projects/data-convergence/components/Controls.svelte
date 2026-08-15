@@ -130,7 +130,7 @@
     background: var(--paper);
     border-top: 1px solid rgba(28, 22, 17, 0.12);
     color: var(--ink);
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: var(--font-body);
   }
 
   /* Zoom buttons sit on the left, then play row stretches across the rest. */
@@ -139,7 +139,7 @@
     gap: 2px;
     background: rgba(28, 22, 17, 0.06);
     padding: 3px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     flex-shrink: 0;
   }
   .zooms button {
@@ -147,9 +147,9 @@
     border: none;
     color: var(--ink);
     padding: 6px 10px;
-    border-radius: var(--radius-round);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
@@ -177,7 +177,7 @@
     border: 1px solid rgba(28, 22, 17, 0.18);
     background: rgba(255, 255, 255, 0.35);
     color: var(--ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -233,8 +233,8 @@
     bottom: -22px;
     left: 50%;
     transform: translateX(-50%);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     white-space: nowrap;
     color: rgba(28, 22, 17, 0.72);
   }
@@ -244,8 +244,8 @@
     align-items: center;
     gap: 4px;
     color: rgba(28, 22, 17, 0.7);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     flex-shrink: 0;
   }
   .speed select {
@@ -253,9 +253,9 @@
     border: 1px solid rgba(28, 22, 17, 0.2);
     color: var(--ink);
     padding: 5px 6px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
 
@@ -264,6 +264,6 @@
     .zooms { justify-content: center; }
     .play-row { gap: 8px; }
     .btn { height: 38px; min-width: 38px; }
-    .thumb-label { font-size: 10px; }
+    .thumb-label { font-size: var(--fs-label-xs); }
   }
 </style>

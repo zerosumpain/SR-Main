@@ -47,7 +47,7 @@
     text-align: left;
     padding: 10px 13px;
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
@@ -66,7 +66,7 @@
     flex: none;
     width: 9px;
     height: 9px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
     margin-top: 4px;
   }
@@ -76,8 +76,8 @@
   }
   .t {
     display: block;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
     line-height: 1.35;
@@ -85,7 +85,7 @@
   .w {
     display: block;
     margin-top: 2px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.65);
     display: -webkit-box;
@@ -102,18 +102,18 @@
     max-width: 150px;
   }
   .doc {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
     text-align: right;
   }
   .st {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 2px 7px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.25);
     color: rgba(28, 22, 17, 0.6);
   }
@@ -123,17 +123,17 @@
     font-weight: 600;
   }
   .tf {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
   }
   .none {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.55);
     padding: 14px;
     text-align: center;
     border: 1px dashed rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
   }
   @media (max-width: 640px) {
     .meta {

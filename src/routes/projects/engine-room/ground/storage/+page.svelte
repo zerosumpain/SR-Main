@@ -74,24 +74,24 @@
 <style>
   .note { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 22px;
     padding: 10px 14px; border-left: 3px solid #5a6b7a;
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(90,107,122,0.09); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: #5a6b7a; }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
 
   .strip { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .chip { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .chip:hover { background: rgba(28,22,17,0.07); }
   .chip.on { background: #5a6b7a; border-color: #5a6b7a; color: #fff; }
 
   .read { min-height: 6.5em; }
-  .r-holds { margin: 0 0 6px; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600;
+  .r-holds { margin: 0 0 6px; font-family: var(--fs-serif); font-size: var(--fs-body-sm); font-weight: 600;
     line-height: 1.3; color: var(--text-primary); max-width: 76ch; }
-  .r-why { margin: 0 0 4px; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
+  .r-why { margin: 0 0 4px; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
   .r-why b { color: var(--text-primary); }
 
 

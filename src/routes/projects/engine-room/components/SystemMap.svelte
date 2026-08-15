@@ -201,7 +201,7 @@
 
 <style>
   .sm { margin: 6px 0; }
-  .sm-scroll { overflow-x: auto; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round);
+  .sm-scroll { overflow-x: auto; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.4); padding: 8px 10px; }
   .sm-scroll svg { display: block; min-width: 920px; width: 100%; height: auto; }
 
@@ -210,10 +210,10 @@
 
   /* One text node, three tspans — so the blurb always flows AFTER the name and can never
      be positioned into the same space as a box. */
-  .band-lab { font-family: 'DM Sans', sans-serif; }
-  .band-no { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; fill: var(--accent-ink); }
-  .band-name { font-size: 12px; font-weight: 600; fill: #1c1611; letter-spacing: 0.01em; }
-  .band-blurb { font-size: 9.5px; fill: rgba(28,22,17,0.45); }
+  .band-lab { font-family: var(--font-body); }
+  .band-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; fill: var(--accent-ink); }
+  .band-name { font-size: var(--fs-label-xs); font-weight: 600; fill: #1c1611; letter-spacing: 0.01em; }
+  .band-blurb { font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.45); }
 
   .flow { fill: none; stroke: var(--accent-ink); stroke-width: 1.1; opacity: 0.13; transition: opacity 0.15s, stroke-width 0.15s; }
   .flow.lit { opacity: 0.8; stroke-width: 2; }
@@ -225,7 +225,7 @@
   .nbox { fill: rgba(255,255,255,0.86); stroke: rgba(28,22,17,0.2); stroke-width: 1; transition: fill 0.14s, stroke 0.14s; }
   .node.key .nbox { fill: #fdfbf6; stroke: rgba(28,22,17,0.42); stroke-width: 1.5; }
   .node.on .nbox { fill: var(--accent-ink); stroke: var(--accent-ink); }
-  .nlabel { font-family: 'DM Sans', sans-serif; font-size: 11.5px; font-weight: 500; fill: #1c1611; transition: fill 0.14s; }
+  .nlabel { font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 500; fill: #1c1611; transition: fill 0.14s; }
   .node.key .nlabel { font-weight: 600; }
   .node.on .nlabel { fill: #fff; }
   .ndot { fill: var(--accent); opacity: 0.8; }
@@ -235,14 +235,14 @@
 
   .card { pointer-events: none; }
   .card-bg { fill: #1c1611; opacity: 0.96; }
-  .card-label { font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; fill: #fdfbf6; }
-  .card-body { font-family: 'DM Sans', sans-serif; color: rgba(253,251,246,0.72); }
+  .card-label { font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 600; fill: #fdfbf6; }
+  .card-body { font-family: var(--font-body); color: rgba(253,251,246,0.72); }
   .card-body p { margin: 0; }
-  .cb-what { font-size: 10.5px; line-height: 1.42; }
-  .cb-go { margin-top: 5px !important; font-size: 10.5px; line-height: 1.42; color: #f0c98a; }
+  .cb-what { font-size: var(--fs-label-xs); line-height: 1.42; }
+  .cb-go { margin-top: 5px !important; font-size: var(--fs-label-xs); line-height: 1.42; color: #f0c98a; }
   .cb-go b { color: #fdfbf6; font-weight: 600; }
   .cb-arrow { opacity: 0.75; }
-  .cb-none { margin-top: 5px !important; font-size: 10px; font-style: italic; color: rgba(253,251,246,0.45); }
+  .cb-none { margin-top: 5px !important; font-size: var(--fs-label-xs); font-style: italic; color: rgba(253,251,246,0.45); }
 
-  .key-note { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.08em; fill: rgba(28,22,17,0.4); }
+  .key-note { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; fill: rgba(28,22,17,0.4); }
 </style>

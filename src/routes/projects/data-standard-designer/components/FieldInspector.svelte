@@ -99,32 +99,32 @@
 </div>
 
 <style>
-  .insp { border: 1.5px solid var(--accent); border-radius: var(--radius-round); padding: 14px; background: var(--card-bg); display: flex; flex-direction: column; gap: 12px; }
+  .insp { border: 1.5px solid var(--accent); border-radius: var(--radius-sharp); padding: 14px; background: var(--card-bg); display: flex; flex-direction: column; gap: 12px; }
   .insp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-  .ih-lbl { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); display: block; }
-  .ih-title { font-size: 15px; color: var(--text-primary); line-height: 1.2; }
+  .ih-lbl { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); display: block; }
+  .ih-title { font-size: var(--fs-body-sm); color: var(--text-primary); line-height: 1.2; }
   .ih-close { background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); color: var(--text-muted); cursor: pointer; padding: 2px 8px; }
   .ih-close:hover { color: var(--accent); border-color: var(--accent); }
   .d { display: block; }
 
-  .spec { border: 1px solid var(--divider); border-radius: var(--radius-round); padding: 10px; background: var(--surface-elevated); display: flex; flex-direction: column; gap: 6px; }
-  .spec-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
-  .sk { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); min-width: 64px; flex-shrink: 0; }
+  .spec { border: 1px solid var(--divider); border-radius: var(--radius-sharp); padding: 10px; background: var(--surface-elevated); display: flex; flex-direction: column; gap: 6px; }
+  .spec-row { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-label); }
+  .sk { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); min-width: 64px; flex-shrink: 0; }
   .sv { color: var(--text-primary); }
-  .sv.rule { color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
-  .rx { font-family: var(--font-mono); font-size: 11px; color: var(--accent); background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 2px 6px; word-break: break-all; flex: 1; }
-  .ex { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); }
-  .apply { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); cursor: pointer; flex-shrink: 0; }
+  .sv.rule { color: var(--text-secondary); font-size: var(--fs-label-xs); line-height: 1.4; }
+  .rx { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 2px 6px; word-break: break-all; flex: 1; }
+  .ex { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
+  .apply { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); cursor: pointer; flex-shrink: 0; }
   .apply.done { background: var(--success-bg); color: var(--success); cursor: default; }
   .perm { display: flex; flex-direction: column; gap: 4px; }
   .perm-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .pv { font-size: 11px; color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--divider); border-radius: var(--radius-sharp); padding: 2px 6px; }
-  .pv code { font-family: var(--font-mono); font-size: 10px; color: var(--accent); }
+  .pv { font-size: var(--fs-label-xs); color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--divider); border-radius: var(--radius-sharp); padding: 2px 6px; }
+  .pv code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
   .pv.more { color: var(--text-ghost); font-style: italic; }
-  .caveat { font-size: 11.5px; color: var(--warn); background: var(--warn-bg); padding: 6px 9px; border-radius: var(--radius-sharp); margin: 2px 0 0; }
+  .caveat { font-size: var(--fs-label-xs); color: var(--warn); background: var(--warn-bg); padding: 6px 9px; border-radius: var(--radius-sharp); margin: 2px 0 0; }
 
   .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
-  .pub pre { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; color: var(--text-secondary); background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 9px 11px; margin: 4px 0 0; overflow-x: auto; white-space: pre-wrap; }
+  .pub pre { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary); background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 9px 11px; margin: 4px 0 0; overflow-x: auto; white-space: pre-wrap; }
   .pub-sub { color: var(--text-ghost); font-weight: 400; text-transform: none; letter-spacing: 0; }
 
   @media (max-width: 480px) { .p-grid { grid-template-columns: 1fr; } }

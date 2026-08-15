@@ -79,7 +79,7 @@
   .cruise {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     overflow: hidden;
   }
   .bar {
@@ -92,33 +92,33 @@
   .dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--text-muted); flex: 0 0 auto; }
   .dot.live { background: var(--success); box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 60%, transparent); animation: cruise-pulse 1.4s ease-out infinite; }
   @keyframes cruise-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent); } 100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--success) 0%, transparent); } }
-  .status { flex: 1 1 auto; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-primary); line-height: 1.3; }
+  .status { flex: 1 1 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); line-height: 1.3; }
   .stop {
-    flex: 0 0 auto; font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em;
+    flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em;
     background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary);
-    border-radius: var(--radius-round); padding: 0.3rem 0.55rem; min-height: 34px; cursor: pointer;
+    border-radius: var(--radius-sharp); padding: 0.3rem 0.55rem; min-height: 34px; cursor: pointer;
   }
   .stop:hover { color: var(--text-primary); border-color: var(--accent); }
-  .rec { flex: 0 0 auto; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; color: var(--error); }
+  .rec { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700; letter-spacing: 0.08em; color: var(--error); }
 
   /* live speed-limit readout for the stretch you're on */
   .zone { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--card-border); background: var(--card-bg); }
   .zone.over { background: color-mix(in srgb, var(--error) 12%, var(--surface-elevated)); }
-  .zone-limit { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700; color: var(--text-primary); }
-  .zone-msg { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
+  .zone-limit { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700; color: var(--text-primary); }
+  .zone-msg { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .zone-msg.warn { color: var(--error); font-weight: 700; }
 
   .near { padding: 0.5rem 0.6rem 0.6rem; }
-  .near-label { display: block; font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.4rem; }
+  .near-label { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.4rem; }
   .cards { display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.15rem; scrollbar-width: thin; }
   .card {
     flex: 0 0 auto; min-width: 9.5rem; max-width: 13rem; text-align: left;
     display: flex; flex-direction: column; gap: 0.12rem;
     background: var(--card-bg); border: 1px solid var(--card-border); border-left: 3px solid var(--accent);
-    border-radius: var(--radius-round); padding: 0.45rem 0.55rem; cursor: pointer;
+    border-radius: var(--radius-sharp); padding: 0.45rem 0.55rem; cursor: pointer;
   }
   .card:hover { border-color: var(--accent); }
   .card .ic { display: inline-flex; line-height: 1; color: var(--accent); }
   .card .name { font-family: var(--font-body); font-size: 0.84rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .card .meta { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); }
+  .card .meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 </style>

@@ -137,13 +137,13 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .kicker {
     display: block;
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -171,13 +171,13 @@
     padding: 0.75rem;
     border: 1px solid var(--card-border);
     border-left: 3px solid var(--error);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--card-bg);
   }
   .blocked-tag {
     align-self: flex-start;
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #fff;
@@ -197,7 +197,7 @@
   .stat { display: flex; flex-direction: column; gap: 0.1rem; min-width: 4.5rem; }
   .stat-label {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -217,7 +217,7 @@
   .bridge-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
   .chip {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #fff;
@@ -229,7 +229,7 @@
   .bridge-name { font-family: var(--font-body); font-size: 0.88rem; color: var(--text-primary); }
   .tag {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
@@ -244,27 +244,27 @@
   /* callouts */
   .callout {
     padding: 0.7rem 0.75rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
     background: color-mix(in srgb, var(--warn) 14%, var(--surface-elevated));
   }
   .callout p { margin: 0; font-family: var(--font-body); font-size: 0.84rem; line-height: 1.45; color: var(--text-primary); }
   .callout-kicker { color: var(--warn); margin-bottom: 0.3rem; }
   .slack { margin-top: 0.4rem !important; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.55rem; }
-  .slack-label { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .slack-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .slack-t { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--warn); }
   .slack-t.approx { color: var(--text-muted); }
-  .slack-t.approx::after { content: '~'; font-size: 0.7em; vertical-align: super; }
+  .slack-t.approx::after { content: '~'; font-size: max(0.7em, var(--fs-label-xs)); vertical-align: super; }
 
   /* actions */
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .btn {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.9rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     min-height: 40px;
   }

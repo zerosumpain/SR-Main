@@ -107,21 +107,21 @@
   .panel { position: fixed; z-index: 81; top: 0; right: 0; height: 100vh; width: min(440px, 94vw); background: var(--paper);
     border-left: 1px solid rgba(28,22,17,0.18); display: flex; flex-direction: column; }
   .ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid rgba(28,22,17,0.12); }
-  .ph-kick { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
-  .ph-title { margin: 3px 0 0; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.2; }
-  .ph-x { background: none; border: none; font-size: 15px; color: rgba(28,22,17,0.5); cursor: pointer; }
+  .ph-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
+  .ph-title { margin: 3px 0 0; font-family: var(--fs-serif); font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+  .ph-x { background: none; border: none; font-size: var(--fs-body-sm); color: rgba(28,22,17,0.5); cursor: pointer; }
   .pb-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; }
-  .status, .hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.62); }
-  .err { margin: 0; font-size: 13px; color: var(--error); }
-  .retry { align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 5px 10px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.6); border-radius: var(--radius-round); cursor: pointer; }
-  .item { display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.5); padding: 10px 12px; }
+  .status, .hint { margin: 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.62); }
+  .err { margin: 0; font-size: var(--fs-label); color: var(--error); }
+  .retry { align-self: flex-start; font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 5px 10px; border: 1px solid rgba(28,22,17,0.25); background: rgba(255,255,255,0.6); border-radius: var(--radius-sharp); cursor: pointer; }
+  .item { display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); padding: 10px 12px; }
   .item.added { border-color: var(--success-border); background: var(--success-bg); }
   .i-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .i-title { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ink); }
-  .i-stmt { font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.72); }
-  .i-add { flex-shrink: 0; align-self: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 6px 10px; border-radius: var(--radius-round); cursor: pointer; border: 1px solid var(--accent-ink); background: var(--accent-ink); color: #fff; }
+  .i-title { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--ink); }
+  .i-stmt { font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.72); }
+  .i-add { flex-shrink: 0; align-self: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 6px 10px; border-radius: var(--radius-sharp); cursor: pointer; border: 1px solid var(--accent-ink); background: var(--accent-ink); color: #fff; }
   .i-add:disabled { background: transparent; color: var(--success); border-color: var(--success-border); cursor: default; }
   .pf { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-top: 1px solid rgba(28,22,17,0.12); background: rgba(241,234,214,0.7); }
-  .pf-count { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.6); }
-  .pf-go { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--paper); background: var(--ink); padding: 8px 14px; border-radius: var(--radius-round); text-decoration: none; }
+  .pf-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
+  .pf-go { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--paper); background: var(--ink); padding: 8px 14px; border-radius: var(--radius-sharp); text-decoration: none; }
 </style>

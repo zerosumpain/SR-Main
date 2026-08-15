@@ -276,7 +276,7 @@
 <style>
   .city { margin: 4px 0 0; }
 
-  .scene { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round);
+  .scene { border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp);
     background: linear-gradient(180deg, #f7f2e8 0%, #efe7d9 100%); overflow: hidden; }
   .scene svg { display: block; width: 100%; height: auto; }
 
@@ -300,31 +300,31 @@
   .win { fill: rgba(255,240,205,0.34); transition: fill 0.25s; }
   .block.hot .win { fill: rgba(255,238,190,0.95); }
 
-  .blabel { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em;
+  .blabel { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em;
     fill: rgba(28,22,17,0.6); text-transform: uppercase; }
   .block.hot .blabel { fill: var(--text-primary); font-weight: 600; }
 
   .gem { fill: #f6d9a0; stroke: #b8791f; stroke-width: 1.2; }
 
   .hud { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px;
-    padding: 10px 14px; border: 1px solid rgba(28,22,17,0.13); border-radius: var(--radius-round);
+    padding: 10px 14px; border: 1px solid rgba(28,22,17,0.13); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.5); }
-  .h-step { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;
+  .h-step { font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 600;
     color: var(--accent-ink); flex-shrink: 0; }
-  .h-step em { font-style: normal; font-size: 10px; color: rgba(28,22,17,0.4); }
-  .h-cap { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
+  .h-step em { font-style: normal; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.4); }
+  .h-cap { margin: 0; font-size: var(--fs-nav); line-height: 1.45; color: var(--text-primary); min-width: 0; flex: 1 1 260px; }
 
   .h-meter { margin-left: auto; }
-  .h-meter { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-variant-numeric: tabular-nums;
+  .h-meter { font-family: var(--font-mono); font-size: var(--fs-nav); font-variant-numeric: tabular-nums;
     color: var(--accent-ink); }
-  .h-btn { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  .h-btn { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; cursor: pointer;
     color: #fff; background: var(--accent-ink); border: 1px solid var(--accent-ink);
-    border-radius: var(--radius-round); padding: 7px 15px; white-space: nowrap; }
+    border-radius: var(--radius-sharp); padding: 7px 15px; white-space: nowrap; }
   .h-btn:hover { background: #0b4a53; }
 
-  .verdict { margin: 10px 0 0; padding: 11px 15px; font-size: 13.5px; line-height: 1.6;
+  .verdict { margin: 10px 0 0; padding: 11px 15px; font-size: var(--fs-label); line-height: 1.6;
     color: rgba(28,22,17,0.78); max-width: 86ch;
-    border-left: 3px solid var(--accent-ink); border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-left: 3px solid var(--accent-ink); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: var(--accent-ink-tint-12, rgba(14,91,102,0.08)); }
   .verdict a { color: var(--accent-ink); font-weight: 600; text-decoration: none; white-space: nowrap; }
   .verdict a:hover { text-decoration: underline; }

@@ -163,50 +163,50 @@
 
 <style>
   .arch-tabs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-  .arch-tab { display: flex; align-items: center; gap: 9px; text-align: left; font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 500;
-    color: var(--ink); background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); padding: 8px 13px; cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+  .arch-tab { display: flex; align-items: center; gap: 9px; text-align: left; font-family: var(--font-body); font-size: var(--fs-label); font-weight: 500;
+    color: var(--ink); background: rgba(255,255,255,0.5); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp); padding: 8px 13px; cursor: pointer; transition: border-color 0.12s, background 0.12s; }
   .arch-tab:hover { border-color: var(--ac); }
   .arch-tab.on { border: 1.5px solid var(--ac); background: rgba(255,255,255,0.75); }
-  .at-no { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #fff; background: var(--ac); border-radius: var(--radius-pill); width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 18px; }
+  .at-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: #fff; background: var(--ac); border-radius: var(--radius-pill); width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 18px; }
 
-  .arch-detail { border: 1.5px solid var(--ac); border-radius: var(--radius-round); background: rgba(255,255,255,0.5); padding: 16px 18px; }
+  .arch-detail { border: 1.5px solid var(--ac); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); padding: 16px 18px; }
   .ad-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .ad-head h3 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; margin: 0; }
-  .ad-short { font-size: 13px; font-style: italic; color: rgba(28,22,17,0.6); }
-  .ad-how { font-size: 14px; line-height: 1.6; color: rgba(28,22,17,0.74); margin: 8px 0 12px; }
+  .ad-head h3 { font-family: var(--fs-serif); font-weight: 600; font-size: 19px; margin: 0; }
+  .ad-short { font-size: var(--fs-label); font-style: italic; color: rgba(28,22,17,0.6); }
+  .ad-how { font-size: var(--fs-nav); line-height: 1.6; color: rgba(28,22,17,0.74); margin: 8px 0 12px; }
   .ad-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
-  .ad-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(28,22,17,0.5); margin-bottom: 4px; }
+  .ad-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: rgba(28,22,17,0.5); margin-bottom: 4px; }
   .ad-lab.good { color: #2f7d4f; } .ad-lab.bad { color: #8a2d3a; }
   .ad-cols ul { margin: 0; padding-left: 17px; }
-  .ad-cols li { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.72); margin-bottom: 3px; }
-  .ad-record { border-left: 3px solid var(--ac); background: rgba(28,22,17,0.03); border-radius: var(--radius-round); padding: 9px 13px; }
-  .ad-record p { font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0; }
+  .ad-cols li { font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.72); margin-bottom: 3px; }
+  .ad-record { border-left: 3px solid var(--ac); background: rgba(28,22,17,0.03); border-radius: var(--radius-sharp); padding: 9px 13px; }
+  .ad-record p { font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); margin: 0; }
   .ad-precs { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
-  .ad-prec { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink); background: rgba(28,22,17,0.06); border-radius: var(--radius-round); padding: 2px 8px; }
+  .ad-prec { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--ink); background: rgba(28,22,17,0.06); border-radius: var(--radius-sharp); padding: 2px 8px; }
   @media (max-width: 700px) { .ad-cols { grid-template-columns: 1fr; } }
 
   .gallery-intro { max-width: 84ch; }
   .prec-card { border-top: 3px solid var(--ac); display: flex; flex-direction: column; }
   .prec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-  .prec-fate { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid; border-radius: var(--radius-round); padding: 0 5px; }
-  .prec-arch { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ac); margin-bottom: 2px; }
+  .prec-fate { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; border: 1px solid; border-radius: var(--radius-sharp); padding: 0 5px; }
+  .prec-arch { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ac); margin-bottom: 2px; }
   .prec-scale, .prec-lesson { margin-top: 6px; }
-  .prec-link { margin-top: auto; padding-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); text-decoration: none; }
+  .prec-link { margin-top: auto; padding-top: 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none; }
 
-  .flow-toggle { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.12); margin-top: 8px; }
-  .flow-toggle button { background: transparent; border: none; color: var(--ink); padding: 6px 14px; border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; }
+  .flow-toggle { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px; border-radius: var(--radius-sharp); border: 1px solid rgba(28,22,17,0.12); margin-top: 8px; }
+  .flow-toggle button { background: transparent; border: none; color: var(--ink); padding: 6px 14px; border-radius: var(--radius-sharp); font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
   .flow-toggle button.on { background: var(--accent-ink); color: #fff; }
 
-  .flow { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 16px 18px; }
+  .flow { display: flex; flex-direction: column; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.4); padding: 16px 18px; }
   .flow.future { border-color: var(--accent-ink-tint-35); background: var(--accent-ink-tint-06); }
   .flow-stage { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 16px; align-items: start; }
-  .fs-title { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); padding-top: 8px; }
+  .fs-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.5); padding-top: 8px; }
   .fs-nodes { display: flex; gap: 8px; flex-wrap: wrap; }
-  .fs-node { border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); background: rgba(255,255,255,0.75); padding: 7px 12px; }
-  .fs-node b { display: block; font-size: 13px; font-family: 'DM Sans', sans-serif; }
-  .fs-node span { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.55); }
-  .fs-note { grid-column: 2; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.62); margin: 4px 0 0; font-style: italic; }
-  .flow-arrow { text-align: center; color: rgba(28,22,17,0.4); font-size: 15px; padding: 4px 0; margin-left: 126px; }
+  .fs-node { border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.75); padding: 7px 12px; }
+  .fs-node b { display: block; font-size: var(--fs-label); font-family: var(--font-body); }
+  .fs-node span { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
+  .fs-note { grid-column: 2; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.62); margin: 4px 0 0; font-style: italic; }
+  .flow-arrow { text-align: center; color: rgba(28,22,17,0.4); font-size: var(--fs-body-sm); padding: 4px 0; margin-left: 126px; }
   @media (max-width: 640px) {
     .flow-stage { grid-template-columns: 1fr; }
     .fs-note { grid-column: 1; }

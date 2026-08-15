@@ -159,44 +159,44 @@
   .sh-backdrop { position: fixed; inset: 0; z-index: 200; display: flex; align-items: flex-start; justify-content: center;
     padding: 8vh 16px 16px; background: rgba(20, 16, 12, 0.55); backdrop-filter: blur(3px); }
   .sh { width: min(560px, 100%); max-height: 84vh; overflow-y: auto; background: var(--surface-elevated);
-    border: 2px solid var(--card-border); border-radius: var(--radius-round); padding: 18px 20px 20px; }
+    border: 2px solid var(--card-border); border-radius: var(--radius-sharp); padding: 18px 20px 20px; }
   .sh-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .sh-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+  .sh-eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
   .sh-title { margin: 2px 0 0; font-size: 19px; font-weight: 600; color: var(--text-primary); line-height: 1.2; word-break: break-word; }
-  .sh-x { flex-shrink: 0; background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); width: 28px; height: 28px; cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+  .sh-x { flex-shrink: 0; background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); width: 28px; height: 28px; cursor: pointer; color: var(--text-secondary); font-size: var(--fs-label); }
   .sh-x:hover { color: var(--text-primary); }
-  .sh-blurb { margin: 10px 0 14px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+  .sh-blurb { margin: 10px 0 14px; font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); }
   .sh-blurb b { color: var(--text-primary); }
 
   .sh-create { display: flex; flex-wrap: wrap; gap: 7px; }
-  .sh-in { flex: 1 1 200px; min-width: 0; background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 10px; font-size: 12.5px; color: var(--text-primary); }
-  .sh-sel { background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 8px; font-size: 12px; color: var(--text-primary); cursor: pointer; font-family: var(--font-mono); }
-  .sh-create-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
+  .sh-in { flex: 1 1 200px; min-width: 0; background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 10px; font-size: var(--fs-label); color: var(--text-primary); }
+  .sh-sel { background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 8px; font-size: var(--fs-label-xs); color: var(--text-primary); cursor: pointer; font-family: var(--font-mono); }
+  .sh-create-btn { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 7px 14px; font-size: var(--fs-label); font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
   .sh-create-btn:hover { background: var(--accent-hover); }
   .sh-create-btn:disabled { opacity: 0.5; cursor: default; }
 
-  .sh-fresh { margin-top: 12px; padding: 11px 13px; border-radius: var(--radius-round); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
-  .sh-fresh-lab { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+  .sh-fresh { margin-top: 12px; padding: 11px 13px; border-radius: var(--radius-sharp); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+  .sh-fresh-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
   .sh-urlrow { display: flex; gap: 6px; margin: 6px 0 5px; }
-  .sh-url { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 9px; font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
-  .sh-copy { flex-shrink: 0; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
+  .sh-url { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 7px 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
+  .sh-copy { flex-shrink: 0; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0 12px; font-size: var(--fs-label-xs); font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
   .sh-copy:hover { background: var(--accent-hover); }
-  .sh-once { font-size: 10.5px; color: var(--text-secondary); }
+  .sh-once { font-size: var(--fs-label-xs); color: var(--text-secondary); }
 
-  .sh-err { margin: 10px 0 0; font-size: 12px; color: var(--error); }
+  .sh-err { margin: 10px 0 0; font-size: var(--fs-label-xs); color: var(--error); }
 
   .sh-list { margin-top: 16px; }
-  .sh-list-lab { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
-  .sh-muted { margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
-  .sh-row { position: relative; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--card-border); border-radius: var(--radius-round); background: var(--bg); }
+  .sh-list-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
+  .sh-muted { margin: 8px 0 0; font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sh-row { position: relative; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--bg); }
   .sh-row.dead { opacity: 0.6; }
   .sh-row-top { display: flex; align-items: center; gap: 8px; }
-  .sh-row-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-  .sh-badge { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--radius-round); }
+  .sh-row-label { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
+  .sh-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--radius-sharp); }
   .sh-active { background: var(--success-bg); color: var(--success); }
   .sh-revoked { background: var(--surface-overlay); color: var(--text-secondary); }
   .sh-expired { background: var(--warn-bg); color: var(--warn); }
-  .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); padding-right: 64px; }
-  .sh-revoke { position: absolute; top: 9px; right: 10px; background: none; border: 1px solid var(--error-border); color: var(--error); border-radius: var(--radius-round); padding: 3px 9px; font-size: 10.5px; cursor: pointer; }
+  .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); padding-right: 64px; }
+  .sh-revoke { position: absolute; top: 9px; right: 10px; background: none; border: 1px solid var(--error-border); color: var(--error); border-radius: var(--radius-sharp); padding: 3px 9px; font-size: var(--fs-label-xs); cursor: pointer; }
   .sh-revoke:hover { background: var(--error-bg); }
 </style>

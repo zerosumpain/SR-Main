@@ -68,12 +68,12 @@
     padding: 0.85rem 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -81,12 +81,12 @@
   .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .chip {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     min-height: 40px;
     padding: 0.45rem 0.7rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
@@ -106,8 +106,8 @@
     border-color: var(--accent);
   }
   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
-  .legend-label, .hint { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-  .key { display: inline-flex; align-items: center; gap: 0.25rem; font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-secondary); }
+  .legend-label, .hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .key { display: inline-flex; align-items: center; gap: 0.25rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .key i { width: 14px; height: 4px; border-radius: 2px; display: inline-block; }
   .hint { margin: 0; line-height: 1.5; }
   .hint strong { color: var(--text-secondary); }

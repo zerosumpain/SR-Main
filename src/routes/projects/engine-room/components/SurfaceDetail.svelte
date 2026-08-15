@@ -113,7 +113,7 @@
     /* Opaque, not translucent — the tour behind this is a wall of screenshots. */
     background: #fdfbf6;
     border: 1px solid rgba(28, 22, 17, 0.28);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     overflow: hidden;
   }
 
@@ -123,44 +123,44 @@
     background: rgba(28, 22, 17, 0.035); flex-shrink: 0;
   }
   .sd-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .sd-kicker { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.12em;
+  .sd-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: rgba(28, 22, 17, 0.5); }
-  .sd-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; line-height: 1.15;
+  .sd-name { font-family: var(--fs-serif); font-weight: 600; font-size: 21px; line-height: 1.15;
     color: var(--text-primary); }
-  .sd-close { background: none; border: 1px solid rgba(28, 22, 17, 0.2); border-radius: var(--radius-round);
-    width: 30px; height: 30px; cursor: pointer; font-size: 13px; color: rgba(28, 22, 17, 0.6); flex-shrink: 0; }
+  .sd-close { background: none; border: 1px solid rgba(28, 22, 17, 0.2); border-radius: var(--radius-sharp);
+    width: 30px; height: 30px; cursor: pointer; font-size: var(--fs-label); color: rgba(28, 22, 17, 0.6); flex-shrink: 0; }
   .sd-close:hover { background: rgba(28, 22, 17, 0.06); color: var(--text-primary); }
 
   .sd-body { overflow-y: auto; padding: 16px 18px 22px; }
 
   .sd-figure { margin: 0 0 14px; }
-  .sd-figure img { display: block; width: 100%; height: auto; border-radius: var(--radius-round);
+  .sd-figure img { display: block; width: 100%; height: auto; border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.18); background: #fff; }
-  .sd-figure figcaption { margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .sd-figure figcaption { margin-top: 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     line-height: 1.6; color: rgba(28, 22, 17, 0.5); max-width: 88ch; }
 
-  .sd-line { margin: 0 0 18px; font-size: 16px; line-height: 1.58; color: rgba(28, 22, 17, 0.8); max-width: 72ch; }
+  .sd-line { margin: 0 0 18px; font-size: var(--fs-body); line-height: 1.58; color: rgba(28, 22, 17, 0.8); max-width: 72ch; }
 
-  .sd-h3 { margin: 0 0 9px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .sd-h3 { margin: 0 0 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.14em; text-transform: uppercase; color: rgba(28, 22, 17, 0.5); font-weight: 500; }
 
   .sd-feats { list-style: none; margin: 0 0 20px; padding: 0; display: grid;
     grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 9px; }
   .sd-feat { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px;
-    border: 1px solid rgba(28, 22, 17, 0.14); border-radius: var(--radius-round);
+    border: 1px solid rgba(28, 22, 17, 0.14); border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.6); }
-  .sf-label { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; line-height: 1.28;
+  .sf-label { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-nav); line-height: 1.28;
     color: var(--text-primary); }
-  .sf-what { font-size: 13px; line-height: 1.52; color: rgba(28, 22, 17, 0.72); }
-  .sf-link { margin-top: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .sf-what { font-size: var(--fs-label); line-height: 1.52; color: rgba(28, 22, 17, 0.72); }
+  .sf-link { margin-top: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.06em; color: var(--tone); text-decoration: none; }
   .sf-link:hover { text-decoration: underline; }
   .sf-part { color: rgba(28, 22, 17, 0.42); }
 
   .sd-leads { display: flex; flex-wrap: wrap; gap: 8px; }
   .sd-lead { display: flex; align-items: center; gap: 8px; padding: 5px 11px 5px 5px; cursor: pointer;
-    border: 1px solid rgba(28, 22, 17, 0.16); border-radius: var(--radius-round);
-    background: rgba(255, 255, 255, 0.6); font-family: inherit; font-size: 12.5px;
+    border: 1px solid rgba(28, 22, 17, 0.16); border-radius: var(--radius-sharp);
+    background: rgba(255, 255, 255, 0.6); font-family: inherit; font-size: var(--fs-label);
     color: var(--text-primary); transition: background 0.13s, border-color 0.13s; }
   .sd-lead:hover { background: #fff; border-color: rgba(28, 22, 17, 0.34); }
   .sd-lead img { width: 40px; height: 25px; object-fit: cover; object-position: top left;

@@ -122,17 +122,17 @@
 </div>
 
 <style>
-  .cg { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+  .cg { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.45); padding: 13px 15px; }
 
   /* ---- controls ---- */
   .cg-ctl { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 14px; }
   .grp { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-width: 0; }
-  .g-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .g-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); margin-right: 2px; }
-  .grp button { font-family: 'DM Sans', sans-serif; font-size: 12px; line-height: 1.2;
+  .grp button { font-family: var(--font-body); font-size: var(--fs-label-xs); line-height: 1.2;
     color: var(--text-primary); background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp);
     padding: 5px 10px; cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s; }
   .grp button:hover { background: rgba(28,22,17,0.06); border-color: rgba(28,22,17,0.36); }
   .grp button.on { background: var(--tone); border-color: var(--tone); color: #fff; }
@@ -142,18 +142,18 @@
     grid-template-columns: minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1.05fr); }
 
   .lanes { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .l-cap { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .l-cap { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); margin-bottom: 1px; }
   .lane { position: relative; display: flex; flex-direction: column; gap: 1px; align-items: flex-start;
     text-align: left; min-width: 0; padding: 6px 10px; cursor: pointer; font-family: inherit;
     border: 1px solid rgba(28,22,17,0.16); border-right: 3px solid rgba(28,22,17,0.16);
-    border-radius: var(--radius-round) 0 0 var(--radius-round); background: rgba(255,255,255,0.55);
+    border-radius: var(--radius-sharp) 0 0 var(--radius-sharp); background: rgba(255,255,255,0.55);
     opacity: 0.62; transition: opacity 0.13s, background 0.13s, border-color 0.13s; }
   .lane:hover { opacity: 0.9; background: rgba(255,255,255,0.9); }
   .lane.on { opacity: 1; border-right-color: var(--tone);
     background: color-mix(in srgb, var(--tone) 9%, transparent); }
-  .lane b { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.25; }
-  .lane em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .lane b { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); line-height: 1.25; }
+  .lane em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.5); }
   .lane::after { content: ''; position: absolute; right: -9px; top: 50%; width: 9px;
     border-top: 1px solid rgba(28,22,17,0.24); }
@@ -164,56 +164,56 @@
     border-left: 1px solid rgba(28,22,17,0.24); }
   .out { position: relative; align-self: stretch; min-height: 30px; }
   .bus::after, .out::after { content: '▸'; position: absolute; left: 50%; top: 50%;
-    transform: translate(-52%, -52%); font-size: 11px; color: rgba(28,22,17,0.42); }
+    transform: translate(-52%, -52%); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.42); }
   .out::before { content: ''; position: absolute; left: 8%; right: 46%; top: 50%;
     border-top: 1px solid rgba(28,22,17,0.24); }
 
   .door { min-width: 0; padding: 9px 11px; border: 1px solid rgba(28,22,17,0.18);
-    border-left: 3px solid var(--tone); border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-left: 3px solid var(--tone); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(255,255,255,0.7); }
-  .d-k { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .d-k { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--tone); margin-bottom: 6px; }
   .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
   .checks li { display: grid; grid-template-columns: 16px 1fr; gap: 1px 7px; align-items: baseline; min-width: 0; }
-  .c-n { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
+  .c-n { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600;
     color: rgba(28,22,17,0.45); }
-  .c-t { font-size: 12px; line-height: 1.3; color: var(--text-primary); }
-  .checks em { grid-column: 2; font-style: normal; font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px; line-height: 1.4; color: rgba(28,22,17,0.55); overflow-wrap: anywhere; }
+  .c-t { font-size: var(--fs-label-xs); line-height: 1.3; color: var(--text-primary); }
+  .checks em { grid-column: 2; font-style: normal; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.55); overflow-wrap: anywhere; }
 
   .verdict { --v: var(--success); min-width: 0; padding: 10px 12px;
     border: 1px solid color-mix(in srgb, var(--v) 40%, transparent); border-left: 3px solid var(--v);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--v) 9%, transparent);
     display: grid; grid-template-columns: 20px 1fr; gap: 2px 8px; align-items: baseline;
     transition: background 0.2s, border-color 0.2s; }
   .verdict[data-v='hold'] { --v: var(--warn); }
   .verdict[data-v='refuse'] { --v: var(--error); }
-  .v-mark { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: var(--v); }
-  .v-head { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; line-height: 1.25;
+  .v-mark { font-family: var(--font-mono); font-size: var(--fs-nav); font-weight: 600; color: var(--v); }
+  .v-head { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-nav); line-height: 1.25;
     color: var(--text-primary); }
-  .v-note { grid-column: 2; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.72); }
+  .v-note { grid-column: 2; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.72); }
 
-  .reg { margin: 11px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .reg { margin: 11px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.04em; color: rgba(28,22,17,0.5); }
 
   .ghost { margin: 7px 0 0; padding: 7px 10px; border-left: 3px solid var(--error);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--error) 8%, transparent);
-    font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.78); max-width: 84ch; }
+    font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.78); max-width: 84ch; }
 
   /* ---- narrow: the flow becomes a column, the rails turn downward ---- */
   @media (max-width: 760px) {
     .cg-flow { grid-template-columns: 1fr; gap: 4px; }
     .lane { border-right-width: 1px; border-left: 3px solid rgba(28,22,17,0.16);
-      border-radius: 0 var(--radius-round) var(--radius-round) 0; }
+      border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; }
     .lane.on { border-right-color: rgba(28,22,17,0.16); border-left-color: var(--tone); }
     .lane::after { display: none; }
     .bus, .out { align-self: center; min-height: 0; height: 16px; width: 100%; }
     .bus::before { left: 50%; top: 0; bottom: 0; }
     .out::before { display: none; }
     .bus::after, .out::after { transform: translate(-52%, -52%) rotate(90deg); }
-    .door { border-left-width: 3px; border-radius: 0 var(--radius-round) var(--radius-round) 0; }
+    .door { border-left-width: 3px; border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; }
   }
   @media (max-width: 420px) {
     .cg { padding: 11px 12px; }

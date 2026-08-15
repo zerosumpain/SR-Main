@@ -128,8 +128,8 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--c);
@@ -139,16 +139,16 @@
     content: '';
     width: 9px;
     height: 9px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
   }
   .dw-status {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 2px 8px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.25);
     color: rgba(28, 22, 17, 0.6);
   }
@@ -161,7 +161,7 @@
     margin-left: auto;
     background: none;
     border: none;
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     color: rgba(28, 22, 17, 0.5);
     cursor: pointer;
   }
@@ -175,7 +175,7 @@
   }
   h2 {
     margin: 0 0 5px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 21px;
     font-weight: 600;
     line-height: 1.2;
@@ -183,7 +183,7 @@
   }
   .dw-doc {
     margin: 0 0 12px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.6);
   }
   .dw-doc a {
@@ -192,7 +192,7 @@
   }
   .dw-what {
     margin: 0 0 10px;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: rgba(28, 22, 17, 0.8);
   }
@@ -201,17 +201,17 @@
     padding: 8px 14px;
     border-left: 3px solid rgba(28, 22, 17, 0.35);
     background: rgba(255, 255, 255, 0.45);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
-    font-family: 'Fraunces', serif;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
+    font-family: var(--fs-serif);
     font-style: italic;
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.75);
   }
   .lab {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
@@ -220,7 +220,7 @@
   .dw-imp {
     border: 1px solid var(--accent-ink-tint-35);
     border-left: 4px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--accent-ink-tint-06);
     padding: 10px 13px 11px;
     margin: 14px 0 4px;
@@ -231,19 +231,19 @@
   }
   .dw-imp p {
     margin: 0 0 8px;
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--ink);
   }
   .add {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     padding: 6px 13px;
     background: var(--accent-ink);
     color: #fff;
     border: none;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
   }
   .add.ok {
@@ -262,15 +262,15 @@
     align-items: baseline;
     gap: 6px;
     flex-wrap: wrap;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     padding: 6px 10px;
     background: rgba(255, 255, 255, 0.5);
     border: 1px solid rgba(28, 22, 17, 0.12);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
   }
   .flows b {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--ink);
   }
   .flows i {
@@ -289,17 +289,17 @@
   }
   .chip {
     display: inline-block;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     padding: 2px 9px;
     margin: 0 4px 4px 0;
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.75);
   }
   .caps {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.72);
   }
@@ -322,8 +322,8 @@
     flex-wrap: wrap;
   }
   .srcs a {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px dashed currentColor;

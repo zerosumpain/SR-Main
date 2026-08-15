@@ -149,14 +149,14 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -179,7 +179,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -188,7 +188,7 @@
   .metric { display: flex; flex-direction: column; gap: 0.15rem; }
   .metric-label {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -203,7 +203,7 @@
   .tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .tag {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
@@ -243,13 +243,13 @@
     flex-direction: column;
     gap: 0.3rem;
     padding: 0.6rem 0.7rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
     background: color-mix(in srgb, var(--accent) 9%, var(--surface-elevated));
   }
   .tide-label {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -262,8 +262,8 @@
   .tide-times { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .tide-t { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
   .tide-t.approx { color: var(--text-muted); }
-  .tide-t.approx::after { content: '~'; font-size: 0.7em; vertical-align: super; }
-  .tide-approx { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-muted); }
+  .tide-t.approx::after { content: '~'; font-size: max(0.7em, var(--fs-label-xs)); vertical-align: super; }
+  .tide-approx { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .spec { margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
   .spec-row {
@@ -275,7 +275,7 @@
   }
   .spec-row dt {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -291,7 +291,7 @@
   .safety {
     margin: 0;
     padding: 0.6rem 0.7rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
     background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated));
     font-family: var(--font-body);

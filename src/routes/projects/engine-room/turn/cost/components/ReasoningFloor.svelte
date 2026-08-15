@@ -85,14 +85,14 @@
 </div>
 
 <style>
-  .rf { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
+  .rf { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
   .rf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-  .k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
-  .k code { font-size: 10px; background: none; padding: 0; }
-  .val { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 600; color: var(--text-primary); }
+  .k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
+  .k code { font-size: var(--fs-label-xs); background: none; padding: 0; }
+  .val { font-family: var(--font-mono); font-size: 19px; font-weight: 600; color: var(--text-primary); }
 
   .slider { width: 100%; margin: 9px 0 2px; accent-color: var(--accent-ink); }
-  .ticks { position: relative; height: 22px; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .ticks { position: relative; height: 22px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
   .ticks .end { position: absolute; right: 0; }
   /* Anchored to the LEFT of its tick, not centred: at 380px a centred label overhangs the frame. */
   .ticks .mark { position: absolute; white-space: nowrap; color: var(--accent); padding-left: 5px; }
@@ -103,21 +103,21 @@
   .seg.reasoning { background: rgba(180,99,46,0.5); }
   .seg.answer { background: rgba(45,122,58,0.32); }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.6); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
   .sw { width: 9px; height: 9px; border-radius: var(--radius-sharp); }
   .sw.reasoning { background: rgba(180,99,46,0.5); }
   .sw.answer { background: rgba(45,122,58,0.32); }
 
-  .out { margin-top: 12px; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.6); padding: 10px 13px; }
+  .out { margin-top: 12px; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.6); padding: 10px 13px; }
   .out.bad { border-color: rgba(196,68,68,0.4); background: rgba(196,68,68,0.05); }
   .o-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
-  .o-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.5); min-width: 92px; }
-  .o-v { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(28,22,17,0.06); padding: 2px 7px; border-radius: var(--radius-sharp); }
+  .o-k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.5); min-width: 92px; }
+  .o-v { font-family: var(--font-mono); font-size: var(--fs-label-xs); background: rgba(28,22,17,0.06); padding: 2px 7px; border-radius: var(--radius-sharp); }
   .o-v.good { color: #2d7a3a; background: rgba(45,122,58,0.11); }
   .o-v.bad { color: #c44; background: rgba(196,68,68,0.1); }
-  .o-v em { font-style: normal; font-size: 10px; color: rgba(28,22,17,0.55); }
-  .o-say { margin: 8px 0 0; font-size: 12.5px; line-height: 1.58; color: rgba(28,22,17,0.76); max-width: 84ch; padding-top: 7px; border-top: 1px solid rgba(28,22,17,0.08); }
+  .o-v em { font-style: normal; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
+  .o-say { margin: 8px 0 0; font-size: var(--fs-label); line-height: 1.58; color: rgba(28,22,17,0.76); max-width: 84ch; padding-top: 7px; border-top: 1px solid rgba(28,22,17,0.08); }
   .o-say b { color: var(--text-primary); }
-  .rf-foot { margin: 11px 0 0; font-size: 11.5px; line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 92ch; }
+  .rf-foot { margin: 11px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 92ch; }
   .rf-foot b { color: rgba(28,22,17,0.82); }
 </style>

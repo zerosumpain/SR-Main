@@ -111,43 +111,43 @@
 </div>
 
 <style>
-  .fs { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
+  .fs { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
   .fs-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .k { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent-ink); }
+  .k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.11em; text-transform: uppercase; color: var(--accent-ink); }
   .tp { display: flex; gap: 5px; }
-  .tp button { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--text-primary); background: rgba(255,255,255,0.65);
-    border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 6px 11px; cursor: pointer; }
+  .tp button { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-sharp); padding: 6px 11px; cursor: pointer; }
   .tp button:hover:not(:disabled) { background: rgba(28,22,17,0.07); }
   .tp button.primary { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
   .tp button:disabled { opacity: 0.4; cursor: default; }
 
   .frame { display: grid; grid-template-columns: 44px 62px minmax(0, 1fr); gap: 4px 9px; align-items: baseline;
-    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.6); padding: 9px 12px; min-height: 54px; }
+    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.6); padding: 9px 12px; min-height: 54px; }
   .frame.status { background: rgba(196,87,10,0.07); border-color: rgba(196,87,10,0.3); }
   .frame.idle { grid-template-columns: minmax(0, 1fr); }
-  .f-seg { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--accent-ink); }
-  .f-op { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-align: center; padding: 1px 0; border-radius: var(--radius-sharp); }
+  .f-seg { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--accent-ink); }
+  .f-op { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-align: center; padding: 1px 0; border-radius: var(--radius-sharp); }
   .f-op[data-op='send'] { color: #2d7a3a; background: rgba(45,122,58,0.12); }
   .f-op[data-op='replace'] { color: #c44; background: rgba(196,68,68,0.12); }
-  .f-text { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
-  .f-note { grid-column: 1 / 4; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.62); }
+  .f-text { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
+  .f-note { grid-column: 1 / 4; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.62); }
 
   .panes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
-  .pane { min-width: 0; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); padding: 10px 13px; }
+  .pane { min-width: 0; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); padding: 10px 13px; }
   .pane.bad { background: rgba(196,68,68,0.05); border-color: rgba(196,68,68,0.26); }
   .pane.good { background: rgba(45,122,58,0.05); border-color: rgba(45,122,58,0.28); }
-  .p-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.6); }
+  .p-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.6); }
   .p-lab em { font-style: normal; text-transform: none; letter-spacing: 0; color: rgba(28,22,17,0.42); }
-  .p-body { margin-top: 6px; min-height: 48px; font-size: 13px; line-height: 1.5; color: var(--text-primary);
+  .p-body { margin-top: 6px; min-height: 48px; font-size: var(--fs-label); line-height: 1.5; color: var(--text-primary);
     background: rgba(255,255,255,0.7); border-radius: var(--radius-sharp); padding: 8px 10px; overflow-wrap: anywhere; }
   .p-body.empty { color: rgba(28,22,17,0.3); }
-  .p-status { margin-top: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); overflow-wrap: anywhere; }
-  .p-status code { font-size: 9px; background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: var(--radius-sharp); }
-  .p-verdict { margin: 7px 0 0; font-size: 12px; line-height: 1.5; }
+  .p-status { margin-top: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); overflow-wrap: anywhere; }
+  .p-status code { font-size: var(--fs-label-xs); background: rgba(28,22,17,0.06); padding: 1px 4px; border-radius: var(--radius-sharp); }
+  .p-verdict { margin: 7px 0 0; font-size: var(--fs-label-xs); line-height: 1.5; }
   .p-verdict.bad { color: #a33; }
   .p-verdict.good { color: #2d7a3a; }
   .p-verdict b { font-weight: 700; }
 
-  .fs-foot { margin: 11px 0 0; font-size: 11.5px; line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 92ch; }
+  .fs-foot { margin: 11px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.58); max-width: 92ch; }
   .fs-foot b { color: rgba(28,22,17,0.82); }
 </style>

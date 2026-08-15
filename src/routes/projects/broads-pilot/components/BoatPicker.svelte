@@ -172,14 +172,14 @@
     padding: 0.9rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: var(--font-body);
     color: var(--text-primary);
   }
 
   .sec-label {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
@@ -210,7 +210,7 @@
     color: var(--text-primary);
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     appearance: none;
     cursor: pointer;
   }
@@ -232,7 +232,7 @@
   .spec-card {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 0.7rem;
   }
   .spec-head {
@@ -251,7 +251,7 @@
   }
   .prop {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 0.18rem 0.4rem;
@@ -288,7 +288,7 @@
   }
   .spec dt {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -310,7 +310,7 @@
   .est-note {
     margin: 0.5rem 0 0;
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     line-height: 1.35;
   }
@@ -327,7 +327,7 @@
     display: flex;
     gap: 0.55rem;
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
@@ -346,11 +346,11 @@
     gap: 0.35rem;
     min-height: 2.05rem;
     padding: 0.3rem 0.55rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--surface-elevated);
     border: 1px solid var(--vc);
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
   }
   .chip-blocked {
@@ -368,7 +368,7 @@
     white-space: nowrap;
   }
   .chip-v {
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--vc);
@@ -381,7 +381,7 @@
     gap: 0.4rem 0.8rem;
     margin: 0.55rem 0 0;
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .lg {

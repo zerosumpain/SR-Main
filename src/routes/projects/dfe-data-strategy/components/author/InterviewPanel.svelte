@@ -414,7 +414,7 @@
   }
   .iv-intro {
     margin: 0 0 16px;
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.6;
     color: rgba(28, 22, 17, 0.72);
     max-width: 80ch;
@@ -424,8 +424,8 @@
   }
   .set-lab {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
@@ -443,7 +443,7 @@
     text-align: left;
     padding: 12px 14px;
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
@@ -456,19 +456,19 @@
     box-shadow: inset 0 0 0 1px var(--accent-ink);
   }
   .pick b {
-    font-family: 'Fraunces', serif;
-    font-size: 15.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     color: var(--ink);
   }
   .pick i {
     font-style: normal;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
   }
   .pick span {
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.65);
   }
@@ -480,8 +480,8 @@
     margin-top: 18px;
   }
   .set-note {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
 
@@ -493,8 +493,8 @@
   }
   .q-prog {
     flex: none;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
@@ -502,7 +502,7 @@
   .q-bar {
     flex: 1;
     height: 4px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(28, 22, 17, 0.1);
     overflow: hidden;
   }
@@ -513,8 +513,8 @@
   }
   .q-skipall {
     flex: none;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     background: none;
     border: none;
     color: rgba(28, 22, 17, 0.5);
@@ -523,7 +523,7 @@
   }
   .q-text {
     margin: 0 0 4px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 22px;
     font-weight: 600;
     color: var(--ink);
@@ -531,7 +531,7 @@
   }
   .q-hint {
     margin: 0 0 12px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.6);
   }
   .opts {
@@ -547,7 +547,7 @@
     text-align: left;
     padding: 11px 13px;
     border: 1px solid rgba(28, 22, 17, 0.16);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
@@ -560,7 +560,7 @@
   }
   .o-mark {
     flex: none;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
     margin-top: 1px;
   }
@@ -570,22 +570,22 @@
   }
   .o-body b {
     display: block;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
   }
   .o-body span {
     display: block;
     margin-top: 2px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.62);
   }
   .q-pick {
     margin: 4px 0 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
   .scale {
@@ -596,7 +596,7 @@
   }
   .s-side {
     flex: 0 1 220px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     color: rgba(28, 22, 17, 0.7);
   }
@@ -611,18 +611,18 @@
     display: block;
     width: 100%;
     margin-top: 12px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     line-height: 1.5;
     padding: 9px 12px;
     border: 1px solid rgba(28, 22, 17, 0.22);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.65);
     color: var(--ink);
     resize: vertical;
   }
   .q-free.big {
-    font-size: 14px;
+    font-size: var(--fs-nav);
   }
   .q-nav {
     display: flex;
@@ -630,12 +630,12 @@
     margin-top: 16px;
   }
   .q-btn {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     padding: 8px 18px;
     border: 1px solid rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.6);
     color: var(--ink);
     cursor: pointer;
@@ -651,20 +651,20 @@
   }
   .q-btn.quiet {
     border-style: dashed;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.6);
   }
 
   .rev-h {
     margin: 0 0 4px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 20px;
     font-weight: 600;
     color: var(--ink);
   }
   .rev-sub {
     margin: 0 0 14px;
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.68);
     max-width: 80ch;
@@ -688,7 +688,7 @@
     text-align: left;
     padding: 8px 11px;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
@@ -696,14 +696,14 @@
     border-color: var(--accent-ink);
   }
   .rev-jump b {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
   }
   .rev-jump span {
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--ink);
     line-height: 1.4;
   }
@@ -734,15 +734,15 @@
     display: flex;
     align-items: baseline;
     gap: 9px;
-    font-size: 13px;
+    font-size: var(--fs-label);
     padding: 4px 10px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
   }
   .g-mark {
     flex: none;
     width: 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.4);
   }
   .g-done .g-mark {
@@ -765,14 +765,14 @@
   }
   .g-words {
     margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
   .gen-note {
     margin: 0 0 12px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
 
@@ -791,18 +791,18 @@
   }
   .done-msg {
     margin: 0 0 10px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: #2f6155;
     font-weight: 600;
   }
   .done-err {
     margin: 0 0 10px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: #b1455e;
   }
   .preview {
     border: 1px solid rgba(28, 22, 17, 0.16);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: #fdfaf2;
     padding: 6px 22px 18px;
     max-height: 62vh;
@@ -822,22 +822,22 @@
   }
   .pv-head h4 {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 17px;
     font-weight: 600;
     color: var(--ink);
   }
   .pv-meta {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
   }
   .pv-regen {
     margin-left: auto;
-    font-size: 13px;
+    font-size: var(--fs-label);
     background: none;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 1px 9px;
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
@@ -847,7 +847,7 @@
     border-color: var(--accent-ink);
   }
   .pv-body {
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.65;
     color: rgba(28, 22, 17, 0.85);
   }
@@ -862,13 +862,13 @@
   .pv-body :global(h3),
   .pv-body :global(h4) {
     margin: 14px 0 4px;
-    font-family: 'Fraunces', serif;
-    font-size: 14.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     color: var(--ink);
   }
   .pv-fail {
     margin: 8px 0 0;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
     font-style: italic;
   }

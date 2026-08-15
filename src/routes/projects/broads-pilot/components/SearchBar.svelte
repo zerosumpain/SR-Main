@@ -92,7 +92,7 @@
     gap: 0.4rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 0 0.6rem;
     min-height: 44px;
     z-index: 2; /* above the backdrop */
@@ -128,7 +128,7 @@
     list-style: none;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     max-height: min(60vh, 22rem);
     overflow-y: auto;
   }
@@ -142,7 +142,7 @@
     background: transparent;
     cursor: pointer;
     padding: 0.5rem 0.55rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .bp-search-item.active { background: color-mix(in srgb, var(--accent) 16%, var(--surface-elevated)); }
@@ -166,7 +166,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .bp-search-sub {
-    font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--text-muted);
   }
   .bp-search-backdrop {

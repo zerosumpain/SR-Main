@@ -204,11 +204,11 @@
 <style>
   .none {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.55);
     padding: 14px;
     border: 1px dashed rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     text-align: center;
   }
   .legend {
@@ -217,8 +217,8 @@
     gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.65);
   }
   .lg {
@@ -229,7 +229,7 @@
   .lg i {
     width: 9px;
     height: 9px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
   }
   .lg-note {
@@ -239,7 +239,7 @@
   .svg-wrap {
     position: relative;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: #fdfaf2;
   }
   svg {
@@ -258,8 +258,8 @@
     opacity: 0.35;
   }
   .lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     fill: rgba(28, 22, 17, 0.75);
     paint-order: stroke;
@@ -267,8 +267,8 @@
     stroke-width: 3px;
   }
   .dfe-lab {
-    font-family: 'Fraunces', serif;
-    font-size: 15px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     fill: #f1ead6;
   }
@@ -279,20 +279,20 @@
     right: 10px;
     background: var(--ink, #1c1611);
     color: #f1ead6;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 7px 12px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     pointer-events: none;
   }
   .tipbar b {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
   }
   .focus {
     margin-top: 14px;
     border: 1px solid var(--accent-ink-tint-35);
     border-left: 4px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--accent-ink-tint-06);
     padding: 12px 15px;
   }
@@ -305,23 +305,23 @@
   }
   .f-head h3 {
     margin: 0;
-    font-family: 'Fraunces', serif;
-    font-size: 16px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body);
     font-weight: 600;
     color: var(--ink);
   }
   .f-n {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
   }
   .f-clear {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 3px 9px;
     background: transparent;
     border: 1px dashed rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
   }
@@ -330,13 +330,13 @@
     padding-left: 17px;
   }
   .f-whats li {
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.72);
   }
   .hint {
     margin: 12px 0 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.6);
     max-width: 86ch;

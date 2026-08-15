@@ -80,44 +80,44 @@
   .tree li { display: grid; grid-template-columns: minmax(120px, 1fr) auto minmax(110px, 1fr);
     gap: 10px; align-items: center; padding: 5px 10px; border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.55); margin-left: calc(var(--depth) * 16px); }
-  .n-name { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-primary); }
+  .n-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
   .n-modes { display: flex; gap: 3px; }
-  .m { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em;
+  .m { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em;
     text-transform: uppercase; color: rgba(28,22,17,0.6); background: rgba(255,255,255,0.7);
-    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     padding: 3px 8px; cursor: pointer; }
   .m:hover { background: rgba(28,22,17,0.07); }
   .m.on[data-m='include'] { background: var(--success); border-color: var(--success); color: #fff; }
   .m.on[data-m='exclude'] { background: #8a2d3a; border-color: #8a2d3a; color: #fff; }
   .m.on[data-m='inherit'] { background: rgba(28,22,17,0.5); border-color: rgba(28,22,17,0.5); color: #fff; }
   .n-cats { display: flex; gap: 4px; flex-wrap: wrap; }
-  .n-cats em, .o-why em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .n-cats em, .o-why em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     padding: 2px 7px; border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-  .n-cats i, .o-why i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .n-cats i, .o-why i { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.35); }
 
   .out { padding: 10px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent); }
   .out.no { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
   .o-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
-  .o-file { font-size: 12.5px; color: rgba(28,22,17,0.7); }
-  .o-file b { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); }
-  .o-verdict { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em;
+  .o-file { font-size: var(--fs-label); color: rgba(28,22,17,0.7); }
+  .o-file b { font-family: var(--font-mono); color: var(--text-primary); }
+  .o-verdict { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--success); }
   .out.no .o-verdict { color: #8a2d3a; }
-  .o-why { margin: 0; font-size: 12px; line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 86ch; }
+  .o-why { margin: 0; font-size: var(--fs-label-xs); line-height: 1.6; color: rgba(28,22,17,0.72); max-width: 86ch; }
   .o-why b { color: var(--text-primary); }
 
   .rules { margin: 0; padding: 0; list-style: none; display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
   .rules li { display: flex; flex-direction: column; gap: 2px; padding: 8px 11px;
-    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.5); }
-  .rules b { font-size: 12.5px; color: var(--text-primary); }
-  .r-rule { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--success); }
-  .r-why { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.62); }
+  .rules b { font-size: var(--fs-label); color: var(--text-primary); }
+  .r-rule { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); }
+  .r-why { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.62); }
 
   @media (max-width: 620px) {
     .tree li { grid-template-columns: 1fr; gap: 4px; margin-left: calc(var(--depth) * 10px); }

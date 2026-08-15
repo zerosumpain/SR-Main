@@ -40,7 +40,7 @@
   .rail { position: absolute; left: -4px; top: 50%; width: 4px; border-top: 1px solid rgba(28,22,17,0.22); }
 
   .s-btn { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; text-align: left;
-    padding: 8px 10px; border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round);
+    padding: 8px 10px; border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.55); cursor: pointer; font-family: inherit;
     transition: background 0.13s, border-color 0.13s; }
   .s-btn:disabled { cursor: default; }
@@ -48,12 +48,12 @@
   .s-btn.on { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 10%, transparent); }
 
   .s-dot { flex-shrink: 0; width: 20px; height: 20px; border-radius: var(--radius-pill);
-    display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    display: grid; place-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     font-weight: 600; background: rgba(28,22,17,0.1); color: rgba(28,22,17,0.65); }
   .s-txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .s-txt b { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.25;
+  .s-txt b { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); line-height: 1.25;
     overflow: hidden; text-overflow: ellipsis; }
-  .s-txt em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .s-txt em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .step[data-state='running'] .s-dot { background: var(--tone); color: #fff; }

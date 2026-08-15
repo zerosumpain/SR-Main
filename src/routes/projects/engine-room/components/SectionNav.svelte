@@ -92,14 +92,14 @@
     flex-wrap: wrap; padding: 8px 32px; }
   .parts { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
   .tab { --pt: var(--accent-ink); display: inline-flex; align-items: baseline; gap: 6px;
-    font-family: 'DM Sans', system-ui, sans-serif; font-size: 13px; font-weight: 500; color: var(--ink, var(--text-primary));
-    text-decoration: none; padding: 6px 13px; border-radius: var(--radius-round);
+    font-family: var(--font-body); font-size: var(--fs-label); font-weight: 500; color: var(--ink, var(--text-primary));
+    text-decoration: none; padding: 6px 13px; border-radius: var(--radius-sharp);
     border: 1px solid rgba(28,22,17,0.22); background: rgba(255,255,255,0.55);
     transition: background 0.12s, color 0.12s, border-color 0.12s; }
   .tab:hover { background: rgba(28,22,17,0.08); border-color: rgba(28,22,17,0.4); }
   .tab.active { background: var(--pt); color: #fff; border-color: var(--pt); }
-  .t-no { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; opacity: 0.6; }
-  .tab.home { padding: 6px 11px; font-size: 11px; color: rgba(28,22,17,0.6); }
+  .t-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; opacity: 0.6; }
+  .tab.home { padding: 6px 11px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
   .tab.home.active { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg); }
 
   .tab.tracelink { background: var(--accent-ink); color: #fff; border-color: var(--accent-ink);
@@ -110,44 +110,44 @@
   .leaves { display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
     padding: 6px 32px 7px; border-top: 1px solid rgba(28,22,17,0.08);
     background: color-mix(in srgb, var(--tone) 5%, transparent); }
-  .lv-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em;
+  .lv-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--tone); margin-right: 4px; }
-  .lv { font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: rgba(28,22,17,0.72);
+  .lv { font-family: var(--font-body); font-size: var(--fs-label); color: rgba(28,22,17,0.72);
     text-decoration: none; padding: 4px 11px; border-radius: var(--radius-pill);
     border: 1px solid transparent; transition: background 0.12s, color 0.12s; }
   .lv:hover { background: rgba(255,255,255,0.7); color: var(--text-primary); }
   .lv.active { background: var(--tone); color: #fff; font-weight: 500; }
 
   .detail { display: inline-flex; align-items: center; gap: 7px; }
-  .d-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase;
+  .d-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.1em; color: rgba(28,22,17,0.5); }
   .seg { display: inline-flex; background: rgba(28,22,17,0.07); padding: 2px;
-    border-radius: var(--radius-round); border: 1px solid rgba(28,22,17,0.12); }
+    border-radius: var(--radius-sharp); border: 1px solid rgba(28,22,17,0.12); }
   .seg button { background: transparent; border: none; color: var(--text-primary); padding: 5px 11px;
-    border-radius: var(--radius-round); font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+    border-radius: var(--radius-sharp); font-family: var(--font-mono); font-size: var(--fs-label-xs);
     cursor: pointer; white-space: nowrap; }
   .seg button.on { background: var(--accent-ink); color: #fff; }
 
-  .burger { display: none; align-items: center; gap: 8px; font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px; font-weight: 600; color: var(--text-primary); background: rgba(255,255,255,0.65);
-    border: 1px solid rgba(28,22,17,0.28); border-radius: var(--radius-round); padding: 7px 13px; cursor: pointer; }
-  .burger .bg-icon { font-size: 14px; line-height: 1; }
+  .burger { display: none; align-items: center; gap: 8px; font-family: var(--font-body);
+    font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(28,22,17,0.28); border-radius: var(--radius-sharp); padding: 7px 13px; cursor: pointer; }
+  .burger .bg-icon { font-size: var(--fs-nav); line-height: 1; }
   .burger .bg-cur { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .burger .bg-chev { font-size: 10px; color: rgba(28,22,17,0.5); transition: transform 0.15s; }
+  .burger .bg-chev { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); transition: transform 0.15s; }
   .burger .bg-chev.open { transform: rotate(180deg); }
 
   .nav-scrim { position: fixed; inset: 0; z-index: 18; background: rgba(28,22,17,0.18); border: none; cursor: pointer; }
   .nav-menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 19; display: flex; flex-direction: column; gap: 1px;
     background: var(--bg); border-bottom: 1px solid rgba(28,22,17,0.18);
     padding: 8px 16px 14px; max-height: 74vh; overflow-y: auto; }
-  .nm-top { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; color: var(--text-primary);
-    text-decoration: none; padding: 8px 12px; border-radius: var(--radius-round); }
-  .nm-part { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em;
+  .nm-top { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body-sm); color: var(--text-primary);
+    text-decoration: none; padding: 8px 12px; border-radius: var(--radius-sharp); }
+  .nm-part { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--pt); margin: 11px 0 2px; padding: 0 12px; }
-  .nm-hub { font-family: 'DM Sans', sans-serif; font-size: 12px; color: rgba(28,22,17,0.6);
+  .nm-hub { font-family: var(--font-body); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6);
     text-decoration: none; padding: 4px 12px 6px; }
-  .nm-item { font-family: 'DM Sans', sans-serif; font-size: 14.5px; font-weight: 500; color: var(--text-primary);
-    text-decoration: none; padding: 8px 12px 8px 20px; border-radius: var(--radius-round); }
+  .nm-item { font-family: var(--font-body); font-size: var(--fs-nav); font-weight: 500; color: var(--text-primary);
+    text-decoration: none; padding: 8px 12px 8px 20px; border-radius: var(--radius-sharp); }
   .nm-item:hover, .nm-hub:hover, .nm-top:hover { background: rgba(28,22,17,0.06); }
   .nm-item.active, .nm-top.active, .nm-hub.active { background: var(--text-primary); color: var(--bg); }
 

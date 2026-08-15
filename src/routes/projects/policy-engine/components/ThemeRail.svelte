@@ -26,13 +26,13 @@
 
 <style>
   .trail { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; }
-  .tr-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
+  .tr-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.45); }
   .tr-items { display: flex; flex-wrap: wrap; gap: 6px; }
   .tr-item {
     display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
-    font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; color: var(--ink);
+    font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--ink);
     background: color-mix(in srgb, var(--c) 9%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
-    border-radius: var(--radius-round); padding: 2px 9px; transition: background 0.12s;
+    border-radius: var(--radius-sharp); padding: 2px 9px; transition: background 0.12s;
   }
   .tr-item:hover { background: color-mix(in srgb, var(--c) 18%, transparent); }
   .tr-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--c); }

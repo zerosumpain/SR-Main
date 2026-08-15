@@ -19,6 +19,6 @@
 <style>
   .up { max-width: 860px; }
   .intro { max-width: 76ch; margin-bottom: 18px; }
-  .back { margin-top: 22px; font-size: 13px; }
+  .back { margin-top: 22px; font-size: var(--fs-label); }
   .back a { color: var(--accent-ink); }
 </style>

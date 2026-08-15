@@ -57,7 +57,7 @@
 <style>
   .mb { display: flex; flex-direction: column; gap: 10px; }
   .mb-head { display: flex; gap: 12px 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-  .k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--success); }
 
   .tog { display: flex; align-items: center; gap: 9px; cursor: pointer; font-family: inherit;
@@ -65,7 +65,7 @@
     border-radius: var(--radius-pill); background: rgba(255,255,255,0.6);
     transition: border-color 0.13s, background 0.13s; }
   .tog:hover { background: rgba(255,255,255,0.95); border-color: rgba(28,22,17,0.36); }
-  .t-state { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--text-primary); }
+  .t-state { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--text-primary); }
   .t-sw { flex-shrink: 0; display: block; width: 44px; height: 22px; border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--success) 34%, transparent);
     border: 1px solid rgba(28,22,17,0.2); position: relative; transition: background 0.18s; }
@@ -73,28 +73,28 @@
   .t-sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: var(--radius-pill);
     background: #fff; transition: left 0.18s; }
   .tog.on .t-sw i { left: 24px; }
-  .t-hint { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .t-hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
 
-  .bar { position: relative; height: 40px; border-radius: var(--radius-round); background: rgba(28,22,17,0.07);
+  .bar { position: relative; height: 40px; border-radius: var(--radius-sharp); background: rgba(28,22,17,0.07);
     border: 1px solid rgba(28,22,17,0.14); overflow: hidden; display: flex; align-items: center; }
   .fill { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--success) 36%, transparent);
     transition: width 0.45s cubic-bezier(0.3,0,0.2,1), background 0.3s; }
   .fill.hot { background: color-mix(in srgb, var(--error) 38%, transparent); }
-  .cap { position: absolute; right: 10px; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .cap { position: absolute; right: 10px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.5); }
 
   .read { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
   .r { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-  .r b { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600;
+  .r b { font-family: var(--font-mono); font-size: 17px; font-weight: 600;
     color: var(--text-primary); line-height: 1.1; }
   .r.hi b { color: var(--accent); }
-  .r span { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em;
+  .r span { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em;
     color: rgba(28,22,17,0.55); line-height: 1.35; }
 
   .verdict { margin: 0; padding: 9px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent);
-    font-size: 13px; line-height: 1.55; color: rgba(28,22,17,0.78); max-width: 88ch;
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.78); max-width: 88ch;
     transition: border-color 0.25s, background 0.25s; }
   .verdict.hot { border-left-color: var(--error); background: color-mix(in srgb, var(--error) 8%, transparent); }
   .verdict b { color: var(--text-primary); }

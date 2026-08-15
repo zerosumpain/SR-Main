@@ -30,12 +30,12 @@
     max-width: 290px;
     background: var(--ink, #1c1611);
     color: #f1ead6;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     font-style: normal;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-body);
     padding: 8px 11px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.12s;
@@ -43,8 +43,8 @@
   }
   .tip b {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     margin-bottom: 2px;

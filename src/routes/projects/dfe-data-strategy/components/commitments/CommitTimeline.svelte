@@ -136,11 +136,11 @@
 <style>
   .none {
     margin: 0 0 12px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.55);
     padding: 14px;
     border: 1px dashed rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     text-align: center;
   }
   .legend {
@@ -149,8 +149,8 @@
     gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.65);
   }
   .lg {
@@ -165,7 +165,7 @@
   .svg-wrap {
     position: relative;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: #fdfaf2;
     padding: 6px 4px;
     overflow-x: auto;
@@ -180,16 +180,16 @@
     flex: none;
   }
   .tick {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     fill: rgba(28, 22, 17, 0.5);
   }
   .tick.today {
     fill: #8a2d3a;
   }
   .lane {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
   }
   .pt {
@@ -203,7 +203,7 @@
     transform: translate(-50%, -130%);
     background: var(--ink, #1c1611);
     color: #f1ead6;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 7px 11px;
     max-width: 300px;
     pointer-events: none;
@@ -211,18 +211,18 @@
   }
   .tip b {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.35;
   }
   .tip span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     opacity: 0.75;
   }
   .list-h {
     margin: 18px 0 9px;
-    font-family: 'Fraunces', serif;
-    font-size: 15.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     color: var(--ink);
   }

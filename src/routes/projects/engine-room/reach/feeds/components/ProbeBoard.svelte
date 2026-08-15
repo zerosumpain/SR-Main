@@ -52,9 +52,9 @@
   .pb { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
 
   .switch { display: flex; gap: 4px; flex-wrap: wrap; }
-  .switch button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .switch button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 12px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 12px; cursor: pointer; }
   .switch button:hover { background: rgba(28,22,17,0.07); }
   .switch button.on { background: var(--success); border-color: var(--success); color: #fff; }
 
@@ -63,20 +63,20 @@
     padding: 7px 11px; border-radius: var(--radius-sharp); background: rgba(255,255,255,0.55);
     border-left: 3px solid transparent; transition: background 0.15s, border-color 0.15s; }
   .rows li.bad { background: rgba(138,45,58,0.08); border-left-color: #8a2d3a; }
-  .r-name { font-size: 12.5px; font-weight: 500; color: var(--text-primary); }
-  .r-say { font-size: 12.5px; line-height: 1.45; color: rgba(28,22,17,0.72); }
+  .r-name { font-size: var(--fs-label); font-weight: 500; color: var(--text-primary); }
+  .r-say { font-size: var(--fs-label); line-height: 1.45; color: rgba(28,22,17,0.72); }
   .r-say.bad { color: #8a2d3a; }
-  .r-dot { justify-self: end; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  .r-dot { justify-self: end; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--success); }
   .r-dot.bad { color: #8a2d3a; }
   .r-dot.unknown { color: rgba(28,22,17,0.35); }
-  .r-ev { grid-column: 2 / -1; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .r-ev { grid-column: 2 / -1; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     line-height: 1.5; color: rgba(28,22,17,0.45); }
 
   .verdict { margin: 0; padding: 9px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent);
-    font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 90ch; }
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 90ch; }
   .verdict b { color: var(--text-primary); }
 
   @media (max-width: 620px) {

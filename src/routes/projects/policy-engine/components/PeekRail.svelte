@@ -46,25 +46,25 @@
 
 <style>
   .peek { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 10px 8px 14px; overflow-y: auto; overscroll-behavior: contain; }
-  .pk-expand { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--accent-ink); background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); padding: 6px 6px; cursor: pointer; }
+  .pk-expand { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-sharp); padding: 6px 6px; cursor: pointer; }
   .pk-expand:hover { background: var(--accent-ink-tint-22); }
-  .pk-scn { font-family: 'Fraunces', serif; font-weight: 600; font-size: 11.5px; line-height: 1.3; color: var(--ink);
+  .pk-scn { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-label-xs); line-height: 1.3; color: var(--ink);
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
-  .pk-none { font-size: 10px; color: rgba(28,22,17,0.45); line-height: 1.4; }
+  .pk-none { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.45); line-height: 1.4; }
   .pk-chips { display: flex; flex-direction: column; gap: 5px; }
   .pk-chip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; cursor: pointer;
-    background: rgba(255,255,255,0.5); border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); padding: 4px 7px; }
+    background: rgba(255,255,255,0.5); border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-sharp); padding: 4px 7px; }
   .pk-chip:hover { background: var(--accent-ink-tint-12); border-color: var(--accent-ink); }
-  .pkc-name { font-size: 9.5px; line-height: 1.25; color: var(--accent-ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .pkc-val { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; color: var(--ink); }
-  .pk-more { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.6); background: transparent;
-    border: 1px dashed rgba(28,22,17,0.3); border-radius: var(--radius-round); padding: 4px 7px; cursor: pointer; }
+  .pkc-name { font-size: var(--fs-label-xs); line-height: 1.25; color: var(--accent-ink); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .pkc-val { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--ink); }
+  .pk-more { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); background: transparent;
+    border: 1px dashed rgba(28,22,17,0.3); border-radius: var(--radius-sharp); padding: 4px 7px; cursor: pointer; }
   .pk-more:hover { color: var(--ink); border-color: rgba(28,22,17,0.5); }
-  .pk-reset { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--error); background: transparent;
-    border: 1px solid var(--error-border); border-radius: var(--radius-round); padding: 4px 6px; cursor: pointer; }
+  .pk-reset { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); background: transparent;
+    border: 1px solid var(--error-border); border-radius: var(--radius-sharp); padding: 4px 6px; cursor: pointer; }
   .pk-reset:hover { background: var(--error-bg); }
-  .pk-collapse { margin-top: auto; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5);
+  .pk-collapse { margin-top: auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5);
     background: transparent; border: none; cursor: pointer; padding: 4px 0; text-align: left; }
   .pk-collapse:hover { color: var(--ink); }
 </style>

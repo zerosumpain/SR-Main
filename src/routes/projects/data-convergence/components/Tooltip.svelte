@@ -107,10 +107,10 @@
     background: var(--ink);
     color: var(--paper);
     border: 1px solid rgba(241, 234, 214, 0.15);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 10px 12px;
-    font-family: 'DM Sans', system-ui, sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     min-width: 200px;
     max-width: 320px;
@@ -150,14 +150,14 @@
     vertical-align: middle;
   }
   .name {
-    font-family: 'Fraunces', serif;
-    font-size: 14px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 500;
     letter-spacing: 0.01em;
   }
   .ref-flag {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(241, 234, 214, 0.7);
     margin-bottom: 6px;
     letter-spacing: 0.05em;
@@ -166,7 +166,7 @@
   .meta {
     color: rgba(241, 234, 214, 0.72);
     font-style: italic;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
   }
   dl {
     display: grid;
@@ -177,8 +177,8 @@
   }
   dt {
     color: rgba(241, 234, 214, 0.55);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
@@ -187,8 +187,8 @@
     color: var(--paper);
   }
   dd.schema code {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(241, 234, 214, 0.85);
     word-break: break-word;
     white-space: normal;

@@ -35,10 +35,10 @@
 <style>
   .ps { padding: 8px 2px 10px; border-bottom: 1px solid rgba(28,22,17,0.08); }
   .ps-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
-  .ps-left, .ps-right { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; color: rgba(28,22,17,0.7); }
+  .ps-left, .ps-right { font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 600; color: rgba(28,22,17,0.7); }
   .ps-right { text-align: right; }
-  .ps-lean { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-ink); white-space: nowrap; }
+  .ps-lean { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-ink); white-space: nowrap; }
   .ps-lean.bal { color: rgba(28,22,17,0.4); }
   .ps-range { width: 100%; accent-color: var(--accent-ink); cursor: pointer; }
-  .ps-eli { margin: 4px 0 0; font-size: 10.5px; line-height: 1.4; color: rgba(28,22,17,0.55); }
+  .ps-eli { margin: 4px 0 0; font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.55); }
 </style>

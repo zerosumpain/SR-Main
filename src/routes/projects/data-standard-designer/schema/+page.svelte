@@ -125,41 +125,41 @@
   .head { margin-bottom: 8px; }
   .grid { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 26px; align-items: start; }
   .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: auto; }
-  .empty-state { border: 1.5px dashed var(--card-border); border-radius: var(--radius-round); padding: 30px; text-align: center; }
+  .count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); margin-left: auto; }
+  .empty-state { border: 1.5px dashed var(--card-border); border-radius: var(--radius-sharp); padding: 30px; text-align: center; }
   .empty-state p { color: var(--text-muted); margin: 0 0 12px; }
 
   .library { margin-top: 20px; border-top: 1px solid var(--divider); padding-top: 14px; }
   .lib-sub { color: var(--text-ghost); font-weight: 400; text-transform: none; letter-spacing: 0; }
   .lib-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
-  .lib-chip { font-size: 12px; padding: 6px 10px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); background: var(--surface-elevated); color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .lib-chip { font-size: var(--fs-label-xs); padding: 6px 10px; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--surface-elevated); color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
   .lib-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .lib-chip.used { opacity: 0.5; cursor: default; }
-  .lib-chip .src { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); }
+  .lib-chip .src { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); }
 
   .rec-standards { margin-top: 20px; border-top: 1px solid var(--divider); padding-top: 14px; }
-  .ingest-msg { font-size: 12px; color: var(--success); margin: 6px 0 8px; }
+  .ingest-msg { font-size: var(--fs-label-xs); color: var(--success); margin: 6px 0 8px; }
   .rs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-top: 8px; }
-  .rs-row { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 8px 10px; background: var(--surface-elevated); }
+  .rs-row { display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 8px 10px; background: var(--surface-elevated); }
   .rs-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; }
-  .rs-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .rs-name { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
   .rs-name:hover { color: var(--accent); }
-  .rs-owner { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); font-weight: 400; }
+  .rs-owner { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-ghost); font-weight: 400; }
   .rs-row .dsd-btn { flex-shrink: 0; }
 
   .rail-sticky { position: sticky; top: 110px; display: flex; flex-direction: column; gap: 12px; }
-  .score-strip { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 12px; background: var(--card-bg); }
-  .ss-h { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); display: block; margin-bottom: 9px; }
+  .score-strip { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 12px; background: var(--card-bg); }
+  .ss-h { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); display: block; margin-bottom: 9px; }
   .ss-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-  .ss-tile { text-align: center; border: 1px solid var(--divider); border-radius: var(--radius-round); padding: 8px 4px; background: var(--surface-elevated); }
+  .ss-tile { text-align: center; border: 1px solid var(--divider); border-radius: var(--radius-sharp); padding: 8px 4px; background: var(--surface-elevated); }
   .ss-tile:hover { border-color: var(--accent); }
   .ss-tile .v { font-family: var(--font-display); font-size: 24px; line-height: 1; display: block; }
-  .ss-tile .l { font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-  .ss-open { display: block; margin-top: 9px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
-  .suggest { border: 1.5px solid var(--accent); border-radius: var(--radius-round); padding: 12px; background: var(--accent-tint-04); }
-  .sg { width: 100%; text-align: left; background: transparent; border: none; border-top: 1px solid var(--divider); padding: 7px 0; cursor: pointer; font-size: 12.5px; color: var(--text-primary); }
+  .ss-tile .l { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .ss-open { display: block; margin-top: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+  .suggest { border: 1.5px solid var(--accent); border-radius: var(--radius-sharp); padding: 12px; background: var(--accent-tint-04); }
+  .sg { width: 100%; text-align: left; background: transparent; border: none; border-top: 1px solid var(--divider); padding: 7px 0; cursor: pointer; font-size: var(--fs-label); color: var(--text-primary); }
   .sg:first-of-type { border-top: none; }
-  .sg span { display: block; font-size: 10px; color: var(--text-muted); }
+  .sg span { display: block; font-size: var(--fs-label-xs); color: var(--text-muted); }
   .sg:hover { color: var(--accent); }
   .full { width: 100%; justify-content: center; }
 

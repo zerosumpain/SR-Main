@@ -143,59 +143,59 @@
 <style>
   .plan { display: flex; flex-direction: column; gap: 0.7rem; }
   .summary { margin: 0; font-family: var(--font-body); font-size: 0.95rem; line-height: 1.5; color: var(--text-primary); }
-  .weather { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.4rem 0.6rem; }
+  .weather { display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.4rem 0.6rem; }
   .warnings { display: flex; flex-direction: column; gap: 0.3rem; }
-  .warn { margin: 0; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: color-mix(in srgb, var(--warn) 14%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: var(--radius-round); padding: 0.45rem 0.6rem; }
+  .warn { margin: 0; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: color-mix(in srgb, var(--warn) 14%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); border-radius: var(--radius-sharp); padding: 0.45rem 0.6rem; }
 
   .stops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
   .day-group { display: flex; flex-direction: column; gap: 0.4rem; }
   .day-group + .day-group { margin-top: 0.6rem; }
   .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; border-bottom: 1.5px solid var(--accent); padding-bottom: 0.2rem; }
   .day-label { font-family: var(--font-display); text-transform: uppercase; font-size: 0.82rem; letter-spacing: 0.03em; color: var(--accent); }
-  .day-meta { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
+  .day-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .num.home { background: var(--text-primary); }
-  .stop { border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.4rem; }
+  .stop { border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.4rem; }
   .stop-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-  .num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--radius-pill); background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: 0.72rem; display: grid; place-items: center; }
+  .num { flex: 0 0 auto; width: 22px; height: 22px; border-radius: var(--radius-pill); background: var(--accent); color: #fff; font-family: var(--font-mono); font-size: var(--fs-label-xs); display: grid; place-items: center; }
   .stop-title { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 8rem; }
   .name { font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
-  .tier { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
-  .leg { font-family: var(--font-mono); font-size: 0.66rem; color: var(--accent); }
-  .flag { margin: 0; font-family: var(--font-body); font-size: 0.78rem; line-height: 1.35; padding: 0.35rem 0.5rem; border-radius: var(--radius-round); }
+  .tier { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .leg { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
+  .flag { margin: 0; font-family: var(--font-body); font-size: 0.78rem; line-height: 1.35; padding: 0.35rem 0.5rem; border-radius: var(--radius-sharp); }
   .flag .flag-ic { vertical-align: -2px; }
   .flag.tidal { background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated)); color: var(--text-primary); }
   .flag.amber { background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated)); color: var(--trend-down); }
   .why { margin: 0; font-family: var(--font-body); font-size: 0.86rem; line-height: 1.45; color: var(--text-secondary); }
 
   .acts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
-  .act { width: 100%; text-align: left; display: flex; align-items: flex-start; gap: 0.5rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); border-radius: var(--radius-round); padding: 0.45rem 0.55rem; cursor: pointer; }
+  .act { width: 100%; text-align: left; display: flex; align-items: flex-start; gap: 0.5rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); border-radius: var(--radius-sharp); padding: 0.45rem 0.55rem; cursor: pointer; }
   .act:hover { border-color: var(--accent); }
   .act .ic { display: inline-flex; line-height: 1.2; flex: 0 0 auto; color: var(--accent); margin-top: 1px; }
   .act-body { display: flex; flex-direction: column; gap: 0.1rem; flex: 1 1 auto; }
   .act-name { font-family: var(--font-body); font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
   .act-what { font-family: var(--font-body); font-size: 0.78rem; color: var(--text-secondary); line-height: 1.35; }
-  .act-hours { font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-muted); }
+  .act-hours { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .chev { color: var(--text-muted); font-size: 1.1rem; align-self: center; }
 
   .mooring-info { display: flex; flex-wrap: wrap; gap: 0.3rem 0.4rem; align-items: center; }
-  .mi { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-secondary); }
+  .mi { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .mi.pill { display: inline-flex; align-items: center; gap: 0.2rem; background: var(--bg-section); border-radius: var(--radius-sharp); padding: 0.1rem 0.35rem; }
   .mi.caveat { color: var(--warn); }
   .mi.verified { color: var(--text-ghost); margin-left: auto; }
 
   .totals { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0.6rem 0; border-top: 1px solid var(--card-border); }
   .totals span { display: flex; flex-direction: column; }
-  .tl { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .tl { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
   .totals strong { font-family: var(--font-mono); font-size: 1rem; color: var(--text-primary); }
 
   .tips { display: flex; flex-direction: column; gap: 0.25rem; }
-  .tips-label { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); }
+  .tips-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); }
   .tips ul { margin: 0; padding-left: 1.1rem; }
   .tips li { font-family: var(--font-body); font-size: 0.82rem; color: var(--text-secondary); line-height: 1.4; }
 
-  .apply { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-round); padding: 0.7rem; font-family: var(--font-mono); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+  .apply { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0.7rem; font-family: var(--font-mono); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
   .apply:hover { background: var(--accent-hover); }
-  .disclaimer { margin: 0; font-family: var(--font-body); font-size: 0.68rem; color: var(--text-ghost); line-height: 1.4; }
+  .disclaimer { margin: 0; font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-ghost); line-height: 1.4; }
 
   /* On the wider web modal, lay the stop cards in two columns so there's much
      less to scroll. Numbers keep the order clear. */

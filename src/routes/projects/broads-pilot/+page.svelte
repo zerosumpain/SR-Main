@@ -374,7 +374,7 @@
 
 <style>
   .bp-planner { position: absolute; inset: 0; overflow: hidden; }
-  .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
+  .bp-status { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 600; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.8rem 1.2rem; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary); }
 
   /* top-centre: search box + home-base lock toggle. Mobile-first = full-width
      bar; desktop centres it in the open map area (see the min-width rule, which
@@ -382,7 +382,7 @@
      600-level FABs/map-options so the search click-away backdrop never blocks them. */
   .bp-topbar { position: absolute; top: 0.6rem; left: 0.6rem; right: 0.6rem; z-index: 550; display: flex; align-items: flex-start; justify-content: center; gap: 0.4rem; }
   .bp-topbar :global(.bp-search) { flex: 1 1 auto; min-width: 0; }
-  .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+  .bp-lock { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; min-height: 44px; padding: 0 0.6rem; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
   .bp-lock.locked { border-color: var(--accent); color: var(--text-primary); background: color-mix(in srgb, var(--accent) 12%, var(--surface-elevated)); }
   .bp-lock-ic { display: inline-flex; }
   .inl-ic { display: inline-flex; vertical-align: middle; }
@@ -393,11 +393,11 @@
 
   /* map options button + popover (top-right) */
   .bp-mapbtn-wrap { position: absolute; top: 0.6rem; right: 0.6rem; z-index: 600; display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
-  .bp-mapbtn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; }
+  .bp-mapbtn { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface-elevated); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.5rem 0.7rem; min-height: 40px; cursor: pointer; }
   .bp-mapbtn.rec { border-color: var(--error); }
   .bp-mapbtn .rec-dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--error); animation: bp-rec 1.3s ease-out infinite; }
   @keyframes bp-rec { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 50%, transparent); } 100% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--error) 0%, transparent); } }
-  .bp-mapbtn .log-count { background: var(--accent); color: #fff; border-radius: var(--radius-pill); font-size: 0.58rem; padding: 0.05rem 0.35rem; min-width: 1.1rem; text-align: center; }
+  .bp-mapbtn .log-count { background: var(--accent); color: #fff; border-radius: var(--radius-pill); font-size: var(--fs-label-xs); padding: 0.05rem 0.35rem; min-width: 1.1rem; text-align: center; }
   .bp-mapopts { display: flex; flex-direction: column; gap: 0.5rem; width: min(88vw, 22rem); }
 
   /* FAB stack (bottom-right, thumb zone) */
@@ -419,7 +419,7 @@
   /* peek summary line */
   .bp-sum { display: flex; flex-direction: column; gap: 0.1rem; }
   .bp-sum .leg { font-family: var(--font-body); font-weight: 600; font-size: 0.92rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bp-sum .meta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); display: flex; gap: 0.5rem; align-items: center; }
+  .bp-sum .meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); display: flex; gap: 0.5rem; align-items: center; }
   .warn-dot { color: var(--warn); }
   .ok-dot { color: var(--success); }
   .bp-sum-explore { font-family: var(--font-body); font-size: 0.88rem; color: var(--text-secondary); line-height: 1.4; }
@@ -435,40 +435,40 @@
   .bp-mini-backdrop { position: absolute; inset: 0; z-index: 950; background: rgba(26, 16, 8, 0.35); display: grid; place-items: center; padding: 1rem; }
 
   /* set-start picker */
-  .bp-start-menu { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 1rem; width: min(24rem, 92vw); max-height: min(80vh, 34rem); display: flex; flex-direction: column; gap: 0.6rem; }
+  .bp-start-menu { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 1rem; width: min(24rem, 92vw); max-height: min(80vh, 34rem); display: flex; flex-direction: column; gap: 0.6rem; }
   .bp-start-head { display: flex; flex-direction: column; gap: 0.15rem; }
-  .bp-start-kicker { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
+  .bp-start-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--accent); }
   .bp-start-cur { font-family: var(--font-body); font-size: 0.82rem; color: var(--text-muted); }
   .bp-start-cur strong { color: var(--text-primary); }
   .bp-start-acts { display: flex; gap: 0.5rem; }
-  .bp-start-act { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.6rem 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; min-height: 44px; }
+  .bp-start-act { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.6rem 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; min-height: 44px; }
   .bp-start-act:hover { border-color: var(--accent); }
   .bp-start-act.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .bp-start-act:disabled { opacity: 0.6; }
-  .bp-start-listlbl { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.2rem; }
+  .bp-start-listlbl { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); margin-top: 0.2rem; }
   .bp-start-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.3rem; }
-  .bp-start-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round); cursor: pointer; text-align: left; color: var(--text-primary); min-height: 42px; }
+  .bp-start-row { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.5rem 0.6rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); cursor: pointer; text-align: left; color: var(--text-primary); min-height: 42px; }
   .bp-start-row:hover { border-color: var(--text-muted); }
   .bp-start-row.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-elevated)); }
   .bp-start-row .nm { font-family: var(--font-body); font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bp-start-row .tier { flex: none; font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .bp-start-row .tier { flex: none; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 
   /* pick-a-point hint (while arming the start tap) */
-  .bp-pick-hint { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 620; display: flex; align-items: center; gap: 0.7rem; background: var(--accent); color: #fff; border-radius: var(--radius-round); padding: 0.5rem 0.6rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: 0.74rem; max-width: calc(100vw - 1.2rem); }
-  .bp-pick-hint button { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: var(--radius-sharp); padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+  .bp-pick-hint { position: absolute; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 620; display: flex; align-items: center; gap: 0.7rem; background: var(--accent); color: #fff; border-radius: var(--radius-sharp); padding: 0.5rem 0.6rem 0.5rem 0.9rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); max-width: calc(100vw - 1.2rem); }
+  .bp-pick-hint button { background: rgba(255, 255, 255, 0.2); color: #fff; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: var(--radius-sharp); padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
 
   /* onboarding */
   .bp-onboard { position: absolute; inset: 0; z-index: 900; display: grid; place-items: center; background: rgba(26, 16, 8, 0.35); padding: 1rem; }
-  .bp-onboard-card { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 1.4rem; max-width: 27rem; }
-  .bp-kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.6rem; color: var(--accent); margin: 0 0 0.3rem; }
+  .bp-onboard-card { background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 1.4rem; max-width: 27rem; }
+  .bp-kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: var(--fs-label-xs); color: var(--accent); margin: 0 0 0.3rem; }
   .bp-onboard-card h2 { font-family: var(--font-display); text-transform: uppercase; font-size: 1.2rem; color: var(--text-primary); margin: 0 0 0.8rem; }
   .bp-onboard-card ol { margin: 0 0 1rem; padding-left: 1.2rem; }
   .bp-onboard-card li { font-family: var(--font-body); color: var(--text-secondary); line-height: 1.5; font-size: 0.9rem; margin: 0.35rem 0; }
   .bp-onboard-card strong { color: var(--text-primary); }
-  .bp-go { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-round); padding: 0.55rem 1rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; cursor: pointer; }
+  .bp-go { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0.55rem 1rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; cursor: pointer; }
 
   @media (min-width: 760px) {
-    .bp-drawer { top: 0.6rem; right: 0.6rem; width: 23rem; max-height: calc(100% - 1.2rem); border-radius: var(--radius-round); }
+    .bp-drawer { top: 0.6rem; right: 0.6rem; width: 23rem; max-height: calc(100% - 1.2rem); border-radius: var(--radius-sharp); }
     .bp-fabs { bottom: 0.9rem; }
     .bp-mapopts { width: 22rem; }
     /* centre the search/legend in the open map area: clear the left docked sheet
@@ -478,7 +478,7 @@
     .bp-legend-wrap { left: 24.2rem; right: 11rem; }
   }
   @media (max-width: 759px) {
-    .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: var(--radius-round) var(--radius-round) 0 0; z-index: 800; }
+    .bp-drawer { left: 0; right: 0; bottom: 0; max-height: 72vh; border-radius: var(--radius-sharp) var(--radius-sharp) 0 0; z-index: 800; }
     /* clear the top-right map/log button stack so the search doesn't run
        under it; drop the route key below that stack. */
     .bp-topbar { right: 5.6rem; }

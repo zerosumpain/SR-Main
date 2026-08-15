@@ -141,14 +141,14 @@
   }
   .blk {
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.45);
     padding: 13px 16px;
   }
   .xp-h {
     margin: 0 0 10px;
-    font-family: 'Fraunces', serif;
-    font-size: 16px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body);
     font-weight: 600;
     color: var(--ink);
   }
@@ -158,14 +158,14 @@
     gap: 6px;
   }
   .dl {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     padding: 8px 13px;
     background: var(--ink);
     color: var(--paper, #f1ead6);
     border: none;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     text-align: left;
   }
@@ -182,26 +182,26 @@
   }
   .note {
     margin: 9px 0 0;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.55);
   }
   .imp {
     display: block;
     margin-top: 10px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     cursor: pointer;
   }
   .imp input {
     display: block;
     margin-top: 4px;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .err {
     margin: 6px 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--error, #a33);
   }
   .snaprow {
@@ -210,11 +210,11 @@
   }
   .in {
     flex: 1;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     padding: 6px 9px;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.7);
     color: var(--ink);
     min-width: 0;
@@ -235,7 +235,7 @@
     align-items: center;
     gap: 8px;
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     padding: 6px 10px;
   }
@@ -245,24 +245,24 @@
   }
   .s-meta b {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .s-meta span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
   .s-op {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 3px 8px;
     background: transparent;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--ink);
     cursor: pointer;
   }
@@ -274,8 +274,8 @@
   }
 
   .preview-wrap .pv-note {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.45);
@@ -283,17 +283,17 @@
   }
   .preview {
     border: 1px solid rgba(28, 22, 17, 0.16);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: #fdfaf2;
     padding: 44px 52px 56px;
     max-width: 78ch;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-nav);
     line-height: 1.65;
     color: var(--ink);
   }
   .preview h1 {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 30px;
     font-weight: 600;
     letter-spacing: -0.02em;
@@ -302,20 +302,20 @@
     border-bottom: 3px solid var(--ink);
   }
   .preview h2 {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 21px;
     font-weight: 600;
     margin: 30px 0 8px;
   }
   .preview :global(h3) {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 16.5px;
     font-weight: 600;
     margin: 18px 0 5px;
   }
   .preview :global(h4) {
-    font-family: 'Fraunces', serif;
-    font-size: 14.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     margin: 14px 0 4px;
   }

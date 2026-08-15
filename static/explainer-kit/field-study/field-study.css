@@ -1,0 +1,131 @@
+/* Field Study System — the studio port.
+ *
+ * The same classes as the site's layer in src/app.css, written against the
+ * explainer kit's `--ex-*` tokens instead of the site's. A studio build loads
+ * tokens.css and never loads app.css, so a straight copy of the site layer
+ * would reference variables that are not there and silently fall back to
+ * initial values — black text on transparent, mostly.
+ *
+ * Load it after tokens.css and shell.css:
+ *   <link rel="stylesheet" href="./explainer-kit/tokens.css">
+ *   <link rel="stylesheet" href="./explainer-kit/shell.css">
+ *   <link rel="stylesheet" href="./explainer-kit/field-study/field-study.css">
+ *
+ * The nine templates these classes serve are in TEMPLATES.md beside this file.
+ * Fraunces is already loaded by tokens.css — do not add a second @import.
+ */
+
+:root {
+  /* The reading serif is the kit's display face; a study just uses it for more
+     than headings. */
+  --fs-serif: 'Fraunces', Georgia, serif;
+
+  /* Confidence — the shipped three levels. Petrol for fact, the kit's flag
+     colour for hypothesis, claret for contested. */
+  --fs-fact: var(--ex-accent);
+  --fs-hypothesis: var(--ex-flag, #c4570a);
+  --fs-contested: #8a2d3a;
+
+  /* Categorical hues — LEGEND ONLY. Never chrome, never a claim. The kit's own
+     ramp is the same idea under a different name. */
+  --fs-cat-identifier: var(--ex-cat-1, #7a5aa6);
+  --fs-cat-operational: var(--ex-cat-2, #2f7d4f);
+  --fs-cat-standards: var(--ex-cat-3, #b4632e);
+  --fs-cat-trust: #8a2d3a;
+
+  --fs-measure: 72ch;
+  --fs-margin-col: 178px;
+}
+
+/* ——— shell ——— */
+.fs-page { background: var(--ex-bg); color: var(--ex-ink); }
+.fs-route { padding: 40px 52px 36px; max-width: 1400px; margin: 0 auto; }
+.fs-spread { display: grid; grid-template-columns: var(--fs-margin-col) minmax(0, 1fr); gap: 40px; align-items: start; }
+@media (max-width: 900px) { .fs-spread { grid-template-columns: 1fr; gap: 18px; } }
+
+/* ——— beat header ——— */
+.fs-beat-rule { display: flex; align-items: baseline; gap: 14px; }
+.fs-beat-rule > .fill { flex: 1; height: 1px; background: var(--ex-rule); }
+.fs-kicker { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ex-accent); }
+.fs-h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(32px, 4vw, 40px); line-height: 1.04; letter-spacing: -0.03em; margin: 13px 0 0; }
+.fs-h1--display { font-size: clamp(38px, 6vw, 60px); line-height: 1; letter-spacing: -0.036em; }
+.fs-numeral { font-family: var(--fs-serif); font-weight: 600; font-size: 68px; line-height: 0.8; letter-spacing: -0.05em; color: var(--ex-accent); }
+
+/* ——— question / claim ——— */
+.fs-qc { display: grid; grid-template-columns: 92px minmax(0, 1fr); border-top: 2px solid var(--ex-ink); border-bottom: 1px solid var(--ex-rule); margin-top: 18px; }
+.fs-qc dt { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ex-ink-muted); padding: 12px 0; margin: 0; }
+.fs-qc dt.claim { color: var(--ex-accent); }
+.fs-qc dd { padding: 12px 0 12px 16px; margin: 0; }
+.fs-qc dd + dt, .fs-qc dd + dt + dd { border-top: 1px solid var(--ex-rule-faint); }
+.fs-question { font-family: var(--fs-serif); font-style: italic; font-size: 18px; line-height: 1.45; color: var(--ex-ink-soft); margin: 0; }
+.fs-claim { font-size: 17px; line-height: 1.5; margin: 0; }
+.fs-claim b { font-weight: 700; }
+@media (max-width: 700px) { .fs-qc { grid-template-columns: 1fr; } .fs-qc dd { padding-left: 0; } }
+
+/* ——— body ——— */
+.fs-body { font-size: 16px; line-height: 1.68; color: var(--ex-ink-soft); max-width: var(--fs-measure); }
+.fs-body b { color: var(--ex-ink); }
+.fs-body a { color: var(--ex-accent); }
+.fs-dropcap::first-letter { font-family: var(--fs-serif); font-weight: 600; font-size: 62px; line-height: 0.76; letter-spacing: -0.04em; color: var(--ex-ink); float: left; margin: 4px 10px 0 0; }
+.fs-cite { font-family: var(--ex-fs-mono, monospace); font-size: 12px; color: var(--ex-accent); vertical-align: super; }
+
+/* ——— margin notes ——— */
+.fs-margin { display: flex; flex-direction: column; gap: 16px; padding-top: 3px; }
+.fs-aside { font-family: var(--fs-serif); font-style: italic; font-size: 14px; line-height: 1.5; color: var(--ex-ink-soft); margin: 0; }
+.fs-margin-label { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ex-ink-muted); }
+
+/* ——— confidence chip ——— */
+.fs-chip { display: inline-block; font-family: var(--ex-fs-mono, monospace); font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; white-space: nowrap; border: 1px solid currentColor; }
+.fs-chip--fact { color: var(--fs-fact); }
+.fs-chip--hypothesis { color: var(--fs-hypothesis); }
+.fs-chip--contested { color: var(--fs-contested); }
+
+/* ——— cell grid: the dominant exhibit primitive ——— */
+.fs-cells { display: grid; gap: 1px; background: var(--ex-rule); border: 1px solid var(--ex-rule); }
+.fs-cells > * { background: var(--ex-bg); padding: 14px 16px; min-width: 0; }
+.fs-cells > .pick { background: var(--ex-accent-faint); box-shadow: inset 0 -2px 0 var(--ex-accent); }
+
+/* ——— figure ——— */
+.fs-figure { border-top: 1px solid var(--ex-rule); border-bottom: 1px solid var(--ex-rule); padding: 22px 0; margin: 26px 0 0; }
+.fs-figcaption { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; }
+.fs-figno { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ex-ink-muted); white-space: nowrap; }
+.fs-figcaption p { font-family: var(--fs-serif); font-style: italic; font-size: 15px; line-height: 1.5; color: var(--ex-ink-soft); margin: 0; }
+
+/* ——— pull quote: one per page ——— */
+.fs-pull { border-top: 2px solid var(--ex-ink); border-bottom: 2px solid var(--ex-ink); padding: 20px 0; margin: 28px 0 0; max-width: 44ch; }
+.fs-pull p { font-family: var(--fs-serif); font-style: italic; font-size: 26px; line-height: 1.35; letter-spacing: -0.015em; margin: 0; text-wrap: pretty; }
+
+/* ——— tables ——— */
+.fs-table { width: 100%; border-collapse: collapse; }
+.fs-table th { font-family: var(--ex-fs-mono, monospace); font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ex-ink-muted); text-align: left; padding: 8px; border-bottom: 1px solid var(--ex-rule); }
+.fs-table td { font-size: 14px; padding: 10px 8px; border-bottom: 1px solid var(--ex-rule-faint); }
+.fs-table .num { font-family: var(--ex-fs-mono, monospace); text-align: right; font-variant-numeric: tabular-nums; }
+.fs-table tr.pick { background: var(--ex-accent-faint); }
+.fs-table tr.sigma { border-top: 2px solid var(--ex-ink); font-family: var(--ex-fs-mono, monospace); }
+.fs-table tr.estimate { border-top: 1px dashed var(--ex-rule); color: var(--ex-ink-muted); }
+
+/* ——— provenance strip ——— */
+.fs-provenance { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 12px 15px; background: var(--ex-surface); border-left: 3px solid var(--ex-accent); }
+.fs-provenance .label { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ex-accent); white-space: nowrap; }
+.fs-provenance p { font-size: 14px; line-height: 1.55; color: var(--ex-ink-soft); margin: 0; }
+
+/* ——— beat close ——— */
+.fs-close { border-top: 2px solid var(--ex-ink); padding-top: 20px; margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 34px; }
+.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 54ch; text-wrap: pretty; }
+.fs-open { border: 1px solid var(--ex-rule); padding: 15px 17px; display: flex; flex-direction: column; gap: 10px; }
+.fs-falsifier { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.08em; color: var(--ex-ink-muted); padding-top: 8px; border-top: 1px dashed var(--ex-rule); }
+@media (max-width: 900px) { .fs-close { grid-template-columns: 1fr; gap: 18px; } }
+
+.fs-next { display: inline-block; font-size: 14px; font-weight: 500; color: var(--ex-bg); background: var(--ex-ink); padding: 11px 20px; text-decoration: none; }
+.fs-next:hover { background: #000; }
+.fs-prev { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ex-ink-muted); text-decoration: none; }
+
+/* ——— warning register: the safeguards beat and contested claims ——— */
+.fs-warn { border: 1px solid rgba(138, 45, 58, 0.4); background: rgba(179, 38, 30, 0.05); padding: 15px 17px; }
+.fs-warn .label { font-family: var(--ex-fs-mono, monospace); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fs-contested); }
+
+/* ——— limits note: mandatory on every instrument ——— */
+.fs-limits { font-size: 14px; line-height: 1.55; color: var(--ex-ink-muted); margin: 0; border-left: 3px solid var(--ex-accent); padding-left: 12px; }
+
+/* every figure that can change in place is tabular */
+.fs-num, .fs-table .num { font-variant-numeric: tabular-nums; }

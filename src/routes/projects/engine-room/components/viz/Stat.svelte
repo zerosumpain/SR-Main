@@ -24,13 +24,13 @@
 
 <style>
   .stat { --tone: var(--accent-ink); border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid var(--tone);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.55);
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.55);
     padding: 10px 13px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .s-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 21px; line-height: 1.05;
+  .s-val { font-family: var(--font-mono); font-weight: 600; font-size: 21px; line-height: 1.05;
     color: var(--text-primary); letter-spacing: -0.02em; }
   .lead .s-val { font-size: 30px; }
-  .s-unit { font-size: 0.55em; font-weight: 500; color: rgba(28,22,17,0.55); margin-left: 2px; }
-  .s-lab { font-size: 12px; line-height: 1.4; color: rgba(28,22,17,0.74); }
-  .s-how { font-family: 'JetBrains Mono', monospace; font-size: 9px; line-height: 1.4;
+  .s-unit { font-size: max(0.55em, var(--fs-label-xs)); font-weight: 500; color: rgba(28,22,17,0.55); margin-left: 2px; }
+  .s-lab { font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.74); }
+  .s-how { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.4;
     color: rgba(28,22,17,0.42); overflow-wrap: anywhere; margin-top: 2px; }
 </style>

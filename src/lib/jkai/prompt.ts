@@ -251,8 +251,26 @@ Before writing any HTML, CSS or JavaScript:
 MOUNT THE CHROME, DO NOT AUTHOR IT.
 \`Explainer.mountShell({ project, chapters, current, form, kicker, lede })\` writes the header, the chapter navigation, the chapter heading and the prev/next footer — already on brand, with every link project-root-relative. Use it on every chapter, and \`mountContents\` on the index. Hand-rolled navigation is how earlier builds shipped dead links, and a nav you wrote yourself will not match the one on the next chapter.
 
+YOU ARE BUILDING A FIELD STUDY — THE SYSTEM IS MOUNTED AT ./explainer-kit/field-study/.
+Read \`./explainer-kit/field-study/README.md\` and \`TEMPLATES.md\` before the first chapter. Load its stylesheet after tokens.css and shell.css:
+\`<link rel="stylesheet" href="./explainer-kit/field-study/field-study.css">\`
+
+Every beat carries the same four things, and the gate checks them:
+1. ONE question, printed at the top of the beat, in \`.fs-qc\`.
+2. ONE claim answering it, with a confidence chip — \`<span class="fs-chip fs-chip--fact">Fact</span>\`, or \`--hypothesis\`, or \`--contested\`. Those three words and no others.
+3. A "so what" in your own voice, in \`.fs-sowhat\`.
+4. An open question AND a falsifier — the thing that would change your mind — in \`.fs-open\` and \`.fs-falsifier\`.
+
+The front matter states the study's three findings BEFORE beat 01. Do not hold conclusions back for suspense; a study that does reads as a tour of your notes.
+
+Instruments state what they do NOT show, and where their numbers came from, in a \`.fs-limits\`. An instrument that cannot state its own limits does not ship.
+
+Never use the categorical hues (\`--fs-cat-*\`) on a claim or in chrome — they are licensed inside a legend and the marks that legend labels, nothing else. Radius 0, 2px or 100px. No emoji anywhere.
+
 TELL THE STORY THE WAY THE PLAN SAYS.
-Each row of the chapter spine carries a FORM and a CONTROL. They are editorial decisions already made for you — honour them.
+Each row of the chapter spine carries a TEMPLATE, a FORM and a CONTROL. They are editorial decisions already made for you — honour them.
+
+The TEMPLATE (T0-T8) is the shape of the ARGUMENT: what kind of beat this is, which slots it has, and what it must never do. \`TEMPLATES.md\` lists all nine with their slots in render order. The FORM is how that argument is ARRANGED on the page, and is what \`mountShell\` renders. They are orthogonal — a T2 survey can be told as a \`ledger\` or as an \`annotate\`.
 
 Pass the form: \`mountShell({ ..., form: 'walk' })\`. It changes the arrangement — where the visual sits, whether the title is a question, whether the page runs to two columns. The forms are: open, question, walk, compare, annotate, ledger, close.
 

@@ -92,18 +92,18 @@
   .kv { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left;
     padding: 8px 11px; min-width: 0; cursor: pointer; font-family: inherit;
     border: 1px solid rgba(28,22,17,0.16); border-left: 3px solid rgba(28,22,17,0.16);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.55);
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.55);
     transition: background 0.13s, border-color 0.13s; }
   .kv:hover { background: rgba(255,255,255,0.9); border-color: rgba(28,22,17,0.34); }
   .kv.on { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 9%, transparent); }
-  .kv-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+  .kv-k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.55); }
-  .kv-v { font-size: 13.5px; font-weight: 600; line-height: 1.3; color: var(--text-primary);
+  .kv-v { font-size: var(--fs-label); font-weight: 600; line-height: 1.3; color: var(--text-primary);
     overflow-wrap: anywhere; }
 
   /* The mark is markup rather than generated content so it can be hidden from assistive
      tech — the house pattern in Instrument.svelte's caption. */
-  .readout { display: flex; gap: 7px; margin: 10px 0 0; font-size: 12.5px; line-height: 1.55;
+  .readout { display: flex; gap: 7px; margin: 10px 0 0; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.7); min-height: 2.6em; max-width: 82ch; }
   .r-mark { color: var(--success); flex-shrink: 0; }
 </style>

@@ -67,8 +67,8 @@
     gap: 14px;
     flex-wrap: wrap;
     margin-bottom: 9px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.65);
   }
   .lg {
@@ -99,7 +99,7 @@
     gap: 10px;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 4px 8px;
     cursor: pointer;
   }
@@ -112,8 +112,8 @@
     border-color: var(--accent-ink);
   }
   .b-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     color: rgba(28, 22, 17, 0.7);
     text-align: right;
@@ -131,8 +131,8 @@
     min-width: 4px;
   }
   .b-n {
-    font-family: 'Fraunces', serif;
-    font-size: 14px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     color: var(--ink);
   }
@@ -141,30 +141,30 @@
     padding: 11px 14px;
     border-left: 3px solid var(--accent-ink);
     background: rgba(255, 255, 255, 0.45);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
   }
   .cap-open h4 {
     margin: 0 0 8px;
-    font-family: 'Fraunces', serif;
-    font-size: 14.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     color: var(--ink);
   }
   .ma-h {
     margin: 20px 0 4px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 18px;
     font-weight: 600;
     color: var(--ink);
   }
   .ma-n {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
   }
   .ma-note {
     margin: 0 0 12px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.65);
     max-width: 86ch;

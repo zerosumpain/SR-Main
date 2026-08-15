@@ -116,46 +116,46 @@
 
 <style>
   .ht { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
-  .k { display: block; margin-bottom: 5px; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .k { display: block; margin-bottom: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--success); }
 
   .cols { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 14px; align-items: start; }
   .col.wide { min-width: 0; }
   .list { display: flex; gap: 5px; flex-wrap: wrap; }
   .col:not(.wide) .list { flex-direction: column; }
-  .list button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .list button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; text-align: left; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; text-align: left; }
   .list button:hover { background: rgba(28,22,17,0.07); }
   .list button.on { background: var(--success); border-color: var(--success); color: #fff; }
   .list button.writes { border-style: dashed; }
   .list button.writes.on { border-style: solid; }
   .ent { display: inline-flex; align-items: baseline; gap: 7px; }
-  .ent em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .ent em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.45); }
   .ent.on em { color: rgba(255,255,255,0.7); }
 
   .groups { display: flex; flex-direction: column; gap: 8px; }
-  .g-lab { display: block; margin-bottom: 4px; font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.42); }
+  .g-lab { display: block; margin-bottom: 4px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(28,22,17,0.42); }
 
-  .dry { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(28,22,17,0.7); cursor: pointer; }
+  .dry { display: flex; align-items: center; gap: 7px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7); cursor: pointer; }
   .dry input { accent-color: var(--success); }
 
   .out { padding: 10px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent); }
   .out.live { border-left-color: #b0892a; background: rgba(176,137,42,0.1); }
   .out.blocked { border-left-color: rgba(28,22,17,0.35); background: rgba(28,22,17,0.05); }
-  .o-kick { display: block; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--success); }
+  .o-kick { display: block; margin-bottom: 6px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--success); }
   .out.live .o-kick { color: #8a6a1f; }
   .out.blocked .o-kick { color: rgba(28,22,17,0.5); }
-  .o-pre { margin: 0 0 7px; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.5;
+  .o-pre { margin: 0 0 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5;
     color: var(--text-primary); background: rgba(255,255,255,0.7); border: 1px solid rgba(28,22,17,0.12);
     border-radius: var(--radius-sharp); padding: 8px 11px; overflow-x: auto; }
-  .o-body { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
-  .o-body code { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-primary); }
+  .o-body { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
+  .o-body code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
   .o-body b { color: var(--text-primary); }
 
   @media (max-width: 620px) {

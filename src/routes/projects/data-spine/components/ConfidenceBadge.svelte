@@ -1,34 +1,38 @@
 <script lang="ts">
-  // ConfidenceBadge — FACT / HYPOTHESIS / CONTESTED chip (adapted from dfe-data-strategy;
-  // this project uses a three-way honesty scale since the spine has no published design).
-  import type { Confidence } from '../lib/types';
+  // The study's confidence chip, now rendered by the Field Study System's
+  // primitive so every study on the site says "fact" in the same colour.
+  //
+  // What changed: this used to colour fact green (#2f7d4f), hypothesis purple
+  // (#7a5aa6) and contested pink — three of the system's CATEGORICAL hues,
+  // which are licensed only inside a legend and the marks that legend labels,
+  // never on a claim. The shipped palette is petrol / orange / claret. The
+  // radius was 4px, which is not one of the three allowed radii either.
+  import ConfidenceChip from '$lib/fieldstudy/ConfidenceChip.svelte';
+  import type { Confidence } from '$lib/fieldstudy/types';
 
   interface Props {
     level: Confidence;
     label?: string;
+    /** Hover detail — what would move this. */
     note?: string;
     small?: boolean;
   }
   let { level, label, note, small = false }: Props = $props();
-
-  const META: Record<Confidence, { label: string; color: string; bg: string }> = {
-    fact: { label: 'Fact', color: '#2f7d4f', bg: 'rgba(47,125,79,0.12)' },
-    hypothesis: { label: 'Hypothesis', color: '#7a5aa6', bg: 'rgba(122,90,166,0.12)' },
-    contested: { label: 'Contested', color: '#b4455e', bg: 'rgba(180,69,94,0.12)' },
-  };
-  const m = $derived(META[level] ?? META.hypothesis);
 </script>
 
-<span class="cb" class:small style="color:{m.color}; background:{m.bg}" title={note ?? ''}>
-  <span class="dot" style="background:{m.color}"></span>{label ?? m.label}
+<span class="cb-wrap" class:small title={note ?? ''}>
+  <ConfidenceChip {level} {label} />
 </span>
 
 <style>
-  .cb {
-    display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600;
-    letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 6px; border-radius: var(--radius-round);
+  /* The chip itself is the system's; this only carries the hover affordance and
+     the study's compact variant. */
+  .cb-wrap {
+    display: inline-flex;
+    vertical-align: middle;
   }
-  .cb.small { font-size: 8px; padding: 1px 4px; }
-  .dot { width: 5px; height: 5px; border-radius: var(--radius-pill); display: inline-block; }
+  .cb-wrap.small :global(.fs-chip) {
+    padding: 1px 5px;
+    letter-spacing: 0.08em;
+  }
 </style>

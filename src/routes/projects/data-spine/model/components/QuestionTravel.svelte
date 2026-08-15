@@ -283,24 +283,24 @@
 </div>
 
 <style>
-  .qt { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-round); background: var(--surface-elevated, #e8dece); overflow: hidden; }
+  .qt { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-sharp); background: var(--surface-elevated, #e8dece); overflow: hidden; }
   .qt-head { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; padding: 18px 20px 8px; }
-  .qcard { flex: 1 1 420px; min-width: 280px; background: #ffffff; border: 1.5px solid rgba(26,16,8,0.5); border-left: 4px solid var(--accent-ink, #0e5b66); border-radius: var(--radius-round); padding: 14px 18px; }
-  .q-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-ink, #0e5b66); }
-  .q-text { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(17px, 2vw, 22px); line-height: 1.25; color: var(--ink); margin: 6px 0 12px; }
+  .qcard { flex: 1 1 420px; min-width: 280px; background: #ffffff; border: 1.5px solid rgba(26,16,8,0.5); border-left: 4px solid var(--accent-ink, #0e5b66); border-radius: var(--radius-sharp); padding: 14px 18px; }
+  .q-eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent-ink, #0e5b66); }
+  .q-text { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(17px, 2vw, 22px); line-height: 1.25; color: var(--ink); margin: 6px 0 12px; }
   .q-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .ask { font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; color: #fff; background: var(--accent-ink, #0e5b66); border: 1.5px solid var(--accent-ink, #0e5b66); border-radius: var(--radius-round); padding: 9px 18px; cursor: pointer; }
+  .ask { font-family: var(--font-body); font-size: var(--fs-nav); font-weight: 600; color: #fff; background: var(--accent-ink, #0e5b66); border: 1.5px solid var(--accent-ink, #0e5b66); border-radius: var(--radius-sharp); padding: 9px 18px; cursor: pointer; }
   .ask:hover:not(:disabled) { background: #094850; }
   .ask:disabled { opacity: 0.4; cursor: default; }
-  .pool-toggle { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: #8a2d3a; background: transparent; border: 1.5px solid rgba(138,45,58,0.5); border-radius: var(--radius-round); padding: 9px 16px; cursor: pointer; }
+  .pool-toggle { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 500; color: #8a2d3a; background: transparent; border: 1.5px solid rgba(138,45,58,0.5); border-radius: var(--radius-sharp); padding: 9px 16px; cursor: pointer; }
   .pool-toggle:hover { border-color: #8a2d3a; }
   .pool-toggle.on { background: #8a2d3a; color: #fff; border-color: #8a2d3a; }
 
   .counters { display: flex; gap: 10px; flex: 0 0 auto; }
-  .ct { background: #ffffff; border: 1.5px solid rgba(26,16,8,0.5); border-radius: var(--radius-round); padding: 10px 16px; text-align: center; min-width: 116px; align-self: center; }
-  .ct b { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(20px, 2.4vw, 30px); line-height: 1.05; color: var(--ink); }
+  .ct { background: #ffffff; border: 1.5px solid rgba(26,16,8,0.5); border-radius: var(--radius-sharp); padding: 10px 16px; text-align: center; min-width: 116px; align-self: center; }
+  .ct b { display: block; font-family: var(--fs-serif); font-weight: 600; font-size: clamp(20px, 2.4vw, 30px); line-height: 1.05; color: var(--ink); }
   .ct b.blast { font-size: clamp(15px, 1.7vw, 20px); }
-  .ct span { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(26,16,8,0.62); }
+  .ct span { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(26,16,8,0.62); }
   .ct.hot { border-color: #8a2d3a; }
   .ct.hot b { color: #8a2d3a; }
 
@@ -318,44 +318,44 @@
   .trust.dim { opacity: 0.32; }
   .bar { fill: var(--accent-ink, #0e5b66); stroke: #05343b; stroke-width: 1.5; }
   .bar-inner { fill: none; stroke: rgba(255,255,255,0.14); stroke-width: 1; }
-  .bar-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; fill: #eaf4f2; font-weight: 600; }
-  .bar-tag.sub { font-size: 8px; letter-spacing: 0.14em; fill: #8fc3bd; font-weight: 400; }
+  .bar-tag { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; fill: #eaf4f2; font-weight: 600; }
+  .bar-tag.sub { font-size: var(--fs-label-xs); letter-spacing: 0.14em; fill: #8fc3bd; font-weight: 400; }
   .prim { fill: rgba(255,255,255,0.07); stroke: rgba(255,255,255,0.2); stroke-width: 1; }
-  .prim-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; fill: #d7ece9; font-weight: 600; }
+  .prim-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; fill: #d7ece9; font-weight: 600; }
   .zero-badge { fill: #eef6f0; stroke: #2f7d4f; stroke-width: 1.4; }
-  .zero-n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14px; fill: #216b3f; }
-  .zero-lab { font-family: 'JetBrains Mono', monospace; font-size: 6.5px; letter-spacing: 0.1em; fill: #2f7d4f; }
+  .zero-n { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-nav); fill: #216b3f; }
+  .zero-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; fill: #2f7d4f; }
 
   /* question + answer nodes */
   .qn-box { fill: #ffffff; stroke: var(--accent-ink, #0e5b66); stroke-width: 2; }
   .qnode.run .qn-box { fill: #eaf3f4; }
-  .qn-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.2em; fill: var(--accent-ink, #0e5b66); }
-  .qn-line { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; fill: var(--ink); }
+  .qn-eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em; fill: var(--accent-ink, #0e5b66); }
+  .qn-line { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body-sm); fill: var(--ink); }
 
   .anode { opacity: 0; transition: opacity 0.5s; }
   .anode.show { opacity: 1; }
   .anode.ghost { opacity: 1; }
   .an-box { fill: #eef6f0; stroke: #2f7d4f; stroke-width: 2; }
   .an-box.ghost { fill: #ffffff; stroke: rgba(47,125,79,0.4); stroke-dasharray: 5 4; }
-  .an-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.16em; fill: #2f7d4f; }
-  .an-n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 30px; fill: #1a4d2e; }
-  .an-lab { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.08em; fill: #216b3f; }
-  .an-ghost { font-family: 'DM Sans', sans-serif; font-size: 14px; fill: rgba(26,16,8,0.5); }
+  .an-eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; fill: #2f7d4f; }
+  .an-n { font-family: var(--fs-serif); font-weight: 600; font-size: 30px; fill: #1a4d2e; }
+  .an-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; fill: #216b3f; }
+  .an-ghost { font-family: var(--font-body); font-size: var(--fs-nav); fill: rgba(26,16,8,0.5); }
   .an-ghost .em { fill: var(--accent-ink, #0e5b66); font-weight: 600; }
 
   /* connector tiles */
   .tbox { fill: #ffffff; stroke: rgba(26,16,8,0.5); stroke-width: 1.5; transition: stroke 0.35s, fill 0.35s; }
   .tile.lit .tbox { stroke: #2f7d4f; stroke-width: 2.2; fill: #eef6f0; }
   .tile.hot .tbox { stroke: #8a2d3a; stroke-width: 2; fill: #f7e6e6; }
-  .t-lab { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; fill: var(--ink); }
-  .t-lab.narrow { font-size: 11px; }
-  .t-share { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.04em; fill: rgba(26,16,8,0.6); }
-  .t-count { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; fill: #216b3f; }
+  .t-lab { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; fill: var(--ink); }
+  .t-lab.narrow { font-size: var(--fs-label-xs); }
+  .t-share { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em; fill: rgba(26,16,8,0.6); }
+  .t-count { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-label); fill: #216b3f; }
   .lock-body { fill: rgba(26,16,8,0.72); transition: fill 0.3s; }
   .lock-shackle { fill: none; stroke: rgba(26,16,8,0.72); stroke-width: 1.7; transition: stroke 0.3s; }
   .lock.open .lock-body { fill: #8a2d3a; }
   .lock.open .lock-shackle { stroke: #8a2d3a; }
-  .row-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; fill: rgba(26,16,8,0.6); }
+  .row-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; fill: rgba(26,16,8,0.6); }
 
   /* moving dots */
   .dot { stroke: #ede4d4; stroke-width: 1.4; }
@@ -366,11 +366,11 @@
   /* pooled store */
   .store { fill: #8a2d3a; stroke: #5f1f28; stroke-width: 2; }
   .store-fill { fill: #6d232d; }
-  .store-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; fill: #f6dede; font-weight: 600; }
-  .store-n { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; fill: #ffffff; }
-  .store-sub { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.06em; fill: #edc9c9; }
+  .store-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; fill: #f6dede; font-weight: 600; }
+  .store-n { font-family: var(--fs-serif); font-weight: 600; font-size: 26px; fill: #ffffff; }
+  .store-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; fill: #edc9c9; }
 
-  .caption { font-size: 14px; line-height: 1.55; color: rgba(26,16,8,0.82); margin: 4px 0 0; padding: 12px 20px 18px; }
+  .caption { font-size: var(--fs-nav); line-height: 1.55; color: rgba(26,16,8,0.82); margin: 4px 0 0; padding: 12px 20px 18px; }
   .caption b { color: var(--ink); }
   .caption.warn { color: #6d232d; background: rgba(138,45,58,0.06); }
   .caption.warn b { color: #8a2d3a; }

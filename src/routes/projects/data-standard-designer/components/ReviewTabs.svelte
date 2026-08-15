@@ -14,9 +14,9 @@
 
 <style>
   .rtabs { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
-  .rt-label { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); }
+  .rt-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.18em; color: var(--accent); }
   .rt-group { display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-pill); padding: 3px; }
-  .rt { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 14px; border-radius: var(--radius-pill); color: var(--text-muted); }
+  .rt { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 14px; border-radius: var(--radius-pill); color: var(--text-muted); }
   .rt:hover { color: var(--text-primary); }
   .rt.on { background: var(--accent); color: #fff; }
 </style>

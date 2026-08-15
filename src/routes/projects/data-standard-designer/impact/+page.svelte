@@ -86,22 +86,22 @@
 
 <style>
   .scores2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 6px; }
-  .table-wrap { overflow-x: auto; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); }
-  table.mtx { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 640px; }
-  .mtx th { text-align: left; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 9px 12px; border-bottom: 1.5px solid var(--card-border); background: var(--card-bg); }
+  .table-wrap { overflow-x: auto; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); }
+  table.mtx { width: 100%; border-collapse: collapse; font-size: var(--fs-label); min-width: 640px; }
+  .mtx th { text-align: left; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 9px 12px; border-bottom: 1.5px solid var(--card-border); background: var(--card-bg); }
   .mtx td { padding: 9px 12px; border-bottom: 1px solid var(--divider); vertical-align: top; color: var(--text-secondary); }
   .mtx tr:last-child td { border-bottom: none; }
   .who { font-weight: 700; color: var(--text-primary); }
-  .note { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+  .note { font-size: var(--fs-label-xs); color: var(--text-muted); line-height: 1.4; }
   .empty { text-align: center; color: var(--text-muted); font-style: italic; padding: 18px; }
   .empty a, .note a { color: var(--accent); }
 
-  .lev { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-sharp); }
+  .lev { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-sharp); }
   .lev.lo { background: var(--success-bg); color: var(--success); }
   .lev.md { background: var(--warn-bg); color: var(--warn); }
   .lev.hi { background: var(--error-bg); color: var(--error); }
 
-  .avail { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-sharp); }
+  .avail { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-sharp); }
   .avail.already-held { background: var(--success-bg); color: var(--success); }
   .avail.partially-held { background: var(--warn-bg); color: var(--warn); }
   .avail.new-collection { background: var(--error-bg); color: var(--error); }
@@ -111,13 +111,13 @@
   .as-bar .seg.held { background: var(--success); }
   .as-bar .seg.part { background: var(--warn); }
   .as-bar .seg.neu { background: var(--error); }
-  .as-key { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 7px; font-size: 11px; color: var(--text-muted); }
+  .as-key { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 7px; font-size: var(--fs-label-xs); color: var(--text-muted); }
   .as-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .as-key i.held { background: var(--success); } .as-key i.part { background: var(--warn); } .as-key i.neu { background: var(--error); }
 
-  .freq { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 16px; background: var(--card-bg); display: flex; flex-direction: column; gap: 10px; }
+  .freq { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 16px; background: var(--card-bg); display: flex; flex-direction: column; gap: 10px; }
   .freq-pick { display: flex; align-items: baseline; gap: 10px; }
-  .fp-l { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
+  .fp-l { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
   .freq-pick b { font-family: var(--font-display); font-size: 22px; color: var(--accent); }
   .symp { display: flex; flex-wrap: wrap; gap: 7px; }
 

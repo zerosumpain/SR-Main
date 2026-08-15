@@ -47,20 +47,20 @@
     padding: 12px 13px;
     background: rgba(255, 255, 255, 0.4);
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     min-width: 0;
   }
   .step {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--accent);
   }
   h4 {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.15;
     color: var(--ink);
   }
@@ -73,7 +73,7 @@
     gap: 3px;
   }
   li {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.3;
     color: rgba(28, 22, 17, 0.66);
     padding-left: 10px;
@@ -90,7 +90,7 @@
     align-items: center;
     justify-content: center;
     color: rgba(28, 22, 17, 0.35);
-    font-size: 16px;
+    font-size: var(--fs-body);
   }
   @media (max-width: 880px) {
     .flow {

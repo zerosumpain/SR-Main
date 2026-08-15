@@ -43,10 +43,10 @@
 
 <style>
   .ph { margin: 0 0 18px; }
-  .ph-no { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.2em;
+  .ph-no { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em;
     text-transform: uppercase; color: var(--tone); margin-bottom: 6px; }
   .ph :global(.pe-h1) { margin-bottom: 4px; }
-  .ph-strap { margin: 0 0 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  .ph-strap { margin: 0 0 10px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.04em; color: rgba(28,22,17,0.55); }
   .ph-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 66ch; }
 
@@ -55,16 +55,16 @@
   .ph-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-top: 8px; }
   .leaf { display: flex; align-items: flex-start; gap: 11px; text-decoration: none;
     border: 1px solid rgba(28,22,17,0.16); border-left: 3px solid var(--tone);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(255,255,255,0.5); padding: 13px 14px; transition: background 0.13s, border-color 0.13s; }
   .leaf:hover { background: rgba(255,255,255,0.85); border-color: rgba(28,22,17,0.34); border-left-color: var(--tone); }
-  .l-no { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--tone); padding-top: 3px; flex-shrink: 0; }
+  .l-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--tone); padding-top: 3px; flex-shrink: 0; }
   .l-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .l-lab { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16.5px; line-height: 1.22; color: var(--text-primary); }
-  .l-blurb { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.7); }
-  .l-inst { display: flex; gap: 5px; margin-top: 3px; font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px; line-height: 1.45; color: rgba(28,22,17,0.5); }
+  .l-lab { font-family: var(--fs-serif); font-weight: 600; font-size: 16.5px; line-height: 1.22; color: var(--text-primary); }
+  .l-blurb { font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.7); }
+  .l-inst { display: flex; gap: 5px; margin-top: 3px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.5); }
   .li-mark { color: var(--tone); flex-shrink: 0; }
-  .l-go { margin-left: auto; align-self: center; color: rgba(28,22,17,0.3); font-size: 15px; flex-shrink: 0; }
+  .l-go { margin-left: auto; align-self: center; color: rgba(28,22,17,0.3); font-size: var(--fs-body-sm); flex-shrink: 0; }
   .leaf:hover .l-go { color: var(--tone); }
 </style>

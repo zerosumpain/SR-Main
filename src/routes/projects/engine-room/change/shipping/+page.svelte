@@ -77,13 +77,13 @@
 </section>
 
 <style>
-  .sub { margin: 16px 0 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .sub { margin: 16px 0 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.13em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
 
   .calls { list-style: none; margin: 0; padding: 0;
     display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 8px 18px; }
   .calls li { display: flex; flex-direction: column; gap: 2px; min-width: 0;
     padding-left: 11px; border-left: 2px solid color-mix(in srgb, #8a2d3a 40%, transparent); }
-  .calls b { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
-  .calls span { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.62); overflow-wrap: anywhere; }
+  .calls b { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+  .calls span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.62); overflow-wrap: anywhere; }
 </style>

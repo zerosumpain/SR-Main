@@ -56,10 +56,10 @@
   .gw { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
   .gw-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .g-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em;
+  .g-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); }
   .seg { display: flex; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-pill); overflow: hidden; }
-  .seg button { font-family: 'DM Sans', sans-serif; font-size: 12px; line-height: 1.2;
+  .seg button { font-family: var(--font-body); font-size: var(--fs-label-xs); line-height: 1.2;
     padding: 5px 12px; border: none; background: rgba(255,255,255,0.6); color: var(--text-primary);
     cursor: pointer; transition: background 0.12s, color 0.12s; }
   .seg button + button { border-left: 1px solid rgba(28,22,17,0.2); }
@@ -69,11 +69,11 @@
 
   .chain { display: flex; align-items: stretch; min-width: 0; }
   .node { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 12px 10px; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round);
+    padding: 12px 10px; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.6); transition: opacity 0.15s, background 0.15s, border-color 0.15s; }
-  .n-name { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600;
+  .n-name { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600;
     color: var(--text-primary); line-height: 1.2; text-align: center; }
-  .n-mark { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #2d7a3a; }
+  .n-mark { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: #2d7a3a; }
 
   .node.first { border-color: #2d7a3a; background: rgba(45,122,58,0.09); }
   .chain.red .node.first { border-color: #c44; background: rgba(196,68,68,0.1); }
@@ -86,11 +86,11 @@
     border-top: 1px solid rgba(28,22,17,0.3); }
   .chain.red .edge::before { border-top-style: dashed; border-top-color: rgba(196,68,68,0.6); }
   .e-lab { position: relative; padding: 1px 5px; background: var(--bg, #fff);
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.55); }
   .chain.red .e-lab { color: #c44; }
 
-  .say { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  .say { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.03em; color: rgba(28,22,17,0.6); }
 
   @media (max-width: 520px) {

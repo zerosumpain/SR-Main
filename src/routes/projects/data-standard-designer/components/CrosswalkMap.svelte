@@ -172,33 +172,33 @@
   .xmap { margin: 8px 0 4px; }
   .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
   .seg { display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-pill); overflow: hidden; }
-  .seg button { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; padding: 6px 14px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); }
+  .seg button { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; padding: 6px 14px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); }
   .seg button.on { background: var(--accent); color: #fff; }
-  .tg { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); cursor: pointer; }
+  .tg { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); cursor: pointer; }
 
-  .canvas { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); background: var(--card-bg); padding: 8px; }
+  .canvas { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--card-bg); padding: 8px; }
   .canvas svg { width: 100%; height: auto; display: block; }
   .node { cursor: pointer; }
-  .node text { font-family: var(--font-mono); font-size: 10px; fill: var(--text-primary); pointer-events: none; }
-  .node.outer text { font-size: 8.5px; fill: var(--text-muted); }
+  .node text { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--text-primary); pointer-events: none; }
+  .node.outer text { font-size: var(--fs-label-xs); fill: var(--text-muted); }
   .node:hover circle, .node:hover rect { filter: brightness(1.08); }
   .node.sel circle { stroke-width: 3.5; }
-  .ctr { font-family: var(--font-mono); font-size: 9px; fill: var(--bg); pointer-events: none; }
-  .bp { font-family: var(--font-mono); font-size: 10px; fill: var(--text-primary); pointer-events: none; }
+  .ctr { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--bg); pointer-events: none; }
+  .bp { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--text-primary); pointer-events: none; }
 
-  .legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; font-size: var(--fs-label-xs); color: var(--text-muted); margin-top: 8px; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .bp-note { font-size: 12px; color: var(--text-muted); text-align: center; margin: 8px 0 0; }
-  .empty { font-size: 13px; color: var(--text-muted); font-style: italic; }
+  .bp-note { font-size: var(--fs-label-xs); color: var(--text-muted); text-align: center; margin: 8px 0 0; }
+  .empty { font-size: var(--fs-label); color: var(--text-muted); font-style: italic; }
   .empty a { color: var(--accent); }
 
-  .drill { margin-top: 12px; border: 1.5px solid var(--accent); border-radius: var(--radius-round); padding: 12px 14px; background: var(--accent-tint-04); }
+  .drill { margin-top: 12px; border: 1.5px solid var(--accent); border-radius: var(--radius-sharp); padding: 12px 14px; background: var(--accent-tint-04); }
   .drill-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-  .drill-head b { font-size: 14px; color: var(--text-primary); }
+  .drill-head b { font-size: var(--fs-nav); color: var(--text-primary); }
   .drill ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-  .drill li { display: flex; gap: 7px; align-items: baseline; font-size: 12.5px; }
+  .drill li { display: flex; gap: 7px; align-items: baseline; font-size: var(--fs-label); }
   .fld { color: var(--text-primary); font-weight: 600; }
   .arrow { color: var(--accent); }
-  .via { color: var(--text-muted); font-size: 11.5px; }
-  .reach { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
+  .via { color: var(--text-muted); font-size: var(--fs-label-xs); }
+  .reach { font-size: var(--fs-label); color: var(--text-secondary); line-height: 1.5; margin: 0 0 8px; }
 </style>

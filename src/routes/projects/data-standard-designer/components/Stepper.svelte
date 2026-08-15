@@ -48,9 +48,9 @@
   .step { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-pill); position: relative; }
   .step .dot {
     width: 22px; height: 22px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; justify-content: center;
-    font-family: var(--font-mono); font-size: 11px; border: 1.5px solid var(--card-border); color: var(--text-muted); background: var(--surface-elevated);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1.5px solid var(--card-border); color: var(--text-muted); background: var(--surface-elevated);
   }
-  .step .lbl { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+  .step .lbl { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
   .step:hover .lbl, .step:hover .dot { color: var(--text-primary); }
   .step:hover .dot { border-color: var(--text-secondary); }
 
@@ -60,7 +60,7 @@
   .step.active .dot { background: var(--accent); border-color: var(--accent); color: #fff; }
   .step.active .lbl { color: var(--text-primary); font-weight: 600; }
 
-  .score { font-family: var(--font-display); font-size: 16px; line-height: 1; margin-left: 2px; }
+  .score { font-family: var(--font-display); font-size: var(--fs-body); line-height: 1; margin-left: 2px; }
 
   .conn { width: 22px; height: 2px; background: var(--divider); border-radius: 2px; }
   .conn.filled { background: var(--success); }

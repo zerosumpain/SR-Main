@@ -103,19 +103,19 @@
 <style>
   .am { display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .am-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; }
-  .am-intro { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+  .am-intro { margin: 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.65); }
   .am-sugg { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
-  .am-sugg button { text-align: left; font-size: 12px; color: var(--accent-ink); background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-22); border-radius: var(--radius-round); padding: 7px 10px; cursor: pointer; }
+  .am-sugg button { text-align: left; font-size: var(--fs-label-xs); color: var(--accent-ink); background: var(--accent-ink-tint-12); border: 1px solid var(--accent-ink-tint-22); border-radius: var(--radius-sharp); padding: 7px 10px; cursor: pointer; }
   .am-sugg button:hover { background: var(--accent-ink-tint-22); }
   .msg { display: flex; flex-direction: column; gap: 2px; }
-  .m-who { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
-  .m-body { font-size: 13px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+  .m-who { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); }
+  .m-body { font-size: var(--fs-label); line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
   .msg.user .m-body { color: rgba(28,22,17,0.72); }
   .m-src { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
-  .src { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); background: rgba(28,22,17,0.05); padding: 1px 5px; border-radius: var(--radius-sharp); }
+  .src { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); background: rgba(28,22,17,0.05); padding: 1px 5px; border-radius: var(--radius-sharp); }
   .am-form { display: flex; gap: 6px; margin-top: 10px; }
-  .am-form input { flex: 1; border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-round); padding: 9px 11px; font-size: 13px; font-family: 'DM Sans', sans-serif; background: rgba(255,255,255,0.7); color: var(--ink); }
-  .am-form button { width: 38px; border: none; border-radius: var(--radius-round); background: var(--accent-ink); color: #fff; font-size: 15px; cursor: pointer; }
+  .am-form input { flex: 1; border: 1px solid rgba(28,22,17,0.25); border-radius: var(--radius-sharp); padding: 9px 11px; font-size: var(--fs-label); font-family: var(--font-body); background: rgba(255,255,255,0.7); color: var(--ink); }
+  .am-form button { width: 38px; border: none; border-radius: var(--radius-sharp); background: var(--accent-ink); color: #fff; font-size: var(--fs-body-sm); cursor: pointer; }
   .am-form button:disabled { opacity: 0.5; }
   .dots { color: rgba(28,22,17,0.4); }
 </style>
