@@ -5,6 +5,7 @@ import { openrouterModels } from '$lib/db/schema';
 import { recordLLMCall, type LLMCallRecord, executionContext } from '$lib/workflows/execution-context';
 import { priceFor, computeCost } from '$lib/jkai/llm-pricing';
 import { recordDurableLLMCall } from '$lib/jkai/llm-usage-log';
+import { currentResearchSessionId } from '$lib/deepdive/meter';
 import { isReasoningModel, REASONING_TOKEN_FLOOR } from '$lib/constants/default-models';
 import type { ModelProvider } from '$lib/server/models/types';
 
@@ -55,14 +56,20 @@ function captureUsage(
   // clutter the cost table with null-cost "call happened" rows.
   if (promptTokens !== null || completionTokens !== null) {
     const store = executionContext.getStore();
+    // A research run is not a workflow node, so it has no execution context and
+    // every call it made used to record with a null session id: the spend was
+    // in the ledger and unattributable — you could see the site spent $4 last
+    // night, not which investigation spent it. Deep research carries its own
+    // ambient id for exactly this.
+    const researchId = currentResearchSessionId();
     recordDurableLLMCall({
       provider,
       model,
       tokensInput: promptTokens,
       tokensOutput: completionTokens,
       costUsd,
-      source: store ? 'workflow' : 'gateway',
-      sessionId: store?.runId ?? null,
+      source: store ? 'workflow' : researchId ? 'research' : 'gateway',
+      sessionId: store?.runId ?? researchId,
     });
   }
 }

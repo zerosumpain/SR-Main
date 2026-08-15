@@ -1,4 +1,5 @@
 import { getTavilyKey } from './keys';
+import { countTavilySearch, countTavilyExtract } from './meter';
 
 const TAVILY_BASE = 'https://api.tavily.com';
 const TAVILY_TIMEOUT_MS = 15_000;
@@ -78,6 +79,10 @@ export async function search(
       throw new Error(`Tavily search failed: ${res.status} ${await res.text()}`);
     }
 
+    // Metered on success only. A refused request is not billed, and the one
+    // retry above is a rare enough over- or under-count to be worth less than
+    // the simplicity. No-op outside a research run.
+    countTavilySearch(options?.searchDepth ?? 'basic');
     return res.json();
   }, `search("${query.slice(0, 50)}")`);
 }
@@ -110,6 +115,7 @@ export async function extract(urls: string[], signal?: AbortSignal): Promise<Tav
       throw new Error(`Tavily extract failed: ${res.status} ${await res.text()}`);
     }
 
+    countTavilyExtract(urls.length);
     return res.json();
   }, `extract(${urls.length} urls)`);
 }

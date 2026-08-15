@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
-import { sources } from '$lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { sources, researchLeads } from '$lib/db/schema';
+import { eq, and, count } from 'drizzle-orm';
 import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
 import { search } from './tavily';
@@ -51,35 +51,63 @@ export async function runPhase1(
     }
   }
 
-  // Step 1: Generate initial search queries
-  emitLog(sessionId, '\u{1F50D}', 'Generating initial search queries...');
+  /**
+   * Step 1: seed the frontier — but only on a run that has no frontier yet.
+   *
+   * `addLeads` already discards duplicate queries, so re-seeding a resumed run
+   * changed nothing and still cost a model call every time. A session that
+   * already has leads has been here before.
+   */
+  const [leadCount] = await db
+    .select({ n: count() })
+    .from(researchLeads)
+    .where(eq(researchLeads.sessionId, sessionId));
 
-  let queryPrompt = `Generate 8-12 diverse search queries covering different angles of this topic. Include biographical, technical, historical, critical, contextual, geographical, legal, and economic angles as relevant. Vary the phrasing to minimize result overlap.`;
-  if (seedContext?.suggestedQueries?.length) {
-    queryPrompt += `\n\nSuggested starting queries from prior research (use as inspiration but also generate fresh angles):\n${seedContext.suggestedQueries.map((q) => `- ${q}`).join('\n')}`;
+  if (Number(leadCount?.n ?? 0) === 0) {
+    emitLog(sessionId, '\u{1F50D}', 'Generating initial search queries...');
+
+    let queryPrompt = `Generate 8-12 diverse search queries covering different angles of this topic. Include biographical, technical, historical, critical, contextual, geographical, legal, and economic angles as relevant. Vary the phrasing to minimize result overlap.`;
+    if (seedContext?.suggestedQueries?.length) {
+      queryPrompt += `\n\nSuggested starting queries from prior research (use as inspiration but also generate fresh angles):\n${seedContext.suggestedQueries.map((q) => `- ${q}`).join('\n')}`;
+    }
+    queryPrompt += `\n\nRespond with JSON: { "queries": ["query1", "query2", ...] }`;
+
+    const queryResult = await jsonCompletion<{ queries: string[] }>(
+      systemPrompt,
+      queryPrompt,
+    );
+
+    const seedQueries = queryResult.queries ?? [];
+    if (seedQueries.length === 0) return;
+
+    // The frontier replaces the old in-memory `followUpQueue`: a plain FIFO with
+    // no scores, which spawned children from an unproductive query exactly as
+    // eagerly as from a productive one, and evaporated on restart.
+    await addLeads(
+      sessionId,
+      seedQueries.map((q) => ({ query: q, origin: 'seed' as const, depth: 0 })),
+    );
+  } else {
+    emitLog(sessionId, 'ℹ️', `Picking the frontier back up — ${leadCount?.n} leads already generated.`);
   }
-  queryPrompt += `\n\nRespond with JSON: { "queries": ["query1", "query2", ...] }`;
-
-  const queryResult = await jsonCompletion<{ queries: string[] }>(
-    systemPrompt,
-    queryPrompt,
-  );
-
-  const seedQueries = queryResult.queries ?? [];
-  if (seedQueries.length === 0) return;
-
-  // The frontier replaces the old in-memory `followUpQueue`: a plain FIFO with
-  // no scores, which spawned children from an unproductive query exactly as
-  // eagerly as from a productive one, and evaporated on restart.
-  await addLeads(
-    sessionId,
-    seedQueries.map((q) => ({ query: q, origin: 'seed' as const, depth: 0 })),
-  );
 
   const seenUrls = new Set<string>();
   const allCategories = new Set<string>();
   let consecutiveLowDiversity = 0;
-  let totalSourcesStored = 0;
+  /**
+   * Sources this SESSION has, not sources this call has gathered.
+   *
+   * The counter used to start at zero on every entry, and `maxSources` is the
+   * only thing bounding the loop — so each resume gathered a further full
+   * allowance. A production investigation that was re-adopted on a dozen
+   * deploys had accumulated 113 sources against a cap of 40, all of it paid
+   * for. Reading the stored count makes the cap mean what it says.
+   */
+  const [stored] = await db
+    .select({ n: count() })
+    .from(sources)
+    .where(eq(sources.sessionId, sessionId));
+  let totalSourcesStored = Number(stored?.n ?? 0);
 
   const stats: SessionStats = {
     sourcesFound: 0,

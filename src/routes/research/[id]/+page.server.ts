@@ -7,6 +7,7 @@ import { depthPreset, coerceDepth } from '$lib/deepdive/depth';
 import { coerceScope, describeScope } from '$lib/deepdive/scope';
 import { loadFrontier } from '$lib/deepdive/frontier';
 import { rankSources, mediaMix } from '$lib/deepdive/media-type';
+import { driveFileStem, existingStems, researchFolder } from '$lib/deepdive/to-drive';
 
 export const load: PageServerLoad = async ({ params }) => {
   const [session] = await db
@@ -57,6 +58,19 @@ export const load: PageServerLoad = async ({ params }) => {
   for (const s of rankedSources) {
     if (s.factCount > 0) contributors[s.media.kind] = (contributors[s.media.kind] ?? 0) + 1;
   }
+
+  /**
+   * Which of these sources already have a copy in /drive.
+   *
+   * Resolved here rather than by a fetch on mount so the rows render in their
+   * true state — a "Keep in Drive" button that turns into "In Drive" a second
+   * after the page settles reads as the page changing its mind.
+   */
+  const driveFolder = researchFolder(session.topic);
+  const storedStems = await existingStems(driveFolder);
+  const savedSourceIds = srcRows
+    .filter((s) => storedStems.has(driveFileStem(driveFolder, s)))
+    .map((s) => s.id);
 
   const leads = await loadFrontier(params.id);
 
@@ -166,7 +180,11 @@ export const load: PageServerLoad = async ({ params }) => {
       createdAt: session.createdAt.toISOString(),
       scopeLabel: describeScope(coerceScope(session.scope)),
       shareToken: session.shareToken,
+      /** Set only while paused — the phase a Resume would pick up at. */
+      resumeFrom: session.resumeFrom,
     },
+    driveFolder,
+    savedSourceIds,
     // The report has carried gaps, hypotheses, contradictions, clusters,
     // diversity and centrality on every completed investigation for months with
     // nothing rendering them.
