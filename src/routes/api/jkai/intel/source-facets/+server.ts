@@ -120,11 +120,23 @@ async function run(dryRun: boolean): Promise<Outcome> {
   };
 }
 
-export const GET: RequestHandler = async () => json({ dryRun: true, ...(await run(true)) });
+// Owner session from a browser, or the maintenance secret for a one-off run
+// from the box — the same arrangement /api/jkai/intel/backfill uses.
+//
+// Both verbs check, not just the writing one. The hooks allow-list that lets a
+// secret-carrying call reach this path says the endpoint re-checks; on the VPS
+// that promise is the whole control, because cloudflared makes every request
+// look like loopback and the address half of that gate means nothing there.
+// The dry run reports the shape of the mailbox — sender domains and counts —
+// which is not something to hand out on the strength of one gate.
+export const GET: RequestHandler = async ({ request, locals }) => {
+  if (!(await isMaintenanceAuthorized(request, locals))) {
+    return json({ error: 'not authorised' }, { status: 403 });
+  }
+  return json({ dryRun: true, ...(await run(true)) });
+};
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  // Owner session from a browser, or the maintenance secret for a one-off run
-  // from the box — the same arrangement /api/jkai/intel/backfill uses.
   if (!(await isMaintenanceAuthorized(request, locals))) {
     return json({ error: 'not authorised' }, { status: 403 });
   }

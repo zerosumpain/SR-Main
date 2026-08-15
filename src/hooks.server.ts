@@ -473,7 +473,8 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   if (
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
-    pathname === '/api/jkai/intel/backfill'
+    pathname === '/api/jkai/intel/backfill' ||
+    pathname === '/api/jkai/intel/source-facets'
   ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
