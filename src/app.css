@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   /* Warm brutalist palette — high contrast */
@@ -749,3 +749,165 @@ a {
   content: '→ ';
   color: var(--accent);
 }
+
+
+/* ============================================================
+   FIELD STUDY SYSTEM
+   Research-paper projects under /projects/<slug>. Extends the
+   warm-brutalist language with a reading serif, claim/evidence
+   structure and citation apparatus. The system, its nine templates
+   and its ship checklist live in field-study-system/ at the repo
+   root; the Svelte primitives live in src/lib/fieldstudy/.
+
+   Sizes are mapped onto the site type scale rather than the kit's
+   own 8.5-11px literals: the 12px floor is gated sitewide by
+   scripts/check-font-sizes.mjs. The mono/uppercase/tracking
+   treatment is unchanged.
+   ============================================================ */
+
+/* The Fraunces face is requested from app.css's existing @font import at the
+ * top of the file — a CSS @import is only valid before any other rule, so it
+ * cannot ride along at the end here. */
+
+:root {
+  /* Type registers — three, each with one job. Only the serif is new: the kit's
+     own --fs-body / --fs-mono aliases are dropped because they duplicate the
+     site's --font-body / --font-mono exactly, AND because --fs-body already
+     means 1rem here. Redefining it as a font family turns all 82 of the site's
+     `font-size: var(--fs-body)` declarations into invalid CSS the browser
+     discards — including every form control, which is what keeps mobile Safari
+     from force-zooming on focus. */
+  --fs-serif: 'Fraunces', Georgia, serif;   /* beats, claims, captions, pull quotes */
+
+  /* surface ladder — opaque steps, never stacked translucency */
+  --fs-paper: var(--bg);
+  --fs-shell: #e9dfcd;
+  --fs-rail: #e3d8c4;
+  --fs-sunken: rgba(26, 16, 8, 0.035);
+
+  /* border scale */
+  --fs-hair: rgba(26, 16, 8, 0.08);
+  --fs-line: rgba(26, 16, 8, 0.14);
+  --fs-line-strong: rgba(26, 16, 8, 0.16);
+
+  /* confidence — the shipped three levels, on the site palette */
+  --fs-fact: var(--accent-ink);
+  --fs-hypothesis: var(--accent);
+  --fs-contested: #8a2d3a;
+
+  /* categorical hues — LEGEND ONLY. Never chrome, never a claim. */
+  --fs-cat-identifier: #7a5aa6;
+  --fs-cat-operational: #2f7d4f;
+  --fs-cat-standards: #b4632e;
+  --fs-cat-trust: #8a2d3a;
+
+  /* measure */
+  --fs-measure: 72ch;
+  --fs-margin-col: 178px;
+}
+
+/* ——— shell ——— */
+.fs-page { background: var(--fs-paper); color: var(--text-primary); font-family: var(--font-body); }
+.fs-route { padding: 40px 52px 36px; max-width: 1400px; margin: 0 auto; }
+.fs-spread { display: grid; grid-template-columns: var(--fs-margin-col) minmax(0, 1fr); gap: 40px; align-items: start; }
+@media (max-width: 900px) { .fs-spread { grid-template-columns: 1fr; gap: 18px; } }
+
+/* ——— beat header ——— */
+.fs-beat-rule { display: flex; align-items: baseline; gap: 14px; }
+.fs-beat-rule > .fill { flex: 1; height: 1px; background: var(--fs-line-strong); }
+.fs-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
+.fs-h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(32px, 4vw, 40px); line-height: 1.04; letter-spacing: -0.03em; margin: 13px 0 0; }
+.fs-h1--display { font-size: clamp(38px, 6vw, 60px); line-height: 1.0; letter-spacing: -0.036em; }
+.fs-numeral { font-family: var(--fs-serif); font-weight: 600; font-size: 68px; line-height: 0.8; letter-spacing: -0.05em; color: var(--accent); }
+
+/* ——— question / claim ——— */
+.fs-qc { display: grid; grid-template-columns: 92px minmax(0, 1fr); border-top: 2px solid var(--text-primary); border-bottom: 1px solid var(--fs-line-strong); margin-top: 18px; }
+.fs-qc dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-ghost); padding: 12px 0; margin: 0; }
+.fs-qc dt.claim { color: var(--accent); }
+.fs-qc dd { padding: 12px 0 12px 16px; margin: 0; }
+.fs-qc dd + dt, .fs-qc dd + dt + dd { border-top: 1px solid var(--fs-hair); }
+.fs-question { font-family: var(--fs-serif); font-style: italic; font-size: 18px; line-height: 1.45; color: var(--text-secondary); margin: 0; }
+.fs-claim { font-size: var(--fs-body-lg); line-height: 1.5; margin: 0; }
+.fs-claim b { font-weight: 700; }
+@media (max-width: 700px) { .fs-qc { grid-template-columns: 1fr; } .fs-qc dd { padding-left: 0; } }
+
+/* ——— body ——— */
+.fs-body { font-size: var(--fs-body); line-height: 1.68; color: var(--text-secondary); max-width: var(--fs-measure); }
+.fs-body b { color: var(--text-primary); }
+.fs-body a { color: var(--accent-ink); }
+.fs-dropcap::first-letter { font-family: var(--fs-serif); font-weight: 600; font-size: 62px; line-height: 0.76; letter-spacing: -0.04em; color: var(--text-primary); float: left; margin: 4px 10px 0 0; }
+.fs-cite { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); vertical-align: super; }
+
+/* ——— margin notes ——— */
+.fs-margin { display: flex; flex-direction: column; gap: 16px; padding-top: 3px; }
+.fs-aside { font-family: var(--fs-serif); font-style: italic; font-size: var(--fs-nav); line-height: 1.5; color: var(--text-secondary); margin: 0; }
+.fs-margin-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-ghost); }
+
+/* ——— confidence chip ——— */
+.fs-chip { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; white-space: nowrap; border: 1px solid currentColor; }
+.fs-chip--fact { color: var(--fs-fact); border-color: var(--accent-ink-tint-35); }
+.fs-chip--hypothesis { color: var(--fs-hypothesis); border-color: var(--accent-tint-35); background: var(--accent-tint-08); }
+.fs-chip--contested { color: var(--fs-contested); border-color: rgba(138, 45, 58, 0.5); background: rgba(179, 38, 30, 0.05); }
+
+/* ——— cell grid: the dominant exhibit primitive ——— */
+.fs-cells { display: grid; gap: 1px; background: var(--fs-line); border: 1px solid var(--fs-line); }
+.fs-cells > * { background: var(--fs-paper); padding: 14px 16px; min-width: 0; }
+.fs-cells > .pick { background: var(--accent-tint-08); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ——— figure ——— */
+.fs-figure { border-top: 1px solid var(--fs-line-strong); border-bottom: 1px solid var(--fs-line-strong); padding: 22px 0; margin: 26px 0 0; }
+.fs-figcaption { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; }
+.fs-figno { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-ghost); white-space: nowrap; }
+.fs-figcaption p { font-family: var(--fs-serif); font-style: italic; font-size: var(--fs-body-sm); line-height: 1.5; color: var(--text-secondary); margin: 0; }
+
+/* ——— pull quote: one per page ——— */
+.fs-pull { border-top: 2px solid var(--text-primary); border-bottom: 2px solid var(--text-primary); padding: 20px 0; margin: 28px 0 0; max-width: 44ch; }
+.fs-pull p { font-family: var(--fs-serif); font-style: italic; font-size: 26px; line-height: 1.35; letter-spacing: -0.015em; margin: 0; text-wrap: pretty; }
+
+/* ——— tables ——— */
+.fs-table { width: 100%; border-collapse: collapse; }
+.fs-table th { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-ghost); text-align: left; padding: 8px; border-bottom: 1px solid var(--fs-line-strong); }
+.fs-table td { font-size: var(--fs-nav); padding: 10px 8px; border-bottom: 1px solid var(--fs-hair); }
+.fs-table .num { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.fs-table tr.pick { background: rgba(196, 87, 10, 0.045); }
+.fs-table tr.sigma { border-top: 2px solid var(--text-primary); font-family: var(--font-mono); }
+.fs-table tr.estimate { border-top: 1px dashed rgba(26, 16, 8, 0.26); color: var(--text-muted); }
+
+/* ——— provenance strip ——— */
+.fs-provenance { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding: 12px 15px; background: rgba(26, 16, 8, 0.045); border-left: 3px solid var(--accent-ink); }
+.fs-provenance .label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); white-space: nowrap; }
+.fs-provenance p { font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); margin: 0; }
+
+/* ——— beat close ——— */
+.fs-close { border-top: 2px solid var(--text-primary); padding-top: 20px; margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 34px; }
+.fs-sowhat { font-family: var(--fs-serif); font-size: 20px; line-height: 1.5; margin: 9px 0 0; max-width: 54ch; text-wrap: pretty; }
+.fs-open { border: 1px solid var(--fs-line-strong); padding: 15px 17px; display: flex; flex-direction: column; gap: 10px; }
+.fs-falsifier { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; color: var(--text-ghost); padding-top: 8px; border-top: 1px dashed rgba(26, 16, 8, 0.2); }
+@media (max-width: 900px) { .fs-close { grid-template-columns: 1fr; gap: 18px; } }
+
+.fs-next { display: inline-block; font-family: var(--font-body); font-size: var(--fs-nav); font-weight: 500; color: var(--fs-paper); background: var(--text-primary); padding: 11px 20px; text-decoration: none; }
+.fs-next:hover { background: #000; }
+.fs-prev { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-ghost); text-decoration: none; }
+
+/* ——— warning register: beat 06 and contested claims ——— */
+.fs-warn { border: 1px solid rgba(138, 45, 58, 0.4); background: rgba(179, 38, 30, 0.05); padding: 15px 17px; }
+.fs-warn .label { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--fs-contested); }
+
+/* ——— instrument (T5): control-surface register, deliberately not editorial ——— */
+.fs-instrument { position: relative; background: var(--fs-shell); border: 1px solid rgba(26, 16, 8, 0.2); overflow: hidden; height: 100svh; }
+.fs-instrument * { font-family: var(--font-mono); }
+.fs-hud { position: absolute; z-index: 4; background: rgba(237, 228, 212, 0.88); backdrop-filter: blur(8px); border: 1px solid rgba(26, 16, 8, 0.22); }
+.fs-hud-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-bottom: 1px solid var(--fs-line); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-ghost); }
+.fs-transport { position: absolute; z-index: 4; left: 16px; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 14px; padding: 10px 13px; background: rgba(237, 228, 212, 0.92); backdrop-filter: blur(8px); border: 1px solid rgba(26, 16, 8, 0.22); }
+/* stack anything above the transport with this, so the gap cannot drift */
+.fs-above-transport { bottom: calc(16px + var(--fs-transport-h, 64px) + 12px); }
+
+/* ——— lever ——— */
+.fs-lever-track { position: relative; height: 4px; background: rgba(26, 16, 8, 0.16); margin: 7px 0 15px; }
+.fs-lever-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+.fs-lever-base { position: absolute; top: -3px; width: 2px; height: 10px; background: rgba(26, 16, 8, 0.45); }
+.fs-lever-handle { position: absolute; top: -4px; width: 2px; height: 12px; background: var(--text-primary); }
+.fs-lever-tick { position: absolute; top: 9px; transform: translateX(-50%); white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-ghost); }
+
+/* every figure that can change in place is tabular */
+.fs-num, .fs-table .num, .fs-hud [data-num] { font-variant-numeric: tabular-nums; }

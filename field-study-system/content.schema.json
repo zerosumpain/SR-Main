@@ -1,0 +1,923 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://strangeramblings.com/schema/field-study.v1.json",
+  "title": "Field Study",
+  "description": "Content model for a Strange Ramblings field study. Content is authored as data; the beat's template decides the markup.",
+  "type": "object",
+  "required": [
+    "slug",
+    "number",
+    "title",
+    "thesis",
+    "status",
+    "findings",
+    "asks",
+    "beats",
+    "sources"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "confidence": {
+      "enum": [
+        "fact",
+        "hypothesis",
+        "contested"
+      ]
+    },
+    "templateId": {
+      "enum": [
+        "T0",
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8"
+      ]
+    },
+    "categoryTag": {
+      "enum": [
+        "identifier",
+        "operational",
+        "standards",
+        "trust",
+        "infrastructure"
+      ]
+    },
+    "sourceRef": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Index into sources[]"
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "text",
+        "confidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Inline <b> permitted on the load-bearing noun only."
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        },
+        "cites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sourceRef"
+          }
+        }
+      }
+    },
+    "figure": {
+      "type": "object",
+      "required": [
+        "no",
+        "caption",
+        "chart"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "no": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Italic serif. Where the author admits what the chart leaves out."
+        },
+        "chart": {
+          "enum": [
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A6"
+          ]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "cites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sourceRef"
+          }
+        },
+        "data": {}
+      }
+    },
+    "openQuestion": {
+      "type": "object",
+      "required": [
+        "text",
+        "falsifier"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "falsifier": {
+          "type": "string",
+          "description": "What would change the author's mind. Mandatory."
+        }
+      }
+    },
+    "prose": {
+      "type": "object",
+      "required": [
+        "research"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "plain": {
+          "type": "string"
+        },
+        "research": {
+          "type": "string"
+        },
+        "technical": {
+          "type": "string"
+        },
+        "dropCap": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "marginNote": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Field study number, shown in the kicker"
+    },
+    "title": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Short name for the masthead, e.g. 'The Data Spine'"
+    },
+    "statusStamp": {
+      "type": "string",
+      "description": "Masthead stamp, e.g. 'ANNOUNCED FEB 2026 · NOT YET BUILT'"
+    },
+    "thesis": {
+      "type": "string",
+      "maxLength": 600
+    },
+    "private": {
+      "type": "boolean",
+      "default": false
+    },
+    "updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "headline",
+        "detail",
+        "confidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/definitions/confidence"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "description": "Stated in the front matter, before beat 01. If these cannot be written, the research is not finished.",
+      "items": {
+        "$ref": "#/definitions/claim"
+      }
+    },
+    "asks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "type": "string"
+      },
+      "description": "What this study answers"
+    },
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "term",
+          "plain"
+        ],
+        "properties": {
+          "term": {
+            "type": "string"
+          },
+          "plain": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "n",
+          "org",
+          "what",
+          "url",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "n": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "org": {
+            "type": "string"
+          },
+          "what": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "kind": {
+            "enum": [
+              "white paper",
+              "hansard",
+              "regulator",
+              "market data",
+              "technical",
+              "press",
+              "legislation",
+              "research"
+            ]
+          },
+          "asOf": {
+            "type": "string"
+          },
+          "caveat": {
+            "type": "string",
+            "description": "e.g. 'shares drift quarterly'"
+          }
+        }
+      }
+    },
+    "instruments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "href",
+          "kind",
+          "limits"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "href": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "2d-staged",
+              "3d-network",
+              "matrix",
+              "model"
+            ]
+          },
+          "reachedFrom": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "levers": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "kind",
+                "baseline"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "B1",
+                    "B2",
+                    "B3",
+                    "B4"
+                  ]
+                },
+                "baseline": {},
+                "min": {},
+                "max": {},
+                "unit": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "difficulty": {
+                  "enum": [
+                    "easy",
+                    "medium",
+                    "hard"
+                  ]
+                }
+              }
+            }
+          },
+          "limits": {
+            "type": "string",
+            "description": "What it does not show and where its numbers came from. Mandatory."
+          }
+        }
+      }
+    },
+    "beats": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "description": "T0 front matter plus up to seven beats, in the fixed order. Beats may merge; they may not reorder.",
+      "items": {
+        "type": "object",
+        "required": [
+          "no",
+          "slug",
+          "name",
+          "template"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "no": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/definitions/templateId"
+          },
+          "minutes": {
+            "type": "integer"
+          },
+          "question": {
+            "type": "string",
+            "description": "Exactly one. If two are needed, this is two beats."
+          },
+          "claim": {
+            "$ref": "#/definitions/claim"
+          },
+          "standfirst": {
+            "type": "string"
+          },
+          "marginNotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/marginNote"
+            }
+          },
+          "prose": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/prose"
+            }
+          },
+          "figures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/figure"
+            }
+          },
+          "pullQuote": {
+            "type": "string",
+            "maxLength": 160,
+            "description": "One per page, 44ch measure. The line you want quoted back."
+          },
+          "sections": {
+            "type": "array",
+            "description": "Section-scale templates hosted inside this beat (T6, T7, T8).",
+            "items": {
+              "type": "object",
+              "required": [
+                "template"
+              ],
+              "properties": {
+                "template": {
+                  "enum": [
+                    "T6",
+                    "T7",
+                    "T8"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "claim": {
+                  "$ref": "#/definitions/claim"
+                },
+                "layers": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 6,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "no",
+                      "name",
+                      "question",
+                      "today",
+                      "withIt",
+                      "theFight"
+                    ],
+                    "properties": {
+                      "no": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "question": {
+                        "type": "string"
+                      },
+                      "today": {
+                        "type": "string"
+                      },
+                      "withIt": {
+                        "type": "string"
+                      },
+                      "theFight": {
+                        "type": "string"
+                      },
+                      "tag": {
+                        "$ref": "#/definitions/categoryTag"
+                      }
+                    }
+                  }
+                },
+                "threads": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "name",
+                      "detail"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "tag": {
+                        "$ref": "#/definitions/categoryTag"
+                      }
+                    }
+                  }
+                },
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "date",
+                      "title",
+                      "detail",
+                      "tag"
+                    ],
+                    "properties": {
+                      "date": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "tag": {
+                        "$ref": "#/definitions/categoryTag"
+                      },
+                      "cites": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/sourceRef"
+                        }
+                      },
+                      "present": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "cases": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 8,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "place",
+                      "year",
+                      "name",
+                      "what",
+                      "archetype",
+                      "fate",
+                      "lesson"
+                    ],
+                    "properties": {
+                      "place": {
+                        "type": "string"
+                      },
+                      "year": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "what": {
+                        "type": "string"
+                      },
+                      "archetype": {
+                        "enum": [
+                          "central-store",
+                          "federated",
+                          "identifier-led",
+                          "broker"
+                        ]
+                      },
+                      "fate": {
+                        "type": "string"
+                      },
+                      "fateKind": {
+                        "enum": [
+                          "live",
+                          "cancelled",
+                          "degraded"
+                        ]
+                      },
+                      "lesson": {
+                        "type": "string",
+                        "maxLength": 120
+                      },
+                      "cites": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/sourceRef"
+                        }
+                      }
+                    }
+                  }
+                },
+                "pattern": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 3,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "balance": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "survey": {
+            "type": "object",
+            "description": "T2 only.",
+            "required": [
+              "columns",
+              "rows",
+              "total",
+              "provenance",
+              "asOf"
+            ],
+            "properties": {
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "cells",
+                    "basis"
+                  ],
+                  "properties": {
+                    "cells": {
+                      "type": "array"
+                    },
+                    "basis": {
+                      "enum": [
+                        "census",
+                        "estimate",
+                        "reported",
+                        "derived"
+                      ]
+                    },
+                    "pick": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "total": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "value"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "value": {},
+                  "reconciles": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                }
+              },
+              "provenance": {
+                "type": "string"
+              },
+              "asOf": {
+                "type": "string"
+              },
+              "cannotTellYou": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "position": {
+            "type": "object",
+            "description": "T3 only.",
+            "required": [
+              "statement",
+              "because",
+              "rejected",
+              "conditions",
+              "sinkers"
+            ],
+            "properties": {
+              "statement": {
+                "type": "string",
+                "maxLength": 90
+              },
+              "elaboration": {
+                "type": "string"
+              },
+              "confidence": {
+                "$ref": "#/definitions/confidence"
+              },
+              "because": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "headline",
+                    "detail"
+                  ],
+                  "properties": {
+                    "headline": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "rejected": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "why"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "why": {
+                      "type": "string",
+                      "description": "State it at full strength. Strawmanning is this template's failure mode."
+                    }
+                  }
+                }
+              },
+              "conditions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sinkers": {
+                "type": "string"
+              },
+              "phases": {
+                "type": "array",
+                "maxItems": 5,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "label",
+                    "name",
+                    "detail"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "ledger": {
+            "type": "object",
+            "description": "T4 only.",
+            "required": [
+              "lenses",
+              "benefits",
+              "risks",
+              "balance"
+            ],
+            "properties": {
+              "lenses": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "activeLens": {
+                "type": "string"
+              },
+              "benefits": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/definitions/claim"
+                }
+              },
+              "risks": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/definitions/claim"
+                },
+                "description": "Must be at least as long as benefits[]."
+              },
+              "balance": {
+                "type": "string"
+              },
+              "byActor": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "actor",
+                    "gains",
+                    "loses",
+                    "net"
+                  ],
+                  "properties": {
+                    "actor": {
+                      "type": "string"
+                    },
+                    "gains": {
+                      "type": "integer"
+                    },
+                    "loses": {
+                      "type": "integer"
+                    },
+                    "net": {
+                      "enum": [
+                        "positive",
+                        "negative",
+                        "even"
+                      ]
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "soWhat": {
+            "type": "string",
+            "description": "The consequence, in the author's voice. Never end on a chart."
+          },
+          "openQuestion": {
+            "$ref": "#/definitions/openQuestion"
+          }
+        }
+      }
+    }
+  }
+}

@@ -65,6 +65,44 @@ Production itself is never at risk from this — the `deploy` job is `needs: gat
 so a red gate cannot reach the VPS. What a premature merge costs is a red commit
 on `master`.
 
+## Field studies
+
+Research projects under `/projects/<slug>` are **field studies** and follow the Field Study
+System in `field-study-system/`. Do not design these pages ad hoc.
+
+When asked to create or edit a field study:
+
+1. Read `field-study-system/INSTRUCTIONS.md` and follow the procedure.
+2. Author content as data in `src/routes/projects/<slug>/study.ts`, validated against
+   `field-study-system/content.schema.json`.
+3. Every beat declares a `template` from `templates.json` (T0–T8). Render with the
+   primitives in `src/lib/fieldstudy/`. Never write a bespoke page layout.
+4. Before opening a PR, run `field-study-system/CHECKLIST.md` and paste the result into the
+   PR description.
+
+Hard constraints, in priority order over any aesthetic judgement:
+
+- `Confidence = 'fact' | 'hypothesis' | 'contested'` — the shipped type in
+  `src/lib/fieldstudy/types.ts`. Do not invent levels or rename these.
+- Categorical hues (`#7a5aa6` identifier, `#2f7d4f` operational/federated, `#b4632e`
+  standards, `#8a2d3a` trust/governance) appear only inside a legend and the marks that
+  legend labels. Never in chrome, never on a claim.
+- Confidence chips use the site palette: petrol `--accent-ink` for fact, orange `--accent`
+  for hypothesis, claret `#8a2d3a` for contested.
+- Radius `0`, `2px` or `100px` only. No shadows inside a page. No emoji.
+- Instruments (T5) are control surfaces: no serif, no drop caps, no margin notes, no page
+  scroll, no autoplay when embedded in a beat.
+
+If a beat does not fit a template, that is a signal the beat is two beats. Split it. Do not
+add a tenth template without being asked.
+
+**Two deviations from the shipped kit, both deliberate** (see
+`docs/superpowers/specs/2026-08-15-field-study-system.md`): the kit's 8.5–11px label sizes
+are mapped onto the site type scale because the 12px floor is gated sitewide; and the kit's
+`--fs-body` / `--fs-mono` font-family aliases are dropped in favour of the site's existing
+`--font-body` / `--font-mono`, because `--fs-body` already means `1rem` here and
+redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is new.
+
 ## Key areas
 
 - `src/lib/workflows/` — workflow engine nodes and runners
