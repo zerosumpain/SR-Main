@@ -119,7 +119,7 @@ import { startIntelEngine, stopIntelEngine } from '$lib/jkai/intel/engine';
 // the session permanently — seven of thirty-one production sessions were stuck
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
-import { runResumeSweep } from '$lib/deepdive/resume';
+import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
@@ -128,11 +128,30 @@ if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startConnectorMonitor();
   startModelRouting();
   startIntelEngine();
-  // Deliberately delayed: a redeploy restarts this process while the OLD one
-  // may still be finishing its graceful drain, and adopting a session its
-  // previous owner is still working on would run it twice.
-  setTimeout(() => {
+  /**
+   * Deliberately delayed, then repeated.
+   *
+   * The delay is because a redeploy restarts this process while the OLD one may
+   * still be finishing its graceful drain, and adopting a session its previous
+   * owner is still working on would run it twice.
+   *
+   * The repeat is because one sweep at boot could not do the job it was written
+   * for. It fires 30 seconds in, and only adopts a run whose heartbeat is older
+   * than STALE_AFTER_MS (90 seconds) — so a run that was beating right up to the
+   * restart is ALWAYS too fresh to be seen, and nothing ever looks again. It
+   * survived to the next deploy, which lost the same race. Measured on
+   * production 2026-08-15: the service restarted at 06:33:30 with a heartbeat
+   * from 06:33:24, the sweep ran at 06:34:00 and skipped it, and the run sat
+   * unowned in phase2 with 848 facts and nobody working on it.
+   *
+   * Now the sweep is a heartbeat of its own. A dead worker is picked up within a
+   * couple of minutes rather than at the whim of when the next merge lands.
+   */
+  const sweep = () =>
     runResumeSweep().catch((err) => console.error('[hooks.server] research resume sweep:', err));
+  setTimeout(() => {
+    void sweep();
+    setInterval(sweep, RESUME_SWEEP_INTERVAL_MS).unref?.();
   }, 30_000).unref?.();
 }
 
