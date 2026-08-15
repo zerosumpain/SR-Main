@@ -204,18 +204,20 @@
     <LiveWalkBanner />
   </div>
 
-  <BackgroundToggle />
-
-  <!-- Footer meta bar -->
-  <div class="relative z-10 flex justify-between items-center hero-pad hero-sig">
-    <span
-      >Signature · {bgMode === 'biome'
-        ? 'Biome'
-        : ecgStyle === 'ascii'
-          ? 'Pulse · ASCII'
-          : 'Pulse'} · Live</span
-    >
-    {#if syncedText}<span>Synced {syncedText}</span>{/if}
+  <!-- Signature bar: what the background is, the control that changes it, and
+       when the readings last landed. -->
+  <div class="relative z-10 flex justify-between items-center gap-4 hero-pad hero-sig">
+    <div class="flex items-center gap-4 min-w-0">
+      <BackgroundToggle />
+      <span class="truncate"
+        >Signature · {bgMode === 'biome'
+          ? 'Biome'
+          : ecgStyle === 'ascii'
+            ? 'Pulse · ASCII'
+            : 'Pulse'} · Live</span
+      >
+    </div>
+    {#if syncedText}<span class="flex-none">Synced {syncedText}</span>{/if}
   </div>
 </section>
 
