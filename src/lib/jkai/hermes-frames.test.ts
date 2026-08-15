@@ -178,6 +178,36 @@ describe('createHermesTextAccumulator', () => {
   });
 });
 
+describe('classifyHermesStatusText — notices that were being persisted as answers', () => {
+  it('recognises the redirect notice, not just the steer one', () => {
+    // Both come from the same busy-ack in run.py; only ⏩ Steered was listed, so
+    // under busy_input_mode: interrupt every superseding message's reply opened
+    // with "↪ Redirected current run. I'll adjust using your correction."
+    const hit = classifyHermesStatusText("↪ Redirected current run. I'll adjust using your correction.");
+    expect(hit?.kind).toBe('notice');
+  });
+
+  it('recognises the /model ack the chat sends itself', () => {
+    // The re-pin after a gateway restart replies with a settings dump. It was
+    // drained by the next job and persisted as that turn's answer — a reply
+    // nobody had asked a question to get.
+    const hit = classifyHermesStatusText(
+      'Model switched to `z-ai/glm-5.1`\nProvider: OpenRouter\nContext: 204,800 tokens',
+    );
+    expect(hit?.kind).toBe('notice');
+    expect(hit?.text).toBe('Model switched to `z-ai/glm-5.1`');
+  });
+
+  it('leaves a real reply that merely mentions switching models alone', () => {
+    expect(classifyHermesStatusText('You can switch models with /model — Model switched to what?')).toBeNull();
+  });
+
+  it('still passes ordinary replies through', () => {
+    expect(classifyHermesStatusText('BRAVO')).toBeNull();
+    expect(classifyHermesStatusText('✅ Corrected: the total is 42')).toBeNull();
+  });
+});
+
 describe('frameBelongsToTurn', () => {
   it('accepts a frame stamped with this turn', () => {
     expect(frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-a')).toBe(true);
@@ -199,6 +229,125 @@ describe('frameBelongsToTurn', () => {
     expect(frameBelongsToTurn({ metadata: {} }, 'job-a')).toBe(true);
     expect(frameBelongsToTurn({ metadata: null }, 'job-a')).toBe(true);
     expect(frameBelongsToTurn({}, 'job-a')).toBe(true);
+  });
+
+  // --- strict mode -------------------------------------------------------
+  // Untagged frames are accepted by default because a gateway that has not been
+  // restarted stamps nothing, and rejecting by default would make a stale
+  // gateway a silent total outage. Once the gateway REPORTS that it stamps at
+  // execution (`turn_tagging: 'execution'` on /health), untagged frames are
+  // foreign — and they have to be, because the model-pin notice is one: it was
+  // being taken as a turn's answer and persisted against the wrong question.
+
+  it('rejects untagged frames once the gateway reports execution-accurate stamps', () => {
+    expect(frameBelongsToTurn({ metadata: {} }, 'job-a', { strict: true })).toBe(false);
+    expect(frameBelongsToTurn({ metadata: null }, 'job-a', { strict: true })).toBe(false);
+    expect(frameBelongsToTurn({}, 'job-a', { strict: true })).toBe(false);
+  });
+
+  it('still matches on the stamp in strict mode', () => {
+    expect(frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-a', { strict: true })).toBe(true);
+    expect(frameBelongsToTurn({ metadata: { turn_id: 'job-b' } }, 'job-a', { strict: true })).toBe(false);
+  });
+
+  it('treats a malformed stamp as absent, so strict mode drops it', () => {
+    // A non-string tag is not evidence of ownership. Lenient mode keeps the
+    // frame (better a stray bubble than a lost reply); strict mode does not.
+    expect(frameBelongsToTurn({ metadata: { turn_id: 42 } }, 'job-a', { strict: true })).toBe(false);
+    expect(frameBelongsToTurn({ metadata: { turn_id: '' } }, 'job-a', { strict: true })).toBe(false);
+  });
+
+  // --- inherited turns ---------------------------------------------------
+  // A second message while the agent is answering does NOT start a second run.
+  // Hermes either redirects the running one (busy_input_mode: interrupt) or
+  // merges the text into it (queue) — both deliberate, and both mean two user
+  // messages produce ONE run carrying the FIRST turn's stamp. The endpoint also
+  // supersedes the earlier job, so without inheriting its id the newest job
+  // rejects the very output that is answering it and shows only the gateway's
+  // "↪ Redirected current run" notice.
+
+  it('accepts frames from a turn this one superseded', () => {
+    expect(
+      frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-b', {
+        strict: true,
+        inherited: ['job-a'],
+      }),
+    ).toBe(true);
+  });
+
+  it('still rejects a turn it did not supersede', () => {
+    // The model-pin notice, and any turn that completed on its own. Inheriting
+    // is specifically about the run that was redirected INTO this message.
+    expect(
+      frameBelongsToTurn({ metadata: { turn_id: 'model-pin:chat_1' } }, 'job-b', {
+        strict: true,
+        inherited: ['job-a'],
+      }),
+    ).toBe(false);
+  });
+
+  it("ignores an inherited turn's ending until this turn has said something", () => {
+    // Two inherited turns end very differently.
+    //
+    // The model re-pin is a DIFFERENT request: its run finishes before ours has
+    // produced a word, so its terminator is not ours — taking it closed the job
+    // at +611ms with an empty reply and pushed the answer onto the next turn.
+    //
+    // A turn we SUPERSEDED is the same run continuing: Hermes redirects it to
+    // answer us, so it never gets a terminator of its own and the superseded
+    // turn's is the only one there will be. By then we have streamed content.
+    //
+    // "Have we said anything yet" separates them without guessing.
+    const inherited = ['other-turn'];
+    const finalize = { kind: 'finalize', metadata: { turn_id: 'other-turn' } };
+
+    expect(frameBelongsToTurn(finalize, 'job-b', { strict: true, inherited })).toBe(false);
+    expect(
+      frameBelongsToTurn(finalize, 'job-b', {
+        strict: true,
+        inherited,
+        acceptInheritedEnd: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("takes an inherited turn's output regardless", () => {
+    // The job that ends on a foreign `finalize` is the whole "closes in
+    // milliseconds" symptom: the model re-pin's turn finished, emitted its
+    // terminator, and the user's job took it as its own completion — closing
+    // before the answer had started, so the answer landed on the NEXT turn.
+    const inherited = ['model-pin:chat_1'];
+    expect(
+      frameBelongsToTurn({ kind: 'send', metadata: { turn_id: 'model-pin:chat_1' } }, 'job-b', {
+        strict: true,
+        inherited,
+      }),
+    ).toBe(true);
+    expect(
+      frameBelongsToTurn({ kind: 'finalize', metadata: { turn_id: 'model-pin:chat_1' } }, 'job-b', {
+        strict: true,
+        inherited,
+      }),
+    ).toBe(false);
+  });
+
+  it('still ends on its own finalize', () => {
+    expect(
+      frameBelongsToTurn({ kind: 'finalize', metadata: { turn_id: 'job-b' } }, 'job-b', {
+        strict: true,
+        inherited: ['job-a'],
+      }),
+    ).toBe(true);
+  });
+
+  it('inherits nothing by default', () => {
+    expect(frameBelongsToTurn({ metadata: { turn_id: 'job-a' } }, 'job-b')).toBe(false);
+  });
+
+  it('does not let inheritance resurrect an untagged frame in strict mode', () => {
+    expect(
+      frameBelongsToTurn({ metadata: {} }, 'job-b', { strict: true, inherited: ['job-a'] }),
+    ).toBe(false);
   });
 
   it('ignores a non-string or empty tag rather than dropping the frame', () => {
