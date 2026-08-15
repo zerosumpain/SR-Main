@@ -56,7 +56,7 @@
   style="--n: {items.length}"
 >
   <header class="index-hd">
-    <span class="index-eyebrow">More</span>
+    <h2 class="index-eyebrow">More</h2>
     <span class="index-rule"></span>
     <span class="index-meta">Field studies · tools · writing</span>
   </header>
@@ -102,43 +102,60 @@
     gap: 14px;
     margin-bottom: 18px;
   }
+  /* Same head as Shipped: display name, hairline rule, mono caption — the two
+     sections read as one column down the page. */
   .index-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--accent);
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(26px, 3.4vw, 34px);
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--text-primary);
   }
   .index-rule {
     flex: 1;
     height: 1px;
-    background: var(--divider);
+    background: var(--line);
   }
   .index-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.12em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
 
   .index-list {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-strong);
   }
   .index-list li {
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The first row is the one being pointed at — the same wash the assistant
+     register uses in chat, and the only coloured row in the list. */
+  .index-list li:first-child .row {
+    background: rgba(196, 87, 10, 0.035);
+  }
+  .index-list li:first-child .row-idx,
+  .index-list li:first-child .row-name,
+  .index-list li:first-child .row-arrow {
+    color: var(--accent);
+  }
+  .index-list li:first-child .row-arrow {
+    opacity: 1;
+    transform: none;
   }
 
   .row {
     display: grid;
-    grid-template-columns: 2.4rem minmax(8.5rem, max-content) 1fr 1.2rem;
+    grid-template-columns: 2.6rem minmax(9rem, 15rem) minmax(0, 1fr) 1.75rem;
     align-items: baseline;
     gap: 14px;
-    padding: 14px 10px 14px 0;
+    padding: 15px 10px 15px 0;
     text-decoration: none;
     color: var(--text-primary);
     position: relative;
@@ -169,16 +186,18 @@
 
   .row-idx {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.05em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    font-variant-numeric: tabular-nums;
     color: var(--text-ghost);
   }
+  /* Display, not mono: these are titles of things, and the mono index beside
+     them is what makes the column read as a directory. */
   .row-name {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 19px;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
     transition: color var(--t-base) var(--ease-out);
   }
@@ -187,7 +206,7 @@
   }
   .row-hook {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-body-sm);
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -216,7 +235,7 @@
     .row-hook {
       grid-column: 2;
       white-space: normal;
-      font-size: 12px;
+      font-size: var(--fs-label);
     }
     .row-arrow {
       display: none;

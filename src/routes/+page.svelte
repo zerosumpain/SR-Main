@@ -126,9 +126,10 @@
      every visitor, in which case the component renders nothing at all. -->
 <AccountSyncBanner summary={data.syncAttention} />
 
-<!-- HERO — viewport minus nav -->
+<!-- HERO — viewport minus nav. Two columns: display type on the page ground,
+     the live rail flush against the right edge on the rail surface. -->
 <section
-  class="relative flex flex-col justify-between px-6 sm:px-10 md:px-16 py-8 overflow-hidden"
+  class="hero-sec relative flex flex-col justify-between overflow-hidden"
   style="min-height: calc(100vh - var(--site-nav-height));"
 >
   {#if bgMode === 'biome'}
@@ -147,7 +148,7 @@
        streamed; render fallback copy until it lands so the hero paints without
        waiting on the external weather fetch. The tiles sit at z-10 over the ECG
        and stack below the copy on narrow viewports. -->
-  <div class="relative z-10 flex-1 flex items-center">
+  <div class="relative z-10 flex-1 flex items-stretch">
     <div class="hero-grid">
       <div class="hero-copy">
         {#await data.heroTitle}
@@ -174,6 +175,7 @@
           />
         {/await}
       </div>
+      <div class="hero-divider" aria-hidden="true"></div>
       <aside class="hero-aside">
         <VitalSigns />
       </aside>
@@ -181,15 +183,12 @@
   </div>
 
   <!-- Live walk banner -->
-  <div class="relative z-10 text-center mt-4">
+  <div class="relative z-10 text-center mt-4 hero-pad">
     <LiveWalkBanner />
   </div>
 
   <!-- Footer meta bar -->
-  <div
-    class="relative z-10 flex justify-between items-center"
-    style="font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-muted);"
-  >
+  <div class="relative z-10 flex justify-between items-center hero-pad hero-sig">
     <span
       >Signature · {bgMode === 'biome'
         ? 'Biome'
@@ -209,8 +208,8 @@
 <FeatureIndex isOwner={data.isOwner} />
 
 <!-- FOOTER — dense, utilitarian -->
-<footer class="px-6 sm:px-10 md:px-16 py-8 flex flex-wrap justify-between items-center gap-4" style="border-top: 2px solid var(--card-border);">
-  <p class="brand text-[14px]" style="color: var(--text-ghost);">strange ramblings</p>
+<footer class="site-foot flex flex-wrap justify-between items-center gap-4">
+  <p class="brand text-[14px]" style="color: var(--text-muted);">strange ramblings</p>
   <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
     <button
       type="button"
@@ -236,13 +235,21 @@
 <BackgroundToggle />
 
 <style>
+  /* The footer is a rail band, like the nav strip that opens the page — the
+     document closes on the same surface it started on. */
+  .site-foot {
+    padding: 18px clamp(24px, 5vw, 64px);
+    border-top: 1px solid var(--line-strong);
+    background: var(--surface-rail);
+  }
+
   /* Footer toggle for the heartbeat render mode (orange line ⇄ ASCII). */
   .ecg-toggle {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 4px 6px 4px 12px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     background: var(--card-bg);
     cursor: pointer;
@@ -256,22 +263,22 @@
   }
   .ecg-toggle-key {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-ghost);
   }
   .ecg-toggle-val {
     font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.14em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-muted);
     min-width: 42px;
     text-align: center;
     padding: 3px 8px;
     border-radius: var(--radius-pill);
-    background: var(--surface-overlay);
+    background: var(--surface-sunken);
     transition:
       color 0.15s ease,
       background 0.15s ease;
@@ -281,28 +288,78 @@
     background: var(--accent-tint-14);
   }
 
-  /* Hero splits into copy (left) + live Vital Signs tiles (right) on wide
-     viewports, and stacks the tiles below the copy under 1024px. */
+  /* The section owns no horizontal padding of its own: the rail has to reach the
+     right edge, so the padding lives on the columns that need it. */
+  .hero-sec {
+    padding: 0 0 24px;
+  }
+  .hero-pad {
+    padding-inline: clamp(24px, 5vw, 64px);
+  }
+  .hero-sig {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* Hero splits into copy (left) + the live vitals rail (right) on wide
+     viewports, divided by a hairline, and stacks under 1024px. */
   .hero-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
-    gap: clamp(28px, 4vw, 64px);
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 1px minmax(300px, 400px);
     width: 100%;
+    align-items: stretch;
   }
   .hero-copy {
     min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: clamp(32px, 5vw, 56px) clamp(24px, 5vw, 64px) clamp(24px, 4vw, 40px);
+    position: relative;
+  }
+  /* A warm bloom behind the type — accent from the top left, petrol from the
+     bottom right. The ECG still shows through it. */
+  .hero-copy::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(80% 70% at 20% 30%, rgba(196, 87, 10, 0.16), transparent 62%),
+      radial-gradient(70% 60% at 85% 85%, rgba(14, 91, 102, 0.14), transparent 60%);
+  }
+  .hero-copy > :global(*) {
+    position: relative;
+  }
+  .hero-divider {
+    background: var(--line-strong);
   }
   .hero-aside {
-    width: 100%;
+    display: flex;
+    min-width: 0;
   }
+  .hero-aside :global(.vitals) {
+    border-width: 0;
+  }
+
   @media (max-width: 1024px) {
     .hero-grid {
-      grid-template-columns: 1fr;
-      gap: 32px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .hero-divider {
+      display: none;
+    }
+    .hero-copy {
+      padding-bottom: clamp(20px, 4vw, 32px);
     }
     .hero-aside {
-      max-width: 440px;
+      padding: 0 clamp(24px, 5vw, 64px) 24px;
+      max-width: 520px;
+    }
+    .hero-aside :global(.vitals) {
+      border-width: 1px;
     }
   }
 </style>
