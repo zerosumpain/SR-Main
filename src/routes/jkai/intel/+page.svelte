@@ -130,6 +130,31 @@
     }
   }
 
+  /**
+   * Which graph is being drawn — entities, or the evidence behind them.
+   *
+   * NOT persisted, unlike 3D/2D. That one is a preference about rendering and
+   * holds across visits; this one is a question you are asking right now, and
+   * returning to a page that silently shows a different graph than the one you
+   * think of as "the intel graph" is a worse default than re-picking it.
+   */
+  let evidenceView = $state(false);
+
+  function setMode(next: boolean) {
+    if (evidenceView === next) return;
+    evidenceView = next;
+    // The two graphs share a source picker but nothing else: cluster focus,
+    // pins and the community filter all name ids from the graph they were
+    // chosen in, and carrying them across would filter to ids that do not
+    // exist — an empty view with filters that look like they should match.
+    focusCommunities = [];
+    communityId = '';
+    pinnedIds = [];
+    focusId = null;
+    typeId = '';
+    selectedId = null;
+  }
+
   function toggleSource(id: string) {
     activeSources = activeSources.includes(id)
       ? activeSources.filter((s) => s !== id)
@@ -324,6 +349,18 @@
   });
 
   /**
+   * Which endpoint serves the current view.
+   *
+   * Read reactively by the loader below, so flipping the mode refetches exactly
+   * as changing a filter does — the evidence route takes the same `sources` and
+   * `q` parameters and returns the same payload shape, so nothing downstream
+   * needs to know which one answered.
+   */
+  const networkUrl = $derived(
+    `/api/jkai/intel/${evidenceView ? 'evidence-network' : 'network'}?${query}`,
+  );
+
+  /**
    * Settle time before a filter change is sent.
    *
    * The range sliders are bound straight to the query, so dragging one from 0 to
@@ -336,7 +373,7 @@
   // Refetch when the filter query changes. Only `query` is read reactively;
   // everything the loader touches it writes, so there is no read-own-write loop.
   $effect(() => {
-    const q = query;
+    const url = networkUrl;
     // Read so the retry button re-runs this with the filters unchanged.
     networkAttempt;
     let cancelled = false;
@@ -347,7 +384,7 @@
     networkError = null;
 
     const timer = setTimeout(() => {
-      fetch(`/api/jkai/intel/network?${q}`, { signal: controller.signal })
+      fetch(url, { signal: controller.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`the analysis request came back ${res.status}`);
           return res.json();
@@ -585,10 +622,21 @@
     lastPoint = { x: event.clientX, y: event.clientY };
   }
 
+  /** Node ids from the evidence view carry this prefix; entities never do. */
+  const EVIDENCE_PREFIX = 'note:';
+
   function onGraphSelect(id: string | null) {
     selectedId = id;
     if (!id) {
       entityHover.close();
+      return;
+    }
+    // A note is not an entity and has no entity card — asking for one would
+    // 404 and the card would show "Could not load this entity", which reads as
+    // a broken graph rather than as "you clicked a document".
+    if (id.startsWith(EVIDENCE_PREFIX)) {
+      entityHover.close();
+      goto(`/jkai/intel/notes/${id.slice(EVIDENCE_PREFIX.length)}`);
       return;
     }
     entityHover.pinAt(id, {
@@ -668,6 +716,35 @@
    * worth listing: asking for one channel and still being shown all 24 clusters
    * at full size is the same contradiction the tiles had.
    */
+  /**
+   * The top bar's live search — highlight only, never a filter.
+   *
+   * Matched against the nodes ALREADY loaded, so it keeps up with typing and
+   * costs nothing. That is the whole difference from the rail's Search box:
+   * that one sends `q` to the server and narrows the graph, which is right when
+   * you know what you want and wrong when the question is "where is this among
+   * everything else". Leaving the graph whole is what makes the answer legible.
+   *
+   * Same fields the server matches on (name, aliases, summary, type), so the two
+   * searches cannot disagree about what counts as a hit.
+   */
+  let liveSearch = $state('');
+  const liveMatches = $derived.by(() => {
+    const needle = liveSearch.trim().toLowerCase();
+    if (!needle || !network) return [];
+    return network.nodes
+      .filter((n) =>
+        [n.name, n.summary ?? '', n.type, ...(n.aliases ?? [])].some((h) =>
+          h.toLowerCase().includes(needle),
+        ),
+      )
+      .map((n) => n.id);
+  });
+  /** What the graphs light up: the live search when there is one, else the
+   *  server's keyword hits. Two sources, one prop — never both at once, or a
+   *  stale keyword would keep glowing under a new search. */
+  const highlightIds = $derived(liveSearch.trim() ? liveMatches : (network?.matched ?? []));
+
   const reachByKey = $derived(
     new Map((network?.communities ?? []).map((c) => [c.key ?? `#${c.id}`, c.reach ?? c.size])),
   );
@@ -684,7 +761,12 @@
 <JkaiPageTitle title="INTEL" />
 
 <div class="wrap">
-  <CommissionBar busy={!!busyId} onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')} />
+  <CommissionBar
+    busy={!!busyId}
+    matchCount={liveSearch.trim() ? liveMatches.length : null}
+    onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')}
+    onSearch={(t) => (liveSearch = t)}
+  />
 
   <!-- Vital signs -->
   <div class="tiles">
@@ -776,13 +858,18 @@
       </RailSection>
 
       <RailSection title="Clusters" badge={focusCommunities.length || null}>
+        <!-- The roster describes clusters of the ENTITY graph. The evidence
+             view is a different graph with a different partition, so its groups
+             have no durable key, no stored name and nothing to narrate —
+             joining them would attach one graph's names to another graph's
+             structure. -->
         <ClusterPicker
           communities={network?.communities ?? []}
-          roster={visibleClusters}
+          roster={evidenceView ? [] : visibleClusters}
           {narrowed}
           reachedTotal={network?.stats.selectedCommunities ?? 0}
-          stats={roster?.stats ?? null}
-          resolution={roster?.resolution ?? null}
+          stats={evidenceView ? null : (roster?.stats ?? null)}
+          resolution={evidenceView ? null : (roster?.resolution ?? null)}
           {recalculating}
           {narrating}
           focused={focusCommunities}
@@ -790,10 +877,10 @@
           onToggleFocus={toggleCluster}
           onClearFocus={() => (focusCommunities = [])}
           onFilter={(id) => (communityId = id === null ? '' : String(id))}
-          onRecalculate={recalculateClusters}
-          onRename={renameCluster}
-          onNarrate={narrateCluster}
-          onOpen={(key) => goto(`/jkai/intel/clusters/${key}`)}
+          onRecalculate={evidenceView ? undefined : recalculateClusters}
+          onRename={evidenceView ? undefined : renameCluster}
+          onNarrate={evidenceView ? undefined : narrateCluster}
+          onOpen={evidenceView ? undefined : (key) => goto(`/jkai/intel/clusters/${key}`)}
         />
         {#if clusterError}
           <p class="cluster-err">{clusterError}</p>
@@ -906,6 +993,32 @@
         <button type="button" class:on={!view3d} onclick={() => setView(false)} aria-pressed={!view3d}>2D</button>
       </div>
 
+      <!-- WHAT the graph is made of, as opposed to how it is drawn. Separated
+           from the 3D/2D pair for exactly that reason: one changes the
+           rendering, this one changes the question. -->
+      <div class="modes" role="group" aria-label="What the nodes are">
+        <button
+          type="button"
+          class:on={!evidenceView}
+          aria-pressed={!evidenceView}
+          title="Entities, connected to each other"
+          onclick={() => setMode(false)}>Entities</button
+        >
+        <button
+          type="button"
+          class:on={evidenceView}
+          aria-pressed={evidenceView}
+          title="Sources as nodes — every note, and the entities it mentions"
+          onclick={() => setMode(true)}>Sources</button
+        >
+      </div>
+      {#if evidenceView && network?.stats}
+        <p class="mode-note">
+          {network.stats.evidenceNodes ?? 0} sources · {network.stats.entityNodes ?? 0} entities they
+          mention. A line means "this source mentions this entity".
+        </p>
+      {/if}
+
       {#if view3d && network}
         <!-- With the 3D/2D toggle rather than in the filter rail: this changes
              how the graph is DRAWN, it does not change which graph you are
@@ -930,7 +1043,7 @@
             nodes={network.nodes}
             edges={network.edges}
             {highlightPath}
-            matchedIds={network.matched ?? []}
+            matchedIds={highlightIds}
             {selectedId}
             {focusCommunities}
             {explode}
@@ -943,7 +1056,7 @@
             nodes={network.nodes}
             edges={network.edges}
             {highlightPath}
-            matchedIds={network.matched ?? []}
+            matchedIds={highlightIds}
             {selectedId}
             {focusCommunities}
             onSelect={onGraphSelect}
@@ -1273,6 +1386,66 @@
      land under it — `--text-ghost` on the inactive button disappeared against a
      pale cluster. Same trap as the modal tokens: anything sitting over a
      surface it does not own needs its own palette. */
+  /* Same pill as .dims, on the opposite side. Deliberately not adjacent to it:
+     they answer different questions (what the nodes ARE vs how they are drawn)
+     and sitting them together made the four buttons read as one four-way
+     choice. */
+  .modes {
+    position: absolute;
+    z-index: 4;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: rgba(28, 25, 23, 0.82);
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: var(--radius-pill);
+    backdrop-filter: blur(4px);
+  }
+  .modes button {
+    padding: 3px 11px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    color: rgba(237, 228, 212, 0.72);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease-out);
+  }
+  .modes button:hover:not(.on) {
+    color: #ede4d4;
+    background: rgba(237, 228, 212, 0.12);
+  }
+  .modes button.on {
+    background: var(--accent);
+    color: #fff;
+  }
+  /* Carries its own dark chip rather than borrowing the canvas colour: the 3D
+     scene is near-black and the 2D one is cream, so light-on-canvas text is
+     legible in exactly one of the two views — and the note was unreadable in
+     the one you land on. */
+  .mode-note {
+    position: absolute;
+    z-index: 4;
+    top: 44px;
+    left: 10px;
+    max-width: 340px;
+    margin: 0;
+    padding: 5px 9px;
+    background: rgba(28, 25, 23, 0.82);
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: var(--radius-sharp);
+    backdrop-filter: blur(4px);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: rgba(237, 228, 212, 0.82);
+    pointer-events: none;
+  }
+
   .dims {
     position: absolute;
     z-index: 4;

@@ -146,34 +146,57 @@ export function computeHoverLayout(
   height: number,
   viewport: { w: number; h: number },
 ): HoverLayout {
+  // The anchor is clamped into the viewport BEFORE anything is measured from it.
+  //
+  // Every space calculation below treats the rect as a point on screen, and it
+  // is not always one: the rect is captured when the card opens and the window
+  // can be resized under it, a graph node can drift as the force layout keeps
+  // running, and `pinAt` takes a raw click point. A rect below the fold gives a
+  // large, entirely fictitious `spaceAbove` — measured from a y-coordinate that
+  // is off screen — so the card is placed "above" it and hangs off the bottom
+  // edge. Measured: open a card at y=484 in a 900px window, resize to 460, and
+  // the card sits 14px past the bottom with no way to reach the rest.
+  const anchorTop = clamp(rect.top, 0, viewport.h);
+  const anchorBottom = clamp(rect.bottom, 0, viewport.h);
+
   let left = rect.left;
   if (left + CARD_W + MARGIN > viewport.w) left = viewport.w - CARD_W - MARGIN;
   if (left < MARGIN) left = MARGIN;
 
-  const spaceBelow = viewport.h - rect.bottom - GAP - MARGIN;
-  const spaceAbove = rect.top - GAP - MARGIN;
+  /** Nothing may ever be taller than the viewport less its margins. */
+  const ceiling = Math.max(MIN_H, viewport.h - MARGIN * 2);
+  const spaceBelow = viewport.h - anchorBottom - GAP - MARGIN;
+  const spaceAbove = anchorTop - GAP - MARGIN;
 
   // Neither side can hold a readable card (short viewport, mention mid-screen):
   // stop dodging the mention and use the full column, scrolling inside.
   if (Math.max(spaceBelow, spaceAbove) < MIN_H) {
-    return {
-      top: MARGIN,
-      left,
-      maxHeight: Math.max(MIN_H, viewport.h - MARGIN * 2),
-      placement: 'overlay',
-    };
+    return { top: MARGIN, left, maxHeight: ceiling, placement: 'overlay' };
   }
 
   if (height <= spaceBelow || spaceBelow >= spaceAbove) {
-    return { top: rect.bottom + GAP, left, maxHeight: spaceBelow, placement: 'below' };
+    const maxHeight = Math.min(spaceBelow, ceiling);
+    // Clamped as well as capped. The cap bounds how tall the card may GROW; the
+    // clamp bounds where its far edge may LAND, which is a different guarantee
+    // and the one that was missing.
+    const drawn = Math.min(height || maxHeight, maxHeight);
+    const top = clamp(anchorBottom + GAP, MARGIN, Math.max(MARGIN, viewport.h - MARGIN - drawn));
+    return { top, left, maxHeight, placement: 'below' };
   }
 
-  return {
-    bottom: viewport.h - rect.top + GAP,
-    left,
-    maxHeight: spaceAbove,
-    placement: 'above',
-  };
+  const maxHeight = Math.min(spaceAbove, ceiling);
+  const drawn = Math.min(height || maxHeight, maxHeight);
+  const bottom = clamp(
+    viewport.h - anchorTop + GAP,
+    MARGIN,
+    Math.max(MARGIN, viewport.h - MARGIN - drawn),
+  );
+  return { bottom, left, maxHeight, placement: 'above' };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(Math.max(value, min), max);
 }
 
 /**

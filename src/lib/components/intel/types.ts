@@ -47,6 +47,8 @@ export interface NetNode {
   aliases: string[];
   /** Note sources that asserted this entity ('email', 'file', 'research', …). */
   sources: string[];
+  /** Evidence view only — true when this node IS a source note, not an entity. */
+  evidence?: boolean;
   /** 0..1 staleness weight — 1 is current, the floor is old but not gone. */
   recency: number;
   /**
@@ -101,6 +103,8 @@ export interface NetworkPayload {
   /** True when any filter is narrowing the view — the `selected*` stats are the
    *  ones worth showing while it is. */
   filtering?: boolean;
+  /** 'evidence' when the nodes are notes and the entities they mention. */
+  mode?: 'evidence';
   stats: {
     totalNodes: number;
     totalEdges: number;
@@ -114,6 +118,9 @@ export interface NetworkPayload {
     selectedNodes?: number;
     selectedEdges?: number;
     selectedCommunities?: number;
+    /** Evidence view only — how much of each side is in play. */
+    evidenceNodes?: number;
+    entityNodes?: number;
   };
   /** Clusters the filter reaches. `size` is the cluster's true size; `reach` is
    *  how much of it is in the current selection (equal when unfiltered). */
