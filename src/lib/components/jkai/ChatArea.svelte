@@ -3176,7 +3176,10 @@
   .msg-stack {
     display: grid;
     grid-template-columns: 1fr min(900px, 100%) 1fr;
-    row-gap: 14px;
+    /* Message rows carry their own hairline divider now, so consecutive turns
+       sit flush and read as one continuous ledger. The cards between them
+       (plans, trays, reasoning panels) bring their own margins. */
+    row-gap: 0;
   }
   /* :global because most children are component roots (ChatMessage's wrapper,
      WorkerTray, Artifact…) and so never carry this component's scope class. */
@@ -3184,9 +3187,19 @@
     grid-column: 2;
     min-width: 0;
   }
-  .msg-stack > .msg-slot.user-turn {
-    grid-column: 2 / -1;
-    justify-self: end;
+  /* A turn is full-bleed: its divider and the assistant wash reach both pane
+     edges, and ChatMessage's own centring padding keeps the words on the 900px
+     reading column. This replaces the old right-gutter span for user turns —
+     the two registers are told apart by the wash and the gutter label now, not
+     by which side of the pane they hug. */
+  .msg-stack > .msg-slot {
+    grid-column: 1 / -1;
+  }
+  /* Only the message row itself is full-bleed. Everything else in the slot —
+     origin tags above it, workflow chips / attachments / build pills below —
+     lines up with the same reading column the words sit on. */
+  .msg-slot > :global(:not(.msg-row)) {
+    padding-inline: max(20px, calc((100% - 900px) / 2));
   }
 
   /* Extraction-in-flight footer. Deliberately the quietest thing in the stack:
@@ -3195,11 +3208,13 @@
      reply itself — see ChatMessage's `erProcessing` border. */
 
   /* ── Composer ─────────────────────────────────────────────────────────── */
+  /* The composer is part of the shell, not the transcript: it takes the shell
+     step so the conversation column reads as ending above it. */
   .composer {
     position: relative;
     flex: none;
-    border-top: 1px solid var(--divider);
-    background: var(--bg);
+    border-top: 1px solid var(--line);
+    background: var(--surface-shell);
     padding: 10px 20px 14px;
     padding-bottom: max(14px, env(safe-area-inset-bottom));
   }
@@ -3252,14 +3267,16 @@
     align-items: flex-end;
     gap: 8px;
   }
+  /* One hairline field on the page ground — the 2px card border read as a
+     second frame inside the composer's own top rule. */
   .composer-textarea {
     flex: 1;
     min-width: 0;
     min-height: 44px;
     padding: 11px 13px;
-    border: 2px solid var(--card-border);
+    border: 1px solid rgba(26, 16, 8, 0.18);
     border-radius: 0;
-    background: var(--card-bg);
+    background: var(--bg);
     font-family: var(--font-body);
     font-size: var(--fs-body);
     line-height: 1.5;
@@ -3274,7 +3291,7 @@
   }
   .composer-textarea:focus {
     outline: none;
-    border-color: var(--accent-tint-35);
+    border-color: var(--accent);
   }
 
   /* Wrap div for the second heartbeat-line render site — kept as a hook
@@ -3318,6 +3335,7 @@
     gap: 6px;
     flex-wrap: wrap;
     margin-top: 6px;
+    margin-bottom: 10px;
   }
   .wf-chips-label {
     font-family: var(--font-mono);
@@ -3523,9 +3541,12 @@
    * clearly labelled, in-flow chips aligned to the message's side. */
   .src-tag-row {
     display: flex;
-    margin-bottom: 4px;
+    padding-top: 10px;
+    margin-bottom: 0;
   }
-  .src-tag-row.justify-end { justify-content: flex-end; }
+  /* Origin tags used to mirror the message's side; every turn is a left-aligned
+     ledger row now, so the tag stays with the gutter. */
+  .src-tag-row.justify-end { justify-content: flex-start; }
   .src-tag {
     display: inline-flex;
     align-items: center;
@@ -4101,7 +4122,7 @@
     background: var(--accent-hover);
   }
   .composer-send:disabled {
-    background: var(--card-border);
+    background: var(--line-strong);
     color: var(--text-ghost);
     cursor: not-allowed;
   }

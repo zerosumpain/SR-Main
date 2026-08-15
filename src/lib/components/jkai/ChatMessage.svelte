@@ -258,15 +258,19 @@
   });
 </script>
 
-<div class="msg-row" class:user={isUser}>
-  <!-- ROLE / TIMESTAMP [/ …] — the uniform every turn wears. -->
+<!-- One ledger row per turn: an 84px mono gutter carrying who and when, the body
+     in the column beside it, and a hairline rule underneath. Assistant turns take
+     a faint accent wash so the two registers separate without a bubble. -->
+<div class="msg-row" class:user={isUser} class:assistant={!isUser}>
+  <!-- ROLE / TIMESTAMP — the uniform every turn wears, now in the gutter. -->
   <div class="msg-meta">
     <span class="meta-role">{roleLabel}</span>
     {#if clockTime}
-      <span class="meta-time"><span class="meta-sep" aria-hidden="true">/</span> {clockTime}</span>
+      <span class="meta-time">{clockTime}</span>
     {/if}
   </div>
 
+  <div class="msg-body">
   {#if hasBody}
   <div
     class="msg-bubble"
@@ -285,6 +289,21 @@
         <span class="hb-label">{heartbeatLabel}</span>
       </div>
     {/if}
+    {#if hasThinking}
+      <!-- One mono row above the body: what the model did before it answered is
+           machinery, and machinery reads above the answer, not under it. -->
+      <button class="thinking-toggle" onclick={() => { thinkingOpen = !thinkingOpen; }}>
+        <span class="tt-glyph" aria-hidden="true">{thinkingOpen ? '\u25BE' : '\u25B8'}</span>
+        <span class="tt-word">thinking</span>
+        <span class="tt-sep" aria-hidden="true">/</span>
+        <span>{thinking!.steps.length} steps</span>
+      </button>
+
+      {#if thinkingOpen}
+        <ThinkingTimeline thinking={thinking!} />
+      {/if}
+    {/if}
+
     {#if isUser}
       <p class="user-text">{content}</p>
     {:else}
@@ -313,17 +332,6 @@
       {/if}
     {/if}
 
-    {#if hasThinking}
-      <button class="thinking-toggle" onclick={() => { thinkingOpen = !thinkingOpen; }}>
-        <span aria-hidden="true">{thinkingOpen ? '\u25BE' : '\u25B8'}</span>
-        <span>Thinking ({thinking!.steps.length} steps)</span>
-      </button>
-
-      {#if thinkingOpen}
-        <ThinkingTimeline thinking={thinking!} />
-      {/if}
-    {/if}
-
     {#if metadata?.workflowGenerated}
       <div class="wf-generated">Workflow generated</div>
     {/if}
@@ -349,54 +357,60 @@
       {/each}
     </div>
   {/if}
+  </div>
 </div>
 
 <style>
-  /* Bubble geometry — square, 2px, no shadow. Depth is border + tint only.
-     Both roles cap at 600px; wide content (tables, pre) scrolls inside. */
-  /* Replies fill the column — the same width as the reasoning bar and the
-     tool-step cards they sit between, so a long answer isn't squeezed into a
-     narrow ribbon while the machinery around it spans the page. User turns stay
-     capped and right-aligned, which is what keeps the thread reading as a
-     dialogue rather than one undifferentiated wall. */
+  /* The transcript is a ledger, not a stack of speech bubbles: every turn is one
+     row with an 84px mono gutter (who / when) and a body column beside it,
+     divided by a hairline. The row is full-bleed so the divider and the
+     assistant wash reach the pane edges, while the content inside stays on the
+     900px reading column via the centring padding. */
   .msg-row {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 16px;
     width: 100%;
     align-self: stretch;
+    padding: 16px max(20px, calc((100% - 900px) / 2));
+    border-bottom: 1px solid var(--line-hair);
   }
-  .msg-row.user {
-    align-items: flex-end;
-    align-self: flex-end;
-    max-width: 600px;
+  /* The assistant register is the wash — that, and the accent role label, is
+     what replaces the bubble. */
+  .msg-row.assistant {
+    background: rgba(196, 87, 10, 0.035);
+  }
+  .msg-body {
+    min-width: 0;
   }
 
   .msg-meta {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    margin-bottom: 5px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding-top: 2px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: rgba(26, 16, 8, 0.5);
-  }
-  .msg-row.user .msg-meta {
-    justify-content: flex-end;
+    letter-spacing: 0.12em;
+    color: var(--text-ghost);
+    min-width: 0;
   }
   .meta-role {
     font-weight: 500;
-    color: var(--text-primary);
+    color: var(--text-ghost);
   }
-  .meta-sep {
-    opacity: 0.4;
+  /* Burnt orange is "this one is the machine talking" — the only colour
+     difference between the two registers besides the wash. */
+  .msg-row.assistant .meta-role {
+    color: var(--accent);
   }
   /* The wall-clock mark stays quiet until the row is hovered — available for
      reference without every turn shouting its timestamp. */
   .meta-time {
     opacity: 0;
+    font-variant-numeric: tabular-nums;
     transition: opacity 0.2s ease-out;
   }
   .msg-row:hover .meta-time,
@@ -404,12 +418,14 @@
     opacity: 1;
   }
 
+  /* No bubble in the assistant register. The element stays so the heartbeat and
+     entity-resolution variants below still have something to dress. */
   .msg-bubble {
     width: 100%;
-    padding: 11px 13px;
-    border: 2px solid var(--card-border);
+    padding: 0;
+    border: 1px solid transparent;
     border-radius: 0;
-    background: var(--card-bg);
+    background: none;
     color: var(--text-primary);
     font-family: var(--font-body);
     /* The one surface on the site that is read rather than scanned — full body
@@ -418,12 +434,13 @@
     font-size: var(--fs-body);
     line-height: 1.6;
   }
+  /* The user turn keeps a bordered block, so a question still reads as an object
+     placed on the page rather than as more prose. */
   .msg-row.user .msg-bubble {
-    border-color: var(--accent-tint-20);
-    background: var(--accent-tint-08);
-    /* Shrink to the question asked — a two-word prompt in a 600px box reads as
-       an empty form field. */
     width: auto;
+    padding: 11px 13px;
+    border-color: var(--line);
+    background: var(--surface-sunken);
   }
   .user-text {
     white-space: pre-wrap;
@@ -436,6 +453,9 @@
      never mistaken for "this is the live turn". */
   .msg-bubble.er-processing {
     position: relative;
+    /* The frame only exists while the job runs, so it brings its own inset —
+       the resting bubble has none. */
+    padding: 11px 13px;
     border-color: var(--accent-ink);
     animation: er-border-pulse 1.8s ease-in-out infinite;
   }
@@ -443,7 +463,7 @@
     0%,
     100% {
       border-color: var(--accent-ink-tint-22);
-      background: var(--card-bg);
+      background: transparent;
     }
     50% {
       border-color: var(--accent-ink);
@@ -452,12 +472,14 @@
   }
   .er-legend {
     position: absolute;
-    top: -2px;
+    top: -1px;
     left: 12px;
     transform: translateY(-50%);
     padding: 0 6px;
-    /* Opaque, so the border it straddles is cut rather than showing through. */
-    background: var(--bg);
+    /* Opaque, so the border it straddles is cut rather than showing through.
+       --surface-shell rather than --bg: the row it sits on carries the assistant
+       wash, and this is the nearest opaque step to it. */
+    background: var(--surface-shell);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -493,29 +515,42 @@
     color: var(--accent);
   }
 
+  /* The machinery row: petrol glyph and word (the "system is fine" colour),
+     ghost metadata after it, `/` between chunks like every other ledger line. */
   .thinking-toggle {
     display: flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 8px;
+    gap: 6px;
+    margin: 0 0 8px;
     background: none;
     border: none;
     padding: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     color: var(--text-ghost);
     cursor: pointer;
     transition: color 0.2s ease-out;
   }
+  .thinking-toggle .tt-glyph,
+  .thinking-toggle .tt-word {
+    color: var(--accent-ink);
+  }
+  .thinking-toggle .tt-sep {
+    opacity: 0.4;
+  }
   .thinking-toggle:hover {
+    color: var(--text-muted);
+  }
+  .thinking-toggle:hover .tt-glyph,
+  .thinking-toggle:hover .tt-word {
     color: var(--accent);
   }
   .wf-generated {
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
@@ -554,8 +589,8 @@
   .chat-markdown :global(pre) {
     margin: 0.5em 0;
     padding: 0.6em 0.8em;
-    border-radius: var(--radius-round);
-    background: var(--bg-section);
+    border-radius: var(--radius-sharp);
+    background: var(--surface-sunken);
     overflow-x: auto;
     font-size: max(0.8em, var(--fs-label-xs));
   }
@@ -582,7 +617,7 @@
   .chat-markdown :global(h2) { font-size: 1.05em; }
   .chat-markdown :global(h3) { font-size: 1em; }
   .chat-markdown :global(blockquote) {
-    border-left: 3px solid var(--card-border);
+    border-left: 3px solid var(--line-strong);
     padding-left: 0.8em;
     margin: 0.4em 0;
     color: var(--text-secondary);
@@ -638,7 +673,7 @@
   }
   .chat-markdown :global(hr) {
     border: none;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line);
     margin: 0.5em 0;
   }
   /* Tables — GFM tables wrapped in .md-table-wrap for horizontal scroll.
@@ -647,8 +682,8 @@
     overflow-x: auto;
     max-width: 100%;
     margin: 0.7em 0;
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
   }
   .chat-markdown :global(.md-table-wrap table) {
     border-collapse: collapse;
@@ -663,14 +698,14 @@
     padding: 6px 11px;
     text-align: left;
     vertical-align: top;
-    border-bottom: 1px solid var(--card-border);
-    border-right: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
   }
   .chat-markdown :global(.md-table-wrap th:last-child),
   .chat-markdown :global(.md-table-wrap td:last-child) { border-right: none; }
   .chat-markdown :global(.md-table-wrap tbody tr:last-child td) { border-bottom: none; }
   .chat-markdown :global(.md-table-wrap thead th) {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 600;
@@ -704,8 +739,13 @@
 
   /* Heartbeat-source message styling */
   .hb-msg {
+    padding: 11px 13px;
     border-color: color-mix(in srgb, var(--error) 18%, transparent) !important;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--error) 4%, transparent), var(--card-bg)) !important;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--error) 4%, transparent),
+      var(--surface-sunken)
+    ) !important;
   }
   .hb-msg-trigger {
     opacity: 0.7;
@@ -723,7 +763,7 @@
     color: var(--text-ghost);
     margin-bottom: 0.4em;
     padding-bottom: 0.3em;
-    border-bottom: 1px dotted var(--card-border);
+    border-bottom: 1px dotted var(--line-strong);
   }
   .hb-pulse {
     color: var(--error);
