@@ -234,14 +234,6 @@ export interface BlockFrame {
   w: number;
 }
 
-export interface DeckMeta {
-  id: string;
-  slug: string;
-  title: string;
-  description: string | null;
-  theme: string;
-}
-
 /** The slide stage's fixed design size, logical px. Slides are laid out at
  *  exactly this size everywhere (player, editor canvas, print/PDF) and then
  *  uniformly transform-scaled to fit their host — resizing the window scales

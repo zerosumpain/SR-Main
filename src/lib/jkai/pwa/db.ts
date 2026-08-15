@@ -58,12 +58,6 @@ export interface DraftRecord {
 	updatedAt: string;
 }
 
-export interface MetaRecord {
-	key: string;
-	value: unknown;
-	updatedAt: string;
-}
-
 export async function openJkaiDB(): Promise<IDBPDatabase> {
 	return openDB(JKAI_DB_NAME, JKAI_DB_VERSION, {
 		upgrade(db) {

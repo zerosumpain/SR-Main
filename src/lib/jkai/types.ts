@@ -48,14 +48,6 @@ export interface ActionRecord {
   exitCode: number;
 }
 
-export interface TestResult {
-  passed: boolean;
-  output: string;
-  testCount: number;
-  failCount: number;
-  duration: number;
-}
-
 export interface BudgetCheckResult {
   canProceed: boolean;
   sleepMs?: number;

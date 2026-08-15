@@ -22,14 +22,6 @@ export interface GeneratedWorkflow {
   trigger?: { type: string; config?: Record<string, unknown> };
 }
 
-export interface PlanningResult {
-  proposal: string;
-  critique: string;
-  revision: string;
-  finalWorkflow: GeneratedWorkflow;
-  tokensUsed: number;
-}
-
 export interface OrchestratorConfig {
   temperature?: number;
   maxTokens?: number;
