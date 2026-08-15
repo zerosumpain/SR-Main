@@ -246,6 +246,50 @@
       <p class="summary">{data.entity.summary}</p>
     {/if}
 
+    <!-- Actions sit here, directly under the name, not at the foot of the
+         card. The card is long — confidence, its breakdown, the evidence
+         timeline and then the evidence itself — so a footer put "research
+         this" and "add to dossier" below a scroll on every entity worth
+         reading about. They are what you came to do; they should not be the
+         last thing you can reach. -->
+    {#if onCommission}
+      <footer>
+        <button
+          type="button"
+          onclick={() => onCommission('research', `Deep dive on ${data!.entity.name} — profile, affiliations, recent developments`, [entityId])}
+        >Research</button>
+        <button
+          type="button"
+          onclick={() => onCommission('ask', `Tell me everything my intel graph knows about ${data!.entity.name}, and what it implies.`, [entityId])}
+        >Ask jkai</button>
+        <button
+          type="button"
+          onclick={() => onCommission('monitor', `Watch for news and changes about ${data!.entity.name}`, [entityId])}
+        >Monitor</button>
+        <button type="button" class:on={pinOpen} onclick={openPin}>Add to dossier</button>
+        <a class="btn-link" href="/jkai/intel/entities/{entityId}">Open</a>
+      </footer>
+
+      {#if pinOpen}
+        <div class="pin-list">
+          {#if !dossiersLoaded}
+            <p class="pin-note">Loading case files…</p>
+          {:else if dossiers.length === 0}
+            <p class="pin-note">No open dossiers. <a href="/jkai/intel/dossiers">Start one →</a></p>
+          {:else}
+            {#each dossiers as d (d.id)}
+              <button type="button" class="pin-item" disabled={pinBusy} onclick={() => pinTo(d)}>
+                {d.title}
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+      {#if pinResult}
+        <p class="pin-note done">{pinResult}</p>
+      {/if}
+    {/if}
+
     <div class="metrics">
       <span title="Direct connections"><b>{data.metrics.degree}</b> links</span>
       <span title="Share of graph importance"><b>{pct(data.metrics.importance)}</b> importance</span>
@@ -370,28 +414,12 @@
       </dl>
     {/if}
 
-    {#if data.neighbours.length}
-      <section>
-        <h4>Connected to</h4>
-        <ul class="neighbours">
-          {#each data.neighbours.slice(0, compact ? 6 : 14) as n}
-            <li>
-              <button
-                type="button"
-                class="neighbour"
-                class:cross={n.crossCommunity}
-                onclick={() => onFocus?.(n.id)}
-                title="{n.relationship} — {n.degree} links"
-              >
-                <span class="dot" style="background: {n.color};"></span>
-                <span class="nb-name">{n.name}</span>
-                <span class="rel">{n.relationship}</span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      </section>
-    {/if}
+    <!-- "Connected to" was here. Removed deliberately: it listed the same
+         neighbours the graph is already drawing around the node you clicked,
+         so it re-answered the one question the surface behind it answers
+         better, and it did so at fourteen rows — pushing the evidence, which
+         the graph CANNOT show, below the fold. `onFocus` is still honoured
+         from the graph itself. -->
 
     {#if data.timeline.length && !compact}
       <section>
@@ -425,43 +453,6 @@
       {/if}
     {/if}
 
-    {#if onCommission}
-      <footer>
-        <button
-          type="button"
-          onclick={() => onCommission('research', `Deep dive on ${data!.entity.name} — profile, affiliations, recent developments`, [entityId])}
-        >Research</button>
-        <button
-          type="button"
-          onclick={() => onCommission('ask', `Tell me everything my intel graph knows about ${data!.entity.name}, and what it implies.`, [entityId])}
-        >Ask jkai</button>
-        <button
-          type="button"
-          onclick={() => onCommission('monitor', `Watch for news and changes about ${data!.entity.name}`, [entityId])}
-        >Monitor</button>
-        <button type="button" class:on={pinOpen} onclick={openPin}>Add to dossier</button>
-        <a class="btn-link" href="/jkai/intel/entities/{entityId}">Open</a>
-      </footer>
-
-      {#if pinOpen}
-        <div class="pin-list">
-          {#if !dossiersLoaded}
-            <p class="pin-note">Loading case files…</p>
-          {:else if dossiers.length === 0}
-            <p class="pin-note">No open dossiers. <a href="/jkai/intel/dossiers">Start one →</a></p>
-          {:else}
-            {#each dossiers as d (d.id)}
-              <button type="button" class="pin-item" disabled={pinBusy} onclick={() => pinTo(d)}>
-                {d.title}
-              </button>
-            {/each}
-          {/if}
-        </div>
-      {/if}
-      {#if pinResult}
-        <p class="pin-note done">{pinResult}</p>
-      {/if}
-    {/if}
   {/if}
 </div>
 
@@ -838,56 +829,6 @@
     padding: 0;
   }
 
-  /* As .pin-list: no nested scroller. The list is already capped by how many
-     neighbours the card asks for. */
-  .neighbours {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .neighbour {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 3px 4px;
-    border-radius: var(--radius-sharp);
-    cursor: pointer;
-    text-align: left;
-    font: inherit;
-    color: var(--text-secondary);
-  }
-  .neighbour:hover {
-    background: var(--accent-tint-08);
-  }
-  .neighbour.cross .nb-name {
-    color: var(--accent);
-  }
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: var(--radius-pill);
-    flex-shrink: 0;
-  }
-  .nb-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .rel {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--text-ghost);
-    white-space: nowrap;
-    max-width: 40%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .props {
     margin: 0 0 10px;
     display: grid;
@@ -941,12 +882,16 @@
     flex-shrink: 0;
   }
 
+  /* Still the `footer` element — it is the card's action set, wherever it sits
+     — but it now sits under the name, so the rule that separated it from the
+     content above is now the rule that separates it from the content BELOW. */
   footer {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding-top: 10px;
-    border-top: 1px solid var(--divider);
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--divider);
   }
   footer button,
   .btn-link {
