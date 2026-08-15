@@ -29,6 +29,14 @@
   // aggregator poll.
   const store = getContext<BiomeStore>('biome');
 
+  let {
+    deploys = null,
+  }: {
+    /** Today's shipping, read off the same release showcase the Shipped section
+     *  uses. Null when the loader had nothing to say. */
+    deploys?: { today: number; peak: number; latestAt: string | null } | null;
+  } = $props();
+
   let mounted = $state(false);
   let v = $state<VitalsPayload | null>(null);
   let now = $state(Date.now());
@@ -200,6 +208,23 @@
     {/if}
   </div>
 
+  {#if deploys}
+    <div class="v-deploys">
+      <span class="metric-label">Deploys today</span>
+      <p class="v-deploys-read">
+        <span class="v-deploys-n">{deploys.today}</span>
+        shipped
+        {#if deploys.latestAt}<span class="v-sep" aria-hidden="true">/</span>latest {deploys.latestAt}{/if}
+      </p>
+      <span class="v-deploys-bar" aria-hidden="true">
+        <span
+          class="v-deploys-fill"
+          style="width: {Math.min(100, Math.round((deploys.today / Math.max(1, deploys.peak)) * 100))}%"
+        ></span>
+      </span>
+    </div>
+  {/if}
+
   <div class="v-foot">
     <a class="v-btn primary" href="/live">Live tracker →</a>
     <a class="v-btn" href="/health">Health data</a>
@@ -234,8 +259,13 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* The pulse band takes the rail's slack. The rail is as tall as the hero, and
+     the alternative was a pool of dead space between the readings and the way
+     out — better that the air sits under the signature numeral, which is what
+     the panel is for. */
   .v-hero {
     display: flex;
+    flex: 1;
     align-items: flex-end;
     justify-content: space-between;
     gap: 16px;
@@ -258,7 +288,13 @@
     font-variant-numeric: tabular-nums;
     color: var(--text-primary);
   }
+  /* No live reading. Mono and a step down, so the panel says "nothing to
+     report" rather than drawing a display-weight em-dash the size of a bar. */
   .v-hero-num.muted {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: var(--fs-num-lg);
+    letter-spacing: 0;
     color: var(--text-ghost);
   }
   .v-hero-dot {
@@ -298,18 +334,60 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     border-top: none;
     border-left: none;
-    min-height: 168px;
+    flex: none;
     align-content: start;
   }
   .v-grid > :global(*:nth-child(2n)) {
     border-right: none;
   }
 
+  /* Today's shipping — the band that keeps the rail from ending in dead space
+     between the readings and the way out. */
+  .v-deploys {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-top: auto;
+    padding: 16px 20px;
+    border-top: 1px solid var(--line);
+  }
+  .v-deploys-read {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .v-deploys-n {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    margin-right: 0.5ch;
+  }
+  .v-sep {
+    color: var(--text-ghost);
+    margin: 0 0.5ch;
+  }
+  .v-deploys-bar {
+    display: block;
+    height: 4px;
+    background: var(--line);
+  }
+  .v-deploys-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+
   .v-foot {
     display: flex;
     gap: 8px;
-    margin-top: auto;
     padding: 14px 20px;
+  }
+  /* Without the deploys band there is nothing to push the foot down, so it
+     takes the slack itself. */
+  .vitals:not(:has(.v-deploys)) .v-foot {
+    margin-top: auto;
   }
   .v-btn {
     display: inline-flex;

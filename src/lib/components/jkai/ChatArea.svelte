@@ -3194,6 +3194,14 @@
      by which side of the pane they hug. */
   .msg-stack > .msg-slot {
     grid-column: 1 / -1;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  /* The assistant register is the wash — that, and the accent role label in the
+     gutter, is what replaces the bubble. It covers the whole slot so a reply's
+     attachments and chips sit inside the same band as its words. */
+  .msg-stack > .msg-slot:not(.user-turn) {
+    background: rgba(196, 87, 10, 0.035);
   }
   /* Only the message row itself is full-bleed. Everything else in the slot —
      origin tags above it, workflow chips / attachments / build pills below —

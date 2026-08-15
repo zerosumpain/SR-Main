@@ -704,9 +704,13 @@
     LOOP_STAGES.map((stage) => {
       const surface = SURFACES.find((sfc) => sfc.stage === stage)!;
       const value = surface.count ? (loopCounts[surface.count] ?? 0) : (loopCounts.entities ?? 0);
+      const label = surface.label.toLowerCase();
+      // "02 triage · triage" read as a stutter. When the surface's name IS the
+      // stage word, the stage says it once and the label is dropped.
+      const stageWord = stage.split(' ')[1];
       return {
         stage,
-        label: surface.label.toLowerCase(),
+        label: label === stageWord ? '' : label,
         href: surface.href,
         question: surface.question,
         value,
@@ -801,7 +805,9 @@
     {#each LOOP_CELLS as cell (cell.stage + cell.label)}
       <a class="loop-cell" href={cell.href}>
         <div class="loop-top">
-          <span class="metric-label" class:accent={cell.warn}>{cell.stage} · {cell.label}</span>
+          <span class="metric-label" class:accent={cell.warn}
+            >{cell.stage}{cell.label ? ` · ${cell.label}` : ''}</span
+          >
           <span class="loop-n" class:accent={cell.warn} class:ink={cell.ink}>{cell.value}</span>
         </div>
         <p class="loop-q">{cell.question}</p>
@@ -1478,10 +1484,17 @@
   }
 
   .note-row a {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     font-size: var(--fs-label);
     line-height: 1.4;
     color: var(--text-primary);
     text-decoration: none;
+    /* Note titles can be raw generated paths with no spaces in them. */
+    overflow-wrap: anywhere;
   }
   .note-row a:hover {
     color: var(--accent);

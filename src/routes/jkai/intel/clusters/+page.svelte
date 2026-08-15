@@ -71,7 +71,7 @@
       <button type="button" class="nm-save-btn" disabled={recalculating} onclick={recalculate}>
         {recalculating ? 'Recalculating…' : 'Recalculate'}
       </button>
-      <a class="back-link" href="/jkai/intel">← Explorer</a>
+      <a class="back-link" href="/jkai/intel">Explorer</a>
     </div>
     {#if error}<p class="err">{error}</p>{/if}
   </header>

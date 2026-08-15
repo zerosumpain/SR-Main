@@ -354,17 +354,13 @@
     color: var(--text-muted);
   }
 
+  /* The three figures run the full width, and the sentence that says what they
+     are evidence of sits under them. Side by side, a 686,199 had nowhere to go
+     and spilled out of its cell. */
   .seam-lede {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-    gap: clamp(24px, 4vw, 56px);
-    align-items: end;
-  }
-  @media (max-width: 860px) {
-    .seam-lede {
-      grid-template-columns: 1fr;
-      gap: 26px;
-    }
+    display: flex;
+    flex-direction: column;
+    gap: clamp(20px, 3vw, 30px);
   }
 
   /* Three cells of one grid, label under figure — the old stacked rows read as
@@ -372,7 +368,9 @@
   .seam-figures {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     background: var(--bg);
-    align-self: start;
+  }
+  .seam-figures > .fig {
+    padding: 20px 22px;
   }
   .fig {
     display: flex;

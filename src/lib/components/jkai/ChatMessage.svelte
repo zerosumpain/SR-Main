@@ -261,7 +261,7 @@
 <!-- One ledger row per turn: an 84px mono gutter carrying who and when, the body
      in the column beside it, and a hairline rule underneath. Assistant turns take
      a faint accent wash so the two registers separate without a bubble. -->
-<div class="msg-row" class:user={isUser} class:assistant={!isUser}>
+<div class="msg-row" class:user={isUser} class:assistant={!isUser} class:bodyless={!hasBody}>
   <!-- ROLE / TIMESTAMP — the uniform every turn wears, now in the gutter. -->
   <div class="msg-meta">
     <span class="meta-role">{roleLabel}</span>
@@ -373,12 +373,14 @@
     width: 100%;
     align-self: stretch;
     padding: 16px max(20px, calc((100% - 900px) / 2));
-    border-bottom: 1px solid var(--line-hair);
   }
-  /* The assistant register is the wash — that, and the accent role label, is
-     what replaces the bubble. */
-  .msg-row.assistant {
-    background: rgba(196, 87, 10, 0.035);
+  /* The wash and the divider belong to the whole TURN, not to its prose — a
+     reply's attachments, workflow chips and build pill are part of the same
+     thing the model said. Both live on .msg-slot in ChatArea; an
+     attachment-only turn would otherwise draw an empty band of wash above an
+     attachment sitting on bare page ground. */
+  .msg-row.bodyless {
+    padding-bottom: 0;
   }
   .msg-body {
     min-width: 0;
@@ -436,8 +438,11 @@
   }
   /* The user turn keeps a bordered block, so a question still reads as an object
      placed on the page rather than as more prose. */
+  /* Shrink to the question asked — `width: auto` on a block element is 100%,
+     which put a two-word prompt in an empty-looking form field. */
   .msg-row.user .msg-bubble {
-    width: auto;
+    width: fit-content;
+    max-width: 100%;
     padding: 11px 13px;
     border-color: var(--line);
     background: var(--surface-sunken);

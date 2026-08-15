@@ -1006,9 +1006,11 @@
             >
               <svg class="folder-icon-sm" width="22" height="18" viewBox="0 0 46 38" fill="none" aria-hidden="true"><path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/></svg>
               <span class="folder-row-name">{fol.name}</span>
-              {@render erChip(joinPath(currentPath, fol.name))}
+              <!-- Placed into the file table's own columns so a folder row reads
+                   across the same grid as the files under it. -->
               <span class="folder-row-count">{fol.count} item{fol.count === 1 ? '' : 's'}</span>
-              <button type="button" class="row-link danger" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
+              <span class="folder-row-er">{@render erChip(joinPath(currentPath, fol.name))}</span>
+              <button type="button" class="row-link danger folder-row-del" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
             </div>
           {/each}
           {#each visibleFiles as f (f.id)}
@@ -1463,10 +1465,13 @@
     display: grid;
     border-top: 1px solid var(--line-strong);
   }
+  /* Explicit tracks on BOTH grids. They are separate elements, so any `auto`
+     track resolves against its own content and the head stops lining up with
+     the rows beneath it — which is exactly what happened. */
   .fl-head,
   .file-card {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 120px 88px 132px 104px auto auto;
+    grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px 104px;
     align-items: center;
     gap: 12px;
   }
@@ -1481,12 +1486,48 @@
   }
   .fl-head .num { text-align: right; }
   .file-card {
+    position: relative;
     padding: 9px 10px;
     background: var(--bg);
     border-bottom: 1px solid var(--line-hair);
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     transition: background var(--t-fast) var(--ease-out);
+  }
+  /* Six action links are 390px of text — a track that wide leaves the name
+     column nothing and forces the table sideways. They ride over the row's
+     right edge on hover instead, the same way the grid tiles and the canvas
+     cards on this site already work. */
+  .file-list .file-actions {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    padding-left: 14px;
+    background: var(--bg);
+    opacity: 0;
+    transition: opacity var(--t-fast) var(--ease-out);
+  }
+  .file-card:hover .file-actions,
+  .file-card:focus-within .file-actions {
+    opacity: 1;
+  }
+  .file-card:hover .file-actions,
+  .file-card.sel .file-actions {
+    background: var(--surface-sunken);
+  }
+  /* No hover on touch: the actions take a row of their own instead of hiding. */
+  @media (hover: none) {
+    .file-list .file-actions {
+      position: static;
+      transform: none;
+      opacity: 1;
+      padding-left: 0;
+      background: none;
+      grid-column: 1 / -1;
+      margin-top: 6px;
+    }
   }
   .file-card:hover { background: var(--surface-sunken); }
   .file-card[draggable="true"] { cursor: grab; }
@@ -1516,32 +1557,47 @@
 
   /* Below the table's natural width the columns fold away, quietest first, so
      the name always survives and nothing scrolls sideways. */
-  @media (max-width: 1200px) {
+  /* Columns fold away quietest-first. Perms go before Updated: the R/W/A/D
+     chips gate workflow nodes, which is not what you are reading a file list
+     for. */
+  @media (max-width: 1150px) {
     .fl-head,
-    .file-card {
-      grid-template-columns: auto minmax(0, 1fr) 120px 88px 104px auto auto;
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px;
+    }
+    .fl-head > :nth-child(7),
+    .file-perms { display: none; }
+  }
+  @media (max-width: 980px) {
+    .fl-head,
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 104px;
     }
     .fl-head > :nth-child(5),
     .fr-updated { display: none; }
   }
-  @media (max-width: 980px) {
+  @media (max-width: 820px) {
     .fl-head,
-    .file-card {
-      grid-template-columns: auto minmax(0, 1fr) 88px 104px auto auto;
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 84px 104px;
     }
     .fl-head > :nth-child(3),
     .fr-folder { display: none; }
   }
-  @media (max-width: 760px) {
+  @media (max-width: 620px) {
     .fl-head { display: none; }
-    .file-card {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      row-gap: 6px;
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      row-gap: 5px;
     }
     .fr-size,
-    .fr-intel { grid-column: 2; }
-    .file-perms,
-    .file-actions { grid-column: 2 / -1; }
+    .fr-intel {
+      grid-column: 2;
+    }
   }
   .file-check {
     display: inline-flex;
@@ -1921,9 +1977,10 @@
   .folder-del:hover { color: var(--error); }
 
   .folder-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px 104px;
     align-items: center;
-    gap: 0.8rem;
+    gap: 12px;
     padding: 9px 10px;
     background: var(--surface-sunken);
     border-bottom: 1px solid var(--line-hair);
@@ -1931,6 +1988,28 @@
     transition: background var(--t-fast) var(--ease-out);
   }
   .folder-row:hover { background: var(--accent-tint-04); }
+  .folder-row-count { grid-column: 5; }
+  .folder-row-er { grid-column: 6; min-width: 0; }
+  .folder-row-del { grid-column: 7; justify-self: start; }
+  @media (max-width: 1150px) {
+    .folder-row-del { grid-column: 6; justify-self: end; }
+    .folder-row-er { grid-column: 5; }
+    .folder-row-count { grid-column: 4; }
+  }
+  @media (max-width: 980px) {
+    .folder-row-del { grid-column: 5; }
+    .folder-row-er { grid-column: 4; }
+    .folder-row-count { grid-column: 3; }
+  }
+  @media (max-width: 820px) {
+    .folder-row-del { grid-column: 4; }
+    .folder-row-er { grid-column: 3; }
+    .folder-row-count { display: none; }
+  }
+  @media (max-width: 620px) {
+    .folder-row-er { grid-column: 2; }
+    .folder-row-del { grid-column: 3; justify-self: end; }
+  }
   .folder-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .folder-icon-sm { color: var(--accent); flex-shrink: 0; }
   .folder-row-name {

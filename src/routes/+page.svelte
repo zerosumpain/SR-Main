@@ -92,6 +92,23 @@
 
   let syncedText = $derived(formatSynced(lastSyncedAt, now));
 
+  // Today's shipping for the vitals rail, read off the same release showcase the
+  // Shipped section below renders — one loader, two readings of it. `peak` is
+  // the busiest day in the window, so the bar is scaled against what a heavy day
+  // actually looks like rather than an invented ceiling.
+  let deploysToday = $derived.by(() => {
+    const cadence = data.releases?.cadence ?? [];
+    if (cadence.length === 0) return null;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const today = cadence.find((d) => d.date === todayKey)?.count ?? 0;
+    const peak = Math.max(1, ...cadence.map((d) => d.count));
+    const last = data.releases?.totals?.lastDeploy ?? null;
+    const latestAt = last
+      ? new Date(last).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : null;
+    return { today, peak, latestAt: today > 0 ? latestAt : null };
+  });
+
   onMount(() => {
     // initialBiome is streamed from the server load, so seed the store once it
     // resolves; the store's own polling takes over from there.
@@ -177,7 +194,7 @@
       </div>
       <div class="hero-divider" aria-hidden="true"></div>
       <aside class="hero-aside">
-        <VitalSigns />
+        <VitalSigns deploys={deploysToday} />
       </aside>
     </div>
   </div>
@@ -186,6 +203,8 @@
   <div class="relative z-10 text-center mt-4 hero-pad">
     <LiveWalkBanner />
   </div>
+
+  <BackgroundToggle />
 
   <!-- Footer meta bar -->
   <div class="relative z-10 flex justify-between items-center hero-pad hero-sig">
@@ -231,8 +250,6 @@
     <a href="/admin" class="nav-link">Admin</a>
   </div>
 </footer>
-
-<BackgroundToggle />
 
 <style>
   /* The footer is a rail band, like the nav strip that opens the page — the

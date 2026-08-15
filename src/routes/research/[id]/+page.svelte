@@ -285,7 +285,7 @@
       <h1>{data.session.topic}</h1>
       <p class="scope-line">{data.session.scopeLabel}</p>
     </div>
-    <a class="back-link" href="/research">← All research</a>
+    <a class="back-link" href="/research">All research</a>
   </header>
 
   <section class="statusbar">

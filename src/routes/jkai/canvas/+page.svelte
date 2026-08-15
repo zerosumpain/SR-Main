@@ -233,7 +233,7 @@
         <code>LLM</code> / <code>parse</code> / <code>intel</code> / <code>agent</code> nodes.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <a class="back-link" href="/jkai">JKAI</a>
   </header>
 
   <div class="board">
