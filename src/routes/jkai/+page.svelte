@@ -1,5 +1,6 @@
 <script lang="ts">
   import ConversationSidebar from '$lib/components/jkai/ConversationSidebar.svelte';
+  import ConversationTabs from '$lib/components/jkai/ConversationTabs.svelte';
   import ShareConversationModal from '$lib/components/jkai/ShareConversationModal.svelte';
   import ChatArea from '$lib/components/jkai/ChatArea.svelte';
   import BriefingCard from '$lib/components/jkai/BriefingCard.svelte';
@@ -7,19 +8,27 @@
   import type { ModelContext } from '$lib/server/models/types';
   import { onMount } from 'svelte';
   import { hub, setLiveRuns, closeGraphSheet } from '$lib/jkai/hub-bus.svelte';
+  import {
+    openTabs,
+    openTab,
+    closeTab,
+    activateTab,
+    cycleTab,
+    forgetTab,
+    setTabActivity,
+    restoreTabs,
+    readStoredTabs,
+    hasTab,
+    MAX_TABS,
+    type TabView,
+  } from '$lib/jkai/open-tabs.svelte';
 
   let { data } = $props();
 
   let conversationList = $state(data.conversations);
   let whatsappThread = $state(data.whatsappThread);
-  let activeConversationId = $state<string | null>(null);
-  let activeMessages = $state<any[]>([]);
-  let activeConversation = $state<{ modelProvider?: string; modelId?: string } | null>(null);
-  let activeContextLength = $state<number | null>(null);
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
-  let activeModelCaps = $state<{ image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null>(null);
-  let activeBuild = $state<{ id: string; status: string } | null>(null);
   let sidebarOpen = $state(false);
   // Desktop sidebar collapsed to an icon rail (persisted across visits).
   let sidebarCollapsed = $state(false);
@@ -34,9 +43,59 @@
   // reflects work that continued in the background.
   let liveConversationIds = $state<string[]>([]);
 
+  /**
+   * Everything one mounted chat pane needs. Fetched once, when the tab opens,
+   * and then LEFT ALONE: `ChatArea` maps `initialMessages` into its own live
+   * transcript inside an effect, so rewriting this array would wipe out
+   * whatever the pane has streamed since.
+   */
+  interface PaneData {
+    messages: any[];
+    conversation: { modelProvider?: string; modelId?: string } | null;
+    modelCaps: { image: boolean; audio: boolean; video: boolean; pdf: boolean; documentText: boolean } | null;
+    contextLength: number | null;
+    activeBuild: { id: string; status: string } | null;
+  }
+  let panes = $state<Record<string, PaneData>>({});
+  // Threads whose history is in flight. A plain Set: nothing reactive reads it,
+  // and making it $state would subscribe the loader to its own writes.
+  const loadingPanes = new Set<string>();
+
+  const activeId = $derived(openTabs.activeId);
+
   const LAST_VISIT_STORAGE_KEY = 'jkai.lastVisit';
   const LAST_CONV_STORAGE_KEY = 'jkai.lastConversationId';
   const RESUME_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+  /** Named the same way the rail names a row, so strip and rail never disagree. */
+  function titleFor(id: string): string {
+    const c = conversationList.find((x) => x.id === id);
+    if (!c) return 'thread';
+    if (c.title?.trim()) return c.title.trim();
+    const first = c.lastMessage?.trim().split('\n')[0];
+    return first || 'new thread';
+  }
+
+  /**
+   * Tab labels are resolved here rather than stored in the tab list, so a rename
+   * in the rail reaches the strip without a second copy to keep in step.
+   */
+  const tabViews = $derived<TabView[]>(
+    openTabs.items.map((t) => {
+      const full = titleFor(t.id);
+      const note =
+        t.activity === 'running' ? ' — working'
+        : t.activity === 'reply' ? ' — replied while you were away'
+        : t.activity === 'error' ? ' — that turn failed'
+        : '';
+      return {
+        id: t.id,
+        label: full.length > 34 ? `${full.slice(0, 33)}…` : full,
+        activity: t.activity,
+        title: `${full}${note}`,
+      };
+    }),
+  );
 
   onMount(() => {
     try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { /* ignore */ }
@@ -60,16 +119,42 @@
     // 1) Deep-link from a WhatsApp escalation: ?c=<convId>. If it matches a
     // known conversation we open it; otherwise we fall through to the
     // localStorage-based resume so the URL doesn't strand the user.
+    let deepLinkId: string | null = null;
     try {
       const params = new URLSearchParams(window.location.search);
-      const deepLinkId = params.get('c');
-      if (!forceNew && deepLinkId && conversationList.some((c) => c.id === deepLinkId)) {
-        selectConversation(deepLinkId);
-        resumed = true;
-      }
+      const id = params.get('c');
+      if (!forceNew && id && conversationList.some((c) => c.id === id)) deepLinkId = id;
     } catch {
       // ignore URL parse failures
     }
+
+    // 2) The tab set from the last visit. Restoring the whole working set is
+    // the point of having tabs — coming back to one of three open threads is
+    // the same as not having them. Ids for threads that have since been
+    // deleted are dropped rather than restored as tabs that 404 on open.
+    if (!forceNew) {
+      const stored = readStoredTabs();
+      const live = stored.ids.filter((id) => conversationList.some((c) => c.id === id));
+      if (live.length > 0) {
+        // A deep link is a destination, not a suggestion — a WhatsApp escalation
+        // that landed you on somebody else's thread because the strip happened to
+        // be full would be worse than dropping the oldest restored tab. So it
+        // gets a slot reserved before the saved set is trimmed to fit.
+        const needsRoom = deepLinkId !== null && !live.includes(deepLinkId);
+        const room = needsRoom ? MAX_TABS - 1 : MAX_TABS;
+        restoreTabs(live.slice(0, room), deepLinkId ?? stored.activeId);
+        for (const tab of openTabs.items) void loadPane(tab.id);
+        if (deepLinkId && !hasTab(deepLinkId)) selectConversation(deepLinkId);
+        resumed = true;
+      }
+    }
+
+    if (!resumed && deepLinkId) {
+      selectConversation(deepLinkId);
+      resumed = true;
+    }
+
+    // 3) Single-thread resume, for a visit that predates any saved tab set.
     if (!resumed && !forceNew) {
       try {
         const lastVisitStr = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
@@ -95,8 +180,6 @@
       try {
         const url = new URL(window.location.href);
         url.searchParams.delete('q');
-        // `send` goes with it: a refresh must not re-ask the question.
-        url.searchParams.delete('send');
         history.replaceState(history.state, '', url);
       } catch {
         // ignore
@@ -138,9 +221,13 @@
     // tell the server we're actively watching. wa-escalation uses this to
     // suppress WhatsApp pings while we're here — and, because we stop beating
     // when the tab is hidden/closed, to detect when we've navigated away.
+    //
+    // Presence follows the tab on screen, not every open tab: a thread mounted
+    // in the background is still one the user is not reading, so escalating it
+    // to WhatsApp is the right call.
     const sendPresence = () => {
       if (document.visibilityState !== 'visible') return;
-      const convId = activeConversationId;
+      const convId = openTabs.activeId;
       if (!convId) return;
       void fetch('/api/workflows/orchestrator/chat/presence', {
         method: 'POST',
@@ -171,30 +258,53 @@
     }
   }
 
-  async function selectConversation(id: string) {
-    activeConversationId = id;
-    rememberConversation(id);
-    sidebarOpen = false;
+  /**
+   * Fetch a thread's history once, for the pane that is about to render it.
+   *
+   * The pane is only created when the history is in hand. Mounting an empty one
+   * first and filling it afterwards would reassign `initialMessages`, and the
+   * effect in ChatArea that maps that prop into its live transcript would wipe
+   * anything the user had already sent in the meantime.
+   */
+  async function loadPane(id: string): Promise<void> {
+    if (panes[id] || loadingPanes.has(id)) return;
+    loadingPanes.add(id);
     try {
       const res = await fetch(`/api/jkai/conversations/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        activeMessages = data.messages || [];
-        activeConversation = data.conversation || null;
-        activeModelCaps = data.modelCapabilities || null;
-        activeContextLength = data.modelContextLength ?? null;
-        activeBuild = data.activeBuild || null;
+      if (!res.ok) {
+        // Render it anyway: an empty thread with a working composer beats a
+        // permanently blank column, and the history returns on the next open.
+        panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+        return;
       }
+      const body = await res.json();
+      panes[id] = {
+        messages: body.messages || [],
+        conversation: body.conversation || null,
+        modelCaps: body.modelCapabilities || null,
+        contextLength: body.modelContextLength ?? null,
+        activeBuild: body.activeBuild || null,
+      };
     } catch {
-      activeMessages = [];
-      activeConversation = null;
-      activeModelCaps = null;
-      activeContextLength = null;
-      activeBuild = null;
+      panes[id] = { messages: [], conversation: null, modelCaps: null, contextLength: null, activeBuild: null };
+    } finally {
+      loadingPanes.delete(id);
     }
   }
 
+  /** Open a thread in a tab, loading it if this is the first time. */
+  function selectConversation(id: string) {
+    sidebarOpen = false;
+    if (!openTab(id)) return;
+    rememberConversation(id);
+    void loadPane(id);
+  }
+
   async function createConversation() {
+    if (openTabs.items.length >= MAX_TABS) {
+      openTabs.limitHit = true;
+      return;
+    }
     try {
       const res = await fetch('/api/jkai/conversations', {
         method: 'POST',
@@ -207,10 +317,17 @@
           { ...conv, messageCount: 0, lastMessage: null },
           ...conversationList,
         ];
-        activeConversationId = conv.id;
+        // A new thread has nothing to fetch — seed the pane directly so it
+        // renders without a round trip.
+        panes[conv.id] = {
+          messages: [],
+          conversation: conv,
+          modelCaps: null,
+          contextLength: null,
+          activeBuild: null,
+        };
+        openTab(conv.id);
         rememberConversation(conv.id);
-        activeConversation = conv;
-        activeMessages = [];
         sidebarOpen = false;
       }
     } catch (err) {
@@ -232,10 +349,8 @@
     try {
       await fetch(`/api/jkai/conversations/${id}`, { method: 'DELETE' });
       conversationList = conversationList.filter((c) => c.id !== id);
-      if (activeConversationId === id) {
-        activeConversationId = null;
-        activeMessages = [];
-      }
+      forgetTab(id);
+      delete panes[id];
     } catch (err) {
       console.error('Failed to delete conversation:', err);
     }
@@ -292,6 +407,35 @@
       console.error('Failed to (un)pin conversation:', err);
     }
   }
+
+  /**
+   * A pane reporting that it has started or stopped working.
+   *
+   * `reply` is only ever set on a tab the user is not looking at — that badge
+   * exists to say "something landed elsewhere", so stamping it on the thread in
+   * front of them would be noise.
+   */
+  function handleBusyChange(id: string, busy: boolean, ok: boolean) {
+    if (busy) {
+      setTabActivity(id, 'running');
+      return;
+    }
+    if (!ok) {
+      setTabActivity(id, 'error');
+      return;
+    }
+    setTabActivity(id, id === openTabs.activeId ? 'idle' : 'reply');
+  }
+
+  function handleModelChange(id: string, ctx: ModelContext) {
+    const pane = panes[id];
+    if (!pane) return;
+    pane.conversation = {
+      ...(pane.conversation ?? {}),
+      modelProvider: ctx.provider,
+      modelId: ctx.modelId,
+    };
+  }
 </script>
 
 <svelte:head>
@@ -304,7 +448,7 @@
     <ConversationSidebar
       conversations={conversationList}
       {whatsappThread}
-      {activeConversationId}
+      activeConversationId={activeId}
       onSelect={selectConversation}
       onNew={createConversation}
       onWhatsAppSelect={selectWhatsApp}
@@ -315,6 +459,7 @@
       collapsed={sidebarCollapsed}
       onToggleCollapse={toggleSidebarCollapsed}
       {liveConversationIds}
+      openTabIds={openTabs.items.map((t) => t.id)}
     />
   </div>
   {#if sidebarOpen}
@@ -330,37 +475,63 @@
         <BriefingCard briefing={data.freshBriefing} />
       </div>
     {/if}
-    <ChatArea
-      conversationId={activeConversationId}
-      initialMessages={activeMessages}
-      initialDraft={data.pendingQuestion}
-      autoSend={data.pendingSend}
-      conversation={activeConversation}
-      modelContextLength={activeContextLength}
-      modelCapabilities={activeModelCaps}
-      defaultChatModelId={data.defaultChatModel.modelId}
-      altOpenRouterModel={data.chatAltOpenRouterModel}
-      messageCount={activeMessages.length}
-      approvalUi={data.approvalUi}
-      hermesEnabled={data.hermesEnabled}
-      {activeBuild}
-      onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
-      onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
-      {graphRailOpen}
-      onmodelchange={(ctx: ModelContext) => {
-        activeConversation = {
-          ...(activeConversation ?? {}),
-          modelProvider: ctx.provider,
-          modelId: ctx.modelId,
-        };
-      }}
+
+    <ConversationTabs
+      tabs={tabViews}
+      activeId={activeId}
+      canOpenMore={openTabs.items.length < MAX_TABS}
+      limitHit={openTabs.limitHit}
+      onActivate={activateTab}
+      onClose={closeTab}
+      onNew={createConversation}
+      onCycle={cycleTab}
     />
+
+    <!--
+      One mounted pane per open tab, hidden rather than destroyed when it is not
+      the one on screen. That is what makes several threads run at once: a pane
+      owns its chat stream, composer draft, tool cards and progress bubble for
+      its whole life, so a running turn cannot follow the user into another
+      thread — which is exactly what used to happen, because `chatStream` was
+      closed only by an explicit cancel.
+    -->
+    {#each openTabs.items as tab (tab.id)}
+      {@const pane = panes[tab.id]}
+      {#if pane}
+        <div class="pane" class:on-screen={tab.id === activeId}>
+          <ChatArea
+            conversationId={tab.id}
+            initialMessages={pane.messages}
+            initialDraft={tab.id === activeId ? data.pendingQuestion : ''}
+            conversation={pane.conversation}
+            modelContextLength={pane.contextLength}
+            modelCapabilities={pane.modelCaps}
+            defaultChatModelId={data.defaultChatModel.modelId}
+            altOpenRouterModel={data.chatAltOpenRouterModel}
+            messageCount={pane.messages.length}
+            approvalUi={data.approvalUi}
+            hermesEnabled={data.hermesEnabled}
+            activeBuild={pane.activeBuild}
+            active={tab.id === activeId}
+            onbusychange={(busy, ok) => handleBusyChange(tab.id, busy, ok)}
+            onToggleThreadRail={() => (sidebarOpen = !sidebarOpen)}
+            onToggleGraphRail={() => (graphRailOpen = !graphRailOpen)}
+            {graphRailOpen}
+            onmodelchange={(ctx: ModelContext) => handleModelChange(tab.id, ctx)}
+          />
+        </div>
+      {/if}
+    {/each}
+
+    {#if activeId && !panes[activeId]}
+      <p class="pane-loading">Opening thread…</p>
+    {/if}
   </div>
 
   <!-- Knowledge-graph rail (324px) / phone bottom sheet (2b) -->
   <div class="graph-slot" class:collapsed={!graphRailOpen} class:sheet-open={hub.graphSheet !== 'closed'}>
     <KnowledgeGraphRail
-      conversationId={activeConversationId}
+      conversationId={activeId}
       threadCostUsd={hub.threadCostUsd}
       contextFraction={hub.contextFraction}
       sheetDetent={hub.graphSheet}
@@ -403,6 +574,29 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+  /* Background panes stay mounted and keep streaming; `display: none` is the
+     whole of their cost. It also hides their composer, so a keystroke can only
+     ever reach the thread on screen. */
+  .pane {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
+  .pane.on-screen {
+    display: flex;
+    flex-direction: column;
+  }
+  .pane-loading {
+    flex: 1;
+    margin: 0;
+    padding: 24px 20px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
   }
   .briefing-slot {
     flex: none;
