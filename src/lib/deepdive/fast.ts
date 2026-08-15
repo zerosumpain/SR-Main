@@ -16,7 +16,9 @@ import { db } from '$lib/db';
 import { researchSessions, sources as sourcesTable } from '$lib/db/schema';
 import type { ResearchSession } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { jsonCompletion, streamCompletion } from './ai';
+import { jsonCompletion, streamCompletion, groundedCompletion } from './ai';
+import { coerceGrounding, groundingOption, isGrounded } from './grounding';
+import { recordCitations } from './grounding.server';
 import { search } from './tavily';
 import { classifyDomain } from './credibility';
 import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
@@ -65,6 +67,34 @@ function streamHandlers(sessionId: string) {
 }
 
 /** Model knowledge only. No search, no sources, and it says so. */
+/** What the model is told when it has no way to look anything up. */
+const UNGROUNDED_RULES = `You are answering from your own knowledge. No search has been run and you have no sources.
+
+Rules:
+- Answer directly and usefully
+- You MUST open with a one-line note that this is unsourced, from training data, and may be out of date
+- Flag specifically anything likely to have changed recently, or that you are unsure of
+- Never invent citations, URLs, statistics presented as current, or figures you do not actually know
+- Say "I don't know" where that is the truthful answer`;
+
+/**
+ * And when it does.
+ *
+ * The "never invent a URL" line is kept and sharpened rather than dropped. With
+ * search OFF, Codex answered a question about the current Node.js release with a
+ * github.com release URL it had never fetched — a fabricated citation, stated
+ * with total confidence. Having real search available makes that MORE tempting,
+ * not less, because a plausible URL now sits alongside genuine ones.
+ */
+const GROUNDED_RULES = `You can search the web, and you should for anything time-sensitive or factual.
+
+Rules:
+- Search before answering anything that may have changed since your training data
+- Answer directly and usefully, and say when something was last verified
+- Cite ONLY pages you actually retrieved in this conversation. Never write a URL from memory, however confident you are that it exists
+- Where sources disagree, say so rather than picking one silently
+- Say "I don't know" where that is the truthful answer`;
+
 export async function runInstant(
   sessionId: string,
   session: ResearchSession,
@@ -72,23 +102,72 @@ export async function runInstant(
 ): Promise<void> {
   const preset = depthPreset('instant');
   const goals = (session.goals ?? []) as string[];
+  const grounding = coerceGrounding(session.grounding);
+  const question =
+    `**Question:** ${session.topic}` + (goals.length ? `\n**Goals:** ${goals.join('; ')}` : '');
 
-  emitLog(sessionId, '\u{1F4AC}', 'Answering from model knowledge — no sources consulted.');
+  if (!isGrounded(grounding)) {
+    emitLog(sessionId, '\u{1F4AC}', 'Answering from model knowledge — no sources consulted.');
 
-  const { text } = await streamCompletion(
-    `You are answering from your own knowledge. No search has been run and you have no sources.\n\nRules:\n- Answer directly and usefully\n- You MUST open with a one-line note that this is unsourced, from training data, and may be out of date\n- Flag specifically anything likely to have changed recently, or that you are unsure of\n- Never invent citations, URLs, statistics presented as current, or figures you do not actually know\n- Say "I don't know" where that is the truthful answer`,
-    `**Question:** ${session.topic}` + (goals.length ? `\n**Goals:** ${goals.join('; ')}` : ''),
-    {
+    const { text } = await streamCompletion(UNGROUNDED_RULES, question, {
       model: preset.pinnedModel ?? undefined,
       maxTokens: SYNTHESIS_MAX_TOKENS,
       signal: budget.signalFor('synthesis'),
       ...streamHandlers(sessionId),
-    },
+    });
+
+    await writeSummary(sessionId, text);
+    emitStats(sessionId, {
+      sourcesFound: 0,
+      factsExtracted: 0,
+      entitiesIdentified: 0,
+      counterfactualsRaised: 0,
+    });
+    return;
+  }
+
+  const option = groundingOption(grounding);
+  emitLog(
+    sessionId,
+    '\u{1F310}',
+    grounding === 'free'
+      ? 'Searching the web on the subscription — the answer arrives in one piece, not word by word.'
+      : 'Searching the web while answering.',
   );
 
+  const { text, citations } = await groundedCompletion(GROUNDED_RULES, question, {
+    mode: grounding,
+    model: preset.pinnedModel ?? undefined,
+    maxTokens: SYNTHESIS_MAX_TOKENS,
+    signal: budget.signalFor('synthesis'),
+    onToken: streamHandlers(sessionId).onToken,
+  });
+
   await writeSummary(sessionId, text);
+
+  /**
+   * Citations become ordinary source rows, so the dashboard's source list,
+   * media flags, credibility badges and "Keep in Drive" all work on an instant
+   * run without knowing it never ran a Tavily search. Failing here must not
+   * lose the answer that has already been written.
+   */
+  let stored = 0;
+  try {
+    ({ stored } = await recordCitations(sessionId, citations));
+  } catch (err) {
+    console.error('[deepdive] recording instant citations failed:', err);
+  }
+
+  emitLog(
+    sessionId,
+    'ℹ️',
+    stored
+      ? `Answered from ${stored} source${stored === 1 ? '' : 's'} it read (${option.label.toLowerCase()}).`
+      : 'The model searched but cited nothing it read — treat this answer as unsourced.',
+  );
+
   emitStats(sessionId, {
-    sourcesFound: 0,
+    sourcesFound: stored,
     factsExtracted: 0,
     entitiesIdentified: 0,
     counterfactualsRaised: 0,

@@ -388,6 +388,15 @@ export const researchSessions = pgTable('research_session', {
    * Defaults to 'investigation' so pre-v3 rows read as what they actually were.
    */
   depth: text('depth').notNull().default('investigation'),
+  /**
+   * How an `instant` run reached the web: 'off' | 'fast' | 'free'.
+   *
+   * Only meaningful for that tier — every other tier gathers its own sources
+   * through Tavily. Stored rather than derived because the three routes differ
+   * in what they cost, how quick they are and how far the answer can be
+   * trusted, and a finished run has to be able to say which one it took.
+   */
+  grounding: text('grounding').notNull().default('off'),
   /** ResearchScope — domain binding, seed urls, recency. */
   scope: jsonb('scope'),
   /** Wall-clock allowance in ms; null for unbudgeted investigations. */

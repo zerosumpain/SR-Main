@@ -54,6 +54,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
         domain: sources.domain,
         credibilityScore: sources.credibilityScore,
         credibilityType: sources.credibilityType,
+        // Keeps "save the key material" saving exactly what the page called key
+        // material, including a grounded answer's citations.
+        category: sources.category,
       })
       .from(sources)
       .where(eq(sources.sessionId, params.id)),

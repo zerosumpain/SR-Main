@@ -4,6 +4,7 @@
   import type { PageData } from './$types';
   import ScopeEditor from '$lib/components/research/ScopeEditor.svelte';
   import type { ScopeDraft } from '$lib/components/research/ScopeEditor.svelte';
+  import { GROUNDING_OPTIONS, groundingOption, type Grounding } from '$lib/deepdive/grounding';
 
   let { data }: { data: PageData } = $props();
 
@@ -11,6 +12,12 @@
 
   let topic = $state('');
   let depth = $state<string>('brief');
+  /**
+   * Whether an `instant` answer may look things up, and at what price. The
+   * default stays 'off' so the cheap tier stays cheap unless asked otherwise —
+   * see $lib/deepdive/grounding for the measured trade-off.
+   */
+  let grounding = $state<Grounding>('off');
   let goals = $state('');
   let showDefinition = $state(false);
   let scope = $state<ScopeDraft>({
@@ -73,6 +80,7 @@
         body: JSON.stringify({
           topic: t,
           depth,
+          grounding,
           goals: splitList(goals),
           scope: canScope
             ? {
@@ -199,6 +207,31 @@
       {/each}
     </div>
 
+    <!-- Only for `instant`. Every other tier searches with Tavily as part of
+         what it is; offering a second search here would be an unasked bill on
+         top of the one the tier already runs. -->
+    {#if depth === 'instant'}
+      <div class="grounding" role="radiogroup" aria-label="Web search">
+        <span class="sr-label-tight">Web search</span>
+        {#each GROUNDING_OPTIONS as g (g.mode)}
+          <button
+            type="button"
+            class="gnd"
+            class:on={grounding === g.mode}
+            role="radio"
+            aria-checked={grounding === g.mode}
+            onclick={() => (grounding = g.mode)}
+          >
+            <span class="gnd-name">{g.label}</span>
+            <span class="gnd-cost">
+              ~{g.seconds}s · {g.costUsd === 0 ? 'no cash cost' : `~$${g.costUsd.toFixed(2)}`}
+            </span>
+          </button>
+        {/each}
+      </div>
+      <p class="gnd-why">{groundingOption(grounding).blurb}</p>
+    {/if}
+
     <div class="define-row">
       <button
         type="button"
@@ -298,6 +331,20 @@
     color: var(--text-primary); outline: none;
   }
   .prompt-input:focus { border-color: var(--accent); }
+
+  /* One row of small choices under the tier cards, not a second card grid: it
+     is a qualifier on one tier, not a peer of the tiers themselves. */
+  .grounding { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.7rem; }
+  .gnd {
+    display: grid; gap: 1px; text-align: left; cursor: pointer;
+    background: none; border: 1px solid var(--card-border); padding: 4px 9px;
+  }
+  .gnd:hover { border-color: var(--accent); }
+  .gnd.on { border-color: var(--accent); background: var(--card-bg); }
+  .gnd-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
+  .gnd.on .gnd-name { color: var(--accent); }
+  .gnd-cost { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .gnd-why { margin: 0.4rem 0 0; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); max-width: 68ch; }
 
   .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; margin-top: 0.6rem; }
   .tier {

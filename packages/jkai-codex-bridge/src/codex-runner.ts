@@ -11,6 +11,9 @@ import { Codex, type ThreadEvent, type ThreadOptions, type Usage } from '@openai
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { toCapturedSearch, type CapturedSearch } from './web-search';
+
+export { toCapturedSearch, toAnnotations, type CapturedSearch } from './web-search';
 
 /**
  * THE SANDBOX SETTINGS BELOW ARE NOT REQUEST-CONFIGURABLE, DELIBERATELY.
@@ -41,6 +44,33 @@ const LOCKED_THREAD_OPTIONS = {
   skipGitRepoCheck: true,
 } satisfies Partial<ThreadOptions>;
 
+/**
+ * The one sanctioned relaxation, reached ONLY through `/v1/grounded/...` —
+ * taking the previous comment at its word rather than adding a flag to the
+ * shared path.
+ *
+ * What it does and does not open up, measured 2026-08-15 against SDK 0.147.0:
+ *
+ *  - Search is served by OpenAI's backend, not by the agent's own network
+ *    stack, so `networkAccessEnabled` STAYS FALSE and still works. The sandbox
+ *    is not loosened by one setting; only the model's ability to consult the
+ *    web is.
+ *  - `'cached'` is NOT a cheaper `'live'`. Asked for the current Node.js
+ *    release, cached returned a version a week stale and stated it as current,
+ *    while live returned the right one with a URL. A grounding mode that
+ *    confidently answers from a stale index is worse than no grounding, so the
+ *    cached mode is deliberately not offered.
+ *
+ * The residual risk is unchanged in kind and smaller in degree: a prompt can
+ * make the model *read* attacker-chosen pages, so only prompts the site itself
+ * composed from user-typed input should reach this path. Scraped text, Gmail
+ * bodies and research documents must keep using the locked endpoint.
+ */
+const GROUNDED_THREAD_OPTIONS = {
+  webSearchMode: 'live',
+  webSearchEnabled: true,
+} satisfies Partial<ThreadOptions>;
+
 /** An empty scratch directory, so that even under read-only the agent has
  *  nothing of ours in scope. Recreated on boot; never written to by us. */
 const WORKDIR = process.env.CODEX_BRIDGE_WORKDIR || join(tmpdir(), 'jkai-codex-bridge-workdir');
@@ -55,6 +85,8 @@ export interface RunRequest {
   /** URL of the per-request MCP server publishing the caller's tools. When set,
    *  Codex may call them and the run stops at the first dispatch. */
   toolServerUrl?: string;
+  /** Let the model consult the live web. Only the `/v1/grounded` route sets it. */
+  webSearch?: boolean;
 }
 
 /** A tool the model decided to call, captured from the event stream. */
@@ -81,6 +113,8 @@ export interface RunResult {
   /** Present when the model called caller-supplied tools; the HTTP layer turns
    *  these into `finish_reason: "tool_calls"`. */
   toolCalls?: CapturedToolCall[];
+  /** Pages and queries the model consulted, when grounding was allowed. */
+  searches?: CapturedSearch[];
 }
 
 let codex: Codex | undefined;
@@ -110,11 +144,15 @@ function clientFor(toolServerUrl?: string): Codex {
 function threadOptions(req: RunRequest): ThreadOptions {
   return {
     ...LOCKED_THREAD_OPTIONS,
+    // Spread AFTER the locked options so the relaxation is visible here and
+    // nowhere else, and so every other lock still wins.
+    ...(req.webSearch ? GROUNDED_THREAD_OPTIONS : {}),
     workingDirectory: WORKDIR,
     model: req.model,
     ...(req.reasoningEffort ? { modelReasoningEffort: req.reasoningEffort } : {}),
   };
 }
+
 
 /** One-shot turn. With `toolServerUrl` set it may return tool calls instead of
  *  text, exactly as an OpenAI completion does. */
@@ -126,7 +164,16 @@ export async function runOnce(req: RunRequest): Promise<RunResult> {
     ...(req.outputSchema ? { outputSchema: req.outputSchema } : {}),
     ...(req.signal ? { signal: req.signal } : {}),
   });
-  return { text: turn.finalResponse ?? '', usage: turn.usage };
+  // `Turn.items` carries the whole turn, so the non-streaming path can report
+  // what was consulted without duplicating the stream reader.
+  const searches = turn.items
+    .map(toCapturedSearch)
+    .filter((s): s is CapturedSearch => s !== null);
+  return {
+    text: turn.finalResponse ?? '',
+    usage: turn.usage,
+    ...(searches.length ? { searches } : {}),
+  };
 }
 
 /**
@@ -145,17 +192,19 @@ export async function runCapturingToolCalls(req: RunRequest): Promise<RunResult>
   let text = '';
   let usage: Usage | null = null;
   let toolCalls: CapturedToolCall[] | undefined;
+  let searches: CapturedSearch[] | undefined;
 
   for await (const chunk of runStreamed(req)) {
     text += chunk.delta;
     if (chunk.done) {
       usage = chunk.usage ?? null;
       toolCalls = chunk.toolCalls;
+      searches = chunk.searches;
     }
   }
   // Reasoning is intentionally dropped here: this shape has nowhere to put it
   // that isn't the answer, and its tokens are still counted in usage.
-  return { text, usage, toolCalls };
+  return { text, usage, toolCalls, searches };
 }
 
 export interface StreamChunk {
@@ -175,6 +224,8 @@ export interface StreamChunk {
   usage?: Usage | null;
   /** Present on the final chunk when the model dispatched caller tools. */
   toolCalls?: CapturedToolCall[];
+  /** Present on the final chunk when the model consulted the web. */
+  searches?: CapturedSearch[];
   done: boolean;
 }
 
@@ -212,6 +263,9 @@ export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk>
   // only unique within its kind.
   const emitted = new Map<string, number>();
   const seen = new Map<string, CapturedToolCall>();
+  // Keyed by item id: Codex re-emits an item as it progresses, and the same
+  // fetch arriving three times must not read as three sources.
+  const searches = new Map<string, CapturedSearch>();
   let usage: Usage | null = null;
   let failure: string | null = null;
   let graceTimer: NodeJS.Timeout | undefined;
@@ -233,6 +287,12 @@ export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk>
           // Give siblings a moment to arrive, then hand the batch back.
           if (!graceTimer) graceTimer = setTimeout(() => ac.abort(), PARALLEL_TOOL_GRACE_MS);
         }
+        continue;
+      }
+
+      if (item?.type === 'web_search') {
+        const captured = toCapturedSearch(item);
+        if (captured) searches.set(String(item.id ?? captured.value), captured);
         continue;
       }
 
@@ -267,5 +327,11 @@ export async function* runStreamed(req: RunRequest): AsyncGenerator<StreamChunk>
   // turn that produced tool calls is not a failure even if it also errored on
   // the way out, since the caller can still run them.
   if (failure && !seen.size) throw new Error(failure);
-  yield { delta: '', usage, done: true, ...(seen.size ? { toolCalls: [...seen.values()] } : {}) };
+  yield {
+    delta: '',
+    usage,
+    done: true,
+    ...(seen.size ? { toolCalls: [...seen.values()] } : {}),
+    ...(searches.size ? { searches: [...searches.values()] } : {}),
+  };
 }
