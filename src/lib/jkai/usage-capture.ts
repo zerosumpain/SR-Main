@@ -14,6 +14,17 @@ export interface CompletionUsage {
   completion_tokens?: number;
   prompt_tokens_details?: { cached_tokens?: number };
   completion_tokens_details?: { reasoning_tokens?: number };
+  /**
+   * What the provider says it charged, in USD. OpenRouter sends this on every
+   * response; nothing else does.
+   *
+   * It is authoritative where our own arithmetic is a guess. A grounded
+   * completion measured $0.149, of which $0.126 was a search fee and only
+   * $0.023 was tokens — so pricing it from a per-token table reported it at a
+   * sixth of the real bill. Anything charged per REQUEST rather than per token
+   * is invisible to `computeCost` by construction.
+   */
+  cost?: number;
 }
 
 /** Extract telemetry from a completion response and push it into (a) the active
@@ -32,10 +43,21 @@ function captureUsage(
   const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens ?? null;
 
   const pricing = priceFor(provider, model);
+  /**
+   * The provider's own figure wins over our arithmetic.
+   *
+   * `computeCost` multiplies a per-token price table, which cannot see anything
+   * billed per request — a web-search fee, a tool surcharge. When OpenRouter
+   * reports `usage.cost` it has already counted all of it, so preferring the
+   * table would be choosing a number we know to be low. Codex reports nothing
+   * and prices as null, which stays null rather than becoming a false zero.
+   */
+  const reportedCost = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) ? usage.cost : null;
   const costUsd =
-    pricing && promptTokens !== null && completionTokens !== null
+    reportedCost ??
+    (pricing && promptTokens !== null && completionTokens !== null
       ? computeCost(pricing, promptTokens, completionTokens)
-      : null;
+      : null);
 
   const record: LLMCallRecord = {
     provider,

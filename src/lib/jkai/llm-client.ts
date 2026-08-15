@@ -9,6 +9,7 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 let openrouterClient: OpenAI | undefined;
 let codexClient: OpenAI | undefined;
+let groundedCodexClient: OpenAI | undefined;
 
 export function clearLLMClientCache(): void {
   openrouterClient = undefined;
@@ -29,6 +30,32 @@ export function clearLLMClientCache(): void {
  * (a separate Python runtime) reach the same subscription by pointing its
  * `base_url` at the same port.
  */
+/**
+ * A Codex client allowed to consult the live web.
+ *
+ * A DIFFERENT BASE URL, not a flag. The bridge keeps its agent pinned shut —
+ * read-only, no network, no approvals, search off — because prompts reach it
+ * from all over the site, much of it text the site did not author, and a prompt
+ * injection reaching an agent with web access is a real attack. The one
+ * sanctioned relaxation lives behind `/v1/grounded`, so turning it on means
+ * deliberately addressing another endpoint rather than setting a field that any
+ * caller might set by accident. See `packages/jkai-codex-bridge/src/codex-runner.ts`.
+ *
+ * Only prompts the site composed from user-typed input should come here.
+ */
+export function getGroundedCodexClient(): OpenAI {
+  if (!groundedCodexClient) {
+    groundedCodexClient = installUsageCapture(
+      new OpenAI({
+        apiKey: 'codex-bridge-local',
+        baseURL: `${getCodexBridgeUrl()}/v1/grounded`,
+      }),
+      'codex',
+    );
+  }
+  return groundedCodexClient;
+}
+
 export async function getLLMClient(ctx: ModelContext): Promise<{ client: OpenAI; model: string }> {
   // Persisted contexts arrive in several shapes (legacy provider 'zai' + bare
   // GLM id; a Codex id with no provider field). Normalise before branching, so

@@ -310,6 +310,16 @@ export interface SourceRow {
   credibilityType: string | null;
   /** Facts this source produced in the run. The contribution signal. */
   factCount?: number;
+  /**
+   * How the run came by this source. `'cited'` means the answer names it.
+   *
+   * A grounded `instant` run extracts no facts at all, so contribution — the
+   * signal that normally decides what mattered — is zero for everything it
+   * read. Without this, the six pages an answer was built on all landed under
+   * "gathered, but nothing in the report rests on them", which is the exact
+   * opposite of the truth.
+   */
+  category?: string | null;
 }
 
 export interface RankedSource extends SourceRow {
@@ -348,13 +358,18 @@ export function rankSources(rows: SourceRow[]): RankedSource[] {
       credibilityType: row.credibilityType,
     });
     const factCount = row.factCount ?? 0;
+    const cited = row.category === 'cited';
     // sqrt so the difference between 0 and 3 facts counts for more than the
     // difference between 17 and 20 — the first is "did this matter at all".
     const contribution = Math.sqrt(factCount / maxFacts);
     const trust = row.credibilityScore ?? 0.5;
-    const interest = contribution * 0.55 + media.weight * 0.3 + trust * 0.15;
+    // A cited source has demonstrably shaped the answer, which is what
+    // `contribution` measures on the tiers that extract facts. Standing it in
+    // at full weight keeps one ranking rule across every tier.
+    const interest = (cited ? 1 : contribution) * 0.55 + media.weight * 0.3 + trust * 0.15;
 
     const reasons: string[] = [];
+    if (cited) reasons.push('the answer cites it');
     if (factCount > 0) {
       reasons.push(`${factCount} ${factCount === 1 ? 'fact' : 'facts'} in the report`);
     }
@@ -369,11 +384,11 @@ export function rankSources(rows: SourceRow[]): RankedSource[] {
       factCount,
       interest: Number(interest.toFixed(4)),
       reasons,
-      // Either it demonstrably fed the answer, or it is the kind of material
-      // that warrants a look regardless. Both routes matter: the first catches
-      // the trade-press article nobody would rank, the second catches the
-      // research paper that was found late and never mined.
-      keyMaterial: factCount > 0 || media.substantial,
+      // Three routes in, and each catches something the others miss: a source
+      // the answer names, one that demonstrably fed the report, or one that is
+      // the kind of material worth a look regardless — the trade-press article
+      // nobody would rank, or the paper found late and never mined.
+      keyMaterial: cited || factCount > 0 || media.substantial,
     };
   });
 

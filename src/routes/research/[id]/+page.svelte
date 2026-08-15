@@ -279,7 +279,9 @@
 <div class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">JKAI · Research · {data.tier.label}</div>
+      <div class="kicker">
+        JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
+      </div>
       <h1>{data.session.topic}</h1>
       <p class="scope-line">{data.session.scopeLabel}</p>
     </div>
@@ -340,6 +342,22 @@
 
   {#if settled}
     <StatTiles stats={tiles} />
+  {/if}
+
+  <!-- An instant answer that searched and one that did not are different things
+       to trust, and only one of them has sources below to check it against. -->
+  {#if data.session.depth === 'instant' && finished}
+    <p class="gnd-line" class:unsourced={!data.tier.grounded}>
+      {#if !data.tier.grounded}
+        Answered from training data with no search, so nothing here is sourced — treat any date, figure
+        or URL in it as unverified.
+      {:else if data.counts.sources}
+        Searched the web while answering. The {data.counts.sources}
+        {data.counts.sources === 1 ? 'page' : 'pages'} it actually read are listed below.
+      {:else}
+        Search was allowed, but it cited nothing it read — treat this answer as unsourced.
+      {/if}
+    </p>
   {/if}
 
   {#if paused}
@@ -491,6 +509,9 @@
   .pill.done { border-color: var(--success); color: var(--success); }
   .pill.failed { border-color: var(--error); color: var(--error); }
   .pill.held { border-color: var(--accent-ink); color: var(--accent-ink); }
+
+  .gnd-line { margin: 0 0 1rem; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--accent); padding: 0.4rem 0 0.4rem 0.7rem; }
+  .gnd-line.unsourced { border-left-color: var(--warn); color: var(--text-secondary); }
 
   .paused-line { margin: 0 0 1rem; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--accent-ink); padding: 0.4rem 0 0.4rem 0.7rem; }
   .metric { color: var(--text-secondary); }

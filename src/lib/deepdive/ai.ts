@@ -1,6 +1,7 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { getOpenRouterClient, getEmbeddingModel, getFallbackModel } from './keys';
-import { getLLMClient } from '$lib/jkai/llm-client';
+import { getLLMClient, getGroundedCodexClient } from '$lib/jkai/llm-client';
+import { readCitations, type Citation } from './grounding';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import {
   isRateLimitError,
@@ -17,6 +18,24 @@ import {
  * produce a usable answer.
  */
 const CREDIT_FALLBACK_MAX_TOKENS = 1_000;
+
+/**
+ * Pages OpenRouter's web plugin fetches per grounded call.
+ *
+ * Five is what the measured $0.15-a-run figure was taken at. The grounding fee
+ * dominates that cost, so raising this raises the bill roughly in proportion
+ * for an answer nobody asked to be broader.
+ */
+const WEB_PLUGIN_MAX_RESULTS = 5;
+
+/**
+ * Codex model used by the free grounding route.
+ *
+ * Pinned here rather than taken from the site default: the site default can be
+ * switched to an OpenRouter model at any time, and this route only exists
+ * because it is served by the Codex bridge against the subscription.
+ */
+const DEFAULT_GROUNDED_CODEX_MODEL = 'gpt-5.6-terra';
 
 // Re-export so existing importers of these from $lib/deepdive/ai keep working.
 export { isRateLimitError };
@@ -399,6 +418,106 @@ export async function streamCompletion(
     }
     throw err;
   }
+}
+
+/**
+ * A completion the model was allowed to look things up for.
+ *
+ * One function rather than a flag on `streamCompletion`, because the two
+ * grounded routes are not variations of the streaming path — they differ in
+ * provider, in client, in whether they stream at all, and in nothing else the
+ * caller cares about. Keeping the branch here means `runInstant` asks for "an
+ * answer, grounded like this" and gets back the same shape either way.
+ *
+ * Citations come back in the SAME `url_citation` annotation shape from both,
+ * which is why the Codex bridge deliberately emits OpenRouter's format. See
+ * `$lib/deepdive/grounding` for the measured trade-off between the routes.
+ */
+export async function groundedCompletion(
+  systemPrompt: string,
+  userPrompt: string,
+  options: {
+    mode: 'fast' | 'free';
+    /** Only used by `fast`; the free route is whatever Codex model is default. */
+    model?: string;
+    codexModel?: string;
+    maxTokens?: number;
+    signal?: AbortSignal;
+    onToken?: (token: string) => void;
+  },
+): Promise<{ text: string; citations: Citation[] }> {
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userPrompt },
+  ];
+  const maxTokens = options.maxTokens ?? 4096;
+
+  if (options.mode === 'free') {
+    // Codex does not usefully stream — measured, it emits an item at a time
+    // rather than tokens — so this asks for the whole turn and hands it over in
+    // one go. The caller has already told the reader to expect that.
+    const client = getGroundedCodexClient();
+    const response = await client.chat.completions.create(
+      { model: options.codexModel ?? DEFAULT_GROUNDED_CODEX_MODEL, messages, max_tokens: maxTokens },
+      { signal: options.signal as any },
+    );
+    const message = response.choices[0]?.message;
+    const text = message?.content ?? '';
+    if (text) options.onToken?.(text);
+    return { text, citations: readCitations(message) };
+  }
+
+  /**
+   * OpenRouter's web plugin. `plugins` is not in the OpenAI SDK's request type
+   * — it is an OpenRouter extension — so it is cast through. Sending it to a
+   * non-OpenRouter base URL would simply be ignored, and this path always uses
+   * the OpenRouter client.
+   */
+  const client = getOpenRouterClient();
+  const model = options.model ?? getFallbackModel();
+  let text = '';
+  /**
+   * Accumulated, keyed by URL — NOT replaced.
+   *
+   * Measured: a grounded stream delivered eight citations across eight separate
+   * frames, one apiece, interleaved with the content. Taking the latest frame's
+   * annotations as the answer's citations kept exactly one of them and threw
+   * the other seven away, so a well-sourced answer reported a single source.
+   */
+  const citationsByUrl = new Map<string, Citation>();
+
+  const stream = await client.chat.completions.create(
+    {
+      model,
+      messages,
+      max_tokens: maxTokens,
+      stream: true,
+      plugins: [{ id: 'web', max_results: WEB_PLUGIN_MAX_RESULTS }],
+    } as never,
+    { signal: options.signal as any },
+  );
+
+  for await (const chunk of stream as unknown as AsyncIterable<{
+    choices?: Array<{ delta?: { content?: string; annotations?: unknown }; message?: unknown }>;
+  }>) {
+    const choice = chunk.choices?.[0];
+    const delta = choice?.delta?.content;
+    if (delta) {
+      text += delta;
+      options.onToken?.(delta);
+    }
+    // Read from every frame and from both shapes: annotations are scattered
+    // through the stream rather than gathered at the end, and nothing in the
+    // contract says which field carries them.
+    for (const c of [
+      ...readCitations(choice?.delta),
+      ...readCitations(choice?.message),
+    ]) {
+      if (!citationsByUrl.has(c.url)) citationsByUrl.set(c.url, c);
+    }
+  }
+
+  return { text, citations: [...citationsByUrl.values()] };
 }
 
 // Target dimensionality for the research embedding space. text-embedding-3-large

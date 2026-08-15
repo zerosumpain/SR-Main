@@ -13,6 +13,7 @@ import { researchSessions } from '$lib/db/schema';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { coerceDepth, depthPreset } from '$lib/deepdive/depth';
 import { coerceScope } from '$lib/deepdive/scope';
+import { coerceGrounding } from '$lib/deepdive/grounding';
 import { startResearch } from '$lib/deepdive/worker';
 import { depthTimings } from '$lib/deepdive/timings';
 
@@ -30,6 +31,15 @@ export const POST: RequestHandler = async ({ request }) => {
   const depth = coerceDepth(body.depth);
   const preset = depthPreset(depth);
   const scope = coerceScope(body.scope);
+
+  /**
+   * Grounding is an `instant`-only choice, and forced off everywhere else.
+   *
+   * Every other tier gathers its own sources through Tavily, so honouring a
+   * `grounding` on one would either do nothing or quietly add a second, unasked
+   * search bill on top of the one the tier already runs.
+   */
+  const grounding = depth === 'instant' ? coerceGrounding(body.grounding) : 'off';
 
   const goals = Array.isArray(body.goals)
     ? (body.goals as unknown[]).filter((g): g is string => typeof g === 'string' && !!g.trim())
@@ -51,6 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
       topic,
       goals,
       depth,
+      grounding,
       scope,
       budgetMs,
       config: preset.config,

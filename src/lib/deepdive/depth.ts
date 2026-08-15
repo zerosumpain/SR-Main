@@ -149,7 +149,7 @@ export function depthPreset(depth: ResearchDepth): DepthPreset {
       return {
         depth: d,
         label: 'Instant',
-        blurb: 'The model answers from what it already knows. No sources, no search.',
+        blurb: 'The model answers from what it already knows — or searches the web first, if you ask it to.',
         searches: false,
         extractsFacts: false,
         runner: 'instant',

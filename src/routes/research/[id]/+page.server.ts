@@ -8,6 +8,7 @@ import { coerceScope, describeScope } from '$lib/deepdive/scope';
 import { loadFrontier } from '$lib/deepdive/frontier';
 import { rankSources, mediaMix } from '$lib/deepdive/media-type';
 import { driveFileStem, existingStems, researchFolder } from '$lib/deepdive/to-drive';
+import { coerceGrounding, groundingOption, isGrounded } from '$lib/deepdive/grounding';
 
 export const load: PageServerLoad = async ({ params }) => {
   const [session] = await db
@@ -36,6 +37,10 @@ export const load: PageServerLoad = async ({ params }) => {
         domain: sources.domain,
         credibilityScore: sources.credibilityScore,
         credibilityType: sources.credibilityType,
+        // 'cited' marks a source the ANSWER names rather than one a phase
+        // gathered — the signal that keeps a grounded instant run's sources out
+        // of the "nothing rests on them" band. See $lib/deepdive/media-type.
+        category: sources.category,
       })
       .from(sources)
       .where(eq(sources.sessionId, params.id))
@@ -182,6 +187,8 @@ export const load: PageServerLoad = async ({ params }) => {
       shareToken: session.shareToken,
       /** Set only while paused — the phase a Resume would pick up at. */
       resumeFrom: session.resumeFrom,
+      /** How an instant run reached the web; 'off' on every other tier. */
+      grounding: coerceGrounding(session.grounding),
     },
     driveFolder,
     savedSourceIds,
@@ -200,7 +207,18 @@ export const load: PageServerLoad = async ({ params }) => {
       counterfactuals: counterTotal?.n ?? 0,
       domains: new Set(rankedSources.map((s) => s.domain).filter(Boolean)).size,
     },
-    tier: { label: preset.label, budgetMs: preset.budgetMs, extractsFacts: preset.extractsFacts },
+    tier: {
+      label: preset.label,
+      budgetMs: preset.budgetMs,
+      extractsFacts: preset.extractsFacts,
+      /**
+       * How this run reached the web, in the reader's words. An instant answer
+       * that searched and one that did not are different things to trust, and
+       * the page has to say which it is looking at.
+       */
+      grounded: isGrounded(coerceGrounding(session.grounding)),
+      groundingLabel: groundingOption(coerceGrounding(session.grounding)).label,
+    },
     sources: rankedSources,
     mix,
     contributors,
