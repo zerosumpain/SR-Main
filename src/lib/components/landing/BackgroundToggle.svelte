@@ -23,10 +23,11 @@
   }
 </script>
 
-<!-- Pinned to the hero, not to the viewport. As a fixed control it followed the
-     page down and ended up sitting on top of the footer wordmark and the vitals
-     rail's buttons; the background it toggles only exists behind the hero, so
-     that is where the control belongs. -->
+<!-- Inline in the hero's signature bar, not floating. As a fixed control it
+     followed the page down onto the footer wordmark and the rail's buttons;
+     absolutely positioned in the hero it landed on the signature line instead.
+     The bar it belongs beside is the one that names what the background is
+     doing, so it sits in that row. -->
 <button onclick={toggle} class="bg-toggle" title={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'} aria-label={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}>
   <span class="bg-toggle-mode">{mode === 'ecg' ? 'ECG' : 'BIOME'}</span>
   <span class="bg-toggle-glyph" aria-hidden="true">⇄</span>
@@ -34,10 +35,6 @@
 
 <style>
   .bg-toggle {
-    position: absolute;
-    bottom: 16px;
-    left: clamp(24px, 5vw, 64px);
-    z-index: 20;
     display: inline-flex;
     align-items: center;
     gap: 8px;
