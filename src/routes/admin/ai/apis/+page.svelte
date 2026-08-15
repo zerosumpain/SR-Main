@@ -732,7 +732,7 @@
 </PageWrap>
 
 <style>
-  .flash { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin: 0 0 0.6rem; }
+  .flash { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); margin: 0 0 0.6rem; }
   .flash.bad { color: var(--error); }
   .sec-lede { font-size: 0.82rem; color: var(--text-muted); line-height: 1.55; margin: 0 0 0.7rem; }
   .sec-lede strong { color: var(--text-primary); }
@@ -756,16 +756,16 @@
   }
   .row-main:hover { background: var(--accent-tint-08); }
   .r-name { font-size: 0.92rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem; }
-  .r-call, .r-outs { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .r-by { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .r-call, .r-outs { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r-by { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .r-detail { padding: 0.2rem 0.5rem 0.9rem; }
   .r-desc { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 0.5rem; }
   .r-dl { display: grid; grid-template-columns: 8rem 1fr; gap: 0.3rem 0.8rem; margin: 0; font-size: 0.8rem; }
-  .r-dl dt { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
+  .r-dl dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
   .r-dl dd { margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
   .r-actions { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.8rem; flex-wrap: wrap; }
-  .test-out { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .test-out { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .srow, .arow {
     display: grid;
@@ -778,7 +778,7 @@
   }
   .srow { grid-template-columns: 8rem minmax(0, 1fr) minmax(0, 1.3fr) 7rem 6rem auto minmax(0, 9rem) auto; }
   .arow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 13rem) auto; }
-  .s-hosts, .s-inj, .s-hint, .s-used, .a-base { font-family: var(--font-mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .s-hosts, .s-inj, .s-hint, .s-used, .a-base { font-family: var(--font-mono); font-size: var(--fs-label-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .s-label, .a-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .s-acts { display: flex; gap: 0.5rem; }
 
@@ -789,10 +789,10 @@
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--divider);
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
   }
   .a-cred-sel:disabled { opacity: 0.5; }
-  .a-legacy { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); white-space: nowrap; }
+  .a-legacy { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); white-space: nowrap; }
 
   .sform { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px dashed var(--divider); display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -804,20 +804,20 @@
   }
 
   .inj-note { margin: 0; font-size: 0.78rem; line-height: 1.55; color: var(--text-muted); }
-  .inj-note code { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .inj-note code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
   .inj-note strong { color: var(--text-primary); }
 
   .quick-row { display: flex; flex-wrap: wrap; gap: 0.9rem; }
   .link-btn.is-on { color: var(--accent); }
   .quick-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
   .quick-dest { margin: 0; font-size: 0.78rem; line-height: 1.55; color: var(--text-muted); }
-  .quick-dest code { font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); }
+  .quick-dest code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); }
   .quick-dest a { color: var(--accent); }
   .field-help { font-size: 0.75rem; line-height: 1.45; color: var(--text-muted); }
 
   .link-btn {
     background: none; border: 0; padding: 0;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted); cursor: pointer; text-decoration: underline;
   }
   .link-btn:hover { color: var(--text-primary); }
@@ -826,7 +826,7 @@
     background: none;
     border: 1px solid var(--error);
     padding: 0.35rem 0.7rem;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .danger-btn:disabled { opacity: 0.5; cursor: default; }

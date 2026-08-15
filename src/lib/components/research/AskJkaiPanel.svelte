@@ -95,7 +95,7 @@
   .chip {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-secondary);
     padding: 4px 8px;

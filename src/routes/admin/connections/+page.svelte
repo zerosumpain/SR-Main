@@ -200,8 +200,8 @@
   .cn-headline { margin: 0; font-family: var(--font-display); font-size: 22px; color: var(--success, #2d7a3a); }
   .cn-headline.cn-warn { color: var(--warn, #b0892a); }
   .cn-headline.cn-bad { color: var(--error, #c44); }
-  .cn-note { margin: 0 0 20px; font-size: 12px; color: var(--text-muted); }
-  .cn-sec-note { font-size: 11px; color: var(--text-muted); margin-left: 10px; }
+  .cn-note { margin: 0 0 20px; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .cn-sec-note { font-size: var(--fs-label-xs); color: var(--text-muted); margin-left: 10px; }
 
   .cn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   .cn-row {
@@ -211,30 +211,30 @@
   .cn-dot { width: 7px; height: 7px; border-radius: 100px; background: currentColor; margin-top: 6px; }
   .cn-main { min-width: 0; }
   .cn-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .cn-label { font-size: 14px; color: var(--text-primary); }
-  .cn-status { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
-  .cn-group { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
+  .cn-label { font-size: var(--fs-nav); color: var(--text-primary); }
+  .cn-status { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
+  .cn-group { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
   .cn-inferred {
-    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-ghost); border: 1px solid currentColor; padding: 0 4px;
   }
-  .cn-detail { margin: 3px 0 0; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
-  .cn-impact { margin: 3px 0 0; font-size: 12px; color: var(--text-muted); font-style: italic; }
-  .cn-hint { margin: 3px 0 0; font-size: 12px; color: var(--accent, #c4570a); overflow-wrap: anywhere; }
-  .cn-result { margin: 6px 0 0; font-family: var(--font-mono); font-size: 11px; color: var(--success, #2d7a3a); overflow-wrap: anywhere; }
+  .cn-detail { margin: 3px 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); overflow-wrap: anywhere; }
+  .cn-impact { margin: 3px 0 0; font-size: var(--fs-label-xs); color: var(--text-muted); font-style: italic; }
+  .cn-hint { margin: 3px 0 0; font-size: var(--fs-label-xs); color: var(--accent, #c4570a); overflow-wrap: anywhere; }
+  .cn-result { margin: 6px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success, #2d7a3a); overflow-wrap: anywhere; }
   .cn-result-bad { color: var(--error, #c44); }
 
   .cn-act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
   .cn-btns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
   .cn-fix {
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     padding: 4px 10px; border: 1px solid currentColor; text-decoration: none;
     background: transparent; color: inherit; cursor: pointer; white-space: nowrap;
   }
   .cn-fix:hover:not(:disabled) { background: var(--surface-overlay); }
   .cn-fix:disabled { opacity: 0.5; cursor: default; }
   .cn-primary { font-weight: 600; }
-  .cn-ms { font-family: var(--font-mono); font-size: 9px; color: var(--text-ghost); }
+  .cn-ms { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .cn-st-ok { color: var(--success, #2d7a3a); }
   .cn-st-degraded { color: var(--warn, #b0892a); }

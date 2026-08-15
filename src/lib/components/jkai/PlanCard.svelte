@@ -103,7 +103,7 @@
 
 <style>
   .plan-card {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border: 1px solid var(--accent);
     padding: 10px 12px;
     margin: 6px 0;
@@ -115,7 +115,7 @@
     display: flex;
     align-items: baseline;
     gap: 10px;
-    border-bottom: 1px dashed var(--card-border);
+    border-bottom: 1px dashed var(--line-strong);
     padding-bottom: 6px;
   }
   .plan-summary {
@@ -143,7 +143,7 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 2px 6px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     min-width: 52px;
     text-align: center;
@@ -177,7 +177,7 @@
     padding: 1px 4px;
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     margin-right: 6px;
   }
   .plan-files code[data-action="create"] { color: var(--status-success); border-color: var(--status-success); }

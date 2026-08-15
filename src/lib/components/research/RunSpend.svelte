@@ -209,13 +209,13 @@
 
   /* One measure against a known limit: one hue, a recessive track, and a 4px
      rounded data end anchored to the left baseline. */
-  .meter { position: relative; height: 10px; margin-top: 0.4rem; background: var(--card-bg); border: 1px solid var(--divider); }
+  .meter { position: relative; height: 10px; margin-top: 0.4rem; background: var(--card-bg); border: 1px solid var(--line-hair); }
   .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 0 4px 4px 0; }
   .fill.tight { background: var(--warn); }
   .plan-why { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--text-muted); }
   .plan-why.tight { color: var(--text-primary); }
 
-  .models { margin-top: 1rem; padding-top: 0.7rem; border-top: 1px solid var(--divider); }
+  .models { margin-top: 1rem; padding-top: 0.7rem; border-top: 1px solid var(--line-hair); }
   .models ul { list-style: none; margin: 0.45rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
   .models li { display: grid; grid-template-columns: minmax(0, 1fr) 120px auto; gap: 0.6rem; align-items: center; }
   .mdl { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-primary); overflow-wrap: anywhere; }

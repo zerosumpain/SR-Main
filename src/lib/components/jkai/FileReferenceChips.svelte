@@ -101,7 +101,7 @@
     gap: 6px;
     max-width: 260px;
     padding: 4px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-secondary);
     cursor: pointer;

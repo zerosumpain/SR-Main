@@ -312,7 +312,7 @@
     width: min(1100px, 100%);
     height: min(88vh, 100%);
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
     overflow: hidden;
   }
@@ -321,7 +321,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     background: var(--bg);
   }
   .fv-title {
@@ -357,7 +357,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 5px 10px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-secondary);
     cursor: pointer;
@@ -472,7 +472,7 @@
     margin: 1em 0;
     color: var(--text-secondary);
   }
-  .fv-prose :global(hr) { border: 0; border-top: 1px solid var(--divider); margin: 1.6em 0; }
+  .fv-prose :global(hr) { border: 0; border-top: 1px solid var(--line-hair); margin: 1.6em 0; }
   .fv-prose :global(img) { max-width: 100%; height: auto; border-radius: 2px; margin: 0.4em 0; }
   .fv-prose :global(code) {
     font-family: var(--font-mono);
@@ -504,7 +504,7 @@
   .fv-prose :global(td) {
     padding: 7px 12px;
     border: 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     text-align: left;
     vertical-align: top;
   }
@@ -516,7 +516,7 @@
   /* Word tables carry no <thead>; style their bold first row as the header. */
   .fv-prose :global(table:not(:has(thead)) tr:first-child td) {
     background: var(--surface-overlay);
-    border-bottom: 2px solid var(--card-border);
+    border-bottom: 2px solid var(--line-strong);
     font-weight: 600;
     color: var(--text-secondary);
   }
@@ -528,7 +528,7 @@
     gap: 16px;
   }
   .fv-rich :global(.pptx-slide) {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
     background: var(--surface-overlay);
     padding: 20px 22px;
@@ -552,7 +552,7 @@
   .fv-rich :global(.pptx-notes) {
     margin-top: 14px;
     padding-top: 12px;
-    border-top: 1px dashed var(--card-border);
+    border-top: 1px dashed var(--line-strong);
     color: var(--text-secondary);
     font-size: max(0.9em, var(--fs-label-xs));
   }
@@ -581,11 +581,11 @@
     color: var(--text-secondary);
     margin: 0 0 10px;
     padding-bottom: 6px;
-    border-bottom: 2px solid var(--card-border);
+    border-bottom: 2px solid var(--line-strong);
   }
   .fv-rich :global(.xlsx-scroll) {
     overflow-x: auto;
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     border-radius: 2px;
   }
   .fv-rich :global(.xlsx-sheet table) { font-size: max(0.85em, var(--fs-label-xs)); min-width: 100%; margin: 0; }
@@ -596,7 +596,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-secondary);
-    border-bottom: 2px solid var(--card-border);
+    border-bottom: 2px solid var(--line-strong);
   }
   .fv-rich :global(.xlsx-sheet tbody tr:nth-child(even) td) { background: var(--surface-overlay); }
   .fv-rich :global(.xlsx-sheet td),
@@ -621,7 +621,7 @@
     align-items: baseline;
     padding: 8px 12px;
     background: var(--surface-overlay);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--accent);
     font-family: var(--font-body);
     font-size: var(--fs-nav);

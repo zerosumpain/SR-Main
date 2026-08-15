@@ -581,19 +581,21 @@
 
   <details class="collapsible">
     <summary>Health sync</summary>
-    <table class="nm-table">
-      <thead><tr><th>Service</th><th>Status</th><th>Last sync</th><th>Records</th></tr></thead>
-      <tbody>
-        {#each live.healthSync as s (s.service)}
-          <tr>
-            <td>{s.service}</td>
-            <td><span class="nm-pill" data-state={pillState(s.status)}>{s.status}</span></td>
-            <td>{fmtTs(s.lastSyncAt * 1000)}</td>
-            <td>{s.recordsSynced ?? 0}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead><tr><th>Service</th><th>Status</th><th>Last sync</th><th>Records</th></tr></thead>
+        <tbody>
+          {#each live.healthSync as s (s.service)}
+            <tr>
+              <td>{s.service}</td>
+              <td><span class="nm-pill" data-state={pillState(s.status)}>{s.status}</span></td>
+              <td>{fmtTs(s.lastSyncAt * 1000)}</td>
+              <td>{s.recordsSynced ?? 0}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   </details>
 {/if}
 
@@ -610,74 +612,76 @@
   {:else if actions.length === 0}
     <p class="empty">No actions.</p>
   {:else}
-    <table class="nm-table">
-      <thead>
-        <tr><th>Action</th><th>Status</th><th>Cadence</th><th>Next</th><th>Runs</th><th>Cost (24h)</th><th></th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each actions as a (a.id)}
-          {@const isOpen = openActionId === a.id}
-          <tr>
-            <td>
-              <div class="act-name">{a.name}</div>
-              <div class="mono-tiny dim">{a.kind} · {a.source}</div>
-            </td>
-            <td><span class="nm-pill" data-state={a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'error' : 'paused'}>{a.status}</span></td>
-            <td>{fmtCadence(a.cadenceSeconds)}</td>
-            <td>{a.nextRunAt && a.status === 'active' ? fmtRelative(new Date(a.nextRunAt).getTime()) : '—'}</td>
-            <td>{a.totalRuns}</td>
-            <td class="mono-tiny">{fmtMoney(a.cost24hUsd)}</td>
-            <td>
-              {#if a.status === 'active'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'paused' })}>pause</button>
-              {:else if a.status === 'paused'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>resume</button>
-              {:else if a.status === 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>reactivate</button>{/if}
-            </td>
-            <td><button class="link-btn" onclick={async () => { openActionId = isOpen ? null : a.id; if (!isOpen) { await loadActionPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button></td>
-          </tr>
-          {#if isOpen}
-            <tr><td colspan="8" class="row-detail">
-              {#if a.description}<p class="act-desc">{a.description}</p>{/if}
-              {#if a.goal}<div class="kv"><span>goal:</span><span>{a.goal}</span></div>{/if}
-              {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
-              {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
-              <div class="kv"><span>active hours:</span><span class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</span></div>
-              <div class="kv"><span>last run:</span><span>{a.lastRunAt ? fmtTs(a.lastRunAt) : '—'}</span></div>
-              <div class="kv"><span>total cost:</span><span>{fmtMoney(a.totalCostUsd)}</span></div>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead>
+          <tr><th>Action</th><th>Status</th><th>Cadence</th><th>Next</th><th>Runs</th><th>Cost (24h)</th><th></th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each actions as a (a.id)}
+            {@const isOpen = openActionId === a.id}
+            <tr>
+              <td>
+                <div class="act-name">{a.name}</div>
+                <div class="mono-tiny dim">{a.kind} · {a.source}</div>
+              </td>
+              <td><span class="nm-pill" data-state={a.status === 'active' ? 'running' : a.status === 'done' ? 'ok' : a.status === 'failed' ? 'error' : 'paused'}>{a.status}</span></td>
+              <td>{fmtCadence(a.cadenceSeconds)}</td>
+              <td>{a.nextRunAt && a.status === 'active' ? fmtRelative(new Date(a.nextRunAt).getTime()) : '—'}</td>
+              <td>{a.totalRuns}</td>
+              <td class="mono-tiny">{fmtMoney(a.cost24hUsd)}</td>
+              <td>
+                {#if a.status === 'active'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'paused' })}>pause</button>
+                {:else if a.status === 'paused'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>resume</button>
+                {:else if a.status === 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'active' })}>reactivate</button>{/if}
+              </td>
+              <td><button class="link-btn" onclick={async () => { openActionId = isOpen ? null : a.id; if (!isOpen) { await loadActionPulses(a.id); cadenceDraft[a.id] = a.cadenceSeconds; } }}>{isOpen ? '−' : '+'}</button></td>
+            </tr>
+            {#if isOpen}
+              <tr><td colspan="8" class="row-detail">
+                {#if a.description}<p class="act-desc">{a.description}</p>{/if}
+                {#if a.goal}<div class="kv"><span>goal:</span><span>{a.goal}</span></div>{/if}
+                {#if a.prompt}<div class="kv"><span>prompt:</span><span>{a.prompt}</span></div>{/if}
+                {#if a.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${a.conversationId}`}>{a.conversationId.slice(0, 12)}…</a></span></div>{/if}
+                <div class="kv"><span>active hours:</span><span class="mono-tiny">{a.activeHoursStart && a.activeHoursEnd ? `${a.activeHoursStart}–${a.activeHoursEnd} ${a.activeHoursTz ?? ''}` : '24/7'}</span></div>
+                <div class="kv"><span>last run:</span><span>{a.lastRunAt ? fmtTs(a.lastRunAt) : '—'}</span></div>
+                <div class="kv"><span>total cost:</span><span>{fmtMoney(a.totalCostUsd)}</span></div>
 
-              <div class="act-controls">
-                <label class="ctrl">
-                  <span>Cadence (s)</span>
-                  <input type="number" min="30" max="86400" bind:value={cadenceDraft[a.id]} class="nm-text-input small" />
-                  <button class="link-btn" onclick={() => patchAction(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
-                </label>
-                <button class="link-btn" onclick={() => runActionNow(a.id)} disabled={runningActionId === a.id || !a.handlerKnown}>{runningActionId === a.id ? 'running…' : 'run now'}</button>
-                {#if a.status !== 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>{/if}
-                <button class="link-btn danger" onclick={() => deleteAction(a.id)}>delete</button>
-              </div>
+                <div class="act-controls">
+                  <label class="ctrl">
+                    <span>Cadence (s)</span>
+                    <input type="number" min="30" max="86400" bind:value={cadenceDraft[a.id]} class="nm-text-input small" />
+                    <button class="link-btn" onclick={() => patchAction(a.id, { cadenceSeconds: cadenceDraft[a.id] })} disabled={cadenceDraft[a.id] === a.cadenceSeconds}>save</button>
+                  </label>
+                  <button class="link-btn" onclick={() => runActionNow(a.id)} disabled={runningActionId === a.id || !a.handlerKnown}>{runningActionId === a.id ? 'running…' : 'run now'}</button>
+                  {#if a.status !== 'done'}<button class="link-btn" onclick={() => patchAction(a.id, { status: 'done' })}>mark done</button>{/if}
+                  <button class="link-btn danger" onclick={() => deleteAction(a.id)}>delete</button>
+                </div>
 
-              {#if pulsesByAction[a.id] && pulsesByAction[a.id].length > 0}
-                <details class="collapsible">
-                  <summary>Recent pulses ({pulsesByAction[a.id].length})</summary>
-                  <table class="nm-table inset">
-                    <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Cost</th></tr></thead>
-                    <tbody>
-                      {#each pulsesByAction[a.id] as p (p.id)}
-                        <tr>
-                          <td>{fmtRelative(new Date(p.ts).getTime())}</td>
-                          <td><span class="nm-pill" data-state={p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'error' : p.outcome === 'ok' ? 'info' : 'paused'}>{p.outcome}</span></td>
-                          <td class="summary-cell">{p.summary}</td>
-                          <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </details>
-              {/if}
-            </td></tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
+                {#if pulsesByAction[a.id] && pulsesByAction[a.id].length > 0}
+                  <details class="collapsible">
+                    <summary>Recent pulses ({pulsesByAction[a.id].length})</summary>
+                    <table class="nm-table inset">
+                      <thead><tr><th>When</th><th>Outcome</th><th>Summary</th><th>Cost</th></tr></thead>
+                      <tbody>
+                        {#each pulsesByAction[a.id] as p (p.id)}
+                          <tr>
+                            <td>{fmtRelative(new Date(p.ts).getTime())}</td>
+                            <td><span class="nm-pill" data-state={p.outcome === 'fired' || p.outcome === 'completed' ? 'ok' : p.outcome === 'error' ? 'error' : p.outcome === 'ok' ? 'info' : 'paused'}>{p.outcome}</span></td>
+                            <td class="summary-cell">{p.summary}</td>
+                            <td class="mono-tiny">{fmtMoney(p.costUsd)}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </details>
+                {/if}
+              </td></tr>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 {/if}
 
@@ -694,48 +698,50 @@
   {:else if scheduled.length === 0}
     <p class="empty">No scheduled callbacks.</p>
   {:else}
-    <table class="nm-table">
-      <thead>
-        <tr><th>Name</th><th>Kind</th><th>Status</th><th>Fire</th><th>Cost</th><th></th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each scheduled as c (c.id)}
-          {@const detailKey = `sch-${c.id}`}
-          {@const fireMs = new Date(c.fireAt).getTime()}
-          <tr>
-            <td>
-              <div class="act-name">{c.name}</div>
-              <div class="mono-tiny dim">{c.description.slice(0, 80)}</div>
-            </td>
-            <td class="mono-tiny">{c.kind}</td>
-            <td><span class="nm-pill" data-state={c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'error'}>{c.status}</span></td>
-            <td>
-              {#if c.status === 'pending'}<span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
-              {:else}<span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>{/if}
-            </td>
-            <td class="mono-tiny">{fmtMoney(c.totalCostUsd)}</td>
-            <td>
-              {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
-              {:else}<button class="link-btn danger" onclick={() => deleteScheduled(c.id)}>delete</button>{/if}
-              {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>{/if}
-            </td>
-            <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
-          </tr>
-          {#if openRowKey === detailKey}
-            <tr><td colspan="7" class="row-detail">
-              {#if c.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${c.conversationId}`}>{c.conversationId.slice(0, 12)}…</a></span></div>{/if}
-              <div class="kv"><span>fire at:</span><span>{fmtTs(fireMs)}</span></div>
-              <div class="kv"><span>source:</span><span>{c.source}</span></div>
-              {#if c.error}<div class="kv"><span>error:</span><span class="err-cell">{c.error}</span></div>{/if}
-              <details class="collapsible">
-                <summary>payload</summary>
-                <pre class="raw">{JSON.stringify(c.payload, null, 2)}</pre>
-              </details>
-            </td></tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead>
+          <tr><th>Name</th><th>Kind</th><th>Status</th><th>Fire</th><th>Cost</th><th></th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each scheduled as c (c.id)}
+            {@const detailKey = `sch-${c.id}`}
+            {@const fireMs = new Date(c.fireAt).getTime()}
+            <tr>
+              <td>
+                <div class="act-name">{c.name}</div>
+                <div class="mono-tiny dim">{c.description.slice(0, 80)}</div>
+              </td>
+              <td class="mono-tiny">{c.kind}</td>
+              <td><span class="nm-pill" data-state={c.status === 'pending' ? 'running' : c.status === 'fired' ? 'ok' : c.status === 'cancelled' ? 'paused' : 'error'}>{c.status}</span></td>
+              <td>
+                {#if c.status === 'pending'}<span class={fireMs - Date.now() < 60_000 ? 'warn' : ''}>{fmtRelative(fireMs)}</span>
+                {:else}<span class="dim">{c.firedAt ? fmtRelative(new Date(c.firedAt).getTime()) : '—'}</span>{/if}
+              </td>
+              <td class="mono-tiny">{fmtMoney(c.totalCostUsd)}</td>
+              <td>
+                {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'fire-now')}>fire now</button>
+                {:else}<button class="link-btn danger" onclick={() => deleteScheduled(c.id)}>delete</button>{/if}
+                {#if c.status === 'pending'}<button class="link-btn" onclick={() => patchScheduled(c.id, 'cancel')}>cancel</button>{/if}
+              </td>
+              <td><button class="link-btn" onclick={() => openRowKey = openRowKey === detailKey ? null : detailKey}>{openRowKey === detailKey ? '−' : '+'}</button></td>
+            </tr>
+            {#if openRowKey === detailKey}
+              <tr><td colspan="7" class="row-detail">
+                {#if c.conversationId}<div class="kv"><span>conversation:</span><span class="mono-tiny"><a class="row-link" href={`/jkai?conv=${c.conversationId}`}>{c.conversationId.slice(0, 12)}…</a></span></div>{/if}
+                <div class="kv"><span>fire at:</span><span>{fmtTs(fireMs)}</span></div>
+                <div class="kv"><span>source:</span><span>{c.source}</span></div>
+                {#if c.error}<div class="kv"><span>error:</span><span class="err-cell">{c.error}</span></div>{/if}
+                <details class="collapsible">
+                  <summary>payload</summary>
+                  <pre class="raw">{JSON.stringify(c.payload, null, 2)}</pre>
+                </details>
+              </td></tr>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 {/if}
 
@@ -751,48 +757,52 @@
   {#if schedules.length === 0}
     <p class="empty">No schedules.</p>
   {:else}
-    <table class="nm-table">
-      <thead><tr><th>Workflow</th><th>Expression</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
-      <tbody>
-        {#each schedules as s (s.id)}
-          <tr>
-            <td><a class="row-link" href={`/jkai/canvas/${s.workflowId}`}>{s.workflowName}</a></td>
-            <td class="mono-tiny">{s.expression ?? '(none)'}</td>
-            <td>{s.lastRunAt ? fmtRelative(new Date(s.lastRunAt).getTime()) : '—'}</td>
-            <td>{s.nextRunAt ? fmtRelative(new Date(s.nextRunAt).getTime()) : '—'}</td>
-            <td>
-              <button class="toggle-btn" class:on={s.enabled} onclick={() => toggleSchedule(s)}>{s.enabled ? 'on' : 'off'}</button>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead><tr><th>Workflow</th><th>Expression</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
+        <tbody>
+          {#each schedules as s (s.id)}
+            <tr>
+              <td><a class="row-link" href={`/jkai/canvas/${s.workflowId}`}>{s.workflowName}</a></td>
+              <td class="mono-tiny">{s.expression ?? '(none)'}</td>
+              <td>{s.lastRunAt ? fmtRelative(new Date(s.lastRunAt).getTime()) : '—'}</td>
+              <td>{s.nextRunAt ? fmtRelative(new Date(s.nextRunAt).getTime()) : '—'}</td>
+              <td>
+                <button class="toggle-btn" class:on={s.enabled} onclick={() => toggleSchedule(s)}>{s.enabled ? 'on' : 'off'}</button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 
   <h3 class="sec-title">Recent activity</h3>
   {#if feed.length === 0}
     <p class="empty">No recent events.</p>
   {:else}
-    <table class="nm-table">
-      <thead><tr><th>When</th><th>Source</th><th>Summary</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-        {#each feed.slice(0, 30) as f, i (i)}
-          {@const k = rowKey('feed', String(i))}
-          <tr>
-            <td>{fmtRelative(f.ts)}</td>
-            <td>{f.source}</td>
-            <td class="summary-cell">{f.summary}</td>
-            <td>{f.status ?? '—'}</td>
-            <td>
-              {#if f.link}<a class="row-link" href={f.link}>open</a>{:else}<button class="link-btn" onclick={() => openRowKey = openRowKey === k ? null : k}>{openRowKey === k ? '−' : '+'}</button>{/if}
-            </td>
-          </tr>
-          {#if openRowKey === k}
-            <tr><td colspan="5" class="row-detail"><pre class="raw">{JSON.stringify(f.raw, null, 2)}</pre></td></tr>
-          {/if}
-        {/each}
-      </tbody>
-    </table>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead><tr><th>When</th><th>Source</th><th>Summary</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {#each feed.slice(0, 30) as f, i (i)}
+            {@const k = rowKey('feed', String(i))}
+            <tr>
+              <td>{fmtRelative(f.ts)}</td>
+              <td>{f.source}</td>
+              <td class="summary-cell">{f.summary}</td>
+              <td>{f.status ?? '—'}</td>
+              <td>
+                {#if f.link}<a class="row-link" href={f.link}>open</a>{:else}<button class="link-btn" onclick={() => openRowKey = openRowKey === k ? null : k}>{openRowKey === k ? '−' : '+'}</button>{/if}
+              </td>
+            </tr>
+            {#if openRowKey === k}
+              <tr><td colspan="5" class="row-detail"><pre class="raw">{JSON.stringify(f.raw, null, 2)}</pre></td></tr>
+            {/if}
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
 {/if}
 
@@ -831,86 +841,88 @@
 
   <details class="collapsible">
     <summary>Tickers (current configuration)</summary>
-    <table class="nm-table">
-      <thead><tr><th>Ticker</th><th>Cadence</th><th>Threshold</th><th>Source</th></tr></thead>
-      <tbody>
-        <tr><td>Job heartbeat</td><td>{fmtDuration(live.thresholds.heartbeatIntervalMs)}</td><td>—</td><td class="mono-tiny">job-store.ts:191</td></tr>
-        <tr><td>Idle watchdog</td><td>15s</td><td>{fmtDuration(live.thresholds.idleTimeoutMs)} idle / {fmtDuration(live.thresholds.hardTimeoutMs)} total</td><td class="mono-tiny">job-store.ts:142</td></tr>
-        <tr><td>Follow-up worker</td><td>{fmtDuration(live.thresholds.followupWorkerIntervalMs)}</td><td>{live.thresholds.followupMaxRetries} retries max</td><td class="mono-tiny">followup-queue.ts:124</td></tr>
-        <tr><td>Heartbeat engine</td><td>30s</td><td>per-action cadence_seconds</td><td class="mono-tiny">heartbeat/engine.ts</td></tr>
-        <tr><td>Scheduled engine</td><td>10s</td><td>fire_at &lt;= now</td><td class="mono-tiny">scheduled/engine.ts</td></tr>
-      </tbody>
-    </table>
+    <div class="nm-table-scroll">
+      <table class="nm-table">
+        <thead><tr><th>Ticker</th><th>Cadence</th><th>Threshold</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Job heartbeat</td><td>{fmtDuration(live.thresholds.heartbeatIntervalMs)}</td><td>—</td><td class="mono-tiny">job-store.ts:191</td></tr>
+          <tr><td>Idle watchdog</td><td>15s</td><td>{fmtDuration(live.thresholds.idleTimeoutMs)} idle / {fmtDuration(live.thresholds.hardTimeoutMs)} total</td><td class="mono-tiny">job-store.ts:142</td></tr>
+          <tr><td>Follow-up worker</td><td>{fmtDuration(live.thresholds.followupWorkerIntervalMs)}</td><td>{live.thresholds.followupMaxRetries} retries max</td><td class="mono-tiny">followup-queue.ts:124</td></tr>
+          <tr><td>Heartbeat engine</td><td>30s</td><td>per-action cadence_seconds</td><td class="mono-tiny">heartbeat/engine.ts</td></tr>
+          <tr><td>Scheduled engine</td><td>10s</td><td>fire_at &lt;= now</td><td class="mono-tiny">scheduled/engine.ts</td></tr>
+        </tbody>
+      </table>
+    </div>
   </details>
 {/if}
 </PageWrap>
 
 <style>
-  .live-meta { display: flex; gap: 1rem; align-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin: 0.75rem 0 0.5rem; }
+  .live-meta { display: flex; gap: 1rem; align-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); margin: 0.75rem 0 0.5rem; }
   .link-btn { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
   .link-btn:hover { color: var(--text-primary); }
 
-  .sec-title { font-family: var(--font-mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-ghost); margin: 1.5rem 0 0.5rem; }
-  .empty { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); padding: 0.6rem 0.8rem; border: 1px dashed var(--card-border); margin: 0 0 1rem; }
-  .hint { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); line-height: 1.55; margin: 0.5rem 0 1rem; }
+  .sec-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-ghost); margin: 1.5rem 0 0.5rem; }
+  .empty { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); padding: 0.6rem 0.8rem; border: 1px dashed var(--line-strong); margin: 0 0 1rem; }
+  .hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); line-height: 1.55; margin: 0.5rem 0 1rem; }
 
-  .mono-tiny { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .mono-tiny { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); white-space: nowrap; }
   .summary-cell { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .err-cell { color: var(--error); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .row-detail { background: var(--bg-section); }
-  .row-detail .kv { display: flex; gap: 1rem; padding: 3px 0; font-family: var(--font-mono); font-size: 11px; }
+  .row-detail { background: var(--surface-sunken); }
+  .row-detail .kv { display: flex; gap: 1rem; padding: 3px 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .row-detail .kv > span:first-child { color: var(--text-ghost); width: 130px; flex: none; }
   .row-detail .kv > span:last-child { color: var(--text-primary); word-break: break-word; }
-  .row-detail .raw { font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); background: var(--bg-base); border: 1px solid var(--card-border); padding: 0.7rem; margin: 0.4rem 0; max-height: 400px; overflow: auto; }
+  .row-detail .raw { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); background: var(--bg-base); border: 1px solid var(--line-strong); padding: 0.7rem; margin: 0.4rem 0; max-height: 400px; overflow: auto; }
 
-  .toggle-btn { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--card-border); background: var(--bg-section); color: var(--text-muted); cursor: pointer; }
+  .toggle-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
   .toggle-btn.on { color: var(--success); border-color: var(--success-border); background: var(--success-bg); }
   .toggle-btn:hover { color: var(--text-primary); }
 
   .sys-grid { display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-  .sys-card { background: var(--bg-section); border: 1px solid var(--card-border); padding: 0.95rem 1.05rem; }
+  .sys-card { background: var(--surface-sunken); border: 1px solid var(--line-strong); padding: 0.95rem 1.05rem; }
   .sys-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; }
   .sys-card h3 { font-family: var(--font-brand); font-weight: 500; font-size: 1.05rem; margin: 0; text-transform: lowercase; letter-spacing: -0.005em; color: var(--text-primary); }
-  .sys-card .sys-cadence { font-family: var(--font-mono); font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
-  .sys-card p { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0 0 0.55rem; }
-  .sys-card .sys-file { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .sys-card .sys-cadence { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
+  .sys-card p { font-family: var(--font-sans); font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); margin: 0 0 0.55rem; }
+  .sys-card .sys-file { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .process-list { list-style: none; padding: 0; margin: 0; counter-reset: ps; }
-  .process-list li { display: flex; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--divider); }
+  .process-list li { display: flex; gap: 0.8rem; padding: 0.7rem 0; border-bottom: 1px solid var(--line-hair); }
   .process-list li:last-child { border-bottom: none; }
   .process-step-num { font-family: var(--font-brand); font-size: 1.4rem; font-weight: 500; color: var(--accent); width: 2rem; flex: none; line-height: 1; padding-top: 0.15rem; }
-  .process-step-label { font-family: var(--font-mono); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-primary); }
-  .process-step-detail { font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin-top: 0.2rem; }
+  .process-step-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-primary); }
+  .process-step-detail { font-family: var(--font-sans); font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); margin-top: 0.2rem; }
 
   /* Heartbeat tab */
-  .layer-explainer { background: var(--bg-section); border: 1px solid var(--card-border); padding: 1rem 1.1rem; margin: 0.5rem 0 1.5rem; }
+  .layer-explainer { background: var(--surface-sunken); border: 1px solid var(--line-strong); padding: 1rem 1.1rem; margin: 0.5rem 0 1.5rem; }
   .layer-grid { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0.5rem 0 0.8rem; }
-  .layer-card { padding: 0.7rem 0.8rem; border-left: 3px solid var(--card-border); background: var(--bg-base); }
-  .layer-card .layer-cad { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); margin-bottom: 0.3rem; }
+  .layer-card { padding: 0.7rem 0.8rem; border-left: 3px solid var(--line-strong); background: var(--bg-base); }
+  .layer-card .layer-cad { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); margin-bottom: 0.3rem; }
   .layer-card .layer-name { font-family: var(--font-brand); font-size: 1.1rem; font-weight: 500; text-transform: lowercase; letter-spacing: -0.005em; color: var(--text-primary); margin-bottom: 0.3rem; }
-  .layer-card .layer-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
+  .layer-card .layer-desc { font-family: var(--font-sans); font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-secondary); }
   .layer-min { border-left-color: var(--success); }
   .layer-sec { border-left-color: var(--info); }
   .layer-actions { border-left-color: var(--error); }
   .layer-poll { border-left-color: var(--warn); }
   .layer-content { border-left-color: var(--accent); }
-  .layer-gap { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--error); background: var(--bg-base); }
-  .layer-fill { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--success); background: var(--bg-base); }
+  .layer-gap { font-family: var(--font-sans); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--error); background: var(--bg-base); }
+  .layer-fill { font-family: var(--font-sans); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary); margin: 0.5rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--success); background: var(--bg-base); }
 
   .bar-row { display: flex; align-items: center; gap: 0.55rem; }
-  .bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-base); border: 1px solid var(--card-border); }
+  .bar { flex: 1; min-width: 60px; height: 4px; background: var(--bg-base); border: 1px solid var(--line-strong); }
   .bar-fill { height: 100%; background: var(--accent); transition: width 200ms ease; }
   .warn { color: var(--warn); }
   .warn .bar-fill { background: var(--warn); }
   .danger { color: var(--error); }
   .danger .bar-fill { background: var(--error); }
 
-  .pulse-stream { list-style: none; padding: 0; margin: 0; max-height: 480px; overflow-y: auto; border: 1px solid var(--card-border); background: var(--bg-base); }
-  .pulse-stream .pulse { display: grid; grid-template-columns: 80px 110px 80px 100px 60px 1fr; gap: 0.6rem; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--divider); font-family: var(--font-mono); font-size: 10px; }
+  .pulse-stream { list-style: none; padding: 0; margin: 0; max-height: 480px; overflow-y: auto; border: 1px solid var(--line-strong); background: var(--bg-base); }
+  .pulse-stream .pulse { display: grid; grid-template-columns: 80px 110px 80px 100px 60px 1fr; gap: 0.6rem; align-items: baseline; padding: 4px 10px; border-bottom: 1px solid var(--line-hair); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .pulse-stream .pulse:last-child { border-bottom: none; }
   .pulse-stream .pulse-time { color: var(--text-ghost); }
-  .pulse-stream .pulse-kind { font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; font-size: 9px; }
+  .pulse-stream .pulse-kind { font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--fs-label-xs); }
   .pulse-stream .pulse-job { color: var(--text-muted); }
   .pulse-stream .pulse-phase { color: var(--text-secondary); text-transform: lowercase; }
   .pulse-stream .pulse-elapsed { color: var(--text-muted); text-align: right; }
@@ -928,37 +940,37 @@
   }
 
   /* Activities tab */
-  .act-name { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text-primary); text-transform: lowercase; }
-  .act-desc { font-family: var(--font-sans); font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 0 0 0.6rem; }
-  .act-controls { display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; padding: 0.4rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--divider); }
-  .ctrl { display: flex; gap: 0.4rem; align-items: center; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .act-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 500; color: var(--text-primary); text-transform: lowercase; }
+  .act-desc { font-family: var(--font-sans); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary); margin: 0 0 0.6rem; }
+  .act-controls { display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; padding: 0.4rem 0; margin-bottom: 0.5rem; border-bottom: 1px solid var(--line-hair); }
+  .ctrl { display: flex; gap: 0.4rem; align-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .ctrl > span { white-space: nowrap; }
-  .nm-text-input.small { font-size: 11px; padding: 3px 6px; max-width: 9rem; }
-  .nm-text-input { font-family: var(--font-mono); border: 1px solid var(--card-border); background: var(--bg-base); color: var(--text-primary); padding: 4px 8px; }
+  .nm-text-input.small { font-size: var(--fs-label-xs); padding: 3px 6px; max-width: 9rem; }
+  .nm-text-input { font-family: var(--font-mono); border: 1px solid var(--line-strong); background: var(--bg-base); color: var(--text-primary); padding: 4px 8px; }
   .act-config { margin: 0.4rem 0 0.6rem; }
   .act-config summary { cursor: pointer; color: var(--text-muted); }
   .sec-title-tight { margin-top: 0.5rem; }
-  .nm-table.inset { border: 1px solid var(--card-border); }
-  .nm-table.inset td, .nm-table.inset th { font-size: 10px; }
+  .nm-table.inset { border: 1px solid var(--line-strong); }
+  .nm-table.inset td, .nm-table.inset th { font-size: var(--fs-label-xs); }
   .dim { color: var(--text-ghost); font-style: italic; }
   .pill + .pill { margin-left: 4px; }
 
   /* Lane-aligned compact stat strip */
   .lane-strip { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0 0 1.25rem; }
-  .lane-card { text-align: left; padding: 0.7rem 0.9rem; background: var(--bg-section); border: 1px solid var(--card-border); cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
+  .lane-card { text-align: left; padding: 0.7rem 0.9rem; background: var(--surface-sunken); border: 1px solid var(--line-strong); cursor: pointer; transition: border-color 120ms ease, background 120ms ease; }
   .lane-card:hover { border-color: var(--accent); background: var(--bg-base); }
   .lane-card.active { border-color: var(--accent); border-left-width: 3px; }
-  .lane-label { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-ghost); margin-bottom: 0.2rem; }
+  .lane-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-ghost); margin-bottom: 0.2rem; }
   .lane-value { font-family: var(--font-brand); font-size: 1.6rem; font-weight: 500; color: var(--text-primary); line-height: 1; letter-spacing: -0.01em; }
-  .lane-unit { font-size: 0.7rem; color: var(--text-muted); margin-left: 2px; }
-  .lane-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 0.3rem; }
+  .lane-unit { font-size: var(--fs-label-xs); color: var(--text-muted); margin-left: 2px; }
+  .lane-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); margin-top: 0.3rem; }
 
   /* Flow list — compact 1-row-per-thing for the Live tab */
-  .flow-list { list-style: none; padding: 0; margin: 0 0 0.8rem; border: 1px solid var(--card-border); background: var(--bg-section); }
-  .flow-row { display: grid; grid-template-columns: 24px 90px 1fr 220px 80px; gap: 0.6rem; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--divider); font-family: var(--font-mono); font-size: 11px; }
+  .flow-list { list-style: none; padding: 0; margin: 0 0 0.8rem; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+  .flow-row { display: grid; grid-template-columns: 24px 90px 1fr 220px 80px; gap: 0.6rem; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--line-hair); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .flow-row:last-child { border-bottom: none; }
   .flow-pip { color: var(--accent); }
-  .flow-kind { color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+  .flow-kind { color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--fs-label-xs); }
   .flow-name { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .flow-meta { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .flow-id { color: var(--text-ghost); text-align: right; }
@@ -968,8 +980,8 @@
   }
 
   /* Collapsibles */
-  .collapsible { margin: 0.8rem 0; border: 1px solid var(--card-border); background: var(--bg-section); }
-  .collapsible > summary { cursor: pointer; padding: 8px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); user-select: none; list-style: none; }
+  .collapsible { margin: 0.8rem 0; border: 1px solid var(--line-strong); background: var(--surface-sunken); }
+  .collapsible > summary { cursor: pointer; padding: 8px 12px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); user-select: none; list-style: none; }
   .collapsible > summary::-webkit-details-marker { display: none; }
   .collapsible > summary::before { content: '▸ '; color: var(--text-ghost); margin-right: 4px; }
   .collapsible[open] > summary::before { content: '▾ '; }

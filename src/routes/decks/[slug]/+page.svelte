@@ -536,7 +536,7 @@
   }
   .deck-title {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -553,7 +553,7 @@
     align-items: center;
     gap: 8px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--paper);
@@ -571,7 +571,7 @@
     transform: none;
   }
   .pill.right:hover { transform: scale(1.05); }
-  .pill-arrow { font-size: 13px; }
+  .pill-arrow { font-size: var(--fs-label); }
   @media (prefers-reduced-motion: no-preference) {
     .pill-arrow { animation: pill-nudge 2.2s ease-in-out infinite; }
   }
@@ -613,7 +613,7 @@
     position: absolute;
     top: 2px;
     right: 6px;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--ink-soft);
     opacity: 0.7;
   }
@@ -626,7 +626,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     color: var(--ink-soft);
     opacity: 0.75;
@@ -647,7 +647,7 @@
   .nm-dot.onpath { border-color: var(--accent-ink); background: var(--accent-ink-tint-35); }
   .nm-return {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -673,7 +673,7 @@
   .hint,
   .progress {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink-soft);

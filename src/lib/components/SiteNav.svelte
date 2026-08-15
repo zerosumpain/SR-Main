@@ -136,7 +136,7 @@
     align-items: center;
     padding: 0 20px;
     border-right: 1px solid var(--line-hair);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     flex-shrink: 0;
     transition: color 0.2s var(--ease-out);
   }

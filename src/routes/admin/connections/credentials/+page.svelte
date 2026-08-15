@@ -403,7 +403,7 @@
   }
   .cap-chip {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -417,7 +417,7 @@
     padding: 1.5rem;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     font-style: italic;
     border: 1px dashed var(--card-border);
@@ -451,14 +451,14 @@
   }
   .cred-label {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     word-break: break-all;
   }
   .cred-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     background: var(--code-bg, rgba(26, 16, 8, 0.06));
     color: var(--code-text, var(--text-secondary));
     padding: 0.08rem 0.38rem;
@@ -472,14 +472,14 @@
     align-items: center;
     margin-top: 0.35rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .cred-meta .dot { color: var(--text-ghost); }
 
   .status-chip {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .status-chip.ok { color: var(--success); }
@@ -494,7 +494,7 @@
 
   .row-link {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -521,7 +521,7 @@
 
   .btn-ghost {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 6px 14px;
@@ -539,7 +539,7 @@
     justify-content: flex-start;
   }
   .add-link {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
   }
 
@@ -555,7 +555,7 @@
   }
   .connect-help {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: var(--text-secondary);
   }
@@ -564,7 +564,7 @@
   .connect-field { display: flex; flex-direction: column; gap: 0.3rem; }
   .connect-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -572,7 +572,7 @@
   .connect-err {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
   }
   .connect-actions { display: flex; gap: 0.6rem; align-items: center; }

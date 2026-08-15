@@ -1710,7 +1710,7 @@
      inside it own no scrollers of their own. */
   .rail {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 4px 12px;
     overflow-y: auto;
@@ -1726,7 +1726,7 @@
   }
 
   .canvas {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     position: relative;
@@ -1850,7 +1850,7 @@
     font-size: var(--fs-label);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .rail input[type='range'] {
@@ -1865,7 +1865,7 @@
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .hint {
@@ -1884,7 +1884,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--chip, var(--accent-ink-tint-35));
     border-radius: var(--radius-sharp);
     background: transparent;
@@ -1945,7 +1945,7 @@
 
   .path {
     padding: 7px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border-radius: var(--radius-sharp);
     font-size: var(--fs-label-xs);
     line-height: 1.7;
@@ -2015,7 +2015,7 @@
     gap: 6px;
     padding: 3px 8px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
   }
   .spread label {
@@ -2083,7 +2083,7 @@
   /* ── Findings ──────────────────────────────────────────────────────────── */
   .findings {
     flex: none;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .findings-head {
     display: flex;
@@ -2120,7 +2120,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     margin-bottom: 14px;
   }
   .tabs button {
@@ -2157,7 +2157,7 @@
 
   .rel {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--accent-ink-tint-35);
     border-radius: var(--radius-round);
     padding: 12px 14px;
@@ -2219,7 +2219,7 @@
   }
   .rel-acts .ghost:hover:not(:disabled) {
     color: var(--accent);
-    border-color: var(--card-border);
+    border-color: var(--line-strong);
   }
   .rel-acts .ghost:disabled {
     opacity: 0.5;
@@ -2232,7 +2232,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

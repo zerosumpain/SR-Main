@@ -120,7 +120,7 @@
     gap: 0.55rem;
     padding: 0.4rem 0.75rem;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-elevated);
     font-family: var(--font-mono, 'DM Mono', ui-monospace, monospace);
     font-size: 0.75rem;

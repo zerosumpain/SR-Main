@@ -25,7 +25,7 @@
 
 <section
   class="p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
+  style="background: var(--card-bg); border: 1px solid var(--line-strong); border-radius: var(--radius-round);"
 >
   <h2
     class="text-sm uppercase tracking-wider mb-4"
@@ -66,8 +66,8 @@
     <label class="flex flex-col gap-1">
       <span class="text-xs" style="color: var(--text-secondary);">Update API key</span>
       <input
-        class="rounded px-3 py-2 text-sm"
-        style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono);"
+        class="rounded px-3 py-2 text-base"
+        style="background: var(--surface-elevated); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-mono);"
         type="password"
         bind:value={keyInput}
         placeholder="sk-or-..."

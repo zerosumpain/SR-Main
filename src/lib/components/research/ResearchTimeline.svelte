@@ -243,8 +243,8 @@
   .bar:focus-visible .fill { stroke: var(--text-primary); stroke-width: 1.5; }
 
   /* Text wears text tokens, never the series colour. */
-  .peak-label { font-family: var(--font-mono); font-size: 11px; fill: var(--text-secondary); }
-  .tick { font-family: var(--font-mono); font-size: 10px; fill: var(--text-ghost); }
+  .peak-label { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--text-secondary); }
+  .tick { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--text-ghost); }
 
   .tip {
     position: absolute;
@@ -253,7 +253,7 @@
     pointer-events: none;
     white-space: nowrap;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 4px 8px;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -263,7 +263,7 @@
   }
   .tip span { color: var(--text-muted); }
 
-  .facts { margin-top: 0.6rem; border-top: 1px solid var(--divider); padding-top: 0.5rem; }
+  .facts { margin-top: 0.6rem; border-top: 1px solid var(--line-hair); padding-top: 0.5rem; }
   .facts-hd { display: flex; align-items: baseline; gap: 0.5rem; }
   .close { margin-left: auto; background: none; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 0 4px; }
   .close:hover { color: var(--error); }

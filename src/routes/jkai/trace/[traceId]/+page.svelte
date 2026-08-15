@@ -762,7 +762,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.3rem 0.7rem;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -780,7 +780,7 @@
     margin-bottom: 1.5rem;
   }
   .stat {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.6rem 0.75rem;
     background: var(--card-bg);
@@ -939,7 +939,7 @@
      admin.css is not loaded under /jkai. */
   .tablewrap {
     overflow-x: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     background: var(--card-bg);
   }
@@ -958,7 +958,7 @@
   th {
     text-align: left;
     padding: 0;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   th.plain,
   th button {
@@ -983,7 +983,7 @@
   }
   td {
     padding: 6px 9px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     vertical-align: middle;
     font-size: 0.82rem;
     color: var(--text-secondary);
@@ -1103,7 +1103,7 @@
     text-align: center;
   }
   .expand-btn {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: transparent;
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -1119,7 +1119,7 @@
   }
 
   .detail-row td {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     padding: 0.75rem 0.9rem 1rem;
   }
   .kv-grid {
@@ -1218,7 +1218,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .cell {
     max-width: 280px;
@@ -1228,7 +1228,7 @@
   }
 
   .subagent {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.7rem 0.8rem;
     margin-bottom: 0.6rem;
@@ -1263,7 +1263,7 @@
     font-size: 0.88rem;
     line-height: 1.6;
     color: var(--text-secondary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.8rem;
     background: var(--card-bg);

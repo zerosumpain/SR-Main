@@ -19,7 +19,7 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 0;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
   }
   @media (max-width: 900px) {
     .h-corr-grid {
@@ -28,15 +28,15 @@
   }
   .h-corr {
     padding: 22px 20px;
-    border-right: 1px solid var(--divider);
-    border-bottom: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
+    border-bottom: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
   .h-corr-cause {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -61,7 +61,7 @@
   }
   .h-corr-conf {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-ghost);
     text-transform: uppercase;
@@ -69,7 +69,7 @@
   }
   .h-corr-badge {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;

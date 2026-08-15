@@ -102,7 +102,7 @@
 <style>
   .insight {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     /* The stronger the finding, the more it is allowed to assert itself. */
     border-left: 3px solid color-mix(in srgb, var(--accent) calc(var(--weight) * 100%), var(--card-border));
     border-radius: var(--radius-round);
@@ -131,7 +131,7 @@
   .score {
     width: 46px;
     height: 3px;
-    background: var(--divider);
+    background: var(--line);
     border-radius: var(--radius-pill);
     overflow: hidden;
   }
@@ -167,7 +167,7 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border: 1px solid transparent;
     border-radius: var(--radius-sharp);
     padding: 2px 7px;
@@ -217,7 +217,7 @@
   }
   .ghost:hover:not(:disabled) {
     color: var(--accent);
-    border-color: var(--card-border);
+    border-color: var(--line-strong);
   }
   .ghost:disabled {
     opacity: 0.5;
@@ -232,7 +232,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

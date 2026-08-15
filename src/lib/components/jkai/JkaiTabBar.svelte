@@ -51,8 +51,8 @@
       grid-template-columns: repeat(5, 1fr);
       flex: none;
       height: 56px;
-      background: var(--bg-section);
-      border-top: 1px solid var(--divider);
+      background: var(--surface-sunken);
+      border-top: 1px solid var(--line-hair);
       /* Reserve the home-indicator strip beneath the bar. */
       padding-bottom: env(safe-area-inset-bottom);
       box-sizing: content-box;

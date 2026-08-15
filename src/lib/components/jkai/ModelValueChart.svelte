@@ -431,7 +431,7 @@
   .expand-btn {
     padding: 3px 9px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -456,7 +456,7 @@
   .chart-head--second {
     margin-top: 18px;
     padding-top: 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .chart-title {
     font-family: var(--font-mono);
@@ -559,7 +559,7 @@
     max-width: 230px;
     /* Opaque — --card-bg is a 7% tint and would read as transparent here. */
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     pointer-events: none;
     z-index: 2;
@@ -653,7 +653,7 @@
   .bar-track {
     height: 7px;
     border-radius: var(--radius-pill);
-    background: var(--divider);
+    background: var(--line);
     overflow: hidden;
   }
   .bar-fill {

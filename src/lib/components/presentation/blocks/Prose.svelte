@@ -64,7 +64,7 @@
   }
   .prose.aside :global(p) {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     letter-spacing: 0.05em;
     line-height: 1.7;
     color: var(--ink-soft);
@@ -116,8 +116,8 @@
     column-gap: 38.5px;
     column-rule: 1px solid rgba(28, 22, 17, 0.14);
   }
-  .prose.columns :global(p) { font-size: 16px; line-height: 1.62; }
-  .prose.columns :global(li) { font-size: 16px; }
+  .prose.columns :global(p) { font-size: var(--fs-body); line-height: 1.62; }
+  .prose.columns :global(li) { font-size: var(--fs-body); }
 
   /* callout — tinted petrol note box, bold opener as its title */
   .prose.callout {
@@ -130,7 +130,7 @@
   .prose.callout :global(b) {
     display: block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -183,7 +183,7 @@
     max-width: clamp(118px, 30%, 208px);
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -197,7 +197,7 @@
     display: block;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent);
@@ -269,7 +269,7 @@
   .prose :global(h4) {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -293,7 +293,7 @@
     color: var(--paper);
     margin: 0;
   }
-  .band-inner :global(em) { font-style: italic; color: #d9a05e; font-size: 0.62em; letter-spacing: 0; }
+  .band-inner :global(em) { font-style: italic; color: #d9a05e; font-size: max(0.62em, var(--fs-label-xs)); letter-spacing: 0; }
   .band-inner :global(b) { color: var(--paper); }
 
   /* cards — detail-dense paragraphs as bordered cards (data-spine .limit) */
@@ -312,7 +312,7 @@
     min-width: 0;
   }
   .pcard :global(p) {
-    font-size: 16px;
+    font-size: var(--fs-body);
     line-height: 1.6;
     color: var(--ink-soft);
     margin: 0;

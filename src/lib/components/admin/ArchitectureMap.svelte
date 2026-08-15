@@ -283,7 +283,7 @@
   .zoom-ctl { display: inline-flex; align-items: center; gap: 4px; }
   .tb-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     min-width: 26px;
     height: 26px;
@@ -291,7 +291,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     background: var(--surface-elevated, transparent);
     color: var(--text-secondary);
     cursor: pointer;
@@ -301,7 +301,7 @@
   .tb-btn.wide { min-width: auto; padding: 0 10px; letter-spacing: 0.02em; }
   .zval {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     min-width: 40px;
     text-align: center;
@@ -311,7 +311,7 @@
     overflow: auto;
     scrollbar-width: thin;
     height: clamp(340px, 56vh, 620px);
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     border-radius: 8px;
     background:
       radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text-ghost) 24%, transparent) 1px, transparent 0) 0 0 / 22px 22px;
@@ -321,7 +321,7 @@
 
   .grp-lab {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     fill: var(--text-secondary);
   }
@@ -335,7 +335,7 @@
   .edge.hot { stroke: var(--accent); stroke-width: 2.2; }
   .edge-lab {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     fill: var(--text-ghost);
     text-anchor: middle;
     opacity: 0;
@@ -351,7 +351,7 @@
     justify-content: center;
     gap: 2px;
     padding: 6px 9px;
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     border-left: 3px solid var(--pc);
     border-radius: 6px;
     background: var(--surface-elevated, var(--bg));
@@ -365,7 +365,7 @@
     flex: 1;
     min-width: 0;
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -374,7 +374,7 @@
   }
   .node-note {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     white-space: nowrap;
     overflow: hidden;
@@ -389,30 +389,30 @@
 
   .side { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 12px; }
   .detail {
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     border-radius: 8px;
     background: var(--surface-elevated, transparent);
     padding: 12px 14px;
     min-height: 132px;
   }
-  .d-kick { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
-  .detail h4 { margin: 5px 0 4px; font-size: 15px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
-  .d-note { margin: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary); }
+  .d-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+  .detail h4 { margin: 5px 0 4px; font-size: var(--fs-body-sm); font-weight: 600; color: var(--text-primary); line-height: 1.2; }
+  .d-note { margin: 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .d-meta { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
   .d-kind {
-    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--text-secondary); border: 1px solid var(--divider); border-radius: 3px; padding: 1px 5px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-secondary); border: 1px solid var(--line-hair); border-radius: 3px; padding: 1px 5px;
   }
-  .d-status { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); }
-  .d-link { display: inline-block; margin-top: 9px; font-family: var(--font-mono); font-size: 10px; color: var(--accent); word-break: break-all; }
-  .d-empty { font-size: 11.5px; line-height: 1.5; color: var(--text-ghost); }
+  .d-status { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .d-link { display: inline-block; margin-top: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); word-break: break-all; }
+  .d-empty { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-ghost); }
 
   .legend {
     display: flex; flex-direction: column; gap: 5px;
-    border: 1px solid var(--divider); border-radius: 8px; padding: 11px 13px;
+    border: 1px solid var(--line-hair); border-radius: 8px; padding: 11px 13px;
   }
-  .lg-hd { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
-  .lg { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10px; color: var(--text-secondary); }
+  .lg-hd { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); }
+  .lg { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .lg i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 
   /* ── full-screen overlay ─────────────────────────────────────────────── */
@@ -436,7 +436,7 @@
     background: color-mix(in srgb, var(--bg) 82%, transparent);
     backdrop-filter: blur(6px);
     padding: 8px;
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     border-radius: 10px;
   }
   .arch.expanded .detail { min-height: 0; background: transparent; border: none; padding: 4px 6px; }

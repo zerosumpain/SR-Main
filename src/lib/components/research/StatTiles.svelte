@@ -52,7 +52,7 @@
 
 <style>
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
-  .tile { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.65rem 0.7rem; display: block; text-decoration: none; }
+  .tile { border: 1px solid var(--line-strong); background: var(--surface-elevated); padding: 0.65rem 0.7rem; display: block; text-decoration: none; }
   .tile.linked { cursor: pointer; }
   .tile.linked:hover { border-color: var(--accent); }
   .tile.linked:hover .label { color: var(--accent); }

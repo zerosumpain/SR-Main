@@ -81,7 +81,7 @@
 <style>
   .table-artifact {
     margin: 0.5rem 0;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     max-width: 100%;
@@ -90,8 +90,8 @@
     padding: 0.4rem 0.75rem;
     font-size: 0.85rem;
     font-weight: 600;
-    background: var(--bg-section);
-    border-bottom: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--line-strong);
   }
   .scroll {
     max-height: 400px;
@@ -108,14 +108,14 @@
     background: var(--bg);
     text-align: left;
     padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     cursor: pointer;
     user-select: none;
     white-space: nowrap;
   }
   td {
     padding: 0.35rem 0.6rem;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   tr:last-child td { border-bottom: none; }
   .align-right { text-align: right; }

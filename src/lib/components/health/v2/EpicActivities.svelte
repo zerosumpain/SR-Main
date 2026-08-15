@@ -380,7 +380,7 @@
   }
 
   .epic-card {
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
     background: var(--card-bg);
     display: flex;
     flex-direction: column;
@@ -391,21 +391,21 @@
     position: relative;
     width: 100%;
     height: 320px;
-    background: var(--bg-section);
-    border-bottom: 1px solid var(--divider);
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--line-hair);
     overflow: hidden;
     z-index: 0;
   }
   .epic-trace :global(.leaflet-container) {
     width: 100%;
     height: 100%;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     font-family: var(--font-mono);
   }
   .epic-trace :global(.leaflet-control-attribution) {
     background: color-mix(in srgb, var(--bg) 85%, transparent);
     color: var(--text-muted);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     padding: 1px 6px;
   }
@@ -432,7 +432,7 @@
     align-items: center;
     justify-content: center;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--text-ghost);
   }
@@ -447,7 +447,7 @@
   .epic-meta {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -476,7 +476,7 @@
 
   .epic-caption {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-secondary);
   }
@@ -486,7 +486,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     gap: 14px 22px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     padding-top: 16px;
   }
   .epic-stat {
@@ -497,7 +497,7 @@
   }
   .epic-stat dt {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--text-ghost);
     text-transform: uppercase;
@@ -513,7 +513,7 @@
   .epic-stat dd span {
     font-family: var(--font-mono);
     font-weight: 400;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     margin-left: 2px;
   }
@@ -521,11 +521,11 @@
   .epic-foot {
     margin: 14px 0 0;
     padding-top: 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .epic-link {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.2em;
     color: var(--accent);
     text-decoration: none;

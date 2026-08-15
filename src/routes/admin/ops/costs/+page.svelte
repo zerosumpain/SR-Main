@@ -55,22 +55,24 @@
       <div class="nm-sec-hd">
         <span class="sr-label-tight">By Model · 30 days</span>
       </div>
-      <table class="nm-table">
-        <thead>
-          <tr><th>Provider</th><th>Model</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr>
-        </thead>
-        <tbody>
-          {#each data.byModel as m}
-            <tr>
-              <td>{m.provider ?? '?'}</td>
-              <td><code>{m.model ?? '?'}</code></td>
-              <td>{m.count}</td>
-              <td>{(m.tokensIn + m.tokensOut).toLocaleString()}</td>
-              <td>${m.cost.toFixed(4)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="nm-table-scroll">
+        <table class="nm-table">
+          <thead>
+            <tr><th>Provider</th><th>Model</th><th>Calls</th><th>Tokens</th><th>Cost</th></tr>
+          </thead>
+          <tbody>
+            {#each data.byModel as m}
+              <tr>
+                <td>{m.provider ?? '?'}</td>
+                <td><code>{m.model ?? '?'}</code></td>
+                <td>{m.count}</td>
+                <td>{(m.tokensIn + m.tokensOut).toLocaleString()}</td>
+                <td>${m.cost.toFixed(4)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     </section>
   {/if}
 
@@ -79,20 +81,22 @@
       <div class="nm-sec-hd">
         <span class="sr-label-tight">By Tool · 30 days</span>
       </div>
-      <table class="nm-table">
-        <thead>
-          <tr><th>Tool</th><th>Calls</th><th>Avg latency</th></tr>
-        </thead>
-        <tbody>
-          {#each data.byTool as t}
-            <tr>
-              <td><code>{t.toolName ?? 'unknown'}</code></td>
-              <td>{t.count}</td>
-              <td>{Math.round(t.avgMs)}ms</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <div class="nm-table-scroll">
+        <table class="nm-table">
+          <thead>
+            <tr><th>Tool</th><th>Calls</th><th>Avg latency</th></tr>
+          </thead>
+          <tbody>
+            {#each data.byTool as t}
+              <tr>
+                <td><code>{t.toolName ?? 'unknown'}</code></td>
+                <td>{t.count}</td>
+                <td>{Math.round(t.avgMs)}ms</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     </section>
   {/if}
 
@@ -114,7 +118,7 @@
   }
   .big-num-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-ghost);
@@ -122,7 +126,7 @@
   }
   code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;

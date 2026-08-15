@@ -31,7 +31,7 @@
         <a
           href="/blog/{post.slug}"
           class="block py-5 group transition-colors hover:bg-[var(--accent-tint-04)]"
-          style="border-bottom: 1px solid var(--divider);"
+          style="border-bottom: 1px solid var(--line-hair);"
         >
           <div class="flex gap-5">
             {#if post.coverImageUrl}
@@ -51,7 +51,7 @@
                     <p class="text-sm mt-1 line-clamp-2" style="color: var(--text-muted);">{post.excerpt}</p>
                   {/if}
                 </div>
-                <span class="label shrink-0" style="font-size: 10px;">
+                <span class="label shrink-0" style="font-size: var(--fs-label-xs);">
                   {post.publishedAt ? new Date(post.publishedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
                 </span>
               </div>
@@ -60,7 +60,7 @@
                   {#each post.tags as tag}
                     <span
                       class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
-                      style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted);"
+                      style="background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
                     >
                       {tag}
                     </span>
@@ -75,7 +75,7 @@
   </div>
 </section>
 
-<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--card-border);">
+<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--line-strong);">
   <a href="/" class="nav-link">← Home</a>
   <a href="/admin" class="nav-link">Admin</a>
 </footer>

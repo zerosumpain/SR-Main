@@ -54,7 +54,7 @@
 
 <style>
   .sec {
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .sec:last-child {
     border-bottom: none;

@@ -146,7 +146,7 @@
     max-width: 260px;
     padding: 5px 9px;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-body);
     font-size: var(--fs-label);
@@ -205,7 +205,7 @@
     overflow-y: auto;
     /* Opaque: this floats over the chart and the graph. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 4px;
     display: flex;

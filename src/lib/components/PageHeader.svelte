@@ -128,7 +128,7 @@
     margin: 0;
     padding: 0 20px;
     border-right: 1px solid var(--line-hair);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1;
     white-space: nowrap;
     overflow: hidden;

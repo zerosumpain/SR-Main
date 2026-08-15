@@ -50,7 +50,7 @@
     max-height: 84vh;
     overflow: auto;
     background: var(--bg);
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     padding: 22px 22px 24px;
   }
   .md-head {
@@ -60,11 +60,11 @@
     gap: 12px;
     padding-bottom: 14px;
     margin-bottom: 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .md-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -72,12 +72,12 @@
   .md-close {
     flex-shrink: 0;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     padding: 3px 8px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     cursor: pointer;
     transition:

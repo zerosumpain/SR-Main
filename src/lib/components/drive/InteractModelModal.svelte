@@ -119,17 +119,17 @@
     display: flex;
     flex-direction: column;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
     overflow: hidden;
   }
   .im-hdr {
     padding: 18px 20px 14px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .im-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -143,7 +143,7 @@
   }
   .im-sub {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-secondary);
     margin: 0;
@@ -155,7 +155,7 @@
   .im-label {
     display: block;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -164,10 +164,10 @@
   .im-input {
     width: 100%;
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     padding: 8px 10px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-primary);
     border-radius: var(--radius-sharp, 2px);
   }
@@ -180,7 +180,7 @@
   }
   .im-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -191,7 +191,7 @@
     padding: 0;
     max-height: 200px;
     overflow-y: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
   .im-file {
     display: flex;
@@ -199,7 +199,7 @@
     gap: 8px;
     padding: 6px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     border-bottom: 1px solid var(--divider, var(--card-border));
     white-space: nowrap;
@@ -220,7 +220,7 @@
   .im-warn {
     margin: 12px 0 0;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: var(--error);
   }
@@ -229,23 +229,23 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 14px 20px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .im-cancel {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 8px 14px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-secondary);
     cursor: pointer;
   }
   .im-cancel:disabled { opacity: 0.5; }
   .im-build {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 8px 16px;

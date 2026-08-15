@@ -249,7 +249,7 @@
   }
   .k {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -269,12 +269,12 @@
   }
   .ips code, .muted code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     color: var(--text-primary);
   }
   .pill {
     font-family: var(--font-mono);
-    font-size: 0.65rem;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     padding: 0.12rem 0.4rem;

@@ -104,23 +104,23 @@
     font-family: var(--font-display); font-size: clamp(72px, 12vw, 160px);
     line-height: 0.9; color: var(--accent); margin: 0; letter-spacing: -0.02em;
   }
-  .caption .display .unit { font-size: 0.35em; color: var(--text-secondary); margin-left: 0.2em; letter-spacing: 0; }
+  .caption .display .unit { font-size: max(0.35em, var(--fs-label-xs)); color: var(--text-secondary); margin-left: 0.2em; letter-spacing: 0; }
   .caption .phase {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em;
     color: var(--accent); margin: 0.4rem 0 0.6rem;
   }
   .caption .sub {
     margin-top: 1.25rem; max-width: 360px; color: var(--text-secondary);
-    font-size: 14px; line-height: 1.55;
+    font-size: var(--fs-nav); line-height: 1.55;
   }
   .caption .sub .lite {
     display: block; margin-top: 0.5rem; font-family: var(--font-mono);
-    font-size: 11px; color: var(--text-muted); letter-spacing: 0.05em;
+    font-size: var(--fs-label-xs); color: var(--text-muted); letter-spacing: 0.05em;
   }
 
   .cycle-bar {
     position: relative; width: 280px; height: 6px;
-    background: var(--divider); border-radius: var(--radius-sharp); overflow: hidden;
+    background: var(--line-hair); border-radius: var(--radius-sharp); overflow: hidden;
     pointer-events: auto;
   }
   .cycle-fill {
@@ -129,7 +129,7 @@
     transition: width 0.05s linear;
   }
   .cycle-bar .seg {
-    position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--card-border);
+    position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--line-strong);
   }
   .seg.s1 { left: 0;     width: 10%; }
   .seg.s2 { left: 10%;   width: 5%;  }
@@ -139,31 +139,31 @@
   .seg.s6 { left: 70%;   width: 30%; border-right: none; }
 
   .controls {
-    border-top: 2px solid var(--divider);
+    border-top: 2px solid var(--line-hair);
     padding: 1.5rem 2rem 2.5rem;
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 2rem; row-gap: 1rem;
     align-items: center; background: var(--bg);
   }
   .ctrl { display: grid; grid-template-columns: 90px 1fr 60px auto; gap: 0.75rem; align-items: center; }
-  .ctrl label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+  .ctrl label { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
                 letter-spacing: 0.15em; color: var(--text-muted); }
   .ctrl input[type='range'] { accent-color: var(--accent); width: 100%; }
   .ctrl .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
                color: var(--text-primary); text-align: right; }
-  .ctrl .hint { font-size: 11px; color: var(--text-ghost); font-family: var(--font-mono); }
+  .ctrl .hint { font-size: var(--fs-label-xs); color: var(--text-ghost); font-family: var(--font-mono); }
 
   .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; grid-column: 1 / -1; }
   .presets button {
-    background: transparent; border: 1px solid var(--card-border); color: var(--text-primary);
+    background: transparent; border: 1px solid var(--line-strong); color: var(--text-primary);
     padding: 0.35rem 0.75rem; border-radius: var(--radius-round); font-family: var(--font-mono);
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
+    font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
   .presets button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
   .stats {
     grid-column: 1 / -1; display: grid; grid-template-columns: repeat(8, auto);
-    gap: 0 0.5rem; font-family: var(--font-mono); font-size: 11px; margin: 0.25rem 0 0;
+    gap: 0 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); margin: 0.25rem 0 0;
     color: var(--text-secondary);
   }
   .stats dt { text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
@@ -173,11 +173,11 @@
     align-items: center; pointer-events: auto;
   }
   .variants .vlabel {
-    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.15em; color: var(--text-muted);
   }
   .variants a {
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
     text-decoration: none; border-bottom: 1px solid transparent;
     transition: color 0.15s, border-color 0.15s;
   }

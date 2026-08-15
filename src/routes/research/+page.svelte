@@ -337,7 +337,7 @@
   .grounding { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.7rem; }
   .gnd {
     display: grid; gap: 1px; text-align: left; cursor: pointer;
-    background: none; border: 1px solid var(--card-border); padding: 4px 9px;
+    background: none; border: 1px solid var(--line-strong); padding: 4px 9px;
   }
   .gnd:hover { border-color: var(--accent); }
   .gnd.on { border-color: var(--accent); background: var(--card-bg); }

@@ -350,7 +350,7 @@
   }
   .section-h {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -362,7 +362,7 @@
   .row-card.inner { background: var(--bg-base, var(--bg-section)); }
   .tab-note code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -390,10 +390,10 @@
     color: inherit;
   }
   .row-head.static { cursor: default; padding-bottom: 0.5rem; border-bottom: 1px solid var(--divider); }
-  .caret { font-size: 9px; color: var(--text-ghost); width: 0.8rem; }
+  .caret { font-size: var(--fs-label-xs); color: var(--text-ghost); width: 0.8rem; }
   .row-name {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--text-primary);
   }
@@ -424,14 +424,14 @@
   @media (max-width: 540px) { .io-grid { grid-template-columns: 1fr; } }
   .io-line {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     margin-top: 0.3rem;
   }
 
   .code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.55rem 0.7rem;
@@ -446,7 +446,7 @@
     display: flex;
     gap: 0.45rem;
     align-items: baseline;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     padding: 2px 0;
   }
   .tool-name { font-family: var(--font-mono); color: var(--text-primary); flex-shrink: 0; }
@@ -455,7 +455,7 @@
 
   .run-stats {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     margin-left: auto;
   }
@@ -467,7 +467,7 @@
     display: flex;
     gap: 1rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 </style>

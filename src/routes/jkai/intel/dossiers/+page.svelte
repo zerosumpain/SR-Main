@@ -167,7 +167,7 @@
     align-items: center;
     padding-bottom: 14px;
     margin-bottom: 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .title {
     flex: 1;
@@ -177,7 +177,7 @@
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
 
@@ -212,7 +212,7 @@
     gap: 8px;
     padding: 12px;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
   }
   .head {
@@ -271,7 +271,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

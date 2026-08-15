@@ -219,7 +219,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 11px 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .gm-hd-left,
   .gm-hd-right {
@@ -250,7 +250,7 @@
     align-items: center;
     padding: 5px 9px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -381,7 +381,7 @@
     flex: none;
     width: 320px;
     padding: 16px;
-    border-left: 1px solid var(--divider);
+    border-left: 1px solid var(--line-hair);
     overflow-y: auto;
   }
   .gm-type {
@@ -431,7 +431,7 @@
   .gm-rel-hd {
     margin-top: 20px;
     padding-bottom: 6px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     font-weight: 500;
@@ -517,7 +517,7 @@
     .gm-side {
       width: auto;
       border-left: none;
-      border-top: 1px solid var(--divider);
+      border-top: 1px solid var(--line-hair);
     }
   }
 </style>

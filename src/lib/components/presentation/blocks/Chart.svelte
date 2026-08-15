@@ -254,13 +254,13 @@
   .grid { stroke: rgba(28, 22, 17, 0.1); stroke-width: 1; }
   .tick {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     fill: rgba(28, 22, 17, 0.55);
   }
-  .slope-end { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .slope-end { font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; }
   .slope-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
   }
   .donut-total {
     font-family: 'Fraunces', serif;
@@ -270,13 +270,13 @@
   }
   .sankey-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     fill: rgba(28, 22, 17, 0.72);
   }
   .axis-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     fill: rgba(28, 22, 17, 0.5);
@@ -345,7 +345,7 @@
     align-items: center;
     gap: 6px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     color: var(--ink-soft);
   }

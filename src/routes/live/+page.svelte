@@ -216,7 +216,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
 
   .live-header-left {
@@ -240,7 +240,7 @@
   }
 
   .live-status-label {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     letter-spacing: 0.12em;
     color: var(--accent);
@@ -256,8 +256,8 @@
     justify-content: space-around;
     align-items: center;
     padding: 16px;
-    background: var(--bg-section);
-    border-top: 1px solid var(--divider);
+    background: var(--surface-sunken);
+    border-top: 1px solid var(--line-hair);
   }
 
   .live-stat {
@@ -272,13 +272,13 @@
   }
 
   .live-stat-unit {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     margin-left: 1px;
   }
 
   .live-stat-label {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -288,17 +288,17 @@
   .live-stat-divider {
     width: 1px;
     height: 24px;
-    background: var(--divider);
+    background: var(--line-hair);
   }
 
   .live-progress {
     padding: 12px 16px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
 
   .live-progress-bar {
     height: 4px;
-    background: var(--divider);
+    background: var(--line-hair);
     border-radius: var(--radius-sharp);
     overflow: hidden;
     margin-bottom: 6px;
@@ -312,7 +312,7 @@
   }
 
   .live-progress-text {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     text-align: center;
     font-family: var(--font-mono, monospace);

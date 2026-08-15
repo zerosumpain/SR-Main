@@ -148,7 +148,7 @@
 
 <style>
   .create-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.4rem; }
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
 
   .coll-list { display: flex; flex-direction: column; border-top: 1px solid var(--divider); }
   .coll-row {
@@ -174,14 +174,14 @@
   }
   .coll-slug {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     color: var(--text-ghost);
   }
-  .coll-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .coll-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); white-space: nowrap; }
   .coll-date {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     letter-spacing: 0.06em;
     white-space: nowrap;

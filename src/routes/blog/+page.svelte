@@ -87,7 +87,7 @@
           <a
             href="/blog/{post.slug}"
             class="post-row group"
-            style="border-bottom: 1px solid var(--divider);"
+            style="border-bottom: 1px solid var(--line-hair);"
           >
             <span class="post-num">{String(i + 1).padStart(2, '0')}</span>
 
@@ -121,7 +121,7 @@
   </div>
 </section>
 
-<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--card-border);">
+<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--line-strong);">
   <a href="/" class="nav-link">← Home</a>
   <a href="/admin" class="nav-link">Admin</a>
 </footer>
@@ -132,7 +132,7 @@
     position: relative;
     padding: 64px 32px 56px;
     overflow: hidden;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     min-height: 520px;
     display: flex;
     flex-direction: column;
@@ -159,7 +159,7 @@
   }
   .b-hero-num {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-ghost);
     margin: 0 0 8px 0;
@@ -179,7 +179,7 @@
     color: var(--text-ghost);
   }
   .b-hero-strap {
-    font-size: 16px;
+    font-size: var(--fs-body);
     line-height: 1.5;
     max-width: 480px;
     margin: 0;
@@ -198,11 +198,11 @@
     padding: 10px 32px;
     z-index: 4;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     background: color-mix(in srgb, var(--bg) 80%, transparent);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -228,15 +228,15 @@
 
   /* --- Tag filter strip (between hero and list) --- */
   .b-tag-strip-wrap {
-    border-bottom: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-bottom: 1px solid var(--line-hair);
+    background: var(--surface-sunken);
     padding: 14px 32px;
   }
   .b-tag-strip {
     max-width: 1480px;
     margin: 0 auto;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -269,7 +269,7 @@
   }
   .post-num {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-muted);
     padding-top: 0.4rem;
@@ -306,14 +306,14 @@
   }
   .post-meta {
     margin-top: 0.6rem;
-    font-size: 10px !important;
+    font-size: var(--fs-label-xs) !important;
   }
   .meta-dot {
     margin: 0 0.5em;
     opacity: 0.5;
   }
   .post-date {
-    font-size: 10px !important;
+    font-size: var(--fs-label-xs) !important;
     flex-shrink: 0;
     color: var(--text-muted);
     padding-top: 0.25rem;
@@ -358,7 +358,7 @@
     align-items: flex-start;
     gap: 1rem;
     padding: 1.5rem 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .sk-body {
     flex: 1;

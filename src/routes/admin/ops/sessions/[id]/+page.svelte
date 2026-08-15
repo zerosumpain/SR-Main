@@ -86,14 +86,14 @@
 
 <style>
   .host-note { margin: 0 0 1.25rem; font-size: 0.9rem; line-height: 1.45; color: var(--text-secondary); max-width: 60ch; }
-  code { font-family: var(--font-mono); font-size: 0.85em; background: var(--code-bg, var(--bg-section)); padding: 0.1em 0.35em; border-radius: var(--radius-sharp); }
+  code { font-family: var(--font-mono); font-size: max(0.85em, var(--fs-label-xs)); background: var(--code-bg, var(--bg-section)); padding: 0.1em 0.35em; border-radius: var(--radius-sharp); }
   .mono { font-family: var(--font-mono); }
 
   .nm-sec { background: var(--card-bg); border: 1px solid var(--card-border); padding: 1rem 1.1rem; }
   .meta { margin-bottom: 1.25rem; }
-  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem 1.2rem; font-size: 12px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem 1.2rem; font-size: var(--fs-label-xs); }
   .meta-grid > div { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ml { display: inline-block; min-width: 5.5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+  .ml { display: inline-block; min-width: 5.5rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--fs-label-xs); }
   .conv-link { margin-top: 0.8rem; padding-top: 0.7rem; border-top: 1px solid var(--card-border); font-size: 0.88rem; color: var(--text-secondary); }
   .conv-link a { color: var(--accent); text-decoration: none; }
   .conv-link a:hover { text-decoration: underline; }
@@ -107,16 +107,16 @@
   .msg[data-role='assistant'] { border-left: 3px solid var(--text-muted); }
   .msg[data-role='tool'] { background: var(--bg-section); }
   .msg-hdr { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
-  .role { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+  .role { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
   .role-user { color: var(--accent); }
   .role-assistant { color: var(--text-primary); }
   .role-tool { color: var(--text-muted); }
   .role-system { color: var(--error); }
-  .tool-name { font-size: 10px; color: var(--text-secondary); background: var(--bg-section); padding: 0.1em 0.4em; border-radius: var(--radius-sharp); }
-  .ts { font-size: 10px; color: var(--text-ghost); margin-left: auto; }
+  .tool-name { font-size: var(--fs-label-xs); color: var(--text-secondary); background: var(--bg-section); padding: 0.1em 0.4em; border-radius: var(--radius-sharp); }
+  .ts { font-size: var(--fs-label-xs); color: var(--text-ghost); margin-left: auto; }
   .msg-body { font-size: 0.9rem; line-height: 1.5; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
   .trunc { color: var(--text-muted); font-style: italic; }
   .tool-calls { margin-top: 0.4rem; }
-  .tool-calls summary { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
-  .tool-calls pre { margin: 0.4rem 0 0; font-size: 11px; line-height: 1.4; color: var(--text-secondary); background: var(--bg-section); border-radius: var(--radius-round); padding: 0.5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .tool-calls summary { font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
+  .tool-calls pre { margin: 0.4rem 0 0; font-size: var(--fs-label-xs); line-height: 1.4; color: var(--text-secondary); background: var(--bg-section); border-radius: var(--radius-round); padding: 0.5rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
 </style>

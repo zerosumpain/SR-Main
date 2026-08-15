@@ -11,10 +11,10 @@
 /* ---------- Banners (success / error / info) ---------- */
 .banner {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   padding: 0.6rem 0.8rem;
-  border: 1px solid var(--card-border);
-  background: var(--bg-section);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
   color: var(--text-primary);
   margin-bottom: 1rem;
   display: flex;
@@ -50,8 +50,8 @@
   margin-bottom: 1.25rem;
 }
 .stat-card {
-  background: var(--bg-section);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 0.85rem 1rem;
   display: flex;
   flex-direction: column;
@@ -59,13 +59,14 @@
 }
 .stat-card-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--text-ghost);
 }
 .stat-card-value {
+  font-variant-numeric: tabular-nums;
   font-family: var(--font-brand);
   font-size: 1.65rem;
   font-weight: 500;
@@ -76,31 +77,40 @@
 }
 .stat-card-meta {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   color: var(--text-muted);
 }
 
-/* ---------- Tables (bare, brutalist) ---------- */
+/* ---------- Tables (bare, brutalist) ----------
+ * Wide content scrolls inside its own container, never the page: a five-column
+ * table was taking the whole document 77px sideways on a phone
+ * (/admin/ops/costs). The wrapper is what scrolls, so the table stays a real
+ * table — full width when there is room, scrollable when there is not. */
+.nm-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
 .nm-table {
   width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   color: var(--text-secondary);
 }
 .nm-table thead th {
   text-align: left;
   font-weight: 500;
-  font-size: 9px;
+  font-size: var(--fs-label-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-ghost);
   padding: 6px 10px;
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--line-strong);
 }
 .nm-table tbody td {
   padding: 7px 10px;
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid var(--line-hair);
   vertical-align: top;
 }
 .nm-table tbody tr:hover td {
@@ -114,13 +124,13 @@
 .nm-tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--line-strong);
   margin-bottom: 1.1rem;
   flex-wrap: wrap;
 }
 .nm-tab {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -147,7 +157,7 @@
 .nm-tab-count {
   display: inline-block;
   padding: 0 5px;
-  font-size: 9px;
+  font-size: var(--fs-label-xs);
   background: var(--accent-tint-08);
   color: var(--accent);
   letter-spacing: 0.05em;
@@ -159,13 +169,13 @@
   align-items: center;
   gap: 0.25rem;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   padding: 2px 8px;
-  border: 1px solid var(--card-border);
-  background: var(--bg-section);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
   color: var(--text-muted);
 }
 .nm-pill[data-state="ok"],
@@ -211,15 +221,15 @@
 .nm-pill[data-state="disconnected"],
 .nm-pill[data-state="cancelled"],
 .nm-pill[data-state="idle"] {
-  border-color: var(--card-border);
+  border-color: var(--line-strong);
   color: var(--text-ghost);
-  background: var(--bg-section);
+  background: var(--surface-sunken);
 }
 
 /* ---------- Action / link button ---------- */
 .nm-link-btn {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -244,8 +254,8 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 1rem 1.1rem;
-  background: var(--bg-section);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   text-decoration: none;
   color: inherit;
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
@@ -257,7 +267,7 @@
 }
 .nm-tile-eyebrow {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.18em;
@@ -283,7 +293,7 @@
   justify-content: space-between;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-label-xs);
   letter-spacing: 0.1em;
   color: var(--text-muted);
 }
@@ -293,10 +303,10 @@
   width: 100%;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   color: var(--text-primary);
-  background: rgba(26, 16, 8, 0.04);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 8px 10px;
   outline: none;
   resize: vertical;
@@ -308,10 +318,10 @@
 
 .nm-select {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   color: var(--text-primary);
-  background: rgba(26, 16, 8, 0.04);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 6px 10px;
   outline: none;
   cursor: pointer;
@@ -325,11 +335,11 @@
   padding: 1.4rem;
   text-align: center;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-label-xs);
   color: var(--text-ghost);
   font-style: italic;
-  border: 1px dashed var(--card-border);
-  background: var(--bg-section);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-sunken);
 }
 
 /* ---------- Inline progress dot ---------- */
@@ -375,7 +385,7 @@
   width: 32px;
   height: 18px;
   background: rgba(26, 16, 8, 0.18);
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--line-strong);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
 }
@@ -403,7 +413,7 @@
   height: 2px;
   appearance: none;
   -webkit-appearance: none;
-  background: var(--card-border);
+  background: var(--line-strong);
   outline: none;
   cursor: pointer;
 }

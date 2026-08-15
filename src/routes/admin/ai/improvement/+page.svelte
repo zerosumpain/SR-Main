@@ -348,63 +348,65 @@
       <div class="nm-empty">No runs recorded.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Status</th><th>Trigger</th><th>Started</th><th>Duration</th><th>Cost</th><th>Actions</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each runs as run (run.runId)}
-              <tr class="run-row" onclick={() => toggleRun(run.runId)}>
-                <td><span class="nm-pill" data-state={runState(run.data.status)}>{run.data.status}</span></td>
-                <td class="mono small">{run.data.trigger}</td>
-                <td class="small">{fmtDateTime(run.data.startedAt ?? run.createdAt)}</td>
-                <td class="mono small">{duration(run.data)}</td>
-                <td class="mono small">{money(run.data.costUsd)}</td>
-                <td class="mono small">{run.data.actions?.length ?? 0}</td>
-                <td class="mono small chevron">{expandedRunId === run.runId ? '▾' : '▸'}</td>
-              </tr>
-              {#if expandedRunId === run.runId}
-                <tr class="run-detail-row">
-                  <td colspan="7">
-                    <div class="run-detail">
-                      <div class="detail-col">
-                        <span class="sr-label-tight">Phases</span>
-                        <ul class="phase-list">
-                          {#each Object.entries(run.data.phases ?? {}) as [name, p]}
-                            <li>
-                              <span class="nm-pill" data-state={phaseState(p.status)}>{p.status}</span>
-                              <span class="phase-name">{name}</span>
-                              {#if p.ms}<span class="phase-ms">{p.ms}ms</span>{/if}
-                              {#if p.detail}<span class="phase-detail">{p.detail}</span>{/if}
-                            </li>
-                          {/each}
-                        </ul>
-                        <div class="budget mono">
-                          {run.data.llmCalls ?? 0} LLM calls · {run.data.tokensIn ?? 0}+{run.data.tokensOut ?? 0} tokens · {money(run.data.costUsd)}
-                        </div>
-                      </div>
-                      <div class="detail-col">
-                        <span class="sr-label-tight">Actions</span>
-                        {#if (run.data.actions?.length ?? 0) === 0}
-                          <div class="nm-empty compact">No actions.</div>
-                        {:else}
-                          <ul class="action-list">
-                            {#each run.data.actions ?? [] as a}
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Status</th><th>Trigger</th><th>Started</th><th>Duration</th><th>Cost</th><th>Actions</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each runs as run (run.runId)}
+                <tr class="run-row" onclick={() => toggleRun(run.runId)}>
+                  <td><span class="nm-pill" data-state={runState(run.data.status)}>{run.data.status}</span></td>
+                  <td class="mono small">{run.data.trigger}</td>
+                  <td class="small">{fmtDateTime(run.data.startedAt ?? run.createdAt)}</td>
+                  <td class="mono small">{duration(run.data)}</td>
+                  <td class="mono small">{money(run.data.costUsd)}</td>
+                  <td class="mono small">{run.data.actions?.length ?? 0}</td>
+                  <td class="mono small chevron">{expandedRunId === run.runId ? '▾' : '▸'}</td>
+                </tr>
+                {#if expandedRunId === run.runId}
+                  <tr class="run-detail-row">
+                    <td colspan="7">
+                      <div class="run-detail">
+                        <div class="detail-col">
+                          <span class="sr-label-tight">Phases</span>
+                          <ul class="phase-list">
+                            {#each Object.entries(run.data.phases ?? {}) as [name, p]}
                               <li>
-                                <span class="action-kind">{a.kind}</span>
-                                <span class="action-detail">{a.detail}</span>
+                                <span class="nm-pill" data-state={phaseState(p.status)}>{p.status}</span>
+                                <span class="phase-name">{name}</span>
+                                {#if p.ms}<span class="phase-ms">{p.ms}ms</span>{/if}
+                                {#if p.detail}<span class="phase-detail">{p.detail}</span>{/if}
                               </li>
                             {/each}
                           </ul>
-                        {/if}
+                          <div class="budget mono">
+                            {run.data.llmCalls ?? 0} LLM calls · {run.data.tokensIn ?? 0}+{run.data.tokensOut ?? 0} tokens · {money(run.data.costUsd)}
+                          </div>
+                        </div>
+                        <div class="detail-col">
+                          <span class="sr-label-tight">Actions</span>
+                          {#if (run.data.actions?.length ?? 0) === 0}
+                            <div class="nm-empty compact">No actions.</div>
+                          {:else}
+                            <ul class="action-list">
+                              {#each run.data.actions ?? [] as a}
+                                <li>
+                                  <span class="action-kind">{a.kind}</span>
+                                  <span class="action-detail">{a.detail}</span>
+                                </li>
+                              {/each}
+                            </ul>
+                          {/if}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              {/if}
-            {/each}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                {/if}
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -421,25 +423,27 @@
       {#if insights.summary}<p class="insights-summary">{insights.summary}</p>{/if}
       {#if (insights.intents?.length ?? 0) > 0}
         <div class="table-scroll">
-          <table class="nm-table">
-            <thead>
-              <tr><th>Intent</th><th>Count</th><th>Served</th><th>Missing capability</th></tr>
-            </thead>
-            <tbody>
-              {#each insights.intents ?? [] as it}
-                <tr>
-                  <td>{it.intent}</td>
-                  <td class="mono small">{it.count ?? 0}</td>
-                  <td>
-                    <span class="nm-pill" data-state={it.servedWell ? 'success' : 'warn'}>
-                      {it.servedWell ? 'yes' : 'no'}
-                    </span>
-                  </td>
-                  <td class="small muted">{it.missingCapability ?? '—'}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <div class="nm-table-scroll">
+            <table class="nm-table">
+              <thead>
+                <tr><th>Intent</th><th>Count</th><th>Served</th><th>Missing capability</th></tr>
+              </thead>
+              <tbody>
+                {#each insights.intents ?? [] as it}
+                  <tr>
+                    <td>{it.intent}</td>
+                    <td class="mono small">{it.count ?? 0}</td>
+                    <td>
+                      <span class="nm-pill" data-state={it.servedWell ? 'success' : 'warn'}>
+                        {it.servedWell ? 'yes' : 'no'}
+                      </span>
+                    </td>
+                    <td class="small muted">{it.missingCapability ?? '—'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
         </div>
       {/if}
       {#if (insights.topUnmet?.length ?? 0) > 0}
@@ -465,33 +469,35 @@
       <div class="nm-empty">Catalogue empty — it’s seeded when the engine first boots.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Name</th><th>Status</th><th>Auth</th><th>Verified</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each apis as api (api.key)}
-              <tr>
-                <td>
-                  <span class="api-name">{api.data.name ?? api.key}</span>
-                  {#if api.data.baseUrl}<span class="api-base mono">{api.data.baseUrl}</span>{/if}
-                </td>
-                <td><span class="nm-pill" data-state={apiState(api.data.status)}>{api.data.status ?? 'seeded'}</span></td>
-                <td class="mono small">{api.data.auth?.kind ?? 'none'}</td>
-                <td class="mono small">{api.data.lastVerifiedAt ? fmtDate(api.data.lastVerifiedAt) : '—'}</td>
-                <td>
-                  <button
-                    class="nm-btn-ghost sm"
-                    onclick={() => verifyApi(api.key)}
-                    disabled={verifyingKey === api.key}
-                  >
-                    {verifyingKey === api.key ? 'Verifying…' : 'Verify'}
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Name</th><th>Status</th><th>Auth</th><th>Verified</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each apis as api (api.key)}
+                <tr>
+                  <td>
+                    <span class="api-name">{api.data.name ?? api.key}</span>
+                    {#if api.data.baseUrl}<span class="api-base mono">{api.data.baseUrl}</span>{/if}
+                  </td>
+                  <td><span class="nm-pill" data-state={apiState(api.data.status)}>{api.data.status ?? 'seeded'}</span></td>
+                  <td class="mono small">{api.data.auth?.kind ?? 'none'}</td>
+                  <td class="mono small">{api.data.lastVerifiedAt ? fmtDate(api.data.lastVerifiedAt) : '—'}</td>
+                  <td>
+                    <button
+                      class="nm-btn-ghost sm"
+                      onclick={() => verifyApi(api.key)}
+                      disabled={verifyingKey === api.key}
+                    >
+                      {verifyingKey === api.key ? 'Verifying…' : 'Verify'}
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -506,31 +512,33 @@
       <div class="nm-empty">The engine hasn’t built any runtime tools yet.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Name</th><th>Toolset</th><th>Runs</th><th>Errors</th><th>State</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each tools as t (t.name)}
-              <tr>
-                <td>
-                  <span class="tool-name mono">{t.name}</span>
-                  {#if t.description}<span class="tool-desc">{t.description}</span>{/if}
-                </td>
-                <td class="mono small">{t.toolset}</td>
-                <td class="mono small">{t.runCount}</td>
-                <td class="mono small">{t.errorCount}</td>
-                <td><span class="nm-pill" data-state={t.enabled ? 'success' : 'draft'}>{t.enabled ? 'enabled' : 'disabled'}</span></td>
-                <td class="tool-actions">
-                  <button class="nm-link-btn" onclick={() => setToolEnabled(t.name, !t.enabled)} disabled={busyTool === t.name}>
-                    {t.enabled ? 'Disable' : 'Enable'}
-                  </button>
-                  <button class="nm-link-btn danger" onclick={() => deleteTool(t.name)} disabled={busyTool === t.name}>Delete</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Name</th><th>Toolset</th><th>Runs</th><th>Errors</th><th>State</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each tools as t (t.name)}
+                <tr>
+                  <td>
+                    <span class="tool-name mono">{t.name}</span>
+                    {#if t.description}<span class="tool-desc">{t.description}</span>{/if}
+                  </td>
+                  <td class="mono small">{t.toolset}</td>
+                  <td class="mono small">{t.runCount}</td>
+                  <td class="mono small">{t.errorCount}</td>
+                  <td><span class="nm-pill" data-state={t.enabled ? 'success' : 'draft'}>{t.enabled ? 'enabled' : 'disabled'}</span></td>
+                  <td class="tool-actions">
+                    <button class="nm-link-btn" onclick={() => setToolEnabled(t.name, !t.enabled)} disabled={busyTool === t.name}>
+                      {t.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button class="nm-link-btn danger" onclick={() => deleteTool(t.name)} disabled={busyTool === t.name}>Delete</button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p class="muted note">
         Tools the engine ships are enabled and registered live. Manually re-enabling a disabled tool
@@ -549,31 +557,33 @@
       <div class="nm-empty">Nothing queued yet — the next run will populate this from unmet needs.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Idea</th><th>Kind</th><th>Pri</th><th>Tries</th><th>State</th><th>Last failure</th></tr>
-          </thead>
-          <tbody>
-            {#each backlog as b (b.slug)}
-              <tr>
-                <td>
-                  <span class="tool-name mono">{b.title}</span>
-                  {#if b.detail}<span class="tool-desc">{b.detail}</span>{/if}
-                  {#if b.prUrl}
-                    <a class="nm-link-btn" href={b.prUrl} target="_blank" rel="noreferrer">View PR</a>
-                  {/if}
-                </td>
-                <td class="mono small">{b.kind}</td>
-                <td class="mono small">{b.priority}</td>
-                <td class="mono small">{b.attempts}</td>
-                <td>
-                  <span class="nm-pill" data-state={backlogState(b.status)}>{b.status}</span>
-                </td>
-                <td class="small muted">{b.lastError ?? '—'}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Idea</th><th>Kind</th><th>Pri</th><th>Tries</th><th>State</th><th>Last failure</th></tr>
+            </thead>
+            <tbody>
+              {#each backlog as b (b.slug)}
+                <tr>
+                  <td>
+                    <span class="tool-name mono">{b.title}</span>
+                    {#if b.detail}<span class="tool-desc">{b.detail}</span>{/if}
+                    {#if b.prUrl}
+                      <a class="nm-link-btn" href={b.prUrl} target="_blank" rel="noreferrer">View PR</a>
+                    {/if}
+                  </td>
+                  <td class="mono small">{b.kind}</td>
+                  <td class="mono small">{b.priority}</td>
+                  <td class="mono small">{b.attempts}</td>
+                  <td>
+                    <span class="nm-pill" data-state={backlogState(b.status)}>{b.status}</span>
+                  </td>
+                  <td class="small muted">{b.lastError ?? '—'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -585,7 +595,7 @@
   .ctl-block.grow { flex: 1; min-width: 220px; }
   .ctl-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.16em;
     color: var(--text-ghost);
@@ -597,14 +607,14 @@
   .small { font-size: 0.8rem; }
   .nm-toggle:disabled { opacity: 0.5; cursor: default; }
 
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
 
   .report {
     margin: 0;
     max-height: 320px;
     overflow: auto;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
@@ -631,13 +641,13 @@
   .phase-list, .action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
   .phase-list li { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8rem; flex-wrap: wrap; }
   .phase-name { color: var(--text-primary); }
-  .phase-ms { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .phase-ms { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .phase-detail { font-size: 0.75rem; color: var(--text-muted); }
-  .budget { font-size: 10px; color: var(--text-ghost); margin-top: 0.3rem; }
+  .budget { font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 0.3rem; }
   .action-list li { display: flex; gap: 0.6rem; font-size: 0.8rem; align-items: baseline; }
   .action-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -651,7 +661,7 @@
   .unmet-list li { font-size: 0.85rem; color: var(--text-secondary); }
 
   .api-name, .tool-name { display: block; color: var(--text-primary); font-size: 0.9rem; }
-  .api-base { display: block; font-size: 10px; color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
+  .api-base { display: block; font-size: var(--fs-label-xs); color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px; }
   .tool-desc { display: block; font-size: 0.78rem; color: var(--text-muted); max-width: 480px; }
   .tool-actions { display: flex; gap: 0.75rem; white-space: nowrap; }
 

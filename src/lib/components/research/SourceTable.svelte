@@ -273,7 +273,7 @@
 
 <style>
   /* .nm-sec, .nm-sec-hd, .sr-label-tight, .nm-sec-meta: $lib/styles/nm-tokens.css */
-  .clear { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; background: none; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; padding: 3px 8px; }
+  .clear { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; background: none; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; padding: 3px 8px; }
   .clear:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .clear:disabled { opacity: 0.5; cursor: default; }
   .clear.keep { border-color: var(--accent); color: var(--accent); margin-left: auto; }
@@ -296,7 +296,7 @@
   .keep-link.done { color: var(--success); }
 
   .band-hd { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
-  .band-hd.second { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px solid var(--divider); }
+  .band-hd.second { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px solid var(--line-hair); }
   .band-why { font-size: 0.78rem; color: var(--text-ghost); font-style: italic; }
 
   .srcs { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
@@ -306,7 +306,7 @@
     gap: 0.6rem;
     align-items: start;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .src:last-child { border-bottom: none; padding-bottom: 0; }
 
@@ -316,7 +316,7 @@
     border: 1px solid var(--accent); color: var(--accent); padding: 1px 5px; white-space: nowrap;
   }
   /* The second band is context, not evidence — its flag recedes. */
-  .media.quiet { border-color: var(--card-border); color: var(--text-ghost); }
+  .media.quiet { border-color: var(--line-strong); color: var(--text-ghost); }
   .cred { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; }
 
   .body a { color: var(--text-primary); font-size: 0.92rem; line-height: 1.35; }

@@ -61,13 +61,13 @@
 
   .md :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--accent-tint-08);
     padding: 1px 4px;
   }
   .md :global(pre) {
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 0.7rem 0.8rem;
     overflow-x: auto;
     margin: 0 0 0.85rem;
@@ -77,8 +77,8 @@
   /* A wide table scrolls inside its own box; the page never scrolls sideways. */
   .md :global(table) { width: 100%; border-collapse: collapse; margin: 0 0 0.85rem; font-size: 0.9rem; }
   .md :global(th),
-  .md :global(td) { border: 1px solid var(--card-border); padding: 0.35rem 0.5rem; text-align: left; }
+  .md :global(td) { border: 1px solid var(--line-strong); padding: 0.35rem 0.5rem; text-align: left; }
   .md :global(th) { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); background: var(--surface-elevated); }
 
-  .md :global(hr) { border: none; border-top: 1px solid var(--divider); margin: 1.2rem 0; }
+  .md :global(hr) { border: none; border-top: 1px solid var(--line-hair); margin: 1.2rem 0; }
 </style>

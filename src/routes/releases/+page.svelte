@@ -138,7 +138,7 @@
 
   .rel-eyebrow {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.22em;
@@ -155,7 +155,7 @@
   }
   .rel-strap {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1.55;
     color: var(--text-secondary);
     border-left: 3px solid var(--accent);
@@ -170,7 +170,7 @@
     gap: 10px 26px;
     margin: 26px 0 0;
     padding: 16px 0 0;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .rel-stats div {
     display: flex;
@@ -179,7 +179,7 @@
   }
   .rel-stats dt {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -206,10 +206,10 @@
     align-items: center;
     gap: 7px;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -251,7 +251,7 @@
   }
   .day-date {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.16em;
     text-transform: uppercase;
@@ -260,18 +260,18 @@
   }
   .day-year {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     color: var(--text-ghost);
   }
   .day-rule {
     flex: 1;
     height: 1px;
-    background: var(--divider);
+    background: var(--line-hair);
   }
   .day-n {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-ghost);
     font-variant-numeric: tabular-nums;
@@ -289,7 +289,7 @@
     grid-template-columns: 6.2rem 1fr;
     gap: 14px;
     padding: 13px 12px 13px 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     position: relative;
     transition:
       background var(--t-base) var(--ease-out),
@@ -320,7 +320,7 @@
 
   .item-kind {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -334,31 +334,41 @@
   }
   .item-title {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     line-height: 1.3;
     color: var(--text-primary);
     margin: 0;
+    overflow-wrap: anywhere;
   }
   .item-sum {
     font-family: var(--font-body);
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-muted);
     margin: 5px 0 0;
     max-width: 74ch;
+    /* Release summaries quote route paths and slugs, which are single
+       unbreakable tokens. One of them was taking the whole page 92px sideways
+       on a phone — the paragraph's box stayed 330px, so nothing showed up in a
+       bounding-box audit; only the document's scrollWidth did. */
+    overflow-wrap: anywhere;
   }
   .item-surfaces {
     margin: 7px 0 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     color: var(--text-ghost);
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
+  /* A single route path can be longer than the column on a phone, and a flex
+     item will not break mid-token on its own. */
   .item-surfaces a {
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px solid transparent;
@@ -378,7 +388,7 @@
   .rel-foot {
     margin-top: 48px;
     padding-top: 20px;
-    border-top: 2px solid var(--card-border);
+    border-top: 2px solid var(--line-strong);
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
@@ -387,7 +397,7 @@
   }
   .rel-foot p {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.6;
     color: var(--text-ghost);
     margin: 0;
@@ -395,7 +405,7 @@
   }
   .back {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);

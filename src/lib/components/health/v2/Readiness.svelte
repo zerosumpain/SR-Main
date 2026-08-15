@@ -87,7 +87,7 @@
     display: grid;
     grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
     gap: 0;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     background: var(--bg);
   }
   @media (max-width: 560px) {
@@ -97,7 +97,7 @@
   }
   .rd-verdict {
     padding: 20px 22px;
-    border-right: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -105,7 +105,7 @@
   @media (max-width: 560px) {
     .rd-verdict {
       border-right: none;
-      border-bottom: 1px solid var(--divider);
+      border-bottom: 1px solid var(--line-hair);
     }
   }
   .rd-verdict-head {
@@ -117,7 +117,7 @@
   }
   .rd-kicker {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -143,7 +143,7 @@
   }
   .rd-score-max {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: 0.1em;
     color: var(--text-muted);
     margin-left: 4px;
@@ -169,7 +169,7 @@
   }
   .rd-rec {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.45;
     color: var(--text-secondary);
     margin: 8px 0 0;
@@ -186,7 +186,7 @@
   }
   .rd-factors-cap {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -204,14 +204,14 @@
   }
   .rd-factor-name {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-primary);
   }
   .rd-factor-wt {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
@@ -234,13 +234,13 @@
   .rd-factor-val {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     letter-spacing: -0.02em;
     color: var(--text-primary);
   }
   .rd-factor-note {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);

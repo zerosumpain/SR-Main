@@ -256,23 +256,25 @@
       {#if failing.length === 0}
         <p class="empty-note">No failures recorded in this window.</p>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr><th>Tool</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Rate</th><th>Last failure</th><th class="when">When</th></tr>
-          </thead>
-          <tbody>
-            {#each failing as t (t.tool)}
-              <tr>
-                <td class="mono">{shortTool(t.tool)}</td>
-                <td class="num mono">{fmtNum(t.calls)}</td>
-                <td class="num mono">{fmtNum(t.errors)}</td>
-                <td class="num mono rate" data-band={rateBand(t.errorRate)}>{pct(t.errorRate)}</td>
-                <td class="err-msg" title={t.lastError ?? ''}>{t.lastError ?? '—'}</td>
-                <td class="when mono">{fmtWhen(t.lastErrorAt)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Tool</th><th class="num">Calls</th><th class="num">Failed</th><th class="num">Rate</th><th>Last failure</th><th class="when">When</th></tr>
+            </thead>
+            <tbody>
+              {#each failing as t (t.tool)}
+                <tr>
+                  <td class="mono">{shortTool(t.tool)}</td>
+                  <td class="num mono">{fmtNum(t.calls)}</td>
+                  <td class="num mono">{fmtNum(t.errors)}</td>
+                  <td class="num mono rate" data-band={rateBand(t.errorRate)}>{pct(t.errorRate)}</td>
+                  <td class="err-msg" title={t.lastError ?? ''}>{t.lastError ?? '—'}</td>
+                  <td class="when mono">{fmtWhen(t.lastErrorAt)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
 
       {#if clean.length > 0}
@@ -305,63 +307,63 @@
 <style>
   .filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; gap: 1rem; }
   .tele-days { display: inline-flex; gap: 0.3rem; }
-  .day-pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); color: var(--text-secondary); text-decoration: none; }
+  .day-pill { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); color: var(--text-secondary); text-decoration: none; }
   .day-pill.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
-  .host-note { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .host-note { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; margin-bottom: 1.2rem; }
   .stat { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem 0.85rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); background: var(--bg-section); }
   .stat-v { font-family: var(--font-mono); font-size: 1.2rem; color: var(--text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stat-v.mono { font-size: 0.95rem; }
-  .stat-l { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .stat-l { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 
   .nm-sec { border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.9rem 1rem 1rem; margin-bottom: 1.2rem; background: var(--bg); }
   .nm-sec-hd { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.8rem; }
-  .nm-sec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .nm-sec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.2rem; }
   .two-col .nm-sec { margin-bottom: 1.2rem; }
 
   /* horizontal bars */
   .hbars { display: flex; flex-direction: column; gap: 5px; }
   .hbar-row { display: grid; grid-template-columns: 130px 1fr 40px; align-items: center; gap: 8px; }
-  .hbar-name { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hbar-name { font-size: var(--fs-label-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hbar-track { height: 14px; background: var(--bg-section); border-radius: 2px; overflow: hidden; }
   .hbar-fill { display: block; height: 100%; background: var(--accent); border-radius: 0 2px 2px 0; }
-  .hbar-val { font-size: 11px; color: var(--text-primary); text-align: right; }
+  .hbar-val { font-size: var(--fs-label-xs); color: var(--text-primary); text-align: right; }
 
   /* per-day spark */
   .spark { display: flex; align-items: flex-end; gap: 2px; height: 70px; }
   .spark-col { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 3px; }
   .spark-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; opacity: 0.85; }
-  .spark-cap { font-size: 10px; color: var(--text-ghost); margin-top: 0.4rem; }
+  .spark-cap { font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 0.4rem; }
 
   /* hour histogram */
   .hours { display: flex; align-items: flex-end; gap: 3px; height: 80px; }
   .hour-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .hour-bar { width: 100%; background: var(--accent-ink); border-radius: 2px 2px 0 0; opacity: 0.85; }
   .hour-bar.zero { background: var(--card-border); opacity: 0.5; }
-  .hour-lbl { font-family: var(--font-mono); font-size: 8px; color: var(--text-ghost); margin-top: 3px; height: 10px; }
+  .hour-lbl { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 3px; height: 10px; }
 
   /* chips */
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-size: 10.5px; color: var(--text-secondary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 2px 7px; background: var(--bg-section); }
+  .chip { font-size: var(--fs-label-xs); color: var(--text-secondary); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 2px 7px; background: var(--bg-section); }
   .chip.more { color: var(--text-ghost); }
 
-  .empty-note { font-size: 12.5px; color: var(--text-muted); margin: 0.2rem 0 0.8rem; }
-  .empty-note.small { font-size: 11px; margin-top: 0.6rem; }
+  .empty-note { font-size: var(--fs-label); color: var(--text-muted); margin: 0.2rem 0 0.8rem; }
+  .empty-note.small { font-size: var(--fs-label-xs); margin-top: 0.6rem; }
   .empty-note.err { color: var(--error); }
 
   .mono { font-family: var(--font-mono); }
 
-  .nm-save-btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; padding: 7px 13px; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: var(--radius-round); cursor: pointer; }
+  .nm-save-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 7px 13px; background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: var(--radius-round); cursor: pointer; }
   .nm-save-btn.ghost { background: transparent; color: var(--text-secondary); border-color: var(--card-border); }
   .nm-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .suggestions { font-size: 13.5px; line-height: 1.55; color: var(--text-primary); margin-bottom: 0.9rem; }
+  .suggestions { font-size: var(--fs-label); line-height: 1.55; color: var(--text-primary); margin-bottom: 0.9rem; }
   .suggestions :global(h2), .suggestions :global(h3) { font-size: 0.95rem; margin: 0.9em 0 0.3em; }
   .suggestions :global(ul) { padding-left: 1.2em; margin: 0.4em 0; }
   .suggestions :global(li) { margin: 0.25em 0; }
-  .suggestions :global(code) { font-family: var(--font-mono); font-size: 0.9em; background: var(--card-bg); padding: 0.05em 0.3em; border-radius: 2px; }
+  .suggestions :global(code) { font-family: var(--font-mono); font-size: max(0.9em, var(--fs-label-xs)); background: var(--card-bg); padding: 0.05em 0.3em; border-radius: 2px; }
   .suggestions :global(strong) { font-weight: 700; }
 
   /* Error rates. `.nm-table` comes from admin.css, which IS loaded under
@@ -370,7 +372,7 @@
   .err-headline { font-family: var(--font-mono); font-size: 1.4rem; line-height: 1; color: var(--success); }
   .err-headline[data-band='warn'] { color: var(--warn); }
   .err-headline[data-band='bad'] { color: var(--error); }
-  .err-headline-l { font-size: 12.5px; color: var(--text-muted); }
+  .err-headline-l { font-size: var(--fs-label); color: var(--text-muted); }
 
   .nm-table .num { text-align: right; white-space: nowrap; }
   .nm-table .rate[data-band='ok'] { color: var(--text-secondary); }

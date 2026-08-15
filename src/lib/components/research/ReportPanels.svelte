@@ -274,8 +274,8 @@
 {/if}
 
 <style>
-  .nm-sec { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
-  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--divider); }
+  .nm-sec { border: 1px solid var(--line-strong); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
+  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--line-hair); }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
@@ -304,7 +304,7 @@
   .diversity { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; font-size: 0.9rem; margin-bottom: 0.5rem; }
   .types, .entities { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .types { margin-bottom: 0.6rem; }
-  .type-chip, .entity-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--card-border); padding: 2px 7px; color: var(--text-secondary); }
+  .type-chip, .entity-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--line-strong); padding: 2px 7px; color: var(--text-secondary); }
   /* Centrality shows as weight, not another colour scale. */
   .entity-chip { border-color: color-mix(in srgb, var(--accent) calc(var(--w) * 100%), var(--card-border)); }
 </style>

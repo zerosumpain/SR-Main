@@ -63,7 +63,7 @@
     max-width: min(70vw, 360px);
     padding: 5px 12px;
     background: var(--surface-elevated, var(--bg));
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 100px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
     text-decoration: none;

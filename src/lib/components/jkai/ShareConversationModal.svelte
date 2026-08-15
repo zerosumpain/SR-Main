@@ -130,7 +130,7 @@
     width: 100%;
     max-width: 420px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 16px 18px 18px;
   }
@@ -170,19 +170,19 @@
     gap: 10px;
     text-align: left;
     padding: 10px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: none;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
   }
-  .opt:hover { background: var(--bg-section); }
+  .opt:hover { background: var(--surface-sunken); }
   .opt.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
   .radio {
     width: 15px;
     height: 15px;
     border-radius: 100px;
-    border: 1.5px solid var(--card-border);
+    border: 1.5px solid var(--line-strong);
     margin-top: 1px;
     flex-shrink: 0;
     transition: border-color 0.12s;
@@ -201,7 +201,7 @@
     flex: 1;
     min-width: 0;
     padding: 7px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--bg);
     font-family: var(--font-mono);

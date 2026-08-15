@@ -211,7 +211,7 @@
   .temporal {
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
 
   .head {

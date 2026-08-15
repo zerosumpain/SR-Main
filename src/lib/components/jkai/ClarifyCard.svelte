@@ -80,7 +80,7 @@
 
 <style>
   .clarify-card {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border: 1px solid var(--accent);
     padding: 10px 12px;
     margin: 6px 0;
@@ -88,7 +88,7 @@
     flex-direction: column;
     gap: 10px;
   }
-  .clarify-hdr { border-bottom: 1px dashed var(--card-border); padding-bottom: 6px; }
+  .clarify-hdr { border-bottom: 1px dashed var(--line-strong); padding-bottom: 6px; }
   .q-list {
     list-style: none;
     margin: 0;

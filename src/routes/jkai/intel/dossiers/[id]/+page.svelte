@@ -527,7 +527,7 @@
     flex-wrap: wrap;
     padding-bottom: 12px;
     margin-bottom: 14px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   h1 {
     margin: 0;
@@ -582,7 +582,7 @@
   .panel {
     padding: 12px;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
   }
   .plabel,
@@ -606,7 +606,7 @@
   .plabel.sources {
     margin-top: 14px;
     padding-top: 10px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .hlabel {
     margin: 10px 0 4px;
@@ -627,7 +627,7 @@
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     resize: vertical;
   }
@@ -652,7 +652,7 @@
     align-items: stretch;
     margin-top: 12px;
     padding-top: 10px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .inline.stack button {
     align-self: flex-start;
@@ -671,7 +671,7 @@
     gap: 8px;
     padding: 4px 0;
     font-size: var(--fs-body-sm);
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .questions li span {
     flex: 1;
@@ -688,7 +688,7 @@
     gap: 8px;
     align-items: start;
     padding: 8px 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .item:last-child {
     border-bottom: 0;
@@ -756,7 +756,7 @@
     align-items: center;
     gap: 8px;
     padding: 5px 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .hname {
     flex: 1;
@@ -777,7 +777,7 @@
   }
   .cites li {
     padding: 5px 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -805,7 +805,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

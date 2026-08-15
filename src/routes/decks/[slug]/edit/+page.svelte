@@ -1044,7 +1044,7 @@
   }
   .back {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -1063,7 +1063,7 @@
   .ed-title:hover, .ed-title:focus { border-color: var(--card-border); background: var(--card-bg); }
   .chip {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     color: var(--text-muted);
     border: 1px solid var(--card-border);
@@ -1076,7 +1076,7 @@
   .chip.public { color: var(--success); border-color: var(--success); }
   .chip.play { color: var(--accent); border-color: var(--accent); }
   .spacer { flex: 1; }
-  .banner { font-family: var(--font-mono); font-size: 10.5px; padding: 4px 10px; border-radius: 2px; }
+  .banner { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 4px 10px; border-radius: 2px; }
   .banner.ok { color: var(--success); border: 1px solid var(--success); }
   .banner.err { color: var(--error); border: 1px solid var(--error); }
 
@@ -1098,7 +1098,7 @@
   .pane-lab {
     display: block;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--text-muted);
     margin: 0 0 8px;
@@ -1112,7 +1112,7 @@
     flex: 1;
     text-align: left;
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: none;
     border: none;
@@ -1122,11 +1122,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .dot { color: var(--warn); font-size: 9px; margin-left: 4px; }
+  .dot { color: var(--warn); font-size: var(--fs-label-xs); margin-left: 4px; }
   .tr-ops { display: none; gap: 1px; }
   .tree-row:hover .tr-ops, .tree-row.sel .tr-ops { display: inline-flex; }
   .tr-ops button {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     background: none;
     border: none;
@@ -1140,7 +1140,7 @@
     width: 100%;
     margin-top: 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted);
     background: none;
@@ -1165,7 +1165,7 @@
   .desk textarea,
   .desk input:not([type='checkbox']) {
     font-family: var(--font-body);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -1185,7 +1185,7 @@
   }
   .mode-toggle button {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--text-muted);
     background: none;
@@ -1199,13 +1199,13 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     color: var(--text-muted);
   }
   .compose-btn {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--bg);
@@ -1221,27 +1221,27 @@
   .deck-meta { margin-top: 10px; }
   .export { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
   .export .add-slide[disabled] { opacity: 0.6; cursor: progress; }
-  .export-err { font-family: var(--font-mono); font-size: 9px; color: var(--error); }
+  .export-err { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
   .shares ul { list-style: none; margin: 0 0 8px; padding: 0; }
   .share-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     padding: 4px 0;
   }
-  .share-row .danger { color: var(--text-muted); background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 9px; }
+  .share-row .danger { color: var(--text-muted); background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .share-row .danger:hover { color: var(--error); }
-  .fresh { font-family: var(--font-mono); font-size: 9.5px; color: var(--success); word-break: break-all; }
-  .fresh code { font-size: 9px; }
+  .fresh { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); word-break: break-all; }
+  .fresh code { font-size: var(--fs-label-xs); }
 
   .ed-preview { padding: 16px; overflow-y: auto; min-width: 0; }
   .preview-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .arr-btn {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -1253,7 +1253,7 @@
   }
   .arr-btn:hover, .arr-btn.active { color: var(--accent); border-color: var(--accent); }
   .arr-btn.danger:hover { color: var(--error); border-color: var(--error); }
-  .arr-note { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-ghost); }
+  .arr-note { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .preview-frame {
     border: 1px solid var(--card-border);
     border-radius: 4px;
@@ -1307,7 +1307,7 @@
   .sel-toolbar.below { transform: translateY(6px); }
   .sel-toolbar button {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     min-width: 22px;
     color: var(--text-muted);
     background: none;
@@ -1321,18 +1321,18 @@
   .sel-toolbar .fi { font-style: italic; }
   .sel-toolbar .fu { text-decoration: underline; }
   .sel-toolbar .sel-del:hover { color: var(--error); border-color: var(--error); }
-  .sel-grip { cursor: grab; font-size: 11px; color: var(--accent-ink); padding: 2px 5px; }
+  .sel-grip { cursor: grab; font-size: var(--fs-label-xs); color: var(--accent-ink); padding: 2px 5px; }
   .sel-grip:active { cursor: grabbing; }
   .sel-style {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     background: var(--bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
     border-radius: 2px;
     padding: 2px 3px;
   }
-  .sel-tag { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); padding: 0 5px; }
+  .sel-tag { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); padding: 0 5px; }
   .preview-frame :global(.ce-live) {
     outline: none;
     cursor: text;
@@ -1383,7 +1383,7 @@
   }
   .add-menu button {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     text-align: left;
     color: var(--text-primary);
@@ -1397,7 +1397,7 @@
   .add-cat {
     grid-column: 1 / -1;
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     letter-spacing: 0.16em;
     color: var(--text-ghost, var(--text-muted));
@@ -1425,7 +1425,7 @@
   .preview-meta input,
   .preview-meta select {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -1443,9 +1443,9 @@
     cursor: pointer;
     list-style: none;
   }
-  .blk-type { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--accent-ink); }
+  .blk-type { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; color: var(--accent-ink); }
   .blk-ops { display: inline-flex; gap: 2px; }
-  .blk-ops button { font-size: 10px; color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+  .blk-ops button { font-size: var(--fs-label-xs); color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 2px 4px; }
   .blk-ops button:hover { color: var(--accent); }
   .blk-ops button.danger:hover { color: var(--error); }
   .blk > :global(.bf) { padding: 4px 10px 12px; }
@@ -1453,7 +1453,7 @@
     display: block;
     width: 100%;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--bg);

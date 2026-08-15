@@ -378,77 +378,79 @@
       <div class="nm-empty">No runs recorded.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr>
-              <th>Status</th><th>Trigger</th><th>Started</th><th>Duration</th>
-              <th>Failing</th><th>Fixed</th><th>Cost</th><th>Writes</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each runs as run (run.runId)}
-              <tr class="run-row" onclick={() => toggleRun(run.runId)}>
-                <td><span class="nm-pill" data-state={runState(run.data.status)}>{run.data.status}</span></td>
-                <td class="mono small">{run.data.trigger}</td>
-                <td class="small">{fmtDateTime(run.data.startedAt ?? run.createdAt)}</td>
-                <td class="mono small">{duration(run.data)}</td>
-                <td class="mono small">{run.data.workflowsFailing ?? 0}</td>
-                <td class="mono small">
-                  {(run.data.fixesApplied ?? 0) + (run.data.schedulesQuarantined ?? 0)}
-                </td>
-                <td class="mono small">{money(run.data.costUsd)}</td>
-                <td class="mono small">
-                  <!-- A shadow night looked identical to a night with nothing to
-                       fix until this column existed. -->
-                  {run.data.autoApplyEnabled ? 'auto' : run.data.breakerEnabled ? 'breaker' : 'none'}
-                </td>
-                <td class="mono small chevron">{expandedRunId === run.runId ? '▾' : '▸'}</td>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr>
+                <th>Status</th><th>Trigger</th><th>Started</th><th>Duration</th>
+                <th>Failing</th><th>Fixed</th><th>Cost</th><th>Writes</th><th></th>
               </tr>
-              {#if expandedRunId === run.runId}
-                <tr class="run-detail-row">
-                  <td colspan="9">
-                    <div class="run-detail">
-                      <div class="detail-col">
-                        <span class="sr-label-tight">Phases</span>
-                        <ul class="phase-list">
-                          {#each Object.entries(run.data.phases ?? {}) as [name, p]}
-                            <li>
-                              <span class="nm-pill" data-state={phaseState(p.status)}>{p.status}</span>
-                              <span class="phase-name">{name}</span>
-                              {#if p.ms}<span class="phase-ms">{p.ms}ms</span>{/if}
-                              {#if p.detail}<span class="phase-detail">{p.detail}</span>{/if}
-                            </li>
-                          {/each}
-                        </ul>
-                        <div class="budget mono">
-                          {run.data.llmCalls ?? 0} LLM calls · {run.data.tokensIn ?? 0}+{run.data.tokensOut ?? 0} tokens · {money(run.data.costUsd)}
-                        </div>
-                        <div class="budget mono">
-                          summary to WhatsApp: {run.data.whatsappDelivered ? 'delivered' : 'not delivered'}
-                        </div>
-                      </div>
-                      <div class="detail-col">
-                        <span class="sr-label-tight">Actions</span>
-                        {#if (run.data.actions?.length ?? 0) === 0}
-                          <div class="nm-empty compact">No actions.</div>
-                        {:else}
-                          <ul class="action-list">
-                            {#each run.data.actions ?? [] as a}
+            </thead>
+            <tbody>
+              {#each runs as run (run.runId)}
+                <tr class="run-row" onclick={() => toggleRun(run.runId)}>
+                  <td><span class="nm-pill" data-state={runState(run.data.status)}>{run.data.status}</span></td>
+                  <td class="mono small">{run.data.trigger}</td>
+                  <td class="small">{fmtDateTime(run.data.startedAt ?? run.createdAt)}</td>
+                  <td class="mono small">{duration(run.data)}</td>
+                  <td class="mono small">{run.data.workflowsFailing ?? 0}</td>
+                  <td class="mono small">
+                    {(run.data.fixesApplied ?? 0) + (run.data.schedulesQuarantined ?? 0)}
+                  </td>
+                  <td class="mono small">{money(run.data.costUsd)}</td>
+                  <td class="mono small">
+                    <!-- A shadow night looked identical to a night with nothing to
+                         fix until this column existed. -->
+                    {run.data.autoApplyEnabled ? 'auto' : run.data.breakerEnabled ? 'breaker' : 'none'}
+                  </td>
+                  <td class="mono small chevron">{expandedRunId === run.runId ? '▾' : '▸'}</td>
+                </tr>
+                {#if expandedRunId === run.runId}
+                  <tr class="run-detail-row">
+                    <td colspan="9">
+                      <div class="run-detail">
+                        <div class="detail-col">
+                          <span class="sr-label-tight">Phases</span>
+                          <ul class="phase-list">
+                            {#each Object.entries(run.data.phases ?? {}) as [name, p]}
                               <li>
-                                <span class="action-kind">{a.kind}</span>
-                                <span class="action-detail">{a.detail}</span>
+                                <span class="nm-pill" data-state={phaseState(p.status)}>{p.status}</span>
+                                <span class="phase-name">{name}</span>
+                                {#if p.ms}<span class="phase-ms">{p.ms}ms</span>{/if}
+                                {#if p.detail}<span class="phase-detail">{p.detail}</span>{/if}
                               </li>
                             {/each}
                           </ul>
-                        {/if}
+                          <div class="budget mono">
+                            {run.data.llmCalls ?? 0} LLM calls · {run.data.tokensIn ?? 0}+{run.data.tokensOut ?? 0} tokens · {money(run.data.costUsd)}
+                          </div>
+                          <div class="budget mono">
+                            summary to WhatsApp: {run.data.whatsappDelivered ? 'delivered' : 'not delivered'}
+                          </div>
+                        </div>
+                        <div class="detail-col">
+                          <span class="sr-label-tight">Actions</span>
+                          {#if (run.data.actions?.length ?? 0) === 0}
+                            <div class="nm-empty compact">No actions.</div>
+                          {:else}
+                            <ul class="action-list">
+                              {#each run.data.actions ?? [] as a}
+                                <li>
+                                  <span class="action-kind">{a.kind}</span>
+                                  <span class="action-detail">{a.detail}</span>
+                                </li>
+                              {/each}
+                            </ul>
+                          {/if}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                </tr>
-              {/if}
-            {/each}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                {/if}
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -465,47 +467,49 @@
       <div class="nm-empty">Nothing has been changed automatically.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Canvas</th><th>Fix</th><th>Changed</th><th>Lint</th><th>Applied</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each applied as f (f.key)}
-              <tr>
-                <td>
-                  <span class="subject">{subject(f)}</span>
-                  <span class="target mono">{target(f)}</span>
-                </td>
-                <td>
-                  <span class="nm-pill" data-state={findingState(f.status)}>{f.fixKindLabel}</span>
-                  <span class="fix-text">{f.fix}</span>
-                </td>
-                <td class="mono small">
-                  <!-- Field NAMES only. The old values stay on the server: a
-                       before-image is the exact payload we refuse to republish. -->
-                  {f.revertKind === 'schedule' ? 'schedule paused' : f.changedFields.join(', ') || '—'}
-                </td>
-                <td class="mono small">
-                  {#if f.verifyBefore !== undefined && f.verifyAfter !== undefined}
-                    {f.verifyBefore} → {f.verifyAfter}
-                  {:else}
-                    —
-                  {/if}
-                </td>
-                <td class="small">{fmtDateTime(f.updatedAt)}</td>
-                <td>
-                  <button
-                    class="nm-link-btn danger"
-                    onclick={() => act(f, 'revert')}
-                    disabled={busyKey === f.key || !f.revertKind}
-                  >
-                    {f.revertKind === 'schedule' ? 'Re-enable' : 'Revert'}
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Canvas</th><th>Fix</th><th>Changed</th><th>Lint</th><th>Applied</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each applied as f (f.key)}
+                <tr>
+                  <td>
+                    <span class="subject">{subject(f)}</span>
+                    <span class="target mono">{target(f)}</span>
+                  </td>
+                  <td>
+                    <span class="nm-pill" data-state={findingState(f.status)}>{f.fixKindLabel}</span>
+                    <span class="fix-text">{f.fix}</span>
+                  </td>
+                  <td class="mono small">
+                    <!-- Field NAMES only. The old values stay on the server: a
+                         before-image is the exact payload we refuse to republish. -->
+                    {f.revertKind === 'schedule' ? 'schedule paused' : f.changedFields.join(', ') || '—'}
+                  </td>
+                  <td class="mono small">
+                    {#if f.verifyBefore !== undefined && f.verifyAfter !== undefined}
+                      {f.verifyBefore} → {f.verifyAfter}
+                    {:else}
+                      —
+                    {/if}
+                  </td>
+                  <td class="small">{fmtDateTime(f.updatedAt)}</td>
+                  <td>
+                    <button
+                      class="nm-link-btn danger"
+                      onclick={() => act(f, 'revert')}
+                      disabled={busyKey === f.key || !f.revertKind}
+                    >
+                      {f.revertKind === 'schedule' ? 'Re-enable' : 'Revert'}
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -522,47 +526,49 @@
       <div class="nm-empty">Nothing open. A finding closes itself when its failure stops arriving.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Canvas</th><th>Kind</th><th>Symptom</th><th>Seen</th><th>Last</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each open as f (f.key)}
-              <tr>
-                <td>
-                  <span class="subject">{subject(f)}</span>
-                  <span class="target mono">{target(f)}</span>
-                </td>
-                <td>
-                  <span class="nm-pill" data-state={findingState(f.status)}>{f.fixKindLabel}</span>
-                </td>
-                <td class="cell-prose">
-                  <span class="fix-text">{f.symptom}</span>
-                  {#if f.status === 'refused_sensitive'}
-                    <span class="refusal">
-                      Refused: this node holds a credential{f.sensitiveFields?.length
-                        ? ` in ${f.sensitiveFields.join(', ')}`
-                        : ''}. Delete the node and recreate it — patching it republishes the value
-                      through the workflow audit log.
-                    </span>
-                  {:else}
-                    <span class="muted small">{f.fix}</span>
-                  {/if}
-                </td>
-                <td class="mono small">{f.occurrences}</td>
-                <td class="small">{fmtDateTime(f.lastSeen)}</td>
-                <td class="row-actions">
-                  <button class="nm-link-btn" onclick={() => act(f, 'accept')} disabled={busyKey === f.key}>
-                    Accept
-                  </button>
-                  <button class="nm-link-btn" onclick={() => act(f, 'dismiss')} disabled={busyKey === f.key}>
-                    Dismiss
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Canvas</th><th>Kind</th><th>Symptom</th><th>Seen</th><th>Last</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each open as f (f.key)}
+                <tr>
+                  <td>
+                    <span class="subject">{subject(f)}</span>
+                    <span class="target mono">{target(f)}</span>
+                  </td>
+                  <td>
+                    <span class="nm-pill" data-state={findingState(f.status)}>{f.fixKindLabel}</span>
+                  </td>
+                  <td class="cell-prose">
+                    <span class="fix-text">{f.symptom}</span>
+                    {#if f.status === 'refused_sensitive'}
+                      <span class="refusal">
+                        Refused: this node holds a credential{f.sensitiveFields?.length
+                          ? ` in ${f.sensitiveFields.join(', ')}`
+                          : ''}. Delete the node and recreate it — patching it republishes the value
+                        through the workflow audit log.
+                      </span>
+                    {:else}
+                      <span class="muted small">{f.fix}</span>
+                    {/if}
+                  </td>
+                  <td class="mono small">{f.occurrences}</td>
+                  <td class="small">{fmtDateTime(f.lastSeen)}</td>
+                  <td class="row-actions">
+                    <button class="nm-link-btn" onclick={() => act(f, 'accept')} disabled={busyKey === f.key}>
+                      Accept
+                    </button>
+                    <button class="nm-link-btn" onclick={() => act(f, 'dismiss')} disabled={busyKey === f.key}>
+                      Dismiss
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p class="muted note">
         Accept records that you intend to fix it yourself; Dismiss stops it being re-proposed. Both
@@ -578,7 +584,7 @@
   .ctl-block.grow { flex: 1; min-width: 220px; }
   .ctl-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.16em;
     color: var(--text-ghost);
@@ -590,14 +596,14 @@
   .small { font-size: 0.8rem; }
   .nm-toggle:disabled { opacity: 0.5; cursor: default; }
 
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
 
   .perm { padding: 0.9rem 0; }
   .perm + .perm { border-top: 1px solid var(--divider); }
   .perm-hd { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
   .perm-title { font-size: 0.95rem; color: var(--text-primary); }
   .perm-default {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -622,7 +628,7 @@
     max-height: 320px;
     overflow: auto;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     white-space: pre-wrap;
     word-break: break-word;
@@ -649,13 +655,13 @@
   .phase-list, .action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
   .phase-list li { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8rem; flex-wrap: wrap; }
   .phase-name { color: var(--text-primary); }
-  .phase-ms { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .phase-ms { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .phase-detail { font-size: 0.75rem; color: var(--text-muted); }
-  .budget { font-size: 10px; color: var(--text-ghost); margin-top: 0.3rem; }
+  .budget { font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 0.3rem; }
   .action-list li { display: flex; gap: 0.6rem; font-size: 0.8rem; align-items: baseline; }
   .action-kind {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -664,7 +670,7 @@
   .action-detail { color: var(--text-secondary); min-width: 0; }
 
   .subject { display: block; color: var(--text-primary); font-size: 0.9rem; }
-  .target { display: block; font-size: 10px; color: var(--text-ghost); }
+  .target { display: block; font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .fix-text { display: block; font-size: 0.78rem; color: var(--text-muted); max-width: 52ch; }
   .cell-prose { min-width: 260px; }
   .refusal {

@@ -256,7 +256,7 @@ body::after {
   align-items: baseline;
   gap: 0.4ch;
   padding: 4px 10px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sharp);
   color: var(--text-primary);
   text-decoration: none;
@@ -323,7 +323,7 @@ a {
 
 .nav-link:hover {
   color: var(--text-primary);
-  border-color: var(--card-border);
+  border-color: var(--line-strong);
 }
 
 .nav-link:hover::before {
@@ -424,7 +424,7 @@ a {
   cursor: pointer;
   line-height: 1;
   padding: 4px 0 4px 12px;
-  border-left: 2px solid var(--card-border);
+  border-left: 2px solid var(--line-strong);
   text-decoration: none;
 }
 
@@ -457,18 +457,21 @@ a {
   font-size: var(--fs-label);
 }
 
-/* Subtle top chrome — used in sticky nav bars */
+/* Subtle top chrome. The site nav is a solid cell strip now (see
+   .site-nav-bar); this stays for the surfaces that still float a bar over
+   scrolling content. */
 .site-chrome {
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid var(--line);
 }
 
-/* Card — solid, bordered, no glass */
+/* Card — solid, bordered, no glass. One hairline, not two: the 2px rule is
+   reserved for page-title underlines now (--line-title). */
 .card {
-  background: var(--card-bg);
-  border: 2px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 1.5rem;
 }
 
@@ -604,7 +607,7 @@ a {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 0;
-  border: 2px solid var(--card-border);
+  border: 1px solid var(--line-strong);
 }
 @media (max-width: 1100px) {
   .h-detail-grid {
@@ -620,8 +623,8 @@ a {
 .h-card {
   position: relative;
   padding: 18px 18px 16px;
-  border-right: 1px solid var(--divider);
-  border-bottom: 1px solid var(--divider);
+  border-right: 1px solid var(--line-hair);
+  border-bottom: 1px solid var(--line-hair);
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -652,7 +655,7 @@ a {
   }
 }
 .h-card.tinted {
-  background: var(--bg-section);
+  background: var(--surface-sunken);
 }
 
 .h-card-head {
@@ -682,7 +685,7 @@ a {
   letter-spacing: 0.15em;
   text-transform: uppercase;
   padding: 2px 6px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--line-strong);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -705,6 +708,7 @@ a {
 .h-card-value {
   font-family: var(--font-display);
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
   font-size: 3.5rem;
   letter-spacing: -0.02em;
   line-height: 0.9;
@@ -731,13 +735,14 @@ a {
   margin: 0;
   margin-top: auto;
 }
+
 .h-card-foot em {
   color: var(--accent);
   font-style: normal;
 }
 .h-card-foot.action {
   color: var(--text-primary);
-  border-top: 1px solid var(--divider);
+  border-top: 1px solid var(--line-hair);
   padding-top: 10px;
 }
 .h-card-foot.action::before {
