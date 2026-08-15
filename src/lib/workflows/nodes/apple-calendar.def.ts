@@ -57,6 +57,9 @@ export const appleCalendarDef: NodeDefinition = {
       "dateRangeEnd": {
         "type": "string"
       },
+      "includeRawIcs": {
+        "type": "boolean"
+      },
       "eventTitle": {
         "type": "string"
       },
@@ -91,6 +94,7 @@ export const appleCalendarDef: NodeDefinition = {
     { key: 'operation', label: 'What to do', type: 'dropdown' },
     { key: 'dateRangeStart', label: 'From', type: 'template-textarea' },
     { key: 'dateRangeEnd', label: 'To', type: 'template-textarea' },
+    { key: 'includeRawIcs', label: 'Include raw ICS (diagnostics)', type: 'toggle' },
     { key: 'eventTitle', label: 'Title', type: 'template-textarea' },
     { key: 'eventStart', label: 'Start', type: 'template-textarea' },
     { key: 'eventEnd', label: 'End', type: 'template-textarea' },

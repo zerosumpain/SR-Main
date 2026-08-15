@@ -12,6 +12,8 @@ import type { NodeExecutor, NodeResult } from '$lib/workflows/types';
 import { appleCalendarDef } from './apple-calendar.def';
 export { appleCalendarDef } from './apple-calendar.def';
 
+export const MAX_CALENDAR_LIST_EVENTS = 100;
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -56,6 +58,77 @@ function rawExtensionProperty(property: ical.Property): { name: string; value: s
     value: String(property.getFirstValue() ?? ''),
     ...(Object.keys(parameters).length ? { parameters } : {}),
   };
+}
+
+const ISO_8601_DATE_TIME = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+export function parseCalendarDateRange(start: unknown, end: unknown): { start: Date; end: Date } | { error: string } {
+  const parse = (value: unknown, name: string): Date | { error: string } => {
+    if (typeof value !== 'string' || !ISO_8601_DATE_TIME.test(value)) return { error: `${name} must be an ISO-8601 date or date-time.` };
+    const date = new Date(value);
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    const calendarDate = new Date(Date.UTC(year, month - 1, day));
+    if (Number.isNaN(date.getTime()) || calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return { error: `${name} must be a valid ISO-8601 date or date-time.` };
+    return date;
+  };
+  const rangeStart = parse(start, 'dateRangeStart');
+  if (rangeStart instanceof Date === false) return rangeStart;
+  const rangeEnd = parse(end, 'dateRangeEnd');
+  if (rangeEnd instanceof Date === false) return rangeEnd;
+  if (rangeStart > rangeEnd) return { error: 'dateRangeStart must be on or before dateRangeEnd.' };
+  return { start: rangeStart, end: rangeEnd };
+}
+
+function overlapsRange(start: Date, end: Date, range: { start: Date; end: Date }): boolean {
+  return start < range.end && end > range.start;
+}
+
+function dateFromIcalTime(time: ical.Time): Date | null {
+  const date = time.toJSDate();
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Expand a CalDAV object locally because servers may ignore a REPORT time range.
+ * Recurring rows are represented by the occurrence that overlaps the requested range.
+ */
+export function calendarObjectEventsInRange(url: string, data: string, range: { start: Date; end: Date }): CalendarEvent[] {
+  const parsed = parseCalendarObject(url, data);
+  if (parsed.parseError) return [];
+  try {
+    const component = new ical.Component(ical.parse(data));
+    const vevent = component.getFirstSubcomponent('vevent');
+    if (!vevent) return [];
+    const event = new ical.Event(vevent);
+    if (!event.isRecurring()) {
+      const start = new Date(parsed.start);
+      const end = new Date(parsed.end);
+      return Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !overlapsRange(start, end, range) ? [] : [parsed];
+    }
+
+    const occurrences: CalendarEvent[] = [];
+    const iterator = event.iterator();
+    for (let count = 0; count < 100_000; count++) {
+      const occurrence = iterator.next();
+      if (!occurrence) break;
+      const details = event.getOccurrenceDetails(occurrence);
+      const start = dateFromIcalTime(details.startDate);
+      const end = dateFromIcalTime(details.endDate);
+      if (!start || !end) continue;
+      if (start >= range.end) break;
+      if (overlapsRange(start, end, range)) {
+        occurrences.push({ ...parsed, start: start.toISOString(), end: end.toISOString() });
+      }
+    }
+    return occurrences;
+  } catch {
+    return [];
+  }
+}
+
+export function compactCalendarEvent(event: CalendarEvent, includeRawIcs = false): Record<string, unknown> {
+  const { rawIcs, rawProperties, parseError, sequence, ...compact } = event;
+  return includeRawIcs ? { ...compact, ...(rawIcs ? { rawIcs } : {}), ...(rawProperties ? { rawProperties } : {}), ...(parseError ? { parseError } : {}), ...(sequence ? { sequence } : {}) } : compact;
 }
 
 /**
@@ -150,12 +223,20 @@ export const appleCalendarExecutor: NodeExecutor = {
 
         if (config.operation === 'list') {
           if (!target) throw new Error('No calendar selected');
+          const range = parseCalendarDateRange(config.dateRangeStart, config.dateRangeEnd);
+          if ('error' in range) throw new Error(range.error);
           const objects = await client.fetchCalendarObjects({
             calendar: target,
             timeRange: { start: config.dateRangeStart, end: config.dateRangeEnd },
           });
-          const events = objects.map((obj: any) => parseCalendarObject(obj.url, obj.data));
-          return { output: { events }, rowCount: events.length };
+          // iCloud can return objects outside the REPORT range, so enforce it
+          // again before serialising a bounded, compact tool response.
+          const matching = objects.flatMap((obj: any) => calendarObjectEventsInRange(obj.url, obj.data, range));
+          const events = matching.slice(0, MAX_CALENDAR_LIST_EVENTS).map((event) => compactCalendarEvent(event, config.includeRawIcs === true));
+          return {
+            output: { events, truncated: matching.length > MAX_CALENDAR_LIST_EVENTS, totalCount: matching.length, limit: MAX_CALENDAR_LIST_EVENTS },
+            rowCount: events.length,
+          };
         }
         if (config.operation === 'create') {
           const uid = config.eventUid || crypto.randomUUID();

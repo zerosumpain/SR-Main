@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/workflows/nodes/apple-calendar', () => ({
   appleCalendarDef: { type: 'apple-calendar' },
+  parseCalendarDateRange: vi.fn((start: string, end: string) => {
+    const rangeStart = new Date(start);
+    const rangeEnd = new Date(end);
+    if (Number.isNaN(rangeStart.getTime())) return { error: 'dateRangeStart must be an ISO-8601 date or date-time.' };
+    if (Number.isNaN(rangeEnd.getTime())) return { error: 'dateRangeEnd must be an ISO-8601 date or date-time.' };
+    if (rangeStart > rangeEnd) return { error: 'dateRangeStart must be on or before dateRangeEnd.' };
+    return { start: rangeStart, end: rangeEnd };
+  }),
   resolveOptions_calendar: vi.fn(),
   appleCalendarExecutor: { execute: vi.fn() },
 }));
@@ -104,6 +112,24 @@ describe('Apple Calendar chat tools', () => {
       expect.objectContaining({ operation: 'list', calendar: '/family/' }),
       expect.objectContaining({ dryRun: false }),
     );
+  });
+
+  it('rejects invalid and reversed event date ranges before calling CalDAV', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    const invalid = await handleAppleCalendarList({ credentialId: 'cred', calendar: 'Family', dateRangeStart: 'nope', dateRangeEnd: '2026-08-15T23:59:59Z' });
+    expect(invalid).toMatchObject({ success: false, error: expect.stringMatching(/dateRangeStart.*ISO/i) });
+    const reversed = await handleAppleCalendarList({ credentialId: 'cred', calendar: 'Family', dateRangeStart: '2026-08-16T00:00:00Z', dateRangeEnd: '2026-08-15T23:59:59Z' });
+    expect(reversed).toMatchObject({ success: false, error: expect.stringMatching(/on or before/i) });
+    expect(appleCalendarExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  it('passes raw ICS diagnostics only when explicitly requested', async () => {
+    vi.mocked(resolveOptions_calendar).mockResolvedValue([{ value: '/family/', label: 'Family' }]);
+    vi.mocked(appleCalendarExecutor.execute).mockResolvedValue({ output: { events: [] }, rowCount: 0 } as never);
+    await handleAppleCalendarList({ credentialId: 'cred', calendar: 'Family', dateRangeStart: '2026-08-12T00:00:00Z', dateRangeEnd: '2026-08-15T23:59:59Z' });
+    expect(appleCalendarExecutor.execute).toHaveBeenLastCalledWith({}, expect.objectContaining({ includeRawIcs: false }), expect.anything());
+    await handleAppleCalendarList({ credentialId: 'cred', calendar: 'Family', dateRangeStart: '2026-08-12T00:00:00Z', dateRangeEnd: '2026-08-15T23:59:59Z', includeRawIcs: true });
+    expect(appleCalendarExecutor.execute).toHaveBeenLastCalledWith({}, expect.objectContaining({ includeRawIcs: true }), expect.anything());
   });
 
   it('delegates a create with a deterministic UID and never accepts credentials as arguments', async () => {

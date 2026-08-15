@@ -5,7 +5,7 @@ vi.mock('tsdav', () => ({ default: { createDAVClient: vi.fn() } }));
 
 import { getCredential } from '$lib/integrations/credentials';
 import tsdav from 'tsdav';
-import { appleCalendarExecutor, parseCalendarObject } from './apple-calendar';
+import { appleCalendarExecutor, parseCalendarDateRange, parseCalendarObject } from './apple-calendar';
 
 const ics = (...lines: string[]) =>
   ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//test//EN', ...lines, 'END:VCALENDAR'].join('\r\n');
@@ -208,7 +208,7 @@ describe('Apple Calendar event mutations', () => {
     expect(dated.output).toMatchObject({ title: 'John @ Big Data London', start: expect.stringMatching(/^2026-09-24/), end: expect.stringMatching(/^2026-09-26/) });
 
     const listed = await appleCalendarExecutor.execute({}, {
-      credentialId: 'cred', operation: 'list', calendar: family.url, dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
+      credentialId: 'cred', operation: 'list', calendar: family.url, dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-27T00:00:00Z',
     }, {} as never);
     expect((listed.output as { events: Array<{ title: string }> }).events).toEqual([expect.objectContaining({ title: 'John @ Big Data London' })]);
 
@@ -218,6 +218,64 @@ describe('Apple Calendar event mutations', () => {
       credentialId: 'cred', operation: 'list', calendar: family.url, dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
     }, {} as never);
     expect((afterDelete.output as { events: unknown[] }).events).toEqual([]);
+  });
+
+  it('enforces the requested three-day range and returns compact occurrence rows', async () => {
+    const outsideRange = ics(
+      'BEGIN:VEVENT', 'UID:old-event', 'DTSTART:20250813T090000Z', 'DTEND:20250813T100000Z', 'SUMMARY:2025 event', 'END:VEVENT',
+    );
+    const recurring = ics(
+      'BEGIN:VEVENT', 'UID:daily-2026', 'DTSTART:20260810T090000Z', 'DTEND:20260810T100000Z', 'RRULE:FREQ=DAILY;COUNT=7',
+      'SUMMARY:August routine', 'DESCRIPTION:compact result please', 'END:VEVENT',
+    );
+    events.set(family.url, [
+      { url: '/family/old.ics', etag: 'one', data: outsideRange },
+      { url: '/family/routine.ics', etag: 'one', data: recurring },
+    ]);
+
+    const listed = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url,
+      dateRangeStart: '2026-08-12T00:00:00Z', dateRangeEnd: '2026-08-15T23:59:59Z',
+    }, {} as never);
+    const output = listed.output as { events: Array<{ title: string; start: string; rawIcs?: string }>; totalCount: number; truncated: boolean; limit: number };
+
+    expect(output.events).toHaveLength(4);
+    expect(output.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'August routine', start: '2026-08-12T09:00:00.000Z' }),
+      expect.objectContaining({ title: 'August routine', start: '2026-08-15T09:00:00.000Z' }),
+    ]));
+    expect(output.events).not.toEqual(expect.arrayContaining([expect.objectContaining({ title: '2025 event' })]));
+    expect(output.events[0]).not.toHaveProperty('rawIcs');
+    expect(output).toMatchObject({ totalCount: 4, truncated: false, limit: 100 });
+  });
+
+  it('reports truncation instead of silently omitting matches beyond the documented limit', async () => {
+    events.set(family.url, Array.from({ length: 101 }, (_, index) => ({ url: `/family/${index}.ics`, etag: 'one', data: EVENT })));
+    const listed = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url,
+      dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
+    }, {} as never);
+    expect(listed.output).toMatchObject({ truncated: true, totalCount: 101, limit: 100 });
+    expect((listed.output as { events: unknown[] }).events).toHaveLength(100);
+  });
+
+  it('includes raw ICS only when diagnostics are explicitly requested', async () => {
+    events.set(family.url, [{ url: '/family/event.ics', etag: 'one', data: EVENT }]);
+    const listed = await appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url, includeRawIcs: true,
+      dateRangeStart: '2026-09-23T00:00:00Z', dateRangeEnd: '2026-09-24T00:00:00Z',
+    }, {} as never);
+    expect((listed.output as { events: Array<{ rawIcs?: string }> }).events[0].rawIcs).toBe(EVENT);
+  });
+
+  it('rejects invalid and reversed event date ranges before making a CalDAV request', async () => {
+    expect(parseCalendarDateRange('not-a-date', '2026-08-15T00:00:00Z')).toMatchObject({ error: expect.stringMatching(/dateRangeStart.*ISO/i) });
+    expect(parseCalendarDateRange('2026-08-16T00:00:00Z', '2026-08-15T00:00:00Z')).toMatchObject({ error: expect.stringMatching(/on or before/i) });
+    await expect(appleCalendarExecutor.execute({}, {
+      credentialId: 'cred', operation: 'list', calendar: family.url,
+      dateRangeStart: '2026-08-16T00:00:00Z', dateRangeEnd: '2026-08-15T00:00:00Z',
+    }, {} as never)).rejects.toThrow(/on or before/i);
+    expect(client.fetchCalendarObjects).not.toHaveBeenCalled();
   });
 
   it('rejects update and delete IDs outside the selected calendar', async () => {
