@@ -33,6 +33,9 @@ const FLOOR_REM = 0.75;
 // legacy literals; widening this list is how that debt gets paid down.
 const SCOPE = [
   ['src/routes/jkai', true],
+  // Added 2026-08-15 with the Instrument pass: /drive's 42 px literals were
+  // mapped onto the type scale, so it can hold the floor from here.
+  ['src/routes/drive', true],
   ['src/lib/components/jkai', true],
   ['src/lib/components/intel', true],
   ['src/lib/canvas', true],

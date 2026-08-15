@@ -39,18 +39,20 @@
   }
   .lh-tag {
     font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.14em;
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--text-ghost);
+    color: var(--accent);
     margin: 0 0 14px;
   }
+  /* The loudest voice on the page — nothing below it goes above --fs-num-lg. */
   .lh-head {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: clamp(36px, 9vw, 132px);
-    line-height: 0.86;
-    letter-spacing: -0.03em;
+    font-size: clamp(38px, 8.5vw, 104px);
+    line-height: 0.9;
+    letter-spacing: -0.045em;
     text-transform: uppercase;
     margin: 0;
     color: var(--text-primary);
@@ -59,22 +61,25 @@
     color: var(--text-ghost);
   }
   .lh-strap {
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--text-secondary);
-    border-left: 3px solid var(--accent);
-    padding-left: 14px;
+    font-size: var(--fs-body-lg);
+    line-height: 1.6;
+    color: var(--text-muted);
     margin: 20px 0 0;
-    max-width: 440px;
+    max-width: 44ch;
   }
+  /* The same `/`-separated ledger the hub header uses, in the hero's register. */
   .lh-vitals {
     font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    color: var(--accent);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
     margin: 18px 0 0;
   }
   .lh-vitals .sep {
     color: var(--text-ghost);
+    margin: 0 0.4ch;
   }
 </style>

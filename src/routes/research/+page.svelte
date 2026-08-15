@@ -173,7 +173,7 @@
         to a full investigation with sources, facts and a red team.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <a class="back-link" href="/jkai">JKAI</a>
   </header>
 
   <section class="launch">

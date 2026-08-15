@@ -23,18 +23,45 @@
   }
 </script>
 
-<button
-  onclick={toggle}
-  class="fixed bottom-4 left-4 z-30 flex items-center gap-2 px-3 py-1.5 transition-opacity hover:opacity-100"
-  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-pill); opacity: 0.7;"
-  title={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}
-  aria-label={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}
->
-  <span
-    class="text-[9px] uppercase tracking-[0.15em]"
-    style="color: var(--text-ghost); font-family: var(--font-mono);"
-  >
-    {mode === 'ecg' ? 'ECG' : 'BIOME'}
-  </span>
-  <span class="text-[10px]" style="color: var(--text-ghost);" aria-hidden="true">⇄</span>
+<!-- Pinned to the hero, not to the viewport. As a fixed control it followed the
+     page down and ended up sitting on top of the footer wordmark and the vitals
+     rail's buttons; the background it toggles only exists behind the hero, so
+     that is where the control belongs. -->
+<button onclick={toggle} class="bg-toggle" title={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'} aria-label={mode === 'ecg' ? 'Switch to biome background' : 'Switch to ECG background'}>
+  <span class="bg-toggle-mode">{mode === 'ecg' ? 'ECG' : 'BIOME'}</span>
+  <span class="bg-toggle-glyph" aria-hidden="true">⇄</span>
 </button>
+
+<style>
+  .bg-toggle {
+    position: absolute;
+    bottom: 16px;
+    left: clamp(24px, 5vw, 64px);
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    opacity: 0.75;
+    transition:
+      opacity 0.2s var(--ease-out),
+      border-color 0.2s var(--ease-out);
+  }
+  .bg-toggle:hover {
+    opacity: 1;
+    border-color: var(--accent);
+  }
+  .bg-toggle-mode,
+  .bg-toggle-glyph {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-ghost);
+    line-height: 1;
+  }
+</style>

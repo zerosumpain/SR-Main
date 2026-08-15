@@ -80,7 +80,10 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--bg);
+    /* The shell sits one step behind the content it frames — rails go to
+       --surface-rail, the conversation column stays on --bg, and this is what
+       reads as "behind" both. */
+    background: var(--surface-shell);
     color: var(--text-primary);
     font-family: var(--font-body);
   }

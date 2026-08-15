@@ -164,7 +164,7 @@
       </p>
     </div>
     <div class="hdr-links">
-      <a class="back-link" href="/jkai">← JKAI</a>
+      <a class="back-link" href="/jkai">JKAI</a>
       <a class="back-link" href="/admin/ai/improvement">Controls →</a>
     </div>
   </header>

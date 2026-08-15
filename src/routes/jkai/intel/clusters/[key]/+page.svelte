@@ -131,7 +131,7 @@
       {#if cluster.name}
         <button type="button" class="row-link" onclick={() => rename(null)}>reset name</button>
       {/if}
-      <a class="back-link" href="/jkai/intel/clusters">← All clusters</a>
+      <a class="back-link" href="/jkai/intel/clusters">All clusters</a>
     </div>
     {#if error}<p class="err">{error}</p>{/if}
     {#if cluster.nameDrifted}

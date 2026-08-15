@@ -4,6 +4,7 @@ import {
   workflowNodes,
   workflowEdges,
   workflowRuns,
+  workflowSchedules,
   nodeExecutions,
   openrouterModels,
   orchestratorChats,
@@ -276,6 +277,15 @@ export type CanvasStats = {
   edgeCount: number;
   runs7d: number;
   successRate7d: number | null;
+  /** One bucket per day, oldest first, seven long — the health board's
+   *  runs histogram. `failed` is a subset of `total`. */
+  runsByDay: { date: string; label: string; total: number; failed: number }[];
+  /** Node kinds across every canvas, commonest first. Kind, not raw type:
+   *  the board is asking "what is this estate made of", and mapTypeToKind is
+   *  the same grouping the canvas editor palette uses. */
+  nodeMix: { kind: string; count: number }[];
+  /** The next few enabled schedules that will actually fire, soonest first. */
+  nextScheduled: { slug: string; title: string; at: string }[];
 };
 
 /** Aggregate counts across all canvases (last 7 days for run stats). */
@@ -287,7 +297,16 @@ export async function listCanvasStats(): Promise<CanvasStats> {
     .where(like(workflows.name, `${SLUG_PREFIX}%`));
   const ids = canvasRows.map((r) => r.id);
   if (ids.length === 0) {
-    return { canvasCount: 0, nodeCount: 0, edgeCount: 0, runs7d: 0, successRate7d: null };
+    return {
+      canvasCount: 0,
+      nodeCount: 0,
+      edgeCount: 0,
+      runs7d: 0,
+      successRate7d: null,
+      runsByDay: [],
+      nodeMix: [],
+      nextScheduled: [],
+    };
   }
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const [nodeAgg] = await db
@@ -299,7 +318,7 @@ export async function listCanvasStats(): Promise<CanvasStats> {
     .from(workflowEdges)
     .where(inArray(workflowEdges.workflowId, ids));
   const recentRuns = await db
-    .select({ status: workflowRuns.status })
+    .select({ status: workflowRuns.status, startedAt: workflowRuns.startedAt })
     .from(workflowRuns)
     .where(
       and(inArray(workflowRuns.workflowId, ids), gte(workflowRuns.startedAt, sevenDaysAgo)),
@@ -310,12 +329,80 @@ export async function listCanvasStats(): Promise<CanvasStats> {
     terminal.length === 0
       ? null
       : terminal.filter((r) => r.status === 'completed').length / terminal.length;
+
+  // Seven day-buckets, oldest first, keyed on local calendar day so "today" is
+  // the last bar rather than a rolling 24h window that never lines up with the
+  // day labels beneath it.
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const buckets = new Map<string, { date: string; label: string; total: number; failed: number }>();
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    buckets.set(dayKey(d), {
+      date: d.toISOString(),
+      label: d.toLocaleDateString('en-GB', { weekday: 'short' }),
+      total: 0,
+      failed: 0,
+    });
+  }
+  for (const r of recentRuns) {
+    if (!r.startedAt) continue;
+    const b = buckets.get(dayKey(new Date(r.startedAt)));
+    if (!b) continue;
+    b.total += 1;
+    if (r.status === 'failed' || r.status === 'completed_with_errors') b.failed += 1;
+  }
+
+  const nodeTypeRows = await db
+    .select({ type: workflowNodes.type })
+    .from(workflowNodes)
+    .where(inArray(workflowNodes.workflowId, ids));
+  const mix = new Map<string, number>();
+  for (const n of nodeTypeRows) {
+    const kind = mapTypeToKind(n.type);
+    mix.set(kind, (mix.get(kind) ?? 0) + 1);
+  }
+  const nodeMix = [...mix.entries()]
+    .map(([kind, count]) => ({ kind, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  // The scheduler keeps nextRunAt current, so this is what will actually fire —
+  // not a cron string re-parsed here and liable to disagree with it.
+  const scheduleRows = await db
+    .select({
+      workflowId: workflowSchedules.workflowId,
+      nextRunAt: workflowSchedules.nextRunAt,
+      name: workflows.name,
+    })
+    .from(workflowSchedules)
+    .innerJoin(workflows, eq(workflows.id, workflowSchedules.workflowId))
+    .where(
+      and(
+        inArray(workflowSchedules.workflowId, ids),
+        eq(workflowSchedules.enabled, true),
+        gte(workflowSchedules.nextRunAt, new Date()),
+      ),
+    )
+    .orderBy(asc(workflowSchedules.nextRunAt))
+    .limit(4);
+  const nextScheduled = scheduleRows
+    .filter((r) => r.nextRunAt)
+    .map((r) => {
+      const slug = r.name.startsWith(SLUG_PREFIX) ? r.name.slice(SLUG_PREFIX.length) : r.name;
+      return { slug, title: slug.replace(/-/g, ' '), at: r.nextRunAt!.toISOString() };
+    });
+
   return {
     canvasCount: ids.length,
     nodeCount: nodeAgg?.n ?? 0,
     edgeCount: edgeAgg?.n ?? 0,
     runs7d,
     successRate7d,
+    runsByDay: [...buckets.values()],
+    nodeMix,
+    nextScheduled,
   };
 }
 

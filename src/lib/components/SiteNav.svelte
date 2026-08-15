@@ -43,22 +43,23 @@
   }}
 />
 
-<!-- z-index lifts above sibling hero content (also z-10) while the menu is
-     open, so the dropdown panel receives clicks instead of the overlay. -->
+<!-- The nav is a cell strip: each destination is a cell of one grid, divided by
+     hairlines, and the current one is cut out of the strip — page ground behind
+     it and a 2px accent seam on its bottom edge. That reads as "you are stood
+     here" without a filled block shouting it.
+
+     z-index lifts above sibling hero content (also z-10) while the phone menu is
+     open, so the panel receives clicks instead of the overlay. -->
 <div
-  class="relative flex items-center gap-6"
-  class:justify-between={showBrand}
-  class:justify-end={!showBrand}
+  class="nav-strip"
+  class:with-brand={showBrand}
   style:z-index={menuOpen ? 60 : 10}
 >
   {#if showBrand}
     <a
       href="/"
-      class="brand leading-none no-underline site-brand"
-      class:text-[24px]={variant === 'hero'}
-      class:sm:text-[28px]={variant === 'hero'}
-      class:text-[18px]={variant === 'compact'}
-      class:sm:text-[20px]={variant === 'compact'}
+      class="brand nav-brand no-underline"
+      class:hero={variant === 'hero'}
       aria-label="Strange Ramblings — Home"
     >
       strange ramblings
@@ -66,15 +67,11 @@
   {/if}
 
   <!-- Inline nav — tablet / desktop (>= 640px) -->
-  <nav
-    class="hidden sm:flex items-center gap-1 sm:gap-2 flex-wrap justify-end"
-    aria-label="Primary"
-  >
-    {#each displayItems as item, i (item.href)}
+  <nav class="nav-cells" aria-label="Primary">
+    {#each displayItems as item (item.href)}
       <a
         href={item.href}
-        class="nav-link"
-        data-index={String(i + 1).padStart(2, '0')}
+        class="nav-cell"
         aria-current={isActive(item.href) ? 'page' : undefined}
       >
         {item.label}
@@ -83,7 +80,7 @@
   </nav>
 
   <!-- Burger — mobile (< 640px) -->
-  <div class="burger-wrap sm:hidden">
+  <div class="burger-wrap">
     <button
       type="button"
       class="burger"
@@ -121,17 +118,83 @@
 </div>
 
 <style>
-  .site-brand {
-    transition: color 0.2s;
-    flex-shrink: 0;
+  .nav-strip {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    min-width: 0;
+    flex: 1;
+    justify-content: flex-end;
   }
-  .site-brand:hover {
+  .nav-strip.with-brand {
+    justify-content: space-between;
+  }
+
+  .nav-brand {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 20px;
+    border-right: 1px solid var(--line-hair);
+    font-size: 15px;
+    flex-shrink: 0;
+    transition: color 0.2s var(--ease-out);
+  }
+  .nav-brand.hero {
+    font-size: 18px;
+  }
+  .nav-brand:hover {
     color: var(--accent);
   }
 
+  .nav-cells {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-cells::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-cell {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 0 16px;
+    border-right: 1px solid var(--line-hair);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+  }
+  /* The brand already owns the left edge; without it the first cell needs one. */
+  .nav-strip:not(.with-brand) .nav-cells .nav-cell:first-child {
+    border-left: 1px solid var(--line-hair);
+  }
+  .nav-cell:hover {
+    color: var(--text-primary);
+    background: var(--accent-tint-04);
+  }
+  /* Cut out of the strip: page ground behind it, accent seam on the bottom. */
+  .nav-cell[aria-current='page'] {
+    color: var(--text-primary);
+    background: var(--bg);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
   .burger-wrap {
+    display: none;
     position: relative;
     flex-shrink: 0;
+    align-items: center;
+    padding: 0 12px;
+    border-left: 1px solid var(--line-hair);
   }
   .burger {
     display: flex;
@@ -141,8 +204,8 @@
     width: 38px;
     height: 38px;
     padding: 0 7px;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    background: transparent;
+    border: 1px solid var(--line-strong);
     cursor: pointer;
   }
   .burger span {
@@ -172,26 +235,28 @@
     border: none;
     cursor: default;
   }
+  /* A floating layer — one of the two places elevation is allowed. */
   .burger-panel {
     position: absolute;
     right: 0;
-    top: calc(100% + 8px);
+    top: 100%;
     z-index: 51;
     display: flex;
     flex-direction: column;
     min-width: 190px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    background: var(--surface-shell);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--elev-pop);
   }
   .burger-link {
     font-family: var(--font-mono);
     font-size: var(--fs-nav);
-    letter-spacing: 0.14em;
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-secondary);
     text-decoration: none;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     transition:
       background 0.15s,
       color 0.15s;
@@ -205,5 +270,19 @@
   }
   .burger-link[aria-current='page'] {
     color: var(--accent);
+  }
+
+  /* Phone: the cells become a burger. The strip keeps its shape so the brand
+     cell and its divider stay put. */
+  @media (max-width: 640px) {
+    .nav-cells {
+      display: none;
+    }
+    .burger-wrap {
+      display: flex;
+    }
+    .nav-brand {
+      padding: 0 14px;
+    }
   }
 </style>

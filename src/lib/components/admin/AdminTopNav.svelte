@@ -43,21 +43,22 @@
 </header>
 
 <style>
-  .admin-top-nav {
-    gap: 1rem;
-  }
-
+  /* Admin wears the same cell strip as the site nav: each section is a cell of
+     one grid, divided by hairlines, and the current one is cut out with an
+     accent seam. Cells own their own padding — .site-nav-bar has none. */
   .admin-wordmark {
     flex-shrink: 0;
-    font-size: 18px;
+    font-size: 15px;
     display: inline-flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.5rem;
+    padding: 0 20px;
+    border-right: 1px solid var(--line-hair);
     text-decoration: none;
   }
   .admin-tag {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.22em;
@@ -67,8 +68,7 @@
   .admin-sections {
     margin-left: auto;
     display: flex;
-    align-items: center;
-    gap: 2px;
+    align-items: stretch;
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
@@ -76,54 +76,67 @@
   .admin-sections::-webkit-scrollbar {
     display: none;
   }
+  .admin-sections :global(.nav-link) {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 0 16px;
+    border: none;
+    border-right: 1px solid var(--line-hair);
+    border-radius: 0;
+    letter-spacing: var(--tracking-label);
+    white-space: nowrap;
+  }
+  .admin-sections :global(.nav-link::after) {
+    display: none;
+  }
+  .admin-sections :global(.nav-link:first-child) {
+    border-left: 1px solid var(--line-hair);
+  }
+  .admin-sections :global(.nav-link:hover) {
+    background: var(--accent-tint-04);
+  }
+  .admin-sections :global(.nav-link[aria-current='page']) {
+    color: var(--text-primary);
+    background: var(--bg);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  .admin-sections :global(.nav-link[aria-current='page']::before) {
+    color: var(--accent);
+  }
 
   .view-site {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+    padding: 0 18px;
+    border-left: 1px solid var(--line-hair);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
+    letter-spacing: var(--tracking-label);
     color: var(--text-muted);
-    padding: 5px 10px;
-    border: 1px solid var(--card-border);
-    border-radius: 2px;
     text-decoration: none;
-    transition: color 120ms ease, border-color 120ms ease;
+    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   .view-site:hover {
     color: var(--accent);
-    border-color: var(--accent);
+    background: var(--accent-tint-04);
   }
 
+  /* The strip scrolls rather than wrapping on a phone — a second row would
+     double the height of a bar that is meant to be one 48px band. */
   @media (max-width: 640px) {
-    /* Brand + "View site" stay on the first row; the section nav wraps to a
-       full-width, horizontally-scrollable second row so all six sections stay
-       reachable (the site uses a burger here; a scroll strip suits a dense
-       settings area better and matches the sub-nav treatment below). */
-    .admin-top-nav {
-      flex-wrap: wrap;
-      row-gap: 0;
-    }
     .admin-wordmark {
-      font-size: 15px;
-      order: 1;
+      padding: 0 14px;
+    }
+    .admin-tag {
+      display: none;
     }
     .view-site {
-      order: 2;
-      margin-left: auto;
-      letter-spacing: 0.12em;
-    }
-    .admin-sections {
-      order: 3;
-      width: 100%;
-      margin-left: 0;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--divider);
+      padding: 0 12px;
     }
   }
 </style>

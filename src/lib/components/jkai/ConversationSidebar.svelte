@@ -425,8 +425,8 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    border-right: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-right: 1px solid var(--line-hair);
+    background: var(--surface-rail);
   }
 
   .rail-label {
@@ -443,7 +443,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     flex: none;
   }
   .sb-hd-btns {
@@ -498,7 +498,7 @@
   .search input {
     width: 100%;
     padding: 6px 22px 6px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     font-family: var(--font-mono);
@@ -667,7 +667,7 @@
     display: flex;
     gap: 1px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     padding: 1px;
     opacity: 0;
@@ -738,9 +738,9 @@
   /* One footer block: drafts, channel state, throughput. */
   .rail-foot {
     flex: none;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     padding: 10px 12px;
-    background: var(--bg-section);
+    background: var(--surface-rail);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -798,8 +798,8 @@
     width: 44px;
     flex: none;
     height: 100%;
-    border-right: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-right: 1px solid var(--line-hair);
+    background: var(--surface-rail);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -812,7 +812,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label);
@@ -838,7 +838,7 @@
   .rail-sep {
     width: 20px;
     height: 1px;
-    background: var(--divider);
+    background: var(--line-hair);
     margin: 2px 0;
   }
   .rail-dots {

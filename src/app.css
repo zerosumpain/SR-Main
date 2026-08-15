@@ -127,6 +127,57 @@
 
   /* Grain overlay */
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+
+  /* ============================================================
+     Instrument — the modernised layer (2026-08-15).
+
+     Palette is UNCHANGED. What this adds is structure and depth:
+     a tonal surface ladder, a hairline border scale, a small
+     elevation scale, and numeric type steps. Every token above is
+     kept — --divider and --card-border stay for back-compat, and
+     new work reaches for --line-hair / --line / --line-strong.
+     ============================================================ */
+
+  /* ——— Surface ladder ———
+     The old system had one card wash (rgba(26,16,8,.07)) doing every job:
+     rails, cards, headers and shells all landed on the same value, so nothing
+     read as being in front of anything else. These are opaque steps mixed from
+     the cream base, so stacked panels never compound transparency. */
+  --surface-shell: #e9dfcd;      /* app shell / page frame behind content */
+  --surface-rail: #e3d8c4;       /* side rails, sticky headers, footers */
+  --surface-rail-deep: #e0d4bf;  /* secondary rail (drive/intel right rail) */
+  --surface-card: #f3ebdd;       /* raised card ABOVE --bg (editorial register) */
+  --surface-sunken: rgba(26, 16, 8, 0.035); /* inset bands, section washes */
+
+  /* ——— Border scale ———
+     Replaces the 1px --divider / 2px --card-border pair. Cell grids read at
+     .10–.16; only page-title rules keep the old 2px solid ink. */
+  --line-hair: rgba(26, 16, 8, 0.1);
+  --line: rgba(26, 16, 8, 0.14);
+  --line-strong: rgba(26, 16, 8, 0.16);
+  --line-title: var(--text-primary); /* 2px, page headers only */
+
+  /* ——— Elevation ———
+     The base system had none. Warm, single-direction, and used ONLY on app
+     frames and floating layers (menus, modals, toasts) — never on cards,
+     buttons, rows or chips. */
+  --elev-frame: 0 18px 40px -32px rgba(26, 16, 8, 0.6);
+  --elev-pop: 0 1px 2px rgba(26, 16, 8, 0.05), 0 12px 28px -18px rgba(26, 16, 8, 0.45);
+
+  /* ——— Status ——— aligned with the existing --error/--success set. */
+  --status-ok: var(--accent-ink);
+  --status-run: var(--accent);
+  --status-fail: #b3261e;
+
+  /* ——— Numeric type steps ———
+     rem-based like the scale above, so a raised browser default still scales
+     them (WCAG 2.2 SC 1.4.4). */
+  --fs-display-hero: 6.5rem;  /* 104px — homepage hero, uppercase display */
+  --fs-num-xl: 5.5rem;        /* 88px  — hero BPM numeral */
+  --fs-num-lg: 3.375rem;      /* 54px  — ledger figures */
+  --fs-num-md: 1.4375rem;     /* 23px  — rail metric values */
+  --tracking-label: 0.14em;
+  --tracking-label-wide: 0.16em;
 }
 
 html {
@@ -425,6 +476,105 @@ a {
 .accent-strip {
   border-left: 3px solid var(--accent);
   padding-left: 1rem;
+}
+
+/* ============================================================
+   Instrument primitives — the three shapes the modernised
+   surfaces are built from. See the token block in :root.
+   ============================================================ */
+
+/* Every figure that can change in place is tabular — the ledger stops
+   shivering as numbers tick. */
+.num,
+.stat-val,
+.mini-val,
+.tr-meta,
+.chunk b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cell grid: the dominant new layout primitive. One border per edge, no gaps,
+   no rounding — used by the vitals rail, canvas stats, intel loop, drive table.
+   Column counts are set by the consumer; the phone rule below guarantees the
+   grid never needs a horizontal scroll. */
+.cellgrid {
+  display: grid;
+  border-top: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
+}
+.cellgrid > * {
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  padding: 15px 18px;
+  min-width: 0;
+}
+/* Responsive intent from the handoff: cell grids drop to two columns on a
+   tablet and never scroll sideways on a phone. Consumers that need a different
+   phone shape override .cellgrid themselves. */
+@media (max-width: 900px) {
+  .cellgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .cellgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cellgrid > * {
+    padding: 12px 13px;
+  }
+}
+
+/* App frame: the only element allowed elevation. */
+.frame {
+  background: var(--surface-shell);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sharp);
+  box-shadow: var(--elev-frame);
+  overflow: hidden;
+}
+
+/* Raised card (editorial register — blog, projects, decks). Still square. */
+.card-raised {
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  padding: 1rem 1rem 0.875rem;
+}
+
+/* Metric label — the mono/uppercase/tracked caption that sits above or beside
+   every figure in the new surfaces. Size is the 12px accessibility floor, not
+   the mock's 10px: see the type-scale note above. */
+.metric-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--text-ghost);
+  line-height: 1.2;
+}
+.metric-label.muted {
+  color: var(--text-muted);
+}
+.metric-label.accent {
+  color: var(--accent);
+}
+
+/* Metric value — mono, tabular, sized off the numeric steps. */
+.metric-val {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-num-md);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.metric-val.accent {
+  color: var(--accent);
+}
+.metric-val.ink {
+  color: var(--accent-ink);
 }
 
 /* Page navigation — subtle cross-fade via the View Transitions API.

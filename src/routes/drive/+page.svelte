@@ -285,6 +285,24 @@
     return name.split('/').pop() || name;
   }
 
+  /** The virtual folder a file sits in — everything before the last `/`. */
+  function folderOf(name: string): string {
+    const i = name.lastIndexOf('/');
+    return i === -1 ? '' : name.slice(0, i);
+  }
+
+  /** Table columns want a short stamp, not a full locale string. */
+  function fmtShortDate(d: string | Date): string {
+    const dt = typeof d === 'string' ? new Date(d) : d;
+    if (Number.isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
   async function refresh() {
     const res = await fetch('/api/files');
     if (res.ok) {
@@ -719,6 +737,8 @@
       </details>
     {/if}
 
+    <div class="drive-board">
+    <div class="drive-main">
     <!-- ——— Files ——— -->
     <section class="nm-sec">
       <div class="nm-sec-hd">
@@ -754,6 +774,19 @@
           </span>
         </div>
       </div>
+
+      <!-- One reading of the ER policy, used by folder tiles, folder rows and the
+           file table: full = accent, categories = petrol, off = ghost. -->
+      {#snippet erChip(path: string)}
+        {@const pol = policyFor(path)}
+        {#if !pol.included}
+          <span class="er-chip out">intel · off</span>
+        {:else if pol.categoryIds.length}
+          <span class="er-chip cats">intel · {pol.categoryIds.length} cat</span>
+        {:else}
+          <span class="er-chip full">intel · full</span>
+        {/if}
+      {/snippet}
 
       {#snippet permChips(f: FileRow)}
         <span class="perm-chip" class:on={f.permissions?.read !== false}>R</span>
@@ -908,11 +941,7 @@
               <div class="tile-name">{fol.name}</div>
               <div class="tile-meta">
                 <span>{fol.count} item{fol.count === 1 ? '' : 's'}</span>
-                {#if !policyFor(joinPath(currentPath, fol.name)).included}
-                  <span class="er-chip out">no ER</span>
-                {:else if policyFor(joinPath(currentPath, fol.name)).categoryIds.length}
-                  <span class="er-chip">{policyFor(joinPath(currentPath, fol.name)).categoryIds.length} cat</span>
-                {/if}
+                {@render erChip(joinPath(currentPath, fol.name))}
               </div>
             </div>
           {/each}
@@ -955,6 +984,18 @@
         </div>
       {:else}
         <div class="file-list" role="list">
+          <!-- Column heads, so the mono columns beneath them are readable as a
+               table rather than as five stacked meta strings. -->
+          <div class="fl-head" aria-hidden="true">
+            <span></span>
+            <span>Name</span>
+            <span>Folder</span>
+            <span class="num">Size</span>
+            <span>Updated</span>
+            <span>Intel</span>
+            <span>Perms</span>
+            <span></span>
+          </div>
           {#each subfolders as fol (fol.name)}
             <div
               class="folder-row"
@@ -965,13 +1006,11 @@
             >
               <svg class="folder-icon-sm" width="22" height="18" viewBox="0 0 46 38" fill="none" aria-hidden="true"><path d="M2 6a2 2 0 012-2h12l3.5 3.5H42a2 2 0 012 2V32a2 2 0 01-2 2H4a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.6"/></svg>
               <span class="folder-row-name">{fol.name}</span>
-              {#if !policyFor(joinPath(currentPath, fol.name)).included}
-                <span class="er-chip out">no ER</span>
-              {:else if policyFor(joinPath(currentPath, fol.name)).categoryIds.length}
-                <span class="er-chip">{policyFor(joinPath(currentPath, fol.name)).categoryIds.length} cat</span>
-              {/if}
+              <!-- Placed into the file table's own columns so a folder row reads
+                   across the same grid as the files under it. -->
               <span class="folder-row-count">{fol.count} item{fol.count === 1 ? '' : 's'}</span>
-              <button type="button" class="row-link danger" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
+              <span class="folder-row-er">{@render erChip(joinPath(currentPath, fol.name))}</span>
+              <button type="button" class="row-link danger folder-row-del" onclick={(e) => { e.stopPropagation(); deleteFolder(fol.name); }}>Delete</button>
             </div>
           {/each}
           {#each visibleFiles as f (f.id)}
@@ -991,23 +1030,19 @@
                   <input type="checkbox" checked={!!selected[f.id]} onchange={(e) => (selected[f.id] = e.currentTarget.checked)} />
                 </label>
                 <div class="file-main">
-                  <div class="file-title">
-                    <span class="file-name-text">{baseName(f.name)}</span>
-                    <span class="file-mime"><code>{f.mimeType}</code></span>
-                  </div>
+                  <span class="file-name-text" title={f.mimeType}>{baseName(f.name)}</span>
                   {#if f.description}
-                    <div class="file-desc">{f.description}</div>
+                    <span class="file-desc">{f.description}</span>
                   {/if}
-                  <div class="file-meta">
-                    <span>{fmtSize(f.sizeBytes)}</span>
-                    <span class="dot">·</span>
-                    <span>Updated {fmtDate(f.updatedAt)}</span>
-                    {#if f.uploadedBy}
-                      <span class="dot">·</span>
-                      <span>by {f.uploadedBy}</span>
-                    {/if}
-                  </div>
                 </div>
+                <span class="fr-folder" title={folderOf(f.name) || 'Drive root'}
+                  >/{folderOf(f.name)}</span
+                >
+                <span class="fr-size">{fmtSize(f.sizeBytes)}</span>
+                <span class="fr-updated" title={f.uploadedBy ? `by ${f.uploadedBy}` : undefined}
+                  >{fmtShortDate(f.updatedAt)}</span
+                >
+                <span class="fr-intel">{@render erChip(folderOf(f.name))}</span>
                 <div class="file-perms">{@render permChips(f)}</div>
                 <div class="file-actions">{@render fileActions(f)}</div>
               </div>
@@ -1017,8 +1052,11 @@
       {/if}
     </section>
 
-    <!-- ——— Knowledge bases (RAG "Interact using model") ——— -->
-    <section class="nm-sec">
+    </div>
+
+    <!-- ——— Ask your files: a rail, not a footnote under the table ——— -->
+    <aside class="drive-rail" aria-label="Ask your files">
+      <section class="nm-sec kb-sec">
       <div class="nm-sec-hd">
         <span class="sr-label-tight">Knowledge bases</span>
         <span class="nm-sec-meta">{collections.length} {collections.length === 1 ? 'base' : 'bases'}</span>
@@ -1051,7 +1089,9 @@
           knowledge base — then chat with your files and get answers cited from the source.
         </p>
       {/if}
-    </section>
+      </section>
+    </aside>
+    </div>
   </main>
 </div>
 
@@ -1135,18 +1175,49 @@
   }
   .drive-wrap {
     width: 100%;
-    max-width: 1100px;
+    max-width: 1440px;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
   }
 
+  /* Files on the left, "ask your files" on the right — the knowledge bases used
+     to sit under the table, which is where a thing goes when it is an
+     afterthought rather than the point. */
+  .drive-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .drive-main {
+    min-width: 0;
+  }
+  .drive-rail {
+    position: sticky;
+    top: 1rem;
+    min-width: 0;
+  }
+  .drive-rail .kb-sec {
+    margin-bottom: 0;
+    background: var(--surface-rail-deep);
+  }
+  /* Right rails collapse first. */
+  @media (max-width: 1180px) {
+    .drive-board {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .drive-rail {
+      position: static;
+    }
+  }
+
   code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
-    border-radius: 2px;
+    border-radius: var(--radius-sharp);
   }
 
   /* ——— Dropzone ——— */
@@ -1166,8 +1237,8 @@
     gap: 0.5rem;
     padding: 2.25rem 1.5rem;
     margin-bottom: 1.25rem;
-    background: var(--bg-section);
-    border: 2px dashed var(--card-border);
+    background: var(--surface-sunken);
+    border: 2px dashed var(--line-strong);
     color: var(--text-secondary);
     cursor: pointer;
     text-align: center;
@@ -1198,7 +1269,7 @@
   .dropzone.active .dz-title { color: var(--accent); }
   .dz-sub {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     color: var(--text-muted);
     display: inline-flex;
@@ -1223,7 +1294,7 @@
     gap: 0.4rem;
     margin-top: 0.85rem;
     padding-top: 0.85rem;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     width: 100%;
     max-width: 520px;
     justify-content: center;
@@ -1231,7 +1302,7 @@
   }
   .dz-perms-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.16em;
     color: var(--text-ghost);
@@ -1243,7 +1314,7 @@
     position: relative;
     height: 22px;
     background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     overflow: hidden;
     margin-bottom: 1rem;
   }
@@ -1261,7 +1332,7 @@
     display: block;
     padding: 4px 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -1270,7 +1341,7 @@
   }
   .fail-list {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
     padding: 6px 8px;
     background: var(--error-bg);
@@ -1279,10 +1350,10 @@
   }
   .fail-list summary { cursor: pointer; }
   .fail-list ul { margin: 6px 0 0 1.2rem; padding: 0; }
-  .fail-list code { font-size: 11px; }
+  .fail-list code { font-size: var(--fs-label-xs); }
   .err-line {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
     padding: 6px 8px;
     background: var(--error-bg);
@@ -1302,9 +1373,9 @@
     gap: 0.3rem;
     padding: 5px 10px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     cursor: pointer;
     user-select: none;
@@ -1332,13 +1403,13 @@
 
   .btn-ghost {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 6px 14px;
     background: transparent;
     color: var(--text-secondary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     cursor: pointer;
   }
   .btn-ghost:hover { border-color: var(--text-primary); color: var(--text-primary); }
@@ -1350,7 +1421,7 @@
     gap: 0.9rem;
     flex-wrap: wrap;
     padding: 0.5rem 0 0.75rem;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     margin-bottom: 0.6rem;
   }
   .select-all {
@@ -1358,7 +1429,7 @@
     align-items: center;
     gap: 0.4rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -1367,13 +1438,13 @@
   .select-all input { accent-color: var(--accent); cursor: pointer; }
   .sel-count {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
   }
   .sel-dl { padding: 5px 12px; }
   .sel-hint {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 
@@ -1382,33 +1453,151 @@
     padding: 1.5rem;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     font-style: italic;
-    border: 1px dashed var(--card-border);
+    border: 1px dashed var(--line-strong);
   }
-  .file-list { display: grid; gap: 0.6rem; }
+  /* The list is a mono table with hairline rows, not a stack of bordered cards:
+     one column per fact, so a folder of forty files can be read down a column
+     instead of parsed row by row. */
+  .file-list {
+    display: grid;
+    border-top: 1px solid var(--line-strong);
+  }
+  /* Explicit tracks on BOTH grids. They are separate elements, so any `auto`
+     track resolves against its own content and the head stops lining up with
+     the rows beneath it — which is exactly what happened. */
+  .fl-head,
   .file-card {
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px 104px;
     align-items: center;
-    gap: 1rem;
-    padding: 0.85rem 1rem;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
+    gap: 12px;
   }
-  .file-card:hover { border-color: var(--text-primary); }
+  .fl-head {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--line-strong);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-ghost);
+  }
+  .fl-head .num { text-align: right; }
+  .file-card {
+    position: relative;
+    padding: 9px 10px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line-hair);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    transition: background var(--t-fast) var(--ease-out);
+  }
+  /* Six action links are 390px of text — a track that wide leaves the name
+     column nothing and forces the table sideways. They ride over the row's
+     right edge on hover instead, the same way the grid tiles and the canvas
+     cards on this site already work. */
+  .file-list .file-actions {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    padding-left: 14px;
+    background: var(--bg);
+    opacity: 0;
+    transition: opacity var(--t-fast) var(--ease-out);
+  }
+  .file-card:hover .file-actions,
+  .file-card:focus-within .file-actions {
+    opacity: 1;
+  }
+  .file-card:hover .file-actions,
+  .file-card.sel .file-actions {
+    background: var(--surface-sunken);
+  }
+  /* No hover on touch: the actions take a row of their own instead of hiding. */
+  @media (hover: none) {
+    .file-list .file-actions {
+      position: static;
+      transform: none;
+      opacity: 1;
+      padding-left: 0;
+      background: none;
+      grid-column: 1 / -1;
+      margin-top: 6px;
+    }
+  }
+  .file-card:hover { background: var(--surface-sunken); }
   .file-card[draggable="true"] { cursor: grab; }
   .file-card[draggable="true"]:active { cursor: grabbing; }
   .file-card.sel {
-    border-color: var(--accent);
     background: var(--accent-tint-08);
   }
   .file-card.editing {
     grid-template-columns: 1fr;
-    background: var(--bg-section);
-    border-color: var(--accent);
+    background: var(--surface-sunken);
+    border: 1px solid var(--accent);
     padding: 1rem 1.1rem 1.15rem;
+  }
+  .fr-folder,
+  .fr-size,
+  .fr-updated {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+  .fr-size { text-align: right; }
+  .fr-intel { min-width: 0; }
+
+  /* Below the table's natural width the columns fold away, quietest first, so
+     the name always survives and nothing scrolls sideways. */
+  /* Columns fold away quietest-first. Perms go before Updated: the R/W/A/D
+     chips gate workflow nodes, which is not what you are reading a file list
+     for. */
+  @media (max-width: 1150px) {
+    .fl-head,
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px;
+    }
+    .fl-head > :nth-child(7),
+    .file-perms { display: none; }
+  }
+  @media (max-width: 980px) {
+    .fl-head,
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 104px;
+    }
+    .fl-head > :nth-child(5),
+    .fr-updated { display: none; }
+  }
+  @media (max-width: 820px) {
+    .fl-head,
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(140px, 1fr) 84px 104px;
+    }
+    .fl-head > :nth-child(3),
+    .fr-folder { display: none; }
+  }
+  @media (max-width: 620px) {
+    .fl-head { display: none; }
+    .file-card,
+    .folder-row {
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      row-gap: 5px;
+    }
+    .fr-size,
+    .fr-intel {
+      grid-column: 2;
+    }
   }
   .file-check {
     display: inline-flex;
@@ -1417,37 +1606,29 @@
   }
   .file-check input { accent-color: var(--accent); cursor: pointer; width: 15px; height: 15px; }
   .file-main { min-width: 0; }
-  .file-title {
+  .file-main {
     display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
   }
   .file-name-text {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
-    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .file-mime { font-size: 10px; }
   .file-desc {
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--text-secondary);
-    margin-top: 0.25rem;
+    font-size: var(--fs-label-xs);
+    line-height: 1.4;
+    color: var(--text-ghost);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .file-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    align-items: center;
-    margin-top: 0.35rem;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-muted);
-  }
-  .file-meta .dot { color: var(--text-ghost); }
 
   .file-perms {
     display: flex;
@@ -1461,10 +1642,10 @@
     width: 22px;
     height: 22px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-ghost);
   }
   .perm-chip.on {
@@ -1481,7 +1662,7 @@
   }
   .row-link {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -1510,7 +1691,7 @@
   .view-toggle {
     margin-left: auto;
     display: inline-flex;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     flex-shrink: 0;
   }
   .vt-btn {
@@ -1518,7 +1699,7 @@
     align-items: center;
     gap: 0.35rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -1528,7 +1709,7 @@
     cursor: pointer;
     transition: background 100ms ease, color 100ms ease;
   }
-  .vt-btn + .vt-btn { border-left: 1px solid var(--card-border); }
+  .vt-btn + .vt-btn { border-left: 1px solid var(--line-strong); }
   .vt-btn:hover { color: var(--text-primary); }
   .vt-btn.on { background: var(--accent); color: var(--bg); }
   .vt-btn svg { display: block; }
@@ -1548,7 +1729,7 @@
     gap: 0.4rem;
     padding: 1rem 0.75rem 0.85rem;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     text-align: center;
     min-width: 0;
   }
@@ -1580,7 +1761,7 @@
     max-width: 100%;
     max-height: 68px;
     object-fit: contain;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
   .tile-icon { color: var(--text-muted); }
   .tile-ext {
@@ -1589,7 +1770,7 @@
     left: 50%;
     transform: translateX(-50%);
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--bg);
@@ -1598,7 +1779,7 @@
   }
   .tile-name {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
     line-height: 1.3;
     word-break: break-word;
@@ -1615,11 +1796,11 @@
     align-items: center;
     gap: 0.3rem;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .tile-chips { display: inline-flex; gap: 2px; }
-  .tile-chips .perm-chip { width: 16px; height: 16px; font-size: 8px; }
+  .tile-chips .perm-chip { width: 16px; height: 16px; font-size: var(--fs-label-xs); }
   .tile-actions {
     position: absolute;
     left: 0;
@@ -1631,7 +1812,7 @@
     gap: 0.5rem;
     padding: 6px;
     background: var(--surface-elevated);
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     opacity: 0;
     visibility: hidden;
     transition: opacity 100ms ease;
@@ -1649,7 +1830,7 @@
   }
   .crumb {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.02em;
   }
   .crumb-link {
@@ -1672,7 +1853,7 @@
   .nf-input {
     width: 130px;
     padding: 4px 8px;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
   }
   .select-all.disabled { opacity: 0.4; }
   .move-wrap { position: relative; }
@@ -1685,7 +1866,7 @@
     max-height: 280px;
     overflow-y: auto;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     display: flex;
     flex-direction: column;
   }
@@ -1693,10 +1874,10 @@
     text-align: left;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     padding: 7px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     cursor: pointer;
     white-space: nowrap;
@@ -1712,8 +1893,8 @@
     align-items: center;
     gap: 0.4rem;
     padding: 1rem 0.75rem 0.85rem;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     text-align: center;
     cursor: pointer;
     min-width: 0;
@@ -1728,7 +1909,7 @@
     background: none;
     border: none;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1;
     color: var(--text-ghost);
     cursor: pointer;
@@ -1742,10 +1923,10 @@
     left: 5px;
     padding: 1px 5px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
     color: var(--text-ghost);
     opacity: 0;
@@ -1756,24 +1937,38 @@
   .folder-er:hover { color: var(--accent); border-color: var(--accent); }
 
   /* ER state on a folder, visible without opening the dialog. */
+  /* Whether a folder feeds the graph, in one chip: full = accent (it is all
+     going in), categories = petrol (some of it, deliberately), off = ghost. */
   .er-chip {
+    display: inline-block;
     font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.06em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 1px 5px;
-    border: 1px solid var(--accent-ink-tint-35, var(--card-border));
-    border-radius: var(--radius-sharp, 2px);
+    padding: 2px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    color: var(--text-ghost);
+    white-space: nowrap;
+  }
+  .er-chip.full {
+    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-08);
+    color: var(--accent);
+  }
+  .er-chip.cats {
+    border-color: var(--accent-ink-tint-35);
+    background: var(--accent-ink-tint-06);
     color: var(--accent-ink);
   }
   .er-chip.out {
-    border-color: var(--warn-border, var(--card-border));
-    color: var(--warn);
+    border-color: var(--line-strong);
+    color: var(--text-ghost);
   }
   .intel-notice {
     margin: 8px 0 0;
     padding: 7px 10px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     background: var(--accent-tint-04);
     border-left: 3px solid var(--accent);
@@ -1782,20 +1977,44 @@
   .folder-del:hover { color: var(--error); }
 
   .folder-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 28px minmax(140px, 1fr) 116px 84px 128px 104px 104px;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.7rem 1rem;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    gap: 12px;
+    padding: 9px 10px;
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--line-hair);
     cursor: pointer;
+    transition: background var(--t-fast) var(--ease-out);
   }
-  .folder-row:hover { border-color: var(--accent); }
+  .folder-row:hover { background: var(--accent-tint-04); }
+  .folder-row-count { grid-column: 5; }
+  .folder-row-er { grid-column: 6; min-width: 0; }
+  .folder-row-del { grid-column: 7; justify-self: start; }
+  @media (max-width: 1150px) {
+    .folder-row-del { grid-column: 6; justify-self: end; }
+    .folder-row-er { grid-column: 5; }
+    .folder-row-count { grid-column: 4; }
+  }
+  @media (max-width: 980px) {
+    .folder-row-del { grid-column: 5; }
+    .folder-row-er { grid-column: 4; }
+    .folder-row-count { grid-column: 3; }
+  }
+  @media (max-width: 820px) {
+    .folder-row-del { grid-column: 4; }
+    .folder-row-er { grid-column: 3; }
+    .folder-row-count { display: none; }
+  }
+  @media (max-width: 620px) {
+    .folder-row-er { grid-column: 2; }
+    .folder-row-del { grid-column: 3; justify-self: end; }
+  }
   .folder-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .folder-icon-sm { color: var(--accent); flex-shrink: 0; }
   .folder-row-name {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--text-primary);
     flex: 1;
@@ -1804,14 +2023,14 @@
   }
   .folder-row-count {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
 
   /* ——— Onboarding ——— */
   .onboard {
     position: relative;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: linear-gradient(180deg, var(--accent-tint-08, color-mix(in srgb, var(--accent) 6%, transparent)), transparent);
     padding: 20px 22px 18px;
     margin-bottom: 1.1rem;
@@ -1820,18 +2039,18 @@
     position: absolute;
     top: 10px;
     right: 12px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     padding: 3px 7px;
   }
   .onboard-x:hover { color: var(--accent); border-color: var(--accent); }
   .onboard-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -1854,18 +2073,18 @@
   }
   .onboard-num {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-ghost);
   }
   .onboard-step strong {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
   }
   .onboard-step p {
     margin: 2px 0 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-secondary);
   }
@@ -1884,7 +2103,7 @@
     gap: 6px;
     padding: 4px 8px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     min-width: 180px;
   }
   .drive-search:focus-within { border-color: var(--accent); }
@@ -1895,7 +2114,7 @@
     border: none;
     background: none;
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
   }
   .search-input:focus { outline: none; }
@@ -1904,7 +2123,7 @@
     background: none;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
     padding: 0 2px;
   }
@@ -1930,7 +2149,7 @@
     gap: 1rem;
     padding: 0.6rem 0.9rem;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
   .kb-card:hover { border-color: var(--accent); }
   .kb-main {
@@ -1945,7 +2164,7 @@
   }
   .kb-name {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -1957,7 +2176,7 @@
     gap: 0.35rem;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .kb-meta .dot { color: var(--text-ghost); }
@@ -1973,7 +2192,7 @@
   }
   .kb-empty {
     margin: 0.2rem 0 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-secondary);
   }

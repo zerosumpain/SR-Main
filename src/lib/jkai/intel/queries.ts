@@ -7,6 +7,7 @@ import {
   intelNoteEntities,
   intelTimelineEvents,
   intelAlerts,
+  intelDossiers,
 } from '$lib/db/schema';
 import { desc, eq, sql, isNull, asc, and } from 'drizzle-orm';
 
@@ -204,7 +205,14 @@ export async function getEntityDetail(id: string) {
 }
 
 export async function getIntelStats() {
-  const [[noteCount], [entityCount], [riskCount], [pendingReviewCount]] = await Promise.all([
+  const [
+    [noteCount],
+    [entityCount],
+    [riskCount],
+    [pendingReviewCount],
+    [unconnectedCount],
+    [dossierCount],
+  ] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(intelNotes),
     db.select({ count: sql<number>`count(*)::int` }).from(intelEntities).where(isNull(intelEntities.mergedIntoId)),
     db
@@ -216,6 +224,27 @@ export async function getIntelStats() {
       .select({ count: sql<number>`count(*)::int` })
       .from(intelEntities)
       .where(and(eq(intelEntities.confirmed, false), eq(intelEntities.confidence, 'low'), isNull(intelEntities.mergedIntoId))),
+    // The `03 repair` reading: live entities with no edge in either direction.
+    // Fragments that never joined up are the thing that stage exists to fix.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(intelEntities)
+      .where(
+        and(
+          isNull(intelEntities.mergedIntoId),
+          sql`not exists (
+            select 1 from intel_relationships r
+            where r.source_entity_id = ${intelEntities.id}
+               or r.target_entity_id = ${intelEntities.id}
+          )`,
+        ),
+      ),
+    // Open case files only — a closed dossier is not part of this month's
+    // working set, which is what `05 collect` is counting.
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(intelDossiers)
+      .where(eq(intelDossiers.status, 'open')),
   ]);
 
   return {
@@ -223,6 +252,8 @@ export async function getIntelStats() {
     entityCount: entityCount.count,
     riskCount: riskCount.count,
     pendingReviewCount: pendingReviewCount.count,
+    unconnectedCount: unconnectedCount.count,
+    dossierCount: dossierCount.count,
   };
 }
 

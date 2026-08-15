@@ -105,6 +105,25 @@
     return `${Math.round(v * 100)}%`;
   }
 
+  // ——— Right rail ————————————————————————————————————————————————
+  // Three readings the board could not previously give: how much ran and how
+  // much of it broke, what the estate is made of, and what fires next.
+  const runsByDay = $derived(stats.runsByDay ?? []);
+  const runsPeak = $derived(Math.max(1, ...runsByDay.map((d) => d.total)));
+  const runsFailed7d = $derived(runsByDay.reduce((n, d) => n + d.failed, 0));
+  const nodeMix = $derived(stats.nodeMix ?? []);
+  const nodeMixPeak = $derived(Math.max(1, ...nodeMix.map((m) => m.count)));
+  const nextScheduled = $derived(stats.nextScheduled ?? []);
+
+  function formatClock(iso: string) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '--:--';
+    const sameDay = d.toDateString() === new Date().toDateString();
+    return sameDay
+      ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   async function createCanvas(e: Event) {
     e.preventDefault();
     const slug = previewSlug;
@@ -214,14 +233,16 @@
         <code>LLM</code> / <code>parse</code> / <code>intel</code> / <code>agent</code> nodes.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <a class="back-link" href="/jkai">JKAI</a>
   </header>
 
+  <div class="board">
+  <div class="board-main">
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Overview</span>
     </div>
-    <div class="stats">
+    <div class="cellgrid stats">
       <div class="stat">
         <div class="stat-val">{stats.canvasCount}</div>
         <div class="stat-lbl">canvases</div>
@@ -239,7 +260,9 @@
         <div class="stat-lbl">runs · 7d</div>
       </div>
       <div class="stat">
-        <div class="stat-val">{formatPct(stats.successRate7d)}</div>
+        <!-- Petrol is the "system is fine" colour, so the success rate carries
+             it rather than the orange that means live. -->
+        <div class="stat-val ok">{formatPct(stats.successRate7d)}</div>
         <div class="stat-lbl">success · 7d</div>
       </div>
     </div>
@@ -328,7 +351,7 @@
       <div class="empty">No canvases yet. Create one above.</div>
     {:else}
       {#each groupedCanvases as group (group.name)}
-        <div class="bucket">
+        <div class="bucket" class:failing={group.name === FAILING_BUCKET}>
           <div class="bucket-hd">
             <span class="bucket-name">{group.name}</span>
             <span class="bucket-count">{group.items.length}</span>
@@ -408,11 +431,83 @@
       {/each}
     {/if}
   </section>
+  </div>
+
+  <aside class="board-rail" aria-label="Estate readings">
+    <div class="rail-cell">
+      <div class="rail-hd"><span class="metric-label">Runs · 7 days</span></div>
+      {#if runsByDay.length > 0}
+        <div class="hist" role="img" aria-label="{stats.runs7d} runs over seven days, {runsFailed7d} failed">
+          {#each runsByDay as d (d.date)}
+            <div class="hist-col" title="{d.label}: {d.total} run{d.total === 1 ? '' : 's'}{d.failed > 0 ? `, ${d.failed} failed` : ''}">
+              <div
+                class="hist-bar"
+                class:failed={d.failed > 0}
+                style="height: {Math.round((d.total / runsPeak) * 100)}%"
+              ></div>
+            </div>
+          {/each}
+        </div>
+        <div class="hist-labels" aria-hidden="true">
+          {#each runsByDay as d (d.date)}<span>{d.label.slice(0, 1)}</span>{/each}
+        </div>
+        <p class="rail-note">
+          {stats.runs7d} run{stats.runs7d === 1 ? '' : 's'}
+          {#if runsFailed7d > 0}<span class="rail-sep">·</span><span class="bad">{runsFailed7d} failed</span>{/if}
+        </p>
+      {:else}
+        <p class="rail-note">Nothing has run this week.</p>
+      {/if}
+    </div>
+
+    <div class="rail-cell">
+      <div class="rail-hd"><span class="metric-label">Node mix</span></div>
+      {#if nodeMix.length > 0}
+        <div class="mix">
+          {#each nodeMix as m (m.kind)}
+            <div class="mix-row">
+              <span class="mix-name">{m.kind}</span>
+              <span class="mix-track"
+                ><span
+                  class="mix-fill"
+                  class:ink={m.kind === 'intel'}
+                  class:lead={m === nodeMix[0]}
+                  style="width: {Math.round((m.count / nodeMixPeak) * 100)}%"
+                ></span></span
+              >
+              <span class="mix-n">{m.count}</span>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="rail-note">No nodes yet.</p>
+      {/if}
+    </div>
+
+    <div class="rail-cell">
+      <div class="rail-hd"><span class="metric-label">Next scheduled</span></div>
+      {#if nextScheduled.length > 0}
+        <ul class="sched">
+          {#each nextScheduled as n (n.slug + n.at)}
+            <li>
+              <a href={`/jkai/canvas/${n.slug}`}>
+                <span class="sched-at">{formatClock(n.at)}</span>
+                <span class="sched-name">{n.title}</span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="rail-note">Nothing scheduled.</p>
+      {/if}
+    </div>
+  </aside>
+  </div>
 </div>
 
 <style>
   .wrap {
-    max-width: 980px;
+    max-width: 1320px;
     margin: 2rem auto 4rem;
     padding: 0 1.5rem;
     color: var(--text-primary);
@@ -476,8 +571,8 @@
   .back-link:hover { text-decoration: underline; }
 
   .nm-sec {
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     padding: 1rem 1.1rem 1.15rem;
     margin-bottom: 1.25rem;
   }
@@ -487,7 +582,7 @@
     gap: 0.75rem;
     margin-bottom: 0.9rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .sr-label-tight {
     font-family: var(--font-mono);
@@ -516,6 +611,192 @@
     cursor: pointer;
   }
 
+  /* ——— Board: work on the left, readings on the right ——— */
+  .board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .board-main {
+    min-width: 0;
+  }
+  .board-rail {
+    position: sticky;
+    top: 1rem;
+    background: var(--surface-rail-deep);
+    border: 1px solid var(--line-strong);
+    min-width: 0;
+  }
+  .rail-cell {
+    padding: 14px 16px 16px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .rail-cell:last-child {
+    border-bottom: none;
+  }
+  .rail-hd {
+    margin-bottom: 10px;
+  }
+  .rail-note {
+    margin: 10px 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .rail-note .bad {
+    color: var(--status-fail);
+  }
+  .rail-sep {
+    opacity: 0.4;
+    margin: 0 0.5ch;
+  }
+
+  /* Runs histogram — one column per day, failures repainted in the fail hue so
+     a bad day is visible without reading the number. */
+  .hist {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 60px;
+  }
+  .hist-col {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+    min-width: 0;
+  }
+  .hist-bar {
+    width: 100%;
+    min-height: 2px;
+    background: rgba(26, 16, 8, 0.2);
+  }
+  .hist-bar.failed {
+    background: var(--status-fail);
+  }
+  .hist-labels {
+    display: flex;
+    gap: 4px;
+    margin-top: 5px;
+  }
+  .hist-labels span {
+    flex: 1;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+
+  /* Node mix — the commonest kind takes the accent, intel takes petrol as the
+     second series, everything else stays ink. */
+  .mix {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .mix-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .mix-name {
+    width: 58px;
+    flex: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mix-track {
+    flex: 1;
+    height: 4px;
+    min-width: 0;
+    background: var(--line);
+  }
+  .mix-fill {
+    display: block;
+    height: 100%;
+    background: rgba(26, 16, 8, 0.35);
+  }
+  .mix-fill.lead {
+    background: var(--accent);
+  }
+  .mix-fill.ink {
+    background: var(--accent-ink);
+  }
+  .mix-n {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+
+  .sched {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .sched a {
+    display: flex;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .sched a:hover .sched-name {
+    color: var(--accent);
+  }
+  .sched-at {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  .sched-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.2s var(--ease-out);
+  }
+
+  /* Responsive intent: the right rail collapses first — below 1080px it drops
+     under the board rather than squeezing the canvas grid. */
+  @media (max-width: 1080px) {
+    .board {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .board-rail {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .rail-cell {
+      border-bottom: none;
+      border-right: 1px solid var(--line-hair);
+    }
+    .rail-cell:last-child {
+      border-right: none;
+    }
+  }
+  @media (max-width: 720px) {
+    .board-rail {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .rail-cell {
+      border-right: none;
+      border-bottom: 1px solid var(--line-hair);
+    }
+    .rail-cell:last-child {
+      border-bottom: none;
+    }
+  }
+
   /* ——— Buckets ——— */
   .bucket { margin-bottom: 1.1rem; }
   .bucket:last-child { margin-bottom: 0; }
@@ -525,8 +806,13 @@
     gap: 0.6rem;
     margin-bottom: 0.55rem;
     padding-bottom: 0.35rem;
-    border-bottom: 1px dashed var(--card-border);
+    border-bottom: 1px dashed var(--line-strong);
   }
+  .bucket.failing .bucket-hd {
+    border-bottom-style: solid;
+    border-bottom-color: var(--line-strong);
+  }
+  .bucket.failing .bucket-name { color: var(--accent); }
   .bucket-name {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -542,37 +828,32 @@
   /* Pushed to the far end of the header row; typography comes from .row-link. */
   .bucket-doctor { margin-left: auto; }
 
-  /* ——— Stats ——— */
+  /* ——— Stats ——— five cells of one grid, not five boxes with gaps. */
   .stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1px;
-    background: var(--card-border);
-    border: 1px solid var(--card-border);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    background: var(--bg);
   }
   .stat {
-    padding: 0.85rem 1rem;
-    background: var(--bg);
     display: flex;
     flex-direction: column;
     gap: 4px;
-    min-width: 0;
   }
   .stat-val {
     font-family: var(--font-mono);
-    font-size: 1.25rem;
+    font-size: var(--fs-num-md);
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
     line-height: 1.1;
+  }
+  .stat-val.ok {
+    color: var(--status-ok);
   }
   .stat-lbl {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: var(--tracking-label);
     color: var(--text-muted);
-  }
-  @media (max-width: 640px) {
-    .stats { grid-template-columns: repeat(2, 1fr); }
   }
 
   /* ——— Create form ——— */
@@ -587,8 +868,8 @@
     font-family: var(--font-mono);
     font-size: var(--fs-body);
     color: var(--text-primary);
-    background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     padding: 7px 10px;
     outline: none;
   }
@@ -641,7 +922,7 @@
     font-size: var(--fs-label);
     color: var(--text-ghost);
     font-style: italic;
-    border: 1px dashed var(--card-border);
+    border: 1px dashed var(--line-strong);
   }
 
   /* ——— Canvas grid ——— */
@@ -655,11 +936,18 @@
     display: flex;
     flex-direction: column;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     min-height: 140px;
-    transition: border-color 80ms ease;
+    transition: border-color 0.2s var(--ease-out);
   }
   .canvas-card:hover { border-color: var(--text-primary); }
+  /* The bucket that needs a human: accent border and the 8% fill, so a broken
+     canvas is the one thing on the board that is coloured. */
+  .bucket.failing .canvas-card {
+    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-08);
+  }
+  .bucket.failing .card-actions { background: transparent; }
 
   .card-link {
     flex: 1;
@@ -711,8 +999,8 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    background: rgba(26, 16, 8, 0.04);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -761,7 +1049,7 @@
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     padding-top: 0.35rem;
-    border-top: 1px dashed var(--card-border);
+    border-top: 1px dashed var(--line);
     display: flex;
     justify-content: space-between;
     gap: 0.5rem;
@@ -774,10 +1062,21 @@
     background: var(--text-ghost);
     display: inline-block;
   }
-  .status-dot[data-status='completed'] { background: var(--success); }
-  .status-dot[data-status='failed'] { background: var(--error); }
-  .status-dot[data-status='running'] { background: var(--accent); }
+  .status-dot[data-status='completed'] { background: var(--status-ok); }
+  .status-dot[data-status='failed'],
+  .status-dot[data-status='completed_with_errors'] { background: var(--status-fail); }
+  .status-dot[data-status='running'] {
+    background: var(--status-run);
+    animation: canvas-live 1.5s ease-in-out infinite;
+  }
   .status-dot[data-status='pending'] { background: var(--text-muted); }
+  @keyframes canvas-live {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status-dot[data-status='running'] { animation: none; }
+  }
 
   /* Delete as discreet row-link in corner, matches /drive */
   .row-link {
