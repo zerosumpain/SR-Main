@@ -443,8 +443,11 @@
     color: var(--text-ghost);
     white-space: nowrap;
   }
+  /* A backlog above its warnAbove threshold. Accent, not --warn: on this
+     palette burnt orange IS "needs you", and the amber read as a third status
+     colour nothing else on the surface used. */
   .menu-meta.warn {
-    color: var(--warn);
+    color: var(--accent);
   }
 
   .back-chip {

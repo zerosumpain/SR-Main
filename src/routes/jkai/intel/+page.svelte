@@ -28,6 +28,7 @@
   import EntityHoverCard from '$lib/components/intel/EntityHoverCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
+  import { SURFACES } from '$lib/components/intel/workbench';
   import { entityHover } from '$lib/components/intel/entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import type {
@@ -679,6 +680,68 @@
       .map((c) => ({ ...c, reach: reachByKey.get(c.key) ?? 0 }))
       .sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0));
   });
+
+  /**
+   * The loop as six cells — one per stage, not one per surface.
+   *
+   * `04 explore` has four surfaces in SURFACES (Graph, Entities, Timeline,
+   * Recall); the loop is about stages, so they collapse into one cell that
+   * links to the Graph and counts entities. The stage label, the question and
+   * `warnAbove` all come from workbench.ts, which is the single place the
+   * wording of "what is this FOR" lives.
+   */
+  const LOOP_STAGES = ['01 capture', '02 triage', '03 repair', '04 explore', '05 collect', '06 act'];
+  const loopCounts = $derived({
+    notes: data.stats.noteCount,
+    pending: data.stats.pendingReviewCount,
+    unconnected: data.stats.unconnectedCount,
+    entities: data.stats.entityCount,
+    dossiers: data.stats.dossierCount,
+    alerts: data.recentAlerts.length,
+  } as Record<string, number>);
+
+  const LOOP_CELLS = $derived(
+    LOOP_STAGES.map((stage) => {
+      const surface = SURFACES.find((sfc) => sfc.stage === stage)!;
+      const value = surface.count ? (loopCounts[surface.count] ?? 0) : (loopCounts.entities ?? 0);
+      return {
+        stage,
+        label: surface.label.toLowerCase(),
+        href: surface.href,
+        question: surface.question,
+        value,
+        // A backlog, not a statistic — the one thing in the loop that is allowed
+        // to be orange.
+        warn: surface.warnAbove !== undefined && value > surface.warnAbove,
+        // Petrol for the collected set: it is the "this is in hand" reading.
+        ink: stage === '05 collect',
+      };
+    }),
+  );
+
+  function relDay(iso: string | Date): string {
+    const then = typeof iso === 'string' ? Date.parse(iso) : iso.getTime();
+    if (!Number.isFinite(then)) return '';
+    const mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 60) return `${Math.max(1, mins)}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    return days === 1 ? 'yesterday' : `${days}d ago`;
+  }
+
+  function shortDate(d: string): string {
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return d;
+    return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
+  }
+
+  /** Within a week — the timeline's one accent. */
+  function isSoon(d: string): boolean {
+    const parsed = Date.parse(d);
+    if (!Number.isFinite(parsed)) return false;
+    return parsed - Date.now() < 7 * 24 * 60 * 60 * 1000;
+  }
 </script>
 
 <JkaiPageTitle title="INTEL" />
@@ -687,7 +750,7 @@
   <CommissionBar busy={!!busyId} onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')} />
 
   <!-- Vital signs -->
-  <div class="tiles">
+  <div class="tiles cellgrid">
     <a class="tile" class:narrowed href="/jkai/intel/entities">
       <span class="n">{entityCount ?? data.stats.entityCount}</span>
       <span class="l">{narrowed ? 'Entities here' : 'Entities'}</span>
@@ -731,6 +794,23 @@
     </a>
   </div>
 
+  <!-- The loop, stated once. Six cells: where you are, how much is waiting, and
+       what the stage is FOR — the question strings come from workbench.ts, so
+       the nav and this grid can never drift apart. -->
+  <section class="loop cellgrid" aria-label="The intel loop">
+    {#each LOOP_CELLS as cell (cell.stage + cell.label)}
+      <a class="loop-cell" href={cell.href}>
+        <div class="loop-top">
+          <span class="metric-label" class:accent={cell.warn}>{cell.stage} · {cell.label}</span>
+          <span class="loop-n" class:accent={cell.warn} class:ink={cell.ink}>{cell.value}</span>
+        </div>
+        <p class="loop-q">{cell.question}</p>
+      </a>
+    {/each}
+  </section>
+
+  <div class="intel-board">
+  <div class="board-main">
   <!-- Network explorer -->
   <section class="explorer">
     <aside class="rail">
@@ -1111,6 +1191,70 @@
       {/if}
     {/if}
   </section>
+  </div>
+
+  <!-- Signals: what came looking for you, what is coming, what was read last.
+       All three were already loaded and only the alert COUNT was being shown. -->
+  <aside class="signals" aria-label="Signals">
+    <div class="sig-cell">
+      <div class="sig-hd">
+        <span class="metric-label">Alerts · unprompted</span>
+        <a class="sig-more" href="/jkai/intel/alerts">All →</a>
+      </div>
+      {#if data.recentAlerts.length > 0}
+        <ul class="sig-list">
+          {#each data.recentAlerts as a (a.id)}
+            <!-- The 3px left border encodes WHERE it came from, so the source
+                 is legible before the sentence is read. -->
+            <li class="alert-row" data-sig={a.significance}>
+              <span class="alert-txt">{a.title}</span>
+              <span class="alert-meta">{a.type} · {relDay(a.createdAt)}</span>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">Nothing has come looking for you.</p>
+      {/if}
+    </div>
+
+    <div class="sig-cell">
+      <div class="sig-hd"><span class="metric-label">Upcoming · timeline</span></div>
+      {#if data.upcomingTimeline.length > 0}
+        <ul class="sig-list">
+          {#each data.upcomingTimeline as e (e.id)}
+            <li class="tl-row">
+              <span class="tl-date" class:soon={isSoon(e.date)}>{shortDate(e.date)}</span>
+              <span class="tl-txt">{e.title}</span>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">Nothing dated ahead.</p>
+      {/if}
+    </div>
+
+    <div class="sig-cell">
+      <div class="sig-hd">
+        <span class="metric-label">Recent notes</span>
+        <a class="sig-more" href="/jkai/intel/notes">All →</a>
+      </div>
+      {#if data.recentNotes.length > 0}
+        <ul class="sig-list">
+          {#each data.recentNotes as n (n.id)}
+            <li class="note-row">
+              <a href="/jkai/intel/notes">{n.title}</a>
+              <span class="note-meta"
+                >{n.source} · {n.entityCount} entit{n.entityCount === 1 ? 'y' : 'ies'}</span
+              >
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">No notes yet.</p>
+      {/if}
+    </div>
+  </aside>
+  </div>
 </div>
 
 <!-- The same card chat uses. Portalled to <body>, so nothing on this page can
@@ -1150,31 +1294,228 @@
     box-sizing: border-box;
   }
 
-  /* ── Tiles ─────────────────────────────────────────────────────────────── */
+  /* ── Tiles ── one cell grid, not a row of rounded cards with gaps. ─────── */
   .tiles {
-    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-    gap: 8px;
     flex: none;
+    background: var(--bg);
   }
-  .tile {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
-    padding: 8px 12px;
+  .tiles > .tile {
+    padding: 10px 13px;
     display: flex;
     flex-direction: column;
     gap: 1px;
     text-decoration: none;
     color: inherit;
-    transition: border-color var(--t-fast) var(--ease-out);
+    transition: background var(--t-fast) var(--ease-out);
   }
   a.tile:hover {
-    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-04);
   }
   .tile.warn {
-    border-color: var(--warn-border);
     background: var(--warn-bg);
+  }
+
+  /* ── The loop ── six stages, each saying what it is for. ───────────────── */
+  .loop {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    flex: none;
+    background: var(--bg);
+  }
+  .loop-cell {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--t-fast) var(--ease-out);
+  }
+  .loop-cell:hover {
+    background: var(--accent-tint-04);
+  }
+  .loop-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .loop-n {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  /* A backlog above its warnAbove, not a statistic — the one orange thing. */
+  .loop-n.accent {
+    color: var(--accent);
+  }
+  .loop-n.ink {
+    color: var(--accent-ink);
+  }
+  .loop-q {
+    margin: 8px 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  @media (max-width: 900px) {
+    .loop {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 560px) {
+    .loop {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ── Board + signals rail ─────────────────────────────────────────────── */
+  .intel-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 12px;
+    align-items: start;
+    min-width: 0;
+  }
+  .board-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .signals {
+    background: var(--surface-rail-deep);
+    border: 1px solid var(--line-strong);
+    min-width: 0;
+  }
+  .sig-cell {
+    padding: 13px 15px 15px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .sig-cell:last-child {
+    border-bottom: none;
+  }
+  .sig-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sig-more {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .sig-more:hover {
+    color: var(--accent-hover);
+  }
+  .sig-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sig-none {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+
+  /* Alerts: the left border says where it came from. High significance takes
+     the accent, everything else the petrol second series. */
+  .alert-row {
+    padding-left: 10px;
+    border-left: 3px solid var(--accent-ink);
+  }
+  .alert-row[data-sig='high'] {
+    border-left-color: var(--accent);
+  }
+  .alert-row[data-sig='low'] {
+    border-left-color: transparent;
+  }
+  .alert-txt {
+    display: block;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-primary);
+  }
+  .alert-meta,
+  .note-meta {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+
+  .tl-row {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .tl-date {
+    color: var(--text-ghost);
+    font-variant-numeric: tabular-nums;
+  }
+  .tl-date.soon {
+    color: var(--accent);
+  }
+  .tl-txt {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .note-row a {
+    font-size: var(--fs-label);
+    line-height: 1.4;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .note-row a:hover {
+    color: var(--accent);
+  }
+
+  /* Right rails collapse first: below 1280px the signals drop under the board
+     as a 3-up strip, and to one column on a phone. */
+  @media (max-width: 1280px) {
+    .intel-board {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .signals {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .sig-cell {
+      border-bottom: none;
+      border-right: 1px solid var(--line-hair);
+    }
+    .sig-cell:last-child {
+      border-right: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .signals {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .sig-cell {
+      border-right: none;
+      border-bottom: 1px solid var(--line-hair);
+    }
+    .sig-cell:last-child {
+      border-bottom: none;
+    }
   }
   /* A tile showing a filtered number is marked, so a small figure reads as
      "narrowed" rather than "the graph shrank". The label says so too; this is
