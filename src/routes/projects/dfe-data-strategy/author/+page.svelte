@@ -134,21 +134,21 @@
     text-align: left;
   }
   .title-btn .pen {
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.35);
   }
   .title-btn:hover .pen {
     color: var(--accent-ink);
   }
   .title-in {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: clamp(22px, 3.2vw, 32px);
     letter-spacing: -0.02em;
     color: var(--ink);
     background: rgba(255, 255, 255, 0.7);
     border: 1px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 2px 10px;
     width: min(640px, 90vw);
   }
@@ -159,12 +159,12 @@
   }
   .au-tab {
     position: relative;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     padding: 8px 16px;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     color: var(--ink);
     cursor: pointer;
@@ -195,8 +195,8 @@
     top: -7px;
     right: -6px;
     font-style: normal;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     background: #b04a2f;
     color: #fff;
@@ -222,7 +222,7 @@
   }
   .sec-title {
     margin: 0 0 8px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 21px;
     font-weight: 600;
     color: var(--ink);

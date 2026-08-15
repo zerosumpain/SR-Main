@@ -69,17 +69,17 @@
   .grid { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .head { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(var(--cols), minmax(96px, 1fr));
     gap: 6px; align-items: end; margin-bottom: 4px; }
-  .h-corner { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em;
+  .h-corner { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: rgba(28,22,17,0.4); padding-bottom: 4px; }
   .h-col { display: flex; flex-direction: column; gap: 1px; text-align: center;
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.16);
-    border-bottom: 3px solid var(--tone); border-radius: var(--radius-round);
+    border-bottom: 3px solid var(--tone); border-radius: var(--radius-sharp);
     padding: 7px 8px; cursor: pointer; transition: background 0.13s, opacity 0.13s; }
   .h-col:hover { background: rgba(255,255,255,0.9); }
   .h-col.on { background: color-mix(in srgb, var(--tone) 14%, transparent); }
   .h-col.dim { opacity: 0.4; }
-  .h-col b { font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.2; }
-  .h-col em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 8.5px;
+  .h-col b { font-size: var(--fs-label-xs); font-weight: 600; color: var(--text-primary); line-height: 1.2; }
+  .h-col em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.45); }
 
   .row { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(var(--cols), minmax(96px, 1fr));
@@ -89,31 +89,31 @@
     transition: background 0.12s, border-color 0.12s; }
   .row:hover { background: rgba(255,255,255,0.85); }
   .row.sel { border-color: rgba(28,22,17,0.28); background: rgba(255,255,255,0.95); }
-  .r-lab { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px;
+  .r-lab { display: flex; align-items: baseline; gap: 7px; font-size: var(--fs-label);
     color: var(--text-primary); min-width: 0; }
-  .r-gate { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 8.5px;
+  .r-gate { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; white-space: nowrap;
     border-radius: var(--radius-pill); background: rgba(176,137,42,0.18); color: #8a6a1f; }
 
-  .cell { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  .cell { text-align: center; font-family: var(--font-mono); font-size: var(--fs-label);
     color: rgba(28,22,17,0.2); transition: opacity 0.13s; }
   .cell.yes { color: var(--tone); }
   .cell.dim { opacity: 0.25; }
 
   .read { border: 1px solid rgba(28,22,17,0.16); border-left: 3px solid var(--tone, #5a6b7a);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(255,255,255,0.55); padding: 11px 14px; min-width: 0; }
-  .r-kick { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .r-kick { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--tone, #5a6b7a); margin-bottom: 4px; }
-  .r-strap { margin: 0 0 6px; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600;
+  .r-strap { margin: 0 0 6px; font-family: var(--fs-serif); font-size: var(--fs-body-sm); font-weight: 600;
     line-height: 1.3; color: var(--text-primary); max-width: 76ch; }
-  .r-why { margin: 0 0 5px; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
+  .r-why { margin: 0 0 5px; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
   .r-why:last-child { margin-bottom: 0; }
   .r-why b { color: var(--text-primary); }
 
   @media (max-width: 640px) {
     .head, .row { grid-template-columns: 1fr repeat(var(--cols), 40px); gap: 4px; }
-    .h-col b { font-size: 10px; }
+    .h-col b { font-size: var(--fs-label-xs); }
     .h-col em { display: none; }
   }
 </style>

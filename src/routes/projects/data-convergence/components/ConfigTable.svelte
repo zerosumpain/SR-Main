@@ -283,7 +283,7 @@
 <style>
   .cfg {
     color: var(--ink);
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: var(--font-body);
   }
   section { margin-bottom: 26px; }
   header {
@@ -293,21 +293,21 @@
     margin-bottom: 10px;
   }
   h3 {
-    font-family: 'Fraunces', serif;
-    font-size: 16px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body);
     font-weight: 500;
     margin: 0;
   }
   .add-wrap { position: relative; }
   .add {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     background: rgba(255, 255, 255, 0.4);
     color: var(--ink);
     border: 1px dashed rgba(28, 22, 17, 0.35);
     padding: 6px 10px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     text-transform: uppercase;
   }
@@ -318,7 +318,7 @@
     right: 0;
     background: var(--paper);
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     min-width: 280px;
     z-index: 5;
     padding: 4px;
@@ -332,14 +332,14 @@
     border: none;
     background: transparent;
     color: var(--ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: inherit;
     cursor: pointer;
     text-align: left;
   }
   .add-item:hover { background: rgba(28, 22, 17, 0.07); }
-  .add-label { font-weight: 500; font-size: 12.5px; }
-  .add-desc { font-size: 11px; color: rgba(28, 22, 17, 0.6); margin-top: 2px; }
+  .add-label { font-weight: 500; font-size: var(--fs-label); }
+  .add-desc { font-size: var(--fs-label-xs); color: rgba(28, 22, 17, 0.6); margin-top: 2px; }
 
   .rows { display: flex; flex-direction: column; gap: 4px; }
 
@@ -361,13 +361,13 @@
     gap: 6px;
     align-items: center;
     padding: 4px 6px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     transition: opacity 0.12s;
   }
   .row.hidden-row { opacity: 0.4; }
   .row.header {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
@@ -382,8 +382,8 @@
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid rgba(28, 22, 17, 0.15);
     padding: 6px 8px;
-    border-radius: var(--radius-round);
-    font-size: 12.5px;
+    border-radius: var(--radius-sharp);
+    font-size: var(--fs-label);
     min-width: 0;
     width: 100%;
   }
@@ -420,7 +420,7 @@
     border-radius: var(--radius-pill);
     border: 1px solid rgba(28, 22, 17, 0.18);
     background: rgba(255, 255, 255, 0.45);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     cursor: pointer;
     color: var(--ink);
     transition: background 0.12s;
@@ -461,7 +461,7 @@
     border: 1px solid rgba(28, 22, 17, 0.15);
     background: rgba(255, 255, 255, 0.55);
     color: rgba(28, 22, 17, 0.6);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     border-radius: var(--radius-sharp);
     cursor: pointer;
   }
@@ -481,7 +481,7 @@
     line-height: 1;
     width: 22px;
     height: 22px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 0;
   }
   .col-del:hover {
@@ -496,8 +496,8 @@
     background: transparent;
     border: none;
     color: rgba(28, 22, 17, 0.55);
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     cursor: pointer;
     padding: 1px 0;
   }
@@ -511,8 +511,8 @@
   .schema-input {
     margin-top: 4px;
     min-height: 48px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     resize: vertical;
   }
 
@@ -520,8 +520,8 @@
     padding: 2px 6px 6px 56px;
   }
   .iss {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     padding: 2px 6px;
     border-radius: var(--radius-sharp);

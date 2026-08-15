@@ -171,9 +171,9 @@
 <style>
   .pm { border-bottom: 1.5px solid rgba(26,16,8,0.4); background: #ffffff; }
   .pm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 18px 0; }
-  .pm-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(26,16,8,0.58); }
+  .pm-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: rgba(26,16,8,0.58); }
   .pm-lab b { color: var(--accent-ink, #0e5b66); }
-  .pm-count { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em; color: var(--accent-ink, #0e5b66); }
+  .pm-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em; color: var(--accent-ink, #0e5b66); }
 
   .pm-scroll { overflow-x: auto; padding: 6px 18px 0; }
   svg { display: block; min-width: 760px; width: 100%; height: auto; }
@@ -198,21 +198,21 @@
   .spine .box { fill: var(--accent-ink, #0e5b66); stroke: #05343b; stroke-width: 2; }
   .node.spine.lit .box { stroke: #d9a05e; stroke-width: 3; }
 
-  .n-lab { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.14em; fill: rgba(26,16,8,0.55); }
+  .n-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; fill: rgba(26,16,8,0.55); }
   .n-lab.hot { fill: #8a2d3a; }
   .n-lab.sp { fill: #8fc3bd; }
-  .n-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; fill: var(--ink); }
-  .n-title.sm { font-size: 14px; }
+  .n-title { font-family: var(--fs-serif); font-weight: 600; font-size: 17px; fill: var(--ink); }
+  .n-title.sm { font-size: var(--fs-nav); }
   .n-title.sp { fill: #ffffff; font-size: 20px; }
-  .n-sub { font-family: 'DM Sans', sans-serif; font-size: 10.5px; fill: rgba(26,16,8,0.65); }
+  .n-sub { font-family: var(--font-body); font-size: var(--fs-label-xs); fill: rgba(26,16,8,0.65); }
   .n-sub.sp, .spine .n-sub { fill: #cfe6e4; }
   .zero { fill: #eef6f0; stroke: #2f7d4f; stroke-width: 1.2; }
-  .zero-t { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; font-weight: 600; letter-spacing: 0.1em; fill: #216b3f; }
-  .row-lab { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.12em; fill: rgba(26,16,8,0.55); }
+  .zero-t { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; letter-spacing: 0.1em; fill: #216b3f; }
+  .row-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; fill: rgba(26,16,8,0.55); }
   .lock-b { fill: rgba(26,16,8,0.6); }
   .lock-s { fill: none; stroke: rgba(26,16,8,0.6); stroke-width: 1.7; }
 
-  .pm-cap { font-size: 13.5px; line-height: 1.5; color: rgba(26,16,8,0.8); margin: 0; padding: 8px 18px 14px; }
+  .pm-cap { font-size: var(--fs-label); line-height: 1.5; color: rgba(26,16,8,0.8); margin: 0; padding: 8px 18px 14px; }
   .pm-cap b { color: var(--accent-ink, #0e5b66); }
 
   @media (max-width: 700px) {

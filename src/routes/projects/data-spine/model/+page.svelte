@@ -216,23 +216,23 @@
   .dm-deck { width: 100%; }
   .slide { max-width: 1240px; margin: 0 auto; padding: clamp(40px, 6.5vh, 88px) clamp(16px, 3vw, 40px); scroll-margin-top: calc(var(--topH, 56px) + 92px); }
 
-  .kicker { display: block; font-family: 'JetBrains Mono', monospace; font-size: clamp(10px, 1.1vw, 12px); letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  .kicker { display: block; font-family: var(--font-mono); font-size: clamp(10px, 1.1vw, 12px); letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
 
   /* hero */
   .hero { min-height: auto; }
-  .hero h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(38px, 7vw, 84px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 22px; color: var(--ink); }
+  .hero h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(38px, 7vw, 84px); line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 22px; color: var(--ink); }
   .hero h1 em { font-style: italic; color: var(--accent-ink); }
   .hero-lede { font-size: clamp(16px, 1.7vw, 20px); line-height: 1.55; color: rgba(26,16,8,0.82); max-width: 66ch; margin: 0 0 28px; }
   .hero-lede b { color: var(--ink); }
 
-  h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(28px, 4.2vw, 52px); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 16px; color: var(--ink); }
+  h2 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(28px, 4.2vw, 52px); line-height: 1.05; letter-spacing: -0.025em; margin: 0 0 16px; color: var(--ink); }
   h2 em { font-style: italic; color: var(--accent-ink); }
   .slide-lede { font-size: clamp(15px, 1.5vw, 18px); line-height: 1.6; color: rgba(26,16,8,0.82); max-width: 74ch; margin: 0 0 28px; }
   .slide-lede b { color: var(--ink); }
 
   /* inverted band */
   .band { max-width: none; background: var(--ink); padding: clamp(56px, 10vh, 120px) clamp(16px, 3vw, 40px); }
-  .band-quote { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(26px, 4.4vw, 56px); line-height: 1.14; letter-spacing: -0.02em; color: var(--paper, #f1ead6); max-width: 1100px; margin: 0 auto; text-align: center; }
+  .band-quote { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(26px, 4.4vw, 56px); line-height: 1.14; letter-spacing: -0.02em; color: var(--paper, #f1ead6); max-width: 1100px; margin: 0 auto; text-align: center; }
   .band-quote em { font-style: italic; color: #d9a05e; }
 
   .next-row { margin-top: 32px; display: flex; gap: 10px; flex-wrap: wrap; }

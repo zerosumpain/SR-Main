@@ -95,25 +95,25 @@
 
   .fm-picks { display: flex; gap: 6px; flex-wrap: wrap; }
   .fm-picks button { display: inline-flex; align-items: center; gap: 7px;
-    font-family: 'DM Sans', sans-serif; font-size: 12.5px; color: var(--text-primary);
+    font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2);
-    border-radius: var(--radius-round); padding: 5px 12px 5px 6px; cursor: pointer;
+    border-radius: var(--radius-sharp); padding: 5px 12px 5px 6px; cursor: pointer;
     transition: background 0.12s, border-color 0.12s; }
   .fm-picks button:hover { background: rgba(28,22,17,0.06); border-color: rgba(28,22,17,0.36); }
   .fm-picks button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
   .fm-picks button.on { background: var(--tone); border-color: var(--tone); color: #fff; }
   .p-n { flex-shrink: 0; display: grid; place-items: center; width: 19px; height: 19px;
     border-radius: var(--radius-pill); background: rgba(28,22,17,0.09);
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; color: rgba(28,22,17,0.65); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: rgba(28,22,17,0.65); }
   .fm-picks button.on .p-n { background: rgba(255,255,255,0.28); color: #fff; }
 
   .dia { display: block; width: 100%; max-width: 620px; height: auto;
-    border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.45); padding: 6px; }
-  .t { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: rgba(28,22,17,0.72); }
+  .t { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.72); }
   .t.mid { text-anchor: middle; }
   .t.ok { fill: #2d7a3a; }
   .t.bad { fill: #c44; }
 
-  .fm-line { margin: 0; font-size: 13px; line-height: 1.58; color: rgba(28,22,17,0.78); max-width: 84ch; }
+  .fm-line { margin: 0; font-size: var(--fs-label); line-height: 1.58; color: rgba(28,22,17,0.78); max-width: 84ch; }
 </style>

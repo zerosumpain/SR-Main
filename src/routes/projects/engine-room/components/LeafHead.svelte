@@ -32,11 +32,11 @@
 <style>
   .lh { margin: 0 0 16px; }
   .lh-part { display: inline-flex; align-items: baseline; gap: 7px; text-decoration: none; margin-bottom: 8px; }
-  .lp-no { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+  .lp-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
     text-transform: uppercase; color: var(--tone); }
-  .lp-name { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+  .lp-name { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
     text-transform: uppercase; color: rgba(28,22,17,0.45); }
   .lh-part:hover .lp-name { color: rgba(28,22,17,0.75); }
   .lh :global(.pe-h1) { margin-bottom: 8px; }
-  .lh-line { margin: 0; font-size: 16px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 68ch; }
+  .lh-line { margin: 0; font-size: var(--fs-body); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 68ch; }
 </style>

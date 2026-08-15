@@ -101,17 +101,17 @@
 </div>
 
 <style>
-  .edge { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-round); background: var(--surface-elevated, #e8dece); overflow: hidden; }
+  .edge { border: 1.5px solid rgba(26,16,8,0.4); border-radius: var(--radius-sharp); background: var(--surface-elevated, #e8dece); overflow: hidden; }
   .diagram-scroll { overflow-x: auto; }
   svg { display: block; min-width: 820px; width: 100%; height: auto; }
 
   .panel { fill: rgba(255,255,255,0.55); stroke: rgba(26,16,8,0.4); stroke-width: 1.2; }
   .panel.strong { stroke: var(--accent-ink, #0e5b66); stroke-width: 2; fill: rgba(14,91,102,0.08); }
   .panel.dashed { stroke-dasharray: 6 5; }
-  .p-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.16em; fill: rgba(26,16,8,0.78); font-weight: 600; }
+  .p-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; fill: rgba(26,16,8,0.78); font-weight: 600; }
   .p-title.strong-t { fill: var(--accent-ink); }
-  .p-sub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.05em; fill: rgba(26,16,8,0.72); }
-  .p-note { font-family: 'DM Sans', sans-serif; font-size: 11px; font-style: italic; fill: rgba(26,16,8,0.72); }
+  .p-sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.05em; fill: rgba(26,16,8,0.72); }
+  .p-note { font-family: var(--font-body); font-size: var(--fs-label-xs); font-style: italic; fill: rgba(26,16,8,0.72); }
 
   .part { cursor: pointer; }
   .pbox { fill: #ffffff; stroke: rgba(26,16,8,0.55); stroke-width: 1.4; transition: stroke 0.12s, fill 0.12s; }
@@ -121,22 +121,22 @@
   .part.hot .pbox { stroke: var(--accent, #c4570a); stroke-width: 1.6px; fill: rgba(196,87,10,0.10); }
   .part.ledger .pbox { stroke: #a8842a; stroke-width: 1.5px; fill: rgba(176,137,42,0.10); }
   .part:focus-visible .pbox { stroke: var(--accent-ink); stroke-width: 2.5; }
-  .plab { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; fill: var(--ink); }
-  .psub { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.04em; fill: rgba(26,16,8,0.72); }
+  .plab { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; fill: var(--ink); }
+  .psub { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em; fill: rgba(26,16,8,0.72); }
 
   .arrow { fill: none; stroke: rgba(26,16,8,0.6); stroke-width: 1.6; }
-  .a-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; fill: rgba(26,16,8,0.72); }
+  .a-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; fill: rgba(26,16,8,0.72); }
   .dot.ink { fill: #1c2f4a; }
   .dot.ok { fill: #2f7d4f; }
   .dot.query { fill: var(--accent-ink); }
-  .boundary { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.04em; fill: #9a3f08; font-weight: 600; }
+  .boundary { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em; fill: #9a3f08; font-weight: 600; }
 
-  .inspector { position: relative; margin: 14px 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-round); background: #ffffff; padding: 14px 18px; }
-  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(26,16,8,0.55); cursor: pointer; font-size: 13px; }
+  .inspector { position: relative; margin: 14px 20px 18px; border: 1.5px solid var(--accent-ink-tint-35, rgba(14,91,102,0.35)); border-radius: var(--radius-sharp); background: #ffffff; padding: 14px 18px; }
+  .inspector .close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: rgba(26,16,8,0.55); cursor: pointer; font-size: var(--fs-label); }
   .inspector .close:hover { color: var(--ink); }
-  .ins-kicker { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-ink); }
-  .inspector h4 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; margin: 3px 0 6px; color: var(--ink); }
-  .inspector h4 em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(26,16,8,0.6); }
-  .inspector p { font-size: 13px; line-height: 1.55; color: rgba(26,16,8,0.85); margin: 0; }
-  .hint { font-size: 12px; font-style: italic; color: rgba(26,16,8,0.62); margin: 12px 20px 16px; }
+  .ins-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-ink); }
+  .inspector h4 { font-family: var(--fs-serif); font-weight: 600; font-size: 18px; margin: 3px 0 6px; color: var(--ink); }
+  .inspector h4 em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(26,16,8,0.6); }
+  .inspector p { font-size: var(--fs-label); line-height: 1.55; color: rgba(26,16,8,0.85); margin: 0; }
+  .hint { font-size: var(--fs-label-xs); font-style: italic; color: rgba(26,16,8,0.62); margin: 12px 20px 16px; }
 </style>

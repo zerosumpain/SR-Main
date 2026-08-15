@@ -27,19 +27,19 @@
 </div>
 
 <style>
-  .sc { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 13px 15px; background: var(--surface-elevated); display: flex; flex-direction: column; gap: 5px; }
+  .sc { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 13px 15px; background: var(--surface-elevated); display: flex; flex-direction: column; gap: 5px; }
   .sc.compact { padding: 9px 12px; gap: 3px; }
   .sc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .sc-name { font-weight: 700; font-size: 14px; color: var(--text-primary); line-height: 1.2; }
-  .sc-owner { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-  .sc-desc { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 4px 0 2px; }
+  .sc-name { font-weight: 700; font-size: var(--fs-nav); color: var(--text-primary); line-height: 1.2; }
+  .sc-owner { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .sc-desc { font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); margin: 4px 0 2px; }
   .sc-meta { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
-  .sc-meta .m { font-size: 11.5px; color: var(--text-secondary); }
-  .sc-meta .ml { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); margin-right: 5px; }
+  .sc-meta .m { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sc-meta .ml { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-ghost); margin-right: 5px; }
   .sc.clickable { cursor: pointer; transition: border-color 0.15s, transform 0.15s; }
   .sc.clickable:hover { border-color: var(--accent); transform: translateY(-1px); }
   .sc.clickable:hover .sc-explore { color: var(--accent); }
   .sc-foot { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-  .sc-explore { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
-  .sc-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-left: auto; }
+  .sc-explore { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
+  .sc-link { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin-left: auto; }
 </style>

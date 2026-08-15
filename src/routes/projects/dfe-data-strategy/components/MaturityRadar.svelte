@@ -31,7 +31,7 @@
         {@const o = pt(i, 5)}
         {@const l = pt(i, 5.75)}
         <line x1={cx} y1={cy} x2={o[0]} y2={o[1]} stroke="rgba(28,22,17,0.1)" stroke-width="1" />
-        <text x={l[0]} y={l[1]} font-size="8.5" font-family="'JetBrains Mono', monospace" fill="rgba(28,22,17,0.6)"
+        <text x={l[0]} y={l[1]} font-size="8.5" font-family="var(--font-mono)" fill="rgba(28,22,17,0.6)"
           text-anchor={l[0] < cx - 8 ? 'end' : l[0] > cx + 8 ? 'start' : 'middle'} dominant-baseline="middle">{d.name.split(' ')[0]}</text>
       {/each}
       <!-- target -->
@@ -76,17 +76,17 @@
   .mr { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 14px 24px; align-items: start; }
   .mr-chart { display: flex; flex-direction: column; align-items: center; }
   .mr-key { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
-  .mr-key .k { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.65); }
+  .mr-key .k { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.65); }
   .mr-key i { width: 12px; height: 6px; border-radius: var(--radius-sharp); display: inline-block; }
   .mr-sliders { display: grid; grid-template-columns: 1fr; gap: 7px; }
   .dim { border-bottom: 1px solid rgba(28,22,17,0.08); padding-bottom: 6px; }
   .d-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-  .d-name { font-size: 12px; font-weight: 600; color: var(--ink); }
-  .d-proj { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--success); white-space: nowrap; }
+  .d-name { font-size: var(--fs-label-xs); font-weight: 600; color: var(--ink); }
+  .d-proj { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); white-space: nowrap; }
   .d-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-top: 3px; }
   .dc { display: grid; grid-template-columns: 38px 1fr 14px; align-items: center; gap: 5px; }
-  .dc span { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; color: rgba(28,22,17,0.5); }
+  .dc span { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; color: rgba(28,22,17,0.5); }
   .dc input { width: 100%; cursor: pointer; }
-  .dc b { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink); text-align: right; }
+  .dc b { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--ink); text-align: right; }
   @media (max-width: 720px) { .mr { grid-template-columns: 1fr; } }
 </style>

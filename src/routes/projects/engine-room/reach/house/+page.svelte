@@ -85,25 +85,25 @@
 <style>
   .note { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px;
     padding: 10px 14px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 8%, transparent); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--success); }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
   .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin-top: -6px; }
 
   .strip { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { display: inline-flex; align-items: baseline; gap: 7px; font-family: 'DM Sans', sans-serif;
-    font-size: 11.5px; color: var(--text-primary); background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-round);
+  .chip { display: inline-flex; align-items: baseline; gap: 7px; font-family: var(--font-body);
+    font-size: var(--fs-label-xs); color: var(--text-primary); background: rgba(255,255,255,0.6);
+    border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp);
     padding: 5px 11px; cursor: pointer; }
-  .chip em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .chip em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.45); }
   .chip:hover { background: rgba(28,22,17,0.07); }
   .chip.on { background: var(--success); border-color: var(--success); color: #fff; }
   .chip.on em { color: rgba(255,255,255,0.7); }
-  .why { margin: 0; min-height: 3em; font-size: 12.5px; line-height: 1.55;
+  .why { margin: 0; min-height: 3em; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.72); max-width: 84ch; }
 
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 9px; margin-top: 12px; }

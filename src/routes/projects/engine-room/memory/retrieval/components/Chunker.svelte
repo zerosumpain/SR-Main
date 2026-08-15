@@ -220,54 +220,54 @@
 </div>
 
 <style>
-  .ck { --tone: var(--accent); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+  .ck { --tone: var(--accent); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 12px 0 4px; }
 
   .ck-bar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 10px; }
-  .badge { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase;
+  .badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.13em; text-transform: uppercase;
     color: rgba(28,22,17,0.5); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-pill); padding: 3px 10px; }
   .badge.on { color: #fff; background: var(--tone); border-color: var(--tone); }
-  .reset { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-primary);
-    background: rgba(255,255,255,0.65); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round);
+  .reset { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary);
+    background: rgba(255,255,255,0.65); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-sharp);
     padding: 5px 11px; cursor: pointer; }
   .reset:hover:not(:disabled) { background: rgba(28,22,17,0.07); }
   .reset:disabled { opacity: 0.35; cursor: default; }
 
   .dials { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 18px; align-items: end; }
   .dial { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; min-width: 0; }
-  .d-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  .d-k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--tone); align-self: end; }
-  .d-v { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600; color: var(--text-primary); text-align: right; }
-  .d-v em { font-style: normal; font-size: 9px; color: rgba(28,22,17,0.5); margin-left: 3px; }
+  .d-v { font-family: var(--font-mono); font-size: var(--fs-body-sm); font-weight: 600; color: var(--text-primary); text-align: right; }
+  .d-v em { font-style: normal; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); margin-left: 3px; }
   .dial input { grid-column: 1 / -1; width: 100%; margin: 3px 0 0; accent-color: var(--tone); }
   .d-tick { position: absolute; bottom: -12px; transform: translateX(-50%); white-space: nowrap;
-    font-family: 'JetBrains Mono', monospace; font-size: 8px; color: rgba(28,22,17,0.5); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
   .d-tick::before { content: ''; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px; background: rgba(28,22,17,0.4); }
 
   .tgl { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; font-family: inherit;
-    padding: 8px 11px; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round);
+    padding: 8px 11px; border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.6); transition: background 0.13s, border-color 0.13s; }
   .tgl:hover { background: rgba(255,255,255,0.95); border-color: rgba(28,22,17,0.36); }
   .tgl.on { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 9%, transparent); }
-  .t-box { flex-shrink: 0; width: 15px; height: 15px; display: grid; place-items: center; font-size: 10px; color: #fff;
+  .t-box { flex-shrink: 0; width: 15px; height: 15px; display: grid; place-items: center; font-size: var(--fs-label-xs); color: #fff;
     border: 1px solid rgba(28,22,17,0.3); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.8); }
   .tgl.on .t-box { background: var(--tone); border-color: var(--tone); }
-  .t-lab { font-size: 12px; line-height: 1.3; color: var(--text-primary); }
+  .t-lab { font-size: var(--fs-label-xs); line-height: 1.3; color: var(--text-primary); }
 
   .chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 20px 0 8px; }
-  .chip { display: inline-flex; align-items: baseline; gap: 5px; font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(28,22,17,0.58);
+  .chip { display: inline-flex; align-items: baseline; gap: 5px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.06em; text-transform: uppercase; color: rgba(28,22,17,0.58);
     border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-pill); padding: 3px 11px; background: rgba(255,255,255,0.5); }
-  .chip b { font-size: 13px; letter-spacing: 0; color: var(--text-primary); }
+  .chip b { font-size: var(--fs-label); letter-spacing: 0; color: var(--text-primary); }
   .chip.bad { border-color: color-mix(in srgb, var(--tone) 55%, transparent); background: color-mix(in srgb, var(--tone) 9%, transparent); }
   .chip.bad b { color: var(--tone); }
 
-  .strip-scroll { overflow-x: auto; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round);
+  .strip-scroll { overflow-x: auto; border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.5); padding: 8px 10px; }
   .strip-scroll svg { display: block; min-width: 540px; width: 100%; height: auto; }
 
-  .lab { font-family: 'JetBrains Mono', monospace; font-size: 7.5px; letter-spacing: 0.1em; fill: rgba(28,22,17,0.5); }
-  .key { font-family: 'JetBrains Mono', monospace; font-size: 7px; letter-spacing: 0.08em; fill: rgba(28,22,17,0.42); }
+  .lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; fill: rgba(28,22,17,0.5); }
+  .key { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; fill: rgba(28,22,17,0.42); }
 
   .sent { fill: rgba(28,22,17,0.14); }
   .sent.alt { fill: rgba(28,22,17,0.22); }
@@ -276,7 +276,7 @@
   .hatch { stroke: var(--tone); stroke-width: 2.4; opacity: 0.3; }
   .ovl { fill: url(#er-ovl); }
   .chunk { fill: color-mix(in srgb, var(--tone) 13%, transparent); stroke: color-mix(in srgb, var(--tone) 60%, transparent); stroke-width: 1; }
-  .c-no { font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 600; fill: color-mix(in srgb, var(--tone) 85%, #000); }
+  .c-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; fill: color-mix(in srgb, var(--tone) 85%, #000); }
 
   .cut { stroke: var(--text-primary); stroke-width: 1.4; }
   .cut.sel { stroke-width: 2.6; }
@@ -287,10 +287,10 @@
   .arrow { stroke: rgba(28,22,17,0.45); stroke-width: 1; }
 
   .cutrow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 11px 0 8px; }
-  .k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  .k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase;
     color: rgba(28,22,17,0.5); margin-right: 4px; }
-  .cutb { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-primary); cursor: pointer;
-    background: rgba(255,255,255,0.65); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round);
+  .cutb { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); cursor: pointer;
+    background: rgba(255,255,255,0.65); border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-sharp);
     min-width: 28px; padding: 4px 8px; }
   .cutb:hover { background: rgba(28,22,17,0.07); }
   .cutb.on { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg); }
@@ -298,9 +298,9 @@
   .cutb.sev.on { background: var(--tone); border-color: var(--tone); color: #fff; }
 
   .zoom { border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid var(--text-primary);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.6); padding: 10px 13px; }
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.6); padding: 10px 13px; }
   .zoom.sev { border-left-color: var(--tone); background: color-mix(in srgb, var(--tone) 6%, rgba(255,255,255,0.6)); }
-  .z-text { display: block; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.85;
+  .z-text { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.85;
     color: rgba(28,22,17,0.72); overflow-wrap: anywhere; }
   .z-cut { display: inline-block; width: 0; height: 1.15em; vertical-align: -0.25em; margin: 0 2px;
     border-left: 2.5px solid var(--text-primary); }
@@ -308,7 +308,7 @@
   .z-raw { display: inline-block; width: 0; height: 1.15em; vertical-align: -0.25em; margin: 0 2px;
     border-left: 2px dashed rgba(28,22,17,0.5); }
   .z-raw.hide { display: none; }
-  .z-say { margin: 7px 0 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.72);
+  .z-say { margin: 7px 0 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.72);
     padding-top: 7px; border-top: 1px solid rgba(28,22,17,0.09); }
   .z-say b { color: var(--text-primary); }
 

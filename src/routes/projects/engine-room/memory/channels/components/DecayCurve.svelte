@@ -74,16 +74,16 @@
   .dc { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
 
   .f { display: flex; align-items: center; gap: 9px; }
-  .f-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+  .f-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); white-space: nowrap; }
   .f input { accent-color: var(--accent); flex: 1 1 auto; max-width: 240px; }
-  .f-out { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+  .f-out { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600;
     color: var(--text-primary); white-space: nowrap; }
 
   /* Capped: stretched to a wide page the 520-unit viewBox doubles every label with it. */
   .plot { max-width: 720px; }
   .plot svg { display: block; width: 100%; height: auto; }
-  .tick { font-family: 'JetBrains Mono', monospace; font-size: 8px; fill: rgba(28,22,17,0.45); }
+  .tick { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.45); }
 
   .l-real { fill: none; stroke: var(--accent); stroke-width: 2; }
   .l-naive { fill: none; stroke: rgba(28,22,17,0.4); stroke-width: 1.4; stroke-dasharray: 4 3; }
@@ -92,10 +92,10 @@
   .d-naive { fill: rgba(28,22,17,0.45); }
 
   .read { display: flex; align-items: baseline; gap: 8px 18px; flex-wrap: wrap; }
-  .r-item { display: inline-flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: rgba(28,22,17,0.6); }
-  .r-item b { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600; color: var(--accent); }
+  .r-item { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
+  .r-item b { font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: var(--accent); }
   .r-item.alt b { color: rgba(28,22,17,0.45); }
-  .r-note { font-size: 11.5px; color: rgba(28,22,17,0.5); margin-left: auto; }
+  .r-note { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); margin-left: auto; }
 
   @media (max-width: 620px) { .r-note { margin-left: 0; } }
 </style>

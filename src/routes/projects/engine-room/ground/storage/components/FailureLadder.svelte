@@ -35,9 +35,9 @@
   .fl { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
 
   .picks { display: flex; gap: 5px; flex-wrap: wrap; }
-  .picks button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .picks button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer;
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer;
     transition: background 0.12s, border-color 0.12s; }
   .picks button:hover { background: rgba(28,22,17,0.07); border-color: rgba(28,22,17,0.34); }
   .picks button.on { background: #5a6b7a; border-color: #5a6b7a; color: #fff; }
@@ -45,9 +45,9 @@
   .picks button.fatal.on { background: #8a2d3a; border-color: #8a2d3a; border-style: solid; }
 
   .out { padding: 11px 14px; border-left: 3px solid #5a6b7a;
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(90,107,122,0.09); }
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(90,107,122,0.09); }
   .out.fatal { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
-  .o-kick { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .o-kick { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: #5a6b7a; margin-bottom: 7px; }
   .out.fatal .o-kick { color: #8a2d3a; }
 
@@ -55,11 +55,11 @@
   .steps li { display: flex; align-items: baseline; gap: 9px; }
   .s-n { flex-shrink: 0; width: 18px; height: 18px; display: grid; place-items: center;
     border-radius: var(--radius-pill); background: rgba(90,107,122,0.22);
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; color: #46545f; }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: #46545f; }
   .out.fatal .s-n { background: rgba(138,45,58,0.18); color: #8a2d3a; }
-  .s-t { font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+  .s-t { font-size: var(--fs-label); line-height: 1.5; color: var(--text-primary); }
 
   .o-cost { margin: 0; padding-top: 8px; border-top: 1px dashed rgba(28,22,17,0.16);
-    font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 86ch; }
   .o-cost b { color: var(--text-primary); }
 </style>

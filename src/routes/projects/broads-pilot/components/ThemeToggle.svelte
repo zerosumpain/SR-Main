@@ -58,13 +58,13 @@
     padding: 0.85rem 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .control { display: flex; flex-direction: column; gap: 0.4rem; }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
@@ -73,13 +73,13 @@
     display: inline-flex;
     flex-wrap: wrap;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     overflow: hidden;
     background: var(--card-bg);
   }
   .seg-btn {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     min-height: 40px;

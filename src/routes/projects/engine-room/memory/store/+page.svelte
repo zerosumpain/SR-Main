@@ -118,24 +118,24 @@
     background: rgba(255,255,255,0.55); }
   .c-n { width: 18px; height: 18px; display: grid; place-items: center; border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--accent) 22%, transparent);
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; color: var(--accent); }
-  .chain b { font-size: 12.5px; color: var(--text-primary); }
-  .chain span { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.68); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--accent); }
+  .chain b { font-size: var(--fs-label); color: var(--text-primary); }
+  .chain span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.68); }
 
   .wilds { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
   .wild { display: flex; flex-direction: column; gap: 3px; padding: 9px 12px;
-    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.5); }
-  .wild code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); }
-  .wild span { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); }
+  .wild code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
+  .wild span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.65); }
 
   .strip { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .chip { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .chip:hover { background: rgba(28,22,17,0.07); }
   .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .why { margin: 0; min-height: 3em; font-size: 12.5px; line-height: 1.55;
+  .why { margin: 0; min-height: 3em; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.72); max-width: 84ch; }
   .why b { color: var(--text-primary); }
 
@@ -145,17 +145,17 @@
     grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
   .limits li { display: flex; flex-direction: column; gap: 2px; padding: 8px 11px;
     border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid var(--accent);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.5); }
-  .limits b { font-size: 12.5px; color: var(--text-primary); }
-  .limits span { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.5); }
+  .limits b { font-size: var(--fs-label); color: var(--text-primary); }
+  .limits span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.65); }
 
   .note { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 16px;
     padding: 10px 14px; border-left: 3px solid var(--accent);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--accent); }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
 
 
   @media (max-width: 620px) {

@@ -117,17 +117,17 @@
   .shm { display: flex; flex-direction: column; gap: 12px; }
   .grid-scroll { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; min-width: 640px; }
-  th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em;
+  th { text-align: left; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     color: rgba(28,22,17,0.5); padding: 4px 10px 6px 6px; border-bottom: 1px solid rgba(28,22,17,0.18); }
   td { padding: 8px 10px 8px 6px; border-bottom: 1px solid rgba(28,22,17,0.08); vertical-align: top; }
   td.fault { background: var(--error-bg); }
-  .stage { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); white-space: nowrap; }
-  .org { display: inline-block; margin: 1px 3px 1px 0; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600;
+  .stage { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-label); color: var(--ink); white-space: nowrap; }
+  .org { display: inline-block; margin: 1px 3px 1px 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600;
     color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent);
-    border-radius: var(--radius-round); padding: 2px 6px; white-space: nowrap; }
-  .nobody { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8a2d3a; font-style: italic; }
-  .fmark { display: inline-block; margin-left: 3px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: #8a2d3a; cursor: help; }
+    border-radius: var(--radius-sharp); padding: 2px 6px; white-space: nowrap; }
+  .nobody { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: #8a2d3a; font-style: italic; }
+  .fmark { display: inline-block; margin-left: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: #8a2d3a; cursor: help; }
   .faults { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
-  .faults li { font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); padding-left: 8px; border-left: 2px solid var(--error-border); }
-  .fnum { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #8a2d3a; margin-right: 4px; }
+  .faults li { font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); padding-left: 8px; border-left: 2px solid var(--error-border); }
+  .fnum { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: #8a2d3a; margin-right: 4px; }
 </style>

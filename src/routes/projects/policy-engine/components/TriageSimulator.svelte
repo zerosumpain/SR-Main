@@ -179,39 +179,39 @@
 <style>
   .tri { display: flex; flex-direction: column; gap: 14px; }
   .tri-ctl { display: flex; align-items: center; gap: 14px 22px; flex-wrap: wrap; padding: 12px 14px;
-    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round); background: rgba(255,255,255,0.42); }
+    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.42); }
   .tc-slider { display: flex; align-items: center; gap: 10px; flex: 1 1 340px; flex-wrap: wrap; }
-  .tc-lab { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.6); }
+  .tc-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.6); }
   .tc-slider input { flex: 1; min-width: 140px; accent-color: var(--accent-ink); }
-  .tc-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; color: var(--accent-ink); min-width: 60px; }
-  .tc-sub { font-size: 11px; color: rgba(28,22,17,0.55); }
-  .tc-mode { display: inline-flex; background: rgba(28,22,17,0.07); padding: 3px; border-radius: var(--radius-round); }
-  .tc-mode button { background: transparent; border: none; color: var(--ink); padding: 6px 12px; border-radius: var(--radius-round);
-    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; cursor: pointer; }
+  .tc-val { font-family: var(--fs-serif); font-weight: 600; font-size: 26px; color: var(--accent-ink); min-width: 60px; }
+  .tc-sub { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
+  .tc-mode { display: inline-flex; background: rgba(28,22,17,0.07); padding: 3px; border-radius: var(--radius-sharp); }
+  .tc-mode button { background: transparent; border: none; color: var(--ink); padding: 6px 12px; border-radius: var(--radius-sharp);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; }
   .tc-mode button.on { background: var(--accent-ink); color: #fff; }
 
   .tri-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
   .tcard { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border: 1px solid rgba(28,22,17,0.14);
-    border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.42); }
-  .tv { font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; line-height: 1; color: var(--ink); }
-  .tl { font-size: 11px; line-height: 1.35; color: rgba(28,22,17,0.65); }
-  .tb { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.45); }
+    border-left: 3px solid var(--accent-ink); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.42); }
+  .tv { font-family: var(--fs-serif); font-weight: 600; font-size: 26px; line-height: 1; color: var(--ink); }
+  .tl { font-size: var(--fs-label-xs); line-height: 1.35; color: rgba(28,22,17,0.65); }
+  .tb { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.45); }
 
-  .tri-chart { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 12px 14px; overflow-x: auto; }
+  .tri-chart { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-sharp); padding: 12px 14px; overflow-x: auto; }
   .tri-chart svg { display: block; width: 100%; min-width: 560px; height: auto; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
-  .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
+  .ax-x, .ax-y { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.5); }
   .ax-x { text-anchor: middle; } .ax-y { text-anchor: end; }
-  .ax-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); text-anchor: middle; text-transform: uppercase; }
+  .ax-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); text-anchor: middle; text-transform: uppercase; }
   .randline { stroke: rgba(28,22,17,0.4); stroke-width: 1.2; stroke-dasharray: 3 4; }
-  .rand-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: rgba(28,22,17,0.45); text-anchor: end; }
+  .rand-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.45); text-anchor: end; }
   .fan { fill: rgba(86,106,140,0.14); stroke: none; }
   .curve { fill: none; }
   .curve.main { stroke: #566a8c; stroke-width: 2.6; }
   .curve.other { stroke: rgba(28,22,17,0.3); stroke-width: 1.4; }
   .dot { fill: #566a8c; stroke: var(--paper); stroke-width: 2; }
-  .dot-lab { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; fill: #3b4d6b; }
-  .chart-note { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.62); }
+  .dot-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; fill: #3b4d6b; }
+  .chart-note { margin: 8px 0 0; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.62); }
 
   .tri-waffle { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
   .waffle { display: grid; grid-template-columns: repeat(20, 13px); gap: 4px; }
@@ -221,22 +221,22 @@
   .w.mt { background: rgba(28,22,17,0.55); }
   .w.rest { background: rgba(28,22,17,0.12); }
   .w-legend { display: flex; flex-direction: column; gap: 5px; }
-  .wl { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: rgba(28,22,17,0.7); }
+  .wl { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7); }
   .wl i { flex-shrink: 0; }
 
-  .tri-caveats { border: 1px solid var(--error-border); border-radius: var(--radius-round); background: var(--error-bg); padding: 12px 14px; }
-  .cav-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  .tri-caveats { border: 1px solid var(--error-border); border-radius: var(--radius-sharp); background: var(--error-bg); padding: 12px 14px; }
+  .cav-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase;
     color: #8a2d3a; font-weight: 600; margin-bottom: 7px; }
   .tri-caveats ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
-  .tri-caveats li { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.74); }
+  .tri-caveats li { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.74); }
   .tri-caveats b { color: var(--ink); }
   .strata { margin-top: 10px; }
-  .strata summary { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase;
+  .strata summary { cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.06em; color: rgba(28,22,17,0.55); }
-  .strata table { border-collapse: collapse; width: 100%; font-size: 11.5px; margin-top: 8px; }
-  .strata th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase;
+  .strata table { border-collapse: collapse; width: 100%; font-size: var(--fs-label-xs); margin-top: 8px; }
+  .strata th { text-align: left; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 3px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
   .strata td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.06); color: rgba(28,22,17,0.78); }
-  .strata th.num, .strata td.num { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; white-space: nowrap; }
+  .strata th.num, .strata td.num { text-align: right; font-family: var(--font-mono); font-size: var(--fs-label-xs); white-space: nowrap; }
   @media (max-width: 560px) { .waffle { grid-template-columns: repeat(10, 13px); } }
 </style>

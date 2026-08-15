@@ -129,29 +129,29 @@
 
 <style>
   .bb { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
-  .k { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .k { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--success); }
 
   .pickers { display: flex; flex-direction: column; gap: 9px; }
   .row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
-  .row button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .row button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .row button:hover { background: rgba(28,22,17,0.07); }
   .row button.on { background: var(--success); border-color: var(--success); color: #fff; }
   .row button.store { border-style: dashed; }
 
-  .hop { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(28,22,17,0.7); cursor: pointer; }
+  .hop { display: flex; align-items: center; gap: 7px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7); cursor: pointer; }
   .hop input { accent-color: var(--success); }
 
   .url { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-    padding: 8px 12px; border-radius: var(--radius-round); background: rgba(28,22,17,0.05);
+    padding: 8px 12px; border-radius: var(--radius-sharp); background: rgba(28,22,17,0.05);
     border: 1px solid rgba(28,22,17,0.12); }
-  .u-m { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em;
+  .u-m { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em;
     padding: 2px 7px; border-radius: var(--radius-pill); background: rgba(28,22,17,0.1); color: rgba(28,22,17,0.65); }
-  .url code { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-primary);
+  .url code { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary);
     overflow-wrap: anywhere; }
-  .u-hop { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent); margin-left: auto; }
+  .u-hop { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); margin-left: auto; }
 
   .gates { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
   .gates li { display: grid; grid-template-columns: 20px minmax(140px, 190px) 1fr; gap: 9px;
@@ -160,20 +160,20 @@
   .gates li.pass { border-left-color: var(--success); }
   .gates li.fail { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
   .gates li.idle { opacity: 0.45; }
-  .g-mark { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(28,22,17,0.3); }
+  .g-mark { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.3); }
   .gates li.pass .g-mark { color: var(--success); }
   .gates li.fail .g-mark { color: #8a2d3a; }
-  .g-lab { font-size: 12.5px; color: var(--text-primary); }
-  .g-say { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.68); }
+  .g-lab { font-size: var(--fs-label); color: var(--text-primary); }
+  .g-say { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.68); }
 
   .verdict { margin: 0; padding: 9px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent);
-    font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 90ch; }
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 90ch; }
   .verdict.no { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
   .verdict b { color: var(--text-primary); }
 
-  .cred-note { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 88ch; }
+  .cred-note { margin: 0; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 88ch; }
 
   @media (max-width: 620px) {
     .gates li { grid-template-columns: 20px 1fr; }

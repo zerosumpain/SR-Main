@@ -34,7 +34,7 @@
     padding: 14px 15px 12px;
     background: rgba(255, 255, 255, 0.42);
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     min-width: 0;
   }
   .top {
@@ -48,8 +48,8 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     padding: 2px 6px;
@@ -77,8 +77,8 @@
     background: rgba(28, 22, 17, 0.07);
   }
   .api {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
     text-decoration: none;
     white-space: nowrap;
@@ -89,7 +89,7 @@
     color: var(--accent);
   }
   .num {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: clamp(28px, 4.2vw, 38px);
     line-height: 1;
@@ -98,14 +98,14 @@
     font-variant-numeric: tabular-nums;
   }
   .label {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--ink);
     line-height: 1.25;
   }
   .detail {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.58);
     line-height: 1.35;
   }
@@ -117,8 +117,8 @@
     margin-top: 6px;
   }
   .src {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.03em;
     color: rgba(28, 22, 17, 0.6);
     text-decoration: none;
@@ -129,8 +129,8 @@
     border-bottom-color: #c4570a;
   }
   .asof {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.42);
     white-space: nowrap;
   }

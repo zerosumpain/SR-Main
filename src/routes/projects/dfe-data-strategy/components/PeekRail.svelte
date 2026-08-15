@@ -30,12 +30,12 @@
   .pr { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px;
     padding: 14px 8px; background: var(--accent-ink-tint-06); border: none; border-right: 1px solid var(--accent-ink-tint-22); cursor: pointer; }
   .pr:hover { background: var(--accent-ink-tint-12); }
-  .pr-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-ink); }
+  .pr-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent-ink); }
   .pr-cov { display: flex; flex-direction: column; align-items: center; }
-  .pr-cov-v { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--ink); }
-  .pr-cov-l { font-size: 9px; color: rgba(28,22,17,0.5); }
+  .pr-cov-v { font-family: var(--fs-serif); font-weight: 600; font-size: 20px; color: var(--ink); }
+  .pr-cov-l { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
   .pr-ring { line-height: 0; }
-  .pr-tense { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--error); text-align: center; line-height: 1.3; }
-  .pr-ok { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--success); }
-  .pr-open { margin-top: auto; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.55); }
+  .pr-tense { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); text-align: center; line-height: 1.3; }
+  .pr-ok { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); }
+  .pr-open { margin-top: auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
 </style>

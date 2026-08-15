@@ -123,7 +123,7 @@
     position: sticky;
     top: calc(var(--topH, 90px) + 10px);
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.4);
     display: flex;
     flex-direction: column;
@@ -138,19 +138,19 @@
     border-bottom: 1px solid rgba(28, 22, 17, 0.1);
   }
   .rail-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
   }
   .rail-clear {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 2px 8px;
     background: transparent;
     border: 1px dashed rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
   }
@@ -167,7 +167,7 @@
     gap: 9px;
     text-align: left;
     border: 1px solid rgba(28, 22, 17, 0.12);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     padding: 7px 9px;
     cursor: pointer;
@@ -190,7 +190,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 700;
     border: 1px solid rgba(28, 22, 17, 0.3);
     border-radius: var(--radius-sharp, 2px);
@@ -208,16 +208,16 @@
   }
   .d-type {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
   }
   .d-name {
     display: block;
-    font-family: 'Fraunces', serif;
-    font-size: 13px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
     line-height: 1.2;
@@ -236,12 +236,12 @@
   .d-dots i {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
   }
   .d-n {
-    font-family: 'Fraunces', serif;
-    font-size: 14px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     color: var(--accent-ink);
     line-height: 1;
@@ -259,51 +259,51 @@
   }
   .list-h {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 17px;
     font-weight: 600;
     color: var(--ink);
   }
   .lh-lab {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
   }
   .lh-hint {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
   }
   .sel-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     padding: 3px 10px;
     border: 1px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--accent-ink);
     color: #fff;
     cursor: pointer;
   }
   .sel-chip i {
     font-style: normal;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     opacity: 0.8;
   }
   .sel-chip:hover i {
     opacity: 1;
   }
   .unpick {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 3px 9px;
     background: transparent;
     border: 1px dashed rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
   }

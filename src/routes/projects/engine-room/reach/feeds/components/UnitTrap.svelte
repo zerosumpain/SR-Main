@@ -57,28 +57,28 @@
   .ut { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
 
   .chips { display: flex; gap: 5px; flex-wrap: wrap; }
-  .chips button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .chips button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .chips button:hover { background: rgba(28,22,17,0.07); }
   .chips button.on { background: var(--success); border-color: var(--success); color: #fff; }
 
   .cols { display: grid; grid-template-columns: 1fr auto 1fr 1fr; gap: 8px 12px; align-items: center; }
   .col { display: flex; flex-direction: column; gap: 2px; padding: 10px 13px;
-    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.14); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.55); min-width: 0; }
   .col.bad { border-color: rgba(138,45,58,0.3); background: rgba(138,45,58,0.05); }
-  .c-k { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.1em;
+  .c-k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.45); }
-  .c-v { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 600;
+  .c-v { font-family: var(--font-mono); font-size: 19px; font-weight: 600;
     line-height: 1.1; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .c-v.raw { color: rgba(28,22,17,0.55); }
   .c-v.ok { color: var(--success); }
-  .c-v.no { color: #8a2d3a; font-size: 15px; }
-  .c-n { font-size: 11px; line-height: 1.4; color: rgba(28,22,17,0.5); }
-  .op { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(28,22,17,0.4); }
+  .c-v.no { color: #8a2d3a; font-size: var(--fs-body-sm); }
+  .c-n { font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.5); }
+  .op { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.4); }
 
-  .say { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 88ch; }
+  .say { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 88ch; }
   .say b { color: var(--text-primary); }
 
   @media (max-width: 720px) {

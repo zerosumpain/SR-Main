@@ -174,7 +174,7 @@
   .hero { margin: 0 0 clamp(52px, 8vw, 104px); max-width: 78ch; }
   .hero-title {
     margin: 6px 0 16px;
-    font-family: 'Fraunces', serif; font-weight: 600;
+    font-family: var(--fs-serif); font-weight: 600;
     font-size: clamp(44px, 9vw, 104px);
     line-height: 0.94; letter-spacing: -0.03em;
     color: var(--text-primary);
@@ -187,13 +187,13 @@
   }
   .hero-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .hero-cta { display: inline-flex; align-items: center; gap: 14px; text-decoration: none;
-    background: var(--accent-ink); color: #fff; padding: 13px 20px; border-radius: var(--radius-round); }
+    background: var(--accent-ink); color: #fff; padding: 13px 20px; border-radius: var(--radius-sharp); }
   .hero-cta:hover { background: #0b4a53; }
   .c-txt { display: flex; flex-direction: column; gap: 2px; }
-  .c-txt b { font-size: 15px; font-weight: 600; }
-  .c-txt em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; opacity: 0.78; }
+  .c-txt b { font-size: var(--fs-body-sm); font-weight: 600; }
+  .c-txt em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); opacity: 0.78; }
   .hero-cta .c-go { font-size: 17px; opacity: 0.8; }
-  .hero-scroll { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em;
+  .hero-scroll { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
     text-transform: uppercase; color: rgba(28, 22, 17, 0.42); }
   .hero-scroll i { font-style: normal; display: inline-block; animation: nudge 2.4s ease-in-out infinite; }
   @keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
@@ -203,42 +203,42 @@
   .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
   .part { display: flex; flex-direction: column; gap: 3px; text-decoration: none;
     border: 1px solid rgba(28,22,17,0.16); border-top: 3px solid var(--tone);
-    border-radius: var(--radius-round); background: rgba(255,255,255,0.5); padding: 14px 16px 12px;
+    border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); padding: 14px 16px 12px;
     transition: background 0.13s, border-color 0.13s, transform 0.13s; }
   .part:hover { background: rgba(255,255,255,0.9); border-color: rgba(28,22,17,0.32);
     border-top-color: var(--tone); transform: translateY(-2px); }
-  .p-no { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+  .p-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
     text-transform: uppercase; color: var(--tone); }
-  .p-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22px; line-height: 1.1; color: var(--text-primary); }
-  .p-strap { font-size: 13px; line-height: 1.45; color: rgba(28,22,17,0.68); margin-bottom: 7px; }
+  .p-name { font-family: var(--fs-serif); font-weight: 600; font-size: 22px; line-height: 1.1; color: var(--text-primary); }
+  .p-strap { font-size: var(--fs-label); line-height: 1.45; color: rgba(28,22,17,0.68); margin-bottom: 7px; }
   .p-leaves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px;
     border-top: 1px dashed rgba(28,22,17,0.16); padding-top: 8px; }
-  .p-leaves li { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.5;
+  .p-leaves li { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5;
     color: rgba(28,22,17,0.6); }
-  .p-count { margin-top: 9px; font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .p-count { margin-top: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.06em; color: var(--tone); }
 
   /* ---- claims -------------------------------------------------------- */
   .claims { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px; }
-  .claim { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+  .claim { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.55); overflow: hidden; align-self: start; }
   .claim.open { border-color: rgba(28,22,17,0.34); }
   .c-head { width: 100%; display: flex; align-items: baseline; gap: 9px; text-align: left;
     background: none; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit; }
   .c-head:hover { background: rgba(28,22,17,0.04); }
-  .c-n { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); flex-shrink: 0; }
-  .c-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; line-height: 1.24;
+  .c-n { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); flex-shrink: 0; }
+  .c-title { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body); line-height: 1.24;
     color: var(--text-primary); min-width: 0; }
-  .c-chev { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  .c-chev { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-nav);
     color: rgba(28,22,17,0.4); flex-shrink: 0; }
   .c-body { padding: 0 14px 13px; }
-  .c-body p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.58; color: rgba(28,22,17,0.76); }
-  .c-ev { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-ink); text-decoration: none; }
+  .c-body p { margin: 0 0 8px; font-size: var(--fs-label); line-height: 1.58; color: rgba(28,22,17,0.76); }
+  .c-ev { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none; }
   .c-ev:hover { text-decoration: underline; }
 
   /* ---- closing note -------------------------------------------------- */
   .idx-note { margin: 0; padding: 12px 16px; border-left: 3px solid rgba(28,22,17,0.28);
-    background: rgba(28,22,17,0.035); border-radius: 0 var(--radius-round) var(--radius-round) 0;
-    font-size: 13px; line-height: 1.6; color: rgba(28,22,17,0.7); max-width: 92ch; }
+    background: rgba(28,22,17,0.035); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
+    font-size: var(--fs-label); line-height: 1.6; color: rgba(28,22,17,0.7); max-width: 92ch; }
   .idx-note b { color: var(--text-primary); }
 </style>

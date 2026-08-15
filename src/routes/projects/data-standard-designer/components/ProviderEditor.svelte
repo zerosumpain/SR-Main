@@ -72,21 +72,21 @@
 
 <style>
   .prov-list { display: flex; flex-direction: column; gap: 9px; }
-  .entity { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-elevated); }
+  .entity { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--surface-elevated); }
   .ent-row { display: flex; gap: 6px; }
   .ent-row .dsd-input { flex: 1; }
-  .sector { width: auto; max-width: 190px; font-size: 12px; }
+  .sector { width: auto; max-width: 190px; font-size: var(--fs-label-xs); }
   .ic-del { background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); color: var(--text-muted); cursor: pointer; padding: 0 9px; }
   .ic-del:hover { color: var(--error); border-color: var(--error); }
-  .detail-toggle { align-self: flex-start; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; padding: 0; }
+  .detail-toggle { align-self: flex-start; background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; padding: 0; }
   .detail-toggle:hover { color: var(--accent); }
-  .detail-toggle .caret { font-size: 9px; }
+  .detail-toggle .caret { font-size: var(--fs-label-xs); }
   .detail-sum { text-transform: none; letter-spacing: 0; color: var(--text-ghost); }
   .ent-detail { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--divider); padding-top: 8px; }
   .ent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; }
   .std-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .std-pill { font-family: var(--font-mono); font-size: 10px; background: var(--accent-tint-08); color: var(--accent); padding: 3px 4px 3px 8px; border-radius: var(--radius-sharp); display: inline-flex; align-items: center; gap: 5px; }
-  .std-pill button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 11px; }
-  .add-std { font-family: var(--font-mono); font-size: 11px; padding: 4px 6px; border: 1px dashed var(--card-border); border-radius: var(--radius-sharp); background: transparent; color: var(--text-muted); max-width: 260px; }
-  .empty { font-size: 12px; color: var(--text-muted); font-style: italic; margin: 0; }
+  .std-pill { font-family: var(--font-mono); font-size: var(--fs-label-xs); background: var(--accent-tint-08); color: var(--accent); padding: 3px 4px 3px 8px; border-radius: var(--radius-sharp); display: inline-flex; align-items: center; gap: 5px; }
+  .std-pill button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: var(--fs-label-xs); }
+  .add-std { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 4px 6px; border: 1px dashed var(--card-border); border-radius: var(--radius-sharp); background: transparent; color: var(--text-muted); max-width: 260px; }
+  .empty { font-size: var(--fs-label-xs); color: var(--text-muted); font-style: italic; margin: 0; }
 </style>

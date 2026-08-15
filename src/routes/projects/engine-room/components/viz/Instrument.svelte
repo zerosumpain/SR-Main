@@ -47,23 +47,23 @@
     --tone: var(--accent-ink);
     margin: 0 0 22px; padding: 14px 16px 13px;
     border: 1px solid rgba(28,22,17,0.16); border-top: 2px solid var(--tone);
-    border-radius: var(--radius-round); background: rgba(255,255,255,0.5);
+    border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5);
   }
   .i-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
   .i-id { min-width: 0; }
-  .i-kick { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.14em;
+  .i-kick { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
     text-transform: uppercase; color: var(--tone); margin-bottom: 3px; }
-  .i-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; line-height: 1.2;
+  .i-title { font-family: var(--fs-serif); font-weight: 600; font-size: 18px; line-height: 1.2;
     margin: 0; color: var(--text-primary); letter-spacing: -0.01em; }
   .i-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 
-  .i-read { margin: 6px 0 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 78ch; }
+  .i-read { margin: 6px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 78ch; }
 
   .i-body { margin-top: 12px; min-width: 0; }
   .i-body.flush { margin-left: -16px; margin-right: -16px; }
 
   .i-take { display: flex; gap: 7px; margin: 12px 0 0; padding-top: 10px;
-    border-top: 1px dashed rgba(28,22,17,0.18); font-size: 13px; line-height: 1.55;
+    border-top: 1px dashed rgba(28,22,17,0.18); font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.78); max-width: 84ch; }
   .t-mark { color: var(--tone); flex-shrink: 0; }
   .i-take :global(b) { color: var(--text-primary); }

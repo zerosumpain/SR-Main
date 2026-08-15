@@ -106,7 +106,7 @@
 <style>
   .ladder { display: flex; flex-direction: column; gap: 15px; }
   .band { --tone: var(--accent); display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-  .band-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .band-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--tone); }
   .band-lab.neg { --tone: var(--error); }
 
@@ -115,9 +115,9 @@
 
   .pen { display: flex; align-items: baseline; gap: 5px 10px; flex-wrap: wrap; margin: 0;
     padding: 8px 12px; border: 1px solid rgba(28,22,17,0.16);
-    border-left: 3px solid var(--error); border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-left: 3px solid var(--error); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(255,255,255,0.55); }
-  .p-lab { font-size: 12.5px; color: var(--text-primary); }
-  .p-op { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: var(--error); }
-  .p-why { flex: 1 1 22ch; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.6); }
+  .p-lab { font-size: var(--fs-label); color: var(--text-primary); }
+  .p-op { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--error); }
+  .p-why { flex: 1 1 22ch; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.6); }
 </style>

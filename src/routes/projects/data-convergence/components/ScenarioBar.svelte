@@ -115,14 +115,14 @@
     padding: 6px 18px 8px;
     border-bottom: 1px solid rgba(28, 22, 17, 0.08);
     background: rgba(28, 22, 17, 0.03);
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: var(--font-body);
     color: var(--ink);
     flex-wrap: wrap;
   }
   .left { display: inline-flex; align-items: center; gap: 8px; }
   .lab {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
@@ -132,8 +132,8 @@
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid rgba(28, 22, 17, 0.18);
     padding: 6px 12px;
-    border-radius: var(--radius-round);
-    font-size: 12.5px;
+    border-radius: var(--radius-sharp);
+    font-size: var(--fs-label);
     cursor: pointer;
     color: var(--ink);
     font-family: inherit;
@@ -142,7 +142,7 @@
     gap: 6px;
   }
   .select:hover { background: rgba(255, 255, 255, 0.85); }
-  .caret { font-size: 10px; opacity: 0.5; }
+  .caret { font-size: var(--fs-label-xs); opacity: 0.5; }
 
   .menu {
     position: absolute;
@@ -150,7 +150,7 @@
     left: 0;
     background: var(--paper);
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     min-width: 240px;
     z-index: 60;
     padding: 4px;
@@ -164,8 +164,8 @@
     border: none;
     background: transparent;
     color: var(--ink);
-    border-radius: var(--radius-round);
-    font-size: 12.5px;
+    border-radius: var(--radius-sharp);
+    font-size: var(--fs-label);
     font-family: inherit;
     cursor: pointer;
     text-align: left;
@@ -175,8 +175,8 @@
   .menu-item.danger { color: var(--error); }
   .menu-item .name { flex: 1; }
   .menu-item .count {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
   .menu-item .dot {
@@ -200,7 +200,7 @@
     min-width: 0;
   }
   .name-display, .name-input {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 500;
     font-size: 18px;
     line-height: 1;
@@ -209,7 +209,7 @@
     color: var(--ink);
     cursor: text;
     padding: 2px 4px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border-bottom: 1px dashed transparent;
   }
   .name-display:hover { border-bottom-color: rgba(28, 22, 17, 0.3); }
@@ -221,13 +221,13 @@
   .desc-display, .desc-input {
     flex: 1;
     min-width: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.65);
     background: transparent;
     border: none;
     text-align: left;
     padding: 2px 4px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: text;
     font-family: inherit;
     white-space: nowrap;
@@ -243,6 +243,6 @@
   @media (max-width: 720px) {
     .bar { padding: 6px 12px; gap: 8px; }
     .middle { flex-direction: column; align-items: flex-start; gap: 4px; }
-    .name-display, .name-input { font-size: 16px; }
+    .name-display, .name-input { font-size: var(--fs-body); }
   }
 </style>

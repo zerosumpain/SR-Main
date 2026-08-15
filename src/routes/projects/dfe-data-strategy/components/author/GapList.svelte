@@ -74,8 +74,8 @@
 <style>
   .gl-h {
     margin: 14px 0 8px;
-    font-family: 'Fraunces', serif;
-    font-size: 14.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     color: var(--ink);
   }
@@ -88,7 +88,7 @@
   .empty,
   .allgood {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.6);
   }
   .allgood {
@@ -105,7 +105,7 @@
   }
   .gap {
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     padding: 9px 12px;
   }
@@ -119,27 +119,27 @@
     flex: none;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
     align-self: center;
   }
   .g-head b {
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--ink);
   }
   .g-doc {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
   .g-status {
     margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 2px 7px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.25);
     color: rgba(28, 22, 17, 0.6);
   }
@@ -150,7 +150,7 @@
   }
   .g-imp {
     margin: 5px 0 7px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.7);
   }
@@ -160,13 +160,13 @@
     gap: 12px;
   }
   .g-add {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     padding: 4px 10px;
     background: var(--accent-ink-tint-06);
     border: 1px solid var(--accent-ink-tint-35);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--accent-ink);
     cursor: pointer;
   }
@@ -178,8 +178,8 @@
     color: #2f6155;
   }
   .g-link {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
     text-decoration: none;
   }
@@ -188,12 +188,12 @@
   }
   .more {
     margin-top: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 5px 11px;
     background: transparent;
     border: 1px dashed rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
   }

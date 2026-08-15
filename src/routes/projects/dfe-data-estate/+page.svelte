@@ -232,7 +232,7 @@
     background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255, 255, 255, 0.4), transparent 60%),
       var(--paper);
     color: var(--ink);
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: var(--font-body);
     overflow-x: hidden;
   }
   .paper-grain {
@@ -254,8 +254,8 @@
     border-bottom: 1px solid rgba(28, 22, 17, 0.1);
   }
   .back {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-soft);
@@ -267,14 +267,14 @@
   .tagline {
     display: block;
     margin-top: 10px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.22em;
     color: var(--accent);
     text-transform: uppercase;
   }
   h1 {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: clamp(30px, 5.5vw, 52px);
     line-height: 0.98;
@@ -283,15 +283,15 @@
   }
   .sub {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.55;
     color: var(--ink-soft);
     max-width: 74ch;
   }
   .meta-line {
     margin: 12px 0 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.02em;
     color: rgba(28, 22, 17, 0.55);
   }
@@ -313,14 +313,14 @@
   }
   .band-hd h2 {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
     font-size: 22px;
     letter-spacing: -0.01em;
   }
   .band-hd p {
     margin: 4px 0 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--ink-soft);
     max-width: 80ch;
@@ -358,7 +358,7 @@
     border-bottom: 1px dotted rgba(28, 22, 17, 0.16);
   }
   .feed-title {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.35;
     color: var(--ink);
     text-decoration: none;
@@ -367,8 +367,8 @@
     color: var(--accent);
   }
   .feed-date {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
     white-space: nowrap;
   }
@@ -386,7 +386,7 @@
     display: inline-flex;
     background: rgba(28, 22, 17, 0.06);
     padding: 3px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     flex-wrap: wrap;
   }
   .chips button {
@@ -394,9 +394,9 @@
     border: none;
     color: var(--ink);
     padding: 6px 12px;
-    border-radius: var(--radius-round);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .chips button.active {
@@ -411,9 +411,9 @@
     border: 1px solid rgba(28, 22, 17, 0.2);
     color: var(--ink-soft);
     padding: 6px 11px;
-    border-radius: var(--radius-round);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     cursor: pointer;
   }
   .toggle i {
@@ -449,14 +449,14 @@
   .group-hd.tier-gateway { --tier: var(--accent-ink); }
   .group-hd h3 {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--fs-body);
     color: var(--tier);
   }
   .group-hd .count {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--paper);
     background: var(--tier);
     padding: 1px 7px;
@@ -464,7 +464,7 @@
   }
   .group-hd p {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     color: var(--ink-soft);
   }
@@ -475,7 +475,7 @@
     align-items: start;
   }
   .empty {
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--ink-soft);
   }
 
@@ -488,8 +488,8 @@
   }
   .method summary {
     cursor: pointer;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--ink-soft);
@@ -507,7 +507,7 @@
     list-style: square;
   }
   .method li {
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.7);
   }
@@ -516,7 +516,7 @@
   }
   .ogl {
     margin: 16px 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
   .ogl a {
@@ -526,7 +526,7 @@
   }
   .foot-disc {
     margin: 8px 0 0;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.5);
   }
@@ -534,7 +534,7 @@
     background: rgba(28, 22, 17, 0.06);
     padding: 1px 5px;
     border-radius: var(--radius-sharp);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
   }
 
   @media (max-width: 720px) {

@@ -28,5 +28,5 @@
 <style>
   .pb-route { max-width: 1000px; }
   .intro { max-width: 76ch; margin-bottom: 18px; }
-  .note { margin-top: 20px; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.5); max-width: 76ch; }
+  .note { margin-top: 20px; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.5); max-width: 76ch; }
 </style>

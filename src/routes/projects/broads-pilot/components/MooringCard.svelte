@@ -204,14 +204,14 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -235,7 +235,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -250,7 +250,7 @@
   }
   .verified {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -259,14 +259,14 @@
   .rating { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; }
   .rating .stars { color: var(--accent); font-size: 0.92rem; letter-spacing: 0.04em; }
   .rating-num { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--text-primary); }
-  .rating-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-muted); }
+  .rating-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .rating-quote { flex-basis: 100%; font-family: var(--font-body); font-size: 0.78rem; font-style: italic; color: var(--text-secondary); line-height: 1.4; }
 
   .facilities { display: flex; flex-direction: column; gap: 0.4rem; }
   .fac-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .fac {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.22rem 0.5rem;
@@ -297,7 +297,7 @@
     padding: 0.4rem 0.55rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     text-align: left;
   }
@@ -306,21 +306,21 @@
   .near-meta { display: flex; align-items: center; gap: 0.5rem; flex: none; }
   .near-kind {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
   }
-  .near-dist { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary); }
+  .near-dist { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); }
 
   .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .btn {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.9rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     min-height: 40px;
   }
@@ -329,11 +329,11 @@
   .btn:disabled { opacity: 0.55; cursor: default; }
   /* "Start from here" is the headline action — its own full-width row */
   .start-here { flex: 1 1 100%; }
-  .is-start { flex: 1 1 100%; font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding: 0.4rem 0; }
+  .is-start { flex: 1 1 100%; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); padding: 0.4rem 0; }
   /* "Add after <last stop>" stacks the action over the leg it adds */
   .add-next { flex: 1 1 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
-  .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.9; font-variant-numeric: tabular-nums; }
+  .add-line { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+  .leg-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); opacity: 0.9; font-variant-numeric: tabular-nums; }
   .leg-meta.blocked { color: var(--error); }
   .btn-ghost { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); }
   .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }

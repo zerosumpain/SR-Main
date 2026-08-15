@@ -12,7 +12,7 @@
   .rv {
     margin: 8px 0 4px;
     border: 1px dashed rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.3);
   }
   .rv[open] {
@@ -26,8 +26,8 @@
     gap: 9px;
     cursor: pointer;
     padding: 11px 16px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
   }

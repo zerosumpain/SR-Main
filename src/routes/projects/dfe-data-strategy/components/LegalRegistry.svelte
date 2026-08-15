@@ -32,14 +32,14 @@
 
 <style>
   .lr { display: flex; flex-direction: column; gap: 22px; }
-  .layer-head h3 { margin: 0 0 2px; font-family: 'Fraunces', serif; font-size: 18px; font-weight: 600; color: var(--ink); }
-  .layer-head p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 72ch; }
-  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; scroll-margin-top: 120px; }
+  .layer-head h3 { margin: 0 0 2px; font-family: var(--fs-serif); font-size: 18px; font-weight: 600; color: var(--ink); }
+  .layer-head p { margin: 0 0 10px; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.62); max-width: 72ch; }
+  .li { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--accent-ink); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; scroll-margin-top: 120px; }
   .li-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-  .li-head h4 { margin: 0; font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--ink); }
-  .li-cite { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.5); }
-  .li-sum { margin: 6px 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.76); }
-  .li-rel { margin: 6px 0 8px; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.66); }
-  .rel-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-ink); margin-bottom: 2px; }
-  .li-src { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
+  .li-head h4 { margin: 0; font-family: var(--fs-serif); font-size: var(--fs-body-sm); font-weight: 600; color: var(--ink); }
+  .li-cite { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
+  .li-sum { margin: 6px 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.76); }
+  .li-rel { margin: 6px 0 8px; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.66); }
+  .rel-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-ink); margin-bottom: 2px; }
+  .li-src { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; }
 </style>

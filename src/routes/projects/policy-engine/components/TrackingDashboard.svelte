@@ -129,12 +129,12 @@
 </div>
 
 <style>
-  .track { margin: 1.5rem 0 2rem; font-family: var(--font-body, 'DM Sans', system-ui, sans-serif); }
+  .track { margin: 1.5rem 0 2rem; font-family: var(--font-body, var(--font-body)); }
   .head { display: flex; gap: 1.2rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
   .head h3 { font-family: var(--font-display, 'Archivo Black', sans-serif); font-size: 1.05rem; margin: 0 0 0.35rem; color: var(--ink); }
   .sub { margin: 0; font-size: 0.82rem; line-height: 1.45; color: var(--ink-soft, rgba(28,22,17,0.66)); max-width: 46ch; }
   .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-  .chip { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.03em;
+  .chip { font-family: var(--font-mono, var(--font-mono)); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.03em;
     padding: 0.28rem 0.5rem; border: 1px solid var(--line, rgba(28,22,17,0.16)); border-radius: var(--radius-sharp); color: var(--ink-soft, rgba(28,22,17,0.7)); white-space: nowrap; }
   .chip b { color: var(--ink); font-weight: 700; }
   .chip.ok { border-color: var(--success-border); }
@@ -142,12 +142,12 @@
   .chip.ts { background: rgba(28,22,17,0.04); }
 
   .legend { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem; margin: 0.9rem 0 0.5rem;
-    font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 0.66rem; color: var(--ink-soft, rgba(28,22,17,0.6)); }
+    font-family: var(--font-mono, var(--font-mono)); font-size: var(--fs-label-xs); color: var(--ink-soft, rgba(28,22,17,0.6)); }
   .legend .sep { opacity: 0.4; margin: 0 0.2rem; }
 
-  .scroll { overflow-x: auto; border: 1px solid var(--line, rgba(28,22,17,0.14)); border-radius: var(--radius-round); background: var(--card-bg, rgba(255,255,255,0.4)); }
+  .scroll { overflow-x: auto; border: 1px solid var(--line, rgba(28,22,17,0.14)); border-radius: var(--radius-sharp); background: var(--card-bg, rgba(255,255,255,0.4)); }
   table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 760px; }
-  thead th { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+  thead th { font-family: var(--font-mono, var(--font-mono)); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em;
     font-weight: 600; color: var(--ink-soft, rgba(28,22,17,0.55)); text-align: center; padding: 0.55rem 0.5rem; border-bottom: 1.5px solid var(--line, rgba(28,22,17,0.18)); white-space: nowrap; }
   thead th.l { text-align: left; }
   tbody td { padding: 0.5rem 0.5rem; border-bottom: 1px solid var(--line, rgba(28,22,17,0.08)); text-align: center; vertical-align: middle; color: var(--ink); }
@@ -158,14 +158,14 @@
   .info { margin-left: 0.3rem; cursor: help; color: var(--ink-soft, rgba(28,22,17,0.4)); font-size: 0.75rem; }
   .num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
   .num.soft { font-weight: 400; color: var(--ink-soft, rgba(28,22,17,0.6)); }
-  .per { display: block; font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 0.58rem; color: var(--ink-soft, rgba(28,22,17,0.45)); font-weight: 400; }
+  .per { display: block; font-family: var(--font-mono, var(--font-mono)); font-size: var(--fs-label-xs); color: var(--ink-soft, rgba(28,22,17,0.45)); font-weight: 400; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: var(--radius-pill); vertical-align: middle; }
   .dot.hollow { background: transparent !important; border: 1.5px solid currentColor; }
   .st .dot { width: 11px; height: 11px; }
   .upd { white-space: nowrap; }
   .upd .dot { margin-right: 0.4rem; }
-  .upd span { font-size: 0.74rem; }
-  .src { font-family: var(--font-mono, 'JetBrains Mono', monospace); font-size: 0.66rem; color: var(--accent, #c4570a); text-decoration: none; white-space: nowrap; }
+  .upd span { font-size: var(--fs-label-xs); }
+  .src { font-family: var(--font-mono, var(--font-mono)); font-size: var(--fs-label-xs); color: var(--accent, #c4570a); text-decoration: none; white-space: nowrap; }
   .src:hover { text-decoration: underline; }
-  .foot { margin: 0.8rem 0 0; font-size: 0.74rem; line-height: 1.5; color: var(--ink-soft, rgba(28,22,17,0.55)); max-width: 80ch; }
+  .foot { margin: 0.8rem 0 0; font-size: var(--fs-label-xs); line-height: 1.5; color: var(--ink-soft, rgba(28,22,17,0.55)); max-width: 80ch; }
 </style>

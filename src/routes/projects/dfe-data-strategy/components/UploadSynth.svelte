@@ -97,28 +97,28 @@
 
 <style>
   .us { display: flex; flex-direction: column; gap: 10px; }
-  .drop { border: 2px dashed rgba(28,22,17,0.25); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); transition: background 0.15s, border-color 0.15s; }
+  .drop { border: 2px dashed rgba(28,22,17,0.25); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.4); transition: background 0.15s, border-color 0.15s; }
   .drop.over { border-color: var(--accent-ink); background: var(--accent-ink-tint-12); }
   .drop-in { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 24px 16px; cursor: pointer; text-align: center; }
   .drop-ico { font-size: 26px; color: var(--accent-ink); }
-  .drop-t { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; color: var(--ink); }
-  .drop-sub { font-size: 11px; color: rgba(28,22,17,0.55); max-width: 46ch; }
-  .us-err { margin: 0; font-size: 12px; color: var(--error); }
-  .us-priv { margin: 0; font-size: 10.5px; line-height: 1.4; color: rgba(28,22,17,0.5); }
-  .card { border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 11px 13px; }
+  .drop-t { font-family: var(--fs-serif); font-size: var(--fs-body); font-weight: 600; color: var(--ink); }
+  .drop-sub { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); max-width: 46ch; }
+  .us-err { margin: 0; font-size: var(--fs-label-xs); color: var(--error); }
+  .us-priv { margin: 0; font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.5); }
+  .card { border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 11px 13px; }
   .c-head { display: flex; align-items: center; gap: 8px; }
-  .c-file { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); }
-  .c-kind { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; color: rgba(28,22,17,0.5); background: rgba(28,22,17,0.06); padding: 2px 6px; border-radius: var(--radius-round); }
-  .c-x { margin-left: auto; background: none; border: none; color: rgba(28,22,17,0.45); cursor: pointer; font-size: 12px; }
-  .c-sum { margin: 7px 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.78); }
+  .c-file { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--ink); }
+  .c-kind { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; color: rgba(28,22,17,0.5); background: rgba(28,22,17,0.06); padding: 2px 6px; border-radius: var(--radius-sharp); }
+  .c-x { margin-left: auto; background: none; border: none; color: rgba(28,22,17,0.45); cursor: pointer; font-size: var(--fs-label-xs); }
+  .c-sum { margin: 7px 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.78); }
   .c-sec { margin-top: 8px; }
-  .c-lab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); display: block; margin-bottom: 4px; }
-  .sig { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.72); margin-bottom: 2px; }
+  .c-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); display: block; margin-bottom: 4px; }
+  .sig { font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.72); margin-bottom: 2px; }
   .sig b { color: var(--ink); }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-size: 10.5px; background: rgba(28,22,17,0.06); border-radius: var(--radius-round); padding: 3px 7px; color: rgba(28,22,17,0.7); }
+  .chip { font-size: var(--fs-label-xs); background: rgba(28,22,17,0.06); border-radius: var(--radius-sharp); padding: 3px 7px; color: rgba(28,22,17,0.7); }
   .chip.nudge { background: var(--accent-ink-tint-12); color: var(--accent-ink); cursor: help; }
-  .apply { margin-top: 7px; font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 6px 11px; border: 1px solid var(--accent-ink); color: #fff; background: var(--accent-ink); border-radius: var(--radius-round); cursor: pointer; }
+  .apply { margin-top: 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 6px 11px; border: 1px solid var(--accent-ink); color: #fff; background: var(--accent-ink); border-radius: var(--radius-sharp); cursor: pointer; }
   .apply:hover { background: var(--accent-ink-hover); }
-  .c-warn { margin: 8px 0 0; font-size: 11px; color: #b4632e; }
+  .c-warn { margin: 8px 0 0; font-size: var(--fs-label-xs); color: #b4632e; }
 </style>

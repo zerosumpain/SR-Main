@@ -61,7 +61,7 @@
 <style>
   .caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 9px; }
 
-  .onward { margin: 11px 0 0; font-size: 12.5px; line-height: 1.55; }
+  .onward { margin: 11px 0 0; font-size: var(--fs-label); line-height: 1.55; }
   .onward a { color: var(--accent-ink); text-decoration: none;
     border-bottom: 1px dashed currentColor; font-weight: 500; }
 

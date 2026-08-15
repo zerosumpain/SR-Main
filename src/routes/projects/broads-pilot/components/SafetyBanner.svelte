@@ -45,7 +45,7 @@
     flex: 1 1 auto;
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 0.66rem;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     letter-spacing: 0.01em;
     color: var(--text-secondary);
@@ -81,7 +81,7 @@
 
   @media (min-width: 640px) {
     .msg {
-      font-size: 0.7rem;
+      font-size: var(--fs-label-xs);
     }
   }
 </style>

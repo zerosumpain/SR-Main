@@ -65,7 +65,7 @@
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 450;
     display: flex; flex-direction: column;
     background: var(--surface-elevated); border-top: 1px solid var(--card-border);
-    border-radius: var(--radius-round) var(--radius-round) 0 0;
+    border-radius: var(--radius-sharp) var(--radius-sharp) 0 0;
   }
   .sheet:not(.dragging) { transition: height 0.2s var(--ease-out); }
   .grip { display: block; width: 100%; height: 30px; border: none; background: transparent; cursor: grab; position: relative; flex: 0 0 auto; touch-action: none; z-index: 2; }
@@ -80,7 +80,7 @@
       left: 0.6rem; right: auto; top: 0.6rem; bottom: auto; width: 23rem;
       height: auto !important; max-height: calc(100% - 5.5rem);
       border: 1px solid var(--card-border); border-top: 1px solid var(--card-border);
-      border-radius: var(--radius-round);
+      border-radius: var(--radius-sharp);
     }
     .grip { display: none; }
     .sheet-head { padding-top: 0.7rem; }

@@ -37,9 +37,10 @@ const SCOPE = [
   // mapped onto the type scale, so it can hold the floor from here.
   ['src/routes/drive', true],
   // Widened in the sitewide sweep — every route below was mapped onto the type
-  // scale in the same pass, so the floor holds there now. /projects is the one
-  // family still outside: 1,677 literals across the interactive field studies,
-  // which the design bundle never covered and which want their own pass.
+  // scale in the same pass, so the floor holds there now. /projects joined when
+  // the Field Study System landed and made those pages a governed family
+  // rather than a set of one-offs.
+  ['src/routes/projects', true],
   ['src/routes/admin', true],
   ['src/routes/blog', true],
   ['src/routes/decks', true],
@@ -67,6 +68,13 @@ const SCOPE = [
 // sizes we know are present and legal; not finding them means fix the script.
 const MIN_DECLARATIONS = 400;
 const CANARY_TOKENS = ['--fs-label-xs', '--fs-body'];
+
+/** True when the source line containing `index` carries `marker`. */
+function lineHas(src, index, marker) {
+  const from = src.lastIndexOf('\n', index) + 1;
+  const to = src.indexOf('\n', index);
+  return src.slice(from, to === -1 ? undefined : to).includes(marker);
+}
 
 function walk(dir, acc = []) {
   for (const entry of readdirSync(dir)) {
@@ -98,7 +106,12 @@ for (const file of files) {
     const n = parseFloat(m[1]);
     const px = m[2] === 'px' ? n : n * 16;
     const floor = m[2] === 'px' ? FLOOR_PX : FLOOR_REM;
-    if (n < floor) {
+    // Inside an SVG viewBox a "px" is a USER UNIT, not a screen pixel: a 4px
+    // label in `viewBox="0 0 100 96"` rendered 600px wide is 24px on screen.
+    // The floor is about what a reader's eye gets, so those are exempt — but
+    // only with the marker below, on the same line, so the exemption is a
+    // decision somebody wrote down rather than a hole in the check.
+    if (n < floor && !lineHas(src, m.index, 'svg-user-units')) {
       const line = src.slice(0, m.index).split('\n').length;
       const text = src.slice(src.lastIndexOf('\n', m.index) + 1, src.indexOf('\n', m.index));
       violations.push(`  ${rel}:${line}  ${m[1]}${m[2]} (${px}px)  ${text.trim().slice(0, 88)}`);

@@ -67,17 +67,17 @@
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 9px; }
   .reasons li { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px;
     border: 1px solid rgba(28,22,17,0.14); border-top: 3px solid #5a6b7a;
-    border-radius: var(--radius-round); background: rgba(255,255,255,0.5); }
-  .reasons b { font-family: 'Fraunces', serif; font-size: 14.5px; font-weight: 600;
+    border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); }
+  .reasons b { font-family: var(--fs-serif); font-size: var(--fs-nav); font-weight: 600;
     line-height: 1.25; color: var(--text-primary); }
-  .reasons span { font-size: 12px; line-height: 1.55; color: rgba(28,22,17,0.7); }
+  .reasons span { font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.7); }
 
   .note { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 22px;
     padding: 10px 14px; border-left: 3px solid #5a6b7a;
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: rgba(90,107,122,0.09); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: #5a6b7a; }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
 
 </style>

@@ -63,21 +63,21 @@
 <style>
   .sv { display: flex; flex-direction: column; gap: 24px; }
   .sv-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .f-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); margin-right: 4px; }
-  .sv-filter button { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 4px 10px; border-radius: var(--radius-round); cursor: pointer; border: 1px solid rgba(28,22,17,0.2); background: rgba(255,255,255,0.6); color: var(--ink); }
+  .f-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); margin-right: 4px; }
+  .sv-filter button { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 4px 10px; border-radius: var(--radius-sharp); cursor: pointer; border: 1px solid rgba(28,22,17,0.2); background: rgba(255,255,255,0.6); color: var(--ink); }
   .sv-filter button.on { background: var(--c, var(--ink)); color: #fff; border-color: var(--c, var(--ink)); }
   .grp { border-top: 3px solid var(--c); padding-top: 10px; }
   .g-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-  .g-label { margin: 0; font-family: 'Fraunces', serif; font-size: 19px; font-weight: 600; color: var(--ink); }
-  .g-blurb { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: rgba(28,22,17,0.6); max-width: 60ch; }
+  .g-label { margin: 0; font-family: var(--fs-serif); font-size: 19px; font-weight: 600; color: var(--ink); }
+  .g-blurb { margin: 2px 0 0; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.6); max-width: 60ch; }
   .g-balance { display: flex; gap: 2px; align-items: center; min-width: 120px; height: 18px; }
-  .bal { display: flex; align-items: center; justify-content: center; height: 100%; background: var(--bc); color: #fff; border-radius: var(--radius-sharp); font-family: 'JetBrains Mono', monospace; font-size: 9px; min-width: 16px; }
+  .bal { display: flex; align-items: center; justify-content: center; height: 100%; background: var(--bc); color: #fff; border-radius: var(--radius-sharp); font-family: var(--font-mono); font-size: var(--fs-label-xs); min-width: 16px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-  .vc { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--sc); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 11px 13px; display: flex; flex-direction: column; }
+  .vc { border: 1px solid rgba(28,22,17,0.12); border-left: 3px solid var(--sc); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 11px 13px; display: flex; flex-direction: column; }
   .v-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-  .v-stance { font-family: 'JetBrains Mono', monospace; font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; color: #fff; padding: 2px 6px; border-radius: var(--radius-round); }
-  .v-who { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
-  .v-point { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.78); flex: 1; }
-  .v-src { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; align-self: flex-start; }
-  .g-empty { font-size: 12px; color: rgba(28,22,17,0.45); }
+  .v-stance { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.04em; color: #fff; padding: 2px 6px; border-radius: var(--radius-sharp); }
+  .v-who { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--ink); line-height: 1.25; }
+  .v-point { margin: 0 0 9px; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.78); flex: 1; }
+  .v-src { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed currentColor; align-self: flex-start; }
+  .g-empty { font-size: var(--fs-label-xs); color: rgba(28,22,17,0.45); }
 </style>

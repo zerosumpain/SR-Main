@@ -238,16 +238,16 @@
   .chart {
     background: rgba(255,255,255,0.4);
     border: 1px solid rgba(28,22,17,0.12);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 8px 10px 6px;
   }
   .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
   .chart-title {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 13.5px;
+    font-family: var(--fs-serif); font-weight: 500; font-size: var(--fs-label);
     color: var(--ink); line-height: 1.2;
   }
   .chart-unit {
-    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9.5px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.06em; text-transform: uppercase; color: rgba(28,22,17,0.5); white-space: nowrap;
   }
   svg { display: block; touch-action: none; cursor: crosshair; }
@@ -255,15 +255,15 @@
   .hist-shade { fill: rgba(28,22,17,0.035); }
   .today { stroke: rgba(28,22,17,0.34); stroke-width: 1; stroke-dasharray: 3 2; }
   .horizon { stroke: #2f6f97; stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.7; }
-  .horizonlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: #2f6f97; font-weight: 600; }
-  .todaylab, .targetlab { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.5); }
+  .horizonlab { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: #2f6f97; font-weight: 600; }
+  .todaylab, .targetlab { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.5); }
   .target { stroke: #2f7d4f; stroke-width: 1; stroke-dasharray: 5 3; opacity: 0.7; }
   .targetlab { fill: #2f7d4f; }
-  .ylab, .xlab { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: rgba(28,22,17,0.55); }
+  .ylab, .xlab { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.55); }
   .hover-line { stroke: rgba(28,22,17,0.3); stroke-width: 1; }
   .legend, .readout {
     display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 5px 2px 2px;
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.7);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7);
     min-height: 18px;
   }
   .lg-item, .ro-item { display: inline-flex; align-items: center; gap: 4px; }

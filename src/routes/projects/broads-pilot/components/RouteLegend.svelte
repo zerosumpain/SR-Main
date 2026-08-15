@@ -46,7 +46,7 @@
   .bp-legend {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     overflow: hidden;
     width: max-content;
     max-width: min(92vw, 30rem);
@@ -57,20 +57,20 @@
     background: transparent; padding: 0.45rem 0.6rem;
     font-family: var(--font-mono);
   }
-  .bp-legend-title { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
-  .bp-legend-from { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-  .bp-legend-caret { margin-left: auto; color: var(--text-muted); font-size: 0.7rem; }
+  .bp-legend-title { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+  .bp-legend-from { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .bp-legend-caret { margin-left: auto; color: var(--text-muted); font-size: var(--fs-label-xs); }
   .bp-legend-body { display: flex; flex-direction: column; gap: 0.35rem; padding: 0 0.6rem 0.55rem; }
   .bp-legend-row { display: flex; align-items: center; gap: 0.5rem; }
   .bp-legend-label {
     flex: none; width: 2.8rem;
-    font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--text-muted);
   }
   .bp-legend-items { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.55rem; }
   .bp-legend-item {
     display: inline-flex; align-items: center; gap: 0.28rem;
-    font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
   }
   .sw { width: 14px; height: 5px; border-radius: 2px; display: inline-block; }
   .dash { display: block; }

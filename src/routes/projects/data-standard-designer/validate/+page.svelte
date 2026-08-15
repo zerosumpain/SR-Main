@@ -121,24 +121,24 @@
 </div>
 
 <style>
-  .empty { border: 1.5px dashed var(--card-border); border-radius: var(--radius-round); padding: 30px; text-align: center; }
+  .empty { border: 1.5px dashed var(--card-border); border-radius: var(--radius-sharp); padding: 30px; text-align: center; }
   .empty p { color: var(--text-muted); margin: 0 0 12px; }
   .controls { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin: 18px 0 8px; padding-bottom: 16px; border-bottom: 1px solid var(--divider); }
   .ctl { display: flex; flex-direction: column; gap: 6px; }
-  .seg { display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); overflow: hidden; }
-  .seg button { font-family: var(--font-mono); font-size: 11px; padding: 8px 13px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); border-right: 1px solid var(--card-border); }
+  .seg { display: inline-flex; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); overflow: hidden; }
+  .seg button { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 8px 13px; background: transparent; border: none; cursor: pointer; color: var(--text-muted); border-right: 1px solid var(--card-border); }
   .seg button:last-child { border-right: none; }
   .seg button.on { background: var(--accent); color: #fff; }
   .seedctl { max-width: 110px; }
-  .aictl { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+  .aictl { flex-direction: row; align-items: center; gap: 8px; font-size: var(--fs-label); color: var(--text-secondary); cursor: pointer; }
   .aictl small { color: var(--text-muted); }
-  .ai-error { font-size: 12px; color: var(--warn); background: var(--warn-bg); padding: 7px 10px; border-radius: var(--radius-sharp); }
-  .result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 8px; font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; }
+  .ai-error { font-size: var(--fs-label-xs); color: var(--warn); background: var(--warn-bg); padding: 7px 10px; border-radius: var(--radius-sharp); }
+  .result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 8px; font-size: var(--fs-label); color: var(--text-secondary); flex-wrap: wrap; }
   .dls { display: flex; gap: 8px; }
-  .table-wrap { overflow-x: auto; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; font-family: var(--font-mono); font-size: 10px; text-transform: lowercase; letter-spacing: 0.02em; color: var(--text-muted); padding: 8px 10px; border-bottom: 1.5px solid var(--card-border); background: var(--card-bg); white-space: nowrap; }
-  th .cl { display: inline-block; margin-left: 5px; font-size: 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); background: var(--accent-tint-08); padding: 1px 4px; border-radius: 2px; }
+  .table-wrap { overflow-x: auto; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--fs-label-xs); }
+  th { text-align: left; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: lowercase; letter-spacing: 0.02em; color: var(--text-muted); padding: 8px 10px; border-bottom: 1.5px solid var(--card-border); background: var(--card-bg); white-space: nowrap; }
+  th .cl { display: inline-block; margin-left: 5px; font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); background: var(--accent-tint-08); padding: 1px 4px; border-radius: 2px; }
   th .cl.id { color: var(--info); background: var(--info-bg); }
   td { padding: 6px 10px; border-bottom: 1px solid var(--divider); color: var(--text-secondary); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
   tbody tr:last-child td { border-bottom: none; }

@@ -25,22 +25,22 @@
     border-top: 1px dashed rgba(28, 22, 17, 0.22);
   }
   .ns-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.45);
     margin-right: 2px;
   }
   .ns-link {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--ink, #1c1611);
     text-decoration: none;
     padding: 7px 14px;
     border: 1px solid rgba(28, 22, 17, 0.28);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
   }
   .ns-link:hover {

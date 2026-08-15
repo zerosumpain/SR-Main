@@ -78,18 +78,18 @@
 
 <style>
   .guide-backdrop { position: absolute; inset: 0; z-index: 1000; background: rgba(26, 16, 8, 0.42); display: grid; place-items: center; padding: 0.6rem; }
-  .guide { width: min(54rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); overflow: hidden; }
+  .guide { width: min(54rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); overflow: hidden; }
   .guide-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
-  .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
+  .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: var(--fs-label-xs); color: var(--accent); }
   .guide-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }
   .head-actions { position: absolute; top: 0.6rem; right: 0.7rem; display: flex; align-items: center; gap: 0.4rem; }
-  .head-btn { background: transparent; border: 1px solid var(--card-border); border-radius: var(--radius-round); color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; padding: 0.35rem 0.55rem; min-height: 36px; }
+  .head-btn { background: transparent; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; padding: 0.35rem 0.55rem; min-height: 36px; }
   .head-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .close { background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.3rem; min-height: 36px; min-width: 36px; }
   .close:hover { color: var(--text-primary); }
 
   .guide-body { overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.55rem; }
-  .bubble { margin: 0; max-width: 90%; padding: 0.55rem 0.75rem; border-radius: var(--radius-round); font-family: var(--font-body); font-size: 0.9rem; line-height: 1.45; }
+  .bubble { margin: 0; max-width: 90%; padding: 0.55rem 0.75rem; border-radius: var(--radius-sharp); font-family: var(--font-body); font-size: 0.9rem; line-height: 1.45; }
   /* keep the short Q&A bubbles readable even though the modal is wide; the plan uses the full width */
   .bubble:not(.plan-bubble) { max-width: 36rem; }
   .bubble.bot { align-self: flex-start; background: var(--card-bg); color: var(--text-primary); border-bottom-left-radius: 0; }
@@ -98,14 +98,14 @@
   .plan-bubble { max-width: 100%; width: 100%; background: var(--surface-elevated); border: 1px solid var(--card-border); padding: 0.8rem; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-  .chip { font-family: var(--font-mono); font-size: 0.74rem; padding: 0.5rem 0.7rem; border-radius: var(--radius-round); min-height: 40px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
+  .chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 0.5rem 0.7rem; border-radius: var(--radius-sharp); min-height: 40px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
   .chip:hover { border-color: var(--accent); color: var(--text-primary); }
   .chip.on { background: color-mix(in srgb, var(--accent) 16%, var(--surface-elevated)); border-color: var(--accent); color: var(--text-primary); }
-  .next { align-self: flex-start; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-round); padding: 0.55rem 0.9rem; font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; min-height: 40px; }
-  .skip { background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); border-radius: var(--radius-round); padding: 0.55rem 0.7rem; font-family: var(--font-mono); font-size: 0.7rem; cursor: pointer; min-height: 40px; }
+  .next { align-self: flex-start; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0.55rem 0.9rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; min-height: 40px; }
+  .skip { background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); border-radius: var(--radius-sharp); padding: 0.55rem 0.7rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); cursor: pointer; min-height: 40px; }
   .free-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
   .free-row.followup { position: sticky; bottom: 0; background: var(--surface-elevated); padding-top: 0.3rem; }
-  .free { flex: 1 1 10rem; min-height: 40px; font-family: var(--font-body); font-size: 0.85rem; padding: 0.5rem 0.6rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); background: var(--bg); color: var(--text-primary); }
+  .free { flex: 1 1 10rem; min-height: 40px; font-family: var(--font-body); font-size: 0.85rem; padding: 0.5rem 0.6rem; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--bg); color: var(--text-primary); }
   .free:focus { outline: none; border-color: var(--accent); }
 
   .planning { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); flex-wrap: wrap; }

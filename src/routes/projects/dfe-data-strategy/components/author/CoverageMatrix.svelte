@@ -88,7 +88,7 @@
 <style>
   .empty {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.6);
   }
   .legend {
@@ -97,8 +97,8 @@
     align-items: center;
     flex-wrap: wrap;
     margin-bottom: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.6);
   }
   .legend span {
@@ -113,7 +113,7 @@
     max-height: 480px;
     overflow: auto;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.45);
   }
   .grid {
@@ -129,8 +129,8 @@
   }
   .colh span {
     display: inline-block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
     transform: none;
   }
@@ -148,19 +148,19 @@
     display: inline-block;
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
     margin-right: 6px;
   }
   .rt {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--ink);
   }
   .rd {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
     margin-left: 6px;
     white-space: nowrap;
@@ -195,13 +195,13 @@
   }
   .detail p {
     margin: 0 0 4px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.75);
   }
   .d-hits {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
 </style>

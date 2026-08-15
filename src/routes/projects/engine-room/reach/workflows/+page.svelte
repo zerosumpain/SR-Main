@@ -117,7 +117,7 @@
 
 <style>
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2;
+  .chip { font-family: inherit; font-size: var(--fs-label); font-weight: 600; line-height: 1.2;
     color: var(--text-primary); cursor: pointer; padding: 7px 13px;
     border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-pill);
     background: rgba(255,255,255,0.6); transition: background 0.13s, border-color 0.13s; }
@@ -128,28 +128,28 @@
   .kv { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left;
     padding: 8px 11px; min-width: 0; cursor: pointer; font-family: inherit;
     border: 1px solid rgba(28,22,17,0.16); border-left: 3px solid rgba(28,22,17,0.16);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.55);
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.55);
     transition: background 0.13s, border-color 0.13s; }
   .kv:hover { background: rgba(255,255,255,0.9); border-color: rgba(28,22,17,0.34); }
   .kv.on { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 9%, transparent); }
-  .kv-k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+  .kv-k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.55); }
-  .kv-v { font-size: 13.5px; font-weight: 600; line-height: 1.3; color: var(--text-primary);
+  .kv-v { font-size: var(--fs-label); font-weight: 600; line-height: 1.3; color: var(--text-primary);
     overflow-wrap: anywhere; }
 
-  .readout { margin: 10px 0 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.7);
+  .readout { margin: 10px 0 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.7);
     min-height: 2.6em; max-width: 82ch; }
   .readout::before { content: '▸ '; color: var(--success); }
 
   .band { margin-top: 13px; padding-top: 11px; border-top: 1px dashed rgba(28,22,17,0.18); }
-  .band-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .band-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--success); margin-bottom: 7px; }
   .leash { margin: 0; padding: 0; list-style: none; display: grid;
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
   .leash li { display: flex; flex-direction: column; gap: 2px; min-width: 0;
     padding-left: 10px; border-left: 2px solid color-mix(in srgb, var(--success) 40%, transparent); }
-  .leash b { font-size: 12.5px; font-weight: 600; line-height: 1.3; color: var(--text-primary); }
-  .leash span { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.62); }
+  .leash b { font-size: var(--fs-label); font-weight: 600; line-height: 1.3; color: var(--text-primary); }
+  .leash span { font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.62); }
 
   @media (max-width: 380px) {
     .kvs, .leash { grid-template-columns: 1fr; }

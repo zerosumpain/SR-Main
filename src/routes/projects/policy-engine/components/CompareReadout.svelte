@@ -50,23 +50,23 @@
 </div>
 
 <style>
-  .cmp { border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); background: var(--accent-ink-tint-06); padding: 9px 12px; }
+  .cmp { border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-sharp); background: var(--accent-ink-tint-06); padding: 9px 12px; }
   .cmp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
-  .ch-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13px; color: var(--ink); }
-  .ch-key { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.6); display: inline-flex; align-items: center; }
+  .ch-title { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-label); color: var(--ink); }
+  .ch-key { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); display: inline-flex; align-items: center; }
   .ch-key i { display: inline-block; width: 9px; height: 3px; border-radius: var(--radius-sharp); margin-right: 4px; }
   .ka { background: #9a3b2e; }
   .kb { background: var(--accent-ink); }
   .cmp-scroll { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 340px; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 340px; font-size: var(--fs-label-xs); }
   @media (max-width: 560px) { .verdict { display: none; } }
-  th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 3px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
+  th { text-align: left; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: rgba(28,22,17,0.5); padding: 3px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.15); }
   th.num, td.num { text-align: right; white-space: nowrap; }
   td { padding: 4px 8px 4px 0; border-bottom: 1px solid rgba(28,22,17,0.06); color: rgba(28,22,17,0.82); }
-  td.num { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  td.num { font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   td.a { color: #9a3b2e; }
   td.b { color: var(--accent-ink); }
-  td small { font-size: 8.5px; opacity: 0.6; margin-left: 1px; }
+  td small { font-size: var(--fs-label-xs); opacity: 0.6; margin-left: 1px; }
   td.delta { font-weight: 600; }
   td.delta.good { color: var(--success); }
   td.delta.bad { color: var(--error); }

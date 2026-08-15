@@ -104,16 +104,16 @@
 <style>
   .sc { display: flex; flex-direction: column; gap: 4px; }
   svg { width: 100%; height: auto; display: block; }
-  .ax { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: rgba(28,22,17,0.5); }
-  .axl { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.06em;
+  .ax { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.5); }
+  .axl { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em;
     fill: rgba(28,22,17,0.6); text-transform: uppercase; }
   .pt { cursor: pointer; transition: r 0.12s, opacity 0.12s; }
-  .read { margin: 0; min-height: 1.5em; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.78); }
+  .read { margin: 0; min-height: 1.5em; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.78); }
   .read b { color: var(--text-primary); }
   .dim { color: rgba(28,22,17,0.45); }
 
   .pts { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 0; padding: 0; }
-  .pt-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.7);
+  .pt-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
     border-radius: var(--radius-pill); padding: 3px 9px; cursor: pointer; }
   .pt-btn:hover { border-color: rgba(28,22,17,0.4); color: var(--text-primary); }

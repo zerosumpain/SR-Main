@@ -50,7 +50,7 @@
     background: rgba(255, 255, 255, 0.4);
     border: 1px solid rgba(28, 22, 17, 0.13);
     border-left: 3px solid var(--tier);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     min-width: 0;
   }
   .tier-open { --tier: var(--success); }
@@ -72,26 +72,26 @@
   }
   h3 {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--fs-body);
     line-height: 1.1;
     letter-spacing: -0.01em;
     color: var(--ink);
   }
   .acr {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     color: rgba(28, 22, 17, 0.5);
     padding: 1px 5px;
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     white-space: nowrap;
   }
   .open-api {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent);
@@ -103,7 +103,7 @@
   }
   .purpose {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.74);
   }
@@ -114,8 +114,8 @@
     margin: 2px 0 0;
   }
   dt {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.45);
@@ -123,20 +123,20 @@
   }
   dd {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.4;
     color: rgba(28, 22, 17, 0.82);
   }
   .hi {
     margin: 4px 0 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--tier);
     line-height: 1.4;
   }
   .note {
     margin: 0;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.55);
     border-left: 2px solid rgba(28, 22, 17, 0.14);
@@ -151,8 +151,8 @@
     border-top: 1px solid rgba(28, 22, 17, 0.08);
   }
   .ft a {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     color: rgba(28, 22, 17, 0.62);
     text-decoration: none;
