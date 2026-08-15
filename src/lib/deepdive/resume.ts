@@ -16,7 +16,8 @@
 import { db } from '$lib/db';
 import { researchSessions, researchLeads } from '$lib/db/schema';
 import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
-import { startResearch, isRunning } from './worker';
+import { startResearch, isRunning, clearSignals } from './worker';
+import { resumePhase } from './phase-order';
 
 /**
  * How quiet a session must be before another process may adopt it.
@@ -33,6 +34,65 @@ const NON_TERMINAL = ['phase1', 'phase2', 'phase3', 'post_processing'];
 export interface ResumeResult {
   adopted: string[];
   skipped: number;
+}
+
+/**
+ * Put one session back to work, from where it left off.
+ *
+ * The single path used by both the sweep and the Resume button, because the
+ * three things that have to happen are the same either way and getting any of
+ * them wrong is silent:
+ *
+ *  1. **Start at the stored phase.** `startResearch` always begins at phase 1.
+ *     For a session already past lead generation that is not a resume, it is a
+ *     restart that pays for the gathering twice — see `$lib/deepdive/phase-order`.
+ *  2. **Requeue the in-flight leads.** `takeLeads` only claims `queued` rows, so
+ *     leads left `running` by a dead worker are invisible to the frontier
+ *     forever.
+ *  3. **Forget the old signals.** A pause flag set thirty seconds ago is still
+ *     in the map, and would stop the run again on its first check.
+ */
+export async function resumeSession(
+  sessionId: string,
+): Promise<{ ok: boolean; phase?: string; reason?: string }> {
+  if (isRunning(sessionId)) return { ok: false, reason: 'This run is already going.' };
+
+  const [row] = await db
+    .select({
+      id: researchSessions.id,
+      status: researchSessions.status,
+      resumeFrom: researchSessions.resumeFrom,
+    })
+    .from(researchSessions)
+    .where(eq(researchSessions.id, sessionId))
+    .limit(1);
+
+  if (!row) return { ok: false, reason: 'No such research run.' };
+  if (row.status === 'complete') return { ok: false, reason: 'This run already finished.' };
+
+  const phase = resumePhase(row);
+
+  await db
+    .update(researchLeads)
+    .set({ status: 'queued', startedAt: null })
+    .where(and(eq(researchLeads.sessionId, sessionId), eq(researchLeads.status, 'running')));
+
+  await db
+    .update(researchSessions)
+    .set({
+      status: phase,
+      resumeFrom: null,
+      resumedAt: new Date(),
+      heartbeatAt: new Date(),
+      // The old failure no longer describes the run, and leaving it there put a
+      // red error line above a working page.
+      errorMessage: null,
+    })
+    .where(eq(researchSessions.id, sessionId));
+
+  clearSignals(sessionId);
+  startResearch(sessionId);
+  return { ok: true, phase };
 }
 
 /**
@@ -69,28 +129,16 @@ export async function resumeStrandedSessions(now = Date.now()): Promise<ResumeRe
   let skipped = 0;
 
   for (const session of candidates) {
-    // This process may itself be the owner — `isRunning` is process-local and
-    // authoritative for that question.
-    if (isRunning(session.id)) {
+    const outcome = await resumeSession(session.id);
+    if (!outcome.ok) {
+      // Almost always "already running" — `isRunning` is process-local and
+      // authoritative for whether this node owns the session.
       skipped++;
       continue;
     }
-
-    // Work that was in flight when the worker died is not lost, it is just
-    // unowned. Requeue it so the resumed run picks it up rather than treating
-    // it as complete.
-    await db
-      .update(researchLeads)
-      .set({ status: 'queued', startedAt: null })
-      .where(and(eq(researchLeads.sessionId, session.id), eq(researchLeads.status, 'running')));
-
-    await db
-      .update(researchSessions)
-      .set({ resumedAt: new Date(), heartbeatAt: new Date() })
-      .where(eq(researchSessions.id, session.id));
-
-    console.log(`[deepdive] resuming stranded session ${session.id} (was ${session.status})`);
-    startResearch(session.id);
+    console.log(
+      `[deepdive] adopting stranded session ${session.id} (was ${session.status}, resuming at ${outcome.phase})`,
+    );
     adopted.push(session.id);
   }
 

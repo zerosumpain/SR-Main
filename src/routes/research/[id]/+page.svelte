@@ -11,6 +11,8 @@
   import SourceMix from '$lib/components/research/SourceMix.svelte';
   import SourceTable from '$lib/components/research/SourceTable.svelte';
   import AskJkaiPanel from '$lib/components/research/AskJkaiPanel.svelte';
+  import RunControls from '$lib/components/research/RunControls.svelte';
+  import RunSpend from '$lib/components/research/RunSpend.svelte';
   import { goto, invalidateAll } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
@@ -42,6 +44,13 @@
   let elapsedMs = $state(0);
   const running = $derived(!['complete', 'failed', 'draft'].includes(status) || status === 'draft');
   const finished = $derived(status === 'complete' || status === 'failed');
+  const paused = $derived(status === 'paused');
+  /**
+   * Not going anywhere on its own. A paused run has real sources, real facts
+   * and a real bill, so the evidence panels below belong to it as much as they
+   * belong to a finished one — only the report-shaped panels need a report.
+   */
+  const settled = $derived(finished || paused);
 
   /**
    * Headline numbers. Single magnitudes, so tiles rather than a chart — a bar
@@ -112,14 +121,18 @@
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
   }
 
-  onMount(() => {
-    const startedAt = Date.now();
-    if (!finished) {
-      elapsedTimer = setInterval(() => {
-        elapsedMs = Date.now() - startedAt;
-      }, 500);
-    }
-
+  /**
+   * (Re)connect to the run's event stream.
+   *
+   * Reconnecting is not decoration. The server binds a stream to the session's
+   * emitter at the moment the request arrives, and a finished run's emitter is
+   * torn down thirty seconds later — so a browser that was watching a run when
+   * it stopped is holding a listener on an object nothing will ever emit on
+   * again. Resuming from this page has to open a new one, or the page would sit
+   * there showing a paused run that had in fact been working for five minutes.
+   */
+  function openStream() {
+    es?.close();
     es = new EventSource(`/api/research/${data.session.id}/stream`);
     es.onmessage = (ev) => {
       let msg: { type: string; message?: string; data?: Record<string, any> };
@@ -185,6 +198,19 @@
       // The browser reconnects on its own; the stream replays state on connect,
       // so a dropped socket costs nothing but a gap in the log.
     };
+  }
+
+  function startClock() {
+    stopClock();
+    const startedAt = Date.now();
+    elapsedTimer = setInterval(() => {
+      elapsedMs = Date.now() - startedAt;
+    }, 500);
+  }
+
+  onMount(() => {
+    if (!finished && !paused) startClock();
+    openStream();
 
     return () => {
       es?.close();
@@ -192,6 +218,26 @@
       stopClock();
     };
   });
+
+  /**
+   * A control changed the run's state. The stream is reopened rather than
+   * trusted: see `openStream`.
+   */
+  function onControlChanged(next: string) {
+    status = next;
+    if (next === 'paused' || next === 'pausing') {
+      stopClock();
+    } else if (next !== 'stopping') {
+      // Resumed. The old failure no longer applies and the clock restarts from
+      // this leg — the total the run reports at the end still includes what it
+      // spent before, because that sum is kept on the row, not here.
+      errorMessage = null;
+      logLines = [];
+      startClock();
+      openStream();
+    }
+    void invalidateAll();
+  }
 
   /**
    * Spawn a child investigation from a gap or hypothesis. `seedContext` and
@@ -241,20 +287,34 @@
   </header>
 
   <section class="statusbar">
-    <span class="pill" class:done={status === 'complete'} class:failed={status === 'failed'}>{status}</span>
+    <span
+      class="pill"
+      class:done={status === 'complete'}
+      class:failed={status === 'failed'}
+      class:held={paused}
+    >{status}</span>
+    {#if paused && data.session.resumeFrom}
+      <span class="metric">will pick up at <b>{data.session.resumeFrom}</b></span>
+    {/if}
     <!-- The SSE counters only ever tick DURING a run, so on a finished one they
          are all zero. Reading "0 facts 0 entities" directly above tiles saying
          51 and 53 made the header look broken; once the run is over the loader's
          counts are the true ones. -->
-    <span class="metric"><b>{finished ? data.counts.sources : stats.sourcesFound || liveSourceCount}</b> sources</span>
+    <span class="metric"><b>{settled ? data.counts.sources : stats.sourcesFound || liveSourceCount}</b> sources</span>
     {#if data.tier.extractsFacts}
-      <span class="metric"><b>{finished ? data.counts.facts : stats.factsExtracted}</b> facts</span>
-      <span class="metric"><b>{finished ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
+      <span class="metric"><b>{settled ? data.counts.facts : stats.factsExtracted}</b> facts</span>
+      <span class="metric"><b>{settled ? data.counts.entities : stats.entitiesIdentified}</b> entities</span>
     {/if}
     <span class="metric spacer">
-      {#if finished}{fmtMs(durationMs)}{:else}{fmtMs(elapsedMs)} elapsed{/if}
-      {#if data.tier.budgetMs && !finished}<span class="budget"> / {fmtMs(data.tier.budgetMs)} budget</span>{/if}
+      {#if finished}{fmtMs(durationMs)}{:else if paused}{fmtMs(durationMs)} so far{:else}{fmtMs(elapsedMs)} elapsed{/if}
+      {#if data.tier.budgetMs && !settled}<span class="budget"> / {fmtMs(data.tier.budgetMs)} budget</span>{/if}
     </span>
+    <RunControls
+      sessionId={data.session.id}
+      {status}
+      pausable={data.session.depth === 'investigation'}
+      onChanged={onControlChanged}
+    />
     <button type="button" class="reason-toggle" class:on={showReasoning} onclick={() => (showReasoning = !showReasoning)}>
       {showReasoning ? 'Hide' : 'Show'} reasoning
     </button>
@@ -278,9 +338,21 @@
     </section>
   {/if}
 
-  {#if finished}
+  {#if settled}
     <StatTiles stats={tiles} />
   {/if}
+
+  {#if paused}
+    <p class="paused-line">
+      Held here on purpose. Nothing has been thrown away — the leads that were in flight are back on
+      the queue, and a deploy will not restart this run behind your back.
+    </p>
+  {/if}
+
+  <!-- The bill, wherever the run is up to. Two budgets are being spent and
+       neither was visible: model tokens through OpenRouter, and Tavily credits
+       against a fixed monthly allowance. -->
+  <RunSpend sessionId={data.session.id} live={!settled} final={finished} />
 
   <!-- The answer and the two things you do with it, side by side. Asking jkai
        and exporting are the actions a reader reaches for while still looking at
@@ -299,6 +371,11 @@
                contradicting itself. -->
           <p class="note">
             This run finished without writing a summary — the evidence below is still here.
+          </p>
+        {:else if paused}
+          <p class="note">
+            Paused before the summary was written. Resume it and it will carry on from where it
+            stopped.
           </p>
         {:else}
           <p class="note">Working…</p>
@@ -328,7 +405,7 @@
     </section>
   {/if}
 
-  {#if finished}
+  {#if settled}
     <ResearchTimeline periods={data.timeline} />
 
     {#if data.counts.entities > 0}
@@ -355,7 +432,7 @@
     />
   {/if}
 
-  {#if finished && data.mix.length > 1}
+  {#if settled && data.mix.length > 1}
     <SourceMix
       mix={data.mix}
       contributors={data.contributors}
@@ -372,6 +449,9 @@
       sources={data.sources}
       filterKind={sourceFilter}
       onClearFilter={() => (sourceFilter = null)}
+      sessionId={data.session.id}
+      savedSourceIds={data.savedSourceIds}
+      driveFolder={data.driveFolder}
     />
   {/if}
 
@@ -410,6 +490,9 @@
   .pill { text-transform: uppercase; letter-spacing: 0.12em; padding: 2px 8px; border: 1px solid var(--accent); color: var(--accent); font-size: var(--fs-label-xs); }
   .pill.done { border-color: var(--success); color: var(--success); }
   .pill.failed { border-color: var(--error); color: var(--error); }
+  .pill.held { border-color: var(--accent-ink); color: var(--accent-ink); }
+
+  .paused-line { margin: 0 0 1rem; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--accent-ink); padding: 0.4rem 0 0.4rem 0.7rem; }
   .metric { color: var(--text-secondary); }
   .metric b { color: var(--text-primary); }
   .spacer { margin-left: auto; }

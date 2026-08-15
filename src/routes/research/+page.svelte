@@ -141,6 +141,9 @@
     if (status === 'complete') return 'var(--success)';
     if (status === 'failed') return 'var(--error)';
     if (status === 'draft') return 'var(--text-ghost)';
+    // Paused is a state somebody chose, not a problem — the counter-accent
+    // separates it from the orange of a run that is genuinely working.
+    if (status === 'paused') return 'var(--accent-ink)';
     return 'var(--accent)';
   }
   function formatDate(iso: string): string {
@@ -265,6 +268,10 @@
             <div class="run-topic">{r.topic}</div>
             <div class="run-meta">
               <span style:color={statusColor(r.status)}>{r.status}</span>
+              <!-- Named, not colour-coded: a run that says `phase2` while nothing
+                   is working on it looks healthy, and one sat like that for four
+                   months before anybody spotted it. -->
+              {#if r.stalled}<span class="dot">·</span><span class="stalled">stalled — open to resume</span>{/if}
               {#if r.durationMs}<span class="dot">·</span><span>{fmtMs(r.durationMs)}</span>{/if}
               <span class="dot">·</span><span>{formatDate(r.createdAt)}</span>
             </div>
@@ -349,4 +356,5 @@
   .run-topic { font-size: var(--fs-nav); font-weight: 500; margin: 0.55rem 0 0.35rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .run-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
   .run-meta .dot { color: var(--text-ghost); }
+  .run-meta .stalled { color: var(--warn); }
 </style>

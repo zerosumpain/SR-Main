@@ -407,6 +407,26 @@ export const researchSessions = pgTable('research_session', {
   resumedAt: timestamp('resumed_at', { withTimezone: true }),
   /** Why a run failed. Previously only ever reached console.error. */
   errorMessage: text('error_message'),
+  /**
+   * Which phase a resumed run should pick up at.
+   *
+   * The phase normally lives in `status` ('phase2' and so on), but pausing has
+   * to overwrite `status` with 'paused' — so without this column a pause would
+   * throw away everything the run had got through and restart at lead
+   * generation. Null on every run that is not paused.
+   */
+  resumeFrom: text('resume_from'),
+  /**
+   * What this run cost at Tavily, in calls and in billed credits.
+   *
+   * Kept on the row rather than derived, because Tavily has no per-request
+   * receipt to reconcile against later: the only moment the spend is knowable
+   * is the moment the call returns. `research_credits` is the account-wide
+   * number and answers a different question — see $lib/deepdive/tavily-usage.
+   */
+  tavilySearches: integer('tavily_searches').notNull().default(0),
+  tavilyExtracts: integer('tavily_extracts').notNull().default(0),
+  tavilyCredits: integer('tavily_credits').notNull().default(0),
 });
 
 export type ResearchSession = typeof researchSessions.$inferSelect;
