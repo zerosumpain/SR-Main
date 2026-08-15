@@ -15,7 +15,7 @@
  */
 import { db } from '$lib/db';
 import { researchSessions, researchLeads } from '$lib/db/schema';
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 import { startResearch, isRunning, clearSignals } from './worker';
 import { resumePhase } from './phase-order';
 
@@ -28,6 +28,19 @@ import { resumePhase } from './phase-order';
  * a frozen page.
  */
 export const STALE_AFTER_MS = 90_000;
+
+/**
+ * How often to look for stranded runs.
+ *
+ * Comfortably longer than `STALE_AFTER_MS`, so a sweep never races the very
+ * threshold it is testing, and short enough that a lost worker costs minutes
+ * rather than waiting for whenever the next deploy happens to land.
+ *
+ * The sweep used to run ONCE, thirty seconds after boot — which is inside the
+ * ninety-second staleness window, so a run that was beating right up to the
+ * restart was always too fresh to adopt and nothing ever looked again.
+ */
+export const RESUME_SWEEP_INTERVAL_MS = 120_000;
 
 const NON_TERMINAL = ['phase1', 'phase2', 'phase3', 'post_processing'];
 
@@ -152,6 +165,19 @@ export async function resumeStrandedSessions(now = Date.now()): Promise<ResumeRe
  * re-run research on questions asked four months ago — spending real money to
  * finish something nobody is waiting for. Anything older than the cutoff is
  * marked failed with an honest reason instead.
+ *
+ * The liveness clause is built with `or()`, NOT a raw `sql` fragment containing
+ * OR. Drizzle's `and()` parenthesises the conjunction as a whole but splices
+ * each operand in as written, so
+ *
+ *     and(A, B, sql`C OR D`)   →   (A and B and C OR D)
+ *
+ * and AND binds tighter than OR, which reads as `(A and B and C) OR D`. `D`
+ * alone is "has a heartbeat older than a day", which matches **completed** runs
+ * — so this UPDATE would have stamped finished research as
+ * "Abandoned — its worker was lost". It had not fired yet only because the two
+ * completed production rows carrying a heartbeat were both younger than the
+ * cutoff on the day it was found.
  */
 export async function retireAncientSessions(maxAgeMs = 24 * 60 * 60 * 1000): Promise<number> {
   const cutoff = new Date(Date.now() - maxAgeMs);
@@ -166,7 +192,7 @@ export async function retireAncientSessions(maxAgeMs = 24 * 60 * 60 * 1000): Pro
       and(
         inArray(researchSessions.status, NON_TERMINAL),
         lt(researchSessions.createdAt, cutoff),
-        sql`${researchSessions.heartbeatAt} IS NULL OR ${researchSessions.heartbeatAt} < ${cutoff}`,
+        or(isNull(researchSessions.heartbeatAt), lt(researchSessions.heartbeatAt, cutoff)),
       ),
     )
     .returning({ id: researchSessions.id });

@@ -695,7 +695,12 @@ export const agentActions = pgTable('agent_actions', {
   status: text('status').default('completed'), // pending | running | completed | failed
   error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // The per-run spend panel reads this table by session id every six seconds
+  // while a research run is live, and the table grows with every LLM call the
+  // whole site makes. Unindexed that is a sequential scan per poll.
+  sessionIdx: index('agent_actions_session_idx').on(t.sessionId),
+}));
 
 export type AgentAction = typeof agentActions.$inferSelect;
 export type NewAgentAction = typeof agentActions.$inferInsert;
