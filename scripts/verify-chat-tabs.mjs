@@ -14,7 +14,7 @@
 //       BASE=http://localhost:5173 node scripts/verify-chat-tabs.mjs
 //       node scripts/verify-chat-tabs.mjs overlap     (one section)
 //
-// Sections: overlap · limits · reattach · viewports
+// Sections: overlap · limits · reattach · typeahead · viewports
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
@@ -229,6 +229,57 @@ if (runs('reattach')) {
         tabs.some((t) => t.activity === 'running'), JSON.stringify(tabs));
     }
   }
+}
+
+// -------------------------------------------------------------- typeahead ----
+// Typing a follow-up while a reply is still streaming.
+//
+// The composer used to be `disabled={loading}`, so a second message simply could
+// not be sent and the gateway's queue/interrupt setting was unreachable from the
+// UI. Follow-ups are now held client-side and sent when the current turn closes,
+// which also means the gateway never sees an overlap from the composer — the one
+// it drops on the floor in `busy_input_mode: queue`.
+if (runs('typeahead')) {
+  log('\n=== typeahead: a follow-up typed mid-reply ===');
+  await openChat(page);
+  const box = paneFor(page).locator('textarea.composer-textarea');
+
+  await send(page, 'Count from 1 to 60, one number per line, nothing else.');
+  await page.waitForTimeout(2500);
+
+  check('the composer stays usable while a reply streams', !(await box.isDisabled()));
+
+  await box.fill('Afterwards, reply with exactly the word DELTA.');
+  await paneFor(page).locator('button[aria-label="Send"]').click();
+  await page.waitForTimeout(600);
+
+  const queued = paneFor(page).locator('.queued-strip .queued-text');
+  check('the follow-up is held and shown as queued', (await queued.count()) === 1,
+    `${await queued.count()} queued rows`);
+  check('the composer is cleared ready for the next one', (await box.inputValue()) === '');
+
+  // It must be sent once the current turn finishes, and not before.
+  const deadline = Date.now() + 240_000;
+  let cleared = false;
+  while (Date.now() < deadline) {
+    if ((await queued.count()) === 0) { cleared = true; break; }
+    await page.waitForTimeout(2000);
+  }
+  check('the queued follow-up is sent once the reply finishes', cleared);
+
+  // Both answers, each under its own question.
+  const settleBy = Date.now() + 240_000;
+  let text = '';
+  while (Date.now() < settleBy) {
+    text = (await transcript(page)).join(' | ');
+    if (/DELTA/.test(text)) break;
+    await page.waitForTimeout(3000);
+  }
+  check('the first message keeps its own answer', /\b1\b[\s\S]*\b60\b/.test(text),
+    'the count should still be there in full');
+  check('the follow-up gets its own answer', /DELTA/.test(text));
+
+  await page.screenshot({ path: `${SHOTS}/typeahead.png` });
 }
 
 // -------------------------------------------------------------- viewports ----

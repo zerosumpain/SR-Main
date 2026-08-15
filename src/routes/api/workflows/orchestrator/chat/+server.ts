@@ -8,7 +8,7 @@ import { db } from '$lib/db';
 import { workflows, workflowNodes, workflowEdges, orchestratorChats, conversations, jkaiAttachments, jkaiToolTraces } from '$lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { allocateCanvasName } from '$lib/canvas/adapter.server';
-import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter } from '$lib/workflows/chat/job-store';
+import { createJob, getJob, cancelJob, cancelAllRunning, cancelForScope, cleanOldJobs, deleteJob, listJobs, publishJobEvent, respondToWaiter, getRunningJobIdForConversation, markJobQueued, clearJobQueued, whenJobSettles } from '$lib/workflows/chat/job-store';
 import type { OrchestratorJob, JobEvent } from '$lib/workflows/chat/job-store';
 import { loadConversationHistory } from '$lib/workflows/chat/conversation-history';
 import { extractEphemeralSidecar, type StoredToolStep } from '$lib/workflows/chat/ephemeral-sidecar';
@@ -207,22 +207,52 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     return json({ error: 'HERMES_BRIDGE_SECRET not configured' }, { status: 500 });
   }
 
-  // Supersede any in-flight job on the same scope BEFORE we start the new
-  // one. Mirrors legacy semantics: a new message on the same canvas cancels
-  // the old one (issue #2 from the Phase 1 cross-cutting review).
+  const client = new HermesClient({
+    baseUrl: HERMES_URL,
+    bridgeSecret: HERMES_SECRET,
+    defaultOrigin: HERMES_ORIGIN,
+    defaultMcpUrl: HERMES_MCP_URL,
+  });
+
+  // One probe, three uses: the model re-pin needs the boot id, the stream loop
+  // needs to know whether this gateway's turn stamps can be trusted, and the
+  // supersede decision below needs to know how it treats an overlapping message.
+  // Probed here rather than in the Hermes branch because the answer changes
+  // whether we cancel the in-flight job at all.
+  const health = await client.health();
+  // Only a gateway that stamps frames at EXECUTION can be read strictly. An older
+  // one stamped on arrival, where a message landing mid-turn took the running
+  // turn's id, so its tags separate nothing and its untagged frames have to be
+  // accepted — dropping them would leave the chat streaming nothing at all until
+  // the gateway was restarted.
+  const strictTurnFrames = health?.turnTagging === 'execution';
+  // `queue` runs each message as its own turn, in order. Anything else folds the
+  // new message into the RUNNING turn.
+  const gatewayQueues = health?.busyInputMode === 'queue';
+
+  // Supersede any in-flight job on the same scope BEFORE we start the new one —
+  // UNLESS the gateway queues, in which case the turn ahead of us is going to run
+  // to completion and answer its own question. Cancelling it there would tear
+  // down the subscriber for an answer that is still coming, and the frames would
+  // be drained by this job and rendered as the reply to a question they do not
+  // answer. Measured: the continuation of a "count to 200" landed under "reply
+  // with BRAVO".
   //
-  // Keep the ids. A second message does NOT start a second Hermes run — the
-  // running one is redirected (or the text merged into it) and keeps the FIRST
-  // turn's stamp, so this job has to adopt what it superseded or it rejects the
-  // output that is answering it and shows only "↪ Redirected current run".
+  // Where the gateway does interrupt, keep the ids. A second message does not
+  // start a second run there — the running one is redirected (or the text merged
+  // into it) and keeps the FIRST turn's stamp, so this job has to adopt what it
+  // superseded or it rejects the very output that is answering it.
   const supersededTurnIds =
-    workflowId || conversationId
+    !gatewayQueues && (workflowId || conversationId)
       ? cancelForScope({ workflowId, conversationId }, 'Superseded by new request')
       : [];
   // Turns whose output belongs to this one. Seeded with what we just superseded
-  // and added to below if a model re-pin is in flight; both are cases where
-  // Hermes folds two requests into a single run that keeps the FIRST turn's id.
+  // and added to below if a model re-pin is in flight; both are cases where the
+  // gateway folds two requests into a single run keeping the FIRST turn's id.
   const inheritedTurnIds: string[] = [...supersededTurnIds];
+  // Whoever is still answering ahead of us, when the gateway queues.
+  const queuedBehindJobId =
+    gatewayQueues && conversationId ? getRunningJobIdForConversation(conversationId) : null;
   cleanOldJobs();
 
   // chatId = the workflow we're chatting against (or a synthetic id when no
@@ -269,6 +299,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   const { jobId, job } = createJob(outbound, { workflowId, conversationId, chatNodeId });
   const { abortController } = job;
 
+  if (queuedBehindJobId) {
+    // Exempt from the idle watchdog until its own turn starts: a queued turn is
+    // silent for exactly as long as the one ahead of it runs, which the 4-min
+    // idle limit reads as stuck. Also tell the client, so a composer that has
+    // just accepted a second message shows why nothing is happening yet.
+    markJobQueued(jobId, queuedBehindJobId);
+    publishJobEvent(jobId, {
+      type: 'status',
+      text: '⏳ Queued — waiting for the current answer to finish.',
+    });
+  }
+
   // Wall-clock for the turn, stamped onto the assistant message so every reply
   // carries its own latency alongside its token count and price.
   const turnStartedAt = Date.now();
@@ -300,12 +342,6 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     });
   }
 
-  const client = new HermesClient({
-    baseUrl: HERMES_URL,
-    bridgeSecret: HERMES_SECRET,
-    defaultOrigin: HERMES_ORIGIN,
-    defaultMcpUrl: HERMES_MCP_URL,
-  });
 
   // Attachments produced by site-tools (e.g. write_document) during this
   // turn. Hoisted here so the tool-step subscriber (below) and the stream
@@ -500,13 +536,22 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // `confirm_ack` waiter chain, unchanged. Unregistered in the same cleanup
   // block as the tool-step subscription, or a stale confirmer would answer for
   // a job that has already finished.
-  const unregisterConfirmer = registerToolConfirmer(toolStepKey, async (req) => {
-    if (abortController.signal.aborted) {
-      return { approved: false, reason: 'the turn was cancelled' };
-    }
-    const approved = await requireConfirmation(jobId, req.prompt, req.args, { destructive: true });
-    return { approved, reason: approved ? undefined : 'the user declined it' };
-  });
+  //
+  // Registered LAZILY, because there is one confirmer per busKey and it would
+  // otherwise be stolen from the turn ahead of us: with the gateway queueing we
+  // no longer supersede, so a queued turn coexists with a running one and used to
+  // overwrite its confirmer the moment it was created. `registerConfirmer` is
+  // called once this turn is actually ours (below, inside the pump).
+  let unregisterConfirmer: () => void = () => {};
+  const registerConfirmer = () => {
+    unregisterConfirmer = registerToolConfirmer(toolStepKey, async (req) => {
+      if (abortController.signal.aborted) {
+        return { approved: false, reason: 'the turn was cancelled' };
+      }
+      const approved = await requireConfirmation(jobId, req.prompt, req.args, { destructive: true });
+      return { approved, reason: approved ? undefined : 'the user declined it' };
+    });
+  };
   // Credential-request gate. Same join as the confirmer above (busKey -> jobId),
   // for `request_credential`. The value never passes through here: this only
   // opens the form and reports the outcome. See secret-gate.ts.
@@ -520,6 +565,10 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     return requireSecret(jobId, spec, req.reason);
   });
   const unsubscribeToolSteps = subscribeToolSteps(toolStepKey, (e: ToolStepEvent) => {
+    // The bus is keyed by CHAT, not by job. While this turn is still queued the
+    // traffic on it belongs to the turn ahead of us, and rendering it here would
+    // fill this reply with another one's tool calls.
+    if (job.queuedBehind) return;
     if (abortController.signal.aborted) return;
     if (e.phase === 'started') {
       emitTraced({
@@ -720,6 +769,23 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // as it always has.
   (async () => {
     console.log(`[hermes-chat] Job ${jobId} started — workflowId=${workflowId ?? 'none'} chatId=${chatId} message="${message.slice(0, 100)}"`);
+    if (queuedBehindJobId) {
+      // Hold until the turn ahead of us has finished. The gateway queues, so it
+      // will answer that one in full first; sending now would put two turns in
+      // flight on one chat, and the tool-step bus keys its confirmer and its
+      // listeners by chat on the documented assumption that there is only ever
+      // one. `cancelForScope` used to guarantee that by killing the first turn —
+      // which is exactly what we stopped doing, because it threw away an answer
+      // that was still coming.
+      console.log(`[hermes-chat] Job ${jobId} queued behind ${queuedBehindJobId}`);
+      await whenJobSettles(queuedBehindJobId);
+      clearJobQueued(jobId);
+      if (abortController.signal.aborted) {
+        console.log(`[hermes-chat] Job ${jobId} was cancelled while queued`);
+        return;
+      }
+    }
+    registerConfirmer();
     // `kind` / `kindId` were resolved above (they gate the auth scope + the
     // adapter's skill selection): 'canvas_chat' → jkai-canvas, 'skill' → the
     // pinned jkai-* domain (carried in kindId), 'manual' → jkai-general routing.
@@ -729,16 +795,6 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       // rebuilt agent falls back to config.yaml's default — so a restart
       // silently moves the conversation onto a different model while every
       // surface still reports the chosen one. No-op unless the boot id changed.
-      // One probe, two uses: the model re-pin needs the boot id, and the stream
-      // loop below needs to know whether this gateway's turn stamps can be
-      // trusted. Probing separately would double a per-turn round trip.
-      const health = await client.health();
-      // Only a gateway that stamps frames at EXECUTION can be read strictly. An
-      // older one stamped on arrival, where a message landing mid-turn took the
-      // running turn's id, so its tags separate nothing and its untagged frames
-      // have to be accepted — dropping them would leave the chat streaming
-      // nothing at all until the gateway was restarted.
-      const strictTurnFrames = health?.turnTagging === 'execution';
       if (conversationId) {
         try {
           const [conv] = await db
@@ -823,6 +879,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
           }
           continue;
         }
+        // Its own turn has started — normal watchdog limits apply from here.
+        clearJobQueued(jobId);
         if (frame.kind === 'send' || frame.kind === 'replace') {
           const update = textAcc.accept(frame);
           if (update.kind === 'status') {

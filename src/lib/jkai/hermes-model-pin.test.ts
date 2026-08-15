@@ -5,7 +5,9 @@ import { ensureModelPinned, resetModelPinCache } from './hermes-model-pin';
 function makeClient(bootId: string | null) {
   return {
     health: vi.fn(async () =>
-      bootId === null ? null : { bootId, startedAt: 1, turnTagging: 'execution' },
+      bootId === null
+        ? null
+        : { bootId, startedAt: 1, turnTagging: 'execution', busyInputMode: 'queue' },
     ),
     sendMessage: vi.fn(async (_req: { chatId: string; text: string }) => ({
       accepted: true,
@@ -79,7 +81,7 @@ describe('ensureModelPinned', () => {
 
   it('reuses a health probe the caller already made rather than adding one', async () => {
     const client = makeClient('boot-a');
-    const health = { bootId: 'boot-a', startedAt: 1, turnTagging: 'execution' };
+    const health = { bootId: 'boot-a', startedAt: 1, turnTagging: 'execution', busyInputMode: 'queue' };
     expect(await ensureModelPinned({ client, ...BASE, health })).toBe(true);
     expect(client.health).not.toHaveBeenCalled();
   });
