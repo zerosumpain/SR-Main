@@ -18,17 +18,6 @@ export type RagChunk = {
   charEnd: number;
 };
 
-/** Sidecar manifest describing how an index was built. */
-export type RagIndexMeta = {
-  collection: string;
-  model: string;
-  dim: number;
-  count: number;
-  chunkChars: number;
-  overlapChars: number;
-  normalized: true;
-};
-
 /** A retrieved chunk plus its similarity score. */
 export type RagHit = RagChunk & { score: number };
 

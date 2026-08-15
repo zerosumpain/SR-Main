@@ -8,15 +8,6 @@ export interface HAEntity {
   state: string;
 }
 
-export interface HADevice {
-  id: string;
-  name: string;
-  manufacturer: string | null;
-  model: string | null;
-  area_id: string | null;
-  area_name: string | null;
-}
-
 export interface HAArea {
   id: string;
   name: string;

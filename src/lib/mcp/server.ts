@@ -41,12 +41,6 @@ export interface McpTool {
   annotations?: { destructiveHint?: boolean };
 }
 
-export interface McpCallRequest {
-  name: string;
-  arguments: Record<string, unknown>;
-  bridgeToken: string;
-}
-
 export interface McpCallResult {
   content: Array<{ type: 'text'; text: string }>;
 }

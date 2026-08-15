@@ -70,14 +70,6 @@ export interface SessionStats {
   counterfactualsRaised: number;
 }
 
-export interface LogEvent {
-  icon: string;
-  message: string;
-  timestamp: number;
-}
-
-export type TimeLimitOption = 15 | 30 | 60 | 120 | null;
-
 export interface IdentityCluster {
   name: string;
   identifier: string;

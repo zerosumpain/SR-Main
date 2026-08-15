@@ -108,37 +108,6 @@ export interface SseFrameToolCall {
   children?: unknown[];
 }
 
-/** Payload for a `kind: 'approval'` frame — a dangerous-command approval gate
- * emitted by the plugin's `send_exec_approval`. Rides in `metadata.approval`
- * (the way tool payloads ride in `metadata.tool`). `adaptFrameToCanvasSse`
- * reads it defensively and raises a `pendingApproval` card whose buttons reply
- * `/approve` | `/deny`. */
-export interface SseFrameApproval {
-  command: string;
-  description?: string;
-  session_key?: string;
-}
-
-/** Payload for a `kind: 'clarify'` frame — a blocking clarifying question from
- *  the agent's `clarify` tool, emitted by the plugin's `send_clarify`. Rides in
- *  `metadata.clarify`. The agent thread is blocked on the gateway's clarify
- *  primitive for `agent.clarify_timeout` (600s) while this is outstanding.
- *
- *  There is no `_ack` correlation event: the gateway resolves the clarify by
- *  intercepting the next non-slash text message in the session
- *  (gateway/run.py:6938-6962), so the card submits the answer as an ordinary
- *  silent chat message — the same trick the approval card uses for `/approve`. */
-export interface SseFrameClarify {
-  clarify_id: string;
-  session_key?: string;
-  questions: Array<{
-    id?: string;
-    text: string;
-    kind?: 'freeform' | 'choice';
-    choices?: string[];
-  }>;
-}
-
 /** Payload for a `kind: 'subagent'` frame — live activity relayed from a
  *  `delegate_task` child agent. Emitted by the plugin's `send_subagent` (wired
  *  from the gateway's child tool_progress relay). Rides in `metadata.subagent`.

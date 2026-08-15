@@ -232,12 +232,6 @@ export async function unbanIp(ip: string, jail = 'sshd'): Promise<{ ok: boolean;
 // them so the panel cannot describe a policy the app is not applying.
 // ---------------------------------------------------------------------------
 
-export interface AppAccessPosture {
-  publicApiPaths: string[];
-  ownerEmails: string[];
-  guestCount: number;
-}
-
 export function publicApiPaths(): string[] {
   return [...PUBLIC_API_PATHS];
 }
