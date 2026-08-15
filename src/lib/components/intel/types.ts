@@ -98,6 +98,9 @@ export interface NetworkPayload {
   /** Ids that literally matched the keyword filter (the rest is context). */
   matched: string[];
   trimmed: boolean;
+  /** True when any filter is narrowing the view — the `selected*` stats are the
+   *  ones worth showing while it is. */
+  filtering?: boolean;
   stats: {
     totalNodes: number;
     totalEdges: number;
@@ -107,8 +110,21 @@ export interface NetworkPayload {
     components: number;
     largestComponent: number;
     isolated: number;
+    /** What the current filter admits, before the 600-node render trim. */
+    selectedNodes?: number;
+    selectedEdges?: number;
+    selectedCommunities?: number;
   };
-  communities: Array<{ id: number; size: number; label: string }>;
+  /** Clusters the filter reaches. `size` is the cluster's true size; `reach` is
+   *  how much of it is in the current selection (equal when unfiltered). */
+  communities: Array<{
+    id: number;
+    size: number;
+    reach?: number;
+    label: string;
+    key?: string | null;
+    colourIndex?: number | null;
+  }>;
 }
 
 export interface UnlikelyRelation {

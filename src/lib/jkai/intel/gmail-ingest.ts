@@ -70,6 +70,17 @@ export interface ThreadMessageInput {
   internalDate?: string;
   /** Populated by the Gmail service's MIME walk; empty for a metadata fetch. */
   attachments?: AttachmentRefInput[];
+  /**
+   * Gmail's own labels for this message — `IMPORTANT`, `CATEGORY_PERSONAL`,
+   * `STARRED` and so on.
+   *
+   * `fetchMessage` has always returned these and this interface has always
+   * dropped them, so nothing downstream could see a verdict Gmail had already
+   * reached. `IMPORTANT` is the interesting one: it is Google's own model of
+   * what matters to this mailbox, trained on years of what actually gets read
+   * and replied to, and no heuristic here is going to beat it.
+   */
+  labelIds?: string[];
 }
 
 export interface ThreadInput {
@@ -443,6 +454,26 @@ export function threadParticipants(thread: ThreadInput): ParsedAddress[] {
     }
   }
   return [...seen.values()];
+}
+
+/** Gmail's label for "this mattered", as it appears on a message. */
+export const IMPORTANT_LABEL = 'IMPORTANT';
+
+/**
+ * Whether Gmail marked any message in this thread important.
+ *
+ * ANY rather than ALL, and deliberately: Gmail marks the message, not the
+ * thread, so a long exchange where one reply mattered carries the label on that
+ * reply alone. Requiring every message to be flagged would lose exactly the
+ * threads worth keeping.
+ *
+ * This is a different axis from `emailKind`. A newsletter can be important and
+ * a colleague's message can be routine — the two describe the post and your
+ * relationship to it, and collapsing them into one facet would throw away the
+ * half that is Google's judgement rather than ours.
+ */
+export function threadIsImportant(thread: ThreadInput): boolean {
+  return (thread?.messages ?? []).some((m) => (m.labelIds ?? []).includes(IMPORTANT_LABEL));
 }
 
 export const CORRESPONDENCE_EDGE_TYPE = 'corresponded_with';
@@ -873,7 +904,13 @@ async function threadAttachmentText(
  */
 async function persistStructuralOnly(
   structural: StructuralExtraction,
-  ctx: { threadId: string; subject: string; account: string; participants: ParsedAddress[] },
+  ctx: {
+    threadId: string;
+    subject: string;
+    account: string;
+    participants: ParsedAddress[];
+    important?: boolean;
+  },
   opts: { recency: number; observedAt?: Date },
 ): Promise<{ entityCount: number; relationshipCount: number }> {
   const { db } = await import('$lib/db');
@@ -892,6 +929,8 @@ async function persistStructuralOnly(
     sourceTag: 'file',
     // No contentHash — see the note above.
     structuralOnly: true,
+    // Only written when true — same reasoning as the full-extraction path.
+    ...(ctx.important ? { important: true } : {}),
   };
 
   const { rows } = await db.execute(sql`
@@ -1146,7 +1185,13 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
         if (structural.entities.length) {
           const stats = await persistStructuralOnly(
             structural,
-            { threadId, subject, account: acct.email, participants: structural.participants },
+            {
+              threadId,
+              subject,
+              account: acct.email,
+              participants: structural.participants,
+              important: threadIsImportant(thread),
+            },
             { recency, observedAt },
           );
           item.edges = stats.relationshipCount;
@@ -1195,6 +1240,10 @@ export async function ingestGmailThreads(opts: GmailIngestOptions = {}): Promise
           gmailAccount: acct.email,
           participants: structural.participants.map((p) => p.email),
           sourceUrl: `https://mail.google.com/mail/u/0/#all/${threadId}`,
+          // Only written when true. A `false` on every ordinary thread would
+          // make the key meaningless to filter on and would say we had checked
+          // — which for anything ingested before this existed we had not.
+          ...(threadIsImportant(thread) ? { important: true } : {}),
         },
       });
 

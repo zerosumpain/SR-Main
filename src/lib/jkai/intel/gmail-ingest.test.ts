@@ -13,6 +13,8 @@ import {
   threadTimestamp,
   threadContentHash,
   queryForMode,
+  threadIsImportant,
+  IMPORTANT_LABEL,
   DEFAULT_GMAIL_INTEL_QUERY,
   ROLLING_GMAIL_INTEL_QUERY,
   type ThreadInput,
@@ -327,6 +329,36 @@ describe('threadToNoteText', () => {
 // ---------------------------------------------------------------------------
 // Structural edges — the zero-LLM half
 // ---------------------------------------------------------------------------
+
+describe('threadIsImportant', () => {
+  it('is true when any message in the thread carries the label', () => {
+    // Gmail labels the MESSAGE, not the thread. A long exchange where one reply
+    // mattered carries IMPORTANT on that reply alone, so requiring all of them
+    // would discard exactly the threads worth keeping.
+    expect(
+      threadIsImportant(
+        thread([msg({ labelIds: ['INBOX'] }), msg({ labelIds: ['INBOX', IMPORTANT_LABEL] })]),
+      ),
+    ).toBe(true);
+  });
+
+  it('is false when no message carries it', () => {
+    expect(
+      threadIsImportant(thread([msg({ labelIds: ['INBOX', 'CATEGORY_PROMOTIONS'] })])),
+    ).toBe(false);
+  });
+
+  it('is false when labels are absent entirely', () => {
+    // Every thread ingested before labels were captured looks like this, and it
+    // must read as "not marked", never as a crash.
+    expect(threadIsImportant(thread([msg()]))).toBe(false);
+    expect(threadIsImportant({ id: 't1', messages: [] })).toBe(false);
+  });
+
+  it('does not match a label that merely contains the word', () => {
+    expect(threadIsImportant(thread([msg({ labelIds: ['NOT_IMPORTANT_REALLY'] })]))).toBe(false);
+  });
+});
 
 describe('threadParticipants', () => {
   it('collects senders, recipients and cc, deduped across messages', () => {

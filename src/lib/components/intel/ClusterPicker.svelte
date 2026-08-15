@@ -31,6 +31,8 @@
   let {
     communities = [],
     roster = [],
+    narrowed = false,
+    reachedTotal = 0,
     focused = [],
     filtered = null,
     stats = null,
@@ -48,12 +50,18 @@
     communities: Array<{
       id: number;
       size: number;
+      /** How much of the cluster the current filter reaches; equals `size` unfiltered. */
+      reach?: number;
       label: string;
       colourIndex?: number | null;
       key?: string | null;
     }>;
     /** The rich roster, joined to `communities` by key. */
     roster?: ClusterView[];
+    /** True when a filter is narrowing the graph, so the list is a slice. */
+    narrowed?: boolean;
+    /** Every cluster the filter reaches, including any past the listed cap. */
+    reachedTotal?: number;
     /** Brought forward in the graph and outlined. Empty means all of them. */
     focused: number[];
     /** Filtered to server-side, or null. */
@@ -103,6 +111,15 @@
       const fa = focusSet.has(a.id) ? 1 : 0;
       const fb = focusSet.has(b.id) ? 1 : 0;
       if (fa !== fb) return fb - fa;
+      // Under a filter, REACH is the ranking that answers the question being
+      // asked — "which clusters does this channel populate". Signal ranks
+      // clusters as they are in the whole graph, which is the right answer only
+      // when you are looking at the whole graph.
+      if (narrowed) {
+        const ra = a.reach ?? a.size;
+        const rb = b.reach ?? b.size;
+        if (ra !== rb) return rb - ra;
+      }
       const sa = a.key ? rosterByKey.get(a.key)?.signal : undefined;
       const sb = b.key ? rosterByKey.get(b.key)?.signal : undefined;
       if (sa !== undefined && sb !== undefined && sa !== sb) return sb - sa;
@@ -161,7 +178,17 @@
             <span class="swatch" aria-hidden="true"></span>
             <span class="name">{rich?.label ?? c.label}</span>
             {#if rich?.name}<span class="named" title="You named this cluster">·</span>{/if}
-            <span class="count">{c.size}</span>
+            <!-- Filtered, the row says how much of the cluster is in view over
+                 how big it really is. Showing only the reach would make a large
+                 cluster you have narrowed into look like a small one; showing
+                 only the size would not say why it is listed. -->
+            {#if narrowed && c.reach !== undefined && c.reach < c.size}
+              <span class="count" title="{c.reach} of this cluster's {c.size} entities are in the current view">
+                {c.reach}<span class="of">/{c.size}</span>
+              </span>
+            {:else}
+              <span class="count">{c.size}</span>
+            {/if}
           </button>
           {#if rich}
             <button
@@ -206,6 +233,17 @@
       {#if focused.length}
         {focused.length} cluster{focused.length === 1 ? '' : 's'} outlined. Everything else is dimmed,
         not removed — pick another to compare them.
+      {:else if narrowed}
+        <!-- Counted over the clusters the filter REACHES, never "how many are
+             hidden": the listed set is capped and the roster only tracks
+             clusters of five or more, so subtracting one from the other
+             produced a number that belonged to neither population. -->
+        {#if reachedTotal > communities.length}
+          Top {communities.length} of {reachedTotal} clusters this filter reaches, most reached first.
+        {:else}
+          {communities.length} cluster{communities.length === 1 ? '' : 's'} reached by this filter, most
+          reached first.
+        {/if}
       {:else}
         {communities.length} clusters covering {total} entities{#if ranked}, strongest first — ranked by
           how many kinds of source corroborate them, not by size{/if}.
@@ -336,6 +374,11 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-ghost);
+  }
+  /* The denominator recedes: the reach is the number being read, the true size
+     is the context for it. */
+  .count .of {
+    opacity: 0.55;
   }
 
   .only {

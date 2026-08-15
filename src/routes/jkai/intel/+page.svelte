@@ -633,6 +633,52 @@
   const fragmentation = $derived(
     network && network.stats.totalNodes ? network.stats.components / network.stats.totalNodes : 0,
   );
+
+  /**
+   * Whether the tiles are describing a slice rather than the whole graph.
+   *
+   * The tiles used to read the unfiltered totals unconditionally, so narrowing
+   * to one channel left every number on the page unmoved. That reads as a
+   * filter that did nothing — and since the graph underneath it HAD narrowed,
+   * the page contradicted itself.
+   *
+   * `filtering` comes from the server, which is the only place that knows the
+   * full filter set; falling back to the local count keeps this honest against
+   * an older payload rather than silently claiming the whole graph.
+   */
+  const narrowed = $derived(!!network && (network.filtering ?? filterCount > 0));
+  const entityCount = $derived(
+    narrowed ? network?.stats.selectedNodes ?? network?.stats.shown : network?.stats.totalNodes,
+  );
+  const connectionCount = $derived(
+    narrowed ? network?.stats.selectedEdges : network?.stats.totalEdges,
+  );
+  const clusterCount = $derived(
+    narrowed
+      ? network?.stats.selectedCommunities ?? network?.communities.length
+      : roster?.stats.tracked ?? network?.stats.communities,
+  );
+
+  /**
+   * The roster, restricted to the clusters the current filter reaches.
+   *
+   * The roster itself stays whole — it is the durable description of every
+   * cluster, and a narrative written about 380 entities does not stop being
+   * about them because you ticked "chat". What changes is which of them are
+   * worth listing: asking for one channel and still being shown all 24 clusters
+   * at full size is the same contradiction the tiles had.
+   */
+  const reachByKey = $derived(
+    new Map((network?.communities ?? []).map((c) => [c.key ?? `#${c.id}`, c.reach ?? c.size])),
+  );
+  const visibleClusters = $derived.by(() => {
+    const all = roster?.clusters ?? [];
+    if (!narrowed || !network) return all;
+    return all
+      .filter((c) => reachByKey.has(c.key))
+      .map((c) => ({ ...c, reach: reachByKey.get(c.key) ?? 0 }))
+      .sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0));
+  });
 </script>
 
 <JkaiPageTitle title="INTEL" />
@@ -642,21 +688,22 @@
 
   <!-- Vital signs -->
   <div class="tiles">
-    <a class="tile" href="/jkai/intel/entities">
-      <span class="n">{network?.stats.totalNodes ?? data.stats.entityCount}</span>
-      <span class="l">Entities</span>
+    <a class="tile" class:narrowed href="/jkai/intel/entities">
+      <span class="n">{entityCount ?? data.stats.entityCount}</span>
+      <span class="l">{narrowed ? 'Entities here' : 'Entities'}</span>
     </a>
-    <div class="tile">
-      <span class="n">{network?.stats.totalEdges ?? '—'}</span>
-      <span class="l">Connections</span>
+    <div class="tile" class:narrowed>
+      <span class="n">{connectionCount ?? '—'}</span>
+      <span class="l">{narrowed ? 'Connections here' : 'Connections'}</span>
     </div>
-    <div class="tile">
-      <!-- The TRACKED count, not the raw community count. Louvain detects one
-           community per isolated entity, so the raw figure on the live graph is
-           ~2,900 — a true number that describes nothing, since 2,632 of them are
-           a single entity connected to nothing. -->
-      <span class="n">{roster?.stats.tracked ?? network?.stats.communities ?? '—'}</span>
-      <span class="l">Clusters</span>
+    <div class="tile" class:narrowed>
+      <!-- Unfiltered this is the TRACKED count, not the raw community count.
+           Louvain detects one community per isolated entity, so the raw figure
+           on the live graph is ~2,900 — a true number that describes nothing,
+           since 2,632 of them are a single entity connected to nothing.
+           Filtered it is the number of clusters the filter actually reaches. -->
+      <span class="n">{clusterCount ?? '—'}</span>
+      <span class="l">{narrowed ? 'Clusters here' : 'Clusters'}</span>
     </div>
     <div class="tile" class:warn={fragmentation > 0.2}>
       <span class="n">{network?.stats.components ?? '—'}</span>
@@ -731,7 +778,9 @@
       <RailSection title="Clusters" badge={focusCommunities.length || null}>
         <ClusterPicker
           communities={network?.communities ?? []}
-          roster={roster?.clusters ?? []}
+          roster={visibleClusters}
+          {narrowed}
+          reachedTotal={network?.stats.selectedCommunities ?? 0}
           stats={roster?.stats ?? null}
           resolution={roster?.resolution ?? null}
           {recalculating}
@@ -1126,6 +1175,15 @@
   .tile.warn {
     border-color: var(--warn-border);
     background: var(--warn-bg);
+  }
+  /* A tile showing a filtered number is marked, so a small figure reads as
+     "narrowed" rather than "the graph shrank". The label says so too; this is
+     the glanceable half of the same statement. */
+  .tile.narrowed {
+    border-color: var(--accent-tint-35);
+  }
+  .tile.narrowed .l {
+    color: var(--accent);
   }
   .tile .n {
     font-family: var(--font-display);
