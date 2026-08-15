@@ -33,7 +33,7 @@
     justify-content: space-between;
     align-items: center;
     gap: 1rem 1.5rem;
-    border-top: 2px solid var(--card-border);
+    border-top: 2px solid var(--line-strong);
     margin-top: auto;
   }
 
@@ -50,7 +50,7 @@
   }
 
   .site-footer-brand {
-    font-size: 14px;
+    font-size: var(--fs-nav);
     color: var(--text-ghost);
   }
   .site-footer-brand:hover {
@@ -65,7 +65,7 @@
 
   .site-footer-link {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.14em;

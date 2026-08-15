@@ -617,7 +617,7 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     padding-bottom: 10px;
     margin-bottom: 14px;
   }
@@ -682,7 +682,7 @@
     flex: 1;
     min-width: 120px;
     height: 3px;
-    background: var(--divider);
+    background: var(--line);
     border-radius: var(--radius-pill);
     overflow: hidden;
   }
@@ -714,7 +714,7 @@
     padding: 0;
     max-height: 70vh;
     overflow-y: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--card-bg);
   }
@@ -727,7 +727,7 @@
     background: transparent;
     border: 0;
     border-left: 2px solid transparent;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     text-align: left;
     cursor: pointer;
     color: var(--text-primary);
@@ -781,7 +781,7 @@
   }
 
   .detail {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--card-bg);
     padding: 16px;
@@ -856,7 +856,7 @@
   blockquote {
     margin: 0;
     padding: 8px 11px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border-left: 2px solid var(--accent-tint-35);
     border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     font-size: var(--fs-body-sm);
@@ -893,8 +893,8 @@
     gap: 5px;
     font-size: var(--fs-label-xs);
     padding: 3px 9px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     color: var(--text-secondary);
     text-decoration: none;
@@ -915,7 +915,7 @@
     gap: 6px;
     flex-wrap: wrap;
     padding-top: 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   button {
     font-family: var(--font-mono);
@@ -923,7 +923,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -962,7 +962,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     padding: 1px 4px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-ghost);
   }
@@ -986,7 +986,7 @@
     letter-spacing: 0;
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .open {
@@ -1011,8 +1011,8 @@
     gap: 8px;
   }
   .alert {
-    border: 1px solid var(--card-border);
-    border-left: 3px solid var(--card-border);
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--card-bg);
     padding: 11px 13px;
@@ -1073,7 +1073,7 @@
     width: min(560px, 100%);
     /* Opaque: a floating panel over the grain background is unreadable otherwise. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 16px;
   }
@@ -1115,7 +1115,7 @@
     font-family: var(--font-body);
     font-size: var(--fs-body-sm);
     border-color: transparent;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     border-radius: 0;
     color: var(--text-primary);
   }

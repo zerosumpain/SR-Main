@@ -149,21 +149,23 @@
                 {#if (watchesByAccount[account.id] ?? []).length === 0}
                   <div class="nm-empty">No watches yet.</div>
                 {:else}
-                  <table class="nm-table">
-                    <thead>
-                      <tr><th>Label</th><th>Query</th><th>Enabled</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                      {#each watchesByAccount[account.id] as w}
-                        <tr>
-                          <td>{w.label}</td>
-                          <td><code>{w.query}</code></td>
-                          <td>{w.enabled ? 'yes' : 'no'}</td>
-                          <td><button class="nm-link-btn danger" onclick={() => deleteWatch(account.id, w.id)} disabled={busy[`del-watch-${w.id}`]}>{busy[`del-watch-${w.id}`] ? '…' : 'Delete'}</button></td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
+                  <div class="nm-table-scroll">
+                    <table class="nm-table">
+                      <thead>
+                        <tr><th>Label</th><th>Query</th><th>Enabled</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        {#each watchesByAccount[account.id] as w}
+                          <tr>
+                            <td>{w.label}</td>
+                            <td><code>{w.query}</code></td>
+                            <td>{w.enabled ? 'yes' : 'no'}</td>
+                            <td><button class="nm-link-btn danger" onclick={() => deleteWatch(account.id, w.id)} disabled={busy[`del-watch-${w.id}`]}>{busy[`del-watch-${w.id}`] ? '…' : 'Delete'}</button></td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
                 {/if}
               </div>
 
@@ -228,9 +230,9 @@
     gap: 0.7rem;
     color: inherit;
   }
-  .caret { font-size: 9px; color: var(--text-ghost); width: 0.8rem; }
+  .caret { font-size: var(--fs-label-xs); color: var(--text-ghost); width: 0.8rem; }
   .account-email { font-size: 0.95rem; color: var(--text-primary); font-weight: 500; }
-  .account-date { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); margin-left: auto; }
+  .account-date { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-left: auto; }
   .account-body { display: flex; flex-direction: column; gap: 0.9rem; padding-top: 0.6rem; }
   .account-section { display: flex; flex-direction: column; gap: 0.4rem; }
   .add-watch-row {
@@ -250,14 +252,14 @@
     background: var(--bg);
     border: 1px solid var(--divider);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .sample-body { margin: 0.4rem 0 0; white-space: pre-wrap; color: var(--text-ghost); }
   .muted { color: var(--text-ghost); }
   code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;

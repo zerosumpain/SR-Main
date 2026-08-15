@@ -604,7 +604,7 @@
   }
   .smp-title {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--text-primary);
     font-weight: 600;
@@ -612,7 +612,7 @@
   .smp-tabs { display: flex; gap: 4px; flex: 1; }
   .smp-tabs button {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     color: var(--text-muted);
     background: none;
@@ -622,7 +622,7 @@
     cursor: pointer;
   }
   .smp-tabs button.active { color: var(--accent); border-color: var(--accent); }
-  .smp-x { font-size: 13px; color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 4px 6px; }
+  .smp-x { font-size: var(--fs-label); color: var(--text-muted); background: none; border: none; cursor: pointer; padding: 4px 6px; }
   .smp-x:hover { color: var(--error); }
 
   .smp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -631,7 +631,7 @@
   .preview-col { position: sticky; top: 0; }
   .lab {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     color: var(--text-muted);
     margin-top: 4px;
@@ -642,7 +642,7 @@
     flex-direction: column;
     gap: 2px;
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -651,10 +651,10 @@
     cursor: pointer;
   }
   .row.sel { border-color: var(--accent); outline: 1px solid var(--accent); }
-  .row-note { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); }
+  .row-note { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .scenario-list, .field input, .browse-bar input {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -668,7 +668,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     color: var(--text-muted);
   }
@@ -686,7 +686,7 @@
     border: 1px dashed var(--card-border);
     border-radius: 2px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
@@ -718,7 +718,7 @@
     right: 0;
     bottom: 0;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #f4ecdc;
@@ -733,7 +733,7 @@
   .find-bar input {
     flex: 1;
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -748,12 +748,12 @@
     border-top: 1px solid var(--card-border);
     padding-top: 12px;
   }
-  .find-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-body); font-size: 12.5px; color: var(--text-primary); min-width: 0; }
+  .find-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-body); font-size: var(--fs-label); color: var(--text-primary); min-width: 0; }
   .find-meta a { color: var(--accent-ink); }
-  .err { font-family: var(--font-mono); font-size: 10px; color: var(--error); margin: 0; }
+  .err { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); margin: 0; }
   .field textarea {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -780,7 +780,7 @@
   .drop:hover { border-color: var(--accent); }
   .drop-main {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -796,15 +796,15 @@
     color: var(--text-muted);
     background: var(--bg);
   }
-  .empty { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+  .empty { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .img-form { display: flex; gap: 12px; align-items: flex-end; border-top: 1px solid var(--card-border); padding-top: 12px; }
 
   .browse { gap: 8px; }
   .browse-bar { display: flex; gap: 8px; align-items: center; }
-  .browse-bar input { max-width: 300px; font-family: var(--font-mono); font-size: 11px; }
+  .browse-bar input { max-width: 300px; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .go {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     background: none;
     border: 1px solid var(--card-border);
@@ -813,13 +813,13 @@
     cursor: pointer;
   }
   .go:hover { color: var(--accent); border-color: var(--accent); }
-  .browse-path { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .browse-path { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .browse-frame { flex: 1; min-height: 46vh; width: 100%; border: 1px solid var(--card-border); border-radius: 2px; background: #fff; }
-  .hint { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-ghost); margin: 0; }
+  .hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin: 0; }
 
   .insert {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--bg);

@@ -281,10 +281,10 @@
 
   .h-section {
     padding: 56px 32px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .h-section.tinted {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .h-section-inner {
     max-width: 1480px;
@@ -310,7 +310,7 @@
   }
   .h-section-strap {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -320,7 +320,7 @@
   }
   .h-section-num {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-ghost);
     margin: 0 0 8px 0;
@@ -349,14 +349,14 @@
   }
   .h-annot-when {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--accent);
     margin: 0 0 4px 0;
   }
   .h-annot-text {
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.5;
     margin: 0;
     color: var(--text-primary);
@@ -377,7 +377,7 @@
   .h-footer-mark {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     text-transform: uppercase;
     letter-spacing: -0.02em;
     color: var(--text-ghost);
@@ -391,12 +391,12 @@
   }
   .h-method-btn {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 5px 12px;
     cursor: pointer;
     transition: color 0.18s, border-color 0.18s;
@@ -407,7 +407,7 @@
   }
   .h-disclaimer {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -416,7 +416,7 @@
 
   .h-sync-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);

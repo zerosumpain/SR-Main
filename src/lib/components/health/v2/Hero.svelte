@@ -136,7 +136,7 @@
   .h-hero {
     position: relative;
     padding: 56px 32px 44px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .h-hero-inner {
     position: relative;
@@ -149,7 +149,7 @@
   }
   .h-section-num {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-ghost);
     margin: 0;
@@ -174,7 +174,7 @@
   }
   .h-hero-ed-strap {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1.5;
     color: var(--text-secondary);
     max-width: 560px;
@@ -189,8 +189,8 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0;
-    border-top: 2px solid var(--card-border);
-    border-bottom: 2px solid var(--card-border);
+    border-top: 2px solid var(--line-strong);
+    border-bottom: 2px solid var(--line-strong);
   }
   @media (max-width: 720px) {
     .h-today {
@@ -199,7 +199,7 @@
   }
   .h-today-cell {
     padding: 14px 18px;
-    border-right: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -214,7 +214,7 @@
   }
   .h-today-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -237,7 +237,7 @@
   }
   .h-today-unit {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
     margin-left: 4px;
@@ -245,7 +245,7 @@
   }
   .h-today-delta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     margin: 0;

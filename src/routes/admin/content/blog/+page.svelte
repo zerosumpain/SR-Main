@@ -227,13 +227,13 @@
   }
   .post-date {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     letter-spacing: 0.06em;
   }
   .post-views {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     min-width: 2.5em;
     text-align: right;

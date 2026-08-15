@@ -43,14 +43,14 @@
   }
   .bn-unit {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent-ink);
   }
   .bn-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: var(--fs-nav);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--ink-soft);

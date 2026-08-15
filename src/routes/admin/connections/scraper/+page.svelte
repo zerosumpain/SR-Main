@@ -247,23 +247,25 @@
       {#if credentials.length === 0}
         <div class="nm-empty">No credentials saved.</div>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr><th>Domain</th><th>Label</th><th>Strategy</th><th>Login URL</th><th>Created</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each credentials as c}
-              <tr>
-                <td>{c.domain}</td>
-                <td>{c.label}</td>
-                <td><code>{c.loginStrategy}</code></td>
-                <td>{trunc(c.loginUrl, 50)}</td>
-                <td>{fmtDate(c.createdAt)}</td>
-                <td><button class="nm-link-btn danger" onclick={() => deleteCredential(c.id)}>Delete</button></td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Domain</th><th>Label</th><th>Strategy</th><th>Login URL</th><th>Created</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each credentials as c}
+                <tr>
+                  <td>{c.domain}</td>
+                  <td>{c.label}</td>
+                  <td><code>{c.loginStrategy}</code></td>
+                  <td>{trunc(c.loginUrl, 50)}</td>
+                  <td>{fmtDate(c.createdAt)}</td>
+                  <td><button class="nm-link-btn danger" onclick={() => deleteCredential(c.id)}>Delete</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     </section>
 
@@ -329,23 +331,25 @@
       {#if targetKnowledge.length === 0}
         <div class="nm-empty">No knowledge rows yet.</div>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr><th>Domain</th><th>Interactive</th><th>Hint</th><th>Source</th><th>Updated</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each targetKnowledge as row}
-              <tr>
-                <td>{row.domain}</td>
-                <td>{row.requiresInteractive ? '✓' : '—'}</td>
-                <td>{trunc(row.interactiveHint, 60)}</td>
-                <td>{row.source}</td>
-                <td>{fmtDate(row.updatedAt)}</td>
-                <td><button class="nm-link-btn danger" onclick={() => deleteTargetKnowledge(row.id)}>Delete</button></td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Domain</th><th>Interactive</th><th>Hint</th><th>Source</th><th>Updated</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each targetKnowledge as row}
+                <tr>
+                  <td>{row.domain}</td>
+                  <td>{row.requiresInteractive ? '✓' : '—'}</td>
+                  <td>{trunc(row.interactiveHint, 60)}</td>
+                  <td>{row.source}</td>
+                  <td>{fmtDate(row.updatedAt)}</td>
+                  <td><button class="nm-link-btn danger" onclick={() => deleteTargetKnowledge(row.id)}>Delete</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     </section>
 
@@ -401,26 +405,28 @@
       {#if sessions.length === 0}
         <div class="nm-empty">No active sessions.</div>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr><th>Profile</th><th>URL</th><th>Started</th><th>Expires</th><th></th></tr>
-          </thead>
-          <tbody>
-            {#each sessions as s}
-              <tr>
-                <td>{s.profile}</td>
-                <td>{trunc(s.url, 50)}</td>
-                <td>{s.startedAt ? new Date(s.startedAt).toLocaleTimeString('en-GB') : '—'}</td>
-                <td>{s.expiresAt ? new Date(s.expiresAt).toLocaleTimeString('en-GB') : '—'}</td>
-                <td>
-                  <button class="nm-link-btn" onclick={() => { modal = { session: s }; }}>Open</button>
-                  <span class="dot">·</span>
-                  <button class="nm-link-btn danger" onclick={() => endSession(s.sessionId)}>End</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Profile</th><th>URL</th><th>Started</th><th>Expires</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each sessions as s}
+                <tr>
+                  <td>{s.profile}</td>
+                  <td>{trunc(s.url, 50)}</td>
+                  <td>{s.startedAt ? new Date(s.startedAt).toLocaleTimeString('en-GB') : '—'}</td>
+                  <td>{s.expiresAt ? new Date(s.expiresAt).toLocaleTimeString('en-GB') : '—'}</td>
+                  <td>
+                    <button class="nm-link-btn" onclick={() => { modal = { session: s }; }}>Open</button>
+                    <span class="dot">·</span>
+                    <button class="nm-link-btn danger" onclick={() => endSession(s.sessionId)}>End</button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     </section>
   {/if}
@@ -431,24 +437,26 @@
       {#if runs.length === 0}
         <div class="nm-empty">No runs logged yet.</div>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr><th>URL</th><th>Profile</th><th>Started</th><th>Ended</th><th>OK</th><th>Pages</th><th>Error</th></tr>
-          </thead>
-          <tbody>
-            {#each runs as r}
-              <tr>
-                <td>{trunc(r.url, 60)}</td>
-                <td>{r.profile}</td>
-                <td>{r.startedAt ? new Date(r.startedAt).toLocaleString('en-GB') : '—'}</td>
-                <td>{r.endedAt ? new Date(r.endedAt).toLocaleString('en-GB') : '—'}</td>
-                <td><span class="nm-pill" data-state={r.success ? 'success' : 'error'}>{r.success ? '✓' : '✗'}</span></td>
-                <td>{r.pagesLoaded}</td>
-                <td class="err-cell">{trunc(r.error, 100)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>URL</th><th>Profile</th><th>Started</th><th>Ended</th><th>OK</th><th>Pages</th><th>Error</th></tr>
+            </thead>
+            <tbody>
+              {#each runs as r}
+                <tr>
+                  <td>{trunc(r.url, 60)}</td>
+                  <td>{r.profile}</td>
+                  <td>{r.startedAt ? new Date(r.startedAt).toLocaleString('en-GB') : '—'}</td>
+                  <td>{r.endedAt ? new Date(r.endedAt).toLocaleString('en-GB') : '—'}</td>
+                  <td><span class="nm-pill" data-state={r.success ? 'success' : 'error'}>{r.success ? '✓' : '✗'}</span></td>
+                  <td>{r.pagesLoaded}</td>
+                  <td class="err-cell">{trunc(r.error, 100)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     </section>
   {/if}
@@ -491,7 +499,7 @@
   .muted { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
   .muted code, code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -502,7 +510,7 @@
     align-items: center;
     gap: 0.45rem;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .profile-list {
@@ -525,7 +533,7 @@
 
   .code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.7rem;
@@ -561,7 +569,7 @@
   .modal-title {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
   }
   iframe {

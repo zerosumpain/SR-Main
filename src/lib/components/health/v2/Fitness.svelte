@@ -247,7 +247,7 @@
   }
   .fit-stat-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -266,7 +266,7 @@
   }
   .fit-stat-unit {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 400;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -291,7 +291,7 @@
   }
   .fit-pr-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -313,14 +313,14 @@
   }
   .fit-pr-unit {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 400;
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
   .fit-pr-date {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);

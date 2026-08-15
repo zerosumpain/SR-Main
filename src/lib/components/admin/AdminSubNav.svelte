@@ -38,7 +38,7 @@
     background: color-mix(in srgb, var(--bg) 92%, transparent);
     backdrop-filter: blur(8px) saturate(1.05);
     -webkit-backdrop-filter: blur(8px) saturate(1.05);
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .admin-subnav-inner {
     display: flex;

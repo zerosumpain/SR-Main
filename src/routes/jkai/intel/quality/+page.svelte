@@ -455,7 +455,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-ghost);
     text-decoration: none;
@@ -481,7 +481,7 @@
 
   .panel {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 16px;
     margin-bottom: 16px;
@@ -531,7 +531,7 @@
     font-size: var(--fs-label);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   button {
@@ -540,7 +540,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -577,9 +577,9 @@
     gap: 8px;
   }
   .dup {
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
-    border-left: 3px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     padding: 11px 13px;
   }
@@ -612,8 +612,8 @@
     gap: 9px;
     padding: 8px 11px;
     margin-bottom: 10px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .pick {
@@ -686,7 +686,7 @@
     font-size: var(--fs-label-xs);
     padding: 1px 6px;
     border-radius: var(--radius-sharp);
-    background: var(--divider);
+    background: var(--line);
     color: var(--text-muted);
     margin-right: 6px;
   }
@@ -710,8 +710,8 @@
   .chip {
     font-size: var(--fs-label-xs);
     padding: 3px 9px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     color: var(--text-secondary);
   }
@@ -725,7 +725,7 @@
     gap: 7px;
     flex-wrap: wrap;
     padding-top: 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .type-merge span {
     color: var(--text-ghost);

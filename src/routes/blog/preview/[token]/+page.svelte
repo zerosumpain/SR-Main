@@ -53,7 +53,7 @@
         {#each data.post.tags as tag}
           <span
             class="inline-block text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-[var(--radius-pill)]"
-            style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-muted);"
+            style="background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted);"
           >
             {tag}
           </span>
@@ -71,13 +71,13 @@
     <ProseContent>{@html renderContent(data.post.content, data.post.contentFormat)}</ProseContent>
 
     <!-- Back -->
-    <div class="mt-12 pt-6" style="border-top: 2px solid var(--card-border);">
+    <div class="mt-12 pt-6" style="border-top: 2px solid var(--line-strong);">
       <a href="/blog" class="nav-link">← Back to writing</a>
     </div>
   </div>
 </article>
 
-<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--card-border);">
+<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--line-strong);">
   <a href="/" class="nav-link">← Home</a>
   <a href="/admin" class="nav-link">Admin</a>
 </footer>

@@ -53,10 +53,10 @@
 
   .prose :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.875em;
+    font-size: max(0.875em, var(--fs-label-xs));
     padding: 0.2em 0.5em;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
 
   .prose :global(pre) {
@@ -66,7 +66,7 @@
     font-size: 0.875rem;
     line-height: 1.6;
     background: var(--card-bg);
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
   }
 
   .prose :global(pre code) {

@@ -163,7 +163,7 @@
     justify-content: space-between;
     align-items: baseline;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .slider-hd label {
     text-transform: uppercase;

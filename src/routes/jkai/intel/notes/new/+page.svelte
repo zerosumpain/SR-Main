@@ -75,7 +75,7 @@
         bind:value={title}
         placeholder="e.g., 1:1 with Sarah — Platform concerns"
         class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base focus:outline-none border"
-        style="background: var(--card-bg); border-color: var(--card-border);"
+        style="background: var(--card-bg); border-color: var(--line-strong);"
       />
     </div>
 
@@ -86,7 +86,7 @@
         placeholder="Paste or type your notes, transcript, email, etc."
         rows={12}
         class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base focus:outline-none border resize-y"
-        style="background: var(--card-bg); border-color: var(--card-border);"
+        style="background: var(--card-bg); border-color: var(--line-strong);"
       ></textarea>
     </div>
 
@@ -95,7 +95,7 @@
       <select
         bind:value={format}
         class="w-full rounded-[var(--radius-round)] px-3 py-2 text-sm focus:outline-none border"
-        style="background: var(--card-bg); border-color: var(--card-border);"
+        style="background: var(--card-bg); border-color: var(--line-strong);"
       >
         {#each formats as f}
           <option value={f.value}>{f.label}</option>
@@ -110,7 +110,7 @@
         accept="image/*,audio/*"
         onchange={handleFileChange}
         class="w-full rounded-[var(--radius-round)] px-3 py-2 text-base border"
-        style="background: var(--card-bg); border-color: var(--card-border);"
+        style="background: var(--card-bg); border-color: var(--line-strong);"
       />
       {#if file}
         <div class="text-xs mt-1" style="color: var(--text-ghost);">{file.name} ({(file.size / 1024).toFixed(0)} KB)</div>

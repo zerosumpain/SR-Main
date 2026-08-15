@@ -113,11 +113,11 @@
     text-align: left;
     color: inherit;
   }
-  .caret { font-size: 9px; color: var(--text-ghost); width: 0.8rem; }
+  .caret { font-size: var(--fs-label-xs); color: var(--text-ghost); width: 0.8rem; }
   .task-title { font-size: 0.92rem; color: var(--text-primary); font-weight: 500; flex: 1; }
   .task-date {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .step-bar { display: flex; gap: 2px; }
@@ -131,7 +131,7 @@
     margin: 0;
     padding-left: 1.2rem;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     display: flex;
     flex-direction: column;
@@ -151,7 +151,7 @@
     display: flex;
     gap: 1rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 </style>

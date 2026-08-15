@@ -167,7 +167,7 @@
     width: min(920px, 100%);
     height: min(88vh, 100%);
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
     overflow: hidden;
   }
@@ -176,7 +176,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     background: var(--bg);
   }
   .fv-title {
@@ -215,7 +215,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 5px 10px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-secondary);
     cursor: pointer;
@@ -261,7 +261,7 @@
     align-items: baseline;
     padding: 10px 14px;
     background: var(--surface-overlay);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--accent);
     font-family: var(--font-body);
     font-size: var(--fs-nav);
@@ -302,7 +302,7 @@
   .fv-prose :global(ol) { margin: 0.5em 0; padding-left: 1.5em; }
   .fv-prose :global(li) { margin: 0.25em 0; }
   .fv-prose :global(blockquote) {
-    border-left: 3px solid var(--card-border);
+    border-left: 3px solid var(--line-strong);
     padding-left: 1em;
     margin: 0.8em 0;
     color: var(--text-secondary);
@@ -325,5 +325,5 @@
   .fv-prose :global(pre code) { background: none; padding: 0; }
   .fv-prose :global(table) { border-collapse: collapse; }
   .fv-prose :global(td),
-  .fv-prose :global(th) { border: 1px solid var(--card-border); padding: 4px 8px; }
+  .fv-prose :global(th) { border: 1px solid var(--line-strong); padding: 4px 8px; }
 </style>

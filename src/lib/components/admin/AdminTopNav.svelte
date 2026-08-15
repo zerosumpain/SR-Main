@@ -48,7 +48,7 @@
      accent seam. Cells own their own padding — .site-nav-bar has none. */
   .admin-wordmark {
     flex-shrink: 0;
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;

@@ -36,6 +36,20 @@ const SCOPE = [
   // Added 2026-08-15 with the Instrument pass: /drive's 42 px literals were
   // mapped onto the type scale, so it can hold the floor from here.
   ['src/routes/drive', true],
+  // Widened in the sitewide sweep — every route below was mapped onto the type
+  // scale in the same pass, so the floor holds there now. /projects is the one
+  // family still outside: 1,677 literals across the interactive field studies,
+  // which the design bundle never covered and which want their own pass.
+  ['src/routes/admin', true],
+  ['src/routes/blog', true],
+  ['src/routes/decks', true],
+  ['src/routes/health', true],
+  ['src/routes/heart', true],
+  ['src/routes/live', true],
+  ['src/routes/releases', true],
+  ['src/routes/capture', true],
+  ['src/routes/research', true],
+  ['src/lib/components', true],
   ['src/lib/components/jkai', true],
   ['src/lib/components/intel', true],
   ['src/lib/canvas', true],

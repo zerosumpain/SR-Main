@@ -121,7 +121,7 @@
     transform: translateX(-50%);
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1;
     letter-spacing: -0.02em;
     color: var(--text-primary);
@@ -134,7 +134,7 @@
     flex: 1;
     text-align: center;
     font-family: var(--font-mono);
-    font-size: 8px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-ghost);

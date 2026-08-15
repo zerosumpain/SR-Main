@@ -248,7 +248,7 @@
 
 <section
   class="p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
+  style="background: var(--card-bg); border: 1px solid var(--line-strong); border-radius: var(--radius-round);"
 >
   <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
     <h2
@@ -263,7 +263,7 @@
       </span>
       <button
         class="rounded px-3 py-1.5 text-xs border"
-        style="border-color: var(--card-border); color: var(--text-secondary); background: var(--surface-overlay); {refreshing ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+        style="border-color: var(--line-strong); color: var(--text-secondary); background: var(--surface-overlay); {refreshing ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
         onclick={refreshCatalogue}
         disabled={refreshing}
         title="Re-pull the catalogue from OpenRouter (prices, benchmarks, new models) and recalculate scores"
@@ -285,7 +285,7 @@
     </span>
     <span
       class="px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1"
-      style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border); font-family: var(--font-mono);"
+      style="background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--line-strong); font-family: var(--font-mono);"
       title="Optional alternate the in-chat toggle flips to"
     >
       chat alt · {chatAltOpenRouterModelId ?? 'none'}
@@ -304,16 +304,16 @@
   <!-- Top-row filters: search + numeric ranges + tools toggle -->
   <div class="flex flex-wrap gap-2 mb-3 items-center">
     <input
-      class="rounded px-3 py-2 text-sm flex-1 min-w-[200px]"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+      class="rounded px-3 py-2 text-base flex-1 min-w-[200px]"
+      style="background: var(--surface-elevated); border: 1px solid var(--line-strong); color: var(--text-primary);"
       placeholder="Search name or id…"
       aria-label="Search models"
       bind:value={q}
       oninput={() => { page = 1; }}
     />
     <input
-      class="rounded px-3 py-2 text-sm w-[150px]"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+      class="rounded px-3 py-2 text-base w-[150px]"
+      style="background: var(--surface-elevated); border: 1px solid var(--line-strong); color: var(--text-primary);"
       type="number"
       placeholder="Min context"
       aria-label="Min context"
@@ -321,8 +321,8 @@
       oninput={() => { page = 1; }}
     />
     <input
-      class="rounded px-3 py-2 text-sm w-[190px]"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-primary);"
+      class="rounded px-3 py-2 text-base w-[190px]"
+      style="background: var(--surface-elevated); border: 1px solid var(--line-strong); color: var(--text-primary);"
       type="number"
       step="0.01"
       placeholder="Max $/1M completion"
@@ -332,7 +332,7 @@
     />
     <label
       class="flex items-center gap-2 px-3 py-2 text-xs rounded cursor-pointer select-none"
-      style="background: var(--surface-elevated); border: 1px solid var(--card-border); color: var(--text-secondary);"
+      style="background: var(--surface-elevated); border: 1px solid var(--line-strong); color: var(--text-secondary);"
       title="Only models supporting tool/function calling — required for jkai agent use"
     >
       <input type="checkbox" bind:checked={toolsOnly} onchange={() => { page = 1; }} />
@@ -344,7 +344,7 @@
   {#if sortBy === 'score'}
     <div
       class="flex flex-wrap items-center gap-4 mb-3 px-3 py-2 rounded"
-      style="background: var(--surface-overlay); border: 1px solid var(--card-border);"
+      style="background: var(--surface-overlay); border: 1px solid var(--line-strong);"
     >
       <span
         class="text-[10px] uppercase tracking-wider"
@@ -395,7 +395,7 @@
               class="px-2.5 py-0.5 text-[11px] transition-colors"
               style={active
                 ? 'border-radius: var(--radius-pill); background: var(--accent); color: white; border: 1px solid var(--accent);'
-                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--line-strong);'}
               aria-pressed={active}
               onclick={() => toggleProvider(p)}
             >
@@ -428,7 +428,7 @@
               class="px-2.5 py-0.5 text-[11px] transition-colors"
               style={active
                 ? 'border-radius: var(--radius-pill); background: var(--accent); color: white; border: 1px solid var(--accent);'
-                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--card-border);'}
+                : 'border-radius: var(--radius-pill); background: var(--surface-overlay); color: var(--text-secondary); border: 1px solid var(--line-strong);'}
               aria-pressed={active}
               onclick={() => toggleModality(m)}
             >
@@ -451,11 +451,11 @@
   </div>
 
   <!-- Table -->
-  <div class="overflow-x-auto rounded" style="border: 1px solid var(--card-border);">
+  <div class="overflow-x-auto rounded" style="border: 1px solid var(--line-strong);">
     <table class="w-full border-collapse text-sm">
       <thead>
         <tr
-          style="background: var(--bg-section); color: var(--text-ghost); font-family: var(--font-mono); text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;"
+          style="background: var(--surface-sunken); color: var(--text-ghost); font-family: var(--font-mono); text-transform: uppercase; font-size: var(--fs-label-xs); letter-spacing: 0.1em;"
         >
           <th class="text-left px-2 py-2" aria-sort={ariaDir('id')}>
             <button class="sort-btn" onclick={() => sortByColumn('id')}>
@@ -533,9 +533,9 @@
           {@const isCurrent = isDefault || isChatAlt}
           <tr
             class="model-row"
-            style="border-bottom: 1px solid var(--divider); color: var(--text-primary); {isCurrent ? 'background: color-mix(in srgb, var(--accent) 8%, transparent);' : ''}"
+            style="border-bottom: 1px solid var(--line-hair); color: var(--text-primary); {isCurrent ? 'background: color-mix(in srgb, var(--accent) 8%, transparent);' : ''}"
           >
-            <td class="px-2 py-2" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">
+            <td class="px-2 py-2" style="font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);">
               <code>{m.id}</code>
               {#if isDefault}
                 <span
@@ -603,7 +603,7 @@
   <div class="flex gap-2 mt-3">
     <button
       class="rounded px-3 py-1.5 text-xs border"
-      style="border-color: var(--card-border); color: var(--text-secondary); background: var(--surface-overlay); {page <= 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+      style="border-color: var(--line-strong); color: var(--text-secondary); background: var(--surface-overlay); {page <= 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
       disabled={page <= 1}
       onclick={() => page--}
     >
@@ -611,7 +611,7 @@
     </button>
     <button
       class="rounded px-3 py-1.5 text-xs border"
-      style="border-color: var(--card-border); color: var(--text-secondary); background: var(--surface-overlay); {page * pageSize >= total ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+      style="border-color: var(--line-strong); color: var(--text-secondary); background: var(--surface-overlay); {page * pageSize >= total ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
       disabled={page * pageSize >= total}
       onclick={() => page++}
     >
@@ -651,7 +651,7 @@
     padding: 0 0 0 2px;
     color: var(--text-ghost);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1;
   }
   .clear-x:hover {

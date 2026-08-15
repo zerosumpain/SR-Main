@@ -100,7 +100,7 @@
 <style>
   .drafts-panel {
     padding: 8px 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   /* Wears the thread rail's mono label uniform — it sits directly above the
      Channels block and the two must read as one footer, not two widgets. */

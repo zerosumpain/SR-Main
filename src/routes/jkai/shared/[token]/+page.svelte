@@ -62,7 +62,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 20px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     position: sticky;
     top: 0;
     background: var(--bg);
@@ -85,7 +85,7 @@
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-secondary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 4px 9px;
   }
@@ -109,7 +109,7 @@
     color: var(--text-ghost);
     margin-top: 8px;
     padding-bottom: 18px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .messages {
     margin-top: 22px;
@@ -125,7 +125,7 @@
   .ft {
     margin-top: 36px;
     padding-top: 18px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     font-size: var(--fs-label);
     color: var(--text-ghost);
     line-height: 1.5;

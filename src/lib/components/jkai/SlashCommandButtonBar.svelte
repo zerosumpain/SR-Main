@@ -98,7 +98,7 @@
         // out-weigh the safe primary action above.
         return 'background: transparent; color: var(--error); border: 1px solid var(--error);';
       case 'subtle':
-        return 'background: transparent; color: var(--text-secondary); border: 1px solid var(--card-border);';
+        return 'background: transparent; color: var(--text-secondary); border: 1px solid var(--line-strong);';
       default:
         // Safe / recommended action — filled and bold so it's the dominant tap.
         return 'background: var(--accent); color: var(--bg); border: 1px solid var(--accent); font-weight: 600;';

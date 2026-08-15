@@ -119,14 +119,14 @@
 </section>
 
 <style>
-  .nm-sec { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
-  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--divider); }
+  .nm-sec { border: 1px solid var(--line-strong); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
+  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--line-hair); }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
 
   .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
   .act {
     font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em;
-    padding: 0.4rem 0.7rem; background: var(--bg); border: 1px solid var(--card-border);
+    padding: 0.4rem 0.7rem; background: var(--bg); border: 1px solid var(--line-strong);
     color: var(--text-primary); text-decoration: none; cursor: pointer;
   }
   .act:hover { border-color: var(--accent); color: var(--accent); }

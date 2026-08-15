@@ -121,7 +121,7 @@
   .ctl {
     font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
-    background: none; border: 1px solid var(--card-border); color: var(--text-muted);
+    background: none; border: 1px solid var(--line-strong); color: var(--text-muted);
     cursor: pointer; padding: 3px 9px;
   }
   .ctl:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }

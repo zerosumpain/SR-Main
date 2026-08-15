@@ -345,7 +345,7 @@
   }
   code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -361,23 +361,23 @@
   /* ── Telemetry ── */
   .engine-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.7rem; line-height: 1.5; }
   .engine-note.subtle { color: var(--text-muted); margin: 0.7rem 0 0; }
-  .engine-err { color: var(--danger, #c0392b); font-size: 12px; margin: 0.5rem 0 0; }
+  .engine-err { color: var(--danger, #c0392b); font-size: var(--fs-label-xs); margin: 0.5rem 0 0; }
   .tele-days { display: inline-flex; gap: 0.3rem; }
-  .day-pill { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border: 1px solid var(--card-border); border-radius: 4px; color: var(--text-secondary); text-decoration: none; }
+  .day-pill { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.15rem 0.45rem; border: 1px solid var(--card-border); border-radius: 4px; color: var(--text-secondary); text-decoration: none; }
   .day-pill.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
   .tele-note { font-size: 0.85rem; color: var(--text-secondary); margin: 0.6rem 0 0; }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.6rem; margin: 0.8rem 0; }
   .stat { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.7rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); background: var(--bg-section); }
   .stat-v { font-family: var(--font-mono); font-size: 1.15rem; color: var(--text-primary); font-weight: 600; }
-  .stat-l { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .stat-l { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
   .spark { display: flex; align-items: flex-end; gap: 2px; height: 48px; margin-top: 0.4rem; }
   .spark-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
   .spark-bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; opacity: 0.8; min-height: 3px; }
-  .spark-cap { font-size: 10px; color: var(--text-ghost, var(--text-muted)); margin-top: 0.25rem; }
+  .spark-cap { font-size: var(--fs-label-xs); color: var(--text-ghost, var(--text-muted)); margin-top: 0.25rem; }
   .tele-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem 1.5rem; margin-top: 1rem; }
-  .tele-col-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.35rem; }
+  .tele-col-h { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.35rem; }
   .costliest-h { margin-top: 1rem; }
-  .tele-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid var(--card-border); font-size: 12px; }
+  .tele-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid var(--card-border); font-size: var(--fs-label-xs); }
   .tele-row:last-child { border-bottom: none; }
   .tr-name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tr-v { color: var(--text-primary); white-space: nowrap; flex-shrink: 0; }
@@ -385,12 +385,12 @@
   a.tele-row.link:hover { background: var(--bg-section); }
   a.tele-row.link .tr-name { color: var(--accent); }
   .curator { margin-top: 1rem; }
-  .curator summary { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
-  .curator pre { margin: 0.5rem 0 0; font-size: 11px; line-height: 1.45; color: var(--text-secondary); background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 22rem; overflow-y: auto; }
+  .curator summary { font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
+  .curator pre { margin: 0.5rem 0 0; font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-secondary); background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 22rem; overflow-y: auto; }
 
   .mono {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--text-primary);
   }
 
@@ -432,7 +432,7 @@
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
 
   .btn-row {
@@ -450,7 +450,7 @@
   }
   .nm-save-btn {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 6px 11px;
@@ -498,13 +498,13 @@
     gap: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .result-meta {
     margin-left: auto;
     color: var(--text-ghost);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
   }
   .result-out, .result-err {
     margin: 6px 0 0;
@@ -512,7 +512,7 @@
     background: var(--code-bg);
     color: var(--code-text);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     border-radius: 2px;
     white-space: pre-wrap;
@@ -548,7 +548,7 @@
     border: 1px solid var(--card-border);
   }
   .kind-pill {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--accent);
@@ -566,7 +566,7 @@
   .session-id { color: var(--text-secondary); }
   .created {
     color: var(--text-ghost);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     white-space: nowrap;
   }
 

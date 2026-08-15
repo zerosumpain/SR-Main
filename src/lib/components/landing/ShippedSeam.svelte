@@ -482,7 +482,7 @@
 
   .seam-readout {
     margin-top: 16px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--card-bg);
     padding: 12px 14px;
     /* Three rows plus the header, so scrubbing never reflows the page. */
@@ -496,7 +496,7 @@
   }
   .ro-date {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -504,14 +504,14 @@
   }
   .ro-stat {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
   .ro-hint {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -533,7 +533,7 @@
   }
   .ro-kind {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -545,13 +545,13 @@
   }
   .ro-title {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.35;
     color: var(--text-primary);
   }
   .ro-empty {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     margin: 0;
   }
@@ -566,7 +566,7 @@
   }
   .seam-note {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     letter-spacing: 0.02em;
     color: var(--text-ghost);
@@ -578,7 +578,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;

@@ -71,7 +71,7 @@
     border: 1px solid var(--accent-tint-20);
     text-decoration: none;
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-family: var(--font-mono, monospace);
     letter-spacing: 0.02em;
     white-space: nowrap;

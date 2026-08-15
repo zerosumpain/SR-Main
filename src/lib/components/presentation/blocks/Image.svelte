@@ -22,7 +22,7 @@
   .fig figcaption {
     margin-top: 10px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink-soft);

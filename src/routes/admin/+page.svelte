@@ -231,7 +231,7 @@
 <style>
   .muted-suffix {
     color: var(--text-ghost);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     font-weight: 500;
     margin-left: 2px;
   }
@@ -247,7 +247,7 @@
   }
   .tile-group-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.22em;
@@ -268,7 +268,7 @@
   }
   .muted {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 </style>

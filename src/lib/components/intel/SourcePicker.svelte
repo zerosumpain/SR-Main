@@ -343,7 +343,7 @@
     transition: background var(--t-fast) var(--ease-out);
   }
   .row:hover {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .row.on {
     color: var(--text-primary);
@@ -353,7 +353,7 @@
     flex-shrink: 0;
     width: 12px;
     height: 12px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--bg);
   }
@@ -431,7 +431,7 @@
   .sender-find {
     margin: 2px 0 2px 34px;
     padding: 4px 7px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--bg);
     font-family: var(--font-mono);
@@ -472,8 +472,8 @@
     margin-top: 4px;
     padding-top: 8px;
     padding-left: 10px;
-    border-top: 1px solid var(--divider);
-    border-left: 2px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
+    border-left: 2px solid var(--line-hair);
   }
   .cat-title {
     font-family: var(--font-mono);
@@ -490,7 +490,7 @@
   }
   .chip {
     padding: 3px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     background: transparent;
     font-family: var(--font-mono);

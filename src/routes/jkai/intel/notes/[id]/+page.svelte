@@ -78,12 +78,12 @@
           style="background: var(--accent); color: white; border-color: var(--accent);"
         >{retrying ? 'Retrying...' : 'Retry'}</button>
       {/if}
-      <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--card-border);">{noteStatus}</span>
+      <span class="px-2 py-1 rounded text-xs border" style="{badge.bg} {badge.text} border-color: var(--line-strong);">{noteStatus}</span>
       <button
         onclick={deleteNote}
         disabled={deleting}
         class="px-3 py-1 rounded text-xs border transition-colors nm-delete-btn"
-        style="background: transparent; color: var(--text-secondary); border-color: var(--card-border);"
+        style="background: transparent; color: var(--text-secondary); border-color: var(--line-strong);"
         aria-label="Delete note"
       >{deleting ? 'Deleting...' : 'Delete'}</button>
     </div>
@@ -98,13 +98,13 @@
 
   <div class="grid grid-cols-3 gap-6">
     <div class="col-span-2 space-y-4">
-      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Content</h2>
         <pre class="text-sm whitespace-pre-wrap leading-relaxed">{data.note.processedContent ?? data.note.rawContent}</pre>
       </div>
 
       {#if data.note.processedContent && data.note.processedContent !== data.note.rawContent}
-        <details class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <details class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
           <summary class="text-xs uppercase cursor-pointer" style="color: var(--text-ghost);">Raw Input</summary>
           <pre class="text-sm whitespace-pre-wrap leading-relaxed mt-2">{data.note.rawContent}</pre>
         </details>
@@ -112,7 +112,7 @@
     </div>
 
     <div class="space-y-4">
-      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Extracted Entities</h2>
         {#if data.entities.length === 0}
           <p class="text-sm" style="color: var(--text-ghost);">No entities extracted.</p>
@@ -131,7 +131,7 @@
       </div>
 
       {#if data.timelineEvents.length > 0}
-        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Timeline Events</h2>
           {#each data.timelineEvents as event}
             <div class="py-1.5 text-sm">

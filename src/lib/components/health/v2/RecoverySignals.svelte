@@ -177,7 +177,7 @@
   /* Caption under the recovery-debt spark — mono micro-label, in-palette. */
   .h-spark-cap {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-ghost);

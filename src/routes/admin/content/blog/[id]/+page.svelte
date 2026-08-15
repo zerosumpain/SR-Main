@@ -363,7 +363,7 @@
 <style>
   .saved-flag {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--success);
@@ -385,12 +385,12 @@
   .muted { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
   .muted code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
   }
-  .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: 12px; }
+  .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
 
   .prose :global(h1),
@@ -419,7 +419,7 @@
   }
   .prose :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.875em;
+    font-size: max(0.875em, var(--fs-label-xs));
     padding: 0.2em 0.5em;
     background: var(--card-bg);
     border: 1px solid var(--card-border);

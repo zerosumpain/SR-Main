@@ -389,7 +389,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     background: none;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-ghost);
     cursor: pointer;

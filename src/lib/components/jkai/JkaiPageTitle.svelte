@@ -44,7 +44,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 11px 20px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .pt-left {
     display: flex;

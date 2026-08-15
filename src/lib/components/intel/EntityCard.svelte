@@ -466,7 +466,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     padding: 4px;
   }
@@ -500,7 +500,7 @@
   .entity-card {
     /* Opaque — this floats over content and must never show it through. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 14px;
     font-family: var(--font-body);
@@ -577,7 +577,7 @@
     font-size: var(--fs-label-xs);
     color: var(--text-muted);
     padding-bottom: 10px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     margin-bottom: 10px;
   }
   .metrics b {
@@ -593,7 +593,7 @@
   /* ── Trust ─────────────────────────────────────────────────────────── */
   .trust {
     padding-bottom: 10px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     margin-bottom: 10px;
   }
 
@@ -640,7 +640,7 @@
   .grade.unverified {
     background: transparent;
     color: var(--text-ghost);
-    border-color: var(--card-border);
+    border-color: var(--line-strong);
   }
 
   .why {
@@ -649,7 +649,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 1px 6px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-ghost);
@@ -663,7 +663,7 @@
 
   .t-bar {
     height: 4px;
-    background: var(--divider);
+    background: var(--line);
     border-radius: var(--radius-sharp);
     overflow: hidden;
   }
@@ -698,7 +698,7 @@
   }
   .admiralty {
     padding: 0 4px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     cursor: help;
@@ -750,7 +750,7 @@
   .bd-total {
     margin-top: 3px;
     padding-top: 3px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .bd-total .bd-value {
     color: var(--accent-ink);
@@ -784,7 +784,7 @@
     max-width: 100%;
     background: var(--card-bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .grader button {
@@ -793,7 +793,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 4px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -891,7 +891,7 @@
     gap: 6px;
     margin-bottom: 10px;
     padding-bottom: 10px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   footer button,
   .btn-link {
@@ -900,7 +900,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 4px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

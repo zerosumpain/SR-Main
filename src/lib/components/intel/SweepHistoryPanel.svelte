@@ -211,7 +211,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 1px 5px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     margin-right: 4px;
@@ -244,7 +244,7 @@
   }
   .history li {
     padding-top: 3px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
 
   .name {

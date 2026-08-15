@@ -252,10 +252,10 @@
 
   .pw-rail { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; }
   @media (max-width: 860px) { .pw-rail { width: 100%; } }
-  .pw-stack { border: 1px solid var(--card-border); padding: 10px; }
+  .pw-stack { border: 1px solid var(--line-strong); padding: 10px; }
   .pw-stack-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .pw-stack-label { font-size: var(--fs-nav); color: var(--text-primary); }
-  .pw-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 1px 5px; border: 1px solid var(--card-border); color: var(--text-ghost); }
+  .pw-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; padding: 1px 5px; border: 1px solid var(--line-strong); color: var(--text-ghost); }
   .pw-chip.on { color: var(--success, #2d7a3a); border-color: currentColor; }
   .pw-stack-runtime { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-top: 3px; }
   .pw-surfaces { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
@@ -263,19 +263,19 @@
   .pw-stack-err { font-size: var(--fs-label); color: var(--warn, #b0892a); margin: 8px 0 0; }
   .pw-files { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
   .pw-file { display: flex; flex-direction: column; gap: 2px; text-align: left; background: transparent; border: 1px solid transparent; padding: 5px 6px; cursor: pointer; }
-  .pw-file:hover { border-color: var(--card-border); }
+  .pw-file:hover { border-color: var(--line-strong); }
   .pw-file.sel { border-color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent-ink, var(--accent)) 10%, transparent); }
   .pw-file-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
   .pw-file-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .pw-stack-total { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .pw-stack-total { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 
   .pw-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .pw-note { margin: 0 0 12px; font-size: var(--fs-label); line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--card-border); padding-left: 10px; }
+  .pw-note { margin: 0 0 12px; font-size: var(--fs-label); line-height: 1.5; color: var(--text-muted); border-left: 2px solid var(--line-strong); padding-left: 10px; }
   .pw-note-live { border-left-color: var(--success, #2d7a3a); }
 
   .pw-tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
   .pw-tab-spacer { flex: 1; }
-  .pw-tab { font-family: var(--font-mono); font-size: var(--fs-label); padding: 5px 10px; background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; }
+  .pw-tab { font-family: var(--font-mono); font-size: var(--fs-label); padding: 5px 10px; background: transparent; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; }
   .pw-tab.on { color: var(--text-primary); border-color: var(--text-muted); background: color-mix(in srgb, var(--card-border) 18%, transparent); }
   .pw-tokens { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .pw-status { font-size: var(--fs-label); }
@@ -284,22 +284,22 @@
   .pw-save { font-family: var(--font-mono); font-size: var(--fs-label); padding: 5px 14px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; cursor: pointer; }
   .pw-save:disabled { opacity: 0.45; cursor: default; }
 
-  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
+  .pw-editor { width: 100%; min-height: 62vh; padding: 12px; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); line-height: 1.6; resize: vertical; outline: none; box-sizing: border-box; }
   .pw-editor:focus { border-color: var(--text-muted); }
   .pw-editor[readonly] { opacity: 0.75; }
 
   .pw-caveat { margin: 0 0 6px; font-size: var(--fs-label); color: var(--text-muted); }
   .pw-resolved-meta { margin: 0 0 8px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .pw-resolved { margin: 0; padding: 12px; max-height: 62vh; overflow: auto; background: var(--card-bg); border: 1px solid var(--card-border); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .pw-resolved { margin: 0; padding: 12px; max-height: 62vh; overflow: auto; background: var(--card-bg); border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 
   .pw-empty { font-size: var(--fs-nav); color: var(--text-ghost); }
   .pw-versions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-  .pw-version { border: 1px solid var(--card-border); padding: 10px; }
+  .pw-version { border: 1px solid var(--line-strong); padding: 10px; }
   .pw-version-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .pw-version-when { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
   .pw-version-delta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); flex: 1; }
   .pw-version-diff { color: var(--text-muted); }
-  .pw-restore { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; background: transparent; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; }
+  .pw-restore { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; background: transparent; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; }
   .pw-restore:hover { color: var(--text-primary); border-color: var(--text-muted); }
   .pw-version-body { margin: 8px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: hidden; }
 </style>

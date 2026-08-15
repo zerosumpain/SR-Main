@@ -122,7 +122,7 @@
     text-align: left;
     font: inherit;
   }
-  .row:hover { border-color: var(--card-border); }
+  .row:hover { border-color: var(--line-strong); }
   .row.on { border-color: var(--accent); background: var(--accent-tint-14); }
 
   .name { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; color: var(--text-secondary); }

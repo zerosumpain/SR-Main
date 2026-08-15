@@ -231,11 +231,11 @@
     padding: 12px 16px;
     border-bottom: 2px solid var(--text-primary);
   }
-  .cem-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; font-weight: 600; color: var(--text-primary); }
+  .cem-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em; font-weight: 600; color: var(--text-primary); }
   .kinds { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
   .kinds button {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
     background: none;
@@ -245,7 +245,7 @@
     cursor: pointer;
   }
   .kinds button.active { color: var(--accent); border-color: var(--accent); }
-  .cem-x { font-size: 13px; color: var(--text-muted); background: none; border: none; cursor: pointer; }
+  .cem-x { font-size: var(--fs-label); color: var(--text-muted); background: none; border: none; cursor: pointer; }
   .cem-x:hover { color: var(--error); }
 
   .cem-body {
@@ -260,13 +260,13 @@
   .col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .form-col { overflow-y: auto; padding-right: 4px; }
   .preview-col { overflow-y: auto; }
-  .lab { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; color: var(--text-muted); }
+  .lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em; color: var(--text-muted); }
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field.grow { flex: 1; }
   .axis-row { display: flex; gap: 10px; }
   input {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -280,10 +280,10 @@
   .series-hd { display: flex; gap: 8px; align-items: center; }
   .series-label { font-weight: 600; }
   .pts { display: grid; grid-template-columns: 1fr 1fr 32px; gap: 4px; align-items: center; }
-  .pts-lab { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-ghost); text-align: center; }
+  .pts-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); text-align: center; }
   .mini {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     background: none;
     border: 1px dashed var(--card-border);
@@ -298,7 +298,7 @@
   .mini.add { align-self: stretch; text-align: center; }
   .row3 { display: grid; grid-template-columns: 2fr 1fr 32px; gap: 6px; }
   .row4 { display: grid; grid-template-columns: 1.5fr 1.5fr 1fr 32px; gap: 6px; }
-  .issues { margin: 0; padding-left: 16px; font-family: var(--font-mono); font-size: 10px; color: var(--error); }
+  .issues { margin: 0; padding-left: 16px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
 
   .cem-preview {
     background: var(--bg);
@@ -310,7 +310,7 @@
   }
   .save {
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--bg);

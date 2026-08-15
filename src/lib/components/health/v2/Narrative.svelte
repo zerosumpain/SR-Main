@@ -16,9 +16,9 @@
 
 <style>
   .h-narrative {
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     padding: 22px 26px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 20px;
@@ -31,7 +31,7 @@
     line-height: 0.9;
     letter-spacing: -0.02em;
     color: var(--accent);
-    border-right: 2px solid var(--card-border);
+    border-right: 2px solid var(--line-strong);
     padding-right: 20px;
   }
   .h-narr-body {
@@ -41,7 +41,7 @@
   }
   .h-narr-tag {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -66,7 +66,7 @@
     }
     .h-narr-icon {
       border-right: none;
-      border-bottom: 2px solid var(--card-border);
+      border-bottom: 2px solid var(--line-strong);
       padding-right: 0;
       padding-bottom: 12px;
     }

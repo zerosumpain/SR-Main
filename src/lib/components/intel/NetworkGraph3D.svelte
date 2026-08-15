@@ -1438,7 +1438,7 @@
     max-width: 280px;
     /* Opaque — it floats over the graph. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 8px 10px;
     font-size: var(--fs-label);

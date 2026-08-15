@@ -196,7 +196,7 @@
     z-index: 0;
     isolation: isolate;
     margin: 0.5rem 0;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     max-width: 100%;
@@ -240,7 +240,7 @@
     padding: 0.4rem 0.75rem;
     font-size: 0.8rem;
     color: var(--text-muted);
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .map-artifact.fullscreen figcaption {
     position: absolute;
@@ -248,7 +248,7 @@
     left: 0;
     right: 0;
     background: rgba(255,255,255,0.95);
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .error {
     color: var(--error);

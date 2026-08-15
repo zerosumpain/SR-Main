@@ -143,7 +143,7 @@
   }
 
   li {
-    border-left: 2px solid var(--divider);
+    border-left: 2px solid var(--line-hair);
     padding-left: 8px;
   }
   li:hover {
@@ -241,7 +241,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

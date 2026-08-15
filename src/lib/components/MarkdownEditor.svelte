@@ -477,7 +477,7 @@
 
 <style>
   .editor-wrapper {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     overflow: hidden;
     display: flex;
@@ -491,7 +491,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     background: var(--card-bg);
     gap: 4px;
   }
@@ -543,11 +543,11 @@
 
   .mode-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 4px;
     background: transparent;
     color: var(--text-ghost);
@@ -630,10 +630,10 @@
 
   .preview-pane :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.875em;
+    font-size: max(0.875em, var(--fs-label-xs));
     padding: 0.2em 0.5em;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
 
   .preview-pane :global(pre) {
@@ -642,7 +642,7 @@
     margin: 1.5em 0;
     font-size: 0.875rem;
     background: var(--card-bg);
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
   }
 
   .preview-pane :global(pre code) {
@@ -682,9 +682,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 4px 12px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -717,15 +717,15 @@
 
   .readability {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    padding: 8px 12px; border-top: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    padding: 8px 12px; border-top: 1px solid var(--line-strong);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-secondary); background: var(--accent-tint-04);
   }
   .r-pill {
-    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: var(--radius-pill);
-    text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px;
+    padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+    text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--fs-label-xs);
   }
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
   .r-audience { color: var(--text-primary); font-style: italic; }
-  .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
+  .r-meta { color: var(--text-ghost); margin-left: auto; font-size: var(--fs-label-xs); }
 </style>

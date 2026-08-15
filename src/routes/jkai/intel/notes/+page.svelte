@@ -46,7 +46,7 @@
         <a
           href="/jkai/intel/notes/{note.id}"
           class="block rounded-[var(--radius-round)] p-4 border hover:opacity-80 transition"
-          style="background: var(--card-bg); border-color: var(--card-border);"
+          style="background: var(--card-bg); border-color: var(--line-strong);"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">

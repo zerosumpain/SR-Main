@@ -249,7 +249,7 @@
     justify-content: space-between;
     gap: 12px;
     padding: 11px 14px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .rm-title {
     font-family: var(--font-mono);
@@ -266,7 +266,7 @@
   }
   .rm-chip {
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 0;
     background: none;
     font-family: var(--font-mono);
@@ -302,7 +302,7 @@
     gap: 2px;
     min-width: 0;
     padding: 9px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
   }
   .rm-icon {
@@ -435,7 +435,7 @@
   }
   .rm-grade {
     padding: 1px 6px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -481,7 +481,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 0;
     background: var(--bg);
     cursor: pointer;

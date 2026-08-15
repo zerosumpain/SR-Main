@@ -415,7 +415,7 @@
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   select {
@@ -428,7 +428,7 @@
     gap: 6px;
     padding-bottom: 12px;
     margin-bottom: 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .facet {
     display: flex;
@@ -453,8 +453,8 @@
     text-transform: none;
     letter-spacing: 0;
     padding: 3px 10px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     color: var(--text-secondary);
     cursor: pointer;
@@ -503,7 +503,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -528,7 +528,7 @@
 
   .tablewrap {
     overflow-x: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--card-bg);
   }
@@ -540,7 +540,7 @@
   th {
     text-align: left;
     padding: 0;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   th button {
     width: 100%;
@@ -565,7 +565,7 @@
   }
   td {
     padding: 7px 10px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     vertical-align: middle;
   }
   tr.picked {

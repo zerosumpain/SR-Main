@@ -319,7 +319,7 @@
     width: min(560px, 100%);
     height: 100%;
     background: var(--surface-elevated);
-    border-left: 1px solid var(--card-border);
+    border-left: 1px solid var(--line-strong);
     animation: rc-slide 180ms ease;
   }
   @keyframes rc-slide {
@@ -331,12 +331,12 @@
     align-items: flex-start;
     gap: 12px;
     padding: 16px 18px 12px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .rc-hdr-main { flex: 1; min-width: 0; }
   .rc-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -352,12 +352,12 @@
     text-overflow: ellipsis;
   }
   .rc-x {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--bg);
     color: var(--text-secondary);
     cursor: pointer;
     padding: 4px 9px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1;
   }
   .rc-x:hover { color: var(--accent); border-color: var(--accent); }
@@ -371,7 +371,7 @@
   }
   .rc-chip {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 2px 7px;
     background: var(--accent-tint-08, color-mix(in srgb, var(--accent) 8%, transparent));
     color: var(--text-secondary);
@@ -385,7 +385,7 @@
   .rc-model {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
@@ -410,13 +410,13 @@
   }
   .rc-state-t, .rc-empty-t {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     color: var(--text-primary);
     margin: 0;
   }
   .rc-state-s, .rc-empty-s {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: var(--text-muted);
     margin: 0;
@@ -425,7 +425,7 @@
   .rc-retry {
     margin-top: 6px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     padding: 6px 14px;
     border: 1px solid var(--accent);
     background: var(--bg);
@@ -435,7 +435,7 @@
   .rc-spinner {
     width: 26px;
     height: 26px;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     border-top-color: var(--accent);
     border-radius: 100px;
     animation: rc-spin 0.8s linear infinite;
@@ -450,14 +450,14 @@
     background: var(--accent);
     color: #fff;
     border-radius: var(--radius-round, 14px);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     white-space: pre-wrap;
     word-break: break-word;
   }
   .rc-assistant { width: 100%; }
   .rc-md {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.6;
     color: var(--text-primary);
   }
@@ -469,11 +469,11 @@
     padding: 10px 12px;
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 0.82em;
+    font-size: max(0.82em, var(--fs-label-xs));
   }
   .rc-md :global(code) {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--surface-overlay);
     padding: 0.1em 0.35em;
   }
@@ -481,7 +481,7 @@
   .rc-md :global(ul), .rc-md :global(ol) { margin: 0.3em 0; padding-left: 1.4em; }
   .rc-md :global(a) { color: var(--accent); text-decoration: underline; }
   .rc-md :global(blockquote) {
-    border-left: 3px solid var(--card-border);
+    border-left: 3px solid var(--line-strong);
     padding-left: 0.8em;
     color: var(--text-secondary);
   }
@@ -491,14 +491,14 @@
     gap: 6px;
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px dotted var(--card-border);
+    border-top: 1px dotted var(--line-strong);
   }
   .rc-cite {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     padding: 2px 7px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     max-width: 200px;
     white-space: nowrap;
@@ -511,12 +511,12 @@
     gap: 8px;
     padding: 8px 14px 0;
     background: var(--bg);
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     padding-top: 10px;
   }
   .rc-modellabel {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-ghost);
@@ -533,10 +533,10 @@
   .rc-modelpicker :global(select) {
     width: 100%;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     padding: 4px 8px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-secondary);
     border-radius: var(--radius-sharp, 2px);
     cursor: pointer;
@@ -555,10 +555,10 @@
     flex: 1;
     resize: none;
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     padding: 8px 10px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-primary);
     border-radius: var(--radius-sharp, 2px);
   }
@@ -567,7 +567,7 @@
   .rc-send {
     align-self: flex-end;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     padding: 9px 16px;

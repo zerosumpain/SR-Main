@@ -203,7 +203,7 @@
     display: grid;
     grid-template-columns: 110px minmax(0, 1fr);
     gap: 0;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     background: rgba(26, 16, 8, 0.03);
     width: 100%;
     max-width: 100%;
@@ -219,7 +219,7 @@
       padding: 8px 8px;
     }
     .h-pg-row-name {
-      font-size: 9px;
+      font-size: var(--fs-label-xs);
       letter-spacing: 0.1em;
     }
   }
@@ -231,14 +231,14 @@
       padding: 6px 6px;
     }
     .h-pg-row-name {
-      font-size: 8px;
+      font-size: var(--fs-label-xs);
       letter-spacing: 0.05em;
     }
   }
   .h-pg-rowlabel {
     padding: 10px 14px;
-    border-right: 1px solid var(--divider);
-    border-bottom: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
+    border-bottom: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -249,7 +249,7 @@
   }
   .h-pg-row-name {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-primary);
@@ -257,7 +257,7 @@
   }
   .h-pg-row-meta {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
     margin: 0;
@@ -269,7 +269,7 @@
     display: grid;
     grid-template-columns: repeat(30, minmax(0, 1fr));
     gap: 0;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     min-width: 0;
   }
   .h-pg-row:last-of-type {
@@ -329,13 +329,13 @@
   .h-pg-axis {
     display: grid;
     grid-template-columns: repeat(30, minmax(0, 1fr));
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     background: rgba(26, 16, 8, 0.02);
     min-width: 0;
   }
   .h-pg-axis-cell {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     color: var(--text-ghost);
     text-align: center;
@@ -348,10 +348,10 @@
     gap: 18px;
     flex-wrap: wrap;
     padding: 9px 14px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     background: rgba(26, 16, 8, 0.02);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -394,18 +394,18 @@
     color: var(--bg);
     padding: 8px 10px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     white-space: nowrap;
     transform: translate(-50%, -120%);
-    border: 1px solid var(--divider);
+    border: 1px solid var(--line-hair);
   }
   .h-tip-key {
     color: color-mix(in srgb, var(--bg) 60%, transparent);
     margin-right: 6px;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
   .h-tip-val {
     color: var(--bg);

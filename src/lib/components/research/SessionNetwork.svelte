@@ -205,11 +205,11 @@
   /* .nm-sec, .nm-sec-hd, .sr-label-tight and .nm-sec-meta come from
      $lib/styles/nm-tokens.css (imported by the root layout). Not redefined
      here — that file is the source of truth and says so at the top. */
-  .expand { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; background: none; border: 1px solid var(--card-border); color: var(--text-muted); cursor: pointer; padding: 3px 8px; }
+  .expand { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; background: none; border: 1px solid var(--line-strong); color: var(--text-muted); cursor: pointer; padding: 3px 8px; }
   .expand:hover { border-color: var(--accent); color: var(--accent); }
 
   .clusters { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.6rem; }
-  .chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--card-border); background: transparent; color: var(--text-secondary); padding: 2px 7px; cursor: pointer; }
+  .chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--line-strong); background: transparent; color: var(--text-secondary); padding: 2px 7px; cursor: pointer; }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
   .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-tint-14); }
   .chip b { color: var(--text-ghost); font-weight: 500; }
@@ -217,10 +217,10 @@
 
   /* The graph fills a frame with an explicit height: NetworkGraph is height:100%
      and would collapse to its min-height in an auto-height parent. */
-  .graph-frame { height: 440px; border: 1px solid var(--divider); transition: height 0.2s ease; }
+  .graph-frame { height: 440px; border: 1px solid var(--line-hair); transition: height 0.2s ease; }
   .graph-frame.expanded { height: 78vh; }
 
-  .detail { margin-top: 0.6rem; border-top: 1px solid var(--divider); padding-top: 0.6rem; }
+  .detail { margin-top: 0.6rem; border-top: 1px solid var(--line-hair); padding-top: 0.6rem; }
   .detail-hd { display: flex; align-items: baseline; gap: 0.5rem; }
   .ico { color: var(--accent); }
   .detail-type { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); }
@@ -230,7 +230,7 @@
   .detail-meta { margin-top: 0.3rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
   .neighbours { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
-  .nb { display: inline-flex; align-items: baseline; gap: 0.35rem; border: 1px solid var(--card-border); background: var(--bg); padding: 2px 7px; cursor: pointer; text-align: left; }
+  .nb { display: inline-flex; align-items: baseline; gap: 0.35rem; border: 1px solid var(--line-strong); background: var(--bg); padding: 2px 7px; cursor: pointer; text-align: left; }
   .nb:hover { border-color: var(--accent); }
   .nb-rel { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); text-transform: lowercase; }
   .nb-name { font-size: 0.85rem; color: var(--text-primary); }

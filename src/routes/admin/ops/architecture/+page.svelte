@@ -67,7 +67,7 @@
 <style>
   .upd {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     align-self: center;
   }

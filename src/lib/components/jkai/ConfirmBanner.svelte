@@ -55,8 +55,8 @@
 
 <style>
   .confirm-banner {
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     padding: 10px 12px;
     margin: 6px 0;
     display: flex;
@@ -64,7 +64,7 @@
     gap: 10px;
   }
   .confirm-banner[data-destructive="true"] { border-color: var(--status-error); }
-  .confirm-hdr { border-bottom: 1px dashed var(--card-border); padding-bottom: 6px; }
+  .confirm-hdr { border-bottom: 1px dashed var(--line-strong); padding-bottom: 6px; }
   .confirm-prompt {
     margin: 0;
     font-family: var(--font-mono);
@@ -75,7 +75,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--text-secondary);
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     padding: 6px 8px;
     margin: 6px 0 0;
     overflow-x: auto;
