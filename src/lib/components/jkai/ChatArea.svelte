@@ -34,6 +34,7 @@
   import { coerceModelContext } from '$lib/constants/default-models';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
+  import { subscribeFollowups } from '$lib/jkai/followup-stream';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
   import { setThreadLedger, clearThreadLedger, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
@@ -74,6 +75,8 @@
     onToggleThreadRail,
     onToggleGraphRail,
     graphRailOpen = true,
+    active = true,
+    onbusychange,
   }: {
     conversationId: string | null;
     initialDraft?: string;
@@ -110,6 +113,20 @@
     /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
     onToggleGraphRail?: () => void;
     graphRailOpen?: boolean;
+    /**
+     * False when this pane is a background tab — mounted and streaming, but not
+     * the one on screen. It suppresses the things that only make sense for the
+     * pane the user is looking at: taking focus, and consuming the one-shot
+     * `?ask=` prefill that would otherwise land in whichever pane mounted first.
+     * The chat stream, the follow-up feed and the transcript all keep running,
+     * because a background tab finishing its answer is the entire point.
+     */
+    active?: boolean;
+    /**
+     * Fires when this thread starts or stops working, so the tab strip can show
+     * a dot without polling. `ok` is false when the turn ended in an error.
+     */
+    onbusychange?: (busy: boolean, ok: boolean) => void;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -227,6 +244,53 @@
   // it reads would fight the user as soon as they edited the box.
   let input = $state(initialDraft ?? '');
   let loading = $state(false);
+  // The graph rail draws the thread on screen, so only that pane's turns are a
+  // reason for it to look again. A background pane bumping the revision would
+  // send the rail refetching a graph that had not changed.
+  function bumpGraphIfOnScreen() {
+    if (active) bumpGraphRevision();
+  }
+
+  // The throughput meter is a single shared instrument, so only one turn at a
+  // time may drive it. Ownership is settled when the turn STARTS and then held
+  // to the end: gating each call on `active` instead would let a turn that began
+  // on screen and finished in the background call `begin` and never `settle`,
+  // leaving the meter stuck on "live" — the very failure the backstop settle in
+  // `silentSend` exists to prevent. A background turn's tokens go unmeasured,
+  // which is the honest answer for a meter about what you are watching.
+  let ownsMeters = false;
+  function meterBegin(opts: { replay?: boolean } = {}) {
+    ownsMeters = active;
+    if (ownsMeters) beginTurn(opts);
+  }
+  function meterOutput(text: string | undefined) {
+    if (ownsMeters) noteOutput(text);
+  }
+  function meterToolStart(args: unknown) {
+    if (ownsMeters) noteToolStart(args);
+  }
+  function meterToolEnd() {
+    if (ownsMeters) noteToolEnd();
+  }
+  function meterSettle(actualOutputTokens?: number | null) {
+    if (ownsMeters) settleTurn(actualOutputTokens);
+  }
+
+  // Whether the turn now finishing produced an answer rather than an error.
+  // A plain `let`, deliberately: only the reporting effect below reads it, and
+  // making it reactive would subscribe that effect to its own write.
+  let turnOk = true;
+  let lastReportedBusy = false;
+
+  // Tell the tab strip when this thread starts and stops working, so a
+  // background tab can show a live dot without the page polling for it.
+  $effect(() => {
+    const busy = loading;
+    if (busy === lastReportedBusy) return;
+    lastReportedBusy = busy;
+    if (busy) turnOk = true;
+    onbusychange?.(busy, turnOk);
+  });
   let currentJobId = $state<string | null>(null);
   // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in
   // src/lib/workflows/chat/job-store.ts — the server fires beats on a fixed
@@ -416,7 +480,6 @@
 
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
-  let eventSource: EventSource | null = null;
   let chatStream: ChatStreamHandle | null = null;
 
   // Index of the most recent assistant message — drives whether the in-chat
@@ -449,7 +512,7 @@
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
-    beginTurn();
+    meterBegin();
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -490,9 +553,9 @@
         // Same tok/s accounting as makeProgressHandler. Tool frames aren't
         // rendered on the silent path, but the meter still needs the pause —
         // otherwise a silent turn's tool time would count as turn time.
-        if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-        else if (data.type === 'tool_start') noteToolStart(data.args);
-        else if (data.type === 'tool_result') noteToolEnd();
+        if (data.type === 'token' || data.type === 'thinking') meterOutput(data.delta);
+        else if (data.type === 'tool_start') meterToolStart(data.args);
+        else if (data.type === 'tool_result') meterToolEnd();
 
         if (data.type === 'token') {
           accumulatedContent += data.delta;
@@ -534,7 +597,7 @@
         if (data.type === 'done') {
           pendingTtft.delete(progressId);
           const result = data.result ?? {};
-          settleTurn((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
+          meterSettle((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
           const finalMessage = (result.message as string) ?? accumulatedContent;
           messages = messages.map((m) =>
             m.id === progressId
@@ -542,12 +605,12 @@
               : m,
           );
           scrollToBottom();
-          bumpGraphRevision();
+          bumpGraphIfOnScreen();
           return;
         }
         if (data.type === 'error') {
           pendingTtft.delete(progressId);
-          settleTurn();
+          meterSettle();
           messages = messages.map((m) =>
             m.id === progressId
               ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown'}` }
@@ -569,7 +632,7 @@
         currentJobId = null;
         // Backstop: a stream that ends without done/error must not leave the
         // meter stuck on "live". No-op once the handler has settled.
-        settleTurn();
+        meterSettle();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -596,7 +659,10 @@
     // `/jkai?ask=…` prefills the composer. This is how the Intel dashboard
     // commissions a question: it hands over a prompt already loaded with what
     // the graph knows, and the user presses send (or edits first).
-    const ask = new URLSearchParams(window.location.search).get('ask');
+    // Only the pane on screen may consume it: `ask` is one-shot (it clears the
+    // param), so with several panes mounted the first to run would swallow a
+    // question meant for the visible thread.
+    const ask = active ? new URLSearchParams(window.location.search).get('ask') : null;
     if (ask && !input) {
       input = ask;
       // Clear the param so a refresh doesn't re-prefill over the user's edits.
@@ -605,7 +671,7 @@
       history.replaceState(history.state, '', url);
     }
 
-    textareaEl?.focus();
+    if (active) textareaEl?.focus();
     void fetchMentionIndex().then((list) => {
       entityMentions = list;
     });
@@ -616,14 +682,29 @@
   });
 
   $effect(() => {
-    // Refocus the composer when the active conversation changes or the
-    // assistant finishes responding, so the cursor lives in the input.
+    // Refocus the composer when this pane comes to the front or the assistant
+    // finishes responding, so the cursor lives in the input. A background tab
+    // must not do this — its textarea is in a hidden subtree, and a pane that
+    // finished its answer off-screen would otherwise yank the caret out of the
+    // thread the user is actually typing in.
+    const onScreen = active;
     conversationId;
     // A new thread means a new history list — never resume mid-cycle in it.
     resetHistoryCycle();
-    if (!loading) {
+    if (onScreen && !loading) {
       tick().then(() => textareaEl?.focus());
     }
+  });
+
+  $effect(() => {
+    // Coming to the front. The transcript's own scroll maths ran while this pane
+    // sat in a `display: none` subtree, where scrollHeight is 0, so it has to be
+    // redone now or a long thread opens at its first message.
+    if (!active) return;
+    void tick().then(() => {
+      scrollToBottom('instant');
+      setTimeout(() => scrollToBottom('instant'), 50);
+    });
   });
 
   // When the selected conversation changes, look up whether the
@@ -888,14 +969,11 @@
     setTimeout(() => scrollToBottom('instant'), 200);
   });
 
-  // SSE connection for real-time follow-up messages
+  // Real-time follow-up messages. The connection itself is shared: every open
+  // tab needs this feed for its own thread, and one EventSource each would
+  // exhaust the browser's six-per-origin HTTP/1.1 budget on the dev server
+  // before the job streams got a look in. See $lib/jkai/followup-stream.
   $effect(() => {
-    // Clean up previous connection
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-
     // Per-conversation state: the `intel` signal only ever arrives for the
     // thread whose stream is open, so switching threads while extraction is
     // running must clear it. Left set, the incoming thread's newest reply would
@@ -905,14 +983,8 @@
 
     if (!conversationId) return;
 
-    const es = new EventSource(`/api/jkai/events?conversationId=${conversationId}`);
-    eventSource = es;
-
-    es.onmessage = (event) => {
+    return subscribeFollowups(conversationId, (data) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') return; // ignore connection ack
-
         // Intel extraction changed state. Not a message — it updates UI that is
         // already on screen. On `done` the mention index is refetched so replies
         // the user is ALREADY reading gain their entity links (the index was
@@ -925,16 +997,16 @@
             void fetchMentionIndex({ refresh: true }).then((list) => {
               entityMentions = list;
             });
-            bumpGraphRevision();
+            bumpGraphIfOnScreen();
           }
           return;
         }
 
         const newMsg: Message = {
           id: crypto.randomUUID(),
-          role: data.role || 'assistant',
-          content: data.content,
-          source: data.source || 'followup',
+          role: (data.role as Message['role']) || 'assistant',
+          content: typeof data.content === 'string' ? data.content : '',
+          source: (data.source as string) || 'followup',
           // Carry the row's metadata so the message keeps its identity across a
           // reload. Without it a heartbeat note arrived as an ordinary assistant
           // bubble and then turned into a status line on refresh, once the
@@ -961,18 +1033,9 @@
         }
         scrollToBottom();
       } catch {
-        // ignore parse errors
+        // ignore malformed frames
       }
-    };
-
-    es.onerror = () => {
-      // EventSource auto-reconnects, no action needed
-    };
-
-    return () => {
-      es.close();
-      eventSource = null;
-    };
+    });
   });
 
   async function cancelJob() {
@@ -1049,9 +1112,9 @@
       // as generated output; a tool call bills its argument JSON and then
       // pauses the clock for however long the tool runs, resuming on its
       // result (so the provider's prefill wait afterwards still counts).
-      if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-      else if (data.type === 'tool_start') noteToolStart(data.args);
-      else if (data.type === 'tool_result') noteToolEnd();
+      if (data.type === 'token' || data.type === 'thinking') meterOutput(data.delta);
+      else if (data.type === 'tool_start') meterToolStart(data.args);
+      else if (data.type === 'tool_result') meterToolEnd();
 
       if (data.type === 'token') {
         heartbeat = null;
@@ -1310,7 +1373,7 @@
         // Settle the tok/s meter against the provider's own output-token count
         // (reasoning + tool-call tokens included) when the server reported one;
         // otherwise it keeps the streamed chars/4 estimate.
-        settleTurn(result.usage?.outputTokens ?? null);
+        meterSettle(result.usage?.outputTokens ?? null);
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
         const finalMsg: Message = {
@@ -1338,18 +1401,19 @@
         // The turn is on record now, so the thread's graph can have gained
         // structure (model, files, canvases) and — on an extraction turn —
         // concepts once the queue drains. Tell the rail to look again.
-        bumpGraphRevision();
+        bumpGraphIfOnScreen();
         return;
       }
 
       if (data.type === 'error') {
+        turnOk = false;
         heartbeat = null;
         pendingTtft.delete(progressId);
         pendingPlan = null;
         pendingConfirm = null;
         pendingClarify = null;
         pendingApproval = null;
-        settleTurn();
+        meterSettle();
         messages = messages.map((m) =>
           m.id === progressId
             ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -1380,7 +1444,7 @@
     pendingTtft.set(progressId, startTtftMark(progressId));
     // Re-attaching: the bus replays its buffered events in one burst, so this
     // turn's throughput isn't measurable — account for it but publish nothing.
-    beginTurn({ replay: true });
+    meterBegin({ replay: true });
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -1409,7 +1473,7 @@
       pendingConfirm = null;
       pendingClarify = null;
       pendingApproval = null;
-      settleTurn();
+      meterSettle();
       scrollToBottom();
     }
   }
@@ -1745,6 +1809,10 @@
   const threadTitle = $derived(conversation?.title?.trim() || 'new thread');
 
   $effect(() => {
+    // The hub header carries ONE thread's numbers, so only the pane on screen
+    // may publish them. Without this gate a background tab's turn would rewrite
+    // the cost and context figures above the thread the user is actually reading.
+    if (!active) return;
     // Tracked reads only — the ledger numbers. The write is untracked so the
     // shared store's proxy can't re-trigger this effect.
     const next = {
@@ -1760,7 +1828,9 @@
     untrack(() => setThreadLedger(next));
   });
 
-  onMount(() => () => clearThreadLedger());
+  // Closing a background tab must not blank the header — those numbers belong to
+  // whichever thread is on screen, which is not this one.
+  onMount(() => () => { if (active) clearThreadLedger(); });
   // Always show the model that will actually answer (the conversation's pin,
   // falling back to the site default) — "Click to select" hid the effective
   // model and made the pill look broken.
@@ -2046,7 +2116,7 @@
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
-    beginTurn();
+    meterBegin();
 
     // An "@files" mention routes this turn to the Files skill so the orchestrator
     // reaches for the file_search tool (semantic search over /drive content); an
@@ -2106,6 +2176,7 @@
       // message isn't lost. Drop the in-flight progress bubble and mark the
       // user bubble queued so it gets the badge.
       const errMsg = err instanceof Error ? err.message : String(err);
+      turnOk = false;
       const isNetworkError = err instanceof TypeError; // `fetch` throws TypeError on network failure
       if (isNetworkError) {
         try {
@@ -2136,7 +2207,7 @@
     pendingApproval = null;
     // Backstop: a stream that ends without done/error (cancel, hang-up, network
     // fallback) must not leave the meter stuck on "live". No-op once settled.
-    settleTurn();
+    meterSettle();
     scrollToBottom();
   }
 
