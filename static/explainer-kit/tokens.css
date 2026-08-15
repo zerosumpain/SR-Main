@@ -8,39 +8,51 @@
    applied": the builds were importing these tokens and obeying them, with no
    fonts behind them.
 
-   The palette is the Engine Room's, not the sitewide one: petrol accent
-   (--accent-ink #0e5b66) on warm cream, Fraunces for display. That is the
-   register these explainers are aiming at. The sitewide burnt orange belongs
-   to the marketing surfaces, not to a study. */
+   The palette IS the sitewide one. It used to be the Engine Room's — petrol as
+   the accent, on a lighter cream — on the reasoning that burnt orange belonged
+   to the marketing surfaces and not to a study. The Field Study System settled
+   that the other way: it extends the site's language with the SAME palette,
+   and it names burnt orange as live/current/primary and petrol as the second
+   data series and the "this is settled" colour. A studio build was coming out
+   petrol-on-#f2ead9 while every hand-built study on the site is
+   orange-on-#ede4d4, which is what "the layout is applied but not the palette"
+   looked like. Fraunces for display, as before. */
 
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  /* Ground and ink — the Engine Room's warm cream, a shade lighter for long
-     reading at full-page width. */
-  --ex-bg: #f2ead9;
-  --ex-surface: #faf6ec;
+  /* Ground and ink — the site's warm cream, so a study opened from the site
+     does not change colour under the reader. */
+  --ex-bg: #ede4d4;
+  --ex-surface: #f3ebdd;
   --ex-ink: #1a1008;
   --ex-ink-soft: #3d2e1a;
   --ex-ink-muted: rgba(26, 16, 8, 0.65);
   --ex-rule: rgba(26, 16, 8, 0.18);
   --ex-rule-faint: rgba(26, 16, 8, 0.08);
 
-  /* Petrol. The Engine Room's accent, and the one an instrument reads best
-     against on cream. */
-  --ex-accent: #0e5b66;
-  --ex-accent-hover: #094850;
+  /* Burnt orange. The site's primary: live, current, and the one action a page
+     is asking for. */
+  --ex-accent: #c4570a;
+  --ex-accent-hover: #a84808;
   /* OPAQUE. diagram.js fills its lever nodes with this, and a translucent
      value lets the edge underneath show straight through the box and its
      label — which is what happened when this was first written as an rgba.
      Anything used as a FILL has to be opaque; use --ex-accent-faint for a
      wash over an existing surface. */
-  --ex-accent-soft: #cfdee0;
-  --ex-accent-faint: rgba(14, 91, 102, 0.06);
+  --ex-accent-soft: #f0d8c2;
+  --ex-accent-faint: rgba(196, 87, 10, 0.08);
 
-  /* Burnt orange, kept for the one thing on a page that must out-shout the
-     accent — a highlighted value, never a whole series. */
-  --ex-flag: #c4570a;
+  /* Petrol. The counter-accent: the second data series, and the colour that
+     means "this one is settled" — which is why a field study's `fact` chip
+     takes it and its `hypothesis` chip takes the orange above. */
+  --ex-accent-ink: #0e5b66;
+  --ex-accent-ink-hover: #094850;
+  --ex-accent-ink-faint: rgba(14, 91, 102, 0.06);
+
+  /* Kept as an alias so anything still asking for the flag gets the accent
+     rather than an undefined variable. Prefer --ex-accent. */
+  --ex-flag: var(--ex-accent);
 
   /* Sequential ramp for scene tiles and choropleths — perceptually ordered,
      and legible in greyscale because tile height already carries magnitude. */
@@ -91,11 +103,20 @@
     --ex-rule: rgba(243, 239, 231, 0.18);
     --ex-rule-faint: rgba(243, 239, 231, 0.08);
 
-    --ex-accent: #4ea3b0;
-    --ex-accent-hover: #6bbcc8;
-    --ex-accent-soft: #23383c;
-    --ex-accent-faint: rgba(78, 163, 176, 0.09);
-    --ex-flag: #e8834a;
+    /* Same relationship as the light theme, lifted for contrast on ink: warm
+       orange is the accent, teal is the counter-accent. It used to be the
+       other way round here, which meant a study changed its mind about which
+       colour meant "primary" depending on the reader's OS setting. */
+    --ex-accent: #e8834a;
+    --ex-accent-hover: #f0a071;
+    --ex-accent-soft: #4a2f1c;
+    --ex-accent-faint: rgba(232, 131, 74, 0.09);
+
+    --ex-accent-ink: #4ea3b0;
+    --ex-accent-ink-hover: #6bbcc8;
+    --ex-accent-ink-faint: rgba(78, 163, 176, 0.09);
+
+    --ex-flag: var(--ex-accent);
 
     --ex-ramp-0: #262219;
     --ex-ramp-1: #33453f;
