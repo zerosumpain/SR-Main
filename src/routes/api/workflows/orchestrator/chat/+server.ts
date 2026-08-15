@@ -36,6 +36,11 @@ import { isRegisteredTool } from '$lib/workflows/site-tools/registry';
 import { JKAI_EXTENDED_TOOL } from '$lib/mcp/meta-tool';
 import { createTraceRecorder, compactStepsForMessage, type CompactToolStep } from '$lib/jkai/tool-trace';
 
+/** How long to wait for a model re-pin's turn to finish before sending anyway. A
+ *  `/model` ack is a sub-second round trip; this is generous enough to cover a
+ *  loaded gateway and short enough that a lost frame does not strand the turn. */
+const PIN_WAIT_MS = 12_000;
+
 const MAX_MESSAGE_LEN = 20_000;
 
 // Tools the SvelteKit MCP server dispatches itself (the site-tools registry
@@ -786,6 +791,11 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       }
     }
     registerConfirmer();
+    // Set when `ensureModelPinned` actually pushed a `/model` turn, which this
+    // message must not race. Cleared by sending, below.
+    let awaitingPinTurn = false;
+    let userTurnSent = false;
+    let pinWaitTimer: ReturnType<typeof setTimeout> | null = null;
     // `kind` / `kindId` were resolved above (they gate the auth scope + the
     // adapter's skill selection): 'canvas_chat' → jkai-canvas, 'skill' → the
     // pinned jkai-* domain (carried in kindId), 'manual' → jkai-general routing.
@@ -812,29 +822,55 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
               health,
               model: coerceModelContext({ provider: conv.provider, modelId: conv.modelId }),
             });
-            // A re-pin is a turn of its own, and this message lands while it is
-            // still running — so Hermes redirects that run to answer THIS
-            // message, and the answer comes out under the re-pin's turn id.
-            // Inherit it or the turn renders nothing at all. (Its "Model
-            // switched to ..." notice rides along; that is pre-existing, and far
-            // better than the answer going missing.)
-            if (rePinned) inheritedTurnIds.push(modelPinTurnId(chatId));
+            // A re-pin is a turn of its OWN, so this message must not be sent
+            // until it has finished. Racing it was the cause of two separate
+            // faults: under `interrupt` the user's message redirected the re-pin's
+            // run, so the answer came out under the re-pin's turn id with its
+            // "Model switched to ..." notice riding along; under `queue` the
+            // gateway dropped the user's message outright, which made every first
+            // message of every conversation vanish. Sending is deferred to the
+            // stream loop below, which waits for the re-pin's own terminator.
+            awaitingPinTurn = rePinned;
           }
         } catch (err) {
           console.error('[hermes-chat] model re-pin check failed:', err);
         }
       }
 
-      await client.sendMessage({
-        chatId,
-        text: message,
-        kind,
-        kindId,
-        sessionId,
-        // Tags every frame this turn emits, so the loop below can tell them
-        // from a superseded turn's leftovers in the shared per-chat queue.
-        turnId: jobId,
-      });
+      const sendUserTurn = async (reason: string) => {
+        if (userTurnSent) return;
+        if (abortController.signal.aborted) return;
+        userTurnSent = true;
+        if (pinWaitTimer) { clearTimeout(pinWaitTimer); pinWaitTimer = null; }
+        console.log(`[hermes-chat] Job ${jobId} sending user turn (${reason})`);
+        await client.sendMessage({
+          chatId,
+          text: message,
+          kind,
+          kindId,
+          sessionId,
+          // Tags every frame this turn emits, so the loop below can tell them
+          // from a superseded turn's leftovers in the shared per-chat queue.
+          turnId: jobId,
+        });
+      };
+
+      if (!awaitingPinTurn) {
+        await sendUserTurn('no re-pin in flight');
+      } else {
+        // Backstop. If the re-pin's terminator never arrives — a gateway hiccup,
+        // a frame lost to a reconnect — send anyway rather than leave the turn
+        // unanswered. A wrong model beats no reply, which is the same trade
+        // `ensureModelPinned` itself makes. Only in THIS case do we inherit the
+        // re-pin's turn, because only here can the two still overlap.
+        pinWaitTimer = setTimeout(() => {
+          console.warn(`[hermes-chat] Job ${jobId}: re-pin turn did not finish within ${PIN_WAIT_MS}ms — sending anyway`);
+          inheritedTurnIds.push(modelPinTurnId(chatId));
+          void sendUserTurn('re-pin wait timed out').catch((err) => {
+            console.error('[hermes-chat] deferred send failed:', err);
+          });
+        }, PIN_WAIT_MS);
+      }
 
       // NOTE: turnAttachments is hoisted above (outer scope) so both the
       // tool-step subscriber and this stream pump can contribute to it.
@@ -865,6 +901,19 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         sessionId,
       }, { signal: abortController.signal })) {
         if (abortController.signal.aborted) break;
+        // Pre-phase: a model re-pin is still running and this turn has not been
+        // sent yet. Everything on the wire belongs to the re-pin — including its
+        // "Model switched to ..." notice, which is a settings dump and not an
+        // answer to anything — so it is dropped, and its terminator is the signal
+        // to send. One subscriber throughout: opening a second one to watch for it
+        // would POP frames out of the shared per-chat queue.
+        if (!userTurnSent) {
+          const stamp = frame.metadata?.['turn_id'];
+          if (frame.kind === 'finalize' && stamp === modelPinTurnId(chatId)) {
+            await sendUserTurn('re-pin turn finished');
+          }
+          continue;
+        }
         // Frames left in the queue by a turn whose consumer detached are not
         // ours: rendering them would answer this message with the previous
         // one's reply, and taking their `finalize` would end this turn before
@@ -1149,6 +1198,8 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
       unsubscribeToolSteps();
       unregisterConfirmer();
       unregisterSecretRequester();
+      // A cancelled turn must not have its deferred send fire afterwards.
+      if (pinWaitTimer) { clearTimeout(pinWaitTimer); pinWaitTimer = null; }
     }
   })();
 

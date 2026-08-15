@@ -86,6 +86,8 @@ async function* sse(resp: Response): AsyncGenerator<Record<string, unknown>> {
 
 interface JobOutcome {
   events: string[];
+  /** Text of every `status` event, so a leaked gateway notice can be asserted on. */
+  statuses: string[];
   text: string;
   finalMessage: string | null;
   closedAt: number | null;
@@ -93,7 +95,7 @@ interface JobOutcome {
 
 /** Consume one job's SSE stream to completion. */
 async function watchJob(label: string, jobId: string, quiet = false): Promise<JobOutcome> {
-  const out: JobOutcome = { events: [], text: '', finalMessage: null, closedAt: null };
+  const out: JobOutcome = { events: [], statuses: [], text: '', finalMessage: null, closedAt: null };
   const resp = await fetch(`${BASE}/api/workflows/orchestrator/chat/stream?jobId=${jobId}`);
   if (!resp.ok || !resp.body) return out;
   for await (const d of sse(resp)) {
@@ -104,6 +106,7 @@ async function watchJob(label: string, jobId: string, quiet = false): Promise<Jo
     }
     if (type === 'heartbeat' || type === 'thinking') continue;
     out.events.push(type);
+    if (type === 'status' && typeof d.text === 'string') out.statuses.push(d.text);
     if (!quiet) log(`${at()}  [${label}] ${type.padEnd(15)} ${JSON.stringify(d).slice(0, 100)}`);
     if (type === 'done') {
       out.finalMessage = String((d.result as Record<string, unknown>)?.message ?? out.text);
@@ -233,6 +236,16 @@ if (runs('first-turn')) {
   const answers = saved.messages.filter((m) => m.role === 'assistant');
   check('the first message gets an answer at all', answers.length >= 1,
     'it used to close in ~600ms on the re-pin\'s terminator, with the answer landing on the next turn');
+  // The re-pin is a turn of its own and used to be sent immediately before this
+  // message, so the two raced: under `interrupt` the answer came out under the
+  // re-pin's id with its notice attached, and under `queue` the gateway dropped
+  // the user's message entirely. The message is now held until the re-pin's own
+  // terminator arrives, so a turn that took a re-pin should look no different
+  // from one that did not.
+  check('the re-pin leaks nothing into this turn',
+    !outcome.statuses.some((t) =>
+      /Model switched to|Redirected current run|Interrupting current task/.test(t)),
+    `statuses seen: ${JSON.stringify(outcome.statuses)}`);
   check('and it is the answer to what was asked',
     answers.some((a) => /READY/i.test(a.content)),
     JSON.stringify(answers.map((a) => a.content.slice(0, 50))));
