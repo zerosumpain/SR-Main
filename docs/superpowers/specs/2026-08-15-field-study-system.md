@@ -96,9 +96,14 @@ kit's T0–T8.
 
 - **Options:** (a) replace Form with the templates outright; (b) add a `Template` column
   alongside Form; (c) leave Studio alone and document the kit as advisory.
-- **Chosen: (a) for information projects.** The brief is explicit — the templates are to be
-  woven in "for when automatically building information projects". Two competing
-  vocabularies is exactly the drift the kit exists to end. `Form` becomes the template id.
+- **Chosen: (b), revised from (a) on evidence.** (a) was the plan until I read
+  `static/explainer-kit/shell.js`: `Form` is not a parallel vocabulary, it is a **rendering
+  contract** — `mountShell` reads it to decide `ex-form-*` classes, whether the visual runs
+  first, whether the page splits into two columns. Replacing it would have broken every
+  studio page's layout to make a naming point. The two turn out to be orthogonal: the
+  **template is the shape of the argument** (what kind of beat this is, which slots it has,
+  what it must never do), the **form is the shape of the page**. A T2 survey can be told as
+  a `ledger` or as an `annotate`. Both columns now ride in the plan and both are honoured.
 - **Mechanism:** the kit is mounted into the Studio workspace beside the explainer kit
   (`static/explainer-kit/field-study/*`, listed in `EXPLAINER_FILES`), so it rides the
   existing `syncExplainerKit` path and the existing `design-lint` mount allowance. The
@@ -115,6 +120,35 @@ the templates real rather than advisory.
 - **Chosen:** extend the gate with the checkable subset — a confidence chip on every claim,
   a beat close carrying an open question and a falsifier, no emoji, radii 0/2/100. Leave
   the judgement calls (is the risk column honest?) to the human checklist.
+
+### D7 — Two things the install would have broken silently
+
+Recorded because both were caught by reading rather than by any gate, and both would have
+shipped green:
+
+- The kit's `:root` defines `--fs-body` as a **font family**. The site has defined
+  `--fs-body: 1rem` since the type scale landed, and 82 declarations across 53 files say
+  `font-size: var(--fs-body)`. Appending the kit verbatim turns every one of them into
+  invalid CSS the browser discards — including every form control, which is precisely what
+  keeps mobile Safari from force-zooming on focus. The kit's `--fs-body`/`--fs-mono`
+  aliases duplicate the site's `--font-body`/`--font-mono` anyway, so they are dropped and
+  only `--fs-serif` is new.
+- `syncExplainerKit` created exactly one subdirectory in the workspace, `examples`, by
+  name. Five files into a `field-study/` that does not exist would have failed the entire
+  mount on a missing path — reported as a write failure, nothing to do with the files.
+  Directories are derived from the asset keys now.
+
+### D8 — Scope of the mechanical conformance pass
+
+The four named studies share components and CSS with `dfe-data-strategy`,
+`data-convergence` and the rest of `/projects`. Squaring the radii on three studies and
+leaving their siblings on 4px would have created new inconsistency to fix old inconsistency.
+
+- **Chosen:** the mechanical pass (radii, font tokens, type scale) covers **all** of
+  `/projects`, which the standing instruction now governs as a family; the structural work
+  (confidence chips, primitives, the system's invariants) covers the four named studies.
+  `/projects` joins the font-size gate — the family the previous sweep deliberately left
+  out for want of an instruction covering it.
 
 ## Verification
 

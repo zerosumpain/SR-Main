@@ -18,8 +18,8 @@ for (const [w,h,tag] of [[1440,900,'1440'],[390,844,'390']]) {
   for (const [name,path] of PAGES) {
     const errs=[]; const on=e=>errs.push(String(e).slice(0,130)); p.on('pageerror',on);
     let st=0;
-    try{ const r=await p.goto('http://localhost:5330'+path,{waitUntil:'networkidle',timeout:40000}); st=r?.status()??0; }
-    catch{ try{ const r=await p.goto('http://localhost:5330'+path,{waitUntil:'domcontentloaded',timeout:25000}); st=r?.status()??0; }catch{} }
+    try{ const r=await p.goto('http://localhost:5331'+path,{waitUntil:'networkidle',timeout:40000}); st=r?.status()??0; }
+    catch{ try{ const r=await p.goto('http://localhost:5331'+path,{waitUntil:'domcontentloaded',timeout:25000}); st=r?.status()??0; }catch{} }
     await p.waitForTimeout(2000);
     const o=await p.evaluate(()=>({d:document.documentElement.scrollWidth,c:document.documentElement.clientWidth}));
     rep.push({name,tag,st,over:o.d>o.c+1?o.d-o.c:0,errors:errs.slice(0,2)});
