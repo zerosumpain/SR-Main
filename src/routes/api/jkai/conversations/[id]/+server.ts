@@ -132,8 +132,15 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
 	// Rename / pin / share — allowed at any time (unlike the model change,
 	// these are not locked after the first message).
-	if ('title' in body || 'pinned' in body || 'shareVisibility' in body) {
-		const set: Partial<{ title: string | null; pinned: boolean; shareVisibility: string; shareToken: string }> = {};
+	if ('title' in body || 'pinned' in body || 'shareVisibility' in body || 'intelEnabled' in body) {
+		const set: Partial<{
+			title: string | null;
+			pinned: boolean;
+			shareVisibility: string;
+			shareToken: string;
+			intelEnabled: boolean;
+		}> = {};
+		if ('intelEnabled' in body) set.intelEnabled = !!body.intelEnabled;
 		if ('title' in body) {
 			const t = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
 			set.title = t.length > 0 ? t : null;
