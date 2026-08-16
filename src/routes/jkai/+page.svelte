@@ -489,12 +489,14 @@
 
   <!-- Conversation column -->
   <div class="chat-slot">
-    {#if data.freshBriefing}
-      <div class="briefing-slot">
-        <BriefingCard briefing={data.freshBriefing} />
-      </div>
-    {/if}
-
+    <!--
+      The strip comes FIRST, before the briefing. It is chrome and belongs
+      against the bottom of the hub header; the briefing is content in the
+      conversation column. The other way round, a briefing pushed the tab bar
+      down by its whole height — and, worse, by 12px even when there was no
+      card to see, because BriefingCard renders nothing once dismissed while
+      the slot kept its padding.
+    -->
     <ConversationTabs
       tabs={tabViews}
       activeId={activeId}
@@ -505,6 +507,12 @@
       onNew={createConversation}
       onCycle={cycleTab}
     />
+
+    {#if data.freshBriefing}
+      <div class="briefing-slot">
+        <BriefingCard briefing={data.freshBriefing} />
+      </div>
+    {/if}
 
     <!--
       One mounted pane per open tab, hidden rather than destroyed when it is not
@@ -617,8 +625,23 @@
     letter-spacing: var(--tracking-label);
     color: var(--text-muted);
   }
+  /* Padded only when it actually holds a card. `BriefingCard` renders nothing
+     once dismissed — and starts dismissed, to avoid an SSR flash — so an
+     unconditional padding put a 12px band of background under the hub header on
+     every load of a day that had a briefing. `:has` failing open costs nothing:
+     the fallback is no padding, which is the state we want anyway.
+
+     `:global(*)` is load-bearing, not decoration. Written `:has(> *)`, Svelte
+     scopes the inner `*` too, finds nothing in this component's own markup that
+     could match it — the only child is a COMPONENT, whose root carries a
+     different hash — and prunes the whole rule as unused. It compiles away to
+     nothing and a briefing then sits flush against the tab strip. That is a
+     `css_unused_selector` warning, not an error, so nothing in the gate stops
+     it. */
   .briefing-slot {
     flex: none;
+  }
+  .briefing-slot:has(> :global(*)) {
     padding: 12px 20px 0;
   }
   .graph-slot {
@@ -685,7 +708,7 @@
       z-index: 35;
       background: rgba(26, 16, 8, 0.2);
     }
-    .briefing-slot {
+    .briefing-slot:has(> :global(*)) {
       padding: 10px 16px 0;
     }
   }
