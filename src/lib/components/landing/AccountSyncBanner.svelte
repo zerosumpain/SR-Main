@@ -1,29 +1,64 @@
 <script lang="ts">
-  // Owner-only, and only when something is actually wrong. A banner that is
-  // present every day is a banner you stop reading, so there is deliberately no
-  // "all good" state — silence is the healthy signal.
+  // Owner-only, and only when something actually wants attention. A banner that
+  // is present every day is a banner you stop reading, so there is deliberately
+  // no "all good" state — silence is the healthy signal.
+  //
+  // Two signals share the strip because they answer the same question on the way
+  // past: an account that has stopped syncing (something is broken), and work
+  // finished and waiting on GitHub (something is ready). They are coloured apart
+  // — orange for a fault, petrol for a ready thing — so the strip never implies
+  // a merge is a problem.
   import type { SyncAttentionSummary } from '$lib/connectors/summary';
+  import type { MergeablePrSummary } from '$lib/github/open-prs';
 
-  let { summary }: { summary: SyncAttentionSummary | null } = $props();
+  let {
+    summary,
+    prs = null,
+  }: { summary: SyncAttentionSummary | null; prs?: MergeablePrSummary | null } = $props();
 
   // Three names read fine inline; past that it becomes a list nobody parses at
   // a glance, so the rest collapse into a count.
   const named = $derived(summary ? summary.names.slice(0, 3).join(', ') : '');
   const extra = $derived(summary ? summary.names.length - 3 : 0);
+
+  // Same rule for PR numbers, which are shorter, so a couple more fit.
+  const prNumbers = $derived(prs ? prs.numbers.slice(0, 4).map((n) => `#${n}`).join(', ') : '');
+  const prExtra = $derived(prs ? prs.numbers.length - 4 : 0);
 </script>
 
-{#if summary && summary.count > 0}
-  <a class="asb" href="/admin/connections">
-    <span class="asb-dot" aria-hidden="true"></span>
-    <span class="asb-text">
-      <strong>{summary.count} account{summary.count === 1 ? '' : 's'}</strong>
-      need{summary.count === 1 ? 's' : ''} resyncing — {named}{extra > 0 ? ` +${extra} more` : ''}
-    </span>
-    <span class="asb-cta">Fix →</span>
-  </a>
+{#if (summary && summary.count > 0) || (prs && prs.count > 0)}
+  <div class="asb-stack">
+    {#if summary && summary.count > 0}
+      <a class="asb" href="/admin/connections">
+        <span class="asb-dot" aria-hidden="true"></span>
+        <span class="asb-text">
+          <strong>{summary.count} account{summary.count === 1 ? '' : 's'}</strong>
+          need{summary.count === 1 ? 's' : ''} resyncing — {named}{extra > 0 ? ` +${extra} more` : ''}
+        </span>
+        <span class="asb-cta">Fix →</span>
+      </a>
+    {/if}
+
+    {#if prs && prs.count > 0}
+      <!-- Opens GitHub, which is only useful to someone signed in there with
+           access to the repo — the same person this whole strip is gated to. -->
+      <a class="asb asb--ready" href={prs.url} target="_blank" rel="noopener noreferrer">
+        <span class="asb-dot" aria-hidden="true"></span>
+        <span class="asb-text">
+          <strong>{prs.count} pull request{prs.count === 1 ? '' : 's'}</strong>
+          ready to merge — {prNumbers}{prExtra > 0 ? ` +${prExtra} more` : ''}
+        </span>
+        <span class="asb-cta">Review →</span>
+      </a>
+    {/if}
+  </div>
 {/if}
 
 <style>
+  .asb-stack {
+    display: flex;
+    flex-direction: column;
+  }
   .asb {
     display: flex;
     align-items: center;
@@ -59,5 +94,16 @@
     letter-spacing: 0.12em;
     color: var(--accent, #c4570a);
     white-space: nowrap;
+  }
+
+  /* Ready, not broken. Same geometry, the other half of the site palette. */
+  .asb--ready {
+    background: var(--accent-ink-tint-06);
+  }
+  .asb--ready .asb-dot {
+    background: var(--accent-ink);
+  }
+  .asb--ready .asb-cta {
+    color: var(--accent-ink);
   }
 </style>
