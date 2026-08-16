@@ -1059,7 +1059,7 @@
 
   .steplink {
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: var(--fs-label-xs);
     padding: 0.05rem 0.3rem;
     border: 1px solid var(--line-hair);
     border-radius: var(--radius-sharp);
