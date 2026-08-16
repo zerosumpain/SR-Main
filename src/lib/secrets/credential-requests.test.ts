@@ -26,6 +26,7 @@ import {
   hostFromEndpoint,
   CredentialSpecError,
 } from './credential-requests';
+import { composeInjection } from './registry';
 import {
   consumePendingCreate,
   registerPendingCreate,
@@ -161,11 +162,24 @@ describe('the Darwin catalogue entries', () => {
     expect(credentialProviderKeys()).toEqual(expect.arrayContaining(['darwin-ldbws', 'darwin-pubsub', 'custom']));
   });
 
-  it('sends the LDBWS consumer key as x-apikey to the RDM gateway, read-only', () => {
+  it('asks for both halves of an RDM subscription and sends only the key', () => {
+    // A subscription issues a Consumer key AND a Consumer secret. Asking for
+    // one box when the vendor shows two is the bug this whole change exists for.
     const spec = CREDENTIAL_REQUEST_SPECS['darwin-ldbws'];
-    expect(spec.binding.injection).toEqual({ kind: 'header', name: 'x-apikey' });
+    expect(spec.fields.map((f) => f.key)).toEqual(['consumer_key', 'consumer_secret']);
+    expect(spec.fields.every((f) => f.required)).toBe(true);
+    expect(spec.assemble).toBe('json');
+    expect(spec.binding.injection).toEqual({ kind: 'header', name: 'x-apikey', field: 'consumer_key' });
     expect(spec.binding.allowedHosts).toEqual(['api1.raildata.org.uk']);
     expect(spec.binding.allowedMethods).toEqual(['GET', 'HEAD']);
+  });
+
+  it('sends the key and never the secret', () => {
+    const spec = CREDENTIAL_REQUEST_SPECS['darwin-ldbws'];
+    const stored = JSON.stringify({ consumer_key: 'ck-live-1234', consumer_secret: 'cs-live-9999' });
+    const out = composeInjection(spec.binding.handle, spec.binding.injection, stored);
+    expect(out.headers['x-apikey']).toBe('ck-live-1234');
+    expect(JSON.stringify(out)).not.toContain('cs-live-9999');
   });
 
   it('asks for all five pub/sub values and never attaches them to a request', () => {
@@ -280,14 +294,49 @@ describe('resolveCreateInput — what actually gets written', () => {
   const planFor = (provider: string) =>
     buildCreatePlan({ requestId: 'r', spec: CREDENTIAL_REQUEST_SPECS[provider], reason: '' }).write;
 
+  // Every catalogued provider now issues more than one value, so the
+  // single-value path gets a fixture rather than borrowing one of them.
+  const singlePlan = () =>
+    buildCreatePlan({
+      requestId: 'r',
+      spec: {
+        provider: 'single-fixture',
+        title: 'Single-value API',
+        assemble: 'single',
+        fields: [{ key: 'value', label: 'API key', type: 'password', required: true }],
+        binding: {
+          handle: 'single-fixture',
+          source: 'vault',
+          injection: { kind: 'bearer' },
+          allowedHosts: ['api.example.com'],
+          allowedMethods: ['GET', 'HEAD'],
+        },
+      },
+      reason: '',
+    }).write;
+
   it('stores a single-value credential and keeps the catalogued host', () => {
-    const out = resolveCreateInput(planFor('darwin-ldbws'), { fields: { value: ' key-123 ' } });
+    const out = resolveCreateInput(singlePlan(), { fields: { value: ' key-123 ' } });
     expect(out.value).toBe('key-123');
-    expect(out.allowedHosts).toEqual(['api1.raildata.org.uk']);
+    expect(out.allowedHosts).toEqual(['api.example.com']);
   });
 
   it('accepts a single value posted as `value` too', () => {
-    expect(resolveCreateInput(planFor('darwin-ldbws'), { value: 'key-123' }).value).toBe('key-123');
+    expect(resolveCreateInput(singlePlan(), { value: 'key-123' }).value).toBe('key-123');
+  });
+
+  it('stores an RDM key and secret as one set, bound to the gateway', () => {
+    const out = resolveCreateInput(planFor('darwin-ldbws'), {
+      fields: { consumer_key: 'ck-1', consumer_secret: 'cs-1' },
+    });
+    expect(JSON.parse(out.value)).toEqual({ consumer_key: 'ck-1', consumer_secret: 'cs-1' });
+    expect(out.allowedHosts).toEqual(['api1.raildata.org.uk']);
+  });
+
+  it('will not store an RDM subscription with only half of it filled in', () => {
+    expect(() => resolveCreateInput(planFor('darwin-ldbws'), { fields: { consumer_key: 'ck-1' } })).toThrow(
+      /consumer_secret/,
+    );
   });
 
   it('assembles a field set from exactly the declared keys', () => {
@@ -327,7 +376,7 @@ describe('resolveCreateInput — what actually gets written', () => {
   });
 
   it('refuses a value with nothing in it', () => {
-    expect(() => resolveCreateInput(planFor('darwin-ldbws'), { fields: {} })).toThrow(/value is required/);
+    expect(() => resolveCreateInput(singlePlan(), { fields: {} })).toThrow(/value is required/);
   });
 
   describe('the custom path — the one that used to fail every time', () => {

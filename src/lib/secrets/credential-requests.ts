@@ -168,26 +168,40 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
     provider: 'darwin-ldbws',
     title: 'National Rail Darwin — Live Departure Boards (LDBWS)',
     helpUrl: 'https://raildata.org.uk/',
-    assemble: 'single',
+    // An RDM subscription issues a Consumer key AND a Consumer secret, side by
+    // side on the same tab. Only the key goes on the wire for an ordinary LDBWS
+    // call (`x-apikey`), but asking for one and not the other means the owner
+    // has to come back and re-enter the pair the moment anything needs the
+    // secret — so both are captured and the field selector decides which one
+    // travels.
+    assemble: 'json',
     fields: [
       {
-        key: 'value',
+        key: 'consumer_key',
         label: 'Consumer key',
         type: 'password',
         required: true,
-        help: 'Rail Data Marketplace → your LDBWS subscription → Specification / API tab → Consumer key.',
+        help: 'Rail Data Marketplace → My Subscriptions → your LDBWS product → Specification / API tab.',
+      },
+      {
+        key: 'consumer_secret',
+        label: 'Consumer secret',
+        type: 'password',
+        required: true,
+        help: 'Shown next to the key on the same tab. Stored encrypted; only the key is sent with a request.',
       },
     ],
     binding: {
       handle: 'darwin-ldbws',
       source: 'vault',
-      injection: { kind: 'header', name: 'x-apikey' },
+      injection: { kind: 'header', name: 'x-apikey', field: 'consumer_key' },
       // Every RDM product is served from this gateway; the per-product prefix
       // (e.g. /1010-live-departure-board-dep/…) differs per subscription, so
       // path scoping is left to the owner rather than guessed here.
       allowedHosts: ['api1.raildata.org.uk'],
       allowedMethods: ['GET', 'HEAD'],
-      notes: 'RDM consumer key, sent as the x-apikey header. Read-only.',
+      notes:
+        'RDM credential set. The consumer key is sent as the x-apikey header; the secret is held for a product that needs it. Read-only.',
     },
   },
 
