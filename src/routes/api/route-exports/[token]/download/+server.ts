@@ -2,12 +2,22 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { basename } from 'node:path';
 import { readBuffer } from '$lib/file-store/storage';
-import { resolveRouteExport } from '$lib/route-exports';
+import { downloadHeaders } from '$lib/file-serving';
+import { resolveLegacyRouteExport } from '$lib/file-shares';
 
-/** Public only through a high-entropy, file-scoped route-export capability. */
+/**
+ * LEGACY. Nothing mints tokens for this path any more — new route exports get
+ * a `/api/file-shares/<token>/download` link with a real expiry.
+ *
+ * It stays alive only so links already sent over WhatsApp keep working, and
+ * `resolveLegacyRouteExport` now caps those at seven days from creation
+ * regardless of the nullable `expires_at` column they were written with. Once
+ * the last row ages out, delete this route, the `route_export_token` table and
+ * the `/api/route-exports` entry in PUBLIC_PATHS.
+ */
 export const GET: RequestHandler = async ({ params }) => {
-  const row = await resolveRouteExport(params.token);
-  if (!row) throw error(404, 'route export not found');
+  const row = await resolveLegacyRouteExport(params.token);
+  if (!row) throw error(404, 'not found');
 
   let bytes: Buffer;
   try {
@@ -17,13 +27,13 @@ export const GET: RequestHandler = async ({ params }) => {
     throw err;
   }
 
-  const filename = basename(row.name).replace(/"/g, '');
+  // Anonymous surface, so never inline whatever the type claims to be.
   return new Response(new Uint8Array(bytes), {
-    headers: {
-      'content-type': row.mimeType,
-      'content-length': String(bytes.byteLength),
-      'content-disposition': `attachment; filename="${filename}"`,
-      'cache-control': 'private, no-store',
-    },
+    headers: downloadHeaders({
+      mimeType: row.mimeType,
+      sizeBytes: bytes.byteLength,
+      filename: basename(row.name),
+      inline: false,
+    }),
   });
 };

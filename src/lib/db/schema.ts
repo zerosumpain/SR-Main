@@ -2326,6 +2326,43 @@ export const routeExportTokens = pgTable(
 
 export type RouteExportToken = typeof routeExportTokens.$inferSelect;
 
+// The general form of the same idea: one high-entropy capability, one drive
+// file. `route_export_token` above is its GPX-only ancestor and is now legacy —
+// $lib/file-shares reads BOTH so existing links keep working, but nothing mints
+// into it any more. Dropping it is deliberately left to a follow-up: a CREATE
+// and a DROP in the same drizzle push invites the rename prompt, and
+// ci-release.sh runs `drizzle-kit push --force` non-interactively.
+//
+// Differences that matter, both learned from the ancestor:
+//   - `expiresAt` is NOT NULL. The old table allowed it to be null and every
+//     row written was therefore an immortal anonymous URL.
+//   - `createdBy` records whether the owner or an agent minted it, so the
+//     revocation list can be read at a glance.
+export const fileShareTokens = pgTable(
+  'file_share_token',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    fileId: text('file_id').notNull().references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    /** Free text shown in the owner's share list, e.g. "WhatsApp to Dad". */
+    label: text('label'),
+    /** An owner email, or an agent tag such as `route-export`. */
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex('file_share_token_hash_idx').on(t.tokenHash),
+    byFile: index('file_share_token_file_idx').on(t.fileId),
+    byExpiry: index('file_share_token_expires_idx').on(t.expiresAt),
+  }),
+);
+
+export type FileShareToken = typeof fileShareTokens.$inferSelect;
+
 export type WorkflowFilePermissions = {
   read: boolean;
   write: boolean;
