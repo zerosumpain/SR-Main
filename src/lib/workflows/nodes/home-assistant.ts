@@ -13,7 +13,7 @@ type RegistryMeta = { area_id: string | null; area_name: string | null; domain: 
 /** Load the cached entity registry (area/domain/friendly_name) as a lookup map.
  *  The live REST /api/states response has state + attributes but NO area, so
  *  query_state/get_history join it with this cached registry per entity_id. */
-async function loadRegistryMap(): Promise<Map<string, RegistryMeta>> {
+export async function loadRegistryMap(): Promise<Map<string, RegistryMeta>> {
   const map = new Map<string, RegistryMeta>();
   try {
     const [cfg] = await db
