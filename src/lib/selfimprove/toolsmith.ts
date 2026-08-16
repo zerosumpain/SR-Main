@@ -93,6 +93,42 @@ const HANDLER_RULES = [
   '  indistinguishable from a broken tool and will cause the whole tool to be rejected.',
 ].join('\n');
 
+/**
+ * One handler that works, to copy the shape of.
+ *
+ * Every rule above is a prohibition; none of them shows what a good handler
+ * looks like, so the author was composing from prose alone. This is the same
+ * precedent-matching the house design process requires of a person: read a
+ * working example first, and make yours look like it.
+ *
+ * Deliberately boring — a catalogued call, an `.success` check before touching
+ * `.data`, a guarded field read, and a return on every path. It is the shape
+ * that matters, not the API.
+ */
+const HANDLER_EXAMPLE = [
+  'WORKED EXAMPLE — a handler that passes. Copy this shape.',
+  '',
+  '  const place = String(args.place ?? "").trim();',
+  '  if (!place) return { success: false, error: "place is required" };',
+  '',
+  '  const res = await platform.call("api_call", {',
+  '    api: "open-meteo",',
+  '    url: `https://api.open-meteo.com/v1/forecast?latitude=${args.lat}&longitude=${args.lon}&current=temperature_2m`,',
+  '    method: "GET",',
+  '  });',
+  '  // Always check .success before reaching into .data — a failed call still',
+  '  // returns an object, and reading through it throws inside the sandbox.',
+  '  if (!res.success) return { success: false, error: res.error ?? "open-meteo call failed" };',
+  '',
+  '  const current = res.data?.current;',
+  '  if (!current) return { success: false, error: "no current reading in the response" };',
+  '  return { success: true, data: { place, temperatureC: current.temperature_2m } };',
+  '',
+  'Note: every path returns the {success, data?, error?} envelope; nothing is',
+  'read out of a response before its success is checked; and the argument is',
+  'validated before any network call is made.',
+].join('\n');
+
 function buildAuthorMessages(
   insights: QuestionInsights | undefined,
   pack: ContextPack,
@@ -115,7 +151,7 @@ function buildAuthorMessages(
     'Describe the question a person could not get answered — never what the code does. ' +
     'Good: "You could not ask what the front door battery level is." ' +
     'Bad: "Queries Home Assistant entities by ID." A tool without "serves" is incomplete.\n\n' +
-    HANDLER_RULES +
+    HANDLER_RULES + '\n\n' + HANDLER_EXAMPLE +
     '\n\nRespond with ONLY JSON: {"tools": [{"name": snake_case, "description": string, "toolset": string, ' +
     '"serves": string, "parameters": {"type":"object","properties":{...},"required":[...]}, ' +
     '"handler_code": string, ' +
@@ -170,7 +206,7 @@ function buildRepairMessages(
     'IMPORTANT: if a failing case was a deliberate error/edge case (an empty string, a "does not exist" value), ' +
     'the TOOL is not what is wrong — the case is. Replace it with a realistic happy-path case. Every smoke case ' +
     'must return success:true.\n\n' +
-    HANDLER_RULES +
+    HANDLER_RULES + '\n\n' + HANDLER_EXAMPLE +
     '\n\nRespond with ONLY JSON: {"name": string, "description": string, "toolset": string, ' +
     '"parameters": {...}, "handler_code": string, "smoke_cases": [{"args": {...}}]}. No prose outside the JSON.';
 
