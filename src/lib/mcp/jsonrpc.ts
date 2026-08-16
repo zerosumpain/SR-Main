@@ -15,7 +15,7 @@
 // and don't open server-initiated SSE streams. Each POST is self-contained.
 
 import { timingSafeEqual } from 'node:crypto';
-import { listMcpTools } from './server';
+import { listMcpTools, todayLine } from './server';
 import { executeTool } from '$lib/workflows/site-tools/registry';
 import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
 import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/confirmation-gate';
@@ -130,6 +130,36 @@ async function verifyBearer(bearer: string): Promise<boolean> {
   const b = Buffer.from(secret, 'utf8');
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+/**
+ * A second content block carrying today's date, on the calls where the model
+ * is orienting before it composes arguments.
+ *
+ * It goes on RESULTS, never on a tool description. Hermes discovers tools once
+ * on connect and re-discovers only on a `notifications/tools/list_changed`
+ * notification, which this server does not send — so anything time-varying in
+ * the manifest freezes at connect time and goes stale for as long as the
+ * gateway stays up. A confidently-stated wrong date is worse than none.
+ *
+ * Scoped to `jkai_extended` list/schema because those are the orienting calls:
+ * the model reads one, then composes an `invoke` that usually wants an
+ * absolute ISO range. That is the ladder that was costing a separate
+ * `current_date` round trip. A turn that never touches `jkai_extended` still
+ * has `current_date` — this narrows the common case, it does not remove the
+ * tool.
+ */
+export function datestampContent(
+  toolName: string,
+  args: Record<string, unknown>,
+): Array<{ type: 'text'; text: string }> {
+  if (toolName !== JKAI_EXTENDED_TOOL.name) return [];
+  const operation = args?.operation;
+  if (operation !== 'list' && operation !== 'schema') return [];
+  return [{
+    type: 'text',
+    text: `Today is ${todayLine()}. Use it directly when a tool wants a date — do not spend a call asking.`,
+  }];
 }
 
 /**
@@ -429,6 +459,7 @@ export async function dispatchJsonRpc(
                     type: 'text',
                     text: typeof out === 'string' ? out : JSON.stringify(out),
                   },
+                  ...datestampContent(name, args),
                 ],
               },
             },

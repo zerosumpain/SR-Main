@@ -58,26 +58,32 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
 }
 
 /**
- * Today's date, stated once where the model will see it before composing any
- * arguments.
+ * Today's date, in London.
  *
  * The Hermes system prompt carries no date at all, and most jkai tools want an
  * absolute ISO instant, so "3 days ago" or "tomorrow" cost a `current_date`
  * round trip before anything else could run — four of them across the ten
  * conversations this came out of.
  *
- * **Date only, never a time.** Tool definitions sit in the cached prompt
- * prefix, so this text is part of the cache key: a date changes it once a day
- * (one miss, self-healing), while a clock would change it on every single
- * request and destroy prompt caching outright — which is worth far more than
- * the call it saves. See the 82x caching note in the OpenRouter reference.
+ * **This must never be attached to a tool DESCRIPTION.** It was, briefly, and
+ * that was wrong: Hermes discovers tools once on connect and re-discovers only
+ * on a `notifications/tools/list_changed` notification, which this server does
+ * not send. So a date in the manifest is frozen at connect time and goes stale
+ * for as long as the gateway stays up — and a confidently-stated wrong date is
+ * strictly worse than no date, because the model has no reason to doubt it.
+ * It rides `jkai_extended` RESULTS instead, which are built per call and can
+ * never be stale.
+ *
+ * **Date only, never a clock**, for the same reason it is worth stating at all:
+ * results are not cached, but keeping the two surfaces identical means nobody
+ * later moves a timestamp into the cached one.
  */
 export function todayLine(now: Date = new Date()): string {
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(now);
   const weekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'long' }).format(now);
-  return ` Today is ${weekday} ${date} (Europe/London) — use it directly rather than spending a call to ask the date.`;
+  return `${weekday} ${date} (Europe/London)`;
 }
 
 export async function listMcpTools(): Promise<McpTool[]> {
@@ -89,11 +95,11 @@ export async function listMcpTools(): Promise<McpTool[]> {
       .map((t) => toolToMcp(t, policy));
     // Cross-cutting call-efficiency rules ride on the meta-tool description:
     // it is the one definition every turn sees regardless of which tools the
-    // model ends up reaching for. Today's date rides the same carrier.
+    // model ends up reaching for. Anything that CHANGES over time must not —
+    // see `todayLine`, which is why the date lives on results instead.
     const guidance = renderGlobalGuidance(policy);
-    const suffix = `${todayLine()}${guidance}`;
-    const meta = suffix
-      ? { ...JKAI_EXTENDED_TOOL, description: JKAI_EXTENDED_TOOL.description + suffix }
+    const meta = guidance
+      ? { ...JKAI_EXTENDED_TOOL, description: JKAI_EXTENDED_TOOL.description + guidance }
       : JKAI_EXTENDED_TOOL;
     return [...essentials, meta];
   }
