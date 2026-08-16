@@ -13,8 +13,14 @@ import {
   type SecretInjection,
   type SecretSource,
 } from '$lib/secrets/registry';
-import { CREDENTIAL_REQUEST_SPECS, customSpec } from '$lib/secrets/credential-requests';
+import {
+  buildCreatePlan,
+  CREDENTIAL_REQUEST_SPECS,
+  CredentialSpecError,
+  type CreateWrite,
+} from '$lib/secrets/credential-requests';
 import { bindingAfterConfirmation, consumePendingUpdate } from '$lib/secrets/pending-updates';
+import { consumePendingCreate, resolveCreateInput } from '$lib/secrets/pending-creates';
 
 // There is deliberately NO endpoint that returns a secret value — not even for
 // the owner, not even write-then-read. `listSecrets` returns SecretMeta, which
@@ -50,8 +56,64 @@ async function requireOwner(locals: App.Locals): Promise<Response | null> {
 }
 
 function errResponse(err: unknown) {
-  if (err instanceof SecretError) return json({ error: err.message }, { status: 400 });
+  // Both are "the owner can fix this by typing something different", so both
+  // report as a 400 with the message unchanged — the modal renders it verbatim.
+  if (err instanceof SecretError || err instanceof CredentialSpecError) {
+    return json({ error: err.message }, { status: 400 });
+  }
   return json({ error: err instanceof Error ? err.message : 'Unexpected error' }, { status: 500 });
+}
+
+/**
+ * Write a brand-new credential from the plan the chat gate parked under this
+ * request id.
+ *
+ * The plan supplies the handle, source, injection, methods and path scoping. The
+ * browser supplies the values the owner typed and — only where the plan says so
+ * — the hostname:
+ *
+ *   * `hostEditable` is the `custom` path: the host began as a model suggestion,
+ *     is rendered as an editable box, and is whatever the owner leaves in it.
+ *   * `hostFromField` is for credentials that name their own endpoint (a Kafka
+ *     bootstrap server issued per subscription); the host is read out of the
+ *     field the owner filled in.
+ *
+ * Either way the hostname arrives from the owner's keyboard. A model suggestion
+ * on its own writes nothing.
+ */
+async function writeNewCredential(plan: CreateWrite, body: Record<string, unknown>) {
+  const { value, allowedHosts } = resolveCreateInput(plan, body);
+
+  const meta = await upsertSecret({
+    handle: plan.handle,
+    label: plan.label,
+    source: plan.source,
+    value,
+    refKey: plan.refKey,
+    injection: plan.injection,
+    allowedHosts,
+    allowedPathPrefixes: plan.allowedPathPrefixes,
+    allowedMethods: plan.allowedMethods,
+    notes: plan.notes,
+  });
+
+  // Companion rows carry no value of their own — a `ref` row's value is minted
+  // at call time from the vault row just written.
+  for (const c of plan.companions) {
+    await upsertSecret({
+      handle: c.handle,
+      label: `${plan.label} (token)`,
+      source: c.source,
+      refKey: c.refKey,
+      injection: c.injection,
+      allowedHosts: c.allowedHosts,
+      allowedPathPrefixes: c.allowedPathPrefixes ?? [],
+      allowedMethods: c.allowedMethods,
+      notes: c.notes,
+    });
+  }
+
+  return json({ secret: meta });
 }
 
 /** GET — registered secrets (metadata only) + the ref sources available. */
@@ -79,17 +141,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  // Credential-modal UPDATE path. The browser sends a request id, not a
-  // destination: the write was authored server-side by the chat gate and parked
-  // in $lib/secrets/pending-updates before the form was ever shown. So the page
-  // decides WHAT VALUE goes in, and nothing about where the credential may go.
-  //
-  // Its one genuine contribution is `confirmedHosts` — the hostnames the owner
-  // typed — and those are checked against the plan rather than trusted. A host
-  // the plan never proposed cannot be added by typing it, and a proposed host
-  // the owner did NOT type is dropped before the write. Both directions
-  // therefore fail towards less reach.
+  // Credential-modal paths, create and update alike. The browser sends a request
+  // id, not a destination: the write was authored server-side by the chat gate
+  // and parked before the form was ever shown. So the page decides WHAT VALUE
+  // goes in, and nothing about where the credential may go.
   if (typeof body.requestId === 'string') {
+    const create = consumePendingCreate(body.requestId);
+    if (create) {
+      const allowed = new Set(['requestId', 'value', 'fields', 'host']);
+      const extra = Object.keys(body).filter((k) => !allowed.has(k));
+      if (extra.length) {
+        return json(
+          { error: `a new credential accepts only ${[...allowed].join(', ')} — got unexpected ${extra.join(', ')}` },
+          { status: 400 },
+        );
+      }
+      try {
+        return await writeNewCredential(create, body);
+      } catch (err) {
+        return errResponse(err);
+      }
+    }
+
     const allowed = new Set(['requestId', 'value', 'fields', 'confirmedHosts']);
     const extra = Object.keys(body).filter((k) => !allowed.has(k));
     if (extra.length) {
@@ -99,6 +172,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       );
     }
 
+    // The UPDATE path's one genuine browser contribution is `confirmedHosts` —
+    // the hostnames the owner typed — and those are checked against the plan
+    // rather than trusted. A host the plan never proposed cannot be added by
+    // typing it, and a proposed host the owner did NOT type is dropped before
+    // the write. Both directions therefore fail towards less reach.
     const plan = consumePendingUpdate(body.requestId);
     if (!plan) {
       return json(
@@ -142,53 +220,34 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
   }
 
-  // Credential-modal CREATE path. The browser sends only { provider, value }: the
-  // handle, source, injection, hosts, methods and path scoping all come from the
-  // code catalogue, so the page cannot choose where a credential lands or which
-  // host it may be sent to. That is the same reason `request_credential` has no
-  // binding parameters — see $lib/secrets/credential-requests.
+  // Quick-add from /admin/ai/apis. Same catalogue, same server-authored write as
+  // the chat modal — the owner is typing directly into the admin page, so there
+  // is no SSE round trip to park a plan against, and the provider key names the
+  // spec instead. `custom` is deliberately not reachable here: it has no binding
+  // of its own, and the generic form below already expresses anything it could.
   if (typeof body.provider === 'string') {
-    const spec =
-      body.provider === 'custom'
-        ? customSpec({
-            label: typeof body.label === 'string' ? body.label : undefined,
-            suggestedHost: typeof body.suggestedHost === 'string' ? body.suggestedHost : undefined,
-            suggestedHandle: typeof body.suggestedHandle === 'string' ? body.suggestedHandle : undefined,
-          })
-        : CREDENTIAL_REQUEST_SPECS[body.provider];
-    if (!spec) return json({ error: `unknown provider "${body.provider}"` }, { status: 400 });
-    if (typeof body.value !== 'string' || !body.value.trim()) {
-      return json({ error: 'value is required' }, { status: 400 });
+    const allowed = new Set(['provider', 'value', 'fields']);
+    const extra = Object.keys(body).filter((k) => !allowed.has(k));
+    if (extra.length) {
+      return json(
+        { error: `a catalogue credential accepts only ${[...allowed].join(', ')} — got unexpected ${extra.join(', ')}` },
+        { status: 400 },
+      );
+    }
+    const spec = CREDENTIAL_REQUEST_SPECS[body.provider];
+    if (!spec) {
+      return json(
+        {
+          error:
+            `unknown provider "${body.provider}" — the quick-add form only writes catalogued providers ` +
+            `(${Object.keys(CREDENTIAL_REQUEST_SPECS).join(', ')}). Use the form below for anything else.`,
+        },
+        { status: 400 },
+      );
     }
     try {
-      const meta = await upsertSecret({
-        handle: spec.binding.handle,
-        label: spec.title,
-        source: spec.binding.source,
-        value: body.value,
-        refKey: spec.binding.refKey,
-        injection: spec.binding.injection,
-        allowedHosts: spec.binding.allowedHosts,
-        allowedPathPrefixes: spec.binding.allowedPathPrefixes ?? [],
-        allowedMethods: spec.binding.allowedMethods,
-        notes: spec.binding.notes,
-      });
-      // Companion rows carry no value of their own — a `ref` row's value is
-      // minted at call time from the vault row just written.
-      for (const c of spec.companions ?? []) {
-        await upsertSecret({
-          handle: c.handle,
-          label: `${spec.title} (token)`,
-          source: c.source,
-          refKey: c.refKey,
-          injection: c.injection,
-          allowedHosts: c.allowedHosts,
-          allowedPathPrefixes: c.allowedPathPrefixes ?? [],
-          allowedMethods: c.allowedMethods,
-          notes: c.notes,
-        });
-      }
-      return json({ secret: meta });
+      const { write } = buildCreatePlan({ requestId: 'admin-quick-add', spec, reason: '' });
+      return await writeNewCredential(write, body);
     } catch (err) {
       return errResponse(err);
     }

@@ -17,7 +17,15 @@ vi.mock('$lib/integrations/crypto', () => ({
   decryptPayload: (s: string) => s.replace(/^enc:/, ''),
 }));
 
-import { hostMatchesPattern, hostAllowed, pathAllowed, redactSecrets, normaliseHandle } from './registry';
+import {
+  hostMatchesPattern,
+  hostAllowed,
+  pathAllowed,
+  redactSecrets,
+  normaliseHandle,
+  composeInjection,
+  SecretError,
+} from './registry';
 
 describe('hostMatchesPattern — exfiltration defence', () => {
   it('matches an exact host, case- and trailing-dot-insensitively', () => {
@@ -110,6 +118,86 @@ describe('redactSecrets', () => {
 
   it('is a no-op with no needles', () => {
     expect(redactSecrets({ a: 1, b: 'x' }, [])).toEqual({ a: 1, b: 'x' });
+  });
+});
+
+describe('composeInjection — using a credential, including a multi-field one', () => {
+  const SET = JSON.stringify({
+    consumer_key: 'ck-live-9999',
+    consumer_secret: 'cs-live-8888',
+    group_id: 'my-group',
+    username: 'user-1',
+    password: 'p4ssw0rd-secret',
+  });
+
+  it('sends a whole single value as a bearer token', () => {
+    const out = composeInjection('h', { kind: 'bearer' }, 'sk-123');
+    expect(out.headers.Authorization).toBe('Bearer sk-123');
+    expect(out.plaintexts).toEqual(['sk-123']);
+  });
+
+  it('sends only the named field of a set, never the whole blob', () => {
+    const out = composeInjection('h', { kind: 'header', name: 'x-apikey', field: 'consumer_key' }, SET);
+    expect(out.headers['x-apikey']).toBe('ck-live-9999');
+    // The rest of the set stays put — this is the failure that made
+    // `{kind:'none'}` necessary before there was a field selector.
+    expect(JSON.stringify(out)).not.toContain('cs-live-8888');
+    expect(out.plaintexts).toEqual(['ck-live-9999']);
+  });
+
+  it('puts a named field in the query string when asked', () => {
+    const out = composeInjection('h', { kind: 'query', name: 'key', field: 'consumer_secret' }, SET);
+    expect(out.query.key).toBe('cs-live-8888');
+  });
+
+  it('composes Basic and lists every scrubbable form of it', () => {
+    const out = composeInjection('h', { kind: 'basic' }, SET);
+    expect(out.headers.Authorization).toBe(`Basic ${Buffer.from('user-1:p4ssw0rd-secret').toString('base64')}`);
+    // The password, the pair and the base64 — a response echoing any of them
+    // must not slip past redactSecrets.
+    expect(out.plaintexts).toContain('p4ssw0rd-secret');
+    expect(out.plaintexts).toContain('user-1:p4ssw0rd-secret');
+    expect(out.plaintexts.some((p) => p === Buffer.from('user-1:p4ssw0rd-secret').toString('base64'))).toBe(true);
+  });
+
+  it('reads a Basic pair from the fields the owner named', () => {
+    const out = composeInjection(
+      'h',
+      { kind: 'basic', usernameField: 'consumer_key', passwordField: 'consumer_secret' },
+      SET,
+    );
+    expect(out.headers.Authorization).toBe(`Basic ${Buffer.from('ck-live-9999:cs-live-8888').toString('base64')}`);
+  });
+
+  it('keeps sending the whole value when no field is named — the original behaviour', () => {
+    const out = composeInjection('h', { kind: 'header', name: 'x-apikey' }, 'plain-key');
+    expect(out.headers['x-apikey']).toBe('plain-key');
+  });
+
+  it('refuses a store-only row rather than inventing a place to put it', () => {
+    expect(() => composeInjection('h', { kind: 'none' }, SET)).toThrow(SecretError);
+  });
+
+  it('says so plainly when a set is expected but a single value is stored', () => {
+    expect(() => composeInjection('h', { kind: 'basic' }, 'just-a-key')).toThrow(/not a set|credential set/);
+  });
+
+  it('names the missing field and quotes no other part of the set', () => {
+    try {
+      composeInjection('h', { kind: 'header', name: 'x', field: 'nope' }, SET);
+      throw new Error('should have thrown');
+    } catch (err) {
+      const msg = (err as Error).message;
+      expect(msg).toContain('nope');
+      expect(msg).not.toContain('cs-live-8888');
+      expect(msg).not.toContain('p4ssw0rd-secret');
+    }
+  });
+
+  it('treats a blank field as missing rather than authenticating with nothing', () => {
+    expect(() =>
+      composeInjection('h', { kind: 'header', name: 'x', field: 'consumer_key' }, JSON.stringify({ consumer_key: '  ' })),
+    ).toThrow(/has no "consumer_key"/);
   });
 });
 

@@ -39,6 +39,14 @@
   const proposed = $derived(upd?.proposed ?? null);
   const change = $derived(upd?.change ?? null);
   const mustType = $derived(upd?.requiresTypedHosts ?? []);
+  const dest = $derived(upd ? null : (request as SecretRequestEvent).destination);
+
+  /** The hostname box on the `custom` path, pre-filled with jkai's suggestion.
+   *  An override rather than a synced copy: no effect writes it, so there is no
+   *  read-own-write cycle to loop on. */
+  let hostOverride = $state<string | null>(null);
+  const hostEditable = $derived(dest?.hostEditable === true);
+  const hostValue = $derived(hostOverride ?? dest?.hosts[0] ?? '');
 
   const normHost = (h: string) => h.trim().toLowerCase().replace(/\.+$/, '');
 
@@ -63,7 +71,11 @@
       const any = request.fields.some((f) => String(values[f.key] ?? '').trim());
       return any ? [] : ['at least one field'];
     }
-    return request.fields.filter((f) => f.required && !String(values[f.key] ?? '').trim()).map((f) => f.label);
+    const empty = request.fields.filter((f) => f.required && !String(values[f.key] ?? '').trim()).map((f) => f.label);
+    // The host is what stops the credential going anywhere else, so a blank one
+    // blocks the save rather than being defaulted quietly.
+    if (hostEditable && !hostValue.trim()) empty.push('API hostname');
+    return empty;
   });
 
   onMount(() => {
@@ -96,19 +108,24 @@
       return { requestId: upd.requestId, value: String(values[request.fields[0]?.key] ?? '').trim() };
     }
 
-    // 'json' assembles the multi-field credential SET into one encrypted
-    // value — the shape $lib/secrets/oauth-refresh reads back.
-    const value =
-      request.assemble === 'json'
-        ? JSON.stringify(
-            Object.fromEntries(
-              request.fields
-                .map((f) => [f.key, String(values[f.key] ?? '').trim()])
-                .filter(([, v]) => v !== ''),
-            ),
-          )
-        : String(values[request.fields[0]?.key] ?? '').trim();
-    return { provider: (request as SecretRequestEvent).provider, value };
+    // A new credential posts the request id and the values, never a
+    // destination: the server holds the plan it authored before this form was
+    // shown (see $lib/secrets/pending-creates) and assembles a multi-field set
+    // from exactly the keys the catalogue declared.
+    //
+    // The hostname is the one exception, and only where the plan asked for it —
+    // on the `custom` path it started life as a model suggestion, so it is the
+    // owner's to confirm or correct.
+    const out: Record<string, unknown> = {
+      requestId: (request as SecretRequestEvent).requestId,
+      fields: Object.fromEntries(
+        request.fields
+          .map((f) => [f.key, String(values[f.key] ?? '').trim()])
+          .filter(([, v]) => v !== ''),
+      ),
+    };
+    if (hostEditable) out.host = hostValue.trim();
+    return out;
   }
 
   async function save() {
@@ -294,23 +311,28 @@
           {/each}
         </div>
       {/if}
-    {:else if !upd}
+    {:else if !upd && dest}
       <dl class="sr-dest">
         <dt>Stored in</dt>
         <dd>
-          <code>{(request as SecretRequestEvent).destination.store}</code> →
-          <code>{(request as SecretRequestEvent).destination.handle}</code>
+          <code>{dest.store}</code> → <code>{dest.handle}</code>
           <span class="sr-note">encrypted at rest</span>
         </dd>
         <dt>Binding</dt>
         <dd>
-          {#if (request as SecretRequestEvent).destination.storeOnly}
+          {#if dest.storeOnly}
             <span class="sr-note">store-only — never attached to any outbound request</span>
-          {:else}
-            {(request as SecretRequestEvent).destination.hosts.join(', ') || '—'}
-            <span class="sr-note">{(request as SecretRequestEvent).destination.methods.join('/')} only</span>
+          {:else if dest.hostField}
+            <span class="sr-note">bound to the host you enter below, {dest.methods.join('/')} only</span>
+          {:else if !hostEditable}
+            {dest.hosts.join(', ') || '—'}
+            <span class="sr-note">{dest.methods.join('/')} only</span>
           {/if}
         </dd>
+        {#if !dest.storeOnly}
+          <dt>Sent as</dt>
+          <dd><span class="sr-note">{dest.injection}</span></dd>
+        {/if}
         {#each (request as SecretRequestEvent).companions as c (c.handle)}
           <dt>Also creates</dt>
           <dd>
@@ -320,10 +342,24 @@
         {/each}
       </dl>
 
-      {#if (request as SecretRequestEvent).provider === 'custom'}
-        <p class="sr-warn">
-          jkai suggested this destination. Check the host matches the vendor — this is where your key will be sent.
-        </p>
+      {#if hostEditable}
+        <div class="sr-confirm">
+          <p class="sr-warn">
+            jkai suggested this host. Check it is really the vendor's — it is the only place this credential can
+            ever be sent, and correcting it here is what binds it.
+          </p>
+          <label class="sr-field">
+            <span class="sr-label">API hostname<span class="sr-req">*</span></span>
+            <input
+              type="text"
+              value={hostValue}
+              oninput={(e) => (hostOverride = e.currentTarget.value)}
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+            />
+          </label>
+        </div>
       {/if}
     {/if}
 

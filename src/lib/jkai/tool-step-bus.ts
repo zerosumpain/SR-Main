@@ -209,7 +209,16 @@ export interface SecretRequest {
   provider?: string;
   /** One sentence, rendered to the owner as quoted text — never as instruction. */
   reason: string;
-  custom?: { label?: string; suggestedHost?: string; suggestedHandle?: string };
+  /** The `custom` proposal, forwarded verbatim to `customSpec`, which sanitises
+   *  every part of it. Typed loosely here for the same reason: this is model
+   *  output in transit, not a validated structure. */
+  custom?: {
+    label?: string;
+    suggestedHost?: string;
+    suggestedHandle?: string;
+    fields?: Array<{ key?: unknown; label?: unknown; secret?: unknown; optional?: unknown; help?: unknown }>;
+    auth?: Record<string, unknown>;
+  };
   /** Present iff this is an update to an existing row rather than a new one. */
   update?: SecretUpdateRequest;
 }
