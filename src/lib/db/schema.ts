@@ -1350,6 +1350,12 @@ export const conversations = pgTable('jkai_conversations', {
   // is the unguessable link id, minted when first shared, kept on unshare.
   shareToken: text('share_token').unique(),
   shareVisibility: text('share_visibility').notNull().default('private'),
+  // Whether this thread's entities and relationships are added to /jkai/intel.
+  // On by default — the graph rail and the entity links in replies both depend
+  // on it. Turning it off stops FUTURE extraction only; whatever the thread has
+  // already contributed stays, and is removed separately (see the rail's
+  // "forget what this thread added").
+  intelEnabled: boolean('intel_enabled').notNull().default(true),
 });
 
 export type Conversation = typeof conversations.$inferSelect;

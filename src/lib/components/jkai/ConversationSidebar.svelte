@@ -29,7 +29,6 @@
     whatsappThread,
     activeConversationId,
     onSelect,
-    onNew,
     onWhatsAppSelect,
     onDelete,
     onRename,
@@ -44,7 +43,6 @@
     whatsappThread: WhatsAppThread | null;
     activeConversationId: string | null;
     onSelect: (id: string) => void;
-    onNew: () => void;
     onWhatsAppSelect: () => void;
     onDelete: (id: string) => void;
     onRename?: (id: string, title: string) => void;
@@ -231,8 +229,11 @@
 </script>
 
 {#if collapsed}
+  <!-- No `+` here, and none in the expanded header either. The tab strip owns
+       starting a thread now: it is on screen at every width, and two `+`s a few
+       hundred pixels apart doing the same thing is the kind of duplication the
+       rail/strip split was meant to remove. The rail is the library. -->
   <div class="rail">
-    <button class="rbtn primary" onclick={onNew} title="New thread" aria-label="New thread">+</button>
     <button class="rbtn" onclick={onToggleCollapse} title="Expand rail" aria-label="Expand rail">
       ▸
     </button>
@@ -261,7 +262,6 @@
         <button class="collapse-btn" onclick={onToggleCollapse} title="Collapse rail" aria-label="Collapse rail">
           ◂
         </button>
-        <button class="new-btn" onclick={onNew} title="New thread" aria-label="New thread">+</button>
       </div>
     </div>
 
@@ -478,27 +478,6 @@
   .collapse-btn:hover {
     color: var(--accent);
   }
-  .new-btn {
-    width: 20px;
-    height: 20px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius-sharp);
-    font-family: var(--font-mono);
-    font-size: var(--fs-nav);
-    font-weight: 500;
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.2s ease-out;
-  }
-  .new-btn:hover {
-    background: var(--accent-hover);
-  }
-
   .search {
     position: relative;
     padding: 6px 6px 0;
@@ -839,16 +818,6 @@
   .rbtn:hover {
     color: var(--accent);
     border-color: var(--accent-tint-35);
-  }
-  .rbtn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-    font-size: var(--fs-nav);
-  }
-  .rbtn.primary:hover {
-    background: var(--accent-hover);
-    color: #fff;
   }
   .rail-sep {
     width: 20px;

@@ -31,9 +31,21 @@
   // The knowledge-graph rail collapses behind a header toggle below 1280px.
   let graphRailOpen = $state(true);
   let sidebarOpen = $state(false);
-  // Desktop sidebar collapsed to an icon rail (persisted across visits).
-  let sidebarCollapsed = $state(false);
-  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed';
+  /**
+   * Desktop sidebar collapsed to an icon rail. Collapsed is the DEFAULT now that
+   * the tab strip carries the working set: the rail is the library, and opening
+   * onto a 236px list of threads you are not in costs the conversation the width.
+   * An explicit choice still wins and still persists — see onMount.
+   */
+  let sidebarCollapsed = $state(true);
+  /**
+   * Deliberately a NEW key. Anyone who had ever used the old toggle has a stored
+   * `'0'`, and that would beat the new default forever — the flip would ship and
+   * appear to have done nothing on exactly the browsers that had used the
+   * feature. Bumping the key resets everyone to the default once; the next
+   * explicit choice persists as before.
+   */
+  const SIDEBAR_COLLAPSED_KEY = 'jkai.sidebarCollapsed.v2';
   function toggleSidebarCollapsed() {
     sidebarCollapsed = !sidebarCollapsed;
     try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0'); } catch { /* ignore */ }
@@ -99,7 +111,13 @@
   );
 
   onMount(() => {
-    try { sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'; } catch { /* ignore */ }
+    // Absent key means "never expressed a preference", which is NOT the same as
+    // "wants it expanded" — reading it as `=== '1'` would silently override the
+    // collapsed default for every visitor who has never touched the toggle.
+    try {
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (stored !== null) sidebarCollapsed = stored === '1';
+    } catch { /* ignore */ }
     let resumed = false;
     /**
      * `?new=1` forces a fresh conversation, skipping BOTH resume paths below.
@@ -452,7 +470,6 @@
       {whatsappThread}
       activeConversationId={activeId}
       onSelect={selectConversation}
-      onNew={createConversation}
       onWhatsAppSelect={selectWhatsApp}
       onDelete={deleteConversation}
       onRename={renameConversation}

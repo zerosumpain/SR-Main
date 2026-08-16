@@ -97,6 +97,17 @@ export async function maybeExtractThreadConcepts(
 ): Promise<AutoExtractOutcome | undefined> {
   let entityCount = 0;
   try {
+    // The per-thread opt-out, checked before anything else costs a query. It
+    // beats `force` on purpose: a sweep must not undo an explicit "keep this
+    // thread out of intel", which is exactly what a backfill would otherwise do
+    // the next time the extractor changes.
+    const [conv] = await db
+      .select({ intelEnabled: conversations.intelEnabled })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
+    if (conv && conv.intelEnabled === false) return;
+
     const rows = await db
       .select({
         role: orchestratorChats.role,
