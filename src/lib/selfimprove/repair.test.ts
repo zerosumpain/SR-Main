@@ -27,8 +27,11 @@ const REAL = [
 beforeEach(() => { records.length = 0; });
 
 describe('picking what to repair', () => {
-  it('still takes the worst offenders when nothing is resting', () => {
-    expect(pickRepairTargets(REAL, WORK_CAPS.maxToolsRepaired).map((t) => t.name))
+  it('still takes the worst offenders first when nothing is resting', () => {
+    // Pinned to 2, not WORK_CAPS.maxToolsRepaired: this asserts the ORDER, and
+    // tying it to the cap made it silently assert something else the moment
+    // the cap moved from 2 to 3.
+    expect(pickRepairTargets(REAL, 2).map((t) => t.name))
       .toEqual(['reverse_geocode', 'reverse_geocode_osm']);
   });
 
@@ -37,7 +40,7 @@ describe('picking what to repair', () => {
     // nights while `nearby_places` sat third of three and only two are
     // repaired per night, so it was never once reached.
     const resting = new Set(['reverse_geocode', 'reverse_geocode_osm']);
-    expect(pickRepairTargets(REAL, WORK_CAPS.maxToolsRepaired, resting).map((t) => t.name))
+    expect(pickRepairTargets(REAL, 2, resting).map((t) => t.name))
       .toEqual(['nearby_places']);
   });
 
