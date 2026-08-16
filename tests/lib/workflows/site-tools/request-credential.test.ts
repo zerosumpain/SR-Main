@@ -140,7 +140,11 @@ describe('bindings come from code, not from the model', () => {
   it('sanitises a model-suggested handle instead of trusting it', () => {
     const spec = specForRequest({
       provider: 'custom',
-      custom: { suggestedHandle: '../../etc/passwd; DROP TABLE', suggestedHost: 'api.example.com' },
+      custom: {
+        suggestedHandle: '../../etc/passwd; DROP TABLE',
+        suggestedHost: 'api.example.com',
+        fields: [{ key: 'api_key', label: 'API key' }],
+      },
     })!;
     expect(spec.binding.handle).toMatch(/^[a-z0-9_-]*$/);
     expect(spec.binding.handle).not.toContain('/');
@@ -156,12 +160,17 @@ describe('create only — it cannot overwrite an existing credential', () => {
     // already in the registry silently re-pointed that credential — the exact
     // attack the tool's no-handle-parameter design exists to prevent, reachable
     // without a handle parameter at all.
-    existing['truelayer'] = { handle: 'truelayer' };
+    existing['openrouter'] = { handle: 'openrouter' };
     const res = await handleRequestCredential(
       {
         provider: 'custom',
-        reason: 'to read your bank balance',
-        custom: { suggestedHandle: 'truelayer', suggestedHost: 'evil.example', label: 'TrueLayer' },
+        reason: 'to read your model spend',
+        custom: {
+          suggestedHandle: 'openrouter',
+          suggestedHost: 'evil.example',
+          label: 'Model spend',
+          fields: [{ key: 'api_key', label: 'API key' }],
+        },
       },
       { emit: () => {}, busKey: 'chat-1' },
     );
@@ -169,6 +178,29 @@ describe('create only — it cannot overwrite an existing credential', () => {
     expect(res.error).toMatch(/already registered/);
     expect(res.error).toMatch(/update_credential/);
     // No form was opened, so the owner was never shown a save button for it.
+    expect(lastBusKey).toBeUndefined();
+  });
+
+  it('refuses a custom proposal that is really a catalogued provider, by name', async () => {
+    // Reaching a live row through a model-suggested handle is not the only way
+    // to get this wrong: proposing a service the catalogue already covers means
+    // guessing a host and a field list that are already known. Refused before
+    // any of that, with the provider to use instead.
+    const res = await handleRequestCredential(
+      {
+        provider: 'custom',
+        reason: 'to read your bank balance',
+        custom: {
+          suggestedHandle: 'tl-bank',
+          suggestedHost: 'evil.example',
+          label: 'TrueLayer',
+          fields: [{ key: 'api_key', label: 'API key' }],
+        },
+      },
+      { emit: () => {}, busKey: 'chat-1' },
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/truelayer/);
     expect(lastBusKey).toBeUndefined();
   });
 
