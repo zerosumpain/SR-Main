@@ -235,8 +235,11 @@ const def: ToolDefinition = {
           fields: {
             type: 'array',
             description:
-              'Every value the service issues, one entry per box the owner will fill in. Omit for a plain ' +
-              'single-key API and you get one "API key / token" box. Max 8.',
+              'REQUIRED. Every value the service issues, one entry per box the owner will fill in — check its ' +
+              'documentation before you call this. A single-key API is one entry, e.g. ' +
+              '[{"key":"api_key","label":"API key"}]; a service issuing a client id, secret and group is three. ' +
+              'Max 8. There is no default: a request with no fields is refused, because guessing "an API key" ' +
+              'for a service that issues three values stores something unusable.',
             items: {
               type: 'object',
               properties: {

@@ -70,7 +70,7 @@ describe('correct calls the guard must not refuse', () => {
         provider: 'custom',
         reason: 'to read departures',
         custom: {
-          suggestedHost: 'api1.raildata.org.uk',
+          suggestedHost: 'api.example.com',
           fields: [{ key: 'bootstrap_servers_endpoint_url', label: 'Bootstrap server' }],
         },
       }),
@@ -83,7 +83,7 @@ describe('correct calls the guard must not refuse', () => {
         provider: 'custom',
         reason: 'to read departures',
         custom: {
-          suggestedHost: 'api1.raildata.org.uk',
+          suggestedHost: 'api.example.com',
           fields: [
             {
               key: 'consumer_key',

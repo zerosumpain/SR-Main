@@ -20,6 +20,7 @@ vi.mock('$lib/integrations/crypto', () => ({
 import {
   CREDENTIAL_REQUEST_SPECS,
   buildCreatePlan,
+  catalogueClaims,
   credentialProviderKeys,
   customSpec,
   describeInjection,
@@ -36,8 +37,20 @@ import {
 } from './pending-creates';
 
 describe('customSpec — asking for what the service actually needs', () => {
-  it('still asks for one key when nothing else is proposed', () => {
-    const spec = customSpec({ label: 'Some API', suggestedHost: 'api.example.com' });
+  it('refuses to guess when the model does not say what the service issues', () => {
+    // The old fallback — one box labelled "API key / token" — is the original
+    // bug. A service issuing a key and a secret got asked for a key.
+    expect(() => customSpec({ label: 'Some API', suggestedHost: 'api.example.com' })).toThrow(
+      /custom\.fields/,
+    );
+  });
+
+  it('takes a single proposed field as a plain single value', () => {
+    const spec = customSpec({
+      label: 'Some API',
+      suggestedHost: 'api.example.com',
+      fields: [{ key: 'api_key', label: 'API key' }],
+    });
     expect(spec.fields).toHaveLength(1);
     expect(spec.assemble).toBe('single');
     expect(spec.binding.injection).toEqual({ kind: 'bearer' });
@@ -61,9 +74,9 @@ describe('customSpec — asking for what the service actually needs', () => {
   it('always leaves the host for the owner to confirm or correct', () => {
     // The whole reason the old path could not save: nothing carried the host
     // back to the server. It is now an editable box on the form.
-    const spec = customSpec({ suggestedHost: 'API1.RailData.org.uk ' });
+    const spec = customSpec({ suggestedHost: 'API.Example.COM ', fields: [{ key: 'api_key', label: 'API key' }] });
     expect(spec.binding.hostEditable).toBe(true);
-    expect(spec.binding.allowedHosts).toEqual(['api1.raildata.org.uk']);
+    expect(spec.binding.allowedHosts).toEqual(['api.example.com']);
   });
 
   it('sanitises field keys and drops duplicates and empties', () => {
@@ -148,12 +161,48 @@ describe('customSpec — asking for what the service actually needs', () => {
     });
 
     it('refuses a header style with no name', () => {
-      expect(() => customSpec({ auth: { style: 'header' } })).toThrow(/auth\.name/);
+      expect(() => customSpec({ fields: [{ key: 'api_key', label: 'API key' }], auth: { style: 'header' } })).toThrow(
+        /auth\.name/,
+      );
     });
 
     it('refuses an unknown style rather than falling back to bearer', () => {
-      expect(() => customSpec({ auth: { style: 'magic' } })).toThrow(/unknown auth\.style/);
+      expect(() =>
+        customSpec({ fields: [{ key: 'api_key', label: 'API key' }], auth: { style: 'magic' } }),
+      ).toThrow(/unknown auth\.style/);
     });
+  });
+});
+
+describe('a catalogued provider claims its own territory', () => {
+  it('refuses the exact custom proposal jkai kept making', () => {
+    // Verbatim from the 2026-08-16 trace, six minutes after the two-field
+    // darwin-ldbws spec went live. Description guidance did not stop it.
+    expect(() =>
+      customSpec({
+        label: 'National Rail Darwin LDBWS — consumer user and password',
+        suggestedHandle: 'national-rail-darwin-basic',
+        suggestedHost: 'realtime.nationalrail.co.uk',
+        fields: [{ key: 'user', label: 'User' }, { key: 'password', label: 'Password' }],
+      }),
+    ).toThrow(/darwin-ldbws/);
+  });
+
+  it('claims a proposal aimed at a host it is already bound to', () => {
+    expect(catalogueClaims({ label: 'Some rail thing', suggestedHost: 'api1.raildata.org.uk' })).toBe('darwin-ldbws');
+    expect(catalogueClaims({ label: 'Banking', suggestedHost: 'auth.truelayer.com' })).toBe('truelayer');
+  });
+
+  it('needs every word of the key, not just one', () => {
+    // "darwin" alone is not enough — the two Darwin products are different
+    // credentials, and picking the wrong one is the mistake being prevented.
+    expect(catalogueClaims({ label: 'Darwin the evolution API', suggestedHost: 'api.evolution.example' })).toBeNull();
+  });
+
+  it('leaves a genuinely uncatalogued service alone', () => {
+    expect(
+      catalogueClaims({ label: 'Companies House', suggestedHost: 'api.company-information.service.gov.uk' }),
+    ).toBeNull();
   });
 });
 
@@ -383,7 +432,12 @@ describe('resolveCreateInput — what actually gets written', () => {
     const customPlan = (over: Record<string, unknown> = {}) =>
       buildCreatePlan({
         requestId: 'r',
-        spec: customSpec({ label: 'Some API', suggestedHost: 'api.example.com', ...over }),
+        spec: customSpec({
+          label: 'Some API',
+          suggestedHost: 'api.example.com',
+          fields: [{ key: 'value', label: 'API key' }],
+          ...over,
+        }),
         reason: '',
       }).write;
 
