@@ -106,12 +106,12 @@
 </div>
 
 <style>
-  .fi { --tone: var(--success); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
+  .fi { --tone: var(--success); border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
   .fi-opts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 13px; }
   .fi-opts button { display: flex; flex-direction: column; gap: 1px; text-align: left; cursor: pointer;
-    background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); padding: 7px 12px; }
-  .fi-opts b { font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
-  .fi-opts span { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.55); }
+    background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp); padding: 7px 12px; }
+  .fi-opts b { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
+  .fi-opts span { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
   .fi-opts button:hover { background: rgba(28,22,17,0.07); border-color: rgba(28,22,17,0.36); }
   .fi-opts button.on { background: var(--tone); border-color: var(--tone); }
   .fi-opts button.on b, .fi-opts button.on span { color: #fff; }
@@ -119,12 +119,12 @@
   .graph { display: grid; grid-template-columns: 1.1fr 0.7fr 1.1fr; gap: 10px; align-items: center; }
   .col { display: flex; flex-direction: column; gap: 9px; }
   .col.wires { position: relative; align-items: center; justify-content: center; min-height: 90px; }
-  .node { border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); background: rgba(255,255,255,0.7); padding: 9px 12px; }
+  .node { border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.7); padding: 9px 12px; }
   .node.down { border-width: 1.5px; }
   .node.down.broken { border-color: color-mix(in srgb, var(--error) 50%, transparent);
     background: color-mix(in srgb, var(--error) 6%, transparent); }
-  .n-lab { display: block; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
-  .n-keys { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; line-height: 1.5; color: rgba(28,22,17,0.5); margin-top: 3px; word-break: break-word; }
+  .n-lab { display: block; font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
+  .n-keys { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.5); margin-top: 3px; word-break: break-word; }
 
   /* The two wires, drawn behind whatever sits in the middle column. */
   .conn { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; overflow: visible; }
@@ -133,10 +133,10 @@
   .plain { display: none; font-size: 18px; color: rgba(28,22,17,0.35); }
 
   .mergebox, .wrapper { position: relative; z-index: 1;
-    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-primary);
-    background: rgba(28,22,17,0.06); border: 1px dashed rgba(28,22,17,0.3); border-radius: var(--radius-round);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary);
+    background: rgba(28,22,17,0.06); border: 1px dashed rgba(28,22,17,0.3); border-radius: var(--radius-sharp);
     padding: 6px 10px; text-align: center; width: 100%; }
-  .mergebox em, .wrapper em { display: block; font-style: normal; font-size: 8.5px; color: rgba(28,22,17,0.5); margin-top: 2px; }
+  .mergebox em, .wrapper em { display: block; font-style: normal; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); margin-top: 2px; }
   .wrapper { border-style: solid; border-color: color-mix(in srgb, var(--tone) 45%, transparent);
     background: color-mix(in srgb, var(--tone) 10%, transparent); }
   .mergebox { border-color: color-mix(in srgb, var(--error) 45%, transparent);
@@ -144,16 +144,16 @@
 
   .got { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
   .got li { display: flex; align-items: baseline; gap: 6px; }
-  .got code { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: rgba(28,22,17,0.07); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--text-primary); }
-  .got em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: rgba(28,22,17,0.5); }
+  .got code { font-family: var(--font-mono); font-size: var(--fs-label-xs); background: rgba(28,22,17,0.07); padding: 1px 5px; border-radius: var(--radius-sharp); color: var(--text-primary); }
+  .got em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
 
   .verdict { margin-top: 13px; border-left: 3px solid var(--tone);
     background: color-mix(in srgb, var(--tone) 9%, transparent);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; padding: 10px 14px; }
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; padding: 10px 14px; }
   .verdict.bad { border-left-color: var(--error); background: color-mix(in srgb, var(--error) 8%, transparent); }
-  .v-lab { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.09em; color: var(--tone); }
+  .v-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.09em; color: var(--tone); }
   .verdict.bad .v-lab { color: var(--error); }
-  .verdict p { margin: 5px 0 0; font-size: 13px; line-height: 1.58; color: rgba(28,22,17,0.78); max-width: 88ch; }
+  .verdict p { margin: 5px 0 0; font-size: var(--fs-label); line-height: 1.58; color: rgba(28,22,17,0.78); max-width: 88ch; }
   .verdict b { color: var(--text-primary); }
 
   /* Stacked: the left-to-right wires no longer describe the layout, so swap in an arrow. */

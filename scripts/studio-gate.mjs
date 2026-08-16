@@ -197,6 +197,36 @@ async function main() {
         missing.push(rel);
       }
     }
+    // A build copies the kit into its own tree on the iteration it first needs
+    // it, and then never looks again — so a kit fix landing at iteration 5
+    // reaches the MOUNT but not the copy, and the pages keep rendering against
+    // a snapshot taken days earlier. That is exactly how a corrected palette
+    // failed to reach a finished build: explainer-kit/tokens.css said
+    // #ede4d4 and assets/tokens.css, four iterations older, still said
+    // #f2ead9. Nothing anywhere reported the difference.
+    //
+    // Compared by CONTENT, not by timestamp: the workspace has no useful mtimes
+    // by the time this runs, and a byte difference is the thing that matters.
+    for (const rel of kitFiles) {
+      const copied = rel.replace(/^explainer-kit\//, 'assets/');
+      if (copied === rel) continue;
+      try {
+        const [a, b] = await Promise.all([
+          fetch(new URL(rel, baseUrl).toString()).then((r) => (r.ok ? r.text() : null)),
+          fetch(new URL(copied, baseUrl).toString()).then((r) => (r.ok ? r.text() : null)),
+        ]);
+        if (a && b && a.trim() !== b.trim()) {
+          findings.push({
+            chapter: 0, rule: 'stale-kit-copy',
+            message: `${copied} is an older copy of ${rel} — the mount has been updated since it was copied, and the pages are rendering against the stale one.`,
+            remedy: `Re-copy ${rel} over ${copied}. The mount is regenerated every iteration and is always current; your copy is a snapshot from whenever you first took it.`,
+          });
+        }
+      } catch {
+        // A fetch failure here is the missing-file check's business, above.
+      }
+    }
+
     if (missing.length > 0) {
       findings.push({
         chapter: 0,
@@ -336,6 +366,69 @@ async function main() {
             chapter: ch.n, rule: 'prose-only',
             message: `Chapter ${ch.n} (${ch.title}) renders no canvas or svg — it is prose.`,
             remedy: `Add a kit visual to ${ch.path}: Explainer.createDiagram for a mechanism, createScene for something spatial, createChart for a series. See ./explainer-kit/scenes.md.`,
+          });
+        }
+
+        // ——— Field Study invariants ———
+        //
+        // The mechanical half of field-study-system/CHECKLIST.md. The
+        // judgement calls in that list (is the risk column honest? is the
+        // lesson transferable?) stay with a human; these four are the ones a
+        // browser can settle, and leaving them to review is how three studies
+        // ended up with three different confidence palettes.
+        const claimChips = await root.locator('.fs-chip').count();
+        if (claimChips === 0) {
+          findings.push({
+            chapter: ch.n, rule: 'no-confidence',
+            message: `Chapter ${ch.n} (${ch.title}) states no confidence — no .fs-chip anywhere in the beat.`,
+            remedy: `Every claim carries one of exactly three: <span class="fs-chip fs-chip--fact">Fact</span>, --hypothesis, or --contested. Put one on the beat's claim in ${ch.path}. See ./explainer-kit/field-study/TEMPLATES.md.`,
+          });
+        } else {
+          // A fourth level is the failure this catches: the scale is three
+          // words, and a study that invents "likely" or "probable" has quietly
+          // stopped being comparable with every other study on the site.
+          const badLevels = await root.locator('.fs-chip').evaluateAll((els) =>
+            [
+              ...new Set(
+                els
+                  .map((e) => [...e.classList].find((c) => c.startsWith('fs-chip--')) ?? 'fs-chip--none')
+                  .filter((c) => !['fs-chip--fact', 'fs-chip--hypothesis', 'fs-chip--contested'].includes(c)),
+              ),
+            ].join(', '),
+          );
+          if (badLevels) {
+            findings.push({
+              chapter: ch.n, rule: 'confidence-invented',
+              message: `Chapter ${ch.n} uses confidence levels that are not in the scale: ${badLevels}.`,
+              remedy: `The scale is fact | hypothesis | contested and does not grow. Map the level onto one of those three in ${ch.path} — anything short of well-evidenced is a hypothesis.`,
+            });
+          }
+        }
+
+        // The close is what stops a study being a tour of the author's notes:
+        // it says what follows, and what would prove it wrong.
+        const hasFalsifier = (await root.locator('.fs-falsifier').count()) > 0;
+        const hasOpen = (await root.locator('.fs-open').count()) > 0;
+        if (!hasOpen || !hasFalsifier) {
+          findings.push({
+            chapter: ch.n, rule: 'no-close',
+            message: `Chapter ${ch.n} ends without ${!hasOpen ? 'an open question' : ''}${!hasOpen && !hasFalsifier ? ' or ' : ''}${!hasFalsifier ? 'a falsifier' : ''}.`,
+            remedy: `Close ${ch.path} with the beat close: a .fs-open aside carrying the open question, and a .fs-falsifier line naming what would change your mind.`,
+          });
+        }
+
+        // No emoji. The system says so, and a build that slips one in has
+        // stopped reading the system.
+        const emoji = await root.evaluate((el) => {
+          const t = el.textContent ?? '';
+          const m = t.match(/\p{Extended_Pictographic}/gu);
+          return m ? [...new Set(m)].slice(0, 5).join(' ') : '';
+        }).catch(() => '');
+        if (emoji) {
+          findings.push({
+            chapter: ch.n, rule: 'emoji',
+            message: `Chapter ${ch.n} contains emoji: ${emoji}`,
+            remedy: `Remove them from ${ch.path}. The system allows Unicode glyphs only — the arrows, dots and diamonds in ./explainer-kit/field-study/README.md.`,
           });
         }
 

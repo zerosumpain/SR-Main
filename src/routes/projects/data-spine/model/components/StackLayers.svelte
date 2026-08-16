@@ -96,9 +96,9 @@
   .stack-wrap { display: flex; flex-direction: column; }
 
   .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.22em; color: var(--accent-ink, #0e5b66); }
+  .eyebrow { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.22em; color: var(--accent-ink, #0e5b66); }
 
-  .std-toggle { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  .std-toggle { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase;
     border: 1.5px solid rgba(26,16,8,0.5); border-radius: var(--radius-pill); background: #faf6ec; color: rgba(26,16,8,0.82);
     padding: 6px 12px; cursor: pointer; }
   .std-toggle:hover { border-color: var(--ink, #1a1008); color: var(--ink, #1a1008); }
@@ -112,8 +112,8 @@
     padding: 0; cursor: pointer; overflow: hidden;
     transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease, transform 0.14s ease; }
   /* top slab gets the round top corners, bottom slab the round bottom corners */
-  .slab:first-child { border-radius: var(--radius-round) var(--radius-round) var(--radius-sharp) var(--radius-sharp); }
-  .slab:last-child  { border-radius: var(--radius-sharp) var(--radius-sharp) var(--radius-round) var(--radius-round); }
+  .slab:first-child { border-radius: var(--radius-sharp) var(--radius-sharp) var(--radius-sharp) var(--radius-sharp); }
+  .slab:last-child  { border-radius: var(--radius-sharp) var(--radius-sharp) var(--radius-sharp) var(--radius-sharp); }
   .slab:hover, .slab.on { background: #ffffff; border-color: var(--lc); }
   .slab.on { transform: translateX(2px); }
   .slab.dim { opacity: 0.5; }
@@ -123,25 +123,25 @@
   .slab:hover .rail, .slab.on .rail { opacity: 0.32; }
 
   .slab-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 13px 16px; }
-  .layer-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(15px, 1.7vw, 19px); color: var(--ink, #1a1008); line-height: 1.15; }
-  .choice { font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.5; letter-spacing: 0.01em; color: rgba(26,16,8,0.72); }
+  .layer-name { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(15px, 1.7vw, 19px); color: var(--ink, #1a1008); line-height: 1.15; }
+  .choice { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; letter-spacing: 0.01em; color: rgba(26,16,8,0.72); }
 
   /* beat chips reveal on the right when the slab is active */
   .beats { display: none; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 5px; padding: 12px 14px 12px 0; max-width: 46%; }
   /* click persists the reveal (works on touch); hover previews it on desktop (CSS only,
      so it never fights the click state — the review-confirmed touch-dead bug) */
   .beats.visible, .slab:hover .beats { display: flex; }
-  .beat-chip { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.03em; white-space: nowrap;
+  .beat-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.03em; white-space: nowrap;
     color: var(--ink, #1a1008); background: #ffffff; border: 1.5px solid var(--lc); border-radius: var(--radius-pill); padding: 3px 9px; }
 
-  .takeaway { font-family: 'DM Sans', sans-serif; font-size: 13.5px; line-height: 1.6; color: rgba(26,16,8,0.82);
+  .takeaway { font-family: var(--font-body); font-size: var(--fs-label); line-height: 1.6; color: rgba(26,16,8,0.82);
     margin: 16px 2px 0; padding-top: 12px; border-top: 1px dashed rgba(26,16,8,0.28); }
   .takeaway b { color: var(--ink, #1a1008); }
-  .tk-mark { font-family: 'JetBrains Mono', monospace; color: var(--accent-ink, #0e5b66); font-weight: 700; margin-right: 4px; }
-  .hint { display: block; margin-top: 4px; font-size: 12px; color: rgba(26,16,8,0.6); }
+  .tk-mark { font-family: var(--font-mono); color: var(--accent-ink, #0e5b66); font-weight: 700; margin-right: 4px; }
+  .hint { display: block; margin-top: 4px; font-size: var(--fs-label-xs); color: rgba(26,16,8,0.6); }
   .hint b { color: rgba(26,16,8,0.72); }
 
-  .eli-note { font-size: 13px; font-style: italic; color: rgba(26,16,8,0.72); margin: 12px 2px 0; }
+  .eli-note { font-size: var(--fs-label); font-style: italic; color: rgba(26,16,8,0.72); margin: 12px 2px 0; }
 
   @media (max-width: 620px) {
     .slab { flex-direction: column; }

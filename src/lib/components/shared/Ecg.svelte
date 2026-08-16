@@ -329,7 +329,7 @@
   }
   .h-ecg-bpm-lbl {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--text-muted);

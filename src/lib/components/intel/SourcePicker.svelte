@@ -62,6 +62,23 @@
   const labelFor = (id: string) => LABELS[id]?.name ?? id;
   const hintFor = (id: string) => LABELS[id]?.hint ?? '';
 
+  /**
+   * A selected value in plain words, whichever of the three levels it is.
+   *
+   * The summary line ran every selection through `labelFor`, which only knows
+   * plain sources — so picking a facet said "Showing what email:bulk
+   * contributed", printing the storage key at the user. */
+  const selectionLabel = (id: string) => {
+    const at = id.indexOf('@');
+    if (at > 0) return id.slice(at + 1);
+    const colon = id.indexOf(':');
+    if (colon > 0) {
+      const kind = id.slice(colon + 1);
+      return `${labelFor(id.slice(0, colon))} (${KIND_LABELS[kind] ?? kind})`;
+    }
+    return labelFor(id);
+  };
+
   const filtering = $derived(activeSources.length > 0 || activeCategories.length > 0);
   /** Files are selected, or nothing is — either way categories are meaningful. */
   const filesInPlay = $derived(!activeSources.length || activeSources.includes('file'));
@@ -82,11 +99,61 @@
     correspondence: 'everything else',
     notification: 'service notices',
     bulk: 'marketing and newsletters',
+    // Not one of the three — see the ordering note below.
+    important: 'marked important',
   };
 
-  /** Senders shown before the list has to be asked for. */
-  const DOMAIN_PREVIEW = 5;
-  let expanded = $state(new Set<string>());
+  /**
+   * The kinds are mutually exclusive; `important` is not.
+   *
+   * Gmail's IMPORTANT label is its own judgement about what matters in this
+   * mailbox, and it cuts across all three — an important newsletter and a
+   * routine note from a colleague are both ordinary things. It is pinned to the
+   * top of the list rather than sorted in by count, because it is the one facet
+   * here that nothing in this codebase decided.
+   */
+  const orderedKinds = (all: typeof sourceKinds, source: string) => {
+    const mine = all.filter((k) => k.source === source);
+    return [
+      ...mine.filter((k) => k.kind === 'important'),
+      ...mine.filter((k) => k.kind !== 'important'),
+    ];
+  };
+
+  /**
+   * Senders are collapsed, not previewed.
+   *
+   * This used to show five domains plus an "all N senders" button under every
+   * source that had them, which on the live mailbox made Email alone ten rows
+   * of a rail that has to hold search, clusters, types and categories too. Five
+   * arbitrary senders is not a summary of four hundred — it is the top of a
+   * list nobody asked to see — so the list now costs one row until it is
+   * wanted, and the row says how many are behind it.
+   */
+  let openSenders = $state(new Set<string>());
+  const toggleSenders = (id: string) => {
+    const next = new Set(openSenders);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    openSenders = next;
+  };
+
+  /**
+   * Senders listed at a time once the list is open.
+   *
+   * The live mailbox has 412 of them. Rendering the lot made the rail 34,000px
+   * tall — a list that long is not a control, it is a document — so the open
+   * state shows the busiest few and a box to find the rest by name. Typing is
+   * the only way to reach the tail of a list this size; scrolling past four
+   * hundred rows is not.
+   */
+  const SENDER_LIMIT = 12;
+  let senderQuery = $state('');
+
+  const matchingDomains = (domains: typeof sourceDomains) => {
+    const needle = senderQuery.trim().toLowerCase();
+    return needle ? domains.filter((d) => d.domain.toLowerCase().includes(needle)) : domains;
+  };
 </script>
 
 <div class="ctl">
@@ -106,8 +173,9 @@
     <div class="rows">
       {#each sources as s (s.id)}
         {@const on = activeSources.includes(s.id)}
-        {@const kinds = sourceKinds.filter((k) => k.source === s.id)}
+        {@const kinds = orderedKinds(sourceKinds, s.id)}
         {@const domains = sourceDomains.filter((d) => d.source === s.id)}
+        {@const sendersOpen = openSenders.has(s.id)}
         <button
           type="button"
           class="row"
@@ -143,8 +211,37 @@
         {/each}
 
         {#if domains.length}
-          {@const shown = expanded.has(s.id) ? domains : domains.slice(0, DOMAIN_PREVIEW)}
-          {#each shown as d (d.id)}
+          {@const picked = domains.filter((d) => activeSources.includes(d.id))}
+          <!-- One row, whatever the mailbox is doing. Any sender you have
+               actually selected stays visible while the list is shut, so
+               collapsing it can never hide a filter that is switched on. -->
+          <button
+            type="button"
+            class="row sub disclose"
+            aria-expanded={sendersOpen}
+            onclick={() => toggleSenders(s.id)}
+          >
+            <span class="caret" class:open={sendersOpen} aria-hidden="true"></span>
+            <span class="name">
+              {sendersOpen ? 'Hide senders' : 'By sender'}
+              {#if !sendersOpen && picked.length}<em>{picked.length} on</em>{/if}
+            </span>
+            <span class="count">{domains.length}</span>
+          </button>
+
+          {#if sendersOpen && domains.length > SENDER_LIMIT}
+            <input
+              class="sender-find"
+              type="search"
+              placeholder="find a sender…"
+              aria-label="Find a sender"
+              bind:value={senderQuery}
+            />
+          {/if}
+
+          {@const matched = sendersOpen ? matchingDomains(domains) : picked}
+          {@const listed = sendersOpen ? matched.slice(0, SENDER_LIMIT) : matched}
+          {#each listed as d (d.id)}
             {@const domOn = activeSources.includes(d.id)}
             <button
               type="button"
@@ -159,19 +256,14 @@
               <span class="count">{d.count}</span>
             </button>
           {/each}
-          {#if domains.length > DOMAIN_PREVIEW}
-            <button
-              type="button"
-              class="more"
-              onclick={() => {
-                const next = new Set(expanded);
-                if (next.has(s.id)) next.delete(s.id);
-                else next.add(s.id);
-                expanded = next;
-              }}
-            >
-              {expanded.has(s.id) ? 'Fewer senders' : `All ${domains.length} senders`}
-            </button>
+          <!-- Says what is NOT shown rather than silently truncating: a list
+               that stops at twelve without saying so reads as the whole list. -->
+          {#if sendersOpen && matched.length > listed.length}
+            <p class="sub-note">
+              {matched.length - listed.length} more — narrow it by name.
+            </p>
+          {:else if sendersOpen && !matched.length}
+            <p class="sub-note">No sender matches “{senderQuery}”.</p>
           {/if}
         {/if}
       {/each}
@@ -182,14 +274,14 @@
         Everything is contributing — {total} entity mention{total === 1 ? '' : 's'} across
         {sources.length} source{sources.length === 1 ? '' : 's'}. Pick one or more to narrow it.
       {:else}
-        Showing what {activeSources.map(labelFor).join(' and ')} contributed.
+        Showing what {activeSources.map(selectionLabel).join(' and ')} contributed.
       {/if}
     </p>
   {/if}
 
   {#if categories.length && filesInPlay}
-    <div class="sub">
-      <span class="sub-title">Files by category</span>
+    <div class="cat-block">
+      <span class="cat-title">Files by category</span>
       <div class="chips">
         {#each categories as c (c.id)}
           <button
@@ -251,7 +343,7 @@
     transition: background var(--t-fast) var(--ease-out);
   }
   .row:hover {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .row.on {
     color: var(--text-primary);
@@ -261,7 +353,7 @@
     flex-shrink: 0;
     width: 12px;
     height: 12px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--bg);
   }
@@ -301,6 +393,64 @@
     color: var(--text-primary);
   }
 
+  /* The senders disclosure. A caret rather than a checkbox mark, because it
+     opens a list — it does not select anything. */
+  .row.sub.disclose .name {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .row.sub.disclose .name em {
+    font-style: normal;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+  }
+  .caret {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    position: relative;
+  }
+  .caret::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 5px;
+    height: 5px;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform var(--t-fast) var(--ease-out);
+  }
+  .caret.open::before {
+    transform: rotate(45deg);
+  }
+
+  .sender-find {
+    margin: 2px 0 2px 34px;
+    padding: 4px 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    /* 16px would be the rule for a form field, but this is a rail-width
+       type-ahead beside 12px rows; the a11y floor is what governs here. */
+    font-size: var(--fs-label-xs);
+    color: var(--text-primary);
+  }
+  .sender-find:focus {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .sub-note {
+    margin: 1px 0 2px 34px;
+    font-size: var(--fs-label-xs);
+    line-height: 1.35;
+    color: var(--text-ghost);
+  }
+
   .count {
     flex-shrink: 0;
     font-family: var(--font-mono);
@@ -308,17 +458,24 @@
     color: var(--text-ghost);
   }
 
-  .sub {
+  /* The categories block. Named `.cat-block`, not `.sub`, because `.sub` also
+     modifies a facet ROW (`.row.sub`) — and a bare `.sub` rule matched those
+     too, stacking every kind and sender row into a bordered column three lines
+     tall. Four kinds and five senders rendered as ~700px of rail that should
+     have been ~230px, which is most of the reason the sources section was
+     unusable. `.row.sub` only overrode padding and colour, so the layout
+     properties leaked straight through. */
+  .cat-block {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin-top: 4px;
     padding-top: 8px;
     padding-left: 10px;
-    border-top: 1px solid var(--divider);
-    border-left: 2px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
+    border-left: 2px solid var(--line-hair);
   }
-  .sub-title {
+  .cat-title {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
@@ -333,7 +490,7 @@
   }
   .chip {
     padding: 3px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     background: transparent;
     font-family: var(--font-mono);

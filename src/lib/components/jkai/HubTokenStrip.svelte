@@ -151,8 +151,11 @@
     gap: 0.45ch;
     white-space: nowrap;
   }
+  /* Every figure in the ledger ticks in place during a turn — tabular stops the
+     strip shivering as digits change width. */
   .chunk b {
     font-weight: 500;
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
   }
   .chunk b.accent {
@@ -173,7 +176,7 @@
     width: 52px;
     height: 5px;
     flex: none;
-    background: var(--divider);
+    background: var(--line);
   }
   .budget-fill {
     display: block;

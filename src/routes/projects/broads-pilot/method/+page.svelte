@@ -110,14 +110,14 @@
 <style>
   .bp-doc { position: absolute; inset: 0; overflow-y: auto; background: var(--bg); }
   .bp-doc-inner { max-width: 40rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-  .bp-kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.62rem; color: var(--accent); margin-bottom: 0.4rem; }
+  .bp-kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: var(--fs-label-xs); color: var(--accent); margin-bottom: 0.4rem; }
   h1 { font-family: var(--font-display); text-transform: uppercase; font-size: 1.6rem; color: var(--text-primary); margin: 0 0 1rem; letter-spacing: 0.01em; }
   h2 { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.78rem; color: var(--accent); margin: 1.8rem 0 0.5rem; }
   p, li { font-family: var(--font-body); color: var(--text-secondary); line-height: 1.6; font-size: 0.94rem; }
   ul { padding-left: 1.1rem; }
   li { margin: 0.3rem 0; }
   strong { color: var(--text-primary); }
-  .bp-disclaimer { background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: var(--radius-round); padding: 0.9rem 1rem; font-family: var(--font-body); color: var(--text-secondary); line-height: 1.55; font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+  .bp-disclaimer { background: color-mix(in srgb, var(--warn) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: var(--radius-sharp); padding: 0.9rem 1rem; font-family: var(--font-body); color: var(--text-secondary); line-height: 1.55; font-size: 0.9rem; margin: 1rem 0 0.5rem; }
   .bp-disclaimer strong { color: var(--text-primary); }
   .v { font-family: var(--font-mono); font-size: 0.78rem; padding: 0.05rem 0.35rem; border-radius: var(--radius-sharp); }
   .v.pass { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }

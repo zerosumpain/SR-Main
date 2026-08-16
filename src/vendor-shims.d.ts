@@ -3,6 +3,10 @@
 // ambient declaration keeps svelte-check/tsc happy (the module is used as `any`).
 declare module 'archiver';
 
+// The browser PDF.js build is deliberately used for text-only extraction: its
+// legacy Node build eagerly loads a native canvas module even when not rendering.
+declare module 'pdfjs-dist/build/pdf.mjs';
+
 /**
  * `d3-force-3d` ships no declarations and has no @types package. It mirrors
  * d3-force's API with a third dimension, so the shape below covers what the

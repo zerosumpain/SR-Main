@@ -113,11 +113,11 @@
           ? 'What should the reader understand by the end? Name a subject and the counter-intuitive thing about it, e.g. "Explain how the National Funding Formula decides what a school receives, and why two schools of the same size get different budgets."'
           : 'Describe what you want to build...'}
         class="w-full rounded-[var(--radius-round)] border p-3 text-base resize-y"
-        style="background: var(--card-bg); border-color: var(--card-border); color: var(--text-primary);"
+        style="background: var(--card-bg); border-color: var(--line-strong); color: var(--text-primary);"
       ></textarea>
     </div>
 
-    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);">
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--line-strong);">
       <label class="flex items-center gap-2 text-sm" style="color: var(--text-primary);">
         <input type="checkbox" bind:checked={studioMode} />
         Studio — multi-chapter interactive explainer
@@ -133,7 +133,7 @@
             id="studio-evidence"
             bind:value={researchMode}
             class="w-full text-sm p-2 rounded-[var(--radius-round)] border"
-            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);"
+            style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);"
           >
             <option value="extend">Extend — reuse what is known, research only the gaps (default)</option>
             <option value="reuse">Reuse only — existing research, no new session (seconds, free)</option>
@@ -150,7 +150,7 @@
       {/if}
     </div>
 
-    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);" class:opacity-50={studioMode}>
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--line-strong);" class:opacity-50={studioMode}>
       <h2 class="text-sm font-medium mb-4" style="color: var(--text-secondary);">Budget</h2>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -166,21 +166,21 @@
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Max tokens per hour</label>
           <input type="number" bind:value={maxTokensPerHour} placeholder="Unlimited"
             class="w-full rounded border px-2 py-1 text-base"
-            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
+            style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);" />
         </div>
 
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Max iterations</label>
           <input type="number" bind:value={maxIterations} placeholder="Unlimited"
             class="w-full rounded border px-2 py-1 text-base"
-            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
+            style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);" />
         </div>
 
         <div>
           <label class="block text-xs mb-1" style="color: var(--text-ghost);">Total time cap (minutes)</label>
           <input type="number" bind:value={maxTotalMinutes} placeholder="Unlimited"
             class="w-full rounded border px-2 py-1 text-base"
-            style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);" />
+            style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);" />
         </div>
       </div>
     </div>
@@ -189,7 +189,7 @@
       <ModelPicker bind:value={builderModel} label="Model" />
     </div>
 
-    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--card-border);" class:opacity-50={studioMode}>
+    <div class="mb-6 p-4 rounded-[var(--radius-round)] border" style="background: var(--card-bg); border-color: var(--line-strong);" class:opacity-50={studioMode}>
       <h2 class="text-sm font-medium mb-3" style="color: var(--text-secondary);">Strategy</h2>
       <label class="flex items-center gap-2 mb-3 text-sm" style="color: var(--text-primary);">
         <input type="checkbox" bind:checked={enforceDesignSystem} />
@@ -202,7 +202,7 @@
       <label class="block text-xs mb-1" style="color: var(--text-ghost);">Thinking level</label>
       <select bind:value={thinkingLevel}
         class="w-full rounded border px-2 py-1 text-sm"
-        style="background: var(--bg); border-color: var(--card-border); color: var(--text-primary);">
+        style="background: var(--bg); border-color: var(--line-strong); color: var(--text-primary);">
         {#each ['off','minimal','low','medium','high','xhigh'] as lv}
           <option value={lv}>{lv}</option>
         {/each}

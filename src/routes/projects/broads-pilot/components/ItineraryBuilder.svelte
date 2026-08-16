@@ -105,7 +105,7 @@
   .trip {
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 0.9rem;
     display: flex;
     flex-direction: column;
@@ -133,12 +133,12 @@
     border: 1px solid var(--card-border);
     color: var(--text-secondary);
     font-family: var(--font-mono);
-    font-size: 0.66rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 0.45rem 0.7rem;
     min-height: 40px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
   }
   .ghost:hover {
@@ -162,7 +162,7 @@
     gap: 0.45rem;
     padding: 0.5rem 0.6rem;
     border: 1px dashed var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: var(--font-body);
     font-size: 0.78rem;
     line-height: 1.35;
@@ -181,7 +181,7 @@
     align-items: center;
     gap: 0.6rem;
     padding: 0.4rem 0.45rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--card-bg);
     border: 1px solid var(--card-border);
   }
@@ -196,7 +196,7 @@
     display: grid;
     place-items: center;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--fs-label-xs);
     color: #fff;
     background: var(--accent);
     border-radius: var(--radius-pill);
@@ -225,7 +225,7 @@
 
   .for {
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
     line-height: 1.2;
     overflow: hidden;
@@ -238,7 +238,7 @@
     align-items: center;
     gap: 0.35rem;
     font-family: var(--font-mono);
-    font-size: 0.66rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .num {
@@ -252,7 +252,7 @@
     color: var(--error);
   }
   .tag {
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--warn);
@@ -273,7 +273,7 @@
     font-size: 1.25rem;
     line-height: 1;
     cursor: pointer;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
   }
   .rm:hover {
     color: var(--error);
@@ -294,7 +294,7 @@
   }
   .tot dt {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
@@ -310,7 +310,7 @@
   .note {
     margin: 0;
     padding: 0.55rem 0.65rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: var(--font-body);
     font-size: 0.78rem;
     line-height: 1.35;
@@ -333,12 +333,12 @@
     color: #fff;
     border: none;
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     padding: 0.6rem 0.8rem;
     min-height: 40px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
   }
   .share:hover {

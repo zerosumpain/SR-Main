@@ -45,6 +45,8 @@
 /api/health/workflow-engine
 /api/jkai/cors/[...url]
 /api/jkai/intel/backfill
+/api/jkai/intel/clusters/recalculate
+/api/jkai/intel/source-facets
 /api/jkai/prompts/hermes
 /api/jkai/proxy/[id]/[...path]
 /api/jkai/studio
@@ -61,6 +63,7 @@
 /api/policy-engine/seed-workflows
 /api/releases/ingest
 /api/releases/summarise
+/api/route-exports/[token]/download
 /api/scraper/interactive
 /api/scraper/interactive/[id]
 /api/scraper/node

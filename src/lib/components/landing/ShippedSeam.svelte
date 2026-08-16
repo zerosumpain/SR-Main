@@ -127,7 +127,7 @@
 
 <section bind:this={sectionEl} class="seam-sec" class:armed class:visible>
   <header class="seam-hd">
-    <span class="seam-eyebrow">Shipped</span>
+    <h2 class="seam-eyebrow">Shipped</h2>
     <span class="seam-rule"></span>
     <span class="seam-meta">Every deploy since 19 Mar 2026</span>
   </header>
@@ -135,7 +135,7 @@
   <!-- LEDE — the 8-second read: three declarative numerals, then the sentence
        that tells you what they are evidence of. -->
   <div class="seam-lede">
-    <div class="seam-figures">
+    <div class="cellgrid seam-figures">
       <div class="fig">
         <span class="fig-n">{releasesN}</span>
         <span class="fig-l">releases</span>
@@ -145,7 +145,9 @@
         <span class="fig-l">things shipped</span>
       </div>
       <div class="fig">
-        <span class="fig-n">{linesN}</span>
+        <!-- The one accent figure: lines written is the number that makes the
+             other two mean something. -->
+        <span class="fig-n accent">{linesN}</span>
         <span class="fig-l">lines written</span>
       </div>
     </div>
@@ -166,12 +168,7 @@
   <!-- THE FIELD — deploys above the horizon, the capabilities they carried
        below it. One mark, read as effort against result. -->
   <div class="seam-field">
-    <div class="seam-ruler" aria-hidden="true">
-      {#each field.ticks as t (t.i)}
-        <span class="seam-tick" style="left: {(t.cx / VIEW_W) * 100}%">{t.label}</span>
-      {/each}
-    </div>
-
+    <div class="seam-box">
     <div
       bind:this={fieldEl}
       class="seam-plot"
@@ -258,6 +255,14 @@
         {/if}
       </svg>
     </div>
+      <!-- Month labels beneath the plot, inside the same box: the axis belongs
+           to the chart, not to the page it sits on. -->
+      <div class="seam-ruler" aria-hidden="true">
+        {#each field.ticks as t (t.i)}
+          <span class="seam-tick" style="left: {(t.cx / VIEW_W) * 100}%">{t.label}</span>
+        {/each}
+      </div>
+    </div>
 
     <!-- READOUT — real titles, so the chart is evidence rather than decoration. -->
     <div class="seam-readout">
@@ -327,71 +332,76 @@
     margin-bottom: 26px;
   }
   .seam-eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--accent);
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(26px, 3.4vw, 34px);
+    line-height: 1;
+    letter-spacing: -0.025em;
+    text-transform: none;
+    color: var(--text-primary);
   }
   .seam-rule {
     flex: 1;
     height: 1px;
-    background: var(--divider);
+    background: var(--line);
   }
   .seam-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.12em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
-    color: var(--text-ghost);
+    color: var(--text-muted);
   }
 
+  /* The three figures run the full width, and the sentence that says what they
+     are evidence of sits under them. Side by side, a 686,199 had nowhere to go
+     and spilled out of its cell. */
   .seam-lede {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
-    gap: clamp(24px, 4vw, 56px);
-    align-items: end;
-  }
-  @media (max-width: 860px) {
-    .seam-lede {
-      grid-template-columns: 1fr;
-      gap: 26px;
-    }
-  }
-
-  .seam-figures {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: clamp(20px, 3vw, 30px);
+  }
+
+  /* Three cells of one grid, label under figure — the old stacked rows read as
+     a list of three unrelated facts. */
+  .seam-figures {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    background: var(--bg);
+  }
+  .seam-figures > .fig {
+    padding: 20px 22px;
   }
   .fig {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
   }
-  /* Deliberately below the hero's clamp(36px, 9vw, 132px) ceiling — the hero
-     must stay the loudest voice on the page. */
+  /* --fs-num-lg, deliberately below the hero's clamp(36px, 9vw, 132px) ceiling
+     — the hero must stay the loudest voice on the page. */
   .fig-n {
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: clamp(34px, 6vw, 62px);
-    line-height: 0.88;
-    letter-spacing: -0.03em;
+    font-size: clamp(30px, 4.6vw, 54px);
+    line-height: 0.9;
+    letter-spacing: -0.04em;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
+  .fig-n.accent {
+    color: var(--accent);
+  }
   .fig-l {
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.18em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
     text-transform: uppercase;
     color: var(--text-ghost);
   }
 
   .seam-strap {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1.5;
     color: var(--text-secondary);
     border-left: 3px solid var(--accent);
@@ -401,9 +411,11 @@
   }
   .seam-figs {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    color: var(--accent);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-primary);
     margin: 16px 0 0;
     font-variant-numeric: tabular-nums;
   }
@@ -413,21 +425,27 @@
 
   .seam-field {
     margin-top: clamp(28px, 4vw, 44px);
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line);
     padding-top: 20px;
+  }
+  /* The chart in a box of its own, axis included. */
+  .seam-box {
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    padding: 16px 16px 10px;
   }
 
   .seam-ruler {
     position: relative;
-    height: 13px;
-    margin-bottom: 6px;
+    height: 16px;
+    margin-top: 8px;
   }
   .seam-tick {
     position: absolute;
     transform: translateX(-50%);
     font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.18em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--text-ghost);
   }
@@ -464,7 +482,7 @@
 
   .seam-readout {
     margin-top: 16px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--card-bg);
     padding: 12px 14px;
     /* Three rows plus the header, so scrubbing never reflows the page. */
@@ -478,7 +496,7 @@
   }
   .ro-date {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -486,14 +504,14 @@
   }
   .ro-stat {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
   .ro-hint {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -515,7 +533,7 @@
   }
   .ro-kind {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-ghost);
@@ -527,13 +545,13 @@
   }
   .ro-title {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.35;
     color: var(--text-primary);
   }
   .ro-empty {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--text-muted);
     margin: 0;
   }
@@ -548,7 +566,7 @@
   }
   .seam-note {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     letter-spacing: 0.02em;
     color: var(--text-ghost);
@@ -560,7 +578,7 @@
     align-items: center;
     gap: 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;

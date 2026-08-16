@@ -345,7 +345,7 @@
     display: grid;
     grid-template-columns: repeat(12, 1fr);
     gap: 0;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
   }
   @media (max-width: 1100px) {
     .h-detail-grid {
@@ -360,8 +360,8 @@
   .h-card {
     position: relative;
     padding: 18px 18px 16px;
-    border-right: 1px solid var(--divider);
-    border-bottom: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
+    border-bottom: 1px solid var(--line-hair);
     background: var(--bg);
     display: flex;
     flex-direction: column;
@@ -394,7 +394,7 @@
     }
   }
   .h-card.tinted {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .h-card-head {
     display: flex;
@@ -404,7 +404,7 @@
   }
   .h-card-name {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -412,11 +412,11 @@
   }
   .h-card-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     text-transform: uppercase;
     padding: 2px 6px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     white-space: nowrap;
   }
@@ -455,14 +455,14 @@
   }
   .h-card-unit {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.15em;
     color: var(--text-muted);
     text-transform: uppercase;
   }
   .h-card-foot {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     color: var(--text-secondary);
     line-height: 1.5;
@@ -505,7 +505,7 @@
     align-items: center;
     gap: 5px;
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -527,21 +527,21 @@
     gap: 14px;
     align-items: baseline;
     padding: 8px 0;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .h-workout-row:first-child {
     border-top: none;
   }
   .h-workout-day {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-muted);
     text-transform: uppercase;
   }
   .h-workout-name {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     color: var(--text-primary);
     font-weight: 500;
   }
@@ -554,7 +554,7 @@
   }
   .h-workout-dur {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     letter-spacing: 0.1em;
   }
@@ -578,7 +578,7 @@
     gap: 10px;
   }
   .h-activity-mini {
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
   }
   .h-activity-mini-val {
     font-size: 28px;
@@ -597,7 +597,7 @@
     align-items: center;
     gap: 6px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);

@@ -97,7 +97,7 @@
     gap: 1px;
     margin-top: 8px;
     background: rgba(26, 16, 8, 0.12);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
   /* An attachment set with no image is just the row stack, full width. */
   .att-block:not(:has(.att-image)) {

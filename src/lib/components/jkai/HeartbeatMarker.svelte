@@ -162,7 +162,7 @@
     gap: 4px;
     padding: 2px 7px;
     background: none;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 100px;
     color: var(--text-ghost);
     cursor: pointer;
@@ -237,7 +237,7 @@
     overflow-y: auto;
     padding: 9px 11px;
     background: var(--surface-elevated);
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     border-radius: 2px;
     text-align: left;
   }
@@ -248,7 +248,7 @@
     gap: 8px;
     margin-bottom: 7px;
     padding-bottom: 5px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;

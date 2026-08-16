@@ -63,29 +63,29 @@
 </div>
 
 <style>
-  .wf { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
+  .wf { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
   .wf-head { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-  .mg { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-primary); background: rgba(255,255,255,0.65);
-    border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+  .mg { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); background: rgba(255,255,255,0.65);
+    border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .mg.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-  .track { display: flex; height: 52px; border-radius: var(--radius-round); overflow: hidden; border: 1px solid rgba(28,22,17,0.16); }
+  .track { display: flex; height: 52px; border-radius: var(--radius-sharp); overflow: hidden; border: 1px solid rgba(28,22,17,0.16); }
   .seg { display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 0 6px; min-width: 0;
     border-right: 1px solid rgba(255,255,255,0.55); transition: width 0.35s cubic-bezier(0.3,0,0.2,1); overflow: hidden; }
   .seg:last-child { border-right: none; }
   .seg.site { background: rgba(14,91,102,0.3); }
   .seg.model { background: rgba(196,87,10,0.26); }
-  .s-lab { font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .s-ms { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.65); white-space: nowrap; }
+  .s-lab { font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-ms { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.65); white-space: nowrap; }
 
-  .scale-note { margin: 6px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; line-height: 1.5; color: var(--accent); }
+  .scale-note { margin: 6px 0 0; font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; color: var(--accent); }
 
   .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 11px; }
-  .sp { border-radius: var(--radius-round); padding: 11px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .sp { border-radius: var(--radius-sharp); padding: 11px 14px; display: flex; flex-direction: column; gap: 2px; }
   .sp.site { background: rgba(14,91,102,0.1); border-left: 3px solid var(--accent-ink); }
   .sp.model { background: rgba(196,87,10,0.09); border-left: 3px solid var(--accent); }
-  .sp b { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600; color: var(--text-primary); line-height: 1.05; }
-  .sp span { font-size: 12.5px; line-height: 1.45; color: rgba(28,22,17,0.72); }
-  .sp em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.5); margin-top: 3px; }
+  .sp b { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--text-primary); line-height: 1.05; }
+  .sp span { font-size: var(--fs-label); line-height: 1.45; color: rgba(28,22,17,0.72); }
+  .sp em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); margin-top: 3px; }
 
 </style>

@@ -99,20 +99,20 @@
     flex-direction: column;
     gap: 1px;
     text-align: left;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     padding: 7px 12px;
     border: 1px solid rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     color: var(--ink);
     cursor: pointer;
   }
   .pk i {
     font-style: normal;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 400;
     color: rgba(28, 22, 17, 0.5);
   }
@@ -130,14 +130,14 @@
 
   .panel {
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.4);
     padding: 15px 18px 16px;
     margin-bottom: 28px;
   }
   .who {
     margin: 0 0 12px;
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.72);
     max-width: 90ch;
@@ -153,15 +153,15 @@
     align-items: center;
     gap: 6px;
     margin: 0 0 7px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--ink);
   }
   .fcol h4 i {
     font-style: normal;
-    font-size: 13px;
+    font-size: var(--fs-label);
   }
   .fcol.in h4 i {
     color: #8a2d3a;
@@ -171,7 +171,7 @@
   }
   .flow {
     border: 1px solid rgba(28, 22, 17, 0.11);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     padding: 8px 11px;
     margin-bottom: 6px;
@@ -184,15 +184,15 @@
   }
   .flow b {
     display: block;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
   }
   .flow span {
     display: block;
     margin-top: 2px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.65);
   }
@@ -205,8 +205,8 @@
   }
   .d-lab {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
@@ -214,7 +214,7 @@
   }
   .d-item p {
     margin: 0;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.75);
   }
@@ -228,8 +228,8 @@
     margin-top: 12px;
   }
   .srcs a {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px dashed currentColor;
@@ -237,14 +237,14 @@
 
   .dyn-h {
     margin: 0 0 4px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 19px;
     font-weight: 600;
     color: var(--ink);
   }
   .dyn-sub {
     margin: 0 0 12px;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.65);
     max-width: 80ch;
@@ -252,35 +252,35 @@
   .dyn {
     border: 1px solid rgba(28, 22, 17, 0.12);
     border-top: 3px solid #b4632e;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.45);
     padding: 12px 14px;
   }
   .dy-title {
     display: block;
-    font-family: 'Fraunces', serif;
-    font-size: 14.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-nav);
     font-weight: 600;
     color: var(--ink);
     margin-bottom: 4px;
   }
   .dy-text {
     margin: 0 0 8px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.72);
   }
   .dy-eg {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.5);
   }
   .dy-link {
     background: none;
     border: none;
     padding: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     cursor: pointer;
     text-decoration: underline dashed;

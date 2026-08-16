@@ -326,8 +326,8 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    border-left: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-left: 1px solid var(--line-hair);
+    background: var(--surface-rail);
   }
 
   .rail-label {
@@ -364,7 +364,7 @@
     align-items: baseline;
     justify-content: space-between;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .gr-count {
     font-family: var(--font-mono);
@@ -380,7 +380,7 @@
     flex: none;
     height: 308px;
     overflow: hidden;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     background-color: var(--bg);
     background-image: radial-gradient(rgba(26, 16, 8, 0.13) 1px, transparent 1px);
     background-size: 20px 20px;
@@ -486,10 +486,12 @@
     border-top-style: dashed;
   }
 
+  /* The rail is a stack of cells: graph, then named entities, then the detail,
+     then the thread-cost footer — each closed by its own hairline. */
   .gr-detail {
     flex: none;
     padding: 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .gr-detail-top {
     display: flex;
@@ -629,7 +631,7 @@
     justify-content: space-between;
     gap: 8px;
     padding: 9px 12px;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;

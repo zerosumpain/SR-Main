@@ -309,6 +309,28 @@ export async function revertPolicyTo(
 ): Promise<ToolPolicyVersion | null> {
   const target = targetVersion === 0 ? emptyPolicy() : await getPolicyVersion(targetVersion);
   if (!target) return null;
+
+  // Close the trial we are abandoning. `assessActiveTrial` is the only other
+  // thing that writes a verdict, and it only ever looks at the ACTIVE policy —
+  // so a version reverted by hand kept `status: 'running'` for good, and the
+  // ledger showed a trial that had in fact been cancelled. Harmless to the
+  // engine, which reads the active policy, and a lie to the person reading the
+  // history, which is the whole point of keeping it append-only.
+  const abandoned = await getActivePolicy();
+  if (abandoned.trial?.status === 'running' && abandoned.version !== targetVersion) {
+    try {
+      await updatePolicyTrial(abandoned.version, {
+        ...abandoned.trial,
+        status: 'reverted',
+        verdict: `Cancelled by ${by} before the trial finished: ${reason}`.slice(0, 300),
+        decidedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      // A tidy ledger is not worth failing the revert over.
+      console.error('[toolpolicy] could not close the abandoned trial:', err);
+    }
+  }
+
   return publishPolicy({
     rationale: `Revert to v${targetVersion}: ${reason}`.slice(0, 400),
     overrides: target.overrides,

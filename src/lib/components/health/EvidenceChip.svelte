@@ -26,11 +26,11 @@
     align-items: center;
     height: 22px;
     padding: 0 8px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     color: var(--text-ghost);
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     cursor: pointer;

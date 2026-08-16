@@ -75,13 +75,13 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 30vw, 200px), 1fr));
     gap: 0;
-    border-top: 2px solid var(--card-border);
-    border-bottom: 2px solid var(--card-border);
+    border-top: 2px solid var(--line-strong);
+    border-bottom: 2px solid var(--line-strong);
     background: var(--bg);
   }
   .win-cell {
     padding: 14px 18px;
-    border-right: 1px solid var(--divider);
+    border-right: 1px solid var(--line-hair);
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -92,7 +92,7 @@
   }
   .win-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -110,7 +110,7 @@
   }
   .win-sub {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-ghost);

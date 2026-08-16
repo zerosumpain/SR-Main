@@ -11,4 +11,4 @@
 </script>
 
 <div class="redir">Opening the levers…</div>
-<style>.redir { padding: 40px 28px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: rgba(28,22,17,0.5); }</style>
+<style>.redir { padding: 40px 28px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }</style>

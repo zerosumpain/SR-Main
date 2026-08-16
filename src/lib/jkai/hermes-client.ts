@@ -108,37 +108,6 @@ export interface SseFrameToolCall {
   children?: unknown[];
 }
 
-/** Payload for a `kind: 'approval'` frame — a dangerous-command approval gate
- * emitted by the plugin's `send_exec_approval`. Rides in `metadata.approval`
- * (the way tool payloads ride in `metadata.tool`). `adaptFrameToCanvasSse`
- * reads it defensively and raises a `pendingApproval` card whose buttons reply
- * `/approve` | `/deny`. */
-export interface SseFrameApproval {
-  command: string;
-  description?: string;
-  session_key?: string;
-}
-
-/** Payload for a `kind: 'clarify'` frame — a blocking clarifying question from
- *  the agent's `clarify` tool, emitted by the plugin's `send_clarify`. Rides in
- *  `metadata.clarify`. The agent thread is blocked on the gateway's clarify
- *  primitive for `agent.clarify_timeout` (600s) while this is outstanding.
- *
- *  There is no `_ack` correlation event: the gateway resolves the clarify by
- *  intercepting the next non-slash text message in the session
- *  (gateway/run.py:6938-6962), so the card submits the answer as an ordinary
- *  silent chat message — the same trick the approval card uses for `/approve`. */
-export interface SseFrameClarify {
-  clarify_id: string;
-  session_key?: string;
-  questions: Array<{
-    id?: string;
-    text: string;
-    kind?: 'freeform' | 'choice';
-    choices?: string[];
-  }>;
-}
-
 /** Payload for a `kind: 'subagent'` frame — live activity relayed from a
  *  `delegate_task` child agent. Emitted by the plugin's `send_subagent` (wired
  *  from the gateway's child tool_progress relay). Rides in `metadata.subagent`.
@@ -184,6 +153,36 @@ export interface SseFrame {
    * same payload under `metadata.tool` / `metadata.tool_call`; the mapper
    * checks both locations. */
   tool?: SseFrameToolCall;
+}
+
+export interface HermesHealth {
+  /** Identifies the runtime PROCESS, not the service — changes on every restart. */
+  bootId: string | null;
+  startedAt: number | null;
+  /**
+   * How the gateway stamps `metadata.turn_id` on outbound frames.
+   *
+   * `'execution'` — bound to the task actually producing the frame, so an
+   * untagged frame provably belongs to no turn and a consumer may reject it.
+   * `null` — an older gateway. It stamped on ARRIVAL, where a message landing
+   * mid-turn relabelled the running turn's output, so tags separate nothing and
+   * untagged frames must be accepted or every reply would be dropped.
+   */
+  turnTagging: string | null;
+  /**
+   * How the gateway treats a message that lands while a turn is running.
+   *
+   * `'queue'` runs them in order, one answer each. `'interrupt'` / `'redirect'` /
+   * `'steer'` fold the new message into the RUNNING turn, so two messages produce
+   * ONE run carrying the first turn's id.
+   *
+   * The consumer has to know, because the correct behaviour is OPPOSITE in the
+   * two cases. Under interrupt it must adopt the turn it superseded, or it
+   * rejects the output that is answering it. Under queue it must NOT adopt it, or
+   * it renders the previous turn's answer as this one's — measured, with the
+   * continuation of a "count to 200" landing under "reply with BRAVO".
+   */
+  busyInputMode: string | null;
 }
 
 export class HermesClient {
@@ -235,14 +234,24 @@ export class HermesClient {
    *
    * Returns null rather than throwing: a failed probe must never block a turn.
    */
-  async health(): Promise<{ bootId: string | null; startedAt: number | null } | null> {
+  async health(): Promise<HermesHealth | null> {
     try {
       const resp = await fetch(`${this.config.baseUrl}/platforms/jkai/health`, {
         signal: AbortSignal.timeout(3_000),
       });
       if (!resp.ok) return null;
-      const body = (await resp.json()) as { boot_id?: string; started_at?: number };
-      return { bootId: body.boot_id ?? null, startedAt: body.started_at ?? null };
+      const body = (await resp.json()) as {
+        boot_id?: string;
+        started_at?: number;
+        turn_tagging?: string;
+        busy_input_mode?: string;
+      };
+      return {
+        bootId: body.boot_id ?? null,
+        startedAt: body.started_at ?? null,
+        turnTagging: body.turn_tagging ?? null,
+        busyInputMode: body.busy_input_mode ?? null,
+      };
     } catch {
       return null;
     }

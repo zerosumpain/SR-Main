@@ -84,7 +84,7 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .reach-head { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -96,7 +96,7 @@
   }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -111,7 +111,7 @@
   .rings-toggle input { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); cursor: pointer; }
   .rings-label {
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
@@ -138,7 +138,7 @@
     align-items: center;
     gap: 0.35rem;
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
   .dot { width: 0.7rem; height: 0.7rem; border-radius: var(--radius-pill); background: var(--c); flex: none; }
@@ -161,7 +161,7 @@
     padding: 0.5rem 0.65rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     text-align: left;
     color: var(--text-primary);
@@ -191,7 +191,7 @@
   }
   .row-dist {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
   }
 </style>

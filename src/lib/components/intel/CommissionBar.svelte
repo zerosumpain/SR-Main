@@ -7,17 +7,23 @@
 
   let {
     busy = false,
+    matchCount = null,
     onRun,
+    onSearch,
   }: {
     busy?: boolean;
+    /** Nodes currently lit by what is typed. `null` means nothing is typed. */
+    matchCount?: number | null;
     onRun: (kind: string, payload: string) => void;
+    /** Fires on every keystroke — the graph lights up as you type. */
+    onSearch?: (text: string) => void;
   } = $props();
 
   const KINDS = [
-    { id: 'research', label: 'Deep dive', hint: 'Run a full research session on this' },
-    { id: 'ask', label: 'Ask jkai', hint: 'Open chat with this question, loaded with graph context' },
-    { id: 'monitor', label: 'Monitor', hint: 'Watch for changes and alert me' },
-    { id: 'canvas', label: 'Canvas', hint: 'Build a workflow for this' },
+    { id: 'research', label: 'Deep dive', hint: 'run a full research session on it' },
+    { id: 'ask', label: 'Ask jkai', hint: 'open chat about it, loaded with graph context' },
+    { id: 'monitor', label: 'Monitor', hint: 'watch for changes and alert me' },
+    { id: 'canvas', label: 'Canvas', hint: 'build a workflow for it' },
   ];
 
   let text = $state('');
@@ -25,11 +31,30 @@
 
   const active = $derived(KINDS.find((k) => k.id === kind) ?? KINDS[0]);
 
+  /**
+   * The box searches as you type; the buttons commission what you typed.
+   *
+   * It used to only commission, which made the most prominent input on the page
+   * the one thing that could not answer "where is this in my graph" — the
+   * question you almost always have first, and the one that tells you whether a
+   * deep dive is even worth starting. Highlighting is done over the nodes
+   * already loaded, so it costs no round trip and keeps up with typing.
+   *
+   * Deliberately a HIGHLIGHT, not a filter. The rail's Search box narrows the
+   * graph server-side and is the right tool when you know what you want; this
+   * one leaves the graph whole and lights up the hits, so you can see where they
+   * sit among everything else.
+   */
+  function onInput() {
+    onSearch?.(text);
+  }
+
   function run() {
     const payload = text.trim();
     if (!payload || busy) return;
     onRun(kind, payload);
     text = '';
+    onSearch?.('');
   }
 
   function onKey(e: KeyboardEvent) {
@@ -52,14 +77,22 @@
     {/each}
   </div>
 
-  <input
-    type="text"
-    bind:value={text}
-    onkeydown={onKey}
-    placeholder={active.hint}
-    aria-label="What to commission"
-    disabled={busy}
-  />
+  <div class="field">
+    <input
+      type="search"
+      bind:value={text}
+      oninput={onInput}
+      onkeydown={onKey}
+      placeholder="Search the graph — or type something to {active.hint}"
+      aria-label="Search the graph, or describe work to commission"
+      disabled={busy}
+    />
+    {#if matchCount !== null}
+      <span class="matches" class:none={matchCount === 0} aria-live="polite">
+        {matchCount === 0 ? 'nothing matches' : `${matchCount} lit`}
+      </span>
+    {/if}
+  </div>
 
   <button class="run" type="button" onclick={run} disabled={busy || !text.trim()}>
     {busy ? 'Working…' : 'Go'}
@@ -73,7 +106,7 @@
     gap: 8px;
     flex-wrap: wrap;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 8px;
   }
@@ -88,7 +121,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 6px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-ghost);
@@ -105,15 +138,33 @@
     color: var(--accent);
   }
 
-  input {
+  .field {
     flex: 1;
     min-width: 220px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .matches {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .matches.none {
+    color: var(--text-ghost);
+  }
+
+  input {
+    flex: 1;
+    min-width: 0;
     padding: 7px 11px;
     font: inherit;
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   input:focus {

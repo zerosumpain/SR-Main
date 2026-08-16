@@ -59,8 +59,8 @@
 
 <style>
   .chip {
-    border: 1px solid var(--card-border);
-    background: var(--bg-section);
+    border: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
     padding: 0.45rem 0.6rem;
     font-size: 0.85rem;
     display: flex; flex-direction: column; gap: 0.35rem;

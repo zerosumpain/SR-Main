@@ -29,6 +29,14 @@
   // aggregator poll.
   const store = getContext<BiomeStore>('biome');
 
+  let {
+    deploys = null,
+  }: {
+    /** Today's shipping, read off the same release showcase the Shipped section
+     *  uses. Null when the loader had nothing to say. */
+    deploys?: { today: number; peak: number; latestAt: string | null } | null;
+  } = $props();
+
   let mounted = $state(false);
   let v = $state<VitalsPayload | null>(null);
   let now = $state(Date.now());
@@ -89,6 +97,19 @@
     dp: number | null;
   }
 
+  // Wall clock in the rail head — the mark that says the panel is live even when
+  // every reading beneath it happens to be idle.
+  let clock = $derived(
+    new Date(now).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }),
+  );
+
+  // Four cells, not five: HEALTH is promoted out of the grid into the rail's
+  // hero reading — it is the signal the rest of the page (ECG, biome, pulse
+  // line) is built around, so it should not be one tile among equals.
   let tiles = $derived.by<TileVM[]>(() => {
     const j = v?.jkai;
     const b = v?.builder;
@@ -122,20 +143,6 @@
         dp: null,
       },
       {
-        label: 'HEALTH',
-        num: bpm,
-        fallback: '—',
-        unit: 'BPM',
-        sub: hrLive
-          ? store.state.lastSyncedAt
-            ? `synced ${rel(store.state.lastSyncedAt, now)}`
-            : 'live'
-          : 'no live signal',
-        state: hrLive ? (store.state.stale ? 'stale' : 'live') : 'idle',
-        href: '/health',
-        dp: null,
-      },
-      {
         label: 'LIVE WALK',
         num: w && w.active && w.distanceKm != null ? w.distanceKm : null,
         fallback: w && w.active ? '0' : '—',
@@ -163,35 +170,251 @@
   });
 </script>
 
-<div class="vitals" aria-label="Live signals from across the site">
+<!-- The rail: an instrument panel on the rail surface, not five floating cards.
+     Head says what it is and what time it is; the pulse is the hero reading
+     because it is the signal the whole page is built around; the rest are cells
+     of one grid; the foot is where you go next. -->
+<aside class="vitals" aria-label="Live signals from across the site">
+  <div class="v-head">
+    <span class="metric-label">Vitals / live</span>
+    <span class="v-clock">{mounted ? clock : '--:--:--'}</span>
+  </div>
+
+  <div class="v-hero">
+    <div class="v-hero-read">
+      <span class="v-hero-num" class:muted={bpm === null}>{bpm ?? '—'}</span>
+      <span class="metric-label muted">bpm / {hrLive ? 'live' : 'no signal'}</span>
+    </div>
+    <span class="v-hero-dot" data-state={hrLive ? 'live' : 'idle'} aria-hidden="true"></span>
+  </div>
+
   <!-- Gated on `mounted` so the tiles enter client-side and the staggered
        fly-in intro actually plays (Svelte intros don't run for hydrated nodes). -->
-  {#if mounted}
-    {#each tiles as t, i (t.label)}
-      <VitalTile
-        label={t.label}
-        num={t.num}
-        fallback={t.fallback}
-        unit={t.unit}
-        sub={t.sub}
-        state={t.state}
-        href={t.href}
-        dp={t.dp}
-        delay={60 * i}
-      />
-    {/each}
+  <div class="cellgrid v-grid">
+    {#if mounted}
+      {#each tiles as t, i (t.label)}
+        <VitalTile
+          label={t.label}
+          num={t.num}
+          fallback={t.fallback}
+          unit={t.unit}
+          sub={t.sub}
+          state={t.state}
+          href={t.href}
+          dp={t.dp}
+          delay={60 * i}
+        />
+      {/each}
+    {/if}
+  </div>
+
+  {#if deploys}
+    <div class="v-deploys">
+      <span class="metric-label">Deploys today</span>
+      <p class="v-deploys-read">
+        <span class="v-deploys-n">{deploys.today}</span>
+        shipped
+        {#if deploys.latestAt}<span class="v-sep" aria-hidden="true">/</span>latest {deploys.latestAt}{/if}
+      </p>
+      <span class="v-deploys-bar" aria-hidden="true">
+        <span
+          class="v-deploys-fill"
+          style="width: {Math.min(100, Math.round((deploys.today / Math.max(1, deploys.peak)) * 100))}%"
+        ></span>
+      </span>
+    </div>
   {/if}
-</div>
+
+  <div class="v-foot">
+    <a class="v-btn primary" href="/live">Live tracker →</a>
+    <a class="v-btn" href="/health">Health data</a>
+  </div>
+</aside>
 
 <style>
   .vitals {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
     width: 100%;
-    /* Reserve ~3 rows so the tiles flying in client-side don't shift the
-       live-walk banner below them on stacked (mobile) layouts. */
-    min-height: 232px;
+    background: var(--surface-rail);
+    border: 1px solid var(--line-strong);
+    /* Reserve the panel's height so the tiles flying in client-side don't shift
+       the live-walk banner below them on stacked (mobile) layouts. */
+    min-height: 392px;
+  }
+
+  .v-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .v-clock {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    color: var(--text-ghost);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The pulse band takes the rail's slack. The rail is as tall as the hero, and
+     the alternative was a pool of dead space between the readings and the way
+     out — better that the air sits under the signature numeral, which is what
+     the panel is for. */
+  .v-hero {
+    display: flex;
+    flex: 1;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .v-hero-read {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  /* The one display-scale numeral on the rail. Everything else is mono. */
+  .v-hero-num {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: var(--fs-num-xl);
+    line-height: 0.8;
+    letter-spacing: -0.05em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  /* No live reading. Mono and a step down, so the panel says "nothing to
+     report" rather than drawing a display-weight em-dash the size of a bar. */
+  .v-hero-num.muted {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: var(--fs-num-lg);
+    letter-spacing: 0;
+    color: var(--text-ghost);
+  }
+  .v-hero-dot {
+    width: 9px;
+    height: 9px;
+    flex: none;
+    margin-bottom: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    box-shadow: var(--accent-glow);
+  }
+  .v-hero-dot[data-state='idle'] {
+    background: transparent;
+    border: 1.5px solid var(--text-ghost);
+    box-shadow: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .v-hero-dot[data-state='live'] {
+      animation: rail-hero-pulse 1.5s ease-in-out infinite;
+    }
+  }
+  @keyframes rail-hero-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.82);
+    }
+  }
+
+  /* The grid draws its own top/left edges; the panel already has a border, so
+     trim the duplicates and let the cells meet it flush. */
+  .v-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: none;
+    border-left: none;
+    flex: none;
     align-content: start;
+  }
+  .v-grid > :global(*:nth-child(2n)) {
+    border-right: none;
+  }
+
+  /* Today's shipping — the band that keeps the rail from ending in dead space
+     between the readings and the way out. */
+  .v-deploys {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-top: auto;
+    padding: 16px 20px;
+    border-top: 1px solid var(--line);
+  }
+  .v-deploys-read {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .v-deploys-n {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    margin-right: 0.5ch;
+  }
+  .v-sep {
+    color: var(--text-ghost);
+    margin: 0 0.5ch;
+  }
+  .v-deploys-bar {
+    display: block;
+    height: 4px;
+    background: var(--line);
+  }
+  .v-deploys-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .v-foot {
+    display: flex;
+    gap: 8px;
+    padding: 14px 20px;
+  }
+  /* Without the deploys band there is nothing to push the foot down, so it
+     takes the slack itself. */
+  .vitals:not(:has(.v-deploys)) .v-foot {
+    margin-top: auto;
+  }
+  .v-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 9px 14px;
+    border: 1px solid var(--accent-ink-tint-35);
+    border-radius: var(--radius-sharp);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--accent-ink);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+  }
+  .v-btn:hover {
+    background: var(--accent-ink-tint-06);
+  }
+  .v-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .v-btn.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
 </style>

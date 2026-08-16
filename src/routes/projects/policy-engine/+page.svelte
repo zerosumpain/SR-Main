@@ -98,14 +98,14 @@
 
 <style>
   .ask-section { margin: 34px 0 8px; padding-top: 22px; border-top: 1px solid rgba(28,22,17,0.12); }
-  .ask-h { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.02em; margin: 4px 0 10px; color: var(--ink); }
-  .ask-intro { font-size: 15px; line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 70ch; margin: 0 0 16px; }
-  .ask-host { height: 520px; max-height: 70vh; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.4); padding: 14px 16px; display: flex; flex-direction: column; }
+  .ask-h { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.02em; margin: 4px 0 10px; color: var(--ink); }
+  .ask-intro { font-size: var(--fs-body-sm); line-height: 1.6; color: rgba(28,22,17,0.74); max-width: 70ch; margin: 0 0 16px; }
+  .ask-host { height: 520px; max-height: 70vh; border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.4); padding: 14px 16px; display: flex; flex-direction: column; }
   .hero { padding: 18px 0 6px; }
-  .hero-h1 { font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(34px, 6.2vw, 66px); line-height: 0.96; letter-spacing: -0.03em; margin: 6px 0 16px; color: var(--ink); }
+  .hero-h1 { font-family: var(--fs-serif); font-weight: 600; font-size: clamp(34px, 6.2vw, 66px); line-height: 0.96; letter-spacing: -0.03em; margin: 6px 0 16px; color: var(--ink); }
   .hero-lede { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.5; color: rgba(28,22,17,0.74); margin: 0 0 18px; }
   .cta-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .cta-ghost { font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--accent-ink); text-decoration: none; border: none; background: none; cursor: pointer; padding: 0; border-bottom: 1px dashed currentColor; }
+  .cta-ghost { font-family: var(--font-body); font-size: var(--fs-label); color: var(--accent-ink); text-decoration: none; border: none; background: none; cursor: pointer; padding: 0; border-bottom: 1px dashed currentColor; }
   .cta-ghost:hover { color: var(--accent-ink-hover); }
   .story { margin: 30px 0 8px; padding-top: 22px; border-top: 1px solid rgba(28,22,17,0.12); }
 </style>

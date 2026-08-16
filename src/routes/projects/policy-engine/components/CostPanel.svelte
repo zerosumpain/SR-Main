@@ -98,13 +98,13 @@
   .cost { display: flex; flex-direction: column; gap: 12px; }
   .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   @media (max-width: 640px) { .charts { grid-template-columns: 1fr; } }
-  .eff-note { margin: 0 0 8px; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.65); }
+  .eff-note { margin: 0 0 8px; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.65); }
   .eff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .eff-card {
-    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-round);
+    background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12); border-radius: var(--radius-sharp);
     padding: 9px 10px; display: flex; flex-direction: column; gap: 3px;
   }
-  .ev { font-family: 'Fraunces', serif; font-weight: 600; font-size: 20px; color: var(--ink); line-height: 1; }
-  .ev small { font-size: 11px; font-weight: 500; color: rgba(28,22,17,0.5); }
-  .el { font-size: 10.5px; line-height: 1.3; color: rgba(28,22,17,0.6); }
+  .ev { font-family: var(--fs-serif); font-weight: 600; font-size: 20px; color: var(--ink); line-height: 1; }
+  .ev small { font-size: var(--fs-label-xs); font-weight: 500; color: rgba(28,22,17,0.5); }
+  .el { font-size: var(--fs-label-xs); line-height: 1.3; color: rgba(28,22,17,0.6); }
 </style>

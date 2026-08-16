@@ -1,0 +1,416 @@
+{
+  "$comment": "Field Study System — template registry. Machine-readable companion to TEMPLATES.md.",
+  "version": 1,
+  "confidenceLevels": [
+    "fact",
+    "hypothesis",
+    "contested"
+  ],
+  "confidenceColours": {
+    "fact": "var(--accent-ink)",
+    "hypothesis": "var(--accent)",
+    "contested": "#8a2d3a"
+  },
+  "categoricalHues": {
+    "$comment": "Legend-only. Never in chrome, never on a claim. Values are the shipped ones.",
+    "identifier": "#7a5aa6",
+    "operational": "#2f7d4f",
+    "federated": "#2f7d4f",
+    "standards": "#b4632e",
+    "trust": "#8a2d3a",
+    "governance": "#8a2d3a",
+    "centralStore": "#8a2d3a"
+  },
+  "sharedSlots": {
+    "$comment": "Present on every template except where noted.",
+    "required": [
+      "beatHeader",
+      "questionClaim",
+      "soWhat",
+      "openQuestion",
+      "pagination"
+    ],
+    "notes": {
+      "T0": "no questionClaim; findings ledger instead",
+      "T5": "limitsNote replaces soWhat/openQuestion"
+    }
+  },
+  "beatPlan": [
+    {
+      "no": "01",
+      "name": "The problem",
+      "question": "What is being claimed, and by whom?",
+      "suggests": [
+        "T1",
+        "T7"
+      ]
+    },
+    {
+      "no": "02",
+      "name": "The estate & evidence",
+      "question": "What exists today, and how do we know?",
+      "suggests": [
+        "T2",
+        "T8"
+      ]
+    },
+    {
+      "no": "03",
+      "name": "Ways to build it",
+      "question": "What are the options, and who has tried them?",
+      "suggests": [
+        "T1",
+        "T6"
+      ]
+    },
+    {
+      "no": "04",
+      "name": "The recommendation",
+      "question": "Which one, and why that one?",
+      "suggests": [
+        "T3"
+      ]
+    },
+    {
+      "no": "05",
+      "name": "What it does & who wins",
+      "question": "Who is better off, who is worse off?",
+      "suggests": [
+        "T4"
+      ]
+    },
+    {
+      "no": "06",
+      "name": "Trust & safeguards",
+      "question": "What could go wrong, and what stops it?",
+      "suggests": [
+        "T4"
+      ]
+    },
+    {
+      "no": "07",
+      "name": "What happens next",
+      "question": "What would change the picture, and when?",
+      "suggests": [
+        "T3"
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "T0",
+      "name": "Front matter",
+      "verb": "declaring",
+      "scale": "page",
+      "once": true,
+      "slots": [
+        "kicker",
+        "title",
+        "thesis",
+        "statusCard",
+        "findingsLedger",
+        "whatThisAnswers",
+        "contents",
+        "instrumentLinks",
+        "startCta",
+        "disclaimer"
+      ],
+      "requiredContent": [
+        "title",
+        "thesis",
+        "status",
+        "findings[3]",
+        "asks[3..4]",
+        "beats[]"
+      ],
+      "never": [
+        "a teaser instead of findings",
+        "a hero image",
+        "more than four findings"
+      ]
+    },
+    {
+      "id": "T1",
+      "name": "Argument",
+      "verb": "reasoning",
+      "scale": "page",
+      "slots": [
+        "beatHeader",
+        "questionClaim",
+        "marginNotes",
+        "dropCapOpening",
+        "body",
+        "figure",
+        "pullQuote",
+        "secondMovement",
+        "figure2",
+        "soWhat",
+        "openQuestion",
+        "pagination"
+      ],
+      "requiredContent": [
+        "question",
+        "claim",
+        "prose[2..4]",
+        "figures[1..2]",
+        "pullQuote",
+        "soWhat",
+        "openQuestion"
+      ],
+      "never": [
+        "two columns of prose",
+        "a third figure",
+        "levers"
+      ],
+      "measure": "68-74ch single column"
+    },
+    {
+      "id": "T2",
+      "name": "Survey",
+      "verb": "accounting",
+      "scale": "page",
+      "slots": [
+        "beatHeader",
+        "questionClaim",
+        "standfirst",
+        "totalsBand",
+        "primaryTable",
+        "estimateBand",
+        "sigmaRow",
+        "provenanceStrip",
+        "secondarySurvey",
+        "cannotTellYou",
+        "soWhat",
+        "openQuestion",
+        "pagination"
+      ],
+      "requiredContent": [
+        "question",
+        "claim",
+        "rows[]",
+        "totals",
+        "provenance",
+        "asOf",
+        "cannotTellYou[]"
+      ],
+      "never": [
+        "a total that does not reconcile to its rows",
+        "estimates inside the total",
+        "an undated count"
+      ]
+    },
+    {
+      "id": "T3",
+      "name": "Position",
+      "verb": "recommending",
+      "scale": "page",
+      "once": true,
+      "slots": [
+        "beatHeader",
+        "positionDisplay",
+        "elaboration",
+        "confidenceNote",
+        "becauseBand",
+        "andNotTheOthers",
+        "conditions",
+        "whatWouldSinkIt",
+        "sequencing",
+        "soWhat",
+        "openQuestion",
+        "pagination"
+      ],
+      "requiredContent": [
+        "position",
+        "because[3]",
+        "rejected[]",
+        "conditions[]",
+        "sinkers",
+        "phases[]"
+      ],
+      "never": [
+        "unnamed alternatives",
+        "a strawmanned alternative",
+        "no conditions"
+      ],
+      "note": "the only page where the accent runs as a filled band"
+    },
+    {
+      "id": "T4",
+      "name": "Ledger",
+      "verb": "weighing",
+      "scale": "page",
+      "slots": [
+        "beatHeader",
+        "questionClaim",
+        "lensLever",
+        "benefitColumn",
+        "riskColumn",
+        "balanceLine",
+        "byActorTable",
+        "soWhat",
+        "openQuestion",
+        "pagination"
+      ],
+      "requiredContent": [
+        "question",
+        "claim",
+        "lenses[]",
+        "benefits[]",
+        "risks[]",
+        "balance"
+      ],
+      "never": [
+        "a risk column shorter than the benefit column",
+        "a lens that filters rather than re-ranks",
+        "hiding a row on lens change"
+      ]
+    },
+    {
+      "id": "T5",
+      "name": "Instrument",
+      "verb": "operating",
+      "scale": "page",
+      "editorial": false,
+      "slots": [
+        "commandBar",
+        "stage",
+        "leverHud",
+        "readoutHud",
+        "exchangeLog",
+        "transport",
+        "limitsNote"
+      ],
+      "requiredContent": [
+        "scenarios[]",
+        "levers[1..5]",
+        "readout",
+        "limits"
+      ],
+      "never": [
+        "serif",
+        "drop caps",
+        "margin notes",
+        "pull quotes",
+        "page scroll",
+        "autoplay when embedded"
+      ],
+      "note": "control-surface register: mono everywhere, tabular figures, HUDs on translucent cream with blur"
+    },
+    {
+      "id": "T6",
+      "name": "Anatomy",
+      "verb": "decomposing",
+      "scale": "section",
+      "hostTemplates": [
+        "T1",
+        "T2"
+      ],
+      "slots": [
+        "beatHeader",
+        "claim",
+        "stackDiagram",
+        "layerRows",
+        "leastDesignedNote",
+        "soWhat",
+        "openQuestion"
+      ],
+      "requiredContent": [
+        "layers[2..6]"
+      ],
+      "layerFields": [
+        "no",
+        "name",
+        "question",
+        "today",
+        "withIt",
+        "theFight"
+      ],
+      "never": [
+        "more than six layers",
+        "a layer with no named fight"
+      ]
+    },
+    {
+      "id": "T7",
+      "name": "Chronicle",
+      "verb": "narrating time",
+      "scale": "section",
+      "hostTemplates": [
+        "T1",
+        "T4"
+      ],
+      "slots": [
+        "beatHeader",
+        "twoThreadsNamed",
+        "legend",
+        "timeline",
+        "youAreHere",
+        "balanceOfAccounts",
+        "soWhat",
+        "openQuestion"
+      ],
+      "requiredContent": [
+        "threads[2]",
+        "entries[]"
+      ],
+      "entryFields": [
+        "date",
+        "title",
+        "detail",
+        "tag",
+        "source"
+      ],
+      "never": [
+        "one undifferentiated thread",
+        "a chronology with no argument"
+      ]
+    },
+    {
+      "id": "T8",
+      "name": "Precedent",
+      "verb": "judging cases",
+      "scale": "section",
+      "hostTemplates": [
+        "T2",
+        "T1"
+      ],
+      "slots": [
+        "beatHeader",
+        "questionClaim",
+        "archetypeKey",
+        "caseCards",
+        "thePattern",
+        "soWhat",
+        "openQuestion"
+      ],
+      "requiredContent": [
+        "cases[3..8]",
+        "pattern[2..3]"
+      ],
+      "caseFields": [
+        "place",
+        "year",
+        "name",
+        "what",
+        "archetype",
+        "fate",
+        "lesson"
+      ],
+      "never": [
+        "a case with no fate",
+        "a lesson that is not transferable"
+      ]
+    }
+  ],
+  "rhythm": {
+    "t0Once": true,
+    "noConsecutiveDuplicatesExcept": [
+      "T1"
+    ],
+    "warnings": {
+      "allT2": "a database, not a study",
+      "allT1": "an essay, not a study",
+      "noHypothesisChips": "the study is not being honest about its own reasoning"
+    }
+  }
+}

@@ -388,6 +388,15 @@ export const researchSessions = pgTable('research_session', {
    * Defaults to 'investigation' so pre-v3 rows read as what they actually were.
    */
   depth: text('depth').notNull().default('investigation'),
+  /**
+   * How an `instant` run reached the web: 'off' | 'fast' | 'free'.
+   *
+   * Only meaningful for that tier — every other tier gathers its own sources
+   * through Tavily. Stored rather than derived because the three routes differ
+   * in what they cost, how quick they are and how far the answer can be
+   * trusted, and a finished run has to be able to say which one it took.
+   */
+  grounding: text('grounding').notNull().default('off'),
   /** ResearchScope — domain binding, seed urls, recency. */
   scope: jsonb('scope'),
   /** Wall-clock allowance in ms; null for unbudgeted investigations. */
@@ -407,6 +416,26 @@ export const researchSessions = pgTable('research_session', {
   resumedAt: timestamp('resumed_at', { withTimezone: true }),
   /** Why a run failed. Previously only ever reached console.error. */
   errorMessage: text('error_message'),
+  /**
+   * Which phase a resumed run should pick up at.
+   *
+   * The phase normally lives in `status` ('phase2' and so on), but pausing has
+   * to overwrite `status` with 'paused' — so without this column a pause would
+   * throw away everything the run had got through and restart at lead
+   * generation. Null on every run that is not paused.
+   */
+  resumeFrom: text('resume_from'),
+  /**
+   * What this run cost at Tavily, in calls and in billed credits.
+   *
+   * Kept on the row rather than derived, because Tavily has no per-request
+   * receipt to reconcile against later: the only moment the spend is knowable
+   * is the moment the call returns. `research_credits` is the account-wide
+   * number and answers a different question — see $lib/deepdive/tavily-usage.
+   */
+  tavilySearches: integer('tavily_searches').notNull().default(0),
+  tavilyExtracts: integer('tavily_extracts').notNull().default(0),
+  tavilyCredits: integer('tavily_credits').notNull().default(0),
 });
 
 export type ResearchSession = typeof researchSessions.$inferSelect;
@@ -675,7 +704,12 @@ export const agentActions = pgTable('agent_actions', {
   status: text('status').default('completed'), // pending | running | completed | failed
   error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // The per-run spend panel reads this table by session id every six seconds
+  // while a research run is live, and the table grows with every LLM call the
+  // whole site makes. Unindexed that is a sequential scan per poll.
+  sessionIdx: index('agent_actions_session_idx').on(t.sessionId),
+}));
 
 export type AgentAction = typeof agentActions.$inferSelect;
 export type NewAgentAction = typeof agentActions.$inferInsert;
@@ -2269,6 +2303,28 @@ export const workflowFiles = pgTable(
 
 export type WorkflowFile = typeof workflowFiles.$inferSelect;
 export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
+
+// A high-entropy bearer capability scoped to exactly one generated route file.
+// Raw tokens are returned once for WhatsApp delivery; only their hash persists.
+export const routeExportTokens = pgTable(
+  'route_export_token',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    fileId: text('file_id').notNull().references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex('route_export_token_hash_idx').on(t.tokenHash),
+    byFile: index('route_export_token_file_idx').on(t.fileId),
+  }),
+);
+
+export type RouteExportToken = typeof routeExportTokens.$inferSelect;
 
 export type WorkflowFilePermissions = {
   read: boolean;

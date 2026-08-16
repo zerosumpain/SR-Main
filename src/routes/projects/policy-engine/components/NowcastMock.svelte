@@ -102,31 +102,31 @@
 </div>
 
 <style>
-  .nm { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-round); padding: 12px 14px; }
+  .nm { background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.1); border-radius: var(--radius-sharp); padding: 12px 14px; }
   /* keep label text legible on phones: scroll sideways rather than shrink */
   .nm-scroll { overflow-x: auto; }
   .nm svg { display: block; width: 100%; min-width: 560px; height: auto; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
-  .ax-x, .ax-y { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; fill: rgba(28,22,17,0.5); }
+  .ax-x, .ax-y { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.5); }
   .ax-x { text-anchor: middle; } .ax-y { text-anchor: end; }
-  .ax-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); text-anchor: middle; text-transform: uppercase; }
+  .ax-title { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em; fill: rgba(28,22,17,0.5); text-anchor: middle; text-transform: uppercase; }
   .nc-line { fill: none; stroke: #2f7d4f; stroke-width: 2.2; stroke-dasharray: 1 0; opacity: 0.9; }
   .lfs-path { fill: none; stroke: rgba(154,123,31,0.45); stroke-width: 1.4; }
   .lfs-pt { fill: #9a7b1f; stroke: var(--paper); stroke-width: 2; }
   .lfs-pt.repr { fill: rgba(154,123,31,0.5); }
   .lfs-ci { stroke: rgba(154,123,31,0.4); stroke-width: 2; }
-  .anno { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; fill: #8a6a14; }
+  .anno { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700; fill: #8a6a14; }
   .anno.dim { fill: rgba(154,123,31,0.7); font-weight: 600; }
-  .cl { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; }
+  .cl { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; }
   .cl.nc { fill: #2f7d4f; } .cl.lfs { fill: #9a7b1f; }
   .nm-key { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
-  .kk { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.6); }
+  .kk { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
   .kk .dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: #9a7b1f; display: inline-block; }
   .kk .dot.repr { background: rgba(154,123,31,0.5); }
-  .nm-note { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: rgba(28,22,17,0.65); }
+  .nm-note { margin: 8px 0 0; font-size: var(--fs-label-xs); line-height: 1.55; color: rgba(28,22,17,0.65); }
   .nm-note b { color: var(--ink); }
   .nm-refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .ref { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; color: var(--accent-ink); text-decoration: none;
-    border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-round); padding: 2px 7px; background: var(--accent-ink-tint-06); }
+  .ref { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none;
+    border: 1px solid var(--accent-ink-tint-35); border-radius: var(--radius-sharp); padding: 2px 7px; background: var(--accent-ink-tint-06); }
   .ref:hover { border-color: var(--accent-ink); }
 </style>

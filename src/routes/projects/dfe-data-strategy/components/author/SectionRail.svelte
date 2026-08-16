@@ -79,8 +79,8 @@
     gap: 2px;
   }
   .rail-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.45);
@@ -99,7 +99,7 @@
     text-align: left;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     padding: 6px 9px;
     cursor: pointer;
     min-width: 0;
@@ -120,7 +120,7 @@
     flex: none;
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     border: 1px solid rgba(28, 22, 17, 0.35);
   }
   .d.empty {
@@ -135,8 +135,8 @@
     border-color: #2f6155;
   }
   .t {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     color: var(--ink);
     white-space: nowrap;
@@ -145,8 +145,8 @@
   }
   .w {
     margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.45);
   }
   .ops {
@@ -154,11 +154,11 @@
     gap: 2px;
   }
   .op {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     padding: 3px 6px;
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     color: var(--ink);
   }
@@ -171,12 +171,12 @@
   }
   .add {
     margin-top: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 6px 9px;
     background: transparent;
     border: 1px dashed rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: rgba(28, 22, 17, 0.6);
     cursor: pointer;
     text-align: left;
@@ -192,11 +192,11 @@
   }
   .addin {
     flex: 1;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     padding: 5px 8px;
     border: 1px solid rgba(28, 22, 17, 0.3);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.7);
     color: var(--ink);
     min-width: 0;
@@ -205,8 +205,8 @@
     margin-top: 10px;
   }
   .restore summary {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.45);
@@ -216,12 +216,12 @@
     display: block;
     width: 100%;
     text-align: left;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     padding: 4px 8px;
     margin-top: 3px;
     background: rgba(255, 255, 255, 0.5);
     border: 1px solid rgba(28, 22, 17, 0.15);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--ink);
     cursor: pointer;
   }

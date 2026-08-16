@@ -408,7 +408,7 @@
     padding: 16px;
     /* Opaque — a credential form must never show the chat through it. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
   }
   .sr-hdr {
@@ -441,7 +441,7 @@
     margin: 0;
     padding: 10px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     font-size: var(--fs-body-sm);
   }
   .sr-dest dt {
@@ -513,12 +513,12 @@
   .sr-field input,
   .sr-field textarea {
     /* 16px floor — anything smaller triggers iOS zoom on focus. */
-    font-size: 16px;
+    font-size: var(--fs-body);
     font-family: var(--font-mono);
     padding: 8px;
     color: var(--text-primary);
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
   }
   .sr-field input:focus,
@@ -549,7 +549,7 @@
     padding: 8px 14px;
     color: var(--text-primary);
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
     cursor: pointer;
   }

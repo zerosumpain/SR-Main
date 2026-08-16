@@ -123,14 +123,14 @@
     padding: 0.9rem;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     font-family: var(--font-body);
     color: var(--text-primary);
   }
   .tide-head { display: flex; flex-direction: column; gap: 0.5rem; }
   .sec-label {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--text-muted);
@@ -144,7 +144,7 @@
     display: grid; place-items: center;
     font-family: var(--font-mono); font-size: 1.1rem; line-height: 1;
     background: var(--surface-elevated); border: 1px solid var(--card-border);
-    border-radius: var(--radius-round); color: var(--accent); cursor: pointer;
+    border-radius: var(--radius-sharp); color: var(--accent); cursor: pointer;
   }
   .step:hover { border-color: var(--text-muted); }
   .date-wrap { position: relative; display: inline-flex; align-items: center; gap: 0.4rem; }
@@ -152,17 +152,17 @@
     font-family: var(--font-mono); font-size: 0.78rem;
     padding: 0.35rem 0.5rem;
     background: var(--surface-elevated); border: 1px solid var(--card-border);
-    border-radius: var(--radius-round); color: var(--text-primary);
+    border-radius: var(--radius-sharp); color: var(--text-primary);
     color-scheme: dark;
   }
   .date-lbl {
-    font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600;
     color: var(--text-secondary); white-space: nowrap;
   }
   .today {
-    font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     padding: 0.3rem 0.55rem; background: transparent; border: 1px solid var(--card-border);
-    border-radius: var(--radius-round); color: var(--text-secondary); cursor: pointer;
+    border-radius: var(--radius-sharp); color: var(--text-secondary); cursor: pointer;
   }
   .today:hover { color: var(--text-primary); border-color: var(--text-muted); }
 
@@ -172,13 +172,13 @@
     padding-bottom: 0.55rem; border-bottom: 1px solid var(--card-border);
   }
   .g-label {
-    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);
+    font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);
   }
-  .b-sub { font-size: 0.6rem; color: var(--text-ghost); }
+  .b-sub { font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .g-ev { display: inline-flex; align-items: baseline; gap: 0.2rem; font-weight: 600; }
   .g-low { color: var(--accent); }
   .g-high { color: var(--text-secondary); }
-  .g-h { font-size: 0.62rem; font-weight: 400; color: var(--text-muted); }
+  .g-h { font-size: var(--fs-label-xs); font-weight: 400; color: var(--text-muted); }
 
   .bridges { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
   .b-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; }
@@ -189,18 +189,18 @@
   }
   .breydon .b-t { color: var(--warn); }
   .b-t.approx { color: var(--text-muted); font-weight: 600; }
-  .b-t.approx::after { content: '~'; font-size: 0.7em; vertical-align: super; }
+  .b-t.approx::after { content: '~'; font-size: max(0.7em, var(--fs-label-xs)); vertical-align: super; }
 
   .approx-note, .foot {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 0.6rem;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: var(--text-muted);
   }
   .approx-note {
     padding: 0.5rem 0.6rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
     background: color-mix(in srgb, var(--warn) 10%, var(--surface-elevated));
     color: var(--text-secondary);

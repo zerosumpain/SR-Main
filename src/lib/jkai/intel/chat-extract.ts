@@ -16,6 +16,7 @@ import { asc, desc, eq, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import { extractIntoIntel, type AutoExtractOutcome } from './auto-extract';
 import { publishConversationSignal } from '$lib/workflows/chat/followup-queue';
+import { COMMAND_ECHO_RE } from '$lib/jkai/hermes-frames';
 
 /**
  * Assistant-turn counts at which we re-extract.
@@ -65,8 +66,11 @@ const TOOL_LOG_LINE_RE = /^\s*⚙️.*$/gm;
  * `/model` being the common one. It carries no knowledge about the subject, and
  * before this it both polluted the transcript and counted as a turn, which
  * shifted the extraction cadence off the real replies.
+ *
+ * Defined in `$lib/jkai/hermes-frames`, which now also uses it to keep the echo
+ * off the text channel in the first place. One definition on purpose: a detector
+ * kept in two places here has drifted before.
  */
-const COMMAND_ECHO_RE = /^\s*(?:Model switched to|Usage:|Unknown command\b|Available (?:commands|models)\b)/i;
 
 /** The knowledge-bearing text of one assistant turn, or '' if there is none. */
 export function cleanAssistantContent(content: string): string {

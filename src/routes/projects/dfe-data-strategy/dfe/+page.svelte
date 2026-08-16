@@ -67,9 +67,9 @@
 <style>
   .intro { max-width: 84ch; }
   .pe-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .pe-link { display: flex; flex-direction: column; gap: 2px; border: 1px solid rgba(138,45,58,0.25); border-left: 3px solid #8a2d3a; border-radius: var(--radius-round); background: rgba(138,45,58,0.04); padding: 10px 13px; text-decoration: none; }
+  .pe-link { display: flex; flex-direction: column; gap: 2px; border: 1px solid rgba(138,45,58,0.25); border-left: 3px solid #8a2d3a; border-radius: var(--radius-sharp); background: rgba(138,45,58,0.04); padding: 10px 13px; text-decoration: none; }
   .pe-link:hover { background: rgba(138,45,58,0.1); }
-  .pl-label { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #8a2d3a; }
-  .pl-note { font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.66); }
+  .pl-label { font-family: var(--font-body); font-size: var(--fs-label); font-weight: 600; color: #8a2d3a; }
+  .pl-note { font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.66); }
   @media (max-width: 820px) { .pe-links { grid-template-columns: 1fr; } }
 </style>

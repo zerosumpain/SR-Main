@@ -1169,7 +1169,7 @@
     /* Opaque surface — the shared --card-bg token is a 7%-opacity tint meant
        to sit on the page, so it reads as transparent over the dark overlay. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     animation: picker-in 160ms ease-out;
@@ -1185,7 +1185,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 16px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .picker-title {
     font-size: var(--fs-nav);
@@ -1219,7 +1219,7 @@
     gap: 1px;
     padding: 5px 10px;
     border-radius: var(--radius-round);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     cursor: pointer;
@@ -1257,7 +1257,7 @@
     margin-left: 2px;
     padding: 0 5px;
     font-size: var(--fs-label-xs);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 0;
     border-radius: 0 var(--radius-round) var(--radius-round) 0;
     background: var(--surface-overlay);
@@ -1293,7 +1293,7 @@
     align-items: flex-start;
     gap: 12px;
     padding: 10px 0;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .wl-row.active { border-color: var(--accent); }
   .wl-main { flex: 1; min-width: 0; }
@@ -1306,7 +1306,7 @@
     letter-spacing: 0.06em;
     padding: 1px 6px;
     border-radius: var(--radius-round);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-ghost);
     white-space: nowrap;
   }
@@ -1331,14 +1331,14 @@
     font-size: var(--fs-label);
     line-height: 1.45;
     color: var(--text-ghost);
-    border-left: 2px solid var(--card-border);
+    border-left: 2px solid var(--line-strong);
     padding-left: 8px;
   }
   .wl-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
   .wl-btn {
     padding: 5px 10px;
     border-radius: var(--radius-round);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -1353,7 +1353,7 @@
   .wl-clear {
     padding: 4px 7px;
     border-radius: var(--radius-round);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-ghost);
     font-size: var(--fs-label-xs);
@@ -1364,13 +1364,13 @@
   .wl-input {
     /* 16px so iOS does not zoom the whole sheet on focus — the same floor the
        search box uses. */
-    font-size: 16px;
+    font-size: var(--fs-body);
     font-family: var(--font-mono);
     width: 190px;
     max-width: 42vw;
     padding: 5px 8px;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-primary);
   }
@@ -1408,7 +1408,7 @@
     gap: 6px;
     padding: 5px 12px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-size: var(--fs-label);
@@ -1450,7 +1450,7 @@
     font-size: var(--fs-body);
     border-radius: var(--radius-round);
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-primary);
   }
   .open-toggle {
@@ -1461,7 +1461,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     border-radius: var(--radius-round);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     cursor: pointer;
@@ -1486,7 +1486,7 @@
     display: flex;
     gap: 0;
     margin: 0 16px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .picker-tab {
     font-family: var(--font-mono);
@@ -1512,7 +1512,7 @@
   .calc-bar {
     margin: 10px 16px 2px;
     padding-bottom: 8px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     flex-shrink: 0;
   }
   .metric-row,
@@ -1533,7 +1533,7 @@
     margin-left: auto;
     padding: 3px 9px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: none;
     color: var(--text-ghost);
     font-family: var(--font-mono);
@@ -1572,7 +1572,7 @@
   .explainer {
     margin-top: 10px;
     padding: 10px 12px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--surface-overlay);
     font-size: var(--fs-label);
@@ -1594,7 +1594,7 @@
   .preset-chip {
     padding: 4px 10px;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -1626,7 +1626,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     margin: 0 16px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
   }
   .picker-table {
@@ -1652,7 +1652,7 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .ta-left { text-align: left; }
   .ta-right { text-align: right; }
@@ -1674,7 +1674,7 @@
 
   .model-row {
     cursor: pointer;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     color: var(--text-primary);
   }
   .model-row:hover { background: var(--surface-overlay); }
@@ -1727,7 +1727,7 @@
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
 
   .picker-foot {
@@ -1746,7 +1746,7 @@
     border-radius: var(--radius-round);
     padding: 5px 12px;
     font-size: var(--fs-label);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-overlay);
     color: var(--text-secondary);
   }
@@ -1809,7 +1809,7 @@
     .sort-chip {
       padding: 4px 10px;
       border-radius: var(--radius-pill);
-      border: 1px solid var(--card-border);
+      border: 1px solid var(--line-strong);
       background: var(--surface-overlay);
       color: var(--text-secondary);
       font-family: var(--font-mono);

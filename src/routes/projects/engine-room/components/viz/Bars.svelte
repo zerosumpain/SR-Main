@@ -53,20 +53,20 @@
 <style>
   .bars { display: flex; flex-direction: column; gap: 7px; }
   .row { display: grid; grid-template-columns: minmax(90px, 21ch) 1fr; gap: 4px 11px; align-items: center; }
-  .b-lab { font-size: 12.5px; line-height: 1.3; color: rgba(28,22,17,0.8); text-align: right;
+  .b-lab { font-size: var(--fs-label); line-height: 1.3; color: rgba(28,22,17,0.8); text-align: right;
     overflow: hidden; text-overflow: ellipsis; }
-  .b-track { position: relative; background: rgba(28,22,17,0.06); border-radius: var(--radius-round);
+  .b-track { position: relative; background: rgba(28,22,17,0.06); border-radius: var(--radius-sharp);
     overflow: hidden; display: flex; align-items: center; }
   .b-fill { position: absolute; inset: 0 auto 0 0; background: var(--tone); opacity: 0.82;
-    border-radius: var(--radius-round); transition: width 0.45s cubic-bezier(0.3,0,0.2,1); }
+    border-radius: var(--radius-sharp); transition: width 0.45s cubic-bezier(0.3,0,0.2,1); }
   .b-fill.muted { opacity: 0.32; }
   .b-thresh { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 2px dashed rgba(28,22,17,0.55); z-index: 2; }
-  .b-val { position: relative; z-index: 1; margin-left: 9px; font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; font-weight: 500; color: var(--text-primary); white-space: nowrap;
+  .b-val { position: relative; z-index: 1; margin-left: 9px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); font-weight: 500; color: var(--text-primary); white-space: nowrap;
     text-shadow: 0 0 4px rgba(255,255,255,0.85), 0 0 4px rgba(255,255,255,0.85); }
-  .b-note { grid-column: 2; font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.55); }
+  .b-note { grid-column: 2; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.55); }
   .th-key { display: flex; align-items: center; gap: 6px; margin: 3px 0 0;
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.55); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
   .th-dash { width: 15px; border-top: 2px dashed rgba(28,22,17,0.55); }
 
   @media (max-width: 560px) {

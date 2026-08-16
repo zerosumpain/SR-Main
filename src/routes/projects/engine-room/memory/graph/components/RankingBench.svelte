@@ -91,11 +91,11 @@
   .rb { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
 
   .band-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; }
-  .band-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .band-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
 
   .scale { display: flex; gap: 4px; margin-left: auto; }
-  .scale button { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em;
+  .scale button { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em;
     color: rgba(28,22,17,0.65); background: rgba(255,255,255,0.6);
     border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-pill);
     padding: 3px 10px; cursor: pointer; }
@@ -106,29 +106,29 @@
   .row { display: grid; grid-template-columns: minmax(0, 16ch) minmax(0, 1fr) minmax(0, 18ch);
     gap: 4px 11px; align-items: center; width: 100%; text-align: left; font-family: inherit;
     padding: 7px 11px; cursor: pointer; background: rgba(255,255,255,0.5);
-    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     transition: background 0.13s, border-color 0.13s; }
   .row:hover { background: rgba(255,255,255,0.85); border-color: rgba(28,22,17,0.36); }
   .row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .row[data-state='rejected'].on { border-color: var(--error); background: color-mix(in srgb, var(--error) 8%, transparent); }
 
-  .r-lab { font-size: 12.5px; line-height: 1.3; color: var(--text-primary); min-width: 0;
+  .r-lab { font-size: var(--fs-label); line-height: 1.3; color: var(--text-primary); min-width: 0;
     overflow: hidden; text-overflow: ellipsis; }
 
   .r-track { position: relative; display: flex; align-items: center; height: 22px; min-width: 0;
-    background: rgba(28,22,17,0.06); border-radius: var(--radius-round); overflow: hidden; }
+    background: rgba(28,22,17,0.06); border-radius: var(--radius-sharp); overflow: hidden; }
   .r-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: 0.5;
-    border-radius: var(--radius-round); transition: width 0.4s cubic-bezier(0.3,0,0.2,1); }
+    border-radius: var(--radius-sharp); transition: width 0.4s cubic-bezier(0.3,0,0.2,1); }
   .row.on .r-fill { opacity: 0.85; }
   .row[data-state='rejected'] .r-fill { background: var(--error); }
   .row[data-state='past'] .r-fill { background: rgba(28,22,17,0.45); }
   .r-over { position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    font-size: 11px; color: rgba(255,255,255,0.9); }
-  .r-val { position: relative; z-index: 1; margin-left: 9px; font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; font-weight: 500; color: var(--text-primary); white-space: nowrap;
+    font-size: var(--fs-label-xs); color: rgba(255,255,255,0.9); }
+  .r-val { position: relative; z-index: 1; margin-left: 9px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); font-weight: 500; color: var(--text-primary); white-space: nowrap;
     text-shadow: 0 0 4px rgba(255,255,255,0.85), 0 0 4px rgba(255,255,255,0.85); }
 
-  .r-verdict { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.06em;
+  .r-verdict { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em;
     text-transform: uppercase; line-height: 1.35; color: rgba(28,22,17,0.62); text-align: right; min-width: 0; }
   .row[data-state='shipped'] .r-verdict { color: var(--accent); }
   .row[data-state='rejected'] .r-verdict { color: var(--error); }
@@ -141,7 +141,7 @@
   .cell.moved { background: color-mix(in srgb, var(--error) 55%, transparent);
     border-color: var(--error); }
 
-  .read { margin: 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.72); }
+  .read { margin: 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.72); }
   .read b { color: var(--text-primary); }
 
   @media (max-width: 620px) {

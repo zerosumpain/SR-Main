@@ -38,6 +38,7 @@
     collapsed = false,
     onToggleCollapse,
     liveConversationIds = [],
+    openTabIds = [],
   }: {
     conversations: ConversationItem[];
     whatsappThread: WhatsAppThread | null;
@@ -52,9 +53,16 @@
     collapsed?: boolean;
     onToggleCollapse: () => void;
     liveConversationIds?: string[];
+    /**
+     * Threads currently open as tabs. The rail is the library and the tab strip
+     * is the working set, so a row needs to say which it already is — otherwise
+     * clicking one that is open reads as having done nothing.
+     */
+    openTabIds?: string[];
   } = $props();
 
   const liveSet = $derived(new Set(liveConversationIds));
+  const openSet = $derived(new Set(openTabIds));
 
   // --- Search ---
   let search = $state('');
@@ -369,6 +377,7 @@
     <div
       class="thread-row"
       class:active={activeConversationId === c.id}
+      class:open={openSet.has(c.id)}
       onclick={() => selectConv(c.id)}
       onkeydown={(e) => {
         if (e.key === 'Enter') selectConv(c.id);
@@ -425,8 +434,8 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    border-right: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-right: 1px solid var(--line-hair);
+    background: var(--surface-rail);
   }
 
   .rail-label {
@@ -443,7 +452,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     flex: none;
   }
   .sb-hd-btns {
@@ -498,7 +507,7 @@
   .search input {
     width: 100%;
     padding: 6px 22px 6px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     font-family: var(--font-mono);
@@ -575,6 +584,12 @@
   .thread-row.active {
     border-color: var(--accent-tint-25);
     background: rgba(196, 87, 10, 0.1);
+  }
+  /* Open as a tab: a seam on the leading edge, in the secondary ink so it reads
+     under `.active` rather than competing with it. Clicking an open row raises
+     its tab instead of spawning a second one, and this is what says so. */
+  .thread-row.open {
+    box-shadow: inset 2px 0 0 var(--accent-ink-tint-35);
   }
   .thread-row:focus-visible {
     outline: none;
@@ -667,7 +682,7 @@
     display: flex;
     gap: 1px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     padding: 1px;
     opacity: 0;
@@ -738,9 +753,9 @@
   /* One footer block: drafts, channel state, throughput. */
   .rail-foot {
     flex: none;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
     padding: 10px 12px;
-    background: var(--bg-section);
+    background: var(--surface-rail);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -798,8 +813,8 @@
     width: 44px;
     flex: none;
     height: 100%;
-    border-right: 1px solid var(--divider);
-    background: var(--bg-section);
+    border-right: 1px solid var(--line-hair);
+    background: var(--surface-rail);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -812,7 +827,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label);
@@ -838,7 +853,7 @@
   .rail-sep {
     width: 20px;
     height: 1px;
-    background: var(--divider);
+    background: var(--line-hair);
     margin: 2px 0;
   }
   .rail-dots {

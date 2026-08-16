@@ -43,6 +43,29 @@ function median(values: number[]): number {
  * DfE 9th→12th). Relevance is still reported per cluster because it is worth
  * knowing; it is just not what "matters" means here.
  */
+/**
+ * Re-tune, re-detect and reconcile against the CURRENT graph.
+ *
+ * Shared by the two callers that can start one — the owner pressing the button
+ * on /jkai/intel, and the maintenance route that lets an ingest or a backfill
+ * follow itself with a recalculation instead of waiting for someone to open the
+ * page. One implementation, so the two cannot drift into different answers.
+ *
+ * Drops the cached analysis as well as the roster memo: recalculating is the
+ * operation for "the graph has changed since you last looked", and reusing a
+ * cached snapshot would make it a no-op for up to a minute.
+ */
+export async function recalculateClusterRoster(resolution?: number) {
+  const { invalidateGraphAnalysis } = await import('./analytics/load');
+  const { autoTuneResolution } = await import('./analytics/community');
+
+  invalidateGraphAnalysis();
+  const analysis = await getGraphAnalysis(true);
+  const tuning = resolution === undefined ? autoTuneResolution(analysis.index) : null;
+  const roster = await buildClusterRoster(analysis, resolution ?? tuning?.resolution);
+  return { ...roster, candidates: tuning?.candidates ?? null };
+}
+
 export async function buildClusterRoster(analysis: GraphAnalysis, resolution?: number) {
   const reconciled = await reconcileFromAnalysis(analysis, { resolution });
   const { index, centrality } = analysis;

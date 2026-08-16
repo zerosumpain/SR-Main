@@ -115,23 +115,23 @@
 
 <style>
   .seg { display: flex; gap: 4px; flex-wrap: wrap; }
-  .seg button { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.04em;
+  .seg button { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.04em;
     color: rgba(28,22,17,0.6); background: rgba(255,255,255,0.7);
-    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round);
+    border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
     padding: 4px 9px; cursor: pointer; }
   .seg button:hover { background: rgba(28,22,17,0.07); }
   .seg button.on { background: var(--success); border-color: var(--success); color: #fff; }
 
-  .path-say { margin: 10px 0 0; font-size: 12.5px; line-height: 1.55;
+  .path-say { margin: 10px 0 0; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.74); max-width: 86ch; }
   .path-say b { color: var(--text-primary); }
 
   .cons { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
   .con { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px;
     border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0; background: rgba(255,255,255,0.5); }
-  .con b { font-size: 12.5px; color: var(--text-primary); }
-  .con span { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.5); }
+  .con b { font-size: var(--fs-label); color: var(--text-primary); }
+  .con span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.65); }
 
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 9px; margin-top: 12px; }
 
@@ -139,9 +139,9 @@
   .share li { display: grid; grid-template-columns: minmax(140px, 200px) minmax(120px, 180px) 1fr;
     gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: var(--radius-sharp);
     background: rgba(255,255,255,0.55); }
-  .share b { font-size: 12.5px; color: var(--text-primary); }
-  .share em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--success); }
-  .share span { font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+  .share b { font-size: var(--fs-label); color: var(--text-primary); }
+  .share em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); }
+  .share span { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.65); }
 
 
   @media (max-width: 700px) {

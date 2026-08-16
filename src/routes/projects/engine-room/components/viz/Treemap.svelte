@@ -61,7 +61,7 @@
 </div>
 
 <style>
-  .tm { position: relative; width: 100%; border-radius: var(--radius-round); overflow: hidden;
+  .tm { position: relative; width: 100%; border-radius: var(--radius-sharp); overflow: hidden;
     border: 1px solid rgba(28,22,17,0.16); background: rgba(28,22,17,0.04); }
   .cell { position: absolute; border: 1px solid rgba(255,255,255,0.7); background: color-mix(in srgb, var(--cell, var(--tone)) 22%, transparent);
     display: flex; flex-direction: column; justify-content: flex-start; gap: 1px; padding: 5px 7px;
@@ -71,8 +71,8 @@
   .cell:not(:disabled):hover { background: color-mix(in srgb, var(--cell, var(--tone)) 40%, transparent); }
   .cell.on { background: color-mix(in srgb, var(--cell, var(--tone)) 52%, transparent);
     border-color: var(--cell, var(--tone)); }
-  .c-lab { font-size: 11.5px; font-weight: 600; line-height: 1.2; color: var(--text-primary);
+  .c-lab { font-size: var(--fs-label-xs); font-weight: 600; line-height: 1.2; color: var(--text-primary);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .c-val { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.62);
+  .c-val { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.62);
     white-space: nowrap; }
 </style>

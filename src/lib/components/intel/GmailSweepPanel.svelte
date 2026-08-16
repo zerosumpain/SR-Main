@@ -248,7 +248,7 @@
        zoom the viewport on focus (gate:font-sizes enforces this). */
     font-size: var(--fs-body);
     padding: 3px 6px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--bg);
     color: var(--text-primary);
@@ -261,7 +261,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

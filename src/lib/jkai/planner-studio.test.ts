@@ -6,6 +6,7 @@ import {
   CHAPTER_FORMS,
   CONTROL_KINDS,
   buildRevisionInstruction,
+  STUDY_TEMPLATES,
   STUDIO_CRITIC_EXTRA,
   STUDIO_PROPOSER_SYSTEM_PROMPT,
 } from './planner';
@@ -21,8 +22,8 @@ describe('parseChapterPlan', () => {
 | 2 | Where deprivation money goes | compare | slider | fsm | uplift |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', form: 'open', control: 'choice', leverId: 'roll', outcomeId: 'total' },
-      { n: 2, title: 'Where deprivation money goes', form: 'compare', control: 'slider', leverId: 'fsm', outcomeId: 'uplift' },
+      { n: 1, title: 'What a school budget is', template: 't1', form: 'open', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+      { n: 2, title: 'Where deprivation money goes', template: 't1', form: 'compare', control: 'slider', leverId: 'fsm', outcomeId: 'uplift' },
     ]);
   });
 
@@ -42,10 +43,11 @@ describe('parseChapterPlan', () => {
 | 2 | Associations Without Assumptions | \`placeassociation\` | \`associationboundary\` |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'The Record Room', form: 'question', control: 'choice', leverId: 'matchclaim', outcomeId: 'claimscope' },
+      { n: 1, title: 'The Record Room', template: 't1', form: 'question', control: 'choice', leverId: 'matchclaim', outcomeId: 'claimscope' },
       {
         n: 2,
         title: 'Associations Without Assumptions',
+        template: 't1',
         form: 'question',
         control: 'choice',
         leverId: 'placeassociation',
@@ -112,7 +114,7 @@ describe('normaliseSpineId', () => {
 | 2 | Data goes stale | Cache refresh | eng |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'What a school budget is', template: 't1', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 
@@ -125,7 +127,7 @@ describe('normaliseSpineId', () => {
 | **1** | **What a school budget is** | roll | total |
 `;
     expect(parseChapterPlan(md)).toEqual([
-      { n: 1, title: 'What a school budget is', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'What a school budget is', template: 't1', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 
@@ -171,14 +173,22 @@ describe('round-3 revision instruction', () => {
 
   it('emits a table the real parser can read back', () => {
     // The literal format block in the instruction is what the model copies. If
-    // it ever drifts from the six columns parseChapterPlan expects, the spine
+    // it ever drifts from the seven columns parseChapterPlan expects, the spine
     // silently comes back empty — so parse the instruction itself.
     const filled = studio.replace(
-      '| 1 | ... | ... | ... | ... | ... |',
-      '| 1 | What a budget is | walk | step | roll | total |',
+      '| 1 | ... | ... | ... | ... | ... | ... |',
+      '| 1 | What a budget is | t2 | walk | step | roll | total |',
     );
     expect(parseChapterPlan(filled)).toEqual([
-      { n: 1, title: 'What a budget is', form: 'walk', control: 'step', leverId: 'roll', outcomeId: 'total' },
+      {
+        n: 1,
+        title: 'What a budget is',
+        template: 't2',
+        form: 'walk',
+        control: 'step',
+        leverId: 'roll',
+        outcomeId: 'total',
+      },
     ]);
   });
 
@@ -191,13 +201,40 @@ describe('round-3 revision instruction', () => {
       '## Chapter Plan',
       '## Chapter Detail',
       '## Risks & Mitigations',
-      '| # | Chapter | Form | Control | Lever id | Outcome id |',
-      '|---|---------|------|---------|----------|------------|',
+      '| # | Chapter | Template | Form | Control | Lever id | Outcome id |',
+      '|---|---------|----------|------|---------|----------|------------|',
       '### Chapter 1: [title]',
     ]) {
       expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toContain(section);
       expect(studio).toContain(section);
     }
+  });
+
+  it('names all nine field study templates in both prompt strings', () => {
+    // The plan's Template cell is parsed against STUDY_TEMPLATES and the agent
+    // builds against ./explainer-kit/field-study/TEMPLATES.md. A template the
+    // prompt describes but the registry does not carry is a chapter with no
+    // instructions behind it.
+    for (const t of STUDY_TEMPLATES) {
+      expect(STUDIO_PROPOSER_SYSTEM_PROMPT.toLowerCase()).toContain(`${t} `);
+      expect(studio.toLowerCase()).toContain(`${t} `);
+    }
+  });
+
+  it('states the fixed beat arc and the per-beat contract', () => {
+    // The arc is the whole reason a study reads as an argument rather than a
+    // tour of the author's notes; the falsifier is the line that keeps it
+    // honest. Both live only in the system prompt.
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/FIELD STUDY/);
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/01 the problem/);
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/07 what happens next/);
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/falsifier/i);
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/may not reorder them or add an eighth/);
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toMatch(/at least one claim[\s\S]{0,80}hypothesis/i);
+  });
+
+  it('points the model at the mounted system rather than describing it twice', () => {
+    expect(STUDIO_PROPOSER_SYSTEM_PROMPT).toContain('./explainer-kit/field-study/');
   });
 
   it('tells the model the chapter table is mandatory and machine-read', () => {
@@ -258,8 +295,8 @@ describe('the chapter spine carries editorial decisions', () => {
 
   it('reads form and control from the six-column table', () => {
     expect(parseChapterPlan(wide)).toEqual([
-      { n: 1, title: 'The record room', form: 'open', control: 'choice', leverId: 'source', outcomeId: 'scope' },
-      { n: 2, title: 'How a claim moves', form: 'walk', control: 'step', leverId: 'stage', outcomeId: 'status' },
+      { n: 1, title: 'The record room', template: 't1', form: 'open', control: 'choice', leverId: 'source', outcomeId: 'scope' },
+      { n: 2, title: 'How a claim moves', template: 't1', form: 'walk', control: 'step', leverId: 'stage', outcomeId: 'status' },
     ]);
   });
 
@@ -272,7 +309,7 @@ describe('the chapter spine carries editorial decisions', () => {
 | 1 | Old shape | roll | total |
 `;
     expect(parseChapterPlan(narrow)).toEqual([
-      { n: 1, title: 'Old shape', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
+      { n: 1, title: 'Old shape', template: 't1', form: 'question', control: 'choice', leverId: 'roll', outcomeId: 'total' },
     ]);
   });
 

@@ -118,7 +118,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.62);
     overflow: hidden;
   }
@@ -134,8 +134,8 @@
   .tb {
     min-width: 28px;
     padding: 4px 7px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(28, 22, 17, 0.18);
     border-radius: var(--radius-sharp, 3px);
@@ -143,7 +143,7 @@
     cursor: pointer;
   }
   .tb.serif {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 600;
   }
   .tb:hover {
@@ -151,8 +151,8 @@
   }
   .save {
     margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: #2f6155;
@@ -166,8 +166,8 @@
     min-height: 380px;
     padding: 18px 22px 26px;
     outline: none;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 15px;
+    font-family: var(--font-body);
+    font-size: var(--fs-body-sm);
     line-height: 1.62;
     color: var(--ink);
   }
@@ -178,14 +178,14 @@
     pointer-events: none;
   }
   .surface :global(h3) {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 19px;
     font-weight: 600;
     margin: 18px 0 6px;
   }
   .surface :global(h4) {
-    font-family: 'Fraunces', serif;
-    font-size: 15.5px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     margin: 14px 0 4px;
   }
@@ -205,7 +205,7 @@
     padding: 6px 14px;
     border-left: 3px solid var(--accent-ink);
     background: var(--accent-ink-tint-06);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
   }
   .surface :global(a) {
     color: var(--accent-ink);

@@ -36,17 +36,17 @@
   .ev-rule {
     display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
     padding: 0.5rem 0 0.4rem;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     margin-bottom: 0.4rem;
   }
   .ev-entry:first-child .ev-rule { border-top: 0; padding-top: 0; }
   .ev-metric {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.18em;
     color: var(--accent);
   }
   .ev-cite {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     color: var(--text-ghost);
     margin-left: auto;
@@ -59,14 +59,14 @@
     margin: 0;
   }
   .ev-grid dt {
-    font-family: var(--font-mono); font-size: 9px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     color: var(--text-muted);
     padding-top: 2px;
   }
   .ev-grid dd {
-    font-size: 11px; line-height: 1.5; color: var(--text-secondary);
+    font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary);
     margin: 0;
   }
-  .ev-ref { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
+  .ev-ref { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 </style>

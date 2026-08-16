@@ -113,9 +113,9 @@
 
 <style>
   .ctl { display: flex; gap: 5px; flex-wrap: wrap; }
-  .ctl button { cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+  .ctl button { cursor: pointer; font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 600;
     color: var(--text-primary); background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); padding: 6px 11px; }
+    border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp); padding: 6px 11px; }
   .ctl button:hover { background: rgba(28,22,17,0.06); border-color: rgba(28,22,17,0.38); }
   .ctl button.on { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
 </style>

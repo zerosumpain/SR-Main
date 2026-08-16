@@ -47,22 +47,22 @@
     <a
       href="/jkai/intel/alerts"
       class="px-3 py-1.5 rounded-full text-sm border"
-      style="{!data.filters.significance ? 'background: var(--accent); color: white; border-color: var(--accent);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+      style="{!data.filters.significance ? 'background: var(--accent); color: white; border-color: var(--accent);' : 'background: var(--card-bg); border-color: var(--line-strong);'}"
     >All</a>
     <a
       href="/jkai/intel/alerts?significance=high"
       class="px-3 py-1.5 rounded-full text-sm border"
-      style="{data.filters.significance === 'high' ? 'background: var(--error); color: white; border-color: var(--error);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+      style="{data.filters.significance === 'high' ? 'background: var(--error); color: white; border-color: var(--error);' : 'background: var(--card-bg); border-color: var(--line-strong);'}"
     >High</a>
     <a
       href="/jkai/intel/alerts?significance=medium"
       class="px-3 py-1.5 rounded-full text-sm border"
-      style="{data.filters.significance === 'medium' ? 'background: var(--warn); color: white; border-color: var(--warn);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+      style="{data.filters.significance === 'medium' ? 'background: var(--warn); color: white; border-color: var(--warn);' : 'background: var(--card-bg); border-color: var(--line-strong);'}"
     >Medium</a>
     <a
       href="/jkai/intel/alerts?significance=low"
       class="px-3 py-1.5 rounded-full text-sm border"
-      style="{data.filters.significance === 'low' ? 'background: var(--accent-ink); color: white; border-color: var(--accent-ink);' : 'background: var(--card-bg); border-color: var(--card-border);'}"
+      style="{data.filters.significance === 'low' ? 'background: var(--accent-ink); color: white; border-color: var(--accent-ink);' : 'background: var(--card-bg); border-color: var(--line-strong);'}"
     >Low</a>
   </div>
 
@@ -74,12 +74,12 @@
     <div class="space-y-3">
       {#each alerts as alert}
         {@const colors = significanceColors[alert.significance] ?? significanceColors.medium}
-        <div class="rounded p-4 border" style="{colors.bg} border-color: var(--card-border);">
+        <div class="rounded p-4 border" style="{colors.bg} border-color: var(--line-strong);">
           <div class="flex items-start justify-between">
             <div class="flex items-center gap-2 mb-1">
               <span class="inline-flex" style="{colors.text}">{@render typeIcon(alert.type)}</span>
               <span class="font-medium text-sm">{alert.title}</span>
-              <span class="text-xs px-1.5 py-0.5 rounded border" style="{colors.text} background: var(--card-bg); border-color: var(--card-border);">{alert.significance}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded border" style="{colors.text} background: var(--card-bg); border-color: var(--line-strong);">{alert.significance}</span>
             </div>
             <button onclick={() => dismiss(alert.id)} class="text-xs px-2 py-1 hover:opacity-80" style="color: var(--text-ghost);" title="Dismiss">dismiss</button>
           </div>

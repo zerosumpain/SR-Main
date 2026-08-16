@@ -61,40 +61,21 @@
 </a>
 
 <style>
+  /* A cell of the vitals rail, not a card: the grid draws the borders, so the
+     tile brings only its contents and a hover wash. */
   .tile {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 12px 13px 13px;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
     text-decoration: none;
     color: var(--text-primary);
     position: relative;
     overflow: hidden;
-    transition:
-      border-color var(--t-base) var(--ease-out),
-      background var(--t-base) var(--ease-out);
+    min-width: 0;
+    transition: background var(--t-base) var(--ease-out);
   }
   .tile:hover {
-    border-color: var(--accent);
     background: var(--accent-tint-04);
-  }
-  /* Accent rail wipes in from the left on hover (brand `>` gesture). */
-  .tile::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--accent);
-    transform: scaleY(0);
-    transform-origin: top;
-    transition: transform var(--t-base) var(--ease-out);
-  }
-  .tile:hover::before {
-    transform: scaleY(1);
   }
 
   .tile-hd {
@@ -105,17 +86,17 @@
   }
   .tile-label {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
+    letter-spacing: var(--tracking-label-wide);
     color: var(--text-muted);
   }
 
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     flex-shrink: 0;
     background: var(--accent);
   }
@@ -140,12 +121,14 @@
     gap: 6px;
     margin-top: 2px;
   }
+  /* Mono, not display: the rail is an instrument, and every figure in it ticks
+     in place. Tabular so a 9 becoming a 10 does not shove the unit sideways. */
   .num {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: 36px;
-    line-height: 1;
-    letter-spacing: -0.02em;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: var(--fs-num-md);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
@@ -154,16 +137,16 @@
   }
   .unit {
     font-family: var(--font-mono);
-    font-size: 8.5px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: var(--tracking-label);
     color: var(--text-ghost);
   }
 
   .tile-sub {
     font-family: var(--font-mono);
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.02em;
     color: var(--text-muted);
     margin: 0;

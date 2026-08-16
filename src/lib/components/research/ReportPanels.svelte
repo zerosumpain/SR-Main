@@ -20,6 +20,10 @@
     by_type: Record<string, number>;
     concentration_index: number;
   }
+  export interface Followup {
+    question: string;
+    context?: string;
+  }
   export interface ReportView {
     knowledge_gaps?: KnowledgeGap[];
     hypotheses?: Hypothesis[];
@@ -27,6 +31,7 @@
     source_diversity?: SourceDiversity;
     entity_centrality?: Record<string, number>;
     clusters?: { title: string; summary: string; fact_ids?: string[] }[];
+    suggested_followups?: Followup[];
   }
 </script>
 
@@ -48,6 +53,7 @@
     goals = [],
     topEntities = [],
     onInvestigate,
+    onAsk,
   }: {
     report: ReportView;
     goals?: string[];
@@ -55,6 +61,8 @@
     topEntities?: { name: string; score: number }[];
     /** Spawn a child investigation seeded from a gap or hypothesis. */
     onInvestigate?: (topic: string, seed: { kind: 'gap' | 'hypothesis'; text: string }) => void;
+    /** Push a question into the Ask jkai panel. */
+    onAsk?: (question: string) => void;
   } = $props();
 
   const gaps = $derived(report.knowledge_gaps ?? []);
@@ -62,6 +70,7 @@
   const contradictions = $derived(report.contradictions_map ?? []);
   const diversity = $derived(report.source_diversity ?? null);
   const clusters = $derived(report.clusters ?? []);
+  const followups = $derived(report.suggested_followups ?? []);
 
   /**
    * Per-goal coverage.
@@ -170,9 +179,53 @@
       <span class="sr-label-tight">Sources that disagree</span>
       <span class="count">{contradictions.length}</span>
     </div>
-    <ul class="items plain">
+    <ul class="items">
       {#each contradictions as c, i (i)}
-        <li><div class="item-main"><span>{c.tension}</span></div></li>
+        <li>
+          <div class="item-main"><span>{c.tension}</span></div>
+          {#if onAsk}
+            <button
+              type="button"
+              class="row-link"
+              onclick={() => onAsk(`The sources in this research disagree: ${c.tension}. Work out which account is better supported, and why.`)}
+            >Settle it →</button>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/if}
+
+<!-- `suggested_followups` has been written on every finished investigation and
+     rendered nowhere. Each one is a question the run itself decided was worth
+     asking next, so each gets both routes: ask jkai now, or commission a fresh
+     child investigation. -->
+{#if followups.length}
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Where to go next</span>
+      <span class="count">{followups.length}</span>
+    </div>
+    <ul class="items">
+      {#each followups as f, i (i)}
+        <li>
+          <div class="item-main">
+            <span>{f.question}</span>
+            {#if f.context}<span class="muted">{f.context}</span>{/if}
+          </div>
+          <div class="row-actions">
+            {#if onAsk}
+              <button type="button" class="row-link" onclick={() => onAsk(f.question)}>Ask jkai →</button>
+            {/if}
+            {#if onInvestigate}
+              <button
+                type="button"
+                class="row-link"
+                onclick={() => onInvestigate(f.question, { kind: 'gap', text: f.context ?? f.question })}
+              >Research it →</button>
+            {/if}
+          </div>
+        </li>
       {/each}
     </ul>
   </section>
@@ -221,8 +274,8 @@
 {/if}
 
 <style>
-  .nm-sec { border: 1px solid var(--card-border); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
-  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--divider); }
+  .nm-sec { border: 1px solid var(--line-strong); background: var(--surface-elevated); padding: 0.8rem 0.9rem; margin-bottom: 1rem; }
+  .nm-sec-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--line-hair); }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
 
@@ -246,11 +299,12 @@
 
   .row-link { font-family: var(--font-mono); font-size: var(--fs-label); background: none; border: none; color: var(--accent); cursor: pointer; white-space: nowrap; padding: 0; }
   .row-link:hover { text-decoration: underline; }
+  .row-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
 
   .diversity { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: baseline; font-size: 0.9rem; margin-bottom: 0.5rem; }
   .types, .entities { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .types { margin-bottom: 0.6rem; }
-  .type-chip, .entity-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--card-border); padding: 2px 7px; color: var(--text-secondary); }
+  .type-chip, .entity-chip { font-family: var(--font-mono); font-size: var(--fs-label-xs); border: 1px solid var(--line-strong); padding: 2px 7px; color: var(--text-secondary); }
   /* Centrality shows as weight, not another colour scale. */
   .entity-chip { border-color: color-mix(in srgb, var(--accent) calc(var(--w) * 100%), var(--card-border)); }
 </style>

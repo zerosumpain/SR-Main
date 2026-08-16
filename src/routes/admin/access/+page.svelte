@@ -187,7 +187,7 @@
   .muted { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--text-secondary); }
   .muted code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -219,7 +219,7 @@
   }
   .added {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-ghost);
@@ -228,7 +228,7 @@
   .owner-tag {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--accent);
@@ -237,10 +237,10 @@
     border-radius: 2px;
   }
   .add-row { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.4rem; }
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
   .row-link {
     font-family: var(--font-mono);
-    font-size: 0.68rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);

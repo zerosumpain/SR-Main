@@ -82,9 +82,9 @@
 <style>
   .worker-tray {
     margin: 8px 0;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .worker-tray[data-state='running'] { border-color: color-mix(in srgb, var(--accent-ink) 45%, var(--card-border)); }
   .wt-hdr {
@@ -129,7 +129,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .wt-agent-meta { display: flex; justify-content: flex-end; }
   .wt-agent-elapsed { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }

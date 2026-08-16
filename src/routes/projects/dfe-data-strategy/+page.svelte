@@ -134,7 +134,7 @@
     gap: 2px;
     padding: 11px 15px;
     border: 1px solid rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     text-decoration: none;
   }
@@ -143,14 +143,14 @@
     border-color: rgba(28, 22, 17, 0.4);
   }
   .path b {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--accent-ink);
   }
   .path span {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.4;
     color: rgba(28, 22, 17, 0.68);
   }
@@ -167,13 +167,13 @@
     gap: 8px;
     border: 1px solid rgba(28, 22, 17, 0.14);
     border-top: 4px solid var(--c);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.45);
     padding: 15px 17px 14px;
   }
   .m-kicker {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--c);
@@ -181,7 +181,7 @@
   }
   .m-promise {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 16.5px;
     font-weight: 500;
     line-height: 1.35;
@@ -194,7 +194,7 @@
     gap: 4px;
   }
   .m-stats a {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: rgba(28, 22, 17, 0.7);
     text-decoration: none;
   }
@@ -202,8 +202,8 @@
     color: var(--ink);
   }
   .m-stats b {
-    font-family: 'Fraunces', serif;
-    font-size: 16px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body);
     font-weight: 600;
     color: var(--c);
     margin-right: 3px;
@@ -217,14 +217,14 @@
     border-top: 1px dashed rgba(28, 22, 17, 0.15);
   }
   .m-links a {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     color: var(--ink);
     text-decoration: none;
     padding: 4px 10px;
     border: 1px solid rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
   }
   .m-links a:hover {

@@ -59,32 +59,80 @@ export const CRON_TZ = 'Europe/London';
 /** Skip a nightly run if the user chatted within this window (idle gate). */
 export const IDLE_WINDOW_MS = 60 * 60 * 1000; // 60 min
 
-/** Hard budget caps for one run. */
+/**
+ * Hard budget caps for one run — the SAFETY ceiling, not the workload dial.
+ *
+ * Measured over the 10 nights to 2026-08-16, a run used **6-10 of 40 calls**,
+ * **$0.01 of $0.50** and **4-8 minutes of 25** (worst 16.5). The budget was
+ * never what limited output; WORK_CAPS below was. Raising these would have
+ * changed nothing at all.
+ *
+ * **`maxWallMs` cannot go up.** The night is scheduled back to back — 03:30
+ * selfimprove, **04:00 model-routing**, 04:15 intel (see
+ * `$lib/workflowdoctor/types.ts`). 25 minutes from 03:30 ends at 03:55, which
+ * is the whole reason for the number: it is a slot boundary, not a guess. The
+ * engine also waits on a 60-minute idle window, so a run can start late and
+ * eat into that margin without anyone changing a cap.
+ *
+ * Wall clock is therefore the real constraint on how much work fits in a
+ * night, and WORK_CAPS below are sized against it rather than against the call
+ * count. Calls and cost keep a wide margin deliberately: they exist to stop a
+ * runaway, and a ceiling that sits just above the expected load stops nothing.
+ */
 export const BUDGET_CAPS = {
   maxLlmCalls: 40,
   maxCostUsd: 0.5,
-  maxWallMs: 25 * 60 * 1000, // 25 minutes wall clock
+  maxWallMs: 25 * 60 * 1000, // 25 min from 03:30 ends at 03:55, before 04:00
 } as const;
 
 /**
- * Work caps for the build/repair loops. Sized so a worst-case night stays inside
- * BUDGET_CAPS: learn 1(+1) + discover 3 + build 3×3 + repair 2×2 + propose 2 ≈ 20
- * of the 40 available calls. Before these loops existed a run spent 2 calls of
- * 40 and shipped nothing — the caps exist to USE the budget, not to ration it.
+ * Work caps for the build/repair loops — the actual workload dial.
+ *
+ * Raised 2026-08-16 because the backlog fills far faster than it drains: 179
+ * ideas added against 31 built over 27 nights, leaving 148 open items at ~0.1
+ * attempts each. More attempts per night is the half of that gap this file can
+ * close; whether `discover` should also produce fewer is a separate question
+ * and deliberately not answered here.
+ *
+ * **Sized against wall clock, not the call count.** Observed cost is ~1.6
+ * minutes per LLM call (16.5 min for 10 on the heaviest night), and the run
+ * has 25 minutes before it runs into the 04:00 model-routing slot — so roughly
+ * 15 calls fit, not 40. These caps put a worst-case night at
+ * learn 2 + discover 3 + build 4 + repair 3 + propose 2 + optimise 2 ≈ 16,
+ * which is deliberately close to that ceiling rather than under it: every
+ * phase checks `timeLeftMs()` and skips rather than overrunning, so the
+ * failure mode is a skipped late phase, not a collision with the next job.
+ *
+ * Before these loops existed a run spent 2 calls of 40 and shipped nothing —
+ * the caps exist to USE the budget, not to ration it.
  */
 export const WORK_CAPS = {
   /** Distinct tool ideas attempted per night. */
-  maxToolCandidates: 3,
+  maxToolCandidates: 4,
   /** Repair rounds per candidate — the smoke-test error is fed back each time. */
   maxRepairRounds: 2,
   /** Existing broken tools re-authored per night. */
-  maxToolsRepaired: 2,
+  maxToolsRepaired: 3,
   /** Draft PRs opened per night (never merged). */
-  maxPullRequests: 1,
+  maxPullRequests: 2,
   /** A tool must beat this error rate to be considered healthy. */
   repairErrorRateThreshold: 0.25,
   /** Minimum runs before an error rate is meaningful. */
   repairMinRuns: 5,
+  /**
+   * Days a tool sits out after a repair attempt is rejected.
+   *
+   * Without it the phase grinds: `pickRepairTargets` sorts by error COUNT, a
+   * rejected repair leaves the tool unchanged, so it is still the worst tool
+   * tomorrow and gets picked again. Measured 2026-08-16 — the same two tools
+   * (`reverse_geocode`, `reverse_geocode_osm`) were re-authored every night for
+   * eight consecutive nights, 31 lifetime attempts for 1 ship, while
+   * `nearby_places` sat third on the list and was never once reached.
+   *
+   * A cooldown rather than an exclusion: the tool may become repairable later,
+   * once the upstream settles or better smoke cases exist.
+   */
+  repairCooldownDays: 7,
   /** Leave this much wall-clock headroom for the report phase. */
   reserveWallMs: 60 * 1000,
 } as const;

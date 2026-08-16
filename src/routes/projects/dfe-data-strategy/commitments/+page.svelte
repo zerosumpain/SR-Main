@@ -97,7 +97,7 @@
     margin: 2px 0 16px;
     padding: 13px 20px;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
   }
   .stat {
@@ -105,7 +105,7 @@
     flex-direction: column;
   }
   .stat b {
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 27px;
     font-weight: 600;
     line-height: 1.05;
@@ -115,8 +115,8 @@
     color: #b04a2f;
   }
   .stat span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.55);
@@ -128,12 +128,12 @@
     margin-bottom: 12px;
   }
   .lens {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 500;
     padding: 8px 16px;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     color: var(--ink);
     cursor: pointer;

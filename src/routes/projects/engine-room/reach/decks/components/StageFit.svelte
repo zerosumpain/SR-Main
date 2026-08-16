@@ -83,20 +83,20 @@
   .ctl { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; }
   .regs { display: flex; gap: 5px; flex-wrap: wrap; }
   .regs button { display: inline-flex; align-items: baseline; gap: 6px;
-    font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+    font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
-  .regs button em { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
+  .regs button em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.45); }
   .regs button:hover { background: rgba(28,22,17,0.07); }
   .regs button.on { background: var(--success); border-color: var(--success); color: #fff; }
   .regs button.on em { color: rgba(255,255,255,0.7); }
 
   .f { display: flex; align-items: center; gap: 8px; }
-  .f-lab { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+  .f-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); white-space: nowrap; }
   .f input { accent-color: var(--success); width: 128px; }
-  .f output { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600;
+  .f output { font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 600;
     color: var(--text-primary); min-width: 3ch; }
 
   /* Capped, because a 16:9 box at full page width is 800px tall and reads as a wall. */
@@ -105,20 +105,20 @@
      which is what makes the word capacities below line up with where the page actually ends. */
   .stage { container-type: inline-size;
     position: relative; aspect-ratio: 16 / 9; overflow: hidden;
-    background: #fdfbf6; border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-round);
+    background: #fdfbf6; border: 1px solid rgba(28,22,17,0.22); border-radius: var(--radius-sharp);
     padding: 4% 6%; display: flex; flex-direction: column; gap: 2%; }
   .stage.over { border-color: rgba(138,45,58,0.6); }
   /* Positioned so they paint AFTER the absolutely-positioned backdrop below. */
-  .s-kicker { position: relative; font-family: 'JetBrains Mono', monospace; font-size: 1.1cqw;
+  .s-kicker { position: relative; font-family: var(--font-mono); font-size: 1.1cqw;
     letter-spacing: 0.16em; text-transform: uppercase; color: var(--success); flex-shrink: 0; }
   .s-body { position: relative; margin: 0; color: rgba(28,22,17,0.82); min-width: 0; }
   /* Sized so that the register's word capacity is roughly a full page — otherwise the strike
      through would fall somewhere with obvious room left, and contradict the instrument. */
   .stage[data-reg='editorial'] .s-body { font-size: 2.35cqw; line-height: 1.5; max-width: 72%; }
-  .stage[data-reg='statement'] .s-body { font-family: 'Fraunces', serif; font-weight: 600;
+  .stage[data-reg='statement'] .s-body { font-family: var(--fs-serif); font-weight: 600;
     font-size: 3.25cqw; line-height: 1.14; max-width: 52%; letter-spacing: -0.015em; }
   .stage[data-reg='split'] .s-body { font-size: 2.4cqw; line-height: 1.5; max-width: 38%; }
-  .stage[data-reg='poster'] .s-body { font-family: 'Fraunces', serif; font-weight: 600;
+  .stage[data-reg='poster'] .s-body { font-family: var(--fs-serif); font-weight: 600;
     font-size: 4.15cqw; line-height: 1.2; max-width: 60%; }
   /* Where the visual would sit. ::before, so the words paint over it. */
   .stage[data-reg='split']::before {
@@ -136,15 +136,15 @@
     background: linear-gradient(to bottom, transparent, rgba(138,45,58,0.2));
     border-bottom: 2px solid rgba(138,45,58,0.6); pointer-events: none; }
   .s-cut i { position: absolute; right: 8px; bottom: 5px; font-style: normal;
-    font-family: 'JetBrains Mono', monospace; font-size: 1.05cqw; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: 1.05cqw; letter-spacing: 0.08em;
     text-transform: uppercase; color: #8a2d3a; }
-  .s-dim { position: absolute; right: 6px; top: -14px; font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px; letter-spacing: 0.08em; color: rgba(28,22,17,0.4); }
+  .s-dim { position: absolute; right: 6px; top: -14px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.08em; color: rgba(28,22,17,0.4); }
 
   .verdict { margin: 0; padding: 9px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent);
-    font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 88ch; }
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 88ch; }
   .verdict b { color: var(--text-primary); }
 
   @media (max-width: 560px) { .f input { width: 96px; } }

@@ -527,41 +527,43 @@
       {#if filteredRecent.length === 0}
         <div class="nm-empty">No activities match the current filters.</div>
       {:else}
-        <table class="nm-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Activity</th>
-              <th>Type</th>
-              <th>Distance</th>
-              <th>Time</th>
-              <th>Elev</th>
-              {#if sortMode === 'epic'}<th>Score</th>{/if}
-              <th>Featured</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each filteredRecent as a (a.id)}
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
               <tr>
-                <td>{fmtDay(a.startDate)}</td>
-                <td class="ep-name">{a.name}</td>
-                <td>{a.sportType || a.type}</td>
-                <td>{fmtKm(a.distance)} km</td>
-                <td>{fmtDur(a.movingTime)}</td>
-                <td>{a.totalElevationGain ? `${Math.round(a.totalElevationGain)}m` : '—'}</td>
-                {#if sortMode === 'epic'}<td class="ep-score">{Math.round(epicScore(a))}</td>{/if}
-                <td>
-                  <button
-                    class="nm-link-btn"
-                    class:on={a.featured}
-                    disabled={featureBusyId === a.id}
-                    onclick={() => toggleFeatured(a)}
-                  >{a.featured ? '★ featured' : '☆ feature'}</button>
-                </td>
+                <th>Date</th>
+                <th>Activity</th>
+                <th>Type</th>
+                <th>Distance</th>
+                <th>Time</th>
+                <th>Elev</th>
+                {#if sortMode === 'epic'}<th>Score</th>{/if}
+                <th>Featured</th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {#each filteredRecent as a (a.id)}
+                <tr>
+                  <td>{fmtDay(a.startDate)}</td>
+                  <td class="ep-name">{a.name}</td>
+                  <td>{a.sportType || a.type}</td>
+                  <td>{fmtKm(a.distance)} km</td>
+                  <td>{fmtDur(a.movingTime)}</td>
+                  <td>{a.totalElevationGain ? `${Math.round(a.totalElevationGain)}m` : '—'}</td>
+                  {#if sortMode === 'epic'}<td class="ep-score">{Math.round(epicScore(a))}</td>{/if}
+                  <td>
+                    <button
+                      class="nm-link-btn"
+                      class:on={a.featured}
+                      disabled={featureBusyId === a.id}
+                      onclick={() => toggleFeatured(a)}
+                    >{a.featured ? '★ featured' : '☆ feature'}</button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     {/if}
   </section>
@@ -576,33 +578,35 @@
     {#if recentJobs.length === 0}
       <div class="nm-empty">No backfill jobs yet.</div>
     {:else}
-      <table class="nm-table">
-        <thead>
-          <tr>
-            <th>Service</th>
-            <th>Status</th>
-            <th>Records</th>
-            <th>Step</th>
-            <th>Started</th>
-            <th>Finished</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each recentJobs as job (job.id)}
+      <div class="nm-table-scroll">
+        <table class="nm-table">
+          <thead>
             <tr>
-              <td>{job.service}</td>
-              <td><span class="nm-pill" data-state={job.status}>{job.status}</span></td>
-              <td>{job.recordsSynced}</td>
-              <td>{job.currentStep ?? '—'}</td>
-              <td>{fmtDate(job.startedAt)}</td>
-              <td>{job.finishedAt ? fmtDate(job.finishedAt) : '—'}</td>
+              <th>Service</th>
+              <th>Status</th>
+              <th>Records</th>
+              <th>Step</th>
+              <th>Started</th>
+              <th>Finished</th>
             </tr>
-            {#if job.errorMessage}
-              <tr><td colspan="6" class="row-err">{job.errorMessage.slice(0, 280)}{job.errorMessage.length > 280 ? '…' : ''}</td></tr>
-            {/if}
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {#each recentJobs as job (job.id)}
+              <tr>
+                <td>{job.service}</td>
+                <td><span class="nm-pill" data-state={job.status}>{job.status}</span></td>
+                <td>{job.recordsSynced}</td>
+                <td>{job.currentStep ?? '—'}</td>
+                <td>{fmtDate(job.startedAt)}</td>
+                <td>{job.finishedAt ? fmtDate(job.finishedAt) : '—'}</td>
+              </tr>
+              {#if job.errorMessage}
+                <tr><td colspan="6" class="row-err">{job.errorMessage.slice(0, 280)}{job.errorMessage.length > 280 ? '…' : ''}</td></tr>
+              {/if}
+            {/each}
+          </tbody>
+        </table>
+      </div>
     {/if}
   </section>
 </PageWrap>
@@ -617,7 +621,7 @@
   .backfill-row .nm-field { min-width: 180px; }
   .hint {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .active-line {
@@ -627,7 +631,7 @@
     align-items: center;
     gap: 0.6rem;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
   }
   .muted {
@@ -637,7 +641,7 @@
   }
   .row-err {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
     background: var(--error-bg);
   }
@@ -662,7 +666,7 @@
   .ep-meta { min-width: 0; }
   .ep-title {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -671,7 +675,7 @@
   .ep-sub {
     margin: 2px 0 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     display: flex;
     flex-wrap: wrap;
@@ -743,7 +747,7 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -752,7 +756,7 @@
   }
   .nm-chip {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     padding: 3px 8px;
     border: 1px solid var(--divider);
@@ -771,7 +775,7 @@
   }
   .ep-score {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--accent);
   }
 </style>

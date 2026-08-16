@@ -44,23 +44,23 @@
 <style>
   .gauge { display: flex; flex-direction: column; gap: 5px; }
   .g-top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
-  .g-lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.1em;
+  .g-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; color: rgba(28,22,17,0.5); }
-  .g-val { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 600; line-height: 1;
+  .g-val { font-family: var(--font-mono); font-size: 26px; font-weight: 600; line-height: 1;
     color: var(--text-primary); letter-spacing: -0.02em; }
-  .g-state { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.06em;
+  .g-state { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.06em;
     text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill);
     color: var(--accent-ink); background: rgba(14,91,102,0.14); margin-left: auto; }
   .over .g-state { color: #2d7a3a; background: rgba(45,122,58,0.16); }
 
   .g-track { position: relative; height: 16px; background: rgba(28,22,17,0.07);
-    border-radius: var(--radius-round); overflow: hidden; }
+    border-radius: var(--radius-sharp); overflow: hidden; }
   .g-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-ink); opacity: 0.75;
     transition: width 0.4s cubic-bezier(0.3,0,0.2,1); }
   .over .g-fill { background: #2d7a3a; }
   .g-line { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 2px dashed rgba(28,22,17,0.7); }
 
   .g-scale { position: relative; display: flex; justify-content: space-between;
-    font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.45); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.45); }
   .g-tlab { position: absolute; transform: translateX(-50%); color: rgba(28,22,17,0.72); }
 </style>

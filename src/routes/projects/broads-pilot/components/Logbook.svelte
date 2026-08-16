@@ -125,15 +125,15 @@
 
 <style>
   .lb-backdrop { position: absolute; inset: 0; z-index: 1000; background: rgba(26, 16, 8, 0.42); display: grid; place-items: center; padding: 0.6rem; }
-  .lb { width: min(48rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); overflow: hidden; }
+  .lb { width: min(48rem, 96vw); max-height: calc(100dvh - 1.2rem); display: flex; flex-direction: column; background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); overflow: hidden; }
   .lb-head { position: relative; padding: 0.9rem 1rem 0.7rem; border-bottom: 1px solid var(--card-border); }
-  .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.58rem; color: var(--accent); }
+  .kicker { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.2em; font-size: var(--fs-label-xs); color: var(--accent); }
   .lb-head h2 { margin: 0.15rem 0 0; font-family: var(--font-display); text-transform: uppercase; font-size: 1.05rem; color: var(--text-primary); }
   .close { position: absolute; top: 0.6rem; right: 0.7rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; padding: 0.3rem; min-height: 36px; min-width: 36px; }
   .close:hover { color: var(--text-primary); }
 
   .lb-body { overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.7rem; }
-  .rec { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-primary); background: color-mix(in srgb, var(--success) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); border-radius: var(--radius-round); padding: 0.5rem 0.65rem; }
+  .rec { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-primary); background: color-mix(in srgb, var(--success) 12%, var(--surface-elevated)); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); border-radius: var(--radius-sharp); padding: 0.5rem 0.65rem; }
   .rec-dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--error); flex: 0 0 auto; animation: lb-pulse 1.3s ease-out infinite; }
   @keyframes lb-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 50%, transparent); } 100% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--error) 0%, transparent); } }
 
@@ -143,24 +143,24 @@
   .empty-d { margin: 0; max-width: 26rem; font-family: var(--font-body); font-size: 0.86rem; line-height: 1.5; color: var(--text-secondary); }
 
   .logs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
-  .log { border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.55rem; }
+  .log { border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.7rem; background: var(--card-bg); display: flex; flex-direction: column; gap: 0.55rem; }
   .log-top { display: flex; gap: 0.7rem; }
-  .mini { flex: 0 0 auto; width: 132px; height: 76px; background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-round); }
+  .mini { flex: 0 0 auto; width: 132px; height: 76px; background: var(--bg-section); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); }
   .log-meta { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; flex: 1 1 auto; }
   .title-in { font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; color: var(--text-primary); background: transparent; border: 1px solid transparent; border-radius: var(--radius-sharp); padding: 0.15rem 0.25rem; margin-left: -0.25rem; }
   .title-in:hover { border-color: var(--card-border); }
   .title-in:focus { outline: none; border-color: var(--accent); background: var(--surface-elevated); }
-  .when { font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .when { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
   .stats { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.15rem; }
   .stats span { display: flex; flex-direction: column; }
   .stats strong { font-family: var(--font-mono); font-size: 0.92rem; color: var(--text-primary); }
-  .stats em { font-family: var(--font-mono); font-size: 0.54rem; font-style: normal; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .stats em { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-style: normal; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
 
-  .notes { width: 100%; box-sizing: border-box; min-height: 2.2rem; resize: vertical; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-round); padding: 0.45rem 0.55rem; }
+  .notes { width: 100%; box-sizing: border-box; min-height: 2.2rem; resize: vertical; font-family: var(--font-body); font-size: 0.82rem; line-height: 1.4; color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0.45rem 0.55rem; }
   .notes:focus { outline: none; border-color: var(--accent); }
 
   .log-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-  .mini-btn { font-family: var(--font-mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: var(--radius-round); min-height: 36px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
+  .mini-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: var(--radius-sharp); min-height: 36px; cursor: pointer; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); }
   .mini-btn:hover { border-color: var(--accent); color: var(--text-primary); }
   .mini-btn.ghost { color: var(--text-muted); }
   .mini-btn.danger { background: var(--error); border-color: var(--error); color: #fff; }

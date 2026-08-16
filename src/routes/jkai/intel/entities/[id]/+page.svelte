@@ -13,7 +13,7 @@
 <div class="p-6 sm:p-10 max-w-5xl mx-auto">
   <!-- Header -->
   <div class="flex items-center gap-4 mt-4 mb-6">
-    <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl border" style="background: {entity.typeColor}20; border-color: var(--card-border);">
+    <div class="w-14 h-14 rounded-full flex items-center justify-center text-2xl border" style="background: {entity.typeColor}20; border-color: var(--line-strong);">
       {entity.typeIcon}
     </div>
     <div>
@@ -33,14 +33,14 @@
     <!-- Left Column -->
     <div class="space-y-4">
       {#if entity.summary}
-        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Summary</h2>
           <p class="text-sm leading-relaxed">{entity.summary}</p>
         </div>
       {/if}
 
       {#if propEntries.length > 0}
-        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Properties</h2>
           <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             {#each propEntries as [key, value]}
@@ -51,10 +51,10 @@
         </div>
       {/if}
 
-      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Appears in {data.notes.length} notes</h2>
         {#each data.notes as note}
-          <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--card-border);">
+          <a href="/jkai/intel/notes/{note.noteId}" class="block py-2 border-b last:border-0 -mx-2 px-2 rounded hover:opacity-80 transition" style="border-color: var(--line-strong);">
             <div class="text-sm" style="color: var(--accent);">{note.noteTitle ?? 'Untitled'}</div>
             <div class="text-xs mt-0.5" style="color: var(--text-ghost);">{new Date(note.noteCreatedAt).toLocaleDateString()} &middot; {note.relevance}</div>
             {#if note.excerpt}
@@ -67,7 +67,7 @@
 
     <!-- Right Column -->
     <div class="space-y-4">
-      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+      <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
         <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Relationships</h2>
         {#if data.relationships.length === 0}
           <p class="text-sm" style="color: var(--text-ghost);">No relationships yet.</p>
@@ -83,9 +83,9 @@
       </div>
 
       {#if data.timelineEvents.length > 0}
-        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--card-border);">
+        <div class="rounded-[var(--radius-round)] p-4 border" style="background: var(--card-bg); border-color: var(--line-strong);">
           <h2 class="text-xs uppercase mb-2" style="color: var(--text-ghost);">Timeline</h2>
-          <div class="border-l-2 pl-3 space-y-3" style="border-color: var(--card-border);">
+          <div class="border-l-2 pl-3 space-y-3" style="border-color: var(--line-strong);">
             {#each data.timelineEvents as event}
               <div>
                 <div class="text-xs" style="color: var(--text-ghost);">{event.date}</div>

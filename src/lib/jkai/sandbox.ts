@@ -797,13 +797,27 @@ export async function writeFileInSandboxChunked(
 export async function syncExplainerKit(buildId: string): Promise<string> {
   const { buildExplainerAssets } = await import('./design-assets');
   const dest = `/home/jkai/workspace/${buildId}/dev/explainer-kit`;
+  const assets = await buildExplainerAssets(process.cwd());
+  // Every directory the asset list actually needs, derived from the keys
+  // rather than hardcoded. `examples/` used to be the only one and was named
+  // literally; adding `field-study/` under that arrangement wrote five files
+  // into a directory that did not exist, and the whole mount failed on a
+  // missing path rather than on anything to do with the files.
+  const dirs = [
+    ...new Set(
+      Object.keys(assets)
+        .filter((rel) => rel.includes('/'))
+        .map((rel) => rel.slice(0, rel.lastIndexOf('/'))),
+    ),
+  ];
   if (HOST_MODE) {
     const { mkdir } = await import('node:fs/promises');
-    await mkdir(`${dest}/examples`, { recursive: true });
+    await mkdir(dest, { recursive: true });
+    for (const d of dirs) await mkdir(`${dest}/${d}`, { recursive: true });
   } else {
-    await execInSandbox(`mkdir -p ${dest}/examples`);
+    const paths = [dest, ...dirs.map((d) => `${dest}/${d}`)].join(' ');
+    await execInSandbox(`mkdir -p ${paths}`);
   }
-  const assets = await buildExplainerAssets(process.cwd());
   let written = 0;
   // Per-file `rel: stderr` diagnosis, not just a pass/fail count — a
   // byte-mismatch on three.min.js and a permissions error on README.md used to

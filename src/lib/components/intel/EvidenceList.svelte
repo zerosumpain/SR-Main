@@ -19,6 +19,13 @@
       title: string;
       source: string;
       createdAt: string | Date;
+      /**
+       * When the thing described was actually observed. Preferred over
+       * `createdAt`, which is the ingest clock — every email note carries the
+       * night its sweep ran, so dating this list by it showed a dozen threads
+       * spanning three months as all having happened on the same Tuesday.
+       */
+      observedAt?: string | Date | null;
       excerpt: string | null;
       href: string;
       relevance?: string | null;
@@ -61,7 +68,12 @@
         <a class="head" href={item.href}>
           <span class="title">{item.title}</span>
           <span class="src" title="Source: {item.source}">{item.source}</span>
-          <time>{when(item.createdAt)}</time>
+          <time
+            title={item.observedAt
+              ? 'When this was observed'
+              : 'When this was ingested — no observation date recorded'}
+            class:ingested={!item.observedAt}>{when(item.observedAt ?? item.createdAt)}</time
+          >
         </a>
         {#if item.excerpt}
           <blockquote>
@@ -131,7 +143,7 @@
   }
 
   li {
-    border-left: 2px solid var(--divider);
+    border-left: 2px solid var(--line-hair);
     padding-left: 8px;
   }
   li:hover {
@@ -165,6 +177,13 @@
     color: var(--text-ghost);
     white-space: nowrap;
     flex-shrink: 0;
+  }
+  /* An ingest date is a weaker claim than an observation date, and the list is
+     sorted on the stronger one — so the rows that could not supply it say so
+     rather than looking like they were dated the same way. */
+  time.ingested {
+    font-style: italic;
+    opacity: 0.75;
   }
   .src {
     text-transform: uppercase;
@@ -222,7 +241,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

@@ -92,30 +92,30 @@
 <style>
   .hero { border-bottom: 2px solid var(--text-primary); background: linear-gradient(180deg, var(--accent-tint-04), transparent 70%); padding: 18px 0 34px; }
   .hero em { font-style: italic; color: var(--text-primary); }
-  .resume { font-size: 12px; color: var(--text-muted); }
+  .resume { font-size: var(--fs-label-xs); color: var(--text-muted); }
   .resume a { color: var(--accent); }
-  .grounded { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 26px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .grounded { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 26px; font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
   .grounded b { font-family: var(--font-display); font-size: 20px; color: var(--accent); margin-right: 4px; vertical-align: -2px; }
 
   .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 26px 0 8px; }
-  .mode-card { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 18px; background: var(--card-bg); }
+  .mode-card { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 18px; background: var(--card-bg); }
   .mode-card h3 { font-size: 17px; font-weight: 700; margin: 10px 0 6px; color: var(--text-primary); }
-  .mode-card p { font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); margin: 0; }
+  .mode-card p { font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); margin: 0; }
 
   .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-  .step { display: flex; gap: 12px; padding: 14px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); }
+  .step { display: flex; gap: 12px; padding: 14px; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); }
   .sn { font-family: var(--font-display); font-size: 22px; color: var(--accent); line-height: 1; }
-  .step b { font-size: 14px; color: var(--text-primary); }
-  .step p { font-size: 12px; line-height: 1.45; color: var(--text-muted); margin: 4px 0 0; }
+  .step b { font-size: var(--fs-nav); color: var(--text-primary); }
+  .step p { font-size: var(--fs-label-xs); line-height: 1.45; color: var(--text-muted); margin: 4px 0 0; }
 
   .presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin: 14px 0 10px; }
-  .preset { text-align: left; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 16px; background: var(--surface-elevated); cursor: pointer; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.15s, transform 0.15s; }
+  .preset { text-align: left; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 16px; background: var(--surface-elevated); cursor: pointer; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.15s, transform 0.15s; }
   .preset:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .preset b { font-size: 16px; color: var(--text-primary); }
-  .preset p { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin: 0; flex: 1; }
-  .preset .open { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+  .preset b { font-size: var(--fs-body); color: var(--text-primary); }
+  .preset p { font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); margin: 0; flex: 1; }
+  .preset .open { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
 
-  .tools-line { font-size: 13px; line-height: 1.7; color: var(--text-secondary); max-width: 80ch; margin: 4px 0 8px; }
+  .tools-line { font-size: var(--fs-label); line-height: 1.7; color: var(--text-secondary); max-width: 80ch; margin: 4px 0 8px; }
   .tools-line a { color: var(--accent); white-space: nowrap; }
   .tools-line a.tool-link { display: inline-flex; align-items: center; gap: 4px; }
   .tools-line a.tool-link svg { vertical-align: middle; }

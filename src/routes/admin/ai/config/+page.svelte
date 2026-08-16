@@ -152,7 +152,7 @@
   .cron-schedule { width: 160px; flex-shrink: 0; }
   .cron-tag {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--text-ghost);
@@ -160,7 +160,7 @@
   .cron-foot {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 </style>

@@ -49,7 +49,7 @@
 
 <style>
   .sb { display: flex; flex-direction: column; gap: 9px; }
-  .track { display: flex; width: 100%; border-radius: var(--radius-round); overflow: hidden;
+  .track { display: flex; width: 100%; border-radius: var(--radius-sharp); overflow: hidden;
     border: 1px solid rgba(28,22,17,0.16); }
   .seg { border: none; border-right: 1px solid rgba(255,255,255,0.6); background: color-mix(in srgb, var(--c) 65%, transparent);
     display: grid; place-items: center; cursor: pointer; min-width: 0; padding: 0;
@@ -58,16 +58,16 @@
   .seg:disabled { cursor: default; }
   .seg:not(:disabled):hover { background: var(--c); }
   .seg.on { background: var(--c); }
-  .s-in { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: #fff;
+  .s-in { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: #fff;
     text-shadow: 0 1px 2px rgba(0,0,0,0.28); }
 
   .key { list-style: none; margin: 0; padding: 0; display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 3px 14px; }
-  .key li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 12px;
+  .key li { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: var(--fs-label-xs);
     line-height: 1.45; color: rgba(28,22,17,0.74); padding: 2px 0; }
   .key li.on { color: var(--text-primary); font-weight: 500; }
   .k-sw { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; align-self: center; }
   .k-lab { min-width: 0; }
-  .k-val { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(28,22,17,0.55); margin-left: auto; }
-  .k-note { flex-basis: 100%; padding-left: 15px; font-size: 10.5px; color: rgba(28,22,17,0.5); }
+  .k-val { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); margin-left: auto; }
+  .k-note { flex-basis: 100%; padding-left: 15px; font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
 </style>

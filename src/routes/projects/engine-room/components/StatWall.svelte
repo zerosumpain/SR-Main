@@ -16,9 +16,9 @@
 
 <style>
   .wall { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 9px; margin: 14px 0 4px; }
-  .tile { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.5);
+  .tile { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5);
     padding: 11px 13px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .tile b { font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 600; color: var(--text-primary); line-height: 1.05; }
-  .lab { font-family: 'DM Sans', sans-serif; font-size: 12px; color: rgba(28,22,17,0.72); }
-  .how { font-family: 'JetBrains Mono', monospace; font-size: 8px; line-height: 1.35; color: rgba(28,22,17,0.42); margin-top: 3px; }
+  .tile b { font-family: var(--font-mono); font-size: 21px; font-weight: 600; color: var(--text-primary); line-height: 1.05; }
+  .lab { font-family: var(--font-body); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.72); }
+  .how { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.35; color: rgba(28,22,17,0.42); margin-top: 3px; }
 </style>

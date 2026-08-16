@@ -74,6 +74,29 @@ export const GET: RequestHandler = async ({ url }) => {
     entityIds: entityFilter,
   });
 
+  // Everything the filter admitted, BEFORE the payload is trimmed to the most
+  // central 600. Cluster reach and the filtered counts are both computed from
+  // this rather than from `keep`: the trim is a rendering budget, not a
+  // statement about the data, and reporting "chat reaches 600 entities" when it
+  // reaches 2,816 would be the trim lying about the mailbox.
+  const selected = filtered.keep;
+  //
+  // `minDegree > 1`, not `> 0`. The page opens at minDegree=1 to hide entities
+  // connected to nothing — 2,632 of them on the live graph — so treating any
+  // minDegree as a filter would put the whole page into its narrowed state
+  // before the user had touched anything. The client draws the same line
+  // (`shapeFilterCount` counts `minDegree > 1`); these two must agree or the
+  // tiles and the graph disagree about whether a filter is on.
+  const filtering =
+    !!typeId ||
+    !!focusId ||
+    !!communityFilter ||
+    !!q ||
+    minDegree > 1 ||
+    categoryFilter.length > 0 ||
+    sourceFilter.length > 0 ||
+    entityFilter.length > 0;
+
   let keep = filtered.keep;
 
   let trimmed = false;
@@ -184,6 +207,20 @@ export const GET: RequestHandler = async ({ url }) => {
 
   const comps = components(index);
 
+  // How far each cluster reaches into the filtered selection.
+  //
+  // Singletons are dropped as they always were (Louvain gives every isolated
+  // entity its own community, and 2,632 of those describe nothing), and a
+  // cluster the filter does not touch at all is dropped too — that is the whole
+  // point of the change. Ranked by reach rather than size so the clusters the
+  // channel actually populates come first; ties break on true size so the
+  // unfiltered ordering is unchanged.
+  const clusterReach = [...community.communities.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([id, ids]) => ({ id, ids, reach: ids.filter((n) => selected.has(n)).length }))
+    .filter((c) => c.reach > 0)
+    .sort((a, b) => b.reach - a.reach || b.ids.length - a.ids.length);
+
   // Every source present in the graph, with how many entities it accounts for.
   //
   // Counted over the WHOLE index rather than the filtered `keep` set: this
@@ -228,6 +265,7 @@ export const GET: RequestHandler = async ({ url }) => {
     // highlight them rather than pretending the expanded neighbourhood matched.
     matched: filtered.matched.filter((id) => keep.has(id)),
     trimmed,
+    filtering,
     stats: {
       totalNodes: index.ids.length,
       totalEdges: analysis.snapshot.edges.length,
@@ -237,13 +275,29 @@ export const GET: RequestHandler = async ({ url }) => {
       components: comps.length,
       largestComponent: comps[0]?.length ?? 0,
       isolated: comps.filter((c) => c.length === 1).length,
+      // What the CURRENT filter admits, before the render trim. The tiles used
+      // to read `totalNodes` unconditionally, so narrowing to one channel left
+      // every number on the page unmoved — which reads as a filter that did
+      // nothing, and was the most common reason to distrust the whole control.
+      selectedNodes: selected.size,
+      selectedEdges: analysis.snapshot.edges.filter(
+        (e) => selected.has(e.source) && selected.has(e.target),
+      ).length,
+      selectedCommunities: clusterReach.length,
     },
-    communities: [...community.communities.entries()]
-      .filter(([, ids]) => ids.length > 1)
+    // Clusters the filter actually reaches, largest reach first.
+    //
+    // `size` stays the cluster's TRUE size and `reach` says how much of it is
+    // in view, because a cluster is a fact about the whole graph and shrinking
+    // its stated size to the filtered slice would make "Policy" look like a
+    // twelve-entity cluster whenever you narrowed to chat. When nothing is
+    // filtered the two are equal and this is the old list exactly.
+    communities: clusterReach
       .slice(0, 24)
-      .map(([id, ids]) => ({
+      .map(({ id, ids, reach }) => ({
         id,
         size: ids.length,
+        reach,
         key: clusterByCommunity.get(id)?.key ?? null,
         colourIndex: clusterByCommunity.get(id)?.colourIndex ?? null,
         // The roster's label, which is the name the user gave it where there is

@@ -60,7 +60,7 @@
 </ul>
 
 <style>
-  .subagents { list-style: none; margin: 7px 0 0; padding: 0 0 0 12px; display: flex; flex-direction: column; gap: 7px; border-left: 2px solid var(--card-border); }
+  .subagents { list-style: none; margin: 7px 0 0; padding: 0 0 0 12px; display: flex; flex-direction: column; gap: 7px; border-left: 2px solid var(--line-strong); }
   .subagent { font-size: var(--fs-label); }
   .sa-hdr { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
   .sa-badge { font-size: var(--fs-label-xs); flex-shrink: 0; color: var(--text-muted); }
@@ -84,7 +84,7 @@
   .sa-trace-toggle:hover { color: var(--text-primary); }
   .sa-summary { margin-top: 4px; font-size: var(--fs-label); line-height: 1.45; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 9rem; overflow-y: auto; }
   .sa-trace { margin-top: 4px; display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: var(--fs-label-xs); }
-  .sa-tool { background: var(--bg-section); border-radius: var(--radius-sharp); padding: 0 4px; color: var(--text-secondary); }
+  .sa-tool { background: var(--surface-sunken); border-radius: var(--radius-sharp); padding: 0 4px; color: var(--text-secondary); }
   .sa-tool[data-error='true'] { color: var(--status-error); }
   .sa-arrow { color: var(--text-ghost); }
 </style>

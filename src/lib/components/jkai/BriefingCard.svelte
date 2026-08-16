@@ -57,7 +57,7 @@
 
 <style>
   .bc {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--accent-ink, var(--accent, #c4570a));
     background: var(--card-bg);
     padding: 10px 12px;
@@ -99,7 +99,7 @@
     letter-spacing: 0.08em;
     padding: 3px 8px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-muted);
     cursor: pointer;
     text-decoration: none;

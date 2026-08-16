@@ -6,6 +6,11 @@ import {
   cleanOldJobs,
   createWaiter,
   cancelJob,
+  cancelForScope,
+  listJobs,
+  markJobQueued,
+  clearJobQueued,
+  whenJobSettles,
   respondToWaiter,
 } from './job-store';
 import type { JobEvent } from './job-store';
@@ -237,5 +242,85 @@ describe('watchdog — delegations are busy, not idle', () => {
     publishJobEvent(jobId, { type: 'tool_result', tool: 'workflow_run', result: 'ok', status: 'done' });
     // The delegation is still live, so the phase must not drop to 'thinking'.
     expect(job.phase).toBe('subagent');
+  });
+});
+
+
+describe('cancelForScope — reporting what was superseded', () => {
+  it('names the jobs it cancelled, not just how many', () => {
+    // The newest job has to adopt the turn ids it superseded. A second message
+    // while the agent is answering does not start a second Hermes run: the
+    // running one is redirected (or the text merged into it) and keeps the FIRST
+    // turn's stamp, so without these ids the newest job rejects the output that
+    // is answering it. A count cannot carry that.
+    const a = createJob('first', { conversationId: 'conv-1' });
+    const b = createJob('second', { conversationId: 'conv-1' });
+    const elsewhere = createJob('other', { conversationId: 'conv-2' });
+
+    const superseded = cancelForScope({ conversationId: 'conv-1' }, 'Superseded by new request');
+
+    expect(new Set(superseded)).toEqual(new Set([a.jobId, b.jobId]));
+    expect(superseded).not.toContain(elsewhere.jobId);
+    cancelJob(elsewhere.jobId);
+  });
+
+  it('returns an empty list when nothing matched', () => {
+    expect(cancelForScope({ conversationId: 'conv-nothing' }, 'why not')).toEqual([]);
+  });
+
+  it('returns an empty list for an unscoped call rather than cancelling everything', () => {
+    const j = createJob('keep me', { conversationId: 'conv-3' });
+    expect(cancelForScope({}, 'no scope')).toEqual([]);
+    cancelJob(j.jobId);
+  });
+});
+
+
+describe('whenJobSettles — serialising a queued turn behind a running one', () => {
+  it('resolves when the job it waits on stops running', async () => {
+    // The tool-step bus keys its confirmer and its listeners by CHAT, on the
+    // documented assumption that a chat has one live job at a time — an
+    // assumption `cancelForScope` used to guarantee. With the gateway queueing we
+    // no longer cancel, so the queued turn has to hold here instead of
+    // registering a confirmer that would answer for the turn ahead of it.
+    const ahead = createJob('first', { conversationId: 'conv-q' });
+    let settled = false;
+    const wait = whenJobSettles(ahead.jobId).then(() => { settled = true; });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(settled).toBe(false);
+    cancelJob(ahead.jobId);
+    await wait;
+    expect(settled).toBe(true);
+  });
+
+  it('resolves immediately for a job that is already gone', async () => {
+    // Its turn finished between us reading the running-job map and getting here.
+    await expect(whenJobSettles('no-such-job')).resolves.toBeUndefined();
+  });
+
+  it('does not wait on a job that already finished', async () => {
+    const j = createJob('done already', { conversationId: 'conv-q2' });
+    cancelJob(j.jobId);
+    await expect(whenJobSettles(j.jobId)).resolves.toBeUndefined();
+  });
+
+  it('reports a queued turn as waiting, not stuck', () => {
+    // A queued turn is silent for exactly as long as the turn ahead of it runs,
+    // which the 4-min idle watchdog reads as stuck. The flag is what exempts it,
+    // and surfacing it means an operator reading the running-job list can tell
+    // the two apart.
+    const ahead = createJob('ahead', { conversationId: 'conv-q3' });
+    const behind = createJob('behind', { conversationId: 'conv-q3' });
+    markJobQueued(behind.jobId, ahead.jobId);
+
+    const listed = listJobs().find((j) => j.id === behind.jobId);
+    expect(listed?.queuedBehind).toBe(ahead.jobId);
+    expect(listJobs().find((j) => j.id === ahead.jobId)?.queuedBehind).toBeNull();
+
+    clearJobQueued(behind.jobId);
+    expect(listJobs().find((j) => j.id === behind.jobId)?.queuedBehind).toBeNull();
+
+    cancelJob(ahead.jobId);
+    cancelJob(behind.jobId);
   });
 });

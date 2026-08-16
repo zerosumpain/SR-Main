@@ -10,10 +10,13 @@
  * class — the token name stays canonical.
  */
 
-/* ——— Sections — bordered card with header rule ——— */
+/* ——— Sections — bordered card with header rule ———
+ * On the surface ladder: a section is a sunken band on the page ground, closed
+ * by the strong hairline. It is NOT raised — elevation is reserved for app
+ * frames and floating layers. */
 .nm-sec {
-  background: var(--bg-section);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 1rem 1.1rem 1.15rem;
   margin-bottom: 1.25rem;
   display: flex;
@@ -33,7 +36,7 @@
   gap: 0.75rem;
   margin-bottom: 0.9rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .sr-label-tight {
@@ -41,7 +44,7 @@
   font-size: var(--fs-label-xs);
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--tracking-label);
   color: var(--text-muted);
 }
 .sr-label-tight.error {
@@ -65,8 +68,8 @@
   font-family: var(--font-mono);
   font-size: var(--fs-body);
   color: var(--text-primary);
-  background: rgba(26, 16, 8, 0.04);
-  border: 1px solid var(--card-border);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-strong);
   padding: 7px 10px;
   outline: none;
 }
@@ -81,7 +84,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-label-xs);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--tracking-label);
   padding: 6px 14px;
   background: var(--accent);
   color: var(--bg);
@@ -102,11 +105,11 @@
   font-family: var(--font-mono);
   font-size: var(--fs-label-xs);
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--tracking-label);
   padding: 6px 14px;
   background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--line-strong);
   cursor: pointer;
 }
 .nm-btn-ghost:hover {
@@ -137,7 +140,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--divider);
+  border-bottom: 1px solid var(--line);
   background: var(--accent-tint-08);
 }
 .nm-inline-hdr .wf-name {
@@ -213,6 +216,6 @@
 }
 .nm-label-input:hover,
 .nm-label-input:focus {
-  border-color: var(--card-border);
+  border-color: var(--line-strong);
   background: var(--bg);
 }

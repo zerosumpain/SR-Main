@@ -1,8 +1,8 @@
 import { EventEmitter } from 'events';
 import { db } from '$lib/db';
-import { researchSessions } from '$lib/db/schema';
+import { researchSessions, researchLeads } from '$lib/db/schema';
 import type { ResearchSession } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { SSEEvent, SessionStats, SessionStatus } from './types';
 import { runPhase1 } from './phase1';
 import { runPhase2 } from './phase2';
@@ -15,11 +15,14 @@ import { coerceDepth, depthPreset } from './depth';
 import { createBudget, NO_BUDGET } from './budget';
 import { runInstant, runScan } from './fast';
 import { runBrief } from './brief';
+import { PHASE_ORDER, resumePhase, startPhaseIndex, type ResearchPhase } from './phase-order';
+import { runWithResearchMeter } from './meter';
 
 // In-memory map of active session emitters
 const activeEmitters = new Map<string, EventEmitter>();
 const stopSignals = new Map<string, boolean>();
 const skipSignals = new Map<string, boolean>();
+const pauseSignals = new Map<string, boolean>();
 const abortControllers = new Map<string, AbortController>();
 
 export function getEmitter(sessionId: string): EventEmitter {
@@ -109,6 +112,37 @@ export function requestSkipPhase(sessionId: string): void {
 }
 
 /**
+ * Ask a run to stop where it is and keep its place.
+ *
+ * Pause is cooperative — it sets a flag the phases notice at the top of their
+ * loops, and does NOT abort the in-flight request the way `requestStop` does.
+ * The difference matters: a paused run is one you intend to finish, so
+ * discarding the source currently being extracted would cost real money to
+ * re-fetch. The trade is that pausing takes until the end of the current lead,
+ * usually a few seconds.
+ */
+export function requestPause(sessionId: string): void {
+  pauseSignals.set(sessionId, true);
+}
+
+export function shouldPause(sessionId: string): boolean {
+  return pauseSignals.get(sessionId) === true;
+}
+
+/**
+ * Forget any stop/skip/pause asked of this session.
+ *
+ * Signals are only swept 30 seconds after a run ends, so resuming a run that
+ * was paused (or stopped) moments ago would otherwise re-read the old flag and
+ * halt again immediately.
+ */
+export function clearSignals(sessionId: string): void {
+  stopSignals.delete(sessionId);
+  skipSignals.delete(sessionId);
+  pauseSignals.delete(sessionId);
+}
+
+/**
  * Worker heartbeat.
  *
  * Liveness is written EXPLICITLY, never derived by subtracting `updatedAt`: a
@@ -150,16 +184,53 @@ async function updateSessionStatus(sessionId: string, status: SessionStatus): Pr
  * and a resumed session's createdAt is older still. The tier picker quotes
  * measured p50s off this column, so it has to mean "time actually spent
  * researching".
+ *
+ * `priorMs` carries what earlier legs of a paused-and-resumed run already
+ * spent. Without it a run paused after fifty minutes and resumed for one would
+ * report a one-minute investigation, and the p50s would drift towards fiction.
  */
-async function finish(sessionId: string, startTime: number): Promise<void> {
-  const durationMs = Date.now() - startTime;
+async function finish(sessionId: string, startTime: number, priorMs = 0): Promise<void> {
+  const durationMs = priorMs + (Date.now() - startTime);
   await db
     .update(researchSessions)
-    .set({ status: 'complete', completedAt: new Date(), durationMs })
+    .set({ status: 'complete', completedAt: new Date(), durationMs, resumeFrom: null })
     .where(eq(researchSessions.id, sessionId));
   emitStatus(sessionId, 'complete');
   emit(sessionId, { type: 'complete', data: { durationMs } });
   emitLog(sessionId, 'ℹ️', `Research complete in ${Math.round(durationMs / 1000)}s.`);
+}
+
+/**
+ * Park a run: record where it got to, hand its in-flight leads back to the
+ * queue, and leave the row in a state the resume sweep will not touch.
+ *
+ * Requeueing matters as much as the status. A lead left `running` belongs to a
+ * worker that no longer exists, and `takeLeads` only ever claims `queued` rows
+ * — so without this the six leads in flight at the moment of the pause would
+ * be silently dropped from the frontier and never researched.
+ */
+export async function pauseRun(sessionId: string, phase: ResearchPhase, spentMs = 0): Promise<void> {
+  await db
+    .update(researchLeads)
+    .set({ status: 'queued', startedAt: null })
+    .where(and(eq(researchLeads.sessionId, sessionId), eq(researchLeads.status, 'running')));
+
+  await db
+    .update(researchSessions)
+    .set({
+      status: 'paused',
+      resumeFrom: phase,
+      // Null, not stale: nobody is working on this session, and saying so is
+      // what keeps a paused run honest on the ops views.
+      heartbeatAt: null,
+      // Everything spent so far, across every leg — so a run paused twice does
+      // not forget the first two.
+      durationMs: spentMs,
+    })
+    .where(eq(researchSessions.id, sessionId));
+
+  emitStatus(sessionId, 'paused');
+  emitLog(sessionId, '⏸️', `Paused during ${phase}. Nothing is lost — resume when you are ready.`);
 }
 
 export async function startResearch(sessionId: string): Promise<void> {
@@ -198,7 +269,17 @@ export async function runResearchSync(sessionId: string): Promise<ResearchSessio
   return row;
 }
 
-async function runResearch(sessionId: string): Promise<void> {
+/**
+ * Everything a run spends — LLM tokens, cash, Tavily credits — is metered
+ * against this session id for as long as the run is inside this call. The
+ * meter is ambient rather than threaded through the phases because `search()`
+ * sits eight call sites deep and is shared with code that has no session.
+ */
+function runResearch(sessionId: string): Promise<void> {
+  return runWithResearchMeter(sessionId, () => runResearchPhases(sessionId));
+}
+
+async function runResearchPhases(sessionId: string): Promise<void> {
   const emitter = getEmitter(sessionId);
   const ac = new AbortController();
   abortControllers.set(sessionId, ac);
@@ -215,6 +296,19 @@ async function runResearch(sessionId: string): Promise<void> {
 
     const preset = depthPreset(coerceDepth(session.depth));
     beat(sessionId, true);
+
+    /**
+     * Time this run has already spent on earlier legs, and the phase it should
+     * pick up at. Both are stored facts: a run that was paused, or whose worker
+     * was lost to a deploy, is resumed rather than restarted. See
+     * `$lib/deepdive/phase-order` for the nine-hour run that made this
+     * necessary.
+     */
+    const priorMs = session.durationMs ?? 0;
+    const startAt = startPhaseIndex(resumePhase(session));
+    /** The phase in flight, so a pause records where to come back to. */
+    let currentPhase: ResearchPhase = PHASE_ORDER[startAt];
+    const elapsed = (): number => priorMs + (Date.now() - startTime);
 
     // The stored budget wins over the preset's (a caller may have narrowed it),
     // then the legacy timeLimitMinutes, then the preset default.
@@ -234,7 +328,7 @@ async function runResearch(sessionId: string): Promise<void> {
       emitStatus(sessionId, 'phase1');
       await run(sessionId, session, budget);
       flushArtefacts(sessionId);
-      await finish(sessionId, startTime);
+      await finish(sessionId, startTime, priorMs);
       return;
     }
 
@@ -266,14 +360,34 @@ async function runResearch(sessionId: string): Promise<void> {
     function isTimeUp(): boolean {
       if (shouldStop(sessionId)) return true;
       if (shouldSkipPhase(sessionId)) return true;
+      // Pause rides the same wind-down path a deadline uses: the phase finishes
+      // the lead in its hand and returns, rather than being torn out of an
+      // in-flight extraction whose fetch has already been paid for.
+      if (shouldPause(sessionId)) return true;
       // `beat` is throttled, so calling it on every check is cheap and keeps
       // the heartbeat alive through long phases without extra plumbing.
       beat(sessionId);
       return budget.expired() || Date.now() > phaseDeadline;
     }
 
+    /**
+     * Stop here if a pause has been asked for, recording the phase in flight so
+     * resuming comes back to it. Returns true when the run should unwind.
+     */
+    async function pauseIfAsked(): Promise<boolean> {
+      if (!shouldPause(sessionId)) return false;
+      flushArtefacts(sessionId);
+      await pauseRun(sessionId, currentPhase, elapsed());
+      return true;
+    }
+
+    if (startAt > 0) {
+      emitLog(sessionId, 'ℹ️', `Resuming at ${currentPhase} — earlier phases are already done.`);
+    }
+
     // Phase 1
-    if (!shouldStop(sessionId)) {
+    if (startAt <= 0 && !shouldStop(sessionId)) {
+      currentPhase = 'phase1';
       skipSignals.delete(sessionId);
       startPhase('phase1');
       await updateSessionStatus(sessionId, 'phase1');
@@ -282,20 +396,22 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase1(sessionId, session, isTimeUp);
       } catch (err: any) {
-        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+        if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 1 stopped.');
         } else {
           console.error('[deepdive] Phase 1 error:', err);
           emitLog(sessionId, '\u26A0\uFE0F', `Phase 1 error: ${err.message ?? 'unknown'}. Continuing...`);
         }
       }
+      if (await pauseIfAsked()) return;
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
       }
     }
 
     // Phase 2
-    if (!shouldStop(sessionId)) {
+    if (startAt <= 1 && !shouldStop(sessionId)) {
+      currentPhase = 'phase2';
       skipSignals.delete(sessionId);
       startPhase('phase2');
       await updateSessionStatus(sessionId, 'phase2');
@@ -304,20 +420,22 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase2(sessionId, session, isTimeUp);
       } catch (err: any) {
-        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+        if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 2 stopped.');
         } else {
           console.error('[deepdive] Phase 2 error:', err);
           emitLog(sessionId, '\u26A0\uFE0F', `Phase 2 error: ${err.message ?? 'unknown'}. Continuing...`);
         }
       }
+      if (await pauseIfAsked()) return;
       if (shouldSkipPhase(sessionId)) {
         emitLog(sessionId, '\u2139\uFE0F', 'Skipping to next phase...');
       }
     }
 
     // Phase 3
-    if (!shouldStop(sessionId)) {
+    if (startAt <= 2 && !shouldStop(sessionId)) {
+      currentPhase = 'phase3';
       skipSignals.delete(sessionId);
       startPhase('phase3');
       await updateSessionStatus(sessionId, 'phase3');
@@ -326,16 +444,20 @@ async function runResearch(sessionId: string): Promise<void> {
       try {
         await runPhase3(sessionId, session, isTimeUp);
       } catch (err: any) {
-        if (err?.name === 'AbortError' || shouldStop(sessionId)) {
+        if (err?.name === 'AbortError' || shouldStop(sessionId) || shouldPause(sessionId)) {
           emitLog(sessionId, '\u2139\uFE0F', 'Phase 3 stopped.');
         } else {
           console.error('[deepdive] Phase 3 error:', err);
           emitLog(sessionId, '\u26A0\uFE0F', `Phase 3 error: ${err.message ?? 'unknown'}. Continuing...`);
         }
       }
+      if (await pauseIfAsked()) return;
     }
 
-    // Post-processing
+    // Post-processing. Not pausable: it is the step that turns everything
+    // gathered into the report, it is short, and stopping halfway through would
+    // leave a run with evidence and no answer.
+    currentPhase = 'post_processing';
     startPhase('post');
     await updateSessionStatus(sessionId, 'post_processing');
     emitStatus(sessionId, 'post_processing');
@@ -369,14 +491,20 @@ async function runResearch(sessionId: string): Promise<void> {
     }
 
     // Complete
-    await finish(sessionId, startTime);
+    await finish(sessionId, startTime, priorMs);
   } finally {
-    // Cleanup
+    // Ownership ends the moment the run does. `isRunning` reads this map to
+    // answer "is this process working on the session", and leaving the entry
+    // for another 30 seconds made a run that had just been paused look busy —
+    // so resuming it immediately, which is the normal thing to do, was refused.
+    abortControllers.delete(sessionId);
+    // The rest lingers: a browser still has the stream open and should receive
+    // the closing frames.
     setTimeout(() => {
       activeEmitters.delete(sessionId);
       stopSignals.delete(sessionId);
       skipSignals.delete(sessionId);
-      abortControllers.delete(sessionId);
+      pauseSignals.delete(sessionId);
       disposeArtefacts(sessionId);
     }, 30000);
   }

@@ -90,15 +90,15 @@
     display: flex;
     flex-wrap: wrap;
     gap: 18px 28px;
-    font-family: 'DM Sans', system-ui, sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     color: var(--ink);
   }
   .lg-section { min-width: 0; }
   .lab {
     display: block;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: rgba(28, 22, 17, 0.55);
     text-transform: uppercase;
@@ -107,7 +107,7 @@
   .hint {
     letter-spacing: 0.06em;
     text-transform: none;
-    font-size: 9.5px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.4);
     margin-left: 4px;
   }
@@ -125,7 +125,7 @@
     gap: 6px;
     cursor: pointer;
     padding: 3px 6px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     transition: background 0.12s, opacity 0.12s;
     white-space: nowrap;
     user-select: none;
@@ -157,7 +157,7 @@
     border: 2px solid rgba(28, 22, 17, 0.45);
     background: transparent;
   }
-  .nm { font-size: 12px; }
+  .nm { font-size: var(--fs-label-xs); }
 
   @media (max-width: 720px) {
     .legend { flex-direction: column; gap: 6px; }

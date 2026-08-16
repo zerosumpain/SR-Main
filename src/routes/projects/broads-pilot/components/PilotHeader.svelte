@@ -31,13 +31,13 @@
   .hdr { display: flex; gap: 0.5rem; }
   .chip {
     flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 0.5rem;
-    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);
+    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-sharp);
     padding: 0.45rem 0.55rem; min-height: 44px; cursor: pointer; text-align: left; color: var(--text-primary);
   }
   .chip:hover { border-color: var(--accent); }
   .ic { flex: 0 0 auto; display: inline-flex; line-height: 1; color: var(--accent); }
   .txt { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
   .nm { font-family: var(--font-body); font-weight: 600; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sub { font-family: var(--font-mono); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
-  .caret { flex: 0 0 auto; color: var(--text-muted); font-size: 0.7rem; }
+  .sub { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+  .caret { flex: 0 0 auto; color: var(--text-muted); font-size: var(--fs-label-xs); }
 </style>

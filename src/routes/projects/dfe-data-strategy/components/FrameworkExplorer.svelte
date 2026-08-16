@@ -108,20 +108,20 @@
     gap: 5px;
   }
   .ctl-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
     margin-right: 3px;
   }
   .ctl-btn {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     padding: 4px 11px;
     border: 1px solid rgba(28, 22, 17, 0.22);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     color: var(--ink);
     cursor: pointer;
@@ -154,7 +154,7 @@
     text-align: left;
     padding: 9px 12px;
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
@@ -168,8 +168,8 @@
   }
   .r-year {
     flex: none;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     color: rgba(28, 22, 17, 0.55);
     width: 34px;
@@ -183,8 +183,8 @@
   }
   .r-name {
     display: block;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     font-weight: 600;
     color: var(--ink);
     line-height: 1.3;
@@ -196,12 +196,12 @@
   }
   .r-meta i {
     font-style: normal;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     padding: 1px 7px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.2);
     color: rgba(28, 22, 17, 0.55);
   }
@@ -220,7 +220,7 @@
   }
   .r-arrow {
     flex: none;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.3);
   }
   .row.on .r-arrow {
@@ -232,7 +232,7 @@
     top: calc(var(--topH, 90px) + 10px);
     border: 1px solid rgba(28, 22, 17, 0.14);
     border-top: 3px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55);
     padding: 16px 19px 18px;
   }
@@ -248,12 +248,12 @@
     margin-bottom: 4px;
   }
   .fx :global(.det-type) {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     padding: 2px 8px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     border: 1px solid rgba(180, 99, 46, 0.45);
     color: #b4632e;
   }
@@ -262,13 +262,13 @@
     color: var(--accent-ink);
   }
   .fx :global(.det-date) {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
   .fx :global(.det-name) {
     margin: 0 0 8px;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-size: 20px;
     font-weight: 600;
     line-height: 1.2;
@@ -282,8 +282,8 @@
     margin: 0 0 10px;
   }
   .fx :global(.dr-lab) {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     font-weight: 600;
@@ -293,7 +293,7 @@
     flex: none;
     width: 110px;
     height: 6px;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(28, 22, 17, 0.1);
     overflow: hidden;
   }
@@ -303,19 +303,19 @@
     background: var(--accent-ink);
   }
   .fx :global(.dr-hint) {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: rgba(28, 22, 17, 0.55);
   }
   .fx :global(.det-sum) {
     margin: 0 0 12px;
-    font-size: 13.5px;
+    font-size: var(--fs-label);
     line-height: 1.6;
     color: rgba(28, 22, 17, 0.8);
   }
   .fx :global(.det-lab) {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
@@ -326,14 +326,14 @@
     padding-left: 17px;
   }
   .fx :global(.det-el li) {
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.72);
     margin-bottom: 3px;
   }
   .fx :global(.det-src) {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px dashed currentColor;
@@ -350,7 +350,7 @@
       display: block;
       border: 1px solid var(--accent-ink-tint-35);
       border-top: none;
-      border-radius: 0 0 var(--radius-round) var(--radius-round);
+      border-radius: 0 0 var(--radius-sharp) var(--radius-sharp);
       background: rgba(255, 255, 255, 0.55);
       padding: 13px 15px 15px;
       margin: -4px 4px 4px;

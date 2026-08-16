@@ -64,9 +64,9 @@
   }
   .ef-kicker {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.18em;
     color: var(--ink-soft);
   }
-  .embed-fallback p { font-size: 14px; margin: 0; }
+  .embed-fallback p { font-size: var(--fs-nav); margin: 0; }
 </style>

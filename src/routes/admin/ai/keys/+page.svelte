@@ -156,7 +156,7 @@
   .muted { margin: 0; font-size: 0.85rem; color: var(--text-secondary); }
   .muted code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: max(0.85em, var(--fs-label-xs));
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
@@ -164,7 +164,7 @@
   }
   .link { color: var(--accent); text-decoration: underline; }
   .test-row { display: flex; gap: 0.7rem; align-items: center; }
-  .result-ok { font-family: var(--font-mono); font-size: 11px; color: var(--success); }
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
-  .save-msg { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .result-ok { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--success); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
+  .save-msg { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
 </style>

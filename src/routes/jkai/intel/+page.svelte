@@ -28,6 +28,7 @@
   import EntityHoverCard from '$lib/components/intel/EntityHoverCard.svelte';
   import InsightCard from '$lib/components/intel/InsightCard.svelte';
   import CommissionBar from '$lib/components/intel/CommissionBar.svelte';
+  import { SURFACES } from '$lib/components/intel/workbench';
   import { entityHover } from '$lib/components/intel/entity-hover.svelte';
   import { commission } from '$lib/jkai/intel/entity-card-store';
   import type {
@@ -128,6 +129,31 @@
       // Private browsing or a full quota. The toggle still works for this
       // session; only remembering it fails.
     }
+  }
+
+  /**
+   * Which graph is being drawn — entities, or the evidence behind them.
+   *
+   * NOT persisted, unlike 3D/2D. That one is a preference about rendering and
+   * holds across visits; this one is a question you are asking right now, and
+   * returning to a page that silently shows a different graph than the one you
+   * think of as "the intel graph" is a worse default than re-picking it.
+   */
+  let evidenceView = $state(false);
+
+  function setMode(next: boolean) {
+    if (evidenceView === next) return;
+    evidenceView = next;
+    // The two graphs share a source picker but nothing else: cluster focus,
+    // pins and the community filter all name ids from the graph they were
+    // chosen in, and carrying them across would filter to ids that do not
+    // exist — an empty view with filters that look like they should match.
+    focusCommunities = [];
+    communityId = '';
+    pinnedIds = [];
+    focusId = null;
+    typeId = '';
+    selectedId = null;
   }
 
   function toggleSource(id: string) {
@@ -324,6 +350,18 @@
   });
 
   /**
+   * Which endpoint serves the current view.
+   *
+   * Read reactively by the loader below, so flipping the mode refetches exactly
+   * as changing a filter does — the evidence route takes the same `sources` and
+   * `q` parameters and returns the same payload shape, so nothing downstream
+   * needs to know which one answered.
+   */
+  const networkUrl = $derived(
+    `/api/jkai/intel/${evidenceView ? 'evidence-network' : 'network'}?${query}`,
+  );
+
+  /**
    * Settle time before a filter change is sent.
    *
    * The range sliders are bound straight to the query, so dragging one from 0 to
@@ -336,7 +374,7 @@
   // Refetch when the filter query changes. Only `query` is read reactively;
   // everything the loader touches it writes, so there is no read-own-write loop.
   $effect(() => {
-    const q = query;
+    const url = networkUrl;
     // Read so the retry button re-runs this with the filters unchanged.
     networkAttempt;
     let cancelled = false;
@@ -347,7 +385,7 @@
     networkError = null;
 
     const timer = setTimeout(() => {
-      fetch(`/api/jkai/intel/network?${q}`, { signal: controller.signal })
+      fetch(url, { signal: controller.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`the analysis request came back ${res.status}`);
           return res.json();
@@ -585,10 +623,21 @@
     lastPoint = { x: event.clientX, y: event.clientY };
   }
 
+  /** Node ids from the evidence view carry this prefix; entities never do. */
+  const EVIDENCE_PREFIX = 'note:';
+
   function onGraphSelect(id: string | null) {
     selectedId = id;
     if (!id) {
       entityHover.close();
+      return;
+    }
+    // A note is not an entity and has no entity card — asking for one would
+    // 404 and the card would show "Could not load this entity", which reads as
+    // a broken graph rather than as "you clicked a document".
+    if (id.startsWith(EVIDENCE_PREFIX)) {
+      entityHover.close();
+      goto(`/jkai/intel/notes/${id.slice(EVIDENCE_PREFIX.length)}`);
       return;
     }
     entityHover.pinAt(id, {
@@ -633,30 +682,177 @@
   const fragmentation = $derived(
     network && network.stats.totalNodes ? network.stats.components / network.stats.totalNodes : 0,
   );
+
+  /**
+   * Whether the tiles are describing a slice rather than the whole graph.
+   *
+   * The tiles used to read the unfiltered totals unconditionally, so narrowing
+   * to one channel left every number on the page unmoved. That reads as a
+   * filter that did nothing — and since the graph underneath it HAD narrowed,
+   * the page contradicted itself.
+   *
+   * `filtering` comes from the server, which is the only place that knows the
+   * full filter set; falling back to the local count keeps this honest against
+   * an older payload rather than silently claiming the whole graph.
+   */
+  const narrowed = $derived(!!network && (network.filtering ?? filterCount > 0));
+  const entityCount = $derived(
+    narrowed ? network?.stats.selectedNodes ?? network?.stats.shown : network?.stats.totalNodes,
+  );
+  const connectionCount = $derived(
+    narrowed ? network?.stats.selectedEdges : network?.stats.totalEdges,
+  );
+  const clusterCount = $derived(
+    narrowed
+      ? network?.stats.selectedCommunities ?? network?.communities.length
+      : roster?.stats.tracked ?? network?.stats.communities,
+  );
+
+  /**
+   * The roster, restricted to the clusters the current filter reaches.
+   *
+   * The roster itself stays whole — it is the durable description of every
+   * cluster, and a narrative written about 380 entities does not stop being
+   * about them because you ticked "chat". What changes is which of them are
+   * worth listing: asking for one channel and still being shown all 24 clusters
+   * at full size is the same contradiction the tiles had.
+   */
+  /**
+   * The top bar's live search — highlight only, never a filter.
+   *
+   * Matched against the nodes ALREADY loaded, so it keeps up with typing and
+   * costs nothing. That is the whole difference from the rail's Search box:
+   * that one sends `q` to the server and narrows the graph, which is right when
+   * you know what you want and wrong when the question is "where is this among
+   * everything else". Leaving the graph whole is what makes the answer legible.
+   *
+   * Same fields the server matches on (name, aliases, summary, type), so the two
+   * searches cannot disagree about what counts as a hit.
+   */
+  let liveSearch = $state('');
+  const liveMatches = $derived.by(() => {
+    const needle = liveSearch.trim().toLowerCase();
+    if (!needle || !network) return [];
+    return network.nodes
+      .filter((n) =>
+        [n.name, n.summary ?? '', n.type, ...(n.aliases ?? [])].some((h) =>
+          h.toLowerCase().includes(needle),
+        ),
+      )
+      .map((n) => n.id);
+  });
+  /** What the graphs light up: the live search when there is one, else the
+   *  server's keyword hits. Two sources, one prop — never both at once, or a
+   *  stale keyword would keep glowing under a new search. */
+  const highlightIds = $derived(liveSearch.trim() ? liveMatches : (network?.matched ?? []));
+
+  const reachByKey = $derived(
+    new Map((network?.communities ?? []).map((c) => [c.key ?? `#${c.id}`, c.reach ?? c.size])),
+  );
+  const visibleClusters = $derived.by(() => {
+    const all = roster?.clusters ?? [];
+    if (!narrowed || !network) return all;
+    return all
+      .filter((c) => reachByKey.has(c.key))
+      .map((c) => ({ ...c, reach: reachByKey.get(c.key) ?? 0 }))
+      .sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0));
+  });
+
+  /**
+   * The loop as six cells — one per stage, not one per surface.
+   *
+   * `04 explore` has four surfaces in SURFACES (Graph, Entities, Timeline,
+   * Recall); the loop is about stages, so they collapse into one cell that
+   * links to the Graph and counts entities. The stage label, the question and
+   * `warnAbove` all come from workbench.ts, which is the single place the
+   * wording of "what is this FOR" lives.
+   */
+  const LOOP_STAGES = ['01 capture', '02 triage', '03 repair', '04 explore', '05 collect', '06 act'];
+  const loopCounts = $derived({
+    notes: data.stats.noteCount,
+    pending: data.stats.pendingReviewCount,
+    unconnected: data.stats.unconnectedCount,
+    entities: data.stats.entityCount,
+    dossiers: data.stats.dossierCount,
+    alerts: data.recentAlerts.length,
+  } as Record<string, number>);
+
+  const LOOP_CELLS = $derived(
+    LOOP_STAGES.map((stage) => {
+      const surface = SURFACES.find((sfc) => sfc.stage === stage)!;
+      const value = surface.count ? (loopCounts[surface.count] ?? 0) : (loopCounts.entities ?? 0);
+      const label = surface.label.toLowerCase();
+      // "02 triage · triage" read as a stutter. When the surface's name IS the
+      // stage word, the stage says it once and the label is dropped.
+      const stageWord = stage.split(' ')[1];
+      return {
+        stage,
+        label: label === stageWord ? '' : label,
+        href: surface.href,
+        question: surface.question,
+        value,
+        // A backlog, not a statistic — the one thing in the loop that is allowed
+        // to be orange.
+        warn: surface.warnAbove !== undefined && value > surface.warnAbove,
+        // Petrol for the collected set: it is the "this is in hand" reading.
+        ink: stage === '05 collect',
+      };
+    }),
+  );
+
+  function relDay(iso: string | Date): string {
+    const then = typeof iso === 'string' ? Date.parse(iso) : iso.getTime();
+    if (!Number.isFinite(then)) return '';
+    const mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 60) return `${Math.max(1, mins)}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    return days === 1 ? 'yesterday' : `${days}d ago`;
+  }
+
+  function shortDate(d: string): string {
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return d;
+    return parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
+  }
+
+  /** Within a week — the timeline's one accent. */
+  function isSoon(d: string): boolean {
+    const parsed = Date.parse(d);
+    if (!Number.isFinite(parsed)) return false;
+    return parsed - Date.now() < 7 * 24 * 60 * 60 * 1000;
+  }
 </script>
 
 <JkaiPageTitle title="INTEL" />
 
 <div class="wrap">
-  <CommissionBar busy={!!busyId} onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')} />
+  <CommissionBar
+    busy={!!busyId}
+    matchCount={liveSearch.trim() ? liveMatches.length : null}
+    onRun={(kind, payload) => runCommission(kind, payload, [], 'bar')}
+    onSearch={(t) => (liveSearch = t)}
+  />
 
   <!-- Vital signs -->
-  <div class="tiles">
-    <a class="tile" href="/jkai/intel/entities">
-      <span class="n">{network?.stats.totalNodes ?? data.stats.entityCount}</span>
-      <span class="l">Entities</span>
+  <div class="tiles cellgrid">
+    <a class="tile" class:narrowed href="/jkai/intel/entities">
+      <span class="n">{entityCount ?? data.stats.entityCount}</span>
+      <span class="l">{narrowed ? 'Entities here' : 'Entities'}</span>
     </a>
-    <div class="tile">
-      <span class="n">{network?.stats.totalEdges ?? '—'}</span>
-      <span class="l">Connections</span>
+    <div class="tile" class:narrowed>
+      <span class="n">{connectionCount ?? '—'}</span>
+      <span class="l">{narrowed ? 'Connections here' : 'Connections'}</span>
     </div>
-    <div class="tile">
-      <!-- The TRACKED count, not the raw community count. Louvain detects one
-           community per isolated entity, so the raw figure on the live graph is
-           ~2,900 — a true number that describes nothing, since 2,632 of them are
-           a single entity connected to nothing. -->
-      <span class="n">{roster?.stats.tracked ?? network?.stats.communities ?? '—'}</span>
-      <span class="l">Clusters</span>
+    <div class="tile" class:narrowed>
+      <!-- Unfiltered this is the TRACKED count, not the raw community count.
+           Louvain detects one community per isolated entity, so the raw figure
+           on the live graph is ~2,900 — a true number that describes nothing,
+           since 2,632 of them are a single entity connected to nothing.
+           Filtered it is the number of clusters the filter actually reaches. -->
+      <span class="n">{clusterCount ?? '—'}</span>
+      <span class="l">{narrowed ? 'Clusters here' : 'Clusters'}</span>
     </div>
     <div class="tile" class:warn={fragmentation > 0.2}>
       <span class="n">{network?.stats.components ?? '—'}</span>
@@ -684,6 +880,25 @@
     </a>
   </div>
 
+  <!-- The loop, stated once. Six cells: where you are, how much is waiting, and
+       what the stage is FOR — the question strings come from workbench.ts, so
+       the nav and this grid can never drift apart. -->
+  <section class="loop cellgrid" aria-label="The intel loop">
+    {#each LOOP_CELLS as cell (cell.stage + cell.label)}
+      <a class="loop-cell" href={cell.href}>
+        <div class="loop-top">
+          <span class="metric-label" class:accent={cell.warn}
+            >{cell.stage}{cell.label ? ` · ${cell.label}` : ''}</span
+          >
+          <span class="loop-n" class:accent={cell.warn} class:ink={cell.ink}>{cell.value}</span>
+        </div>
+        <p class="loop-q">{cell.question}</p>
+      </a>
+    {/each}
+  </section>
+
+  <div class="intel-board">
+  <div class="board-main">
   <!-- Network explorer -->
   <section class="explorer">
     <aside class="rail">
@@ -729,11 +944,18 @@
       </RailSection>
 
       <RailSection title="Clusters" badge={focusCommunities.length || null}>
+        <!-- The roster describes clusters of the ENTITY graph. The evidence
+             view is a different graph with a different partition, so its groups
+             have no durable key, no stored name and nothing to narrate —
+             joining them would attach one graph's names to another graph's
+             structure. -->
         <ClusterPicker
           communities={network?.communities ?? []}
-          roster={roster?.clusters ?? []}
-          stats={roster?.stats ?? null}
-          resolution={roster?.resolution ?? null}
+          roster={evidenceView ? [] : visibleClusters}
+          {narrowed}
+          reachedTotal={network?.stats.selectedCommunities ?? 0}
+          stats={evidenceView ? null : (roster?.stats ?? null)}
+          resolution={evidenceView ? null : (roster?.resolution ?? null)}
           {recalculating}
           {narrating}
           focused={focusCommunities}
@@ -741,10 +963,10 @@
           onToggleFocus={toggleCluster}
           onClearFocus={() => (focusCommunities = [])}
           onFilter={(id) => (communityId = id === null ? '' : String(id))}
-          onRecalculate={recalculateClusters}
-          onRename={renameCluster}
-          onNarrate={narrateCluster}
-          onOpen={(key) => goto(`/jkai/intel/clusters/${key}`)}
+          onRecalculate={evidenceView ? undefined : recalculateClusters}
+          onRename={evidenceView ? undefined : renameCluster}
+          onNarrate={evidenceView ? undefined : narrateCluster}
+          onOpen={evidenceView ? undefined : (key) => goto(`/jkai/intel/clusters/${key}`)}
         />
         {#if clusterError}
           <p class="cluster-err">{clusterError}</p>
@@ -857,6 +1079,32 @@
         <button type="button" class:on={!view3d} onclick={() => setView(false)} aria-pressed={!view3d}>2D</button>
       </div>
 
+      <!-- WHAT the graph is made of, as opposed to how it is drawn. Separated
+           from the 3D/2D pair for exactly that reason: one changes the
+           rendering, this one changes the question. -->
+      <div class="modes" role="group" aria-label="What the nodes are">
+        <button
+          type="button"
+          class:on={!evidenceView}
+          aria-pressed={!evidenceView}
+          title="Entities, connected to each other"
+          onclick={() => setMode(false)}>Entities</button
+        >
+        <button
+          type="button"
+          class:on={evidenceView}
+          aria-pressed={evidenceView}
+          title="Sources as nodes — every note, and the entities it mentions"
+          onclick={() => setMode(true)}>Sources</button
+        >
+      </div>
+      {#if evidenceView && network?.stats}
+        <p class="mode-note">
+          {network.stats.evidenceNodes ?? 0} sources · {network.stats.entityNodes ?? 0} entities they
+          mention. A line means "this source mentions this entity".
+        </p>
+      {/if}
+
       {#if view3d && network}
         <!-- With the 3D/2D toggle rather than in the filter rail: this changes
              how the graph is DRAWN, it does not change which graph you are
@@ -881,7 +1129,7 @@
             nodes={network.nodes}
             edges={network.edges}
             {highlightPath}
-            matchedIds={network.matched ?? []}
+            matchedIds={highlightIds}
             {selectedId}
             {focusCommunities}
             {explode}
@@ -894,7 +1142,7 @@
             nodes={network.nodes}
             edges={network.edges}
             {highlightPath}
-            matchedIds={network.matched ?? []}
+            matchedIds={highlightIds}
             {selectedId}
             {focusCommunities}
             onSelect={onGraphSelect}
@@ -1062,6 +1310,70 @@
       {/if}
     {/if}
   </section>
+  </div>
+
+  <!-- Signals: what came looking for you, what is coming, what was read last.
+       All three were already loaded and only the alert COUNT was being shown. -->
+  <aside class="signals" aria-label="Signals">
+    <div class="sig-cell">
+      <div class="sig-hd">
+        <span class="metric-label">Alerts · unprompted</span>
+        <a class="sig-more" href="/jkai/intel/alerts">All →</a>
+      </div>
+      {#if data.recentAlerts.length > 0}
+        <ul class="sig-list">
+          {#each data.recentAlerts as a (a.id)}
+            <!-- The 3px left border encodes WHERE it came from, so the source
+                 is legible before the sentence is read. -->
+            <li class="alert-row" data-sig={a.significance}>
+              <span class="alert-txt">{a.title}</span>
+              <span class="alert-meta">{a.type} · {relDay(a.createdAt)}</span>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">Nothing has come looking for you.</p>
+      {/if}
+    </div>
+
+    <div class="sig-cell">
+      <div class="sig-hd"><span class="metric-label">Upcoming · timeline</span></div>
+      {#if data.upcomingTimeline.length > 0}
+        <ul class="sig-list">
+          {#each data.upcomingTimeline as e (e.id)}
+            <li class="tl-row">
+              <span class="tl-date" class:soon={isSoon(e.date)}>{shortDate(e.date)}</span>
+              <span class="tl-txt">{e.title}</span>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">Nothing dated ahead.</p>
+      {/if}
+    </div>
+
+    <div class="sig-cell">
+      <div class="sig-hd">
+        <span class="metric-label">Recent notes</span>
+        <a class="sig-more" href="/jkai/intel/notes">All →</a>
+      </div>
+      {#if data.recentNotes.length > 0}
+        <ul class="sig-list">
+          {#each data.recentNotes as n (n.id)}
+            <li class="note-row">
+              <a href="/jkai/intel/notes">{n.title}</a>
+              <span class="note-meta"
+                >{n.source} · {n.entityCount} entit{n.entityCount === 1 ? 'y' : 'ies'}</span
+              >
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="sig-none">No notes yet.</p>
+      {/if}
+    </div>
+  </aside>
+  </div>
 </div>
 
 <!-- The same card chat uses. Portalled to <body>, so nothing on this page can
@@ -1101,31 +1413,244 @@
     box-sizing: border-box;
   }
 
-  /* ── Tiles ─────────────────────────────────────────────────────────────── */
+  /* ── Tiles ── one cell grid, not a row of rounded cards with gaps. ─────── */
   .tiles {
-    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-    gap: 8px;
     flex: none;
+    background: var(--bg);
   }
-  .tile {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
-    padding: 8px 12px;
+  .tiles > .tile {
+    padding: 10px 13px;
     display: flex;
     flex-direction: column;
     gap: 1px;
     text-decoration: none;
     color: inherit;
-    transition: border-color var(--t-fast) var(--ease-out);
+    transition: background var(--t-fast) var(--ease-out);
   }
   a.tile:hover {
-    border-color: var(--accent-tint-35);
+    background: var(--accent-tint-04);
   }
   .tile.warn {
-    border-color: var(--warn-border);
     background: var(--warn-bg);
+  }
+
+  /* ── The loop ── six stages, each saying what it is for. ───────────────── */
+  .loop {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    flex: none;
+    background: var(--bg);
+  }
+  .loop-cell {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--t-fast) var(--ease-out);
+  }
+  .loop-cell:hover {
+    background: var(--accent-tint-04);
+  }
+  .loop-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .loop-n {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  /* A backlog above its warnAbove, not a statistic — the one orange thing. */
+  .loop-n.accent {
+    color: var(--accent);
+  }
+  .loop-n.ink {
+    color: var(--accent-ink);
+  }
+  .loop-q {
+    margin: 8px 0 0;
+    font-size: var(--fs-label);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  @media (max-width: 900px) {
+    .loop {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 560px) {
+    .loop {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ── Board + signals rail ─────────────────────────────────────────────── */
+  .intel-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 12px;
+    align-items: start;
+    min-width: 0;
+  }
+  .board-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .signals {
+    background: var(--surface-rail-deep);
+    border: 1px solid var(--line-strong);
+    min-width: 0;
+  }
+  .sig-cell {
+    padding: 13px 15px 15px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .sig-cell:last-child {
+    border-bottom: none;
+  }
+  .sig-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sig-more {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .sig-more:hover {
+    color: var(--accent-hover);
+  }
+  .sig-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sig-none {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+  }
+
+  /* Alerts: the left border says where it came from. High significance takes
+     the accent, everything else the petrol second series. */
+  .alert-row {
+    padding-left: 10px;
+    border-left: 3px solid var(--accent-ink);
+  }
+  .alert-row[data-sig='high'] {
+    border-left-color: var(--accent);
+  }
+  .alert-row[data-sig='low'] {
+    border-left-color: transparent;
+  }
+  .alert-txt {
+    display: block;
+    font-size: var(--fs-label);
+    line-height: 1.45;
+    color: var(--text-primary);
+  }
+  .alert-meta,
+  .note-meta {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+
+  .tl-row {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .tl-date {
+    color: var(--text-ghost);
+    font-variant-numeric: tabular-nums;
+  }
+  .tl-date.soon {
+    color: var(--accent);
+  }
+  .tl-txt {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .note-row a {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: var(--fs-label);
+    line-height: 1.4;
+    color: var(--text-primary);
+    text-decoration: none;
+    /* Note titles can be raw generated paths with no spaces in them. */
+    overflow-wrap: anywhere;
+  }
+  .note-row a:hover {
+    color: var(--accent);
+  }
+
+  /* Right rails collapse first: below 1280px the signals drop under the board
+     as a 3-up strip, and to one column on a phone. */
+  @media (max-width: 1280px) {
+    .intel-board {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .signals {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .sig-cell {
+      border-bottom: none;
+      border-right: 1px solid var(--line-hair);
+    }
+    .sig-cell:last-child {
+      border-right: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .signals {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .sig-cell {
+      border-right: none;
+      border-bottom: 1px solid var(--line-hair);
+    }
+    .sig-cell:last-child {
+      border-bottom: none;
+    }
+  }
+  /* A tile showing a filtered number is marked, so a small figure reads as
+     "narrowed" rather than "the graph shrank". The label says so too; this is
+     the glanceable half of the same statement. */
+  .tile.narrowed {
+    border-color: var(--accent-tint-35);
+  }
+  .tile.narrowed .l {
+    color: var(--accent);
   }
   .tile .n {
     font-family: var(--font-display);
@@ -1185,7 +1710,7 @@
      inside it own no scrollers of their own. */
   .rail {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     padding: 4px 12px;
     overflow-y: auto;
@@ -1201,7 +1726,7 @@
   }
 
   .canvas {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     position: relative;
@@ -1215,6 +1740,66 @@
      land under it — `--text-ghost` on the inactive button disappeared against a
      pale cluster. Same trap as the modal tokens: anything sitting over a
      surface it does not own needs its own palette. */
+  /* Same pill as .dims, on the opposite side. Deliberately not adjacent to it:
+     they answer different questions (what the nodes ARE vs how they are drawn)
+     and sitting them together made the four buttons read as one four-way
+     choice. */
+  .modes {
+    position: absolute;
+    z-index: 4;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: rgba(28, 25, 23, 0.82);
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: var(--radius-pill);
+    backdrop-filter: blur(4px);
+  }
+  .modes button {
+    padding: 3px 11px;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    color: rgba(237, 228, 212, 0.72);
+    cursor: pointer;
+    transition: all var(--t-fast) var(--ease-out);
+  }
+  .modes button:hover:not(.on) {
+    color: #ede4d4;
+    background: rgba(237, 228, 212, 0.12);
+  }
+  .modes button.on {
+    background: var(--accent);
+    color: #fff;
+  }
+  /* Carries its own dark chip rather than borrowing the canvas colour: the 3D
+     scene is near-black and the 2D one is cream, so light-on-canvas text is
+     legible in exactly one of the two views — and the note was unreadable in
+     the one you land on. */
+  .mode-note {
+    position: absolute;
+    z-index: 4;
+    top: 44px;
+    left: 10px;
+    max-width: 340px;
+    margin: 0;
+    padding: 5px 9px;
+    background: rgba(28, 25, 23, 0.82);
+    border: 1px solid rgba(237, 228, 212, 0.22);
+    border-radius: var(--radius-sharp);
+    backdrop-filter: blur(4px);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.45;
+    color: rgba(237, 228, 212, 0.82);
+    pointer-events: none;
+  }
+
   .dims {
     position: absolute;
     z-index: 4;
@@ -1265,7 +1850,7 @@
     font-size: var(--fs-label);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .rail input[type='range'] {
@@ -1280,7 +1865,7 @@
     font-size: var(--fs-body);
     background: var(--bg);
     color: var(--text-primary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
   }
   .hint {
@@ -1299,7 +1884,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     padding: 3px 8px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--chip, var(--accent-ink-tint-35));
     border-radius: var(--radius-sharp);
     background: transparent;
@@ -1360,7 +1945,7 @@
 
   .path {
     padding: 7px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     border-radius: var(--radius-sharp);
     font-size: var(--fs-label-xs);
     line-height: 1.7;
@@ -1430,7 +2015,7 @@
     gap: 6px;
     padding: 3px 8px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
   }
   .spread label {
@@ -1498,7 +2083,7 @@
   /* ── Findings ──────────────────────────────────────────────────────────── */
   .findings {
     flex: none;
-    border-top: 1px solid var(--divider);
+    border-top: 1px solid var(--line-hair);
   }
   .findings-head {
     display: flex;
@@ -1535,7 +2120,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     margin-bottom: 14px;
   }
   .tabs button {
@@ -1572,7 +2157,7 @@
 
   .rel {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--accent-ink-tint-35);
     border-radius: var(--radius-round);
     padding: 12px 14px;
@@ -1634,7 +2219,7 @@
   }
   .rel-acts .ghost:hover:not(:disabled) {
     color: var(--accent);
-    border-color: var(--card-border);
+    border-color: var(--line-strong);
   }
   .rel-acts .ghost:disabled {
     opacity: 0.5;
@@ -1647,7 +2232,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 5px 11px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);

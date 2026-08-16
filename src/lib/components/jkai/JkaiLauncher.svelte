@@ -211,13 +211,13 @@
   .jl-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 200; display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; }
   .jl {
     width: 560px; max-width: 100%;
-    background: var(--surface-elevated, var(--bg)); border: 1px solid var(--card-border);
+    background: var(--surface-elevated, var(--bg)); border: 1px solid var(--line-strong);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
     display: flex; flex-direction: column; max-height: 70vh;
     font-family: var(--font-body, system-ui);
   }
-  .jl-search { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
-  .jl-slash { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); border: 1px solid var(--card-border); padding: 1px 5px; flex-shrink: 0; }
+  .jl-search { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line-strong); }
+  .jl-slash { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); border: 1px solid var(--line-strong); padding: 1px 5px; flex-shrink: 0; }
   .jl-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: var(--fs-body); }
   .jl-input::placeholder { color: var(--text-ghost); }
 
@@ -242,10 +242,10 @@
   .jl-desc { font-size: var(--fs-label); color: var(--text-ghost); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .jl-empty { padding: 20px 14px; color: var(--text-ghost); font-size: var(--fs-nav); }
 
-  .jl-status { padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: var(--fs-label); color: var(--status-success, #2a9d4a); }
+  .jl-status { padding: 8px 14px; border-top: 1px solid var(--line-strong); font-size: var(--fs-label); color: var(--status-success, #2a9d4a); }
   .jl-status.busy { color: var(--text-muted); }
-  .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: var(--fs-label-xs); color: var(--text-ghost); }
-  .jl-foot kbd { font-family: var(--font-mono); border: 1px solid var(--card-border); padding: 0 3px; margin-right: 2px; }
+  .jl-foot { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--line-strong); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .jl-foot kbd { font-family: var(--font-mono); border: 1px solid var(--line-strong); padding: 0 3px; margin-right: 2px; }
 
   /* Mobile / PWA: give the panel room, drop the keyboard-hint footer on very
      small screens, and respect the notch. */

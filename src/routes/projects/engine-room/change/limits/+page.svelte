@@ -90,12 +90,12 @@
 <style>
   .filters { display: flex; gap: 5px; flex-wrap: wrap; }
   .filters button { display: inline-flex; align-items: center; gap: 6px;
-    font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: rgba(28,22,17,0.75);
+    font-family: var(--font-body); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.75);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
     border-radius: var(--radius-pill); padding: 4px 9px; cursor: pointer;
     transition: background 0.12s, border-color 0.12s, color 0.12s; }
   .filters button:hover { background: #fff; border-color: rgba(28,22,17,0.38); color: var(--text-primary); }
-  .filters button span { font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+  .filters button span { font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.5); }
   .filters button.on { background: #8a2d3a; border-color: #8a2d3a; color: #fff; }
   .filters button.on span { color: rgba(255,255,255,0.75); }

@@ -24,10 +24,10 @@
 
 <style>
   .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .lab { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); flex-shrink: 0; }
+  .lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: rgba(28,22,17,0.5); flex-shrink: 0; }
   .chips { display: flex; gap: 5px; flex-wrap: wrap; }
   .chip {
-    font-family: 'DM Sans', system-ui, sans-serif; font-size: 11px; padding: 4px 9px; border-radius: var(--radius-round);
+    font-family: var(--font-body); font-size: var(--fs-label-xs); padding: 4px 9px; border-radius: var(--radius-sharp);
     border: 1px solid rgba(28,22,17,0.2); background: rgba(255,255,255,0.4); color: rgba(28,22,17,0.78);
     cursor: pointer; white-space: nowrap; transition: all 0.12s;
   }

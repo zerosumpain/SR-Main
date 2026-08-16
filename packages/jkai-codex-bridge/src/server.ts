@@ -20,6 +20,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { CODEX_MODELS, DEFAULT_CODEX_MODEL_SLUG, toCodexSlug } from '$lib/server/models/codex-catalogue';
 import { runOnce, runStreamed, type CapturedToolCall } from './codex-runner';
+import { toAnnotations, type CapturedSearch } from './web-search';
 import {
   registerTools,
   unregisterTools,
@@ -220,10 +221,16 @@ interface ChatCompletionRequest {
 
 const REASONING_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
 
+interface HandlerOptions {
+  /** Set only by the /v1/grounded route. Never read from the request body. */
+  webSearch?: boolean;
+}
+
 async function handleChatCompletions(
   req: IncomingMessage,
   res: ServerResponse,
   body: ChatCompletionRequest,
+  opts: HandlerOptions = {},
 ): Promise<void> {
   const messages = body.messages ?? [];
   if (!messages.length) {
@@ -302,12 +309,22 @@ async function handleChatCompletions(
           reasoningEffort,
           signal: controller.signal,
           toolServerUrl,
+          webSearch: opts.webSearch,
         })) {
           if (chunk.done) {
             const calls = chunk.toolCalls?.length ? toOpenAiToolCalls(chunk.toolCalls) : null;
             // Tool calls ride their own delta before the terminator, so a
             // consumer sees them the same way it would from any provider.
             if (calls) write(frame(withRole({ tool_calls: calls }), null));
+            // Citations arrive only once the turn is done — Codex reports what
+            // it read as it goes, but the set is not final until it stops. They
+            // ride the last content-bearing frame rather than the terminator,
+            // because a consumer that stops reading on `finish_reason` would
+            // otherwise never see them.
+            const annotations = toAnnotations(chunk.searches);
+            if (annotations.length) {
+              write(frame(withRole({ annotations, x_web_searches: chunk.searches }), null));
+            }
             write(frame({}, calls ? 'tool_calls' : 'stop', toOpenAiUsage(chunk.usage ?? null)));
             break;
           }
@@ -325,9 +342,18 @@ async function handleChatCompletions(
     }
 
     const result = await withSlot(() =>
-      runOnce({ model, prompt, outputSchema, reasoningEffort, signal: controller.signal, toolServerUrl }),
+      runOnce({
+        model,
+        prompt,
+        outputSchema,
+        reasoningEffort,
+        signal: controller.signal,
+        toolServerUrl,
+        webSearch: opts.webSearch,
+      }),
     );
     const calls = result.toolCalls?.length ? toOpenAiToolCalls(result.toolCalls) : null;
+    const annotations = toAnnotations(result.searches);
     sendJson(res, 200, {
       id,
       object: 'chat.completion',
@@ -341,7 +367,13 @@ async function handleChatCompletions(
           // nothing" rather than "the model wants a tool run".
           message: calls
             ? { role: 'assistant', content: null, tool_calls: calls }
-            : { role: 'assistant', content: result.text },
+            : {
+                role: 'assistant',
+                content: result.text,
+                ...(annotations.length
+                  ? { annotations, x_web_searches: result.searches }
+                  : {}),
+              },
           finish_reason: calls ? 'tool_calls' : 'stop',
         },
       ],
@@ -415,6 +447,22 @@ export function createBridgeServer() {
       if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {
         const body = (await readBody(req)) as ChatCompletionRequest;
         await handleChatCompletions(req, res, body);
+        return;
+      }
+
+      /**
+       * The same handler, with the agent allowed to consult the live web.
+       *
+       * A separate ROUTE rather than a body flag, deliberately. Every prompt on
+       * this bridge is composed somewhere in the site, and most of them contain
+       * text the site did not author — scraped pages, Gmail bodies, research
+       * documents. A flag on the shared path would let any of those callers turn
+       * search on by accident; a different URL has to be chosen. `codex-runner`
+       * spells out what this does and does not loosen.
+       */
+      if (req.method === 'POST' && url.pathname === '/v1/grounded/chat/completions') {
+        const body = (await readBody(req)) as ChatCompletionRequest;
+        await handleChatCompletions(req, res, body, { webSearch: true });
         return;
       }
 

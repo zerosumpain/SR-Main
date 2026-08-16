@@ -143,8 +143,8 @@
     font-size: var(--fs-label);
     color: var(--text-secondary);
     padding: 4px 8px;
-    background: var(--bg-section);
-    border-left: 2px solid var(--card-border);
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--line-strong);
   }
 
   .sa-steps {
@@ -156,9 +156,9 @@
     gap: 4px;
   }
   .sa-step {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 4px 8px;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .sa-step[data-status="running"] { border-color: var(--accent); }
   .sa-step[data-status="error"]   { border-color: var(--status-error); }
@@ -218,7 +218,7 @@
   .sa-live {
     font-size: var(--fs-label);
     color: var(--text-muted);
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     padding: 6px 8px;
     margin: 0;
     max-height: 180px;

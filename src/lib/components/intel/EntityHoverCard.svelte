@@ -179,7 +179,7 @@
   .scroll {
     overflow-y: auto;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     /* Stop a flick at the end of the card scrolling the chat behind it — which
        would then fire the page-scroll handler and dismiss the card. */
@@ -229,7 +229,7 @@
     height: 22px;
     line-height: 1;
     font-size: var(--fs-body);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--surface-elevated);
     color: var(--text-muted);

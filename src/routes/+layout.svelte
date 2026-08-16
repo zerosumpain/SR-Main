@@ -52,32 +52,22 @@
 
 <style>
   :global(:root) {
-    --site-nav-height: 56px;
+    --site-nav-height: 48px;
   }
 
-  @media (max-width: 640px) {
-    :global(:root) {
-      --site-nav-height: 48px;
-    }
-  }
-
+  /* The nav is a full-bleed cell strip: no page padding, no translucency, no
+     blur. Each destination is a cell of one grid divided by hairlines, so the
+     strip reads as part of the page's structure rather than as chrome floating
+     over it. Cells own their own padding — see SiteNav / PageHeader. */
   :global(.site-nav-bar) {
     position: sticky;
     top: 0;
     z-index: 30;
-    min-height: var(--site-nav-height);
-    padding: 14px 24px;
-    background: color-mix(in srgb, var(--bg) 88%, transparent);
-    backdrop-filter: blur(10px) saturate(1.1);
-    -webkit-backdrop-filter: blur(10px) saturate(1.1);
-    border-bottom: 1px solid var(--divider);
+    height: var(--site-nav-height);
+    padding: 0;
+    background: var(--surface-rail);
+    border-bottom: 1px solid var(--line-strong);
     display: flex;
-    align-items: center;
-  }
-
-  @media (max-width: 640px) {
-    :global(.site-nav-bar) {
-      padding: 10px 16px;
-    }
+    align-items: stretch;
   }
 </style>

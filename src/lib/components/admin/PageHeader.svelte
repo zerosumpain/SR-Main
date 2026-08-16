@@ -50,7 +50,7 @@
     align-items: center;
     gap: 0.4rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.2em;
     color: var(--text-ghost);
@@ -61,7 +61,7 @@
   .crumb-sep { color: var(--text-ghost); }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.18em;

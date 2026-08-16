@@ -111,7 +111,7 @@
     letter-spacing: -0.02em;
   }
   .caption .display .unit {
-    font-size: 0.35em;
+    font-size: max(0.35em, var(--fs-label-xs));
     color: var(--text-secondary);
     margin-left: 0.2em;
     letter-spacing: 0;
@@ -120,12 +120,12 @@
     margin-top: 1.25rem;
     max-width: 320px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: var(--fs-nav);
     line-height: 1.55;
   }
 
   .controls {
-    border-top: 2px solid var(--divider);
+    border-top: 2px solid var(--line-hair);
     padding: 1.5rem 2rem 2.5rem;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -143,7 +143,7 @@
   }
   .ctrl label {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--text-muted);
@@ -155,17 +155,17 @@
     color: var(--text-primary);
     text-align: right;
   }
-  .ctrl .hint { font-size: 11px; color: var(--text-ghost); font-family: var(--font-mono); }
+  .ctrl .hint { font-size: var(--fs-label-xs); color: var(--text-ghost); font-family: var(--font-mono); }
 
   .presets { display: flex; flex-wrap: wrap; gap: 0.4rem; grid-column: 1 / -1; }
   .presets button {
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     color: var(--text-primary);
     padding: 0.35rem 0.75rem;
     border-radius: var(--radius-round);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     cursor: pointer;
@@ -183,7 +183,7 @@
     grid-template-columns: repeat(8, auto);
     gap: 0 0.5rem;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     margin: 0.25rem 0 0;
     color: var(--text-secondary);
   }
@@ -197,11 +197,11 @@
     align-items: center; pointer-events: auto;
   }
   .variants .vlabel {
-    font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.15em; color: var(--text-muted);
   }
   .variants a {
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
     text-decoration: none; border-bottom: 1px solid transparent;
     transition: color 0.15s, border-color 0.15s;
   }

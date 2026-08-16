@@ -122,23 +122,23 @@
 <style>
   .note { display: flex; flex-direction: column; gap: 4px; margin: -6px 0 22px;
     padding: 10px 14px; border-left: 3px solid var(--accent);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--accent); }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
 
   .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 26px; }
   .col { min-width: 0; }
-  .c-head { display: block; margin-bottom: 7px; font-family: 'JetBrains Mono', monospace;
-    font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
+  .c-head { display: block; margin-bottom: 7px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
 
   .bands { display: flex; flex-direction: column; gap: 3px; }
   .band { display: grid; grid-template-columns: 68px 96px 1fr; gap: 10px; align-items: baseline;
     padding: 6px 10px; border-radius: var(--radius-sharp); background: rgba(255,255,255,0.55); }
-  .b-from { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); }
-  .b-lab { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 600; color: var(--text-primary); }
-  .b-what { font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.68); }
+  .b-from { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); }
+  .b-lab { font-family: var(--fs-serif); font-size: var(--fs-nav); font-weight: 600; color: var(--text-primary); }
+  .b-what { font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.68); }
 
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; margin-top: 12px; }
 

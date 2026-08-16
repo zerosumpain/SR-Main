@@ -246,7 +246,7 @@
   .map {
     width: 100%;
     overflow-x: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: var(--card-bg);
   }

@@ -66,7 +66,7 @@
     <ProseContent class="post-prose">{@html renderContent(data.post.content, data.post.contentFormat)}</ProseContent>
 
     <!-- Back -->
-    <div class="mt-16 pt-6" style="border-top: 2px solid var(--card-border);">
+    <div class="mt-16 pt-6" style="border-top: 2px solid var(--line-strong);">
       <a href="/blog" class="nav-link">← Back to writing</a>
     </div>
   </div>
@@ -122,7 +122,7 @@
   }
 </style>
 
-<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--card-border);">
+<footer class="px-6 sm:px-10 md:px-16 py-6" style="border-top: 2px solid var(--line-strong);">
   <a href="/" class="nav-link">← Home</a>
   <a href="/admin" class="nav-link">Admin</a>
 </footer>

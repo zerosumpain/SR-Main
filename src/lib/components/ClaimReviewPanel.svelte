@@ -294,7 +294,7 @@
   .claim-panel { display: flex; flex-direction: column; gap: 0.6rem; }
   .mode-pick {
     display: inline-flex; align-items: center; gap: 0.4rem;
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     text-transform: uppercase; letter-spacing: 0.1em;
     color: var(--text-secondary);
   }
@@ -317,7 +317,7 @@
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
-    border: 2px solid var(--card-border);
+    border: 2px solid var(--line-strong);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -336,7 +336,7 @@
 
   .claims { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.9rem; }
   .claim {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 6px;
     padding: 0.75rem 0.9rem;
     background: var(--card-bg);
@@ -354,24 +354,24 @@
     display: flex; align-items: center; justify-content: center;
     border-radius: 50%;
     background: var(--accent); color: white;
-    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 700;
   }
   .claim-body { flex: 1; min-width: 0; }
   .claim-text { font-weight: 600; color: var(--text-primary); margin-bottom: 0.3rem; }
   .claim-meta {
     display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--text-secondary); margin-bottom: 0.35rem;
   }
   .claim-meta code {
-    font-family: var(--font-mono); font-size: 10px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     padding: 1px 5px; background: var(--card-border); border-radius: 3px; text-transform: none;
   }
   .claim-snippet { font-style: italic; color: var(--text-ghost); font-size: 0.88rem; }
 
   .candidates { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.45rem; }
   .cand {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 6px;
     padding: 0.55rem 0.75rem;
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem;
@@ -379,13 +379,13 @@
   .cand.reputable { border-color: var(--accent); background: rgba(196,87,10,0.04); }
   .cand-url { display: flex; flex-direction: column; flex: 1 1 60%; text-decoration: none; }
   .cand-title { color: var(--text-primary); font-weight: 600; font-size: 0.95rem; }
-  .cand-domain { color: var(--text-ghost); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .cand-domain { color: var(--text-ghost); font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
   .cand-why { width: 100%; color: var(--text-secondary); font-size: 0.85rem; }
   .cand-insert { margin-left: auto; }
 
   .banner {
     padding: 0.5rem 0.75rem;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: 6px;
     font-size: 0.9rem;
   }

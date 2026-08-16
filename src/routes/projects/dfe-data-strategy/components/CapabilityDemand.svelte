@@ -46,14 +46,14 @@
 </div>
 
 <style>
-  .cd { font-family: 'DM Sans', sans-serif; }
+  .cd { font-family: var(--font-body); }
   .row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 0.7fr; gap: 3px; margin-bottom: 3px; }
-  .cell { display: flex; align-items: center; justify-content: center; padding: 7px 6px; border-radius: var(--radius-round); font-size: 12px; }
-  .cell.lab { justify-content: flex-start; font-weight: 600; color: rgba(28,22,17,0.78); font-size: 11.5px; }
-  .col-h { font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
-  .val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .tot { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: rgba(28,22,17,0.6); background: rgba(28,22,17,0.04); }
+  .cell { display: flex; align-items: center; justify-content: center; padding: 7px 6px; border-radius: var(--radius-sharp); font-size: var(--fs-label-xs); }
+  .cell.lab { justify-content: flex-start; font-weight: 600; color: rgba(28,22,17,0.78); font-size: var(--fs-label-xs); }
+  .col-h { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: rgba(28,22,17,0.55); }
+  .val { font-family: var(--font-mono); font-weight: 600; }
+  .tot { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: rgba(28,22,17,0.6); background: rgba(28,22,17,0.04); }
   .head .cell { padding-top: 0; padding-bottom: 4px; }
-  .cd-note { margin: 10px 0 0; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.6); }
+  .cd-note { margin: 10px 0 0; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.6); }
   .cd-note b { color: var(--ink); }
 </style>

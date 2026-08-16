@@ -48,17 +48,17 @@
 <style>
   .fn { display: flex; flex-direction: column; gap: 2px; }
   .f-row { display: grid; grid-template-columns: minmax(90px, 20ch) 1fr; gap: 11px; align-items: center; }
-  .f-lab { font-size: 12.5px; line-height: 1.3; color: rgba(28,22,17,0.8); text-align: right; }
+  .f-lab { font-size: var(--fs-label); line-height: 1.3; color: rgba(28,22,17,0.8); text-align: right; }
   .f-track { position: relative; display: flex; align-items: center; background: rgba(28,22,17,0.05);
-    border-radius: var(--radius-round); overflow: hidden; }
+    border-radius: var(--radius-sharp); overflow: hidden; }
   .f-fill { position: absolute; inset: 0 auto 0 0; background: var(--tone); opacity: 0.75;
     transition: width 0.4s cubic-bezier(0.3,0,0.2,1); }
-  .f-val { position: relative; margin-left: 10px; font-family: 'JetBrains Mono', monospace;
-    font-size: 12px; font-weight: 600; color: var(--text-primary);
+  .f-val { position: relative; margin-left: 10px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); font-weight: 600; color: var(--text-primary);
     text-shadow: 0 0 4px rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.9); }
-  .f-note { margin: 2px 0 0; padding-left: calc(20ch + 11px); font-size: 11px; line-height: 1.45; color: rgba(28,22,17,0.55); }
+  .f-note { margin: 2px 0 0; padding-left: calc(20ch + 11px); font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.55); }
   .f-drop { display: flex; align-items: center; gap: 6px; margin: 3px 0 3px;
-    padding-left: calc(20ch + 11px); font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    padding-left: calc(20ch + 11px); font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: rgba(28,22,17,0.5); }
   .f-drop b { color: var(--accent); font-weight: 600; }
   .d-arrow { color: rgba(28,22,17,0.35); }

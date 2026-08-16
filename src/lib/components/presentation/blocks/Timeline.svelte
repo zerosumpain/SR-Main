@@ -57,7 +57,7 @@
   }
   .tl-year {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: 0.08em;
     color: var(--accent-ink);
     padding-top: 1px;
@@ -70,7 +70,7 @@
     color: var(--ink);
   }
   .tl-detail {
-    font-size: 15px;
+    font-size: var(--fs-body-sm);
     line-height: 1.55;
     color: var(--ink-soft);
     margin: 4px 0 0;

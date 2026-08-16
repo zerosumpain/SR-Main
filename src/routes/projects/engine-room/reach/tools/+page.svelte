@@ -174,18 +174,18 @@
 
   .r-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
     flex-wrap: wrap; margin-bottom: 5px; }
-  .r-lab { font-size: 12.5px; font-weight: 500; color: var(--text-primary); }
-  .r-tot { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.55); }
+  .r-lab { font-size: var(--fs-label); font-weight: 500; color: var(--text-primary); }
+  .r-tot { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.55); }
 
-  .readout { margin: 11px 0 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.72);
+  .readout { margin: 11px 0 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.72);
     min-height: 2.6em; max-width: 82ch; }
   .readout::before { content: '▸ '; color: var(--success); }
 
-  .gap { margin: 9px 0 0; font-size: 12px; line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 84ch; }
+  .gap { margin: 9px 0 0; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 84ch; }
   .gap b { color: var(--text-primary); }
 
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-  .tag { padding: 6px 12px; cursor: pointer; font-family: inherit; font-size: 12px; line-height: 1.25;
+  .tag { padding: 6px 12px; cursor: pointer; font-family: inherit; font-size: var(--fs-label-xs); line-height: 1.25;
     color: rgba(28,22,17,0.78); border: 1px solid rgba(28,22,17,0.18);
     border-radius: var(--radius-pill); background: rgba(255,255,255,0.6);
     transition: background 0.13s, border-color 0.13s, color 0.13s; }

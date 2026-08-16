@@ -50,13 +50,13 @@
     border: 1px solid rgba(28, 22, 17, 0.16);
     border-left: 4px solid var(--ink, #1c1611);
     background: rgba(255, 255, 255, 0.5);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     max-width: 86ch;
   }
   .tb-kicker {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
@@ -64,7 +64,7 @@
   }
   .tb-take {
     margin: 0;
-    font-family: 'Fraunces', serif;
+    font-family: var(--fs-serif);
     font-weight: 500;
     font-size: clamp(17px, 2.2vw, 21px);
     line-height: 1.35;
@@ -84,19 +84,19 @@
     gap: 6px;
     padding: 4px 10px;
     border: 1px solid rgba(28, 22, 17, 0.18);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(241, 234, 214, 0.6);
     text-decoration: none;
   }
   .tb-chip b {
-    font-family: 'Fraunces', serif;
-    font-size: 15px;
+    font-family: var(--fs-serif);
+    font-size: var(--fs-body-sm);
     font-weight: 600;
     color: var(--accent-ink);
   }
   .tb-chip span {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.6);
@@ -112,8 +112,8 @@
     margin-left: auto;
   }
   .tb-drill {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px dashed currentColor;

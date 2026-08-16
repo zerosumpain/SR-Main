@@ -128,47 +128,47 @@
 
 <style>
   .qx { display: flex; flex-direction: column; gap: 14px; }
-  .qx-stage { border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 16px 18px; }
+  .qx-stage { border: 1px solid rgba(28,22,17,0.2); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 16px 18px; }
   .qx-stage header { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; }
-  .qx-n { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-content: center; background: var(--ink); color: var(--paper, #f1ead6); border-radius: var(--radius-pill); font-family: 'JetBrains Mono', monospace; font-size: 12px; }
-  .qx-lab { display: block; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
-  .qx-note { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 70ch; }
-  .basis { margin-left: auto; flex: 0 0 auto; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.12em; padding: 4px 10px; border-radius: var(--radius-sharp); color: #fff; }
+  .qx-n { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-content: center; background: var(--ink); color: var(--paper, #f1ead6); border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .qx-lab { display: block; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+  .qx-note { margin: 3px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.65); max-width: 70ch; }
+  .basis { margin-left: auto; flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; padding: 4px 10px; border-radius: var(--radius-sharp); color: #fff; }
   .basis.statutory { background: var(--accent-ink); }
   .basis.voluntary { background: #b0892a; }
 
   .qx-contract { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 3px 12px; margin: 0 0 12px; }
-  .qx-contract dt { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); padding-top: 2px; }
-  .qx-contract dd { margin: 0; font-size: 12.5px; line-height: 1.45; color: rgba(28,22,17,0.82); }
+  .qx-contract dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); padding-top: 2px; }
+  .qx-contract dd { margin: 0; font-size: var(--fs-label); line-height: 1.45; color: rgba(28,22,17,0.82); }
 
-  .qx-sql { margin: 0; background: #1c1611; border-radius: var(--radius-round); padding: 14px 16px; overflow-x: auto; }
-  .qx-sql code { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; line-height: 1.6; color: #e8dcc3; white-space: pre; }
+  .qx-sql { margin: 0; background: #1c1611; border-radius: var(--radius-sharp); padding: 14px 16px; overflow-x: auto; }
+  .qx-sql code { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.6; color: #e8dcc3; white-space: pre; }
 
   .qx-tablewrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); text-align: left; padding: 4px 8px; border-bottom: 1px solid rgba(28,22,17,0.2); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--fs-label-xs); }
+  th { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: rgba(28,22,17,0.5); text-align: left; padding: 4px 8px; border-bottom: 1px solid rgba(28,22,17,0.2); }
   td { padding: 5px 8px; border-bottom: 1px solid rgba(28,22,17,0.08); color: rgba(28,22,17,0.82); }
   tr.dim td { color: rgba(28,22,17,0.4); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .sup { font-weight: 600; color: var(--ink); }
   tr.dim .sup { color: rgba(28,22,17,0.45); }
-  .st { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.05em; padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap; }
+  .st { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.05em; padding: 2px 7px; border-radius: var(--radius-pill); white-space: nowrap; }
   .st.ok { background: rgba(47,125,79,0.12); color: #2f7d4f; }
   .st.no { background: rgba(138,45,58,0.12); color: #8a2d3a; }
   .st.warn { background: rgba(176,137,42,0.14); color: #8a6a1e; }
 
   .qx-head-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px; }
-  .hn b { display: block; font-family: 'Fraunces', serif; font-weight: 600; font-size: clamp(22px, 2.4vw, 34px); line-height: 1.05; color: var(--ink); letter-spacing: -0.02em; }
-  .hn span { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.55); }
+  .hn b { display: block; font-family: var(--fs-serif); font-weight: 600; font-size: clamp(22px, 2.4vw, 34px); line-height: 1.05; color: var(--ink); letter-spacing: -0.02em; }
+  .hn span { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.08em; text-transform: uppercase; color: rgba(28,22,17,0.55); }
   .hn.zero b { color: var(--accent, #c4570a); }
 
   .qx-covbar { height: 8px; border-radius: var(--radius-pill); background: rgba(28,22,17,0.1); overflow: hidden; margin-bottom: 10px; }
   .qx-covbar i { display: block; height: 100%; background: var(--accent-ink); border-radius: var(--radius-pill); transition: width 0.4s ease; }
 
-  .qx-flag { font-size: 12.5px; line-height: 1.5; border-radius: var(--radius-round); padding: 8px 12px; margin: 0 0 8px; }
+  .qx-flag { font-size: var(--fs-label); line-height: 1.5; border-radius: var(--radius-sharp); padding: 8px 12px; margin: 0 0 8px; }
   .qx-flag.partial { background: rgba(138,45,58,0.07); border: 1px solid rgba(138,45,58,0.3); color: rgba(28,22,17,0.8); }
   .qx-flag.override { background: rgba(176,137,42,0.08); border: 1px solid rgba(176,137,42,0.35); color: rgba(28,22,17,0.8); }
 
   .qx-notes { margin: 6px 0 0; padding-left: 18px; }
-  .qx-notes li { font-size: 12.5px; line-height: 1.6; color: rgba(28,22,17,0.72); margin-bottom: 2px; }
+  .qx-notes li { font-size: var(--fs-label); line-height: 1.6; color: rgba(28,22,17,0.72); margin-bottom: 2px; }
 </style>

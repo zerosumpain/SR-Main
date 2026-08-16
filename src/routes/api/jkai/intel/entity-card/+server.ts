@@ -57,6 +57,21 @@ function sourceHref(noteId: string, _source: string, metadata: unknown): string 
   return `/jkai/intel/notes/${noteId}`;
 }
 
+/**
+ * Newest first, by when the evidence was OBSERVED rather than ingested.
+ *
+ * `observedAt` is null for a note that produced no edges, and for the appended
+ * first-seen row; those fall back to `createdAt` rather than sinking to the
+ * bottom, because "we do not know when this was observed" is not the same claim
+ * as "this is the oldest thing here".
+ */
+function sortByRecency<T extends { observedAt?: Date | string | null; createdAt: Date | string }>(
+  rows: T[],
+): T[] {
+  const at = (r: T) => new Date(r.observedAt ?? r.createdAt).getTime() || 0;
+  return [...rows].sort((a, b) => at(b) - at(a));
+}
+
 export const GET: RequestHandler = async ({ url }) => {
   if (url.searchParams.get('mentions')) return mentionsIndex();
 
@@ -138,7 +153,16 @@ export const GET: RequestHandler = async ({ url }) => {
     .from(intelNoteEntities)
     .innerJoin(intelNotes, eq(intelNoteEntities.noteId, intelNotes.id))
     .where(eq(intelNoteEntities.entityId, id))
-    .orderBy(desc(intelNotes.createdAt))
+    // By the OBSERVATION clock, falling back to ingest where a note produced no
+    // edges to carry one. Ordering by `created_at` — as this did — sorts by the
+    // night the sweep ran, so the ten most recent pieces of evidence for any
+    // email-heavy entity were "the ten from the last sweep" in arbitrary order,
+    // and a thread from March outranked one from last week if March happened to
+    // be swept later. Same reasoning as the `observed_at` column above.
+    .orderBy(sql`COALESCE((
+      SELECT MAX(r.last_seen_at) FROM intel_relationships r
+      WHERE r.source_note_id = ${intelNotes.id} AND r.suppressed IS NOT TRUE
+    ), ${intelNotes.createdAt}) DESC`)
     .limit(10);
 
   // Evidence per month across ALL of this entity's notes, not the ten fetched
@@ -252,7 +276,12 @@ export const GET: RequestHandler = async ({ url }) => {
       count: Number(r.count ?? 0),
     })),
     neighbours,
-    notes: [
+    // Newest evidence first, by the observation clock. Sorted AFTER the
+    // first-seen row is merged in: that row is appended rather than selected, so
+    // leaving the SQL order alone put a two-year-old extraction at the bottom
+    // and everything else in date order — a list that is sorted except for the
+    // one row you would most want dated correctly.
+    notes: sortByRecency([
       ...notes.map((n) => ({
         id: n.id,
         title: n.title ?? 'Untitled',
@@ -281,7 +310,7 @@ export const GET: RequestHandler = async ({ url }) => {
             },
           ]
         : []),
-    ],
+    ]),
     timeline,
   });
 };

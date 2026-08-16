@@ -34,6 +34,7 @@
   import { coerceModelContext } from '$lib/constants/default-models';
   import type { ModelContext } from '$lib/server/models/types';
   import { streamChatJob, type ChatStreamHandle } from '$lib/jkai/chat-stream';
+  import { subscribeFollowups } from '$lib/jkai/followup-stream';
   import { readTurnStamp, type TurnStamp } from '$lib/jkai/turn-stamp';
   import { shortModelLabel } from '$lib/jkai/model-label';
   import { setThreadLedger, clearThreadLedger, setLiveRuns, bumpGraphRevision } from '$lib/jkai/hub-bus.svelte';
@@ -41,6 +42,13 @@
   import { startTtftMark } from '$lib/jkai/ttft-metrics';
   import { beginTurn, noteOutput, noteToolStart, noteToolEnd, settleTurn } from '$lib/jkai/throughput-bus.svelte';
   import { enqueueMessage } from '$lib/jkai/pwa/outbox';
+  import {
+    hydrateQueuedSends,
+    queuedFor,
+    pushQueued,
+    takeQueued,
+    dropQueued,
+  } from '$lib/jkai/queued-sends.svelte';
   import { dockTrigger, openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { onMount, tick, untrack } from 'svelte';
 
@@ -53,6 +61,13 @@
      * user landed on an empty box and had to retype the question.
      */
     initialDraft = '',
+    /**
+     * Send `initialDraft` as soon as there is a conversation to send it into,
+     * instead of leaving it in the box. This is what makes "Ask jkai about it"
+     * on a research run actually ask: the reply streams here rather than the
+     * user arriving at a primed composer and pressing enter themselves.
+     */
+    autoSend = false,
     conversation = null,
     modelContextLength = null,
     defaultChatModelId,
@@ -67,9 +82,12 @@
     onToggleThreadRail,
     onToggleGraphRail,
     graphRailOpen = true,
+    active = true,
+    onbusychange,
   }: {
     conversationId: string | null;
     initialDraft?: string;
+    autoSend?: boolean;
     initialMessages?: Array<{
       id: string;
       role: string;
@@ -102,6 +120,20 @@
     /** Show/hide the knowledge-graph rail (below 1280px it is collapsed). */
     onToggleGraphRail?: () => void;
     graphRailOpen?: boolean;
+    /**
+     * False when this pane is a background tab — mounted and streaming, but not
+     * the one on screen. It suppresses the things that only make sense for the
+     * pane the user is looking at: taking focus, and consuming the one-shot
+     * `?ask=` prefill that would otherwise land in whichever pane mounted first.
+     * The chat stream, the follow-up feed and the transcript all keep running,
+     * because a background tab finishing its answer is the entire point.
+     */
+    active?: boolean;
+    /**
+     * Fires when this thread starts or stops working, so the tab strip can show
+     * a dot without polling. `ok` is false when the turn ended in an error.
+     */
+    onbusychange?: (busy: boolean, ok: boolean) => void;
   } = $props();
 
   function buildIdFromMessage(m: Message): string | null {
@@ -219,6 +251,53 @@
   // it reads would fight the user as soon as they edited the box.
   let input = $state(initialDraft ?? '');
   let loading = $state(false);
+  // The graph rail draws the thread on screen, so only that pane's turns are a
+  // reason for it to look again. A background pane bumping the revision would
+  // send the rail refetching a graph that had not changed.
+  function bumpGraphIfOnScreen() {
+    if (active) bumpGraphRevision();
+  }
+
+  // The throughput meter is a single shared instrument, so only one turn at a
+  // time may drive it. Ownership is settled when the turn STARTS and then held
+  // to the end: gating each call on `active` instead would let a turn that began
+  // on screen and finished in the background call `begin` and never `settle`,
+  // leaving the meter stuck on "live" — the very failure the backstop settle in
+  // `silentSend` exists to prevent. A background turn's tokens go unmeasured,
+  // which is the honest answer for a meter about what you are watching.
+  let ownsMeters = false;
+  function meterBegin(opts: { replay?: boolean } = {}) {
+    ownsMeters = active;
+    if (ownsMeters) beginTurn(opts);
+  }
+  function meterOutput(text: string | undefined) {
+    if (ownsMeters) noteOutput(text);
+  }
+  function meterToolStart(args: unknown) {
+    if (ownsMeters) noteToolStart(args);
+  }
+  function meterToolEnd() {
+    if (ownsMeters) noteToolEnd();
+  }
+  function meterSettle(actualOutputTokens?: number | null) {
+    if (ownsMeters) settleTurn(actualOutputTokens);
+  }
+
+  // Whether the turn now finishing produced an answer rather than an error.
+  // A plain `let`, deliberately: only the reporting effect below reads it, and
+  // making it reactive would subscribe that effect to its own write.
+  let turnOk = true;
+  let lastReportedBusy = false;
+
+  // Tell the tab strip when this thread starts and stops working, so a
+  // background tab can show a live dot without the page polling for it.
+  $effect(() => {
+    const busy = loading;
+    if (busy === lastReportedBusy) return;
+    lastReportedBusy = busy;
+    if (busy) turnOk = true;
+    onbusychange?.(busy, turnOk);
+  });
   let currentJobId = $state<string | null>(null);
   // MUST stay in lockstep with HEARTBEAT_INTERVAL_MS in
   // src/lib/workflows/chat/job-store.ts — the server fires beats on a fixed
@@ -408,7 +487,53 @@
 
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
-  let eventSource: EventSource | null = null;
+
+  // ── Follow-the-tail scrolling ───────────────────────────────────────────────
+  // The view only chases new content while the reader is parked at the bottom.
+  // Scroll up mid-turn to re-read something and the stream stops yanking you
+  // back; scroll (or click "latest") to within `SCROLL_SLACK` of the end and the
+  // follow re-arms itself. Read by the template, so it has to be `$state`.
+  let stickToBottom = $state(true);
+  const SCROLL_SLACK = 80;
+  // rAF coalescer for the observer below — an internal handle, never `$state`.
+  let stickPending = false;
+
+  function onListScroll() {
+    if (!chatContainer) return;
+    stickToBottom =
+      chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < SCROLL_SLACK;
+  }
+
+  /**
+   * Sticky-bottom for everything that grows the list *without* going through
+   * `scrollToBottom` — streamed markdown re-rendering, a tool drawer opening,
+   * the thinking timeline expanding, images and iframes settling late. Without
+   * this the reply starts rendering just under the fold. Mirrors the same
+   * pattern in BuilderChatNode.
+   */
+  function stickyBottom(node: HTMLDivElement): { destroy(): void } {
+    const follow = () => {
+      if (!stickToBottom || stickPending) return;
+      stickPending = true;
+      requestAnimationFrame(() => {
+        stickPending = false;
+        if (stickToBottom) node.scrollTop = node.scrollHeight;
+      });
+    };
+    const mo = new MutationObserver(follow);
+    mo.observe(node, { childList: true, subtree: true, characterData: true });
+    // Catches height changes the mutation observer can't see: the composer
+    // growing as you type, the mobile keyboard, a window resize.
+    const ro = new ResizeObserver(follow);
+    ro.observe(node);
+    return {
+      destroy() {
+        mo.disconnect();
+        ro.disconnect();
+      },
+    };
+  }
+
   let chatStream: ChatStreamHandle | null = null;
 
   // Index of the most recent assistant message — drives whether the in-chat
@@ -441,7 +566,7 @@
 
     const progressId = crypto.randomUUID();
     pendingTtft.set(progressId, startTtftMark(progressId));
-    beginTurn();
+    meterBegin();
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -451,7 +576,7 @@
       toolSteps: [],
       createdAt: new Date().toISOString(),
     }];
-    scrollToBottom();
+    scrollToBottom('auto', true);
 
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
@@ -482,9 +607,9 @@
         // Same tok/s accounting as makeProgressHandler. Tool frames aren't
         // rendered on the silent path, but the meter still needs the pause —
         // otherwise a silent turn's tool time would count as turn time.
-        if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-        else if (data.type === 'tool_start') noteToolStart(data.args);
-        else if (data.type === 'tool_result') noteToolEnd();
+        if (data.type === 'token' || data.type === 'thinking') meterOutput(data.delta);
+        else if (data.type === 'tool_start') meterToolStart(data.args);
+        else if (data.type === 'tool_result') meterToolEnd();
 
         if (data.type === 'token') {
           accumulatedContent += data.delta;
@@ -526,7 +651,7 @@
         if (data.type === 'done') {
           pendingTtft.delete(progressId);
           const result = data.result ?? {};
-          settleTurn((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
+          meterSettle((result.usage as { outputTokens?: number | null } | undefined)?.outputTokens ?? null);
           const finalMessage = (result.message as string) ?? accumulatedContent;
           messages = messages.map((m) =>
             m.id === progressId
@@ -534,12 +659,12 @@
               : m,
           );
           scrollToBottom();
-          bumpGraphRevision();
+          bumpGraphIfOnScreen();
           return;
         }
         if (data.type === 'error') {
           pendingTtft.delete(progressId);
-          settleTurn();
+          meterSettle();
           messages = messages.map((m) =>
             m.id === progressId
               ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown'}` }
@@ -561,7 +686,7 @@
         currentJobId = null;
         // Backstop: a stream that ends without done/error must not leave the
         // meter stuck on "live". No-op once the handler has settled.
-        settleTurn();
+        meterSettle();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -588,7 +713,10 @@
     // `/jkai?ask=…` prefills the composer. This is how the Intel dashboard
     // commissions a question: it hands over a prompt already loaded with what
     // the graph knows, and the user presses send (or edits first).
-    const ask = new URLSearchParams(window.location.search).get('ask');
+    // Only the pane on screen may consume it: `ask` is one-shot (it clears the
+    // param), so with several panes mounted the first to run would swallow a
+    // question meant for the visible thread.
+    const ask = active ? new URLSearchParams(window.location.search).get('ask') : null;
     if (ask && !input) {
       input = ask;
       // Clear the param so a refresh doesn't re-prefill over the user's edits.
@@ -597,7 +725,10 @@
       history.replaceState(history.state, '', url);
     }
 
-    textareaEl?.focus();
+    // Bring back any follow-up left pending at the last reload. Idempotent, so
+    // every mounted pane can call it.
+    hydrateQueuedSends();
+    if (active) textareaEl?.focus();
     void fetchMentionIndex().then((list) => {
       entityMentions = list;
     });
@@ -608,14 +739,32 @@
   });
 
   $effect(() => {
-    // Refocus the composer when the active conversation changes or the
-    // assistant finishes responding, so the cursor lives in the input.
+    // Refocus the composer when this pane comes to the front or the assistant
+    // finishes responding, so the cursor lives in the input. A background tab
+    // must not do this — its textarea is in a hidden subtree, and a pane that
+    // finished its answer off-screen would otherwise yank the caret out of the
+    // thread the user is actually typing in.
+    const onScreen = active;
     conversationId;
     // A new thread means a new history list — never resume mid-cycle in it.
     resetHistoryCycle();
-    if (!loading) {
+    if (onScreen && !loading) {
       tick().then(() => textareaEl?.focus());
     }
+  });
+
+  $effect(() => {
+    // Coming to the front. The transcript's own scroll maths ran while this pane
+    // sat in a `display: none` subtree, where scrollHeight is 0, so it has to be
+    // redone now or a long thread opens at its first message.
+    // Forced: hiding and re-showing the pane can fire a scroll event at
+    // scrollTop 0, which reads as "the user scrolled up" and would otherwise
+    // leave the follow disarmed at the top of the thread.
+    if (!active) return;
+    void tick().then(() => {
+      scrollToBottom('instant', true);
+      setTimeout(() => scrollToBottom('instant', true), 50);
+    });
   });
 
   // When the selected conversation changes, look up whether the
@@ -657,6 +806,20 @@
     error?: string;
     incompatible?: boolean;
   }
+  // Follow-ups typed while a reply is still streaming.
+  //
+  // The composer used to be `disabled={loading}`, so a second message simply
+  // could not be sent — which made the gateway's queue/interrupt setting almost
+  // unreachable from the UI. Holding them rather than posting them straight away
+  // serialises at our own door: the gateway never sees an overlap from the
+  // composer, so this is correct whichever mode it is in, and each message still
+  // gets its own turn and its own answer.
+  //
+  // Kept in $lib/jkai/queued-sends, keyed by conversation, so they survive a
+  // reload — which is exactly when you would most want them back — and so one
+  // pane per open tab can each have their own without four copies of the storage
+  // logic.
+  const queuedSends = $derived(queuedFor(conversationId));
   let pendingAttachments = $state<PendingAttachment[]>([]);
   let dragOver = $state(false);
   let fileInputEl: HTMLInputElement | undefined = $state();
@@ -875,19 +1038,16 @@
     // Jump instantly to the latest message on initial load / conversation switch.
     // Child content (markdown, tool drawers, attachments) renders across multiple
     // frames, so retry after layout settles to catch the real scrollHeight.
-    scrollToBottom('instant');
-    setTimeout(() => scrollToBottom('instant'), 50);
-    setTimeout(() => scrollToBottom('instant'), 200);
+    scrollToBottom('instant', true);
+    setTimeout(() => scrollToBottom('instant', true), 50);
+    setTimeout(() => scrollToBottom('instant', true), 200);
   });
 
-  // SSE connection for real-time follow-up messages
+  // Real-time follow-up messages. The connection itself is shared: every open
+  // tab needs this feed for its own thread, and one EventSource each would
+  // exhaust the browser's six-per-origin HTTP/1.1 budget on the dev server
+  // before the job streams got a look in. See $lib/jkai/followup-stream.
   $effect(() => {
-    // Clean up previous connection
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-
     // Per-conversation state: the `intel` signal only ever arrives for the
     // thread whose stream is open, so switching threads while extraction is
     // running must clear it. Left set, the incoming thread's newest reply would
@@ -897,14 +1057,8 @@
 
     if (!conversationId) return;
 
-    const es = new EventSource(`/api/jkai/events?conversationId=${conversationId}`);
-    eventSource = es;
-
-    es.onmessage = (event) => {
+    return subscribeFollowups(conversationId, (data) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'connected') return; // ignore connection ack
-
         // Intel extraction changed state. Not a message — it updates UI that is
         // already on screen. On `done` the mention index is refetched so replies
         // the user is ALREADY reading gain their entity links (the index was
@@ -917,16 +1071,16 @@
             void fetchMentionIndex({ refresh: true }).then((list) => {
               entityMentions = list;
             });
-            bumpGraphRevision();
+            bumpGraphIfOnScreen();
           }
           return;
         }
 
         const newMsg: Message = {
           id: crypto.randomUUID(),
-          role: data.role || 'assistant',
-          content: data.content,
-          source: data.source || 'followup',
+          role: (data.role as Message['role']) || 'assistant',
+          content: typeof data.content === 'string' ? data.content : '',
+          source: (data.source as string) || 'followup',
           // Carry the row's metadata so the message keeps its identity across a
           // reload. Without it a heartbeat note arrived as an ordinary assistant
           // bubble and then turned into a status line on refresh, once the
@@ -953,18 +1107,9 @@
         }
         scrollToBottom();
       } catch {
-        // ignore parse errors
+        // ignore malformed frames
       }
-    };
-
-    es.onerror = () => {
-      // EventSource auto-reconnects, no action needed
-    };
-
-    return () => {
-      es.close();
-      eventSource = null;
-    };
+    });
   });
 
   async function cancelJob() {
@@ -1041,9 +1186,9 @@
       // as generated output; a tool call bills its argument JSON and then
       // pauses the clock for however long the tool runs, resuming on its
       // result (so the provider's prefill wait afterwards still counts).
-      if (data.type === 'token' || data.type === 'thinking') noteOutput(data.delta);
-      else if (data.type === 'tool_start') noteToolStart(data.args);
-      else if (data.type === 'tool_result') noteToolEnd();
+      if (data.type === 'token' || data.type === 'thinking') meterOutput(data.delta);
+      else if (data.type === 'tool_start') meterToolStart(data.args);
+      else if (data.type === 'tool_result') meterToolEnd();
 
       if (data.type === 'token') {
         heartbeat = null;
@@ -1302,7 +1447,7 @@
         // Settle the tok/s meter against the provider's own output-token count
         // (reasoning + tool-call tokens included) when the server reported one;
         // otherwise it keeps the streamed chars/4 estimate.
-        settleTurn(result.usage?.outputTokens ?? null);
+        meterSettle(result.usage?.outputTokens ?? null);
         const prior = messages.find((m) => m.id === progressId);
         const finalContent = result.message || result.error || accRef.value || 'No response.';
         const finalMsg: Message = {
@@ -1330,18 +1475,19 @@
         // The turn is on record now, so the thread's graph can have gained
         // structure (model, files, canvases) and — on an extraction turn —
         // concepts once the queue drains. Tell the rail to look again.
-        bumpGraphRevision();
+        bumpGraphIfOnScreen();
         return;
       }
 
       if (data.type === 'error') {
+        turnOk = false;
         heartbeat = null;
         pendingTtft.delete(progressId);
         pendingPlan = null;
         pendingConfirm = null;
         pendingClarify = null;
         pendingApproval = null;
-        settleTurn();
+        meterSettle();
         messages = messages.map((m) =>
           m.id === progressId
             ? { ...m, isProgress: false, content: `Error: ${data.message ?? 'Unknown error'}` }
@@ -1372,7 +1518,7 @@
     pendingTtft.set(progressId, startTtftMark(progressId));
     // Re-attaching: the bus replays its buffered events in one burst, so this
     // turn's throughput isn't measurable — account for it but publish nothing.
-    beginTurn({ replay: true });
+    meterBegin({ replay: true });
     messages = [...messages, {
       id: progressId,
       role: 'assistant',
@@ -1401,7 +1547,7 @@
       pendingConfirm = null;
       pendingClarify = null;
       pendingApproval = null;
-      settleTurn();
+      meterSettle();
       scrollToBottom();
     }
   }
@@ -1737,6 +1883,10 @@
   const threadTitle = $derived(conversation?.title?.trim() || 'new thread');
 
   $effect(() => {
+    // The hub header carries ONE thread's numbers, so only the pane on screen
+    // may publish them. Without this gate a background tab's turn would rewrite
+    // the cost and context figures above the thread the user is actually reading.
+    if (!active) return;
     // Tracked reads only — the ledger numbers. The write is untracked so the
     // shared store's proxy can't re-trigger this effect.
     const next = {
@@ -1752,7 +1902,9 @@
     untrack(() => setThreadLedger(next));
   });
 
-  onMount(() => () => clearThreadLedger());
+  // Closing a background tab must not blank the header — those numbers belong to
+  // whichever thread is on screen, which is not this one.
+  onMount(() => () => { if (active) clearThreadLedger(); });
   // Always show the model that will actually answer (the conversation's pin,
   // falling back to the site default) — "Click to select" hid the effective
   // model and made the pill look broken.
@@ -1932,16 +2084,47 @@
     await tellHermesModel(ctx.provider, ctx.modelId);
   }
 
-  async function send() {
-    const text = input.trim();
-    if (!text || loading || !conversationId) return;
+  /**
+   * Fire the handed-over question once, as soon as it can actually be sent.
+   *
+   * A plain `let`, never `$state`: nothing renders it, and the effect below
+   * both reads it and writes it — as reactive state that is the documented
+   * route to `effect_update_depth_exceeded`.
+   */
+  let autoSendDone = false;
+
+  $effect(() => {
+    if (!autoSend || autoSendDone) return;
+    // `?new=1` creates the conversation in the parent's mount hook, so there is
+    // usually no id on the first run — wait for one rather than dropping the
+    // question on the floor.
+    if (!conversationId || !input.trim() || loading) return;
+    autoSendDone = true;
+    // `send()` writes `input` and `loading`, which this effect reads.
+    untrack(() => void send());
+  });
+
+  async function send(queuedText?: string) {
+    const text = (queuedText ?? input).trim();
+    if (!text || !conversationId) return;
+    if (loading) {
+      // Mid-reply. Hold it and send when this turn closes.
+      if (pendingAttachments.length > 0) {
+        showToast('Finish the current reply before sending files.');
+        return;
+      }
+      pushQueued(conversationId, text);
+      input = '';
+      resetHistoryCycle();
+      return;
+    }
 
     // Snapshot before `messages` is mutated below — routing applies to the first
     // message of a conversation only, and the optimistic bubble we now append
     // BEFORE routing would otherwise make every conversation look started.
     const isFirstMessage = messages.length === 0;
 
-    input = '';
+    if (queuedText === undefined) input = '';
     resetHistoryCycle();
     loading = true;
     heartbeat = null;
@@ -1969,7 +2152,9 @@
       createdAt: new Date().toISOString(),
     };
     messages = [...messages, userMsg];
-    scrollToBottom();
+    // Sending is an explicit "take me to the bottom" — re-arms the follow even
+    // if the user had scrolled up to read something before typing.
+    scrollToBottom('auto', true);
 
     // Offline short-circuit: if the browser reports it's offline, skip the
     // POST entirely, enqueue via the PWA outbox, and mark the user bubble
@@ -2018,7 +2203,7 @@
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
-    beginTurn();
+    meterBegin();
 
     // An "@files" mention routes this turn to the Files skill so the orchestrator
     // reaches for the file_search tool (semantic search over /drive content); an
@@ -2078,6 +2263,7 @@
       // message isn't lost. Drop the in-flight progress bubble and mark the
       // user bubble queued so it gets the badge.
       const errMsg = err instanceof Error ? err.message : String(err);
+      turnOk = false;
       const isNetworkError = err instanceof TypeError; // `fetch` throws TypeError on network failure
       if (isNetworkError) {
         try {
@@ -2108,9 +2294,34 @@
     pendingApproval = null;
     // Backstop: a stream that ends without done/error (cancel, hang-up, network
     // fallback) must not leave the meter stuck on "live". No-op once settled.
-    settleTurn();
+    meterSettle();
     scrollToBottom();
+    void drainQueuedSends();
   }
+
+  /** Send the next follow-up typed while the last reply was streaming. */
+  async function drainQueuedSends() {
+    if (loading || !conversationId) return;
+    const next = takeQueued(conversationId);
+    if (next === null) return;
+    await send(next);
+  }
+
+  function dropQueuedSend(index: number) {
+    if (!conversationId) return;
+    dropQueued(conversationId, index);
+  }
+
+  // A queue restored from the last visit goes out as soon as this pane is idle —
+  // the same rule it followed before the reload. Tracked read is `loading` alone;
+  // the drain is untracked because `send` writes `loading` and reads the queue,
+  // and an effect that tracked either would re-enter itself.
+  $effect(() => {
+    const busy = loading;
+    untrack(() => {
+      if (!busy) void drainQueuedSends();
+    });
+  });
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {
@@ -2127,7 +2338,21 @@
     }
   }
 
-  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+  /**
+   * Every SSE frame calls this — token deltas, tool cards, status lines. It
+   * only moves the view while `stickToBottom` holds, so scrolling up through
+   * the history during a turn is no longer fought by the stream.
+   *
+   * `force` re-arms the follow and is for things the *user* just did: sending a
+   * message, firing a slash command, opening a thread.
+   *
+   * Behaviour defaults to instant, not smooth: a smooth scroll fires scroll
+   * events at every intermediate position, and those read as "the user scrolled
+   * up" and would unstick the follow mid-animation.
+   */
+  function scrollToBottom(behavior: ScrollBehavior = 'auto', force = false) {
+    if (force) stickToBottom = true;
+    else if (!stickToBottom) return;
     requestAnimationFrame(() => {
       chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior });
     });
@@ -2325,7 +2550,7 @@
 
 
   <!-- Messages -->
-  <div bind:this={chatContainer} class="msg-list">
+  <div bind:this={chatContainer} class="msg-list" onscroll={onListScroll} use:stickyBottom>
     {#if !conversationId}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm" style="color: var(--text-ghost);">
@@ -2801,7 +3026,39 @@
           Drop files to attach
         </div>
       {/if}
+      <!-- Only while the reader has scrolled off the tail: says the view is no
+           longer following, and clicking re-arms it. -->
+      {#if !stickToBottom}
+        <button
+          type="button"
+          class="jump-latest"
+          onclick={() => scrollToBottom('auto', true)}
+          title="Jump to the latest message and resume following"
+        >
+          ↓ Latest
+        </button>
+      {/if}
       <div class="composer-inner">
+        <!-- Follow-ups typed while the reply was still streaming. Shown rather
+             than dropped into the transcript as optimistic bubbles: they have not
+             been sent, and each one is still cancellable. -->
+        {#if queuedSends.length > 0}
+          <div class="queued-strip" aria-label="Queued follow-ups">
+            {#each queuedSends as q, i (i)}
+              <div class="queued-row">
+                <span class="queued-mark" aria-hidden="true">⏳</span>
+                <span class="queued-text">{q}</span>
+                <button
+                  type="button"
+                  class="queued-drop"
+                  aria-label={`Remove queued message: ${q.slice(0, 40)}`}
+                  title="Don't send this"
+                  onclick={() => dropQueuedSend(i)}
+                >×</button>
+              </div>
+            {/each}
+          </div>
+        {/if}
         {#if paletteOpen}
           <div class="cmd-palette" role="listbox" aria-label="Slash commands">
             {#each paletteMatches as cmd, i (cmd.command)}
@@ -2964,8 +3221,7 @@
             onkeydown={handleKeydown}
             oninput={onComposerInput}
             onpaste={onPaste}
-            placeholder={composerPlaceholder}
-            disabled={loading}
+            placeholder={loading ? 'Type a follow-up — it goes next…' : composerPlaceholder}
             class="composer-textarea"
             rows="1"
           ></textarea>
@@ -2980,8 +3236,8 @@
           </button>
           <button
             type="button"
-            onclick={send}
-            disabled={loading || !input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
+            onclick={() => send()}
+            disabled={!input.trim() || pendingAttachments.some(a => a.uploading || a.incompatible)}
             class="composer-send"
             aria-label="Send"
           >
@@ -3031,7 +3287,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 11px 20px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .th-left {
     min-width: 0;
@@ -3082,7 +3338,7 @@
     display: inline-flex;
     align-items: center;
     padding: 5px 9px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -3148,7 +3404,10 @@
   .msg-stack {
     display: grid;
     grid-template-columns: 1fr min(900px, 100%) 1fr;
-    row-gap: 14px;
+    /* Message rows carry their own hairline divider now, so consecutive turns
+       sit flush and read as one continuous ledger. The cards between them
+       (plans, trays, reasoning panels) bring their own margins. */
+    row-gap: 0;
   }
   /* :global because most children are component roots (ChatMessage's wrapper,
      WorkerTray, Artifact…) and so never carry this component's scope class. */
@@ -3156,9 +3415,27 @@
     grid-column: 2;
     min-width: 0;
   }
-  .msg-stack > .msg-slot.user-turn {
-    grid-column: 2 / -1;
-    justify-self: end;
+  /* A turn is full-bleed: its divider and the assistant wash reach both pane
+     edges, and ChatMessage's own centring padding keeps the words on the 900px
+     reading column. This replaces the old right-gutter span for user turns —
+     the two registers are told apart by the wash and the gutter label now, not
+     by which side of the pane they hug. */
+  .msg-stack > .msg-slot {
+    grid-column: 1 / -1;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  /* The assistant register is the wash — that, and the accent role label in the
+     gutter, is what replaces the bubble. It covers the whole slot so a reply's
+     attachments and chips sit inside the same band as its words. */
+  .msg-stack > .msg-slot:not(.user-turn) {
+    background: rgba(196, 87, 10, 0.035);
+  }
+  /* Only the message row itself is full-bleed. Everything else in the slot —
+     origin tags above it, workflow chips / attachments / build pills below —
+     lines up with the same reading column the words sit on. */
+  .msg-slot > :global(:not(.msg-row)) {
+    padding-inline: max(20px, calc((100% - 900px) / 2));
   }
 
   /* Extraction-in-flight footer. Deliberately the quietest thing in the stack:
@@ -3167,11 +3444,13 @@
      reply itself — see ChatMessage's `erProcessing` border. */
 
   /* ── Composer ─────────────────────────────────────────────────────────── */
+  /* The composer is part of the shell, not the transcript: it takes the shell
+     step so the conversation column reads as ending above it. */
   .composer {
     position: relative;
     flex: none;
-    border-top: 1px solid var(--divider);
-    background: var(--bg);
+    border-top: 1px solid var(--line);
+    background: var(--surface-shell);
     padding: 10px 20px 14px;
     padding-bottom: max(14px, env(safe-area-inset-bottom));
   }
@@ -3179,6 +3458,33 @@
     position: relative;
     max-width: 900px;
     margin: 0 auto;
+  }
+
+  /* Detached-from-the-tail affordance. Floats over the bottom of the message
+     list rather than inside it, so it can't trip the sticky-bottom observer. */
+  .jump-latest {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 20px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    background: var(--card-bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease-out, border-color 0.2s ease-out;
+  }
+  .jump-latest:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
   }
 
   .chip-row {
@@ -3194,7 +3500,7 @@
     gap: 7px;
     padding: 5px 9px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -3224,29 +3530,80 @@
     align-items: flex-end;
     gap: 8px;
   }
+  .queued-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+  .queued-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 8px;
+    background: var(--surface-sunken);
+    border-left: 2px solid var(--accent-ink-tint-35);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .queued-mark {
+    flex: none;
+  }
+  .queued-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .queued-drop {
+    flex: none;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    line-height: 1;
+    color: var(--text-muted);
+    padding: 0 2px;
+  }
+  .queued-drop:hover {
+    color: var(--status-fail);
+  }
+
+  /* One hairline field on the page ground — the 2px card border read as a
+     second frame inside the composer's own top rule. */
   .composer-textarea {
     flex: 1;
     min-width: 0;
     min-height: 44px;
     padding: 11px 13px;
-    border: 2px solid var(--card-border);
+    border: 1px solid rgba(26, 16, 8, 0.18);
     border-radius: 0;
-    background: var(--card-bg);
+    background: var(--bg);
     font-family: var(--font-body);
     font-size: var(--fs-body);
     line-height: 1.5;
     color: var(--text-primary);
     resize: none;
     /* Height is driven by the autosize effect; this is where it stops growing
-       and starts scrolling. */
+       and starts scrolling — silently. The box keeps scrolling past its
+       max-height, it just doesn't put a scrollbar in the middle of the
+       composer to say so. */
     overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .composer-textarea::-webkit-scrollbar {
+    display: none;
   }
   .composer-textarea::placeholder {
     color: var(--text-ghost);
   }
   .composer-textarea:focus {
     outline: none;
-    border-color: var(--accent-tint-35);
+    border-color: var(--accent);
   }
 
   /* Wrap div for the second heartbeat-line render site — kept as a hook
@@ -3262,7 +3619,7 @@
     right: 0;
     margin-bottom: 0.5rem;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     z-index: 20;
@@ -3290,6 +3647,7 @@
     gap: 6px;
     flex-wrap: wrap;
     margin-top: 6px;
+    margin-bottom: 10px;
   }
   .wf-chips-label {
     font-family: var(--font-mono);
@@ -3335,7 +3693,7 @@
     border: 1px solid transparent;
     background: transparent;
   }
-  .model-btn { cursor: pointer; border-color: var(--card-border); }
+  .model-btn { cursor: pointer; border-color: var(--line-strong); }
   .model-btn:hover:not(:disabled) { color: var(--text-primary); }
   .model-btn:disabled { opacity: 0.5; cursor: default; }
   .model-dot { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--accent); flex-shrink: 0; }
@@ -3366,7 +3724,7 @@
   .route-fb-why { color: var(--text-ghost); }
   .route-fb-ask { margin-left: auto; }
   .route-fb-btn {
-    border: 1px solid var(--card-border); background: var(--surface-overlay);
+    border: 1px solid var(--line-strong); background: var(--surface-overlay);
     border-radius: var(--radius-pill); padding: 2px 9px; font-size: var(--fs-nav); line-height: 1.1; cursor: pointer;
   }
   .route-fb-btn:hover { border-color: var(--accent); }
@@ -3379,7 +3737,7 @@
     margin-top: 0.35rem;
     min-width: 12rem;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
     z-index: 26;
@@ -3396,7 +3754,7 @@
     border: none;
     cursor: pointer;
   }
-  .model-opt:hover { background: var(--bg-section); }
+  .model-opt:hover { background: var(--surface-sunken); }
   .model-opt.active { background: var(--accent-tint-08); }
   .model-opt-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
   .model-opt-provider { font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -3425,8 +3783,8 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     color: var(--text-primary);
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: 4px;
     padding: 6px 8px;
     margin: 0 0 6px;
@@ -3476,7 +3834,7 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     padding: 8px 14px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-pill);
     background: transparent;
     color: var(--text-secondary);
@@ -3495,9 +3853,12 @@
    * clearly labelled, in-flow chips aligned to the message's side. */
   .src-tag-row {
     display: flex;
-    margin-bottom: 4px;
+    padding-top: 10px;
+    margin-bottom: 0;
   }
-  .src-tag-row.justify-end { justify-content: flex-end; }
+  /* Origin tags used to mirror the message's side; every turn is a left-aligned
+     ledger row now, so the tag stays with the gutter. */
+  .src-tag-row.justify-end { justify-content: flex-start; }
   .src-tag {
     display: inline-flex;
     align-items: center;
@@ -3524,7 +3885,7 @@
   .reasoning-panel {
     margin: 4px 0;
     padding: 0;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     background: color-mix(in srgb, var(--accent) 3%, transparent);
     font-family: var(--font-mono);
@@ -3573,7 +3934,7 @@
     margin: 0;
     padding: 10px 12px;
     color: var(--text-muted);
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
     max-height: 320px;
     overflow-y: auto;
     font-family: var(--font-sans, inherit);
@@ -3640,7 +4001,7 @@
     margin: 0.5em 0;
     padding: 7px 9px;
     background: color-mix(in srgb, var(--accent) 5%, var(--bg-section));
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     overflow-x: auto;
     font-size: var(--fs-label);
@@ -3661,7 +4022,7 @@
   }
   .reasoning-body :global(hr) {
     border: none;
-    border-top: 1px dashed var(--card-border);
+    border-top: 1px dashed var(--line-strong);
     margin: 0.7em 0;
   }
   .reasoning-body :global(a) {
@@ -3679,7 +4040,7 @@
     font-size: var(--fs-label);
     color: var(--text-muted);
     background: color-mix(in srgb, var(--accent) 4%, transparent);
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .heartbeat-line .hb-dot {
     width: 6px;
@@ -3738,7 +4099,7 @@
     font-size: var(--fs-label);
     color: var(--status-error);
     background: color-mix(in srgb, var(--status-error) 6%, transparent);
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .conn-warning .hb-dot.warn {
     width: 6px;
@@ -3762,8 +4123,8 @@
   }
   .step-card {
     padding: 6px 10px;
-    background: var(--bg-section);
-    border: 1px solid var(--card-border);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     transition: border-color 100ms ease;
   }
@@ -3851,7 +4212,7 @@
     letter-spacing: 0.06em;
     background: transparent;
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     cursor: pointer;
   }
@@ -3983,7 +4344,7 @@
     gap: 8px;
     padding: 6px 10px;
     background: var(--accent-tint-08);
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .working-dot {
     width: 8px;
@@ -4073,7 +4434,7 @@
     background: var(--accent-hover);
   }
   .composer-send:disabled {
-    background: var(--card-border);
+    background: var(--line-strong);
     color: var(--text-ghost);
     cursor: not-allowed;
   }
@@ -4086,7 +4447,7 @@
     flex: none;
     background: transparent;
     color: var(--text-muted);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);

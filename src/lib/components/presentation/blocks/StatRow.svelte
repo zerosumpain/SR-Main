@@ -45,7 +45,7 @@
   }
   .sr-lab {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--ink-soft);

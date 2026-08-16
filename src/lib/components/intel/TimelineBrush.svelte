@@ -374,7 +374,7 @@
   .plot {
     position: relative;
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-round);
     overflow: hidden;
   }
@@ -418,7 +418,7 @@
     padding: 6px 8px;
     /* Floating over the chart — opaque, never a tint. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     pointer-events: none;
   }
@@ -475,7 +475,7 @@
   }
   .field input {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     padding: 4px 6px;
     font-family: var(--font-mono);
@@ -494,7 +494,7 @@
     letter-spacing: 0.05em;
     padding: 4px 10px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     cursor: pointer;

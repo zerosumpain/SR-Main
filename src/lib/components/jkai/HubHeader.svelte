@@ -309,8 +309,8 @@
     /* Above the thread rail's slide-over (30) and the phone graph sheet (40),
        below the grain overlay (100) — the menu must escape both. */
     z-index: 60;
-    background: var(--bg-section);
-    border-bottom: 1px solid var(--divider);
+    background: var(--surface-rail);
+    border-bottom: 1px solid var(--line);
     padding-top: env(safe-area-inset-top);
   }
   .hdr-row {
@@ -335,7 +335,7 @@
     width: 1px;
     height: 18px;
     flex: none;
-    background: rgba(26, 16, 8, 0.16);
+    background: var(--line-strong);
   }
   .strip-slot {
     min-width: 0;
@@ -355,7 +355,7 @@
     gap: 7px;
     padding: 5px 9px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
@@ -385,17 +385,20 @@
   .menu-wrap {
     position: relative;
   }
+  /* A floating layer — one of the two places elevation is allowed. The border
+     drops to a hairline now that the shadow is doing the separating. */
   .menu {
     position: absolute;
     right: 0;
     top: 32px;
     width: 250px;
     background: var(--bg);
-    border: 2px solid rgba(26, 16, 8, 0.22);
+    border: 1px solid var(--line-strong);
+    box-shadow: var(--elev-pop);
     z-index: 50;
   }
   .menu-group {
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .menu-group.last {
     border-bottom: none;
@@ -440,8 +443,11 @@
     color: var(--text-ghost);
     white-space: nowrap;
   }
+  /* A backlog above its warnAbove threshold. Accent, not --warn: on this
+     palette burnt orange IS "needs you", and the amber read as a third status
+     colour nothing else on the surface used. */
   .menu-meta.warn {
-    color: var(--warn);
+    color: var(--accent);
   }
 
   .back-chip {
@@ -537,7 +543,7 @@
       bottom: 0;
       left: auto;
       width: min(86vw, 300px);
-      border-width: 0 0 0 2px;
+      border-width: 0 0 0 1px;
       overflow-y: auto;
       padding-top: calc(env(safe-area-inset-top) + 8px);
       padding-bottom: env(safe-area-inset-bottom);
@@ -559,7 +565,7 @@
       align-items: center;
       height: 34px;
       padding: 0 16px;
-      border-top: 1px solid var(--divider);
+      border-top: 1px solid var(--line-hair);
       overflow-x: auto;
       overflow-y: hidden;
       scrollbar-width: none;

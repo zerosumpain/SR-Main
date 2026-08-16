@@ -275,30 +275,32 @@
           </button>
         </div>
       </div>
-      <table class="nm-table hero-table">
-        <thead>
-          <tr>
-            <th>HR / Steps / Temp</th>
-            <th>Headline</th>
-            <th>Strap template</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each preview as row, i (i)}
-            <tr class:row-failed={row.failed}>
-              <td class="cell-meta">
-                {row.hrCentroid} / {row.stepsCentroid.toLocaleString('en-GB')} /
-                {row.tempCentroid}°
-                {#if row.failed}<span class="nm-pill" data-state="warn">fallback</span>{/if}
-              </td>
-              <td class="cell-headline">
-                {row.primary} <span class="ghost-text">{row.ghost}</span>
-              </td>
-              <td class="cell-strap">{row.strapTemplate}</td>
+      <div class="nm-table-scroll">
+        <table class="nm-table hero-table">
+          <thead>
+            <tr>
+              <th>HR / Steps / Temp</th>
+              <th>Headline</th>
+              <th>Strap template</th>
             </tr>
-          {/each}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {#each preview as row, i (i)}
+              <tr class:row-failed={row.failed}>
+                <td class="cell-meta">
+                  {row.hrCentroid} / {row.stepsCentroid.toLocaleString('en-GB')} /
+                  {row.tempCentroid}°
+                  {#if row.failed}<span class="nm-pill" data-state="warn">fallback</span>{/if}
+                </td>
+                <td class="cell-headline">
+                  {row.primary} <span class="ghost-text">{row.ghost}</span>
+                </td>
+                <td class="cell-strap">{row.strapTemplate}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
     </section>
   {:else}
     <section class="panel">
@@ -315,42 +317,44 @@
           No entries yet. Generate a batch above to populate the pool.
         </p>
       {:else}
-        <table class="nm-table hero-table">
-          <thead>
-            <tr>
-              <th>HR / Steps / Temp</th>
-              <th>Headline</th>
-              <th>Strap template</th>
-              <th>Style</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each data.rows as row (row.id)}
+        <div class="nm-table-scroll">
+          <table class="nm-table hero-table">
+            <thead>
               <tr>
-                <td class="cell-meta">
-                  {row.hrCentroid} / {row.stepsCentroid.toLocaleString('en-GB')} /
-                  {row.tempCentroid}°
-                </td>
-                <td class="cell-headline">
-                  {row.primary} <span class="ghost-text">{row.ghost}</span>
-                </td>
-                <td class="cell-strap">{row.strapTemplate}</td>
-                <td class="cell-style">{row.style ?? '—'}</td>
-                <td class="cell-del">
-                  <button
-                    class="nm-link-btn danger btn-del"
-                    onclick={() => deleteRow(row.id)}
-                    disabled={busy}
-                    aria-label="Delete entry"
-                  >
-                    ×
-                  </button>
-                </td>
+                <th>HR / Steps / Temp</th>
+                <th>Headline</th>
+                <th>Strap template</th>
+                <th>Style</th>
+                <th></th>
               </tr>
-            {/each}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {#each data.rows as row (row.id)}
+                <tr>
+                  <td class="cell-meta">
+                    {row.hrCentroid} / {row.stepsCentroid.toLocaleString('en-GB')} /
+                    {row.tempCentroid}°
+                  </td>
+                  <td class="cell-headline">
+                    {row.primary} <span class="ghost-text">{row.ghost}</span>
+                  </td>
+                  <td class="cell-strap">{row.strapTemplate}</td>
+                  <td class="cell-style">{row.style ?? '—'}</td>
+                  <td class="cell-del">
+                    <button
+                      class="nm-link-btn danger btn-del"
+                      onclick={() => deleteRow(row.id)}
+                      disabled={busy}
+                      aria-label="Delete entry"
+                    >
+                      ×
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {/if}
     </section>
   {/if}
@@ -381,7 +385,7 @@
   }
   .hint {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
   .panel { margin-top: 1rem; }
@@ -395,7 +399,7 @@
   }
   .panel-title {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-secondary);
@@ -408,7 +412,7 @@
   }
   .save-mode {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     color: var(--text-secondary);
     display: flex;
     align-items: center;
@@ -417,7 +421,7 @@
   .save-mode input[type='radio'] { accent-color: var(--accent); }
 
   /* hero-table adds tighter cell padding + special row/cell tints on top of .nm-table */
-  .hero-table { font-size: 12px; }
+  .hero-table { font-size: var(--fs-label-xs); }
   .hero-table tbody tr.row-failed {
     background: color-mix(in srgb, var(--error) 8%, transparent);
   }
@@ -426,7 +430,7 @@
   .ghost-text { color: var(--text-ghost); }
   .cell-strap { color: var(--text-secondary); }
   .cell-style {
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     max-width: 160px;
     overflow: hidden;
@@ -434,5 +438,5 @@
     white-space: nowrap;
   }
   .cell-del { text-align: right; }
-  .btn-del { font-size: 14px; line-height: 1; padding: 2px 6px; }
+  .btn-del { font-size: var(--fs-nav); line-height: 1; padding: 2px 6px; }
 </style>

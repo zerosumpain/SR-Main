@@ -66,7 +66,7 @@
     padding: 0.4rem 0.75rem;
     margin: 0.4rem 0;
     font-size: 0.85rem;
-    border: 1px dashed var(--card-border);
+    border: 1px dashed var(--line-strong);
     border-radius: var(--radius-round);
     background: var(--card-bg);
   }

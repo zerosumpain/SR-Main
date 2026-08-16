@@ -184,6 +184,16 @@ const EXPLAINER_FILES = [
   'scenes.md',
   'SKILL.md',
   'examples/chapter.html',
+  // The Field Study System. A studio build is an INFORMATION project, and this
+  // is the system it is built against: the nine templates, the machine-readable
+  // registry the chapter plan names ids from, the CSS those templates are made
+  // of (ported to the kit's --ex-* tokens, because a studio build never loads
+  // app.css), and the ship gate.
+  'field-study/README.md',
+  'field-study/TEMPLATES.md',
+  'field-study/templates.json',
+  'field-study/field-study.css',
+  'field-study/CHECKLIST.md',
   // VENDOR.md (three.js provenance) is intentionally NOT listed here — the
   // agent needs the kit to build with, not its licensing paperwork. Omitting
   // it is safe: buildExplainerAssets only throws for files it lists and

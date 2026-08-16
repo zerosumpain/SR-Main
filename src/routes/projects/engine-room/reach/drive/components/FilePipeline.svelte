@@ -65,25 +65,25 @@
   .fp { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
 
   .kinds { display: flex; gap: 5px; flex-wrap: wrap; }
-  .kinds button { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .kinds button { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer;
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer;
     transition: background 0.12s, border-color 0.12s; }
   .kinds button:hover { background: rgba(28,22,17,0.07); border-color: rgba(28,22,17,0.34); }
   .kinds button.on { background: var(--success); border-color: var(--success); color: #fff; }
 
   .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .h-eg { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
-  .h-mode { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em;
+  .h-eg { font-family: var(--fs-serif); font-size: var(--fs-body-sm); font-weight: 600; color: var(--text-primary); }
+  .h-mode { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em;
     text-transform: uppercase; padding: 2px 8px; border-radius: var(--radius-pill);
     color: var(--m); background: color-mix(in srgb, var(--m) 14%, transparent); }
 
-  .note { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.72); max-width: 86ch; }
+  .note { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.72); max-width: 86ch; }
 
   .outcome { padding: 9px 13px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 9%, transparent);
-    font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 88ch; }
+    font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 88ch; }
   .outcome.no { border-left-color: #8a2d3a; background: rgba(138,45,58,0.07); }
   .outcome b { color: var(--text-primary); }
 </style>

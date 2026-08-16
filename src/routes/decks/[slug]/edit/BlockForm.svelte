@@ -323,18 +323,18 @@
   .bf-field { display: flex; flex-direction: column; gap: 4px; }
   .bf-lab {
     font-family: var(--font-mono);
-    font-size: 9px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  .bf-hint { font-family: var(--font-mono); font-size: 8.5px; color: var(--text-ghost); }
+  .bf-hint { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   input[type='text'],
   input[type='number'],
   select,
   textarea {
     font-family: var(--font-body);
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     color: var(--text-primary);
     background: var(--bg);
     border: 1px solid var(--card-border);
@@ -343,13 +343,13 @@
     width: 100%;
     box-sizing: border-box;
   }
-  .bf-json { font-family: var(--font-mono); font-size: 11px; }
-  .bf-code { font-family: var(--font-mono); font-size: 11px; white-space: pre; }
+  .bf-json { font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .bf-code { font-family: var(--font-mono); font-size: var(--fs-label-xs); white-space: pre; }
   textarea { resize: vertical; }
   .bf-toolbar { display: flex; gap: 2px; align-items: center; }
   .bf-toolbar button {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     min-width: 26px;
     color: var(--text-muted);
     background: var(--bg);
@@ -369,7 +369,7 @@
   .bf-x,
   .bf-add {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-muted);
     background: none;
     border: 1px solid var(--card-border);
@@ -385,10 +385,10 @@
     justify-content: space-between;
     gap: 10px;
   }
-  .bf-chart-sum { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+  .bf-chart-sum { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .bf-chart-btn {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     color: var(--bg);
     background: var(--accent-ink);

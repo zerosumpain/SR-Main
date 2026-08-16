@@ -110,7 +110,7 @@
 </section>
 
 <style>
-  .sub { margin: 16px 0 7px; font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  .sub { margin: 16px 0 7px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.13em; text-transform: uppercase; color: rgba(28,22,17,0.5); }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 7px; }
 </style>

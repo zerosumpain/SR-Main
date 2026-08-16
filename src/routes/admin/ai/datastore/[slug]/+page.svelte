@@ -504,21 +504,23 @@
       <div class="nm-empty">No records match.</div>
     {:else}
       <div class="table-scroll">
-        <table class="nm-table">
-          <thead>
-            <tr><th>Key</th><th>Data</th><th>Ver</th><th>Updated</th></tr>
-          </thead>
-          <tbody>
-            {#each records as rec (rec.id)}
-              <tr class="rec-row" class:selected={selected?.id === rec.id} onclick={() => openRecord(rec)}>
-                <td class="rec-key">{rec.key ?? '—'}</td>
-                <td class="rec-data">{preview(rec)}</td>
-                <td>{rec.version}</td>
-                <td class="rec-date">{fmtDate(rec.updatedAt)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="nm-table-scroll">
+          <table class="nm-table">
+            <thead>
+              <tr><th>Key</th><th>Data</th><th>Ver</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              {#each records as rec (rec.id)}
+                <tr class="rec-row" class:selected={selected?.id === rec.id} onclick={() => openRecord(rec)}>
+                  <td class="rec-key">{rec.key ?? '—'}</td>
+                  <td class="rec-data">{preview(rec)}</td>
+                  <td>{rec.version}</td>
+                  <td class="rec-date">{fmtDate(rec.updatedAt)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
       </div>
     {/if}
   </section>
@@ -651,10 +653,10 @@
 
 <style>
   .coll-desc { margin: -0.75rem 0 1.25rem; font-size: 0.9rem; color: var(--text-secondary); max-width: 70ch; }
-  .result-bad { font-family: var(--font-mono); font-size: 11px; color: var(--error); }
+  .result-bad { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--error); }
   .saved-flag {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.18em;
     color: var(--success);
@@ -689,8 +691,8 @@
   .rec-date { white-space: nowrap; color: var(--text-ghost); }
 
   .editor { border-color: var(--accent); }
-  .rec-meta { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); }
-  .code { font-family: var(--font-mono); font-size: 11px; line-height: 1.5; }
+  .rec-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .code { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5; }
   .editor-actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.6rem; }
 
   .audit { margin-top: 1rem; }
@@ -705,8 +707,8 @@
     font-size: 0.8rem;
   }
   .audit-row:last-child { border-bottom: none; }
-  .audit-actor { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
-  .audit-date { font-family: var(--font-mono); font-size: 10px; color: var(--text-ghost); margin-left: auto; }
+  .audit-actor { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .audit-date { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-left: auto; }
 
   .danger-zone { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--divider); }
 

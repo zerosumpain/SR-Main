@@ -76,14 +76,14 @@
     gap: 0.25rem;
   }
   .bp-link {
-    font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 0.66rem;
+    font-family: var(--font-mono, var(--font-mono));
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--text-muted);
     text-decoration: none;
     padding: 0.35rem 0.6rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
   }
   .bp-link.active {
     color: var(--accent);

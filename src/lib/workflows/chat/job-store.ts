@@ -289,6 +289,13 @@ export interface OrchestratorJob {
   // legitimate 16-minute tool call is reaped at 4 min while Hermes carries on
   // producing the real answer into a dead stream.
   activeTools: number;
+  // Set when this job's message is queued BEHIND another turn on the same
+  // conversation, which happens when the gateway runs in `busy_input_mode:
+  // queue`. Such a job produces nothing at all until the turn ahead of it
+  // finishes — indistinguishable from stuck to the 4-min idle watchdog, which
+  // would reap a perfectly healthy queued turn behind any long answer. Cleared
+  // the moment its own first frame arrives.
+  queuedBehind: string | null;
 }
 
 const jobs = new Map<string, OrchestratorJob>();
@@ -319,6 +326,10 @@ const DELEGATION_HARD_TIMEOUT_MS = 45 * 60_000; // 45 min total while a delegati
 // Hermes — which owns the turn and can still deliver the answer — gives up
 // first, rather than SvelteKit reaping a live stream out from under it.
 const TOOL_IDLE_TIMEOUT_MS = 20 * 60_000; // 20 min inside a single tool call
+// A queued turn is silent for exactly as long as the turn ahead of it runs, and
+// that one is bounded by its own hard limit. Generous, because the alternative is
+// reaping a turn that has not been given a chance to start.
+const QUEUED_IDLE_TIMEOUT_MS = 30 * 60_000; // 30 min waiting to start
 const TOOL_HARD_TIMEOUT_MS = 29 * 60_000; // 29 min total while a tool is running
 
 function startWatchdog(jobId: string, job: OrchestratorJob): void {
@@ -338,7 +349,9 @@ function startWatchdog(jobId: string, job: OrchestratorJob): void {
     // busy-but-silent, so neither must be reaped at the 4-min idle mark.
     const delegating = job.activeDelegations > 0;
     const toolRunning = job.activeTools > 0;
-    const idleLimit = job.waiterOpenedAt
+    const idleLimit = job.queuedBehind
+      ? QUEUED_IDLE_TIMEOUT_MS
+      : job.waiterOpenedAt
       ? WAITER_IDLE_TIMEOUT_MS
       : delegating ? DELEGATION_IDLE_TIMEOUT_MS
       : toolRunning ? TOOL_IDLE_TIMEOUT_MS : IDLE_TIMEOUT_MS;
@@ -484,6 +497,7 @@ export function createJob(message: string, scope: JobScope = {}): { jobId: strin
     waiterOpenedAt: null,
     activeDelegations: 0,
     activeTools: 0,
+    queuedBehind: null,
   };
   jobs.set(jobId, job);
   recordPulse({ ts: now, jobId, kind: 'job_start', phase: 'starting', summary: message.slice(0, 140), elapsedMs: 0 });
@@ -526,10 +540,17 @@ function scopeMatches(job: OrchestratorJob, scope: JobScope): boolean {
  * conversationId. A new request within the same canvas/conversation
  * supersedes its own prior in-flight job, but leaves other users' or
  * other canvases' jobs alone.
+ *
+ * Returns the ids it cancelled, because the superseding job needs them: a second
+ * message sent while the agent is answering does NOT start a second Hermes run —
+ * the running one is redirected, or the text merged into it, and it keeps the
+ * FIRST turn's stamp. The new job adopts these ids so it renders the output that
+ * is actually answering it instead of rejecting it as another turn's. See
+ * `frameBelongsToTurn`.
  */
-export function cancelForScope(scope: JobScope, reason: string): number {
-  if (!scope.workflowId && !scope.conversationId) return 0;
-  let cancelled = 0;
+export function cancelForScope(scope: JobScope, reason: string): string[] {
+  if (!scope.workflowId && !scope.conversationId) return [];
+  const cancelled: string[] = [];
   for (const [id, job] of jobs) {
     if (job.status !== 'running') continue;
     if (!scopeMatches(job, scope)) continue;
@@ -542,7 +563,7 @@ export function cancelForScope(scope: JobScope, reason: string): number {
     if (job.heartbeat) { clearInterval(job.heartbeat); job.heartbeat = undefined; }
     publishJobEvent(id, { type: 'error', message: reason });
     failAllWaiters(id, reason);
-    cancelled += 1;
+    cancelled.push(id);
   }
   return cancelled;
 }
@@ -600,6 +621,9 @@ export function listJobs(): Array<{
   workflowId?: string | null;
   conversationId?: string | null;
   chatNodeId?: string | null;
+  /** Set while this turn is waiting for another on the same conversation. An
+   *  operator reading the running-job list should see "waiting", not "stuck". */
+  queuedBehind?: string | null;
 }> {
   return Array.from(jobs.entries()).map(([id, job]) => ({
     id,
@@ -615,6 +639,7 @@ export function listJobs(): Array<{
     workflowId: job.scope.workflowId ?? null,
     conversationId: job.scope.conversationId ?? null,
     chatNodeId: job.scope.chatNodeId ?? null,
+    queuedBehind: job.queuedBehind,
   }));
 }
 
@@ -705,6 +730,51 @@ export function listRunningJobsByConversation(): Map<string, string> {
     out.set(convId, id);
   }
   return out;
+}
+
+/**
+ * Resolve when `jobId` is no longer running — immediately if it is already gone.
+ *
+ * Used to serialise a queued turn behind the one ahead of it. Polls rather than
+ * hooking the job's completion, because a job can end by any of five routes
+ * (done, error, explicit cancel, scope supersede, watchdog) and a missed hook
+ * would hang a turn for its whole idle allowance. 250ms is far below anything a
+ * user perceives at the end of a multi-second answer.
+ */
+export function whenJobSettles(jobId: string): Promise<void> {
+  const job = jobs.get(jobId);
+  if (!job || job.status !== 'running') return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      const current = jobs.get(jobId);
+      if (!current || current.status !== 'running') {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 250);
+    // Do not hold the process open on this alone.
+    if (typeof timer === 'object' && 'unref' in timer) timer.unref();
+  });
+}
+
+/**
+ * Mark `jobId` as waiting for `behindJobId` to finish before its own turn starts.
+ *
+ * Only meaningful when the gateway queues rather than interrupts. It exempts the
+ * job from the idle watchdog while it has nothing to say, and nothing else.
+ */
+export function markJobQueued(jobId: string, behindJobId: string): void {
+  const job = jobs.get(jobId);
+  if (!job) return;
+  job.queuedBehind = behindJobId;
+}
+
+/** Its turn has started — normal watchdog limits apply again. */
+export function clearJobQueued(jobId: string): void {
+  const job = jobs.get(jobId);
+  if (!job || !job.queuedBehind) return;
+  job.queuedBehind = null;
+  job.lastEventAt = Date.now();
 }
 
 export function getRunningJobIdForConversation(conversationId: string): string | null {

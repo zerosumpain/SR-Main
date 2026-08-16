@@ -32,7 +32,7 @@
   .hl[data-align='right'] { align-items: flex-end; text-align: right; }
   .hl-kicker {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: 0.22em;
     text-transform: uppercase;
     color: var(--accent-ink);

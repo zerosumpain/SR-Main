@@ -87,30 +87,30 @@
 </div>
 
 <style>
-  .ts { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-round); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
+  .ts { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp); background: rgba(255,255,255,0.45); padding: 14px 16px; margin: 14px 0; }
   .ts-head { margin-bottom: 8px; }
-  .ts-head .k { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
+  .ts-head .k { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
   svg { display: block; width: 100%; height: auto; max-width: 640px; }
   .ax { stroke: rgba(28,22,17,0.3); stroke-width: 1; }
   .grid { stroke: rgba(28,22,17,0.09); stroke-width: 1; }
-  .tick { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; fill: rgba(28,22,17,0.5); }
-  .axlab { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 0.12em; fill: rgba(28,22,17,0.42); }
+  .tick { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.5); }
+  .axlab { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; fill: rgba(28,22,17,0.42); }
   .pt { cursor: pointer; }
   .pt circle { fill: var(--accent-ink); transition: r 0.12s; }
   .pt.hot circle { fill: var(--error); }
   .pt.on circle { stroke: rgba(28,22,17,0.4); stroke-width: 1.5; }
-  .ptlab { font-family: 'JetBrains Mono', monospace; font-size: 9px; fill: rgba(28,22,17,0.6); }
+  .ptlab { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: rgba(28,22,17,0.6); }
   .pt.hot .ptlab { fill: var(--error); font-weight: 600; }
 
   .pts { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0; padding: 0; }
-  .pt-btn { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.7);
+  .pt-btn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.7);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
     border-radius: var(--radius-pill); padding: 3px 9px; cursor: pointer; }
   .pt-btn:hover { border-color: rgba(28,22,17,0.4); color: var(--text-primary); }
   .pt-btn.on { background: var(--accent-ink); border-color: var(--accent-ink); color: #fff; }
 
-  .ts-read { margin-top: 8px; padding: 9px 13px; border-radius: var(--radius-round); background: var(--accent-ink-tint-12);
+  .ts-read { margin-top: 8px; padding: 9px 13px; border-radius: var(--radius-sharp); background: var(--accent-ink-tint-12);
     border: 1px solid rgba(14,91,102,0.2); display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; min-height: 40px; }
-  .ts-read b { font-family: 'Fraunces', serif; font-size: 14px; color: var(--text-primary); }
-  .ts-read span { font-size: 12.5px; line-height: 1.5; color: rgba(28,22,17,0.74); flex: 1 1 240px; }
+  .ts-read b { font-family: var(--fs-serif); font-size: var(--fs-nav); color: var(--text-primary); }
+  .ts-read span { font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.74); flex: 1 1 240px; }
 </style>

@@ -160,14 +160,14 @@
     padding: 1rem;
     background: var(--surface-elevated);
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-primary);
   }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; }
   .head-text { display: flex; flex-direction: column; gap: 0.3rem; }
   .kicker {
     font-family: var(--font-mono);
-    font-size: 0.625rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -190,7 +190,7 @@
     line-height: 1;
     background: transparent;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--text-secondary);
     cursor: pointer;
   }
@@ -199,7 +199,7 @@
   .tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .tag {
     font-family: var(--font-mono);
-    font-size: 0.58rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
@@ -225,13 +225,13 @@
     gap: 0.4rem;
     padding: 0.65rem 0.7rem;
     border: 1px solid var(--card-border);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--card-bg);
   }
   .rating-head { display: flex; align-items: baseline; gap: 0.4rem; }
   .stars { color: var(--accent); font-size: 0.95rem; letter-spacing: 0.05em; }
   .rating-num { font-family: var(--font-mono); font-size: 1rem; font-weight: 700; color: var(--text-primary); }
-  .rating-count { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); }
+  .rating-count { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); }
   .quote {
     margin: 0;
     font-family: var(--font-body);
@@ -247,11 +247,11 @@
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.55rem 0.85rem;
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     cursor: pointer;
     min-height: 40px;
     text-decoration: none;
@@ -265,6 +265,6 @@
   .btn-primary:hover { background: var(--accent-hover); }
   .btn:disabled { opacity: 0.55; cursor: default; }
   .add-next { flex: 1 1 100%; flex-direction: column; align-items: flex-start; gap: 0.12rem; padding-top: 0.5rem; padding-bottom: 0.5rem; text-transform: none; letter-spacing: 0; }
-  .add-line { font-family: var(--font-mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .leg-meta { font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.92; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .add-line { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; }
+  .leg-meta { font-family: var(--font-mono); font-size: var(--fs-label-xs); opacity: 0.92; font-variant-numeric: tabular-nums; line-height: 1.3; }
 </style>

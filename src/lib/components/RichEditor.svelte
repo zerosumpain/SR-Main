@@ -639,7 +639,7 @@
 
 <style>
   .editor-wrapper {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     overflow: hidden;
     display: flex;
@@ -650,7 +650,7 @@
     display: flex;
     align-items: center;
     padding: 6px 10px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     background: var(--card-bg);
     gap: 4px;
   }
@@ -661,7 +661,7 @@
     border: none; border-radius: 4px;
     background: transparent; color: var(--text-secondary);
     cursor: pointer;
-    font-family: var(--font-mono); font-size: 11px;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     transition: background 0.15s, color 0.15s;
   }
   .tool-btn:hover:not(:disabled) { background: var(--accent-tint-08); color: var(--text-primary); }
@@ -684,12 +684,12 @@
   .rich-host :global(p) { margin: 0 0 1.1em; }
   .rich-host :global(a) { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
   .rich-host :global(code) {
-    font-family: var(--font-mono); font-size: 0.875em;
-    padding: 0.15em 0.45em; background: var(--card-bg); border: 1px solid var(--card-border);
+    font-family: var(--font-mono); font-size: max(0.875em, var(--fs-label-xs));
+    padding: 0.15em 0.45em; background: var(--card-bg); border: 1px solid var(--line-strong);
   }
   .rich-host :global(pre) {
     padding: 1.1em 1.4em; margin: 1.4em 0; overflow-x: auto;
-    background: var(--card-bg); border: 2px solid var(--card-border); font-size: 0.875rem;
+    background: var(--card-bg); border: 2px solid var(--line-strong); font-size: 0.875rem;
   }
   .rich-host :global(pre code) { padding: 0; background: none; border: none; }
   .rich-host :global(blockquote) {
@@ -702,8 +702,8 @@
 
   .status-bar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 4px 12px; border-top: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+    padding: 4px 12px; border-top: 1px solid var(--line-strong);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase;
     letter-spacing: 0.1em; color: var(--text-ghost); background: var(--card-bg);
   }
   .status-left, .status-right { display: flex; align-items: center; gap: 12px; }
@@ -713,17 +713,17 @@
 
   .readability {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    padding: 8px 12px; border-top: 1px solid var(--card-border);
-    font-family: var(--font-mono); font-size: 11px;
+    padding: 8px 12px; border-top: 1px solid var(--line-strong);
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-secondary); background: var(--accent-tint-04);
   }
   .r-pill {
-    padding: 2px 8px; border: 1px solid var(--card-border); border-radius: var(--radius-pill);
-    text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px;
+    padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill);
+    text-transform: uppercase; letter-spacing: 0.08em; font-size: var(--fs-label-xs);
   }
   .r-pill strong { color: var(--accent); margin-left: 4px; font-weight: 700; }
   .r-audience { color: var(--text-primary); font-style: italic; }
-  .r-meta { color: var(--text-ghost); margin-left: auto; font-size: 10px; }
+  .r-meta { color: var(--text-ghost); margin-left: auto; font-size: var(--fs-label-xs); }
 
   /* Margin-only display: highlight the original (will be replaced) in the
      body, hide the proposed insertion entirely (it lives in the callout). */

@@ -4,6 +4,7 @@
   import type { PageData } from './$types';
   import ScopeEditor from '$lib/components/research/ScopeEditor.svelte';
   import type { ScopeDraft } from '$lib/components/research/ScopeEditor.svelte';
+  import { GROUNDING_OPTIONS, groundingOption, type Grounding } from '$lib/deepdive/grounding';
 
   let { data }: { data: PageData } = $props();
 
@@ -11,6 +12,12 @@
 
   let topic = $state('');
   let depth = $state<string>('brief');
+  /**
+   * Whether an `instant` answer may look things up, and at what price. The
+   * default stays 'off' so the cheap tier stays cheap unless asked otherwise —
+   * see $lib/deepdive/grounding for the measured trade-off.
+   */
+  let grounding = $state<Grounding>('off');
   let goals = $state('');
   let showDefinition = $state(false);
   let scope = $state<ScopeDraft>({
@@ -73,6 +80,7 @@
         body: JSON.stringify({
           topic: t,
           depth,
+          grounding,
           goals: splitList(goals),
           scope: canScope
             ? {
@@ -141,6 +149,9 @@
     if (status === 'complete') return 'var(--success)';
     if (status === 'failed') return 'var(--error)';
     if (status === 'draft') return 'var(--text-ghost)';
+    // Paused is a state somebody chose, not a problem — the counter-accent
+    // separates it from the orange of a run that is genuinely working.
+    if (status === 'paused') return 'var(--accent-ink)';
     return 'var(--accent)';
   }
   function formatDate(iso: string): string {
@@ -162,7 +173,7 @@
         to a full investigation with sources, facts and a red team.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <a class="back-link" href="/jkai">JKAI</a>
   </header>
 
   <section class="launch">
@@ -195,6 +206,31 @@
         </button>
       {/each}
     </div>
+
+    <!-- Only for `instant`. Every other tier searches with Tavily as part of
+         what it is; offering a second search here would be an unasked bill on
+         top of the one the tier already runs. -->
+    {#if depth === 'instant'}
+      <div class="grounding" role="radiogroup" aria-label="Web search">
+        <span class="sr-label-tight">Web search</span>
+        {#each GROUNDING_OPTIONS as g (g.mode)}
+          <button
+            type="button"
+            class="gnd"
+            class:on={grounding === g.mode}
+            role="radio"
+            aria-checked={grounding === g.mode}
+            onclick={() => (grounding = g.mode)}
+          >
+            <span class="gnd-name">{g.label}</span>
+            <span class="gnd-cost">
+              ~{g.seconds}s · {g.costUsd === 0 ? 'no cash cost' : `~$${g.costUsd.toFixed(2)}`}
+            </span>
+          </button>
+        {/each}
+      </div>
+      <p class="gnd-why">{groundingOption(grounding).blurb}</p>
+    {/if}
 
     <div class="define-row">
       <button
@@ -265,6 +301,10 @@
             <div class="run-topic">{r.topic}</div>
             <div class="run-meta">
               <span style:color={statusColor(r.status)}>{r.status}</span>
+              <!-- Named, not colour-coded: a run that says `phase2` while nothing
+                   is working on it looks healthy, and one sat like that for four
+                   months before anybody spotted it. -->
+              {#if r.stalled}<span class="dot">·</span><span class="stalled">stalled — open to resume</span>{/if}
               {#if r.durationMs}<span class="dot">·</span><span>{fmtMs(r.durationMs)}</span>{/if}
               <span class="dot">·</span><span>{formatDate(r.createdAt)}</span>
             </div>
@@ -291,6 +331,20 @@
     color: var(--text-primary); outline: none;
   }
   .prompt-input:focus { border-color: var(--accent); }
+
+  /* One row of small choices under the tier cards, not a second card grid: it
+     is a qualifier on one tier, not a peer of the tiers themselves. */
+  .grounding { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-top: 0.7rem; }
+  .gnd {
+    display: grid; gap: 1px; text-align: left; cursor: pointer;
+    background: none; border: 1px solid var(--line-strong); padding: 4px 9px;
+  }
+  .gnd:hover { border-color: var(--accent); }
+  .gnd.on { border-color: var(--accent); background: var(--card-bg); }
+  .gnd-name { font-family: var(--font-mono); font-size: var(--fs-label); color: var(--text-primary); }
+  .gnd.on .gnd-name { color: var(--accent); }
+  .gnd-cost { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
+  .gnd-why { margin: 0.4rem 0 0; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); max-width: 68ch; }
 
   .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; margin-top: 0.6rem; }
   .tier {
@@ -349,4 +403,5 @@
   .run-topic { font-size: var(--fs-nav); font-weight: 500; margin: 0.55rem 0 0.35rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .run-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
   .run-meta .dot { color: var(--text-ghost); }
+  .run-meta .stalled { color: var(--warn); }
 </style>

@@ -37,19 +37,19 @@
 </div>
 
 <style>
-  .sb { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); background: var(--card-bg); overflow: hidden; }
+  .sb { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--card-bg); overflow: hidden; }
   .sb-head { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px 8px; background: transparent; border: none; cursor: pointer; text-align: left; }
-  .sb-label { font-family: var(--font-body); font-weight: 700; font-size: 14px; color: var(--text-primary); display: block; }
-  .sb-sub { font-size: 11px; color: var(--text-muted); }
+  .sb-label { font-family: var(--font-body); font-weight: 700; font-size: var(--fs-nav); color: var(--text-primary); display: block; }
+  .sb-sub { font-size: var(--fs-label-xs); color: var(--text-muted); }
   .sb-num { display: flex; align-items: baseline; gap: 7px; }
   .sb-num .v { font-family: var(--font-display); font-size: 30px; line-height: 1; }
-  .sb-num .band { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .sb-num .band { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; }
   .sb-track { height: 5px; background: var(--surface-overlay); }
   .sb-fill { height: 100%; transition: width 0.2s var(--ease-out); }
   .sb-items { list-style: none; margin: 0; padding: 8px 14px 12px; display: flex; flex-direction: column; gap: 7px; }
   .sb-items li { display: grid; grid-template-columns: 16px 1fr; gap: 2px 8px; align-items: start; }
-  .sb-items .dot { grid-row: 1 / span 2; font-size: 12px; color: var(--text-ghost); }
+  .sb-items .dot { grid-row: 1 / span 2; font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .sb-items .dot.met { color: var(--success); }
-  .it-l { font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
-  .it-d { grid-column: 2; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
+  .it-l { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
+  .it-d { grid-column: 2; font-size: var(--fs-label-xs); line-height: 1.4; color: var(--text-muted); }
 </style>

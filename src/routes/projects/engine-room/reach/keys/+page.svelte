@@ -84,33 +84,33 @@
 <style>
   .note { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px;
     padding: 10px 14px; border-left: 3px solid var(--success);
-    border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--success) 8%, transparent); }
-  .n-kick { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  .n-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--success); }
-  .note p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
+  .note p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 82ch; }
   .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; margin-top: -6px; }
 
   .strip { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-primary);
+  .chip { font-family: var(--font-body); font-size: var(--fs-label-xs); color: var(--text-primary);
     background: rgba(255,255,255,0.6); border: 1px solid rgba(28,22,17,0.18);
-    border-radius: var(--radius-round); padding: 5px 11px; cursor: pointer; }
+    border-radius: var(--radius-sharp); padding: 5px 11px; cursor: pointer; }
   .chip:hover { background: rgba(28,22,17,0.07); }
   .chip.on { background: var(--success); border-color: var(--success); color: #fff; }
-  .why { margin: 0; min-height: 3em; font-size: 12.5px; line-height: 1.55;
+  .why { margin: 0; min-height: 3em; font-size: var(--fs-label); line-height: 1.55;
     color: rgba(28,22,17,0.72); max-width: 84ch; }
 
   .flow { margin: 0; padding: 0; list-style: none; display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
   .flow li { display: grid; grid-template-columns: 20px 1fr; gap: 4px 9px; align-items: baseline;
     padding: 9px 12px; border: 1px solid rgba(28,22,17,0.14); border-top: 3px solid var(--success);
-    border-radius: var(--radius-round); background: rgba(255,255,255,0.5); }
+    border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); }
   .f-n { width: 18px; height: 18px; display: grid; place-items: center; border-radius: var(--radius-pill);
     background: color-mix(in srgb, var(--success) 20%, transparent);
-    font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; color: var(--success); }
-  .flow b { font-size: 12.5px; color: var(--text-primary); }
-  .f-w { grid-column: 2; font-size: 11.5px; line-height: 1.5; color: rgba(28,22,17,0.65); }
+    font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; color: var(--success); }
+  .flow b { font-size: var(--fs-label); color: var(--text-primary); }
+  .f-w { grid-column: 2; font-size: var(--fs-label-xs); line-height: 1.5; color: rgba(28,22,17,0.65); }
 
   @media (max-width: 560px) { .why { min-height: 0; } }
 </style>

@@ -49,14 +49,14 @@
 
 <style>
   .ad { padding: 4px 2px; }
-  .ad-bar { display: flex; height: 10px; border-radius: var(--radius-round); overflow: hidden; margin: 2px 0 12px; background: rgba(28,22,17,0.08); }
+  .ad-bar { display: flex; height: 10px; border-radius: var(--radius-sharp); overflow: hidden; margin: 2px 0 12px; background: rgba(28,22,17,0.08); }
   .ad-bar .seg { display: block; height: 100%; transition: width 0.18s ease; }
-  .row { padding: 5px 4px; border-radius: var(--radius-round); }
+  .row { padding: 5px 4px; border-radius: var(--radius-sharp); }
   .row.hl { background: var(--accent-tint-20); animation: flash 1.4s ease; }
   @keyframes flash { 0% { background: var(--accent-tint-25); } 100% { background: var(--accent-tint-08); } }
   .r-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
   .dot { width: 7px; height: 7px; border-radius: var(--radius-sharp); flex-shrink: 0; }
-  .r-name { font-family: 'DM Sans', sans-serif; font-size: 11.5px; font-weight: 600; color: rgba(28,22,17,0.78); }
-  .r-pct { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(28,22,17,0.6); }
+  .r-name { font-family: var(--font-body); font-size: var(--fs-label-xs); font-weight: 600; color: rgba(28,22,17,0.78); }
+  .r-pct { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.6); }
   .r-range { width: 100%; cursor: pointer; }
 </style>

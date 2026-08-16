@@ -272,17 +272,17 @@
     display: flex;
     flex-direction: column;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-md, 4px);
     overflow: hidden;
   }
   .fi-hdr {
     padding: 18px 20px 14px;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   .fi-kicker {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: var(--accent);
@@ -298,7 +298,7 @@
   .fi-sub {
     margin: 0;
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.5;
     color: var(--text-secondary);
   }
@@ -309,7 +309,7 @@
   .fi-label {
     display: block;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--text-muted);
@@ -331,7 +331,7 @@
     padding: 8px 9px;
     text-align: left;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
     cursor: pointer;
     color: var(--text-secondary);
@@ -346,19 +346,19 @@
   }
   .fi-mode-l {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .fi-mode-d {
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     line-height: 1.35;
     color: var(--text-ghost);
   }
 
   .fi-effective {
     margin: 0 0 16px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: var(--text-secondary);
     padding: 8px 10px;
@@ -377,10 +377,10 @@
   }
   .fi-cat {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     padding: 4px 9px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--cat, var(--accent-ink));
     border-radius: var(--radius-sharp, 2px);
     color: var(--text-secondary);
@@ -396,7 +396,7 @@
   }
   .fi-none {
     margin: 6px 0 0;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: var(--text-ghost);
   }
@@ -409,10 +409,10 @@
   .fi-input {
     flex: 1;
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     padding: 7px 9px;
     background: var(--bg);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
     color: var(--text-primary);
   }
@@ -423,12 +423,12 @@
   .fi-add,
   .fi-cancel {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 7px 12px;
     background: transparent;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp, 2px);
     color: var(--text-secondary);
     cursor: pointer;
@@ -440,13 +440,13 @@
   }
   .fi-warn {
     margin: 12px 0 0;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--error);
   }
   .fi-loading {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
 
@@ -455,11 +455,11 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 12px 20px;
-    border-top: 1px solid var(--card-border);
+    border-top: 1px solid var(--line-strong);
   }
   .fi-save {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 7px 14px;

@@ -1,0 +1,891 @@
+/**
+ * The Data Spine — the reference field study.
+ *
+ * Content as DATA, validated against `field-study-system/content.schema.json`.
+ * Each beat names a template from `templates.json`; the template decides the
+ * markup, and `src/lib/fieldstudy/` renders it. There is no bespoke page
+ * layout under this route, which is the point: this is the study the others
+ * are migrated toward, and the one Studio's output is compared against.
+ *
+ * The authored content is the design system's own reference expression of this
+ * study (`field-study-system/example/data-spine.study.json`). To change what
+ * the study SAYS, change it here. To change how a beat LOOKS, change the
+ * template — and a template change applies to every study, so raise it rather
+ * than forking a layout locally.
+ *
+ * `fieldstudy/validate.ts` re-checks the invariants the types cannot express;
+ * `study.test.ts` fails the build if any of them break.
+ */
+import type { Study } from '$lib/fieldstudy/study';
+
+export const study: Study = {
+  slug: 'data-spine',
+  number: 5,
+  title: 'What is the education data spine?',
+  subject: 'The Data Spine',
+  statusStamp: 'DFE · ANNOUNCED FEB 2026 · NOT YET BUILT',
+  thesis: 'In February 2026 the government committed, in one paragraph of a white paper, to build a “data spine” for English education. This project takes that paragraph seriously — what a spine is, what it would be worth, who wants what from it, and how it could be built without repeating the mistakes already made with children\'s data.',
+  private: true,
+  updated: '2026-08-11',
+  status: {
+    headline: 'Announced, unspecified, unbuilt.',
+    detail: 'Consultation promised for summer 2026; the white paper\'s own phasing puts implementation at 2028–29.',
+    confidence: 'fact',
+  },
+  findings: [
+    {
+      text: 'The public specification of the spine fits in three quotations. Everything that matters — custody, architecture, who may look — is undecided.',
+      confidence: 'fact',
+      cites: [
+        1,
+        2,
+        3,
+      ],
+    },
+    {
+      text: 'The <b>long tail of suppliers</b>, not the three majors, is the binding design constraint — and it serves nurseries, special schools and alternative provision.',
+      confidence: 'fact',
+      cites: [
+        11,
+      ],
+    },
+    {
+      text: 'A federated spine can answer the department\'s questions without a new central store. The remaining obstacle is legal and political, not technical.',
+      confidence: 'hypothesis',
+    },
+  ],
+  asks: [
+    'What exactly has been announced — and what remains undecided?',
+    'What is a data spine made of, and what are the options at each layer?',
+    'How does it differ from the consistent child identifier, and why does confusing them matter?',
+    'Could it be built without spending the last of the public\'s trust?',
+  ],
+  glossary: [
+    {
+      term: 'MIS',
+      plain: 'The system a school keeps its register in.',
+    },
+    {
+      term: 'UPN',
+      plain: 'Unique pupil number — the school-side identifier.',
+    },
+    {
+      term: 'Federated query',
+      plain: 'Asking every holder a question instead of collecting their records.',
+    },
+  ],
+  sources: [
+    {
+      n: 1,
+      org: 'DfE',
+      what: 'Every Child Achieving and Thriving, p.98 — the spine paragraph',
+      url: 'https://www.gov.uk/government/publications/every-child-achieving-and-thriving',
+      kind: 'white paper',
+      asOf: 'Feb 2026',
+    },
+    {
+      n: 2,
+      org: 'DfE',
+      what: 'Bett 2026 remarks on the spine',
+      url: 'https://www.gov.uk/government/publications/every-child-achieving-and-thriving',
+      kind: 'press',
+      asOf: '2026',
+    },
+    {
+      n: 3,
+      org: 'DfE',
+      what: 'White paper phasing annex',
+      url: 'https://www.gov.uk/government/publications/every-child-achieving-and-thriving',
+      kind: 'white paper',
+      asOf: 'Feb 2026',
+    },
+    {
+      n: 11,
+      org: 'WhichMIS',
+      what: 'School management information system market shares',
+      url: 'https://www.whichmis.co.uk/',
+      kind: 'market data',
+      asOf: 'Oct 2025',
+      caveat: 'shares drift quarterly',
+    },
+    {
+      n: 14,
+      org: 'DfE',
+      what: 'The commitment, verbatim, p.98',
+      url: 'https://www.gov.uk/government/publications/every-child-achieving-and-thriving',
+      kind: 'white paper',
+      asOf: 'Feb 2026',
+    },
+    {
+      n: 21,
+      org: 'Parliament',
+      what: 'ContactPoint shutdown, research briefing SN05171',
+      url: 'https://researchbriefings.files.parliament.uk/documents/SN05171/SN05171.pdf',
+      kind: 'hansard',
+      asOf: '2010',
+    },
+    {
+      n: 33,
+      org: 'RIA Estonia',
+      what: 'X-Road performance characteristics',
+      url: 'https://e-estonia.com/solutions/interoperability-services/x-road/',
+      kind: 'technical',
+    },
+  ],
+  instruments: [
+    {
+      id: 'trace',
+      name: 'Trace a request',
+      href: '/projects/data-spine/trace',
+      kind: '2d-staged',
+      reachedFrom: [
+        '03',
+      ],
+      scenarios: [
+        {
+          id: 'attendance-daily',
+          label: 'Daily attendance, one local authority',
+          difficulty: 'easy',
+        },
+      ],
+      limits: 'Timings are modelled from published NHS Spine and X-Road latency figures, not measured on any DfE system. The identity-resolution step is the one with no published English standard.',
+    },
+    {
+      id: 'federation',
+      name: 'The federation, live',
+      href: '/projects/data-spine/federation/sim',
+      kind: '3d-network',
+      reachedFrom: [
+        '03',
+        '05',
+      ],
+      levers: [
+        {
+          id: 'estates',
+          label: 'Estates connected',
+          kind: 'B1',
+          baseline: 9,
+          min: 0,
+          max: 15,
+        },
+        {
+          id: 'optOut',
+          label: 'Opt-out rate',
+          kind: 'B1',
+          baseline: 3,
+          min: 0,
+          max: 25,
+          unit: '%',
+        },
+        {
+          id: 'custody',
+          label: 'Custody',
+          kind: 'B2',
+          baseline: 'connect',
+        },
+        {
+          id: 'focus',
+          label: 'Focus',
+          kind: 'B4',
+          baseline: 'all',
+        },
+      ],
+      scenarios: [
+        {
+          id: 'attendance-cin',
+          label: 'Attendance × children\'s social care, by LA',
+          difficulty: 'hard',
+        },
+        {
+          id: 'fsm-attainment',
+          label: 'FSM × attainment (single context)',
+          difficulty: 'easy',
+        },
+      ],
+      limits: 'Timings modelled from published NHS Spine and X-Road figures, not measured on any DfE system. Every cross-sector join shown is probabilistic; unmatched records are shown dropping out.',
+    },
+  ],
+  beats: [
+    {
+      no: '00',
+      slug: '',
+      name: 'Front matter',
+      template: 'T0',
+    },
+    {
+      no: '01',
+      slug: '',
+      name: 'The problem',
+      template: 'T1',
+      minutes: 4,
+      question: 'What exactly has been announced, and by whom?',
+      claim: {
+        text: '<b>The entire public record of the spine is three quotations.</b> Everything a design would need is still to be decided.',
+        confidence: 'fact',
+        cites: [
+          1,
+          2,
+          3,
+        ],
+      },
+      prose: [
+        {
+          research: 'The full public specification of the data spine fits in three quotations. The white paper names the data in scope and the qualities demanded — and nothing else: no architecture, no custodian, no budget, no delivery date.',
+          plain: 'Three quotes are the entire public record. Everything else is still to be decided.',
+          dropCap: true,
+        },
+      ],
+      pullQuote: 'One paragraph, on page 98, with no architecture attached.',
+      sections: [
+        {
+          template: 'T7',
+          title: 'How England got here',
+          threads: [
+            {
+              name: 'Capability built',
+              detail: 'NPD, the attendance feed, the Education Record, now the spine. Each one made the next possible.',
+              tag: 'operational',
+            },
+            {
+              name: 'Trust spent',
+              detail: 'ContactPoint, the distribution era, the Home Office MoU, the ICO audit. Each one made the next harder.',
+              tag: 'trust',
+            },
+          ],
+          entries: [
+            {
+              date: '2002',
+              title: 'The National Pupil Database begins',
+              detail: 'Census returns become a permanent longitudinal record. No sunset clause was ever set.',
+              tag: 'infrastructure',
+            },
+            {
+              date: '2010',
+              title: 'ContactPoint is switched off',
+              detail: 'A national index of every child, cancelled on cost and proportionality. The objections were never answered.',
+              tag: 'trust',
+              cites: [
+                21,
+              ],
+            },
+            {
+              date: '2016',
+              title: 'The Home Office memorandum',
+              detail: 'School census data shared for immigration enforcement.',
+              tag: 'trust',
+            },
+            {
+              date: '2020',
+              title: 'The ICO audit',
+              detail: 'The regulator found the department in breach of data-protection law.',
+              tag: 'trust',
+            },
+            {
+              date: '2024',
+              title: 'Daily attendance goes mandatory',
+              detail: 'Automated extraction from every state school\'s MIS — the spine\'s proof of concept, under a commercial contract.',
+              tag: 'operational',
+            },
+            {
+              date: '2025',
+              title: 'Data (Use and Access) Act',
+              detail: 'The legal plumbing a spine would run on, plus the consistent child identifier in statute.',
+              tag: 'identifier',
+            },
+            {
+              date: 'Feb 2026',
+              title: 'The white paper commits to a spine',
+              detail: 'One paragraph on page 98. Consultation promised for the summer.',
+              tag: 'infrastructure',
+              cites: [
+                14,
+              ],
+              present: true,
+            },
+          ],
+          balance: 'The two accounts do not net off. Capability compounds while trust depletes, and the consultation inherits the balance of both.',
+        },
+      ],
+      soWhat: 'There is less here than the debate assumes. The argument is not about a system that exists — it is about a paragraph.',
+      openQuestion: {
+        text: 'Has the trust account ever recovered anywhere, after a breach of this kind?',
+        falsifier: 'a documented recovery',
+      },
+    },
+    {
+      no: '02',
+      slug: 'sources',
+      name: 'The estate & the evidence',
+      template: 'T2',
+      minutes: 6,
+      question: 'What exists today, who holds it, and how do we know?',
+      claim: {
+        text: '<b>Three suppliers cover four schools in five</b> — but the twelve that cover the rest are the ones serving nurseries, special schools and alternative provision.',
+        confidence: 'fact',
+        cites: [
+          11,
+        ],
+      },
+      standfirst: 'Nobody can design a spine without knowing how many estates it has to reach. So: every supplier, with a real number against it, and the date the number was true.',
+      survey: {
+        columns: [
+          'Supplier',
+          'Kind',
+          'Schools',
+          'Share',
+          'Query interface',
+        ],
+        rows: [
+          {
+            cells: [
+              'Arbor',
+              'cloud MIS',
+              9677,
+              '43.9%',
+              'API, documented',
+            ],
+            basis: 'census',
+          },
+          {
+            cells: [
+              'ESS SIMS',
+              'on-premise',
+              6897,
+              '31.3%',
+              'per-site, varies',
+            ],
+            basis: 'census',
+          },
+          {
+            cells: [
+              'Bromcom',
+              'cloud MIS',
+              3493,
+              '15.9%',
+              'API, documented',
+            ],
+            basis: 'census',
+          },
+          {
+            cells: [
+              'ScholarPack',
+              'cloud, primary',
+              800,
+              '3.6%',
+              'API, documented',
+            ],
+            basis: 'census',
+          },
+          {
+            cells: [
+              'RM Integris',
+              'hosted',
+              650,
+              '3.0%',
+              'on request',
+            ],
+            basis: 'census',
+          },
+          {
+            cells: [
+              'The long tail — 10 further suppliers',
+              'mixed',
+              501,
+              '2.3%',
+              'none published',
+            ],
+            basis: 'census',
+            pick: true,
+          },
+          {
+            cells: [
+              'Independent, early years, bespoke — 6 vendors',
+              'not in census',
+              undefined,
+              undefined,
+              'unknown',
+            ],
+            basis: 'estimate',
+          },
+        ],
+        total: {
+          label: 'Reconciles to state census',
+          value: 22018,
+          reconciles: true,
+        },
+        provenance: 'WhichMIS, October 2025. Every count reconciles to the 22,018 state census; the estimate band is excluded from that total and from every share.',
+        asOf: 'October 2025',
+        cannotTellYou: [
+          'How many children appear in more than one estate under different identifiers.',
+          'Whether the long tail could afford a query interface at all.',
+          'Anything about independent schools or early years, which are not in the census.',
+        ],
+      },
+      sections: [
+        {
+          template: 'T8',
+          title: 'It has been tried before',
+          claim: {
+            text: '<b>Every spine that died was a central store; every one that survived moved questions.</b> The sample is small, but unanimous.',
+            confidence: 'fact',
+          },
+          cases: [
+            {
+              place: 'England',
+              year: '2004',
+              name: 'NHS Spine',
+              what: 'Demographics service plus a record locator. Holds identity and pointers; records stay in trusts.',
+              archetype: 'federated',
+              fate: 'Live · 20 years',
+              fateKind: 'live',
+              lesson: 'The name everyone borrows was never a database.',
+            },
+            {
+              place: 'Estonia',
+              year: '2001',
+              name: 'X-Road',
+              what: 'A query fabric across the whole state. No central copy; every request logged and citizen-visible.',
+              archetype: 'federated',
+              fate: 'Live · 24 years',
+              fateKind: 'live',
+              lesson: 'Citizens tolerate the plumbing because they can watch it.',
+              cites: [
+                33,
+              ],
+            },
+            {
+              place: 'England',
+              year: '2009',
+              name: 'ContactPoint',
+              what: 'An index of all 11 million children, with 390,000 authorised users.',
+              archetype: 'central-store',
+              fate: 'Cancelled 2010',
+              fateKind: 'cancelled',
+              lesson: 'Scale of access, not scale of data, is what ended it.',
+              cites: [
+                21,
+              ],
+            },
+            {
+              place: 'Denmark',
+              year: '1968',
+              name: 'CPR',
+              what: 'A civil registration number used across every public service, with statutory purpose limits.',
+              archetype: 'identifier-led',
+              fate: 'Live · 57 years',
+              fateKind: 'live',
+              lesson: 'An identifier is survivable if the limits arrive with it.',
+            },
+          ],
+          pattern: [
+            'Survivors hold identity and audit centrally, and nothing else. The three that died all held records.',
+            'Survivors made access visible to the citizen from the start. Retrofitting transparency has never once worked.',
+            'Every failure was political, not technical. All three cancelled systems worked as specified when switched off.',
+          ],
+        },
+      ],
+      soWhat: 'The estate is more concentrated than the debate assumes and more fragmented than a designer would like. Both facts constrain the answer, and they pull in opposite directions.',
+      openQuestion: {
+        text: 'Nobody publishes how many of the 22,018 could serve a query today. The department must know; it has not said.',
+        falsifier: 'a published readiness assessment',
+      },
+    },
+    {
+      no: '03',
+      slug: 'architecture',
+      name: 'Ways to build it',
+      template: 'T1',
+      minutes: 5,
+      question: 'If you had to build it, what are the actual options — and which have already been tried?',
+      claim: {
+        text: '<b>There are four archetypes, not a spectrum</b> — three have a real precedent, and only one requires copying children\'s records into a new store.',
+        confidence: 'fact',
+        cites: [
+          14,
+          21,
+        ],
+      },
+      marginNotes: [
+        {
+          text: 'The word does five jobs. Collapsing them into “database” is how the argument gets lost.',
+        },
+      ],
+      prose: [
+        {
+          research: 'Every school already keeps its register in a management information system. The question the consultation must answer is <b>custody</b>: connect those estates with a query fabric, or collect them into another central store.',
+          plain: 'Schools already hold the data. The question is whether the government asks them, or copies it.',
+          dropCap: true,
+        },
+        {
+          research: 'Where a spine has succeeded, the pattern is consistent. The centre holds identity, permission and audit. The records stay where they are generated.',
+        },
+      ],
+      figures: [
+        {
+          no: '3.1',
+          caption: 'The four archetypes and their fates. Three are already running in British government; the accent marks the one this study goes on to defend in beat 04.',
+          chart: 'A4',
+          unit: 'archetype',
+        },
+        {
+          no: '3.2',
+          caption: 'A schools × local-authority join, modelled. The dropped column is the one that matters: those children exist, and the answer silently excludes them.',
+          chart: 'A1',
+          unit: '% of records',
+          cites: [
+            33,
+          ],
+        },
+      ],
+      pullQuote: 'The department does not need to invent an architecture. It needs to choose one and say so.',
+      sections: [
+        {
+          template: 'T6',
+          title: 'Anatomy of a spine',
+          claim: {
+            text: '<b>Four of the five layers already exist in some form.</b> The one that does not — governance — is the one every objection is actually about.',
+            confidence: 'fact',
+          },
+          layers: [
+            {
+              no: 'L1',
+              name: 'Identifier',
+              question: 'who is this child?',
+              today: 'UPN in schools, ULN post-16, NHS number in health. None reconcile.',
+              withIt: 'One consistent identifier, in statute, with pilots running.',
+              theFight: 'Whether it becomes a de facto national ID.',
+              tag: 'identifier',
+            },
+            {
+              no: 'L2',
+              name: 'Index',
+              question: 'who holds a record?',
+              today: 'Nothing. Finding a child\'s history means asking around.',
+              withIt: 'A record-locator registry: pointers only, no content.',
+              theFight: 'A pointer index is itself sensitive — it maps a life.',
+            },
+            {
+              no: 'L3',
+              name: 'Exchange',
+              question: 'how does it move?',
+              today: 'A rented commercial pipe, plus 2,385 bespoke distributions.',
+              withIt: 'A query fabric the department governs itself.',
+              theFight: 'Connect or collect. This is the whole argument.',
+              tag: 'operational',
+            },
+            {
+              no: 'L4',
+              name: 'Standards',
+              question: 'do we mean the same thing?',
+              today: 'Census specifications, revised annually, interpreted locally.',
+              withIt: 'A published semantic layer — and a resolution standard.',
+              theFight: 'The resolution standard does not exist. Nothing works without it.',
+              tag: 'standards',
+            },
+            {
+              no: 'L5',
+              name: 'Governance',
+              question: 'who may ask, and who checks?',
+              today: 'Policy, not statute. An ICO audit found the law was broken.',
+              withIt: 'Purpose limits in law, an append-only audit ledger, a public dashboard.',
+              theFight: 'Entirely undesigned — and the subject of beat 06.',
+              tag: 'trust',
+            },
+          ],
+        },
+      ],
+      soWhat: 'Three of the four archetypes are already running somewhere in British government. The choice is available; what is missing is a decision, and the standard that makes it work.',
+      openQuestion: {
+        text: 'No lawful shared analytic key exists across schools, local authorities and health. Every join in this study is therefore probabilistic.',
+        falsifier: 'a published resolution standard',
+      },
+    },
+    {
+      no: '04',
+      slug: 'model',
+      name: 'The recommendation',
+      template: 'T3',
+      minutes: 4,
+      question: 'Which archetype, and why that one?',
+      claim: {
+        text: '<b>Centralise the trust, not the data.</b>',
+        confidence: 'hypothesis',
+      },
+      position: {
+        statement: 'Centralise the trust, not the data.',
+        elaboration: 'Build the identity, permission and audit layers nationally, once, and govern them in public. Leave every pupil record in the estate that generates it. Move questions, not children.',
+        confidence: 'hypothesis',
+        because: [
+          {
+            headline: 'It is the only archetype with a working precedent at national scale.',
+            detail: 'X-Road has run for 24 years across a whole government; the NHS Spine for twenty.',
+          },
+          {
+            headline: 'It answers the stated questions without a new copy to defend.',
+            detail: 'Every question in the white paper is an aggregate. None needs the records in one place.',
+          },
+          {
+            headline: 'It is the only design where an opt-out still means something.',
+            detail: 'A record never copied can still be withheld. A record already in a warehouse cannot.',
+          },
+        ],
+        rejected: [
+          {
+            name: 'Central store',
+            why: 'Cancelled once already, on precisely these objections, and nothing about them has changed except the public\'s patience.',
+          },
+          {
+            name: 'Broker pipe',
+            why: 'It works today — that is the strongest argument for it. But the department rents the governance rather than holding it, and cannot show a parent the audit trail of a system it does not run.',
+          },
+          {
+            name: 'Index & locate',
+            why: 'Sound, cheap, and insufficient. A pointer registry can tell you who holds a record; it cannot answer how many children in a local authority were absent last week.',
+          },
+        ],
+        conditions: [
+          'A published identity-resolution standard',
+          'Statutory purpose limits, not policy ones',
+          'A transparency dashboard live from the first query',
+          'Funding for the long tail\'s query interface',
+        ],
+        sinkers: 'If the long tail cannot be brought to a query interface at acceptable cost, federation degrades into a broker pipe with extra steps — and the department will have spent the trust for nothing.',
+        phases: [
+          {
+            label: 'Phase 1',
+            name: 'The standard',
+            detail: 'Publish identity resolution. Nothing works without it.',
+          },
+          {
+            label: 'Phase 2',
+            name: 'The audit ledger',
+            detail: 'Before any query runs, so the first one is on the record.',
+          },
+          {
+            label: 'Phase 3',
+            name: 'Three estates',
+            detail: 'The majors, one question, in public. Then measure.',
+          },
+          {
+            label: 'Phase 4',
+            name: 'The long tail',
+            detail: 'Funded, not mandated. This is where it succeeds or fails.',
+          },
+        ],
+      },
+      soWhat: 'This is a recommendation the department could adopt in the consultation without new legislation. The expensive part is not the technology — it is publishing a standard and then living by it.',
+      openQuestion: {
+        text: 'Is there any lawful route to a shared analytic key across schools, local authorities and health?',
+        falsifier: 'a DUAA route nobody has used yet',
+      },
+    },
+    {
+      no: '05',
+      slug: 'outcomes',
+      name: 'What it does & who wins',
+      template: 'T4',
+      minutes: 4,
+      question: 'Who is better off if this is built, and who is worse off?',
+      claim: {
+        text: '<b>Nineteen entries, and the ledger is close to even</b> — because almost every benefit depends on the department also doing something it has not committed to.',
+        confidence: 'hypothesis',
+      },
+      ledger: {
+        lenses: [
+          'Parent',
+          'MAT data lead',
+          'LA children\'s services',
+          'MIS vendor',
+          'Researcher',
+          'DfE policy',
+          'DfE digital',
+          'Other department',
+        ],
+        activeLens: 'Parent',
+        benefits: [
+          {
+            text: 'A child moving school keeps their record',
+            confidence: 'fact',
+          },
+          {
+            text: 'One transparency dashboard, not 2,385 releases',
+            confidence: 'fact',
+          },
+          {
+            text: 'Children missing education found faster',
+            confidence: 'hypothesis',
+          },
+          {
+            text: 'Fewer duplicate data collections',
+            confidence: 'hypothesis',
+          },
+        ],
+        risks: [
+          {
+            text: 'Function creep beyond education',
+            confidence: 'contested',
+          },
+          {
+            text: 'An opt-out that cannot be honoured',
+            confidence: 'hypothesis',
+          },
+          {
+            text: 'Small suppliers priced out of compliance',
+            confidence: 'hypothesis',
+          },
+          {
+            text: 'Probabilistic joins presented as certainty',
+            confidence: 'contested',
+          },
+        ],
+        balance: 'Read as a parent, the ledger tips negative — not because the benefits are small, but because every one of them is conditional and every risk is structural.',
+        byActor: [
+          {
+            actor: 'Parent',
+            gains: 4,
+            loses: 6,
+            net: 'negative',
+            quote: 'Show me the audit trail first.',
+          },
+          {
+            actor: 'MAT data lead',
+            gains: 7,
+            loses: 2,
+            net: 'positive',
+            quote: 'Stop asking us for the same return twice.',
+          },
+          {
+            actor: 'MIS vendor',
+            gains: 3,
+            loses: 5,
+            net: 'negative',
+            quote: 'Who pays for the interface?',
+          },
+        ],
+      },
+      soWhat: 'The winners are institutional and the losers are individual, which is the shape of every data programme that has failed politically.',
+      openQuestion: {
+        text: 'Nobody has asked parents what they would trade. Every entry on their side of this page is inferred.',
+        falsifier: 'deliberative research with parents',
+      },
+    },
+    {
+      no: '06',
+      slug: 'governance',
+      name: 'Trust & safeguards',
+      template: 'T4',
+      minutes: 3,
+      question: 'What could go wrong, and what would actually stop it?',
+      claim: {
+        text: '<b>Every safeguard proposed so far is policy, not law</b> — and policy is what failed the last four times.',
+        confidence: 'contested',
+      },
+      ledger: {
+        lenses: [
+          'Parent',
+          'Privacy advocate',
+          'ICO',
+          'DfE digital',
+        ],
+        activeLens: 'Privacy advocate',
+        benefits: [
+          {
+            text: 'Query-not-copy is auditable in a way bulk distribution never was',
+            confidence: 'fact',
+          },
+          {
+            text: 'DUAA 2025 provides a lawful basis that does not need new primary legislation',
+            confidence: 'fact',
+          },
+        ],
+        risks: [
+          {
+            text: 'The 2016 Home Office memorandum has no statutory bar on repetition',
+            confidence: 'contested',
+          },
+          {
+            text: '2,385 NPD distributions remain outside any single audit trail',
+            confidence: 'fact',
+          },
+          {
+            text: 'Purpose limits held in policy can be changed without Parliament',
+            confidence: 'contested',
+          },
+        ],
+        balance: 'The architecture can be made trustworthy. The governance, as announced, cannot — because nothing in it is binding on a future minister.',
+      },
+      soWhat: 'Architecture alone cannot answer the objections. The safeguards have to be the kind that survive a change of government.',
+      openQuestion: {
+        text: 'Would statutory purpose limits actually pass, given the Home Office\'s interest in the same data?',
+        falsifier: 'a government amendment tabled',
+      },
+    },
+    {
+      no: '07',
+      slug: 'next',
+      name: 'What happens next',
+      template: 'T3',
+      minutes: 2,
+      question: 'What would change the picture, and when?',
+      claim: {
+        text: '<b>Three things are due before the end of 2026</b>, and one of them decides everything else.',
+        confidence: 'fact',
+        cites: [
+          3,
+        ],
+      },
+      position: {
+        statement: 'Watch the consultation for one word: custody.',
+        elaboration: 'The consultation document will either name an architecture or defer it. If it defers, the broker pipe becomes the spine by default — not by decision.',
+        confidence: 'hypothesis',
+        because: [
+          {
+            headline: 'Summer 2026: the consultation opens.',
+            detail: 'The first document that could contain an architecture.',
+          },
+          {
+            headline: '2028–29: the white paper\'s own implementation window.',
+            detail: 'Which means procurement decisions in 2027.',
+          },
+          {
+            headline: 'Meanwhile the attendance feed keeps running.',
+            detail: 'Every month it runs, the default hardens.',
+          },
+        ],
+        rejected: [
+          {
+            name: 'Waiting for the consultation to ask better questions',
+            why: 'Consultations answer the questions they are given. The architecture question has to be raised before the document is drafted, not after.',
+          },
+        ],
+        conditions: [
+          'A published resolution standard',
+          'A named custodian',
+        ],
+        sinkers: 'Deferral. A consultation that does not name a custody model has already chosen the incumbent.',
+        phases: [
+          {
+            label: 'Open',
+            name: 'The resolution standard',
+            detail: 'Still unwritten. The single largest gap in this study.',
+          },
+          {
+            label: 'Open',
+            name: 'The custodian',
+            detail: 'No named owner for any layer.',
+          },
+          {
+            label: 'Open',
+            name: 'The long tail\'s cost',
+            detail: 'Unpriced, and decisive.',
+          },
+        ],
+      },
+      soWhat: 'The decision that matters will be made by whether the consultation document uses the word custody — and it may be made by not using it.',
+      openQuestion: {
+        text: 'Is the consultation drafted already? If so, none of this analysis reaches it in time.',
+        falsifier: 'a published drafting timetable',
+      },
+    },
+  ],
+};

@@ -71,7 +71,7 @@
       <button type="button" class="nm-save-btn" disabled={recalculating} onclick={recalculate}>
         {recalculating ? 'Recalculating…' : 'Recalculate'}
       </button>
-      <a class="back-link" href="/jkai/intel">← Explorer</a>
+      <a class="back-link" href="/jkai/intel">Explorer</a>
     </div>
     {#if error}<p class="err">{error}</p>{/if}
   </header>
@@ -250,7 +250,7 @@
     gap: 12px;
     padding-bottom: 8px;
     margin-bottom: 12px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .sr-label-tight {
     margin: 0;
@@ -286,7 +286,7 @@
   .nm-save-btn:disabled {
     background: none;
     color: var(--text-ghost);
-    border-color: var(--card-border);
+    border-color: var(--line-strong);
     cursor: default;
   }
 
@@ -300,7 +300,7 @@
     flex-direction: column;
     gap: 6px;
     padding: 11px 12px 13px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--cl);
     border-radius: var(--radius-sharp);
     text-decoration: none;
@@ -363,7 +363,7 @@
     height: 5px;
     overflow: hidden;
     border-radius: var(--radius-sharp);
-    background: var(--divider);
+    background: var(--line);
   }
   .bar span {
     height: 100%;

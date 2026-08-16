@@ -182,7 +182,7 @@
 
   .node { cursor: pointer; }
   .node rect { fill: var(--bg); stroke: rgba(26, 16, 8, 0.28); stroke-width: 1.2; }
-  .node text { font-family: var(--font-mono); font-size: 11px; fill: var(--text-primary); }
+  .node text { font-family: var(--font-mono); font-size: var(--fs-label-xs); fill: var(--text-primary); }
   .node:hover rect { stroke: var(--accent); }
   .node:focus-visible rect { stroke: var(--accent); stroke-width: 2; }
 

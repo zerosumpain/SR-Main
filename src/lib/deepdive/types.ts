@@ -20,6 +20,12 @@ export type SessionStatus =
   | 'phase2'
   | 'phase3'
   | 'post_processing'
+  /**
+   * Deliberately halted, and waiting to be picked back up. Non-terminal, but
+   * unlike the phases it is never adopted by the resume sweep: a paused run is
+   * paused because somebody meant it, and a deploy must not undo that.
+   */
+  | 'paused'
   | 'complete'
   | 'failed';
 
@@ -63,14 +69,6 @@ export interface SessionStats {
   entitiesIdentified: number;
   counterfactualsRaised: number;
 }
-
-export interface LogEvent {
-  icon: string;
-  message: string;
-  timestamp: number;
-}
-
-export type TimeLimitOption = 15 | 30 | 60 | 120 | null;
 
 export interface IdentityCluster {
   name: string;

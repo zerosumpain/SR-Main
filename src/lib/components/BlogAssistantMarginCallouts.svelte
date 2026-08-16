@@ -234,7 +234,7 @@
     /* `left` and `width` are set inline at recompute time so callouts anchor
        beside the article body rather than at the viewport's right edge. */
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 0.55rem 0.7rem;
     pointer-events: auto;
     font-size: 0.85rem;
@@ -257,10 +257,10 @@
   .anchor-link {
     position: absolute; left: -22px; top: 6px;
     width: 18px; height: 18px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-elevated);
     cursor: pointer; padding: 0;
-    font-size: 0.7rem; line-height: 1;
+    font-size: var(--fs-label-xs); line-height: 1;
     display: flex; align-items: center; justify-content: center;
     color: var(--text-muted);
   }
@@ -284,7 +284,7 @@
     pointer-events: auto;
   }
   .drawer-toggle {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: var(--surface-elevated);
     color: var(--text-primary);
     font-family: var(--font-mono);
@@ -300,7 +300,7 @@
     max-height: 60vh;
     overflow-y: auto;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     padding: 0.6rem;
     display: flex; flex-direction: column; gap: 0.5rem;
   }

@@ -50,7 +50,7 @@
 
     {#if debateOpen}
       <div class="mt-1 space-y-2">
-        <div class="rounded p-2" style="background: var(--bg-section);">
+        <div class="rounded p-2" style="background: var(--surface-sunken);">
           <div class="text-[10px] font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">
             PROPOSAL: {thinking.debate.proposal.nodeCount} nodes, {thinking.debate.proposal.edgeCount} edges
             {#if thinking.debate.proposal.newNodes.length > 0}
@@ -60,7 +60,7 @@
         </div>
 
         {#if thinking.debate.issues.length > 0}
-          <div class="rounded p-2" style="background: var(--bg-section);">
+          <div class="rounded p-2" style="background: var(--surface-sunken);">
             <div class="text-[10px] font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">CRITIQUE</div>
             {#each thinking.debate.issues as issue}
               <div class="text-[10px] py-0.5" style="color: var(--text-secondary); font-family: var(--font-mono);">
@@ -75,7 +75,7 @@
         {/if}
 
         {#if thinking.debate.revisions.length > 0}
-          <div class="rounded p-2" style="background: var(--bg-section);">
+          <div class="rounded p-2" style="background: var(--surface-sunken);">
             <div class="text-[10px] font-medium mb-1" style="color: var(--text-ghost); font-family: var(--font-mono);">REVISIONS</div>
             {#each thinking.debate.revisions as rev}
               <div class="text-[10px] py-0.5" style="color: var(--text-secondary); font-family: var(--font-mono);">

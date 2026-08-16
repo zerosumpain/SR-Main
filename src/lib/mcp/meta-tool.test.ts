@@ -292,3 +292,98 @@ describe('listMcpTools() env-flag behaviour', () => {
     }
   });
 });
+
+describe('list entries carry required argument names', () => {
+  it('names the required arguments so a schema round trip is optional', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list', query: 'apple calendar' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const create = list.find((e) => e.name === 'apple_calendar_create');
+    expect(create).toBeTruthy();
+    // 18 of 68 discovery calls over ten conversations were schema fetches,
+    // mostly for tools with a handful of arguments. This is what replaces them.
+    expect(create!.required).toEqual(expect.arrayContaining(['calendar', 'title']));
+  });
+
+  it('omits `required` entirely for a tool that has none', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const optional = list.find((e) => !('required' in e));
+    // `required: []` would read as "this tool takes no arguments", which is a
+    // different and usually wrong claim — absence is the honest encoding.
+    expect(optional).toBeTruthy();
+    for (const entry of list) {
+      if ('required' in entry) expect((entry.required as string[]).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps them on the compact survey, which is where a call is most likely skipped', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list', compact: true, query: 'apple calendar' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const create = list.find((e) => e.name === 'apple_calendar_create');
+    expect(create!.required).toEqual(expect.arrayContaining(['calendar', 'title']));
+    expect('destructive' in create!).toBe(false);
+  });
+});
+
+describe('the domain map the model navigates by', () => {
+  it('names the domains whose absence caused real misroutes', () => {
+    const d = JKAI_EXTENDED_TOOL.description.toLowerCase();
+    // Calendar and payments were both missing while `gmail` was present, and
+    // both produced a wrong-source turn in the same week.
+    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'decks', 'monitors']) {
+      expect(d, domain).toContain(domain);
+    }
+  });
+
+  it('tells the caller that list may be enough on its own', () => {
+    expect(JKAI_EXTENDED_TOOL.description).toContain('REQUIRED argument names');
+  });
+});
+
+describe("today's date never rides a cached tool description", () => {
+  it('formats the London day with no clock in it', async () => {
+    const { todayLine } = await import('./server');
+    const line = todayLine(new Date('2026-08-16T09:30:00Z'));
+    expect(line).toBe('Sunday 2026-08-16 (Europe/London)');
+    // A clock in a cached surface would change the prompt prefix on every
+    // request and destroy prompt caching, which is worth far more than the
+    // call this saves.
+    expect(line).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('reads the London day, not the UTC one, across the BST boundary', async () => {
+    const { todayLine } = await import('./server');
+    // 23:30 UTC on 15 Aug is 00:30 on the 16th in London (BST).
+    expect(todayLine(new Date('2026-08-15T23:30:00Z'))).toContain('2026-08-16');
+    // January is GMT, where the two agree — the control.
+    expect(todayLine(new Date('2026-01-15T23:30:00Z'))).toContain('2026-01-15');
+  });
+
+  it('is ABSENT from the tools/list manifest', async () => {
+    const originalFlag = process.env.JKAI_MCP_META_TOOL;
+    process.env.JKAI_MCP_META_TOOL = '1';
+    try {
+      const tools = await listMcpTools();
+      const meta = tools.find((t) => t.name === 'jkai_extended');
+      expect(meta).toBeTruthy();
+      // Load-bearing. Hermes discovers tools ONCE on connect and re-discovers
+      // only on a `notifications/tools/list_changed` notification this server
+      // never sends, so a date here freezes at connect time and goes stale for
+      // as long as the gateway stays up. A confidently-stated wrong date is
+      // worse than none.
+      expect(meta!.description).not.toMatch(/Today is/);
+      expect(meta!.description).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    } finally {
+      if (originalFlag === undefined) delete process.env.JKAI_MCP_META_TOOL;
+      else process.env.JKAI_MCP_META_TOOL = originalFlag;
+    }
+  });
+
+  it('rides jkai_extended list/schema RESULTS, which are built per call', async () => {
+    const { datestampContent } = await import('./jsonrpc');
+    expect(datestampContent('jkai_extended', { operation: 'list' })[0].text).toMatch(/Today is \w+ \d{4}-\d{2}-\d{2}/);
+    expect(datestampContent('jkai_extended', { operation: 'schema', name: 'x' })).toHaveLength(1);
+    // Not on invoke — by then the arguments are already composed, and every
+    // result carrying a date line is noise.
+    expect(datestampContent('jkai_extended', { operation: 'invoke', name: 'x' })).toEqual([]);
+    expect(datestampContent('gmail_search', { query: 'x' })).toEqual([]);
+    expect(datestampContent('jkai_extended', {})).toEqual([]);
+  });
+});

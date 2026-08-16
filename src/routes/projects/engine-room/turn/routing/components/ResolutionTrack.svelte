@@ -54,15 +54,15 @@
   .rt { display: flex; flex-direction: column; gap: 11px; }
 
   .rt-out { margin: 0; padding: 10px 14px; min-height: 5.4em;
-    border-left: 3px solid var(--tone); border-radius: 0 var(--radius-round) var(--radius-round) 0;
+    border-left: 3px solid var(--tone); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
     background: color-mix(in srgb, var(--tone) 7%, transparent); }
   .o-row { display: grid; grid-template-columns: minmax(0, 7ch) 1fr; gap: 4px 12px; align-items: baseline; }
   .o-row + .o-row { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(28,22,17,0.15); }
 
-  dt { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em;
+  dt { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--tone); }
-  dd { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-primary); max-width: 78ch; }
-  dd.dim { font-size: 12.5px; color: rgba(28,22,17,0.62); }
+  dd { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: var(--text-primary); max-width: 78ch; }
+  dd.dim { font-size: var(--fs-label); color: rgba(28,22,17,0.62); }
 
   @media (max-width: 520px) {
     .o-row { grid-template-columns: 1fr; gap: 2px; }

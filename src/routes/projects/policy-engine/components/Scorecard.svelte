@@ -66,26 +66,26 @@
 
 <style>
   .scorecard { display: flex; flex-direction: column; gap: 10px; }
-  .sc-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: rgba(28,22,17,0.65); }
+  .sc-note { margin: 0; font-size: var(--fs-label-xs); line-height: 1.45; color: rgba(28,22,17,0.65); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
   .card {
     background: rgba(255,255,255,0.4); border: 1px solid rgba(28,22,17,0.12);
-    border-radius: var(--radius-round); padding: 9px 10px; border-left-width: 3px;
+    border-radius: var(--radius-sharp); padding: 9px 10px; border-left-width: 3px;
   }
   .card.tone-good { border-left-color: var(--success); }
   .card.tone-bad { border-left-color: var(--error); }
   .card.tone-neutral { border-left-color: rgba(28,22,17,0.35); }
   .card { cursor: help; }
-  .c-label { font-size: 11px; line-height: 1.3; color: rgba(28,22,17,0.72); min-height: 28px; display: flex; align-items: flex-start; gap: 4px; }
+  .c-label { font-size: var(--fs-label-xs); line-height: 1.3; color: rgba(28,22,17,0.72); min-height: 28px; display: flex; align-items: flex-start; gap: 4px; }
   .c-q { display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px; border-radius: var(--radius-pill); flex-shrink: 0;
-    border: 1px solid rgba(28,22,17,0.3); font-size: 8px; color: rgba(28,22,17,0.5); margin-top: 1px; }
+    border: 1px solid rgba(28,22,17,0.3); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); margin-top: 1px; }
   .c-main { display: flex; align-items: baseline; gap: 4px; margin: 3px 0 4px; }
-  .c-val { font-family: 'Fraunces', serif; font-weight: 600; font-size: 23px; color: var(--ink); line-height: 1; }
-  .c-unit { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(28,22,17,0.5); }
+  .c-val { font-family: var(--fs-serif); font-weight: 600; font-size: 23px; color: var(--ink); line-height: 1; }
+  .c-unit { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.5); }
   .c-foot { display: flex; flex-direction: column; gap: 2px; }
-  .c-delta { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; }
+  .c-delta { font-family: var(--font-mono); font-size: var(--fs-label-xs); font-weight: 600; }
   .c-delta.tone-good { color: var(--success); }
   .c-delta.tone-bad { color: var(--error); }
   .c-delta.neutral { color: rgba(28,22,17,0.5); font-weight: 500; }
-  .c-start { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28,22,17,0.4); }
+  .c-start { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28,22,17,0.4); }
 </style>

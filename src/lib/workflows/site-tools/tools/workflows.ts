@@ -1,4 +1,5 @@
 import { register } from '../registry-internal';
+import { readId, readWorkflowId, missingIdError } from './_arg-id';
 import { db } from '$lib/db';
 import {
   workflows,
@@ -838,7 +839,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const id = args.id as string;
+    const id = readWorkflowId(args, { allowBareId: true });
+    if (!id) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const confirmName = args.confirmName as string;
     const [existing] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
     if (!existing) return { success: false, error: 'Workflow not found' };
@@ -862,13 +864,14 @@ register({
   description: 'Full structural view of a workflow — metadata, all nodes (type, label, config), all edges (connections), schedules, and last 5 execution runs',
   parameters: {
     type: 'object',
-    properties: { id: { type: 'string', description: 'Workflow ID' } },
+    properties: { id: { type: 'string', description: 'Workflow ID (`workflowId` is accepted too — the toolset uses both spellings)' } },
     required: ['id'],
   },
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const id = args.id as string;
+    const id = readWorkflowId(args, { allowBareId: true });
+    if (!id) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const [wf] = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
     if (!wf) return { success: false, error: 'Workflow not found' };
 
@@ -932,7 +935,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const runId = args.runId as string;
+    const runId = readId(args, 'runId', { allowBareId: true });
+    if (!runId) return { success: false, error: missingIdError('run', 'runId') };
     const [run] = await db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).limit(1);
     if (!run) return { success: false, error: 'Run not found' };
 
@@ -971,16 +975,18 @@ register({
   description: 'Replay how the orchestrator built a workflow — the tool-calling sequence (search_nodes, use_node, connect_nodes, finalize) with reasoning',
   parameters: {
     type: 'object',
-    properties: { workflowId: { type: 'string', description: 'Workflow ID' } },
+    properties: { workflowId: { type: 'string', description: 'Workflow ID (`id` is accepted too — the toolset uses both spellings)' } },
     required: ['workflowId'],
   },
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const rows = await db
       .select()
       .from(orchestratorChats)
-      .where(eq(orchestratorChats.workflowId, args.workflowId as string))
+      .where(eq(orchestratorChats.workflowId, workflowId))
       .orderBy(asc(orchestratorChats.createdAt));
 
     if (rows.length === 0) return { success: false, error: 'No generation log found — this workflow may have been created manually or the log was not retained' };
@@ -998,7 +1004,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      id: { type: 'string', description: 'Workflow ID' },
+      id: { type: 'string', description: 'Workflow ID (`workflowId` is accepted too — the toolset uses both spellings)' },
       name: { type: 'string', description: 'New name' },
       description: { type: 'string', description: 'New description' },
       trigger: { type: 'object', description: 'New trigger config (e.g. {"type":"manual"})' },
@@ -1012,7 +1018,9 @@ register({
     if (args.name) updates.name = args.name;
     if (args.description !== undefined) updates.description = args.description;
     if (args.trigger) updates.trigger = args.trigger;
-    const [wf] = await db.update(workflows).set(updates).where(eq(workflows.id, args.id as string)).returning();
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
+    const [wf] = await db.update(workflows).set(updates).where(eq(workflows.id, workflowId)).returning();
     return wf ? { success: true, data: wf } : { success: false, error: 'Workflow not found' };
   },
 });
@@ -1076,7 +1084,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const nodeId = args.nodeId as string;
+    const nodeId = readId(args, 'nodeId', { allowBareId: true });
+    if (!nodeId) return { success: false, error: missingIdError('node', 'nodeId') };
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
     if (!existing) return { success: false, error: 'Node not found' };
 
@@ -1143,7 +1152,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      workflowId: { type: 'string', description: 'Workflow ID' },
+      workflowId: { type: 'string', description: 'Workflow ID (`id` is accepted too — the toolset uses both spellings)' },
       type: { type: 'string', description: 'Node type — must match a registered type exactly. Examples: "manual-trigger", "whatsapp", "llm-call", "code-execute", "http-request", "conditional", "data-store". Call workflow_list_node_types to see the full list.' },
       label: { type: 'string', description: 'Display label for the node' },
       config: { type: 'object', description: 'Node configuration (see node definition for its configSchema)' },
@@ -1155,7 +1164,8 @@ register({
   toolset: 'workflows',
   handler: async (args) => {
     const type = args.type as string;
-    const workflowId = args.workflowId as string;
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const typeErr = await validateNodeType(type);
     if (typeErr) return { success: false, error: typeErr };
 
@@ -1384,7 +1394,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const nodeId = args.nodeId as string;
+    const nodeId = readId(args, 'nodeId', { allowBareId: true });
+    if (!nodeId) return { success: false, error: missingIdError('node', 'nodeId') };
     const [existing] = await db.select().from(workflowNodes).where(eq(workflowNodes.id, nodeId)).limit(1);
     if (!existing) return { success: false, error: 'Node not found' };
 
@@ -1415,7 +1426,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      workflowId: { type: 'string', description: 'Workflow ID' },
+      workflowId: { type: 'string', description: 'Workflow ID (`id` is accepted too — the toolset uses both spellings)' },
       sourceNodeId: { type: 'string', description: 'Source node ID' },
       targetNodeId: { type: 'string', description: 'Target node ID' },
       sourceHandle: { type: 'string', description: 'Source handle (e.g. "success", "error"). Omit for default.' },
@@ -1426,10 +1437,12 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
+    const workflowId = readWorkflowId(args, { allowBareId: false });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     let edge;
     try {
       edge = await createEdge({
-        workflowId: args.workflowId as string,
+        workflowId,
         sourceNodeId: args.sourceNodeId as string,
         targetNodeId: args.targetNodeId as string,
         sourceHandle: (args.sourceHandle as string) || null,
@@ -1483,7 +1496,9 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, args.edgeId as string)).limit(1);
+    const edgeId = readId(args, 'edgeId', { allowBareId: true });
+    if (!edgeId) return { success: false, error: missingIdError('edge', 'edgeId') };
+    const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, edgeId)).limit(1);
     if (!existing) return { success: false, error: 'Edge not found' };
     await deleteEdge({
       workflowId: existing.workflowId,
@@ -1518,7 +1533,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const edgeId = args.edgeId as string;
+    const edgeId = readId(args, 'edgeId', { allowBareId: false });
+    if (!edgeId) return { success: false, error: missingIdError('edge', 'edgeId') };
     const [existing] = await db.select().from(workflowEdges).where(eq(workflowEdges.id, edgeId)).limit(1);
     if (!existing) return { success: false, error: 'Edge not found' };
 
@@ -1640,7 +1656,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const workflowId = args.workflowId as string;
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const ops = (Array.isArray(args.ops) ? args.ops : []) as AmendOp[];
     if (ops.length === 0) {
       return { success: false, error: 'Pass at least one op. See the `ops` description for the six shapes.' };
@@ -1744,7 +1761,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      workflowId: { type: 'string', description: 'Workflow ID' },
+      workflowId: { type: 'string', description: 'Workflow ID (`id` is accepted too — the toolset uses both spellings)' },
       type: { type: 'string', description: 'Schedule type (e.g. "cron")' },
       config: { type: 'object', description: 'Schedule config. For cron, set the 5-field cron string as { "expression": "0 8 * * *" } (daily at 8am). "cron" is accepted as an alias. Times are interpreted in Europe/London (so "0 8" means 8am the owner\'s time, all year) unless you set { "timezone": "..." } to an IANA zone.' },
     },
@@ -1753,8 +1770,10 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const [schedule] = await db.insert(workflowSchedules).values({
-      workflowId: args.workflowId as string,
+      workflowId,
       type: args.type as string,
       config: normalizeScheduleConfig(args.config as Record<string, unknown>),
     }).returning();
@@ -1782,7 +1801,8 @@ register({
     const updates: Record<string, unknown> = {};
     if (args.enabled !== undefined) updates.enabled = args.enabled;
     if (args.config) updates.config = normalizeScheduleConfig(args.config as Record<string, unknown>);
-    const scheduleId = args.scheduleId as string;
+    const scheduleId = readId(args, 'scheduleId', { allowBareId: true });
+    if (!scheduleId) return { success: false, error: missingIdError('schedule', 'scheduleId') };
     const [schedule] = await db
       .update(workflowSchedules)
       .set(updates)
@@ -1806,7 +1826,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const scheduleId = args.scheduleId as string;
+    const scheduleId = readId(args, 'scheduleId', { allowBareId: true });
+    if (!scheduleId) return { success: false, error: missingIdError('schedule', 'scheduleId') };
     const [existing] = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, scheduleId)).limit(1);
     if (!existing) return { success: false, error: 'Schedule not found' };
     const { unregisterCronJob } = await import('$lib/workflows/scheduler');
@@ -1850,7 +1871,8 @@ register({
   toolset: 'workflows',
   producesLongRunningTask: { kind: 'workflow_run', idPath: 'runId', cadenceSeconds: 30 },
   handler: async (args) => {
-    const id = args.id as string;
+    const id = readWorkflowId(args, { allowBareId: true });
+    if (!id) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const initialInput = (args.input as Record<string, unknown>) ?? {};
     const selfHealing = args.selfHealing !== false;
     const awaitMs = typeof args.awaitMs === 'number' ? Math.min(Math.max(args.awaitMs, 0), 600_000) : 0;
@@ -1982,8 +2004,10 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const buildId = args.buildId as string;
-    const workflowId = args.workflowId as string;
+    const buildId = readId(args, 'buildId', { allowBareId: false });
+    if (!buildId) return { success: false, error: missingIdError('build', 'buildId') };
+    const workflowId = readWorkflowId(args, { allowBareId: false });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const { jkaiBuilds, buildWorkflowSubscriptions } = await import('$lib/db/schema');
     const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId)).limit(1);
     if (!build) return { success: false, error: 'Build not found' };
@@ -2011,8 +2035,10 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const buildId = args.buildId as string;
-    const workflowId = args.workflowId as string;
+    const buildId = readId(args, 'buildId', { allowBareId: false });
+    if (!buildId) return { success: false, error: missingIdError('build', 'buildId') };
+    const workflowId = readWorkflowId(args, { allowBareId: false });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const { buildWorkflowSubscriptions } = await import('$lib/db/schema');
     await db
       .delete(buildWorkflowSubscriptions)
@@ -2052,7 +2078,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const workflowId = args.workflowId as string;
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const keys = Array.isArray(args.keys) ? (args.keys as string[]) : null;
     const all = args.all === true;
     const sinceLastNRuns = typeof args.sinceLastNRuns === 'number' ? args.sinceLastNRuns : null;
@@ -2149,7 +2176,8 @@ register({
   category: 'Workflows',
   toolset: 'workflows',
   handler: async (args) => {
-    const workflowId = args.workflowId as string;
+    const workflowId = readWorkflowId(args, { allowBareId: true });
+    if (!workflowId) return { success: false, error: missingIdError('workflow', 'workflowId') };
     const [workflow] = await db.select().from(workflows).where(eq(workflows.id, workflowId)).limit(1);
     if (!workflow) return { success: false, error: 'Workflow not found' };
 

@@ -55,7 +55,7 @@
 
 <section
   class="p-5"
-  style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-round);"
+  style="background: var(--card-bg); border: 1px solid var(--line-strong); border-radius: var(--radius-round);"
 >
   <h2
     class="text-sm uppercase tracking-wider mb-4"
@@ -112,7 +112,7 @@
   <div class="flex flex-wrap items-center gap-2">
     <button
       class="rounded px-4 py-2 text-sm font-medium"
-      style="background: {enabled ? 'var(--surface-elevated)' : 'var(--accent)'}; color: {enabled ? 'var(--text-primary)' : 'white'}; border: 1px solid var(--card-border); {saving || (!health.ok && !enabled) ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+      style="background: {enabled ? 'var(--surface-elevated)' : 'var(--accent)'}; color: {enabled ? 'var(--text-primary)' : 'white'}; border: 1px solid var(--line-strong); {saving || (!health.ok && !enabled) ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
       onclick={toggle}
       disabled={saving || (!health.ok && !enabled)}
     >

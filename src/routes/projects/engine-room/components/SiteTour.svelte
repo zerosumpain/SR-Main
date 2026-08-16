@@ -102,16 +102,16 @@
   .tier { margin-bottom: 18px; }
   .t-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 9px;
     padding-bottom: 7px; border-bottom: 2px solid var(--tone); }
-  .t-no { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em;
+  .t-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
     text-transform: uppercase; color: var(--tone); }
-  .t-name { font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px; line-height: 1.15;
+  .t-name { font-family: var(--fs-serif); font-weight: 600; font-size: 19px; line-height: 1.15;
     color: var(--text-primary); }
-  .t-lede { font-size: 12.5px; line-height: 1.5; color: rgba(28, 22, 17, 0.62); flex: 1 1 320px; min-width: 0; }
+  .t-lede { font-size: var(--fs-label); line-height: 1.5; color: rgba(28, 22, 17, 0.62); flex: 1 1 320px; min-width: 0; }
 
   .t-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 10px; }
 
   .card { display: flex; flex-direction: column; gap: 0; padding: 0; cursor: pointer; text-align: left;
-    border: 1px solid rgba(28, 22, 17, 0.16); border-radius: var(--radius-round);
+    border: 1px solid rgba(28, 22, 17, 0.16); border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.55); overflow: hidden; font-family: inherit;
     transition: opacity 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
   .card:hover, .card.on { border-color: var(--tone); transform: translateY(-2px);
@@ -124,31 +124,31 @@
     border-bottom: 1px solid rgba(28, 22, 17, 0.12); }
   .c-shot img { display: block; width: 100%; height: auto; aspect-ratio: 1440 / 900; object-fit: cover;
     object-position: top center; }
-  .c-lock { position: absolute; top: 6px; right: 6px; font-family: 'JetBrains Mono', monospace;
-    font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 5px;
+  .c-lock { position: absolute; top: 6px; right: 6px; font-family: var(--font-mono);
+    font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 5px;
     border-radius: 2px; background: rgba(28, 22, 17, 0.72); color: #fdfbf6; }
 
   .c-foot { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 9px; }
-  .c-label { font-family: 'Fraunces', serif; font-weight: 600; font-size: 14.5px; line-height: 1.2;
+  .c-label { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-nav); line-height: 1.2;
     color: var(--text-primary); }
-  .c-route { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: rgba(28, 22, 17, 0.48);
+  .c-route { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: rgba(28, 22, 17, 0.48);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .t-read { margin-top: 4px; min-height: 46px; display: flex; align-items: baseline; gap: 9px;
-    flex-wrap: wrap; padding: 9px 13px; border-radius: var(--radius-round);
+    flex-wrap: wrap; padding: 9px 13px; border-radius: var(--radius-sharp);
     border: 1px solid rgba(28, 22, 17, 0.12); background: rgba(255, 255, 255, 0.4);
     transition: border-color 0.15s, background 0.15s; }
   .t-read.active { border-color: var(--accent-ink-tint-35, rgba(14, 91, 102, 0.35));
     background: var(--accent-ink-tint-12); }
-  .tr-kick { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em;
+  .tr-kick { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--accent-ink); }
-  .tr-label { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
-  .tr-what { font-size: 12.5px; line-height: 1.5; color: rgba(28, 22, 17, 0.72); flex: 1 1 300px; min-width: 0; }
-  .tr-go { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--accent); white-space: nowrap; }
-  .tr-idle { font-size: 12.5px; line-height: 1.5; color: rgba(28, 22, 17, 0.58); max-width: 96ch; }
+  .tr-label { font-family: var(--fs-serif); font-size: var(--fs-body-sm); font-weight: 600; color: var(--text-primary); }
+  .tr-what { font-size: var(--fs-label); line-height: 1.5; color: rgba(28, 22, 17, 0.72); flex: 1 1 300px; min-width: 0; }
+  .tr-go { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); white-space: nowrap; }
+  .tr-idle { font-size: var(--fs-label); line-height: 1.5; color: rgba(28, 22, 17, 0.58); max-width: 96ch; }
 
   @media (max-width: 560px) {
     .t-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-    .c-label { font-size: 13px; }
+    .c-label { font-size: var(--fs-label); }
   }
 </style>

@@ -47,7 +47,7 @@
 
   <details class="ref">
     <summary>Identifiers <span class="rn">({IDENTIFIERS.length})</span></summary>
-    <p class="dsd-prose" style="font-size:13px">Reusing an identifier a provider already holds is the single biggest interoperability and adoption win — with the caveats that matter.</p>
+    <p class="dsd-prose" style="font-size: var(--fs-label)">Reusing an identifier a provider already holds is the single biggest interoperability and adoption win — with the caveats that matter.</p>
     <div class="id-list">
       {#each IDENTIFIERS as id}
         <div class="idr">
@@ -63,7 +63,7 @@
 
   <details class="ref">
     <summary>Design methods <span class="rn">({METHODS.length})</span></summary>
-    <p class="dsd-prose" style="font-size:13px">The principles the scoring and recommendations encode — drawn from the Open Standards Principles, W3C Data on the Web Best Practices, ISO/IEC 11179, the Government Data Quality Framework and the ICO Data Sharing Code.</p>
+    <p class="dsd-prose" style="font-size: var(--fs-label)">The principles the scoring and recommendations encode — drawn from the Open Standards Principles, W3C Data on the Web Best Practices, ISO/IEC 11179, the Government Data Quality Framework and the ICO Data Sharing Code.</p>
     {#each METHOD_CATS as cat}
       {@const ms = METHODS.filter((m) => m.category === cat)}
       {#if ms.length}
@@ -77,42 +77,42 @@
 
   <details class="ref">
     <summary>Provenance &amp; disclaimer</summary>
-    <p class="dsd-prose" style="font-size:13px">The catalogue was assembled from primary sources (DfE, NHS England, ONS, GeoPlace, W3C and the standards bodies) and a structured research pass across education, children's social care, child protection, health, local and central government, and international metadata/publishing standards. It is decision-support: confirm any specific clause against the source before adoption, and run your standard through your own information-governance and Open Standards Board processes.</p>
+    <p class="dsd-prose" style="font-size: var(--fs-label)">The catalogue was assembled from primary sources (DfE, NHS England, ONS, GeoPlace, W3C and the standards bodies) and a structured research pass across education, children's social care, child protection, health, local and central government, and international metadata/publishing standards. It is decision-support: confirm any specific clause against the source before adoption, and run your standard through your own information-governance and Open Standards Board processes.</p>
   </details>
 </div>
 
 <style>
   .value { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 24px 0 8px; }
-  .vcard { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 18px; background: var(--card-bg); }
-  .vcard b { font-size: 16px; color: var(--text-primary); display: block; margin-bottom: 7px; }
-  .vcard p { font-size: 13.5px; line-height: 1.55; color: var(--text-secondary); margin: 0; }
+  .vcard { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 18px; background: var(--card-bg); }
+  .vcard b { font-size: var(--fs-body); color: var(--text-primary); display: block; margin-bottom: 7px; }
+  .vcard p { font-size: var(--fs-label); line-height: 1.55; color: var(--text-secondary); margin: 0; }
   .cta { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 8px; }
 
   .how { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-  .how-step { display: flex; gap: 12px; border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 14px; background: var(--surface-elevated); }
+  .how-step { display: flex; gap: 12px; border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 14px; background: var(--surface-elevated); }
   .hn { font-family: var(--font-display); font-size: 22px; color: var(--accent); line-height: 1; }
-  .how-step b { font-size: 13.5px; color: var(--text-primary); }
-  .how-step p { font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); margin: 5px 0 0; }
+  .how-step b { font-size: var(--fs-label); color: var(--text-primary); }
+  .how-step p { font-size: var(--fs-label); line-height: 1.5; color: var(--text-secondary); margin: 5px 0 0; }
 
-  .ref { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 4px 16px; margin: 10px 0; background: var(--card-bg); }
-  .ref summary { cursor: pointer; font-weight: 700; font-size: 14.5px; color: var(--text-primary); padding: 10px 0; }
+  .ref { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 4px 16px; margin: 10px 0; background: var(--card-bg); }
+  .ref summary { cursor: pointer; font-weight: 700; font-size: var(--fs-nav); color: var(--text-primary); padding: 10px 0; }
   .ref summary::marker { color: var(--accent); }
-  .rn { font-family: var(--font-mono); font-size: 12px; color: var(--text-ghost); font-weight: 400; }
+  .rn { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); font-weight: 400; }
 
   .id-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 10px 0; }
-  .idr { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 13px; background: var(--surface-elevated); }
+  .idr { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 13px; background: var(--surface-elevated); }
   .idr-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .idr-h b { font-size: 13.5px; color: var(--text-primary); }
-  .idr-scope { font-size: 12px; color: var(--text-secondary); display: block; margin: 5px 0; }
-  .idr-meta { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-muted); }
-  .idr-caveat { font-size: 11px; color: var(--warn); background: var(--warn-bg); padding: 6px 8px; border-radius: var(--radius-sharp); margin: 8px 0 4px; line-height: 1.4; }
-  .idr a { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; color: var(--accent); }
+  .idr-h b { font-size: var(--fs-label); color: var(--text-primary); }
+  .idr-scope { font-size: var(--fs-label-xs); color: var(--text-secondary); display: block; margin: 5px 0; }
+  .idr-meta { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-label-xs); color: var(--text-muted); }
+  .idr-caveat { font-size: var(--fs-label-xs); color: var(--warn); background: var(--warn-bg); padding: 6px 8px; border-radius: var(--radius-sharp); margin: 8px 0 4px; line-height: 1.4; }
+  .idr a { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; color: var(--accent); }
 
   .m-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-bottom: 10px; }
-  .mcard { border: 1.5px solid var(--card-border); border-radius: var(--radius-round); padding: 12px 14px; background: var(--surface-elevated); }
-  .mcard b { font-size: 13.5px; color: var(--text-primary); }
-  .mcard p { font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin: 5px 0 0; }
-  .msrc { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); display: block; margin-top: 6px; }
+  .mcard { border: 1.5px solid var(--card-border); border-radius: var(--radius-sharp); padding: 12px 14px; background: var(--surface-elevated); }
+  .mcard b { font-size: var(--fs-label); color: var(--text-primary); }
+  .mcard p { font-size: var(--fs-label-xs); line-height: 1.5; color: var(--text-secondary); margin: 5px 0 0; }
+  .msrc { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); display: block; margin-top: 6px; }
 
   @media (max-width: 640px) { .value { grid-template-columns: 1fr; } }
 </style>

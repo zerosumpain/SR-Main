@@ -26,7 +26,7 @@
   .mh-kicker {
     display: block;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
+    font-size: var(--fs-label);
     letter-spacing: 0.24em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -57,5 +57,5 @@
     max-width: 58ch;
   }
   .mh-ask ul { margin: 0; padding-left: 18px; }
-  .mh-ask li { font-size: 15px; line-height: 1.6; color: var(--ink-soft); margin: 3px 0; }
+  .mh-ask li { font-size: var(--fs-body-sm); line-height: 1.6; color: var(--ink-soft); margin: 3px 0; }
 </style>

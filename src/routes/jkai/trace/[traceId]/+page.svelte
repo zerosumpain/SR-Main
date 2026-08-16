@@ -12,6 +12,80 @@
   const steps = $derived<TraceStep[]>(trace?.steps ?? []);
   const subAgents = $derived<TraceSubAgent[]>(trace?.subAgents ?? []);
 
+  // ── Chain analysis ────────────────────────────────────────────────────────
+  //
+  // The chain was already the only durable record of a turn; it just had no
+  // reader but a person. This asks a model where the calls went, and can hand
+  // what it finds to the self-improvement engine's backlog.
+  //
+  // Findings are NOT sent automatically. One turn is one sample — the same
+  // reason the by-tool rows below refuse to print a rate under five calls —
+  // so a finding is a hypothesis for the backlog, never a live policy change.
+  type ChainFinding = {
+    kind: string; tool: string; calls: number; couldHaveBeen: number;
+    cheaperRoute?: string; evidence: string; fix: string; rationale: string; steps: number[];
+  };
+  let analysing = $state(false);
+  let analysis = $state<{ calls: number; discoveryCalls: number; discoveryShare: number } | null>(null);
+  let findings = $state<ChainFinding[]>([]);
+  let analysisNote = $state('');
+  let analysisError = $state('');
+  let sending = $state(false);
+  let sendResult = $state('');
+
+  async function runAnalysis() {
+    analysing = true;
+    analysisError = '';
+    analysisNote = '';
+    sendResult = '';
+    try {
+      const res = await fetch(`/api/jkai/trace/${meta.id}/analyse`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      const body = await res.json();
+      analysis = body.analysis ?? null;
+      findings = Array.isArray(body.findings) ? body.findings : [];
+      analysisNote = typeof body.note === 'string' ? body.note : '';
+      // A 502 still carries the deterministic half, so show it and say the
+      // model half is missing rather than blanking the measurement.
+      if (body.error) analysisError = String(body.error);
+    } catch (err) {
+      analysisError = err instanceof Error ? err.message : 'analysis failed';
+    } finally {
+      analysing = false;
+    }
+  }
+
+  async function sendToEngine() {
+    if (!findings.length) return;
+    sending = true;
+    sendResult = '';
+    try {
+      const res = await fetch(`/api/jkai/trace/${meta.id}/analyse`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ send: findings }),
+      });
+      const body = await res.json();
+      if (body.error) sendResult = String(body.error);
+      else {
+        const added = Array.isArray(body.added) ? body.added.length : 0;
+        // Zero added is the normal, correct outcome once a finding has been
+        // seen before — the backlog dedupes on the title slug. Saying "already
+        // queued" beats a silent success that reads as a no-op.
+        sendResult = added
+          ? `queued ${added} idea${added === 1 ? '' : 's'} for the engine`
+          : `already queued — the backlog has ${body.considered} of these`;
+      }
+    } catch (err) {
+      sendResult = err instanceof Error ? err.message : 'send failed';
+    } finally {
+      sending = false;
+    }
+  }
+
   type SortKey = 'seq' | 'tool' | 'category' | 'status' | 'duration' | 'size';
   let sortKey = $state<SortKey>('seq');
   let sortDir = $state<'asc' | 'desc'>('asc');
@@ -279,6 +353,9 @@
       </p>
     </div>
     <div class="hdr-actions">
+      <button type="button" class="ghost-btn accent-btn" onclick={runAnalysis} disabled={analysing}>
+        {analysing ? 'analysing…' : 'analyse chain'}
+      </button>
       <button type="button" class="ghost-btn" onclick={copyJson}>{copied ? 'copied' : 'copy json'}</button>
       <button type="button" class="ghost-btn" onclick={downloadJson}>download</button>
     </div>
@@ -318,6 +395,71 @@
       </div>
     {/if}
   </section>
+
+  {#if analysis || analysisError}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Where the calls went</span>
+        {#if analysis}
+          <span class="sec-meta">
+            {analysis.discoveryCalls} of {analysis.calls} were discovery ({Math.round(analysis.discoveryShare * 100)}%)
+          </span>
+        {/if}
+      </div>
+
+      {#if analysisError}
+        <p class="note bad-note">
+          The model half failed: {analysisError}
+          {#if analysis}The measured counts above still stand.{/if}
+        </p>
+      {/if}
+
+      {#if analysisNote}
+        <p class="note">{analysisNote}</p>
+      {/if}
+
+      {#if findings.length}
+        <div class="findings">
+          {#each findings as f (f.tool + f.kind)}
+            <article class="finding">
+              <div class="finding-hd">
+                <span class="fkind">{f.kind.replace(/_/g, ' ')}</span>
+                <span class="ftool mono">{f.tool}</span>
+                <span class="fsaved">{f.calls} → {f.couldHaveBeen} calls</span>
+                <span class="ffix">{f.fix.replace(/_/g, ' ')}</span>
+              </div>
+              <p class="frat">{f.rationale}</p>
+              {#if f.cheaperRoute}
+                <p class="froute">Cheaper route: <code>{f.cheaperRoute}</code></p>
+              {/if}
+              <p class="fev">{f.evidence}</p>
+              {#if f.steps?.length}
+                <p class="fsteps mono">
+                  steps
+                  {#each f.steps.slice(0, 24) as s (s)}
+                    <button type="button" class="steplink" onclick={() => toggleRow(s)}>#{s}</button>
+                  {/each}
+                  {#if f.steps.length > 24}<span class="dot">+{f.steps.length - 24} more</span>{/if}
+                </p>
+              {/if}
+            </article>
+          {/each}
+        </div>
+
+        <div class="send-row">
+          <button type="button" class="ghost-btn accent-btn" onclick={sendToEngine} disabled={sending}>
+            {sending ? 'sending…' : 'send to self-improvement'}
+          </button>
+          {#if sendResult}<span class="send-note">{sendResult}</span>{/if}
+          <!-- One turn is one sample. The engine trials and reverts on its own
+               measurement; nothing here changes live tool behaviour. -->
+          <span class="send-hint">queues a backlog idea — it does not change any tool</span>
+        </div>
+      {:else if analysis && !analysisError && !analysisNote}
+        <p class="note">Nothing worth reporting on this chain.</p>
+      {/if}
+    </section>
+  {/if}
 
   {#if trace.droppedSteps > 0 || trace.payloadsDropped > 0}
     <p class="note">
@@ -762,7 +904,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     padding: 0.3rem 0.7rem;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-sharp);
     background: transparent;
     color: var(--text-secondary);
@@ -780,7 +922,7 @@
     margin-bottom: 1.5rem;
   }
   .stat {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.6rem 0.75rem;
     background: var(--card-bg);
@@ -832,6 +974,118 @@
     border-left: 2px solid var(--warn);
     padding-left: 0.6rem;
     margin: 0 0 1.25rem;
+  }
+
+  /* ── Chain analysis ─────────────────────────────────────────────────── */
+
+  .accent-btn {
+    color: var(--accent-ink);
+    border-color: var(--accent-ink);
+  }
+  .accent-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .bad-note {
+    color: var(--error);
+    border-left-color: var(--error);
+  }
+
+  .findings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .finding {
+    border: 1px solid var(--card-border);
+    border-left: 2px solid var(--accent);
+    background: var(--card-bg);
+    padding: 0.7rem 0.85rem;
+  }
+
+  .finding-hd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 0.9rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .fkind,
+  .ffix,
+  .fsaved {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .fkind {
+    color: var(--accent-ink);
+  }
+  .fsaved {
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .ffix {
+    color: var(--text-ghost);
+    margin-left: auto;
+  }
+  .ftool {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+  }
+
+  .frat {
+    margin: 0 0 0.35rem;
+    font-size: 0.87rem;
+    color: var(--text-secondary);
+  }
+  .froute,
+  .fev,
+  .fsteps {
+    margin: 0 0 0.3rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .fsteps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .steplink {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 0.05rem 0.3rem;
+    border: 1px solid var(--line-hair);
+    border-radius: var(--radius-sharp);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .steplink:hover {
+    border-color: var(--line-strong);
+    color: var(--text-primary);
+  }
+
+  .send-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.8rem;
+    margin-bottom: 1.25rem;
+  }
+  .send-note {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+  .send-hint {
+    font-size: 0.75rem;
+    color: var(--text-ghost);
   }
   .note.inline {
     margin: 0.5rem 0;
@@ -939,7 +1193,7 @@
      admin.css is not loaded under /jkai. */
   .tablewrap {
     overflow-x: auto;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     background: var(--card-bg);
   }
@@ -958,7 +1212,7 @@
   th {
     text-align: left;
     padding: 0;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
   }
   th.plain,
   th button {
@@ -983,7 +1237,7 @@
   }
   td {
     padding: 6px 9px;
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
     vertical-align: middle;
     font-size: 0.82rem;
     color: var(--text-secondary);
@@ -1103,7 +1357,7 @@
     text-align: center;
   }
   .expand-btn {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     background: transparent;
     color: var(--text-secondary);
     font-family: var(--font-mono);
@@ -1119,7 +1373,7 @@
   }
 
   .detail-row td {
-    background: var(--bg-section);
+    background: var(--surface-sunken);
     padding: 0.75rem 0.9rem 1rem;
   }
   .kv-grid {
@@ -1218,7 +1472,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-ghost);
-    border-bottom: 1px solid var(--divider);
+    border-bottom: 1px solid var(--line-hair);
   }
   .cell {
     max-width: 280px;
@@ -1228,7 +1482,7 @@
   }
 
   .subagent {
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.7rem 0.8rem;
     margin-bottom: 0.6rem;
@@ -1263,7 +1517,7 @@
     font-size: 0.88rem;
     line-height: 1.6;
     color: var(--text-secondary);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-soft, 4px);
     padding: 0.8rem;
     background: var(--card-bg);

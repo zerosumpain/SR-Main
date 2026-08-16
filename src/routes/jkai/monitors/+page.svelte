@@ -145,7 +145,7 @@
 
 <style>
   .mo { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; color: var(--text-primary); }
-  .mo-hdr { border-bottom: 2px solid var(--card-border); padding-bottom: 16px; margin-bottom: 20px; }
+  .mo-hdr { border-bottom: 2px solid var(--line-strong); padding-bottom: 16px; margin-bottom: 20px; }
   .mo-kicker { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
   .mo-hdr h1 { font-family: var(--font-display, var(--font-sans)); font-size: 2.125rem; margin: 4px 0 2px; }
   .mo-sub { margin: 0; color: var(--text-muted); font-size: var(--fs-nav); }
@@ -153,13 +153,13 @@
   .mo-back:hover { color: var(--text-primary); }
 
   .mo-sec { margin-bottom: 24px; }
-  .mo-sec-hd { border-bottom: 1px dashed var(--card-border); padding-bottom: 6px; margin-bottom: 12px; }
+  .mo-sec-hd { border-bottom: 1px dashed var(--line-strong); padding-bottom: 6px; margin-bottom: 12px; }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }
 
-  .mo-in { width: 100%; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; resize: vertical; }
+  .mo-in { width: 100%; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; resize: vertical; }
   .mo-in:focus, .mo-cron:focus { border-color: var(--text-muted); }
   .mo-row { display: flex; gap: 8px; margin-top: 8px; }
-  .mo-cron { flex: 1; background: var(--bg); border: 1px solid var(--card-border); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; }
+  .mo-cron { flex: 1; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-body); padding: 8px 10px; outline: none; box-sizing: border-box; }
   .mo-go { padding: 0 18px; background: var(--accent-ink, var(--accent, #c4570a)); color: var(--bg, #fff); border: none; font-family: var(--font-mono); font-size: var(--fs-label); cursor: pointer; }
   .mo-go:disabled { opacity: 0.5; cursor: default; }
 
@@ -169,7 +169,7 @@
   .mo-empty { color: var(--text-ghost); font-size: var(--fs-nav); }
 
   .mo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-  .mo-card { border: 1px solid var(--card-border); padding: 12px; }
+  .mo-card { border: 1px solid var(--line-strong); padding: 12px; }
   .mo-card.off { opacity: 0.6; }
   .mo-card-hd { display: flex; align-items: baseline; gap: 10px; }
   .mo-toggle { display: flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-muted); cursor: pointer; flex-shrink: 0; }
@@ -189,7 +189,7 @@
   .mo-hits { margin-top: 8px; }
   .mo-hits summary { cursor: pointer; }
   .mo-hit-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .mo-hit { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--card-border); padding-left: 8px; }
+  .mo-hit { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--line-strong); padding-left: 8px; }
   .mo-hit-hd { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }
   .mo-hit-prev { font-size: var(--fs-label); color: var(--text-muted); word-break: break-word; }
   .sr-label-tight { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.16em; color: var(--text-muted); }

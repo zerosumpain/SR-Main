@@ -216,7 +216,7 @@
     flex-direction: column;
     gap: 7px;
     padding: 9px 9px 10px;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     border-left: 3px solid var(--cl);
     border-radius: var(--radius-sharp);
     background: var(--accent-tint-08);
@@ -305,7 +305,7 @@
     height: 6px;
     overflow: hidden;
     border-radius: var(--radius-sharp);
-    background: var(--divider);
+    background: var(--line);
   }
   .seg {
     height: 100%;

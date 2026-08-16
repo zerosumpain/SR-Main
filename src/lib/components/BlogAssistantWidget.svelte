@@ -367,7 +367,7 @@
 <style>
   .fab {
     position: fixed; z-index: 80; width: 44px; height: 44px;
-    border-radius: var(--radius-pill); border: 1px solid var(--card-border);
+    border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
     background: var(--surface-elevated); cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
     color: var(--text-secondary);
@@ -376,13 +376,13 @@
     position: fixed; z-index: 80;
     width: 360px; height: 580px;
     background: var(--surface-elevated);
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
     display: flex; flex-direction: column;
   }
   .bar {
     display: flex; align-items: center; gap: 0.6rem;
     padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     user-select: none;
   }
   .title {
@@ -391,34 +391,34 @@
   }
   .title:active { cursor: grabbing; }
   .clear {
-    border: 1px solid var(--card-border); background: transparent;
-    padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
+    border: 1px solid var(--line-strong); background: transparent;
+    padding: 0.1rem 0.4rem; font-size: var(--fs-label-xs); cursor: pointer;
     color: var(--text-muted);
   }
   .clear:hover { color: var(--error); border-color: var(--error); }
   .auto {
-    border: 1px solid var(--card-border); background: transparent;
-    padding: 0.1rem 0.4rem; font-size: 0.7rem; cursor: pointer;
+    border: 1px solid var(--line-strong); background: transparent;
+    padding: 0.1rem 0.4rem; font-size: var(--fs-label-xs); cursor: pointer;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
   .auto.on { background: var(--accent-tint-08); color: var(--text-primary); border-color: var(--accent); }
   .hist {
-    border: 1px solid var(--card-border); background: transparent;
+    border: 1px solid var(--line-strong); background: transparent;
     padding: 0.1rem 0.45rem; font-size: 0.85rem; cursor: pointer;
     color: var(--text-muted);
   }
   .hist.active { background: var(--accent-tint-08); color: var(--text-primary); }
   .history-panel {
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     padding: 0.5rem 0.6rem;
     font-size: 0.8rem;
     max-height: 220px; overflow-y: auto;
-    background: var(--bg-section);
+    background: var(--surface-sunken);
   }
   .hist-hd {
     display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--font-mono); font-size: 0.72rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
     margin-bottom: 0.4rem;
   }
@@ -427,11 +427,11 @@
   .hist-row {
     display: flex; gap: 0.5rem; align-items: center;
     padding: 0.3rem 0.4rem;
-    border: 1px solid var(--card-border);
+    border: 1px solid var(--line-strong);
   }
   .hist-row-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .hist-field {
-    font-family: var(--font-mono); font-size: 0.7rem;
+    font-family: var(--font-mono); font-size: var(--fs-label-xs);
     color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
   }
   .hist-prev {
@@ -447,8 +447,8 @@
   .row.user { justify-content: flex-end; }
   .bubble {
     padding: 0.4rem 0.6rem;
-    border: 1px solid var(--card-border);
-    background: var(--bg-section);
+    border: 1px solid var(--line-strong);
+    background: var(--surface-sunken);
     font-size: 0.86rem; max-width: 85%;
     white-space: pre-wrap;
   }
@@ -475,6 +475,6 @@
     50% { opacity: 1; }
   }
   .empty { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
-  .composer { display: flex; gap: 0.4rem; padding: 0.4rem; border-top: 1px solid var(--card-border); }
+  .composer { display: flex; gap: 0.4rem; padding: 0.4rem; border-top: 1px solid var(--line-strong); }
   .composer .nm-textarea { flex: 1; }
 </style>

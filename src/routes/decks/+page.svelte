@@ -31,8 +31,11 @@
     <p class="empty">Nothing published yet.</p>
   {:else}
     <ul class="grid">
-      {#each data.decks as deck (deck.id)}
-        <li class="card" class:private={!deck.isPublic}>
+      {#each data.decks as deck, i (deck.id)}
+        <!-- The newest deck wears the accent edge permanently. The old
+             scaleY-on-hover border said "you are pointing at this", which every
+             card could say; only one can be the latest. -->
+        <li class="card" class:private={!deck.isPublic} class:newest={i === 0}>
           <a class="card-main" href="/decks/{deck.slug}">
             <span class="card-kicker">
               {deck.slideCount} SLIDES · {fmtDate(deck.updatedAt)}
@@ -53,18 +56,37 @@
 
 <style>
   .wrap { max-width: 1060px; margin: 0 auto; padding: 34px 20px 90px; }
-  .page-hdr { border-bottom: 2px solid var(--text-primary); padding-bottom: 20px; margin-bottom: 22px; }
+  .page-hdr { border-bottom: 2px solid var(--line-title); padding-bottom: 20px; margin-bottom: 22px; }
   .kicker {
     display: block;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.22em;
+    text-transform: uppercase;
     color: var(--accent);
   }
-  h1 { font-family: var(--font-display); font-size: clamp(30px, 4.5vw, 42px); margin: 6px 0 10px; color: var(--text-primary); }
-  .sub { font-family: var(--font-body); font-size: 14.5px; line-height: 1.6; color: var(--text-muted); margin: 0; max-width: 64ch; }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(30px, 4.5vw, 42px);
+    letter-spacing: -0.03em;
+    margin: 8px 0 10px;
+    color: var(--text-primary);
+  }
+  .sub {
+    font-family: var(--font-body);
+    font-size: var(--fs-body-sm);
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin: 0;
+    max-width: 64ch;
+  }
   .sub a { color: var(--accent-ink); }
-  .empty { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); padding: 30px 2px; }
+  .empty {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    padding: 30px 2px;
+  }
 
   .grid {
     list-style: none;
@@ -72,28 +94,21 @@
     padding: 0;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
+    gap: 12px;
   }
+  /* Editorial register, so the card is raised off the page ground rather than
+     tinted into it — but still square, and still without a shadow. */
   .card {
     position: relative;
-    border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    transition: border-color var(--t-base) var(--ease-out), background var(--t-base) var(--ease-out);
+    min-height: 168px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-card);
+    transition: border-color var(--t-base) var(--ease-out);
   }
-  .card:hover { border-color: var(--accent); background: var(--accent-tint-04); }
-  .card::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--accent);
-    transform: scaleY(0);
-    transform-origin: top;
-    transition: transform var(--t-base) var(--ease-out);
+  .card:hover { border-color: var(--accent-tint-35); }
+  .card.newest {
+    border-left: 2px solid var(--accent);
   }
-  .card:hover::before { transform: scaleY(1); }
   .card-main {
     display: flex;
     flex-direction: column;
@@ -105,40 +120,49 @@
   }
   .card-kicker {
     font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.16em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label-wide);
+    text-transform: uppercase;
     color: var(--text-muted);
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
   }
+  /* Private is a fact about the deck, not a warning — accent, like every other
+     "this one is different" mark on the site. --warn amber was a third status
+     colour nothing else here used. */
   .chip {
     font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.14em;
-    color: var(--warn);
-    border: 1px solid var(--warn);
-    border-radius: 2px;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sharp);
     padding: 1px 5px;
   }
   .card-title {
     font-family: var(--font-display);
-    font-size: 19px;
-    line-height: 1.2;
+    font-size: 20px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
   }
   .card-desc {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: var(--text-muted);
   }
+  /* Pinned to the bottom edge of the card, so every card in a row ends on the
+     same line whatever the description does above it. */
   .card-cta {
     margin-top: auto;
     padding-top: 8px;
     font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
     color: var(--accent);
   }
   .card-edit {
@@ -146,14 +170,19 @@
     top: 12px;
     right: 12px;
     font-family: var(--font-mono);
-    font-size: 9.5px;
-    letter-spacing: 0.12em;
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
     color: var(--accent-ink);
     text-decoration: none;
-    border: 1px solid var(--card-border);
-    border-radius: 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
     padding: 3px 8px;
+    background: var(--surface-card);
   }
   .card-edit:hover { border-color: var(--accent-ink); }
+
+  @media (max-width: 520px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>

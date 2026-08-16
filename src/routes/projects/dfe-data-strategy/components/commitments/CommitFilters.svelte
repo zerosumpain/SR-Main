@@ -47,7 +47,7 @@
     margin: 0 0 14px;
     padding: 9px 12px;
     border: 1px solid rgba(28, 22, 17, 0.14);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(241, 234, 214, 0.55);
   }
   .cf-row {
@@ -57,8 +57,8 @@
     flex-wrap: wrap;
   }
   .cf-lab {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: rgba(28, 22, 17, 0.5);
@@ -67,31 +67,31 @@
   .cf-q {
     flex: 1 1 190px;
     min-width: 150px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12.5px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
     padding: 6px 11px;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.75);
     color: var(--ink);
   }
   .cf-s {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     padding: 6px 8px;
     border: 1px solid rgba(28, 22, 17, 0.25);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.75);
     color: var(--ink);
     max-width: 190px;
   }
   .cf-clear {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 5px 10px;
     background: var(--accent-ink-tint-06);
     border: 1px solid var(--accent-ink-tint-35);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--accent-ink);
     cursor: pointer;
   }
@@ -99,11 +99,11 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 3px 9px 3px 7px;
     border: 1px solid rgba(28, 22, 17, 0.2);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.6);
     color: rgba(28, 22, 17, 0.7);
     cursor: pointer;
@@ -111,7 +111,7 @@
   .th i {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: var(--radius-pill);
     background: var(--c);
     opacity: 0.55;
   }
@@ -128,12 +128,12 @@
     opacity: 1;
   }
   .dchip {
-    font-family: 'DM Sans', sans-serif;
-    font-size: 11px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 600;
     padding: 3px 9px;
     border: 1px solid var(--accent-ink);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: var(--accent-ink);
     color: #fff;
     cursor: pointer;

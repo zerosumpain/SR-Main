@@ -125,7 +125,7 @@
   }
   .action-type {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -142,13 +142,13 @@
   }
   .action-meta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     flex-shrink: 0;
   }
   .action-time {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     width: 110px;
     text-align: right;
@@ -167,7 +167,7 @@
   @media (max-width: 760px) { .io-grid { grid-template-columns: 1fr; } }
   .code {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     background: var(--code-bg);
     color: var(--code-text);
     padding: 0.55rem 0.7rem;
@@ -181,7 +181,7 @@
     display: flex;
     gap: 1rem;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
     flex-wrap: wrap;
   }

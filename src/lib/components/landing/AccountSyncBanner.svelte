@@ -29,7 +29,7 @@
     align-items: center;
     gap: 10px;
     padding: 8px clamp(24px, 5vw, 64px);
-    border-bottom: 1px solid var(--card-border);
+    border-bottom: 1px solid var(--line-strong);
     background: var(--accent-tint-14, rgba(196, 87, 10, 0.08));
     text-decoration: none;
     color: var(--text-primary);
@@ -47,14 +47,14 @@
   }
   .asb-text {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.04em;
     min-width: 0;
     flex: 1;
   }
   .asb-cta {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--accent, #c4570a);

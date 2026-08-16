@@ -122,14 +122,14 @@
   }
   .blk {
     border: 1px solid rgba(28, 22, 17, 0.13);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     background: rgba(255, 255, 255, 0.45);
     padding: 11px 13px;
   }
   .blk-lab {
     display: block;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -137,7 +137,7 @@
   }
   .guide {
     margin: 0;
-    font-size: 12.5px;
+    font-size: var(--fs-label);
     line-height: 1.55;
     color: rgba(28, 22, 17, 0.75);
   }
@@ -146,7 +146,7 @@
     padding-left: 17px;
   }
   .prompts li {
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.72);
     margin-bottom: 4px;
@@ -158,13 +158,13 @@
   }
   .start {
     text-align: left;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
     font-weight: 500;
     padding: 6px 10px;
     background: var(--accent-ink-tint-06);
     border: 1px solid var(--accent-ink-tint-35);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--accent-ink);
     cursor: pointer;
   }
@@ -178,13 +178,13 @@
   }
   .hint {
     margin: 7px 0 0;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.5);
   }
   .sug-intro {
     margin: 0 0 8px;
-    font-size: 10.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.55);
   }
@@ -200,7 +200,7 @@
   }
   .sug-text {
     margin: 0 0 5px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
     color: rgba(28, 22, 17, 0.78);
   }
@@ -211,8 +211,8 @@
     gap: 8px;
   }
   .sug-src {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--accent-ink);
@@ -221,12 +221,12 @@
     color: #a06a1f;
   }
   .sug-add {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9.5px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     padding: 2px 8px;
     border: 1px solid var(--accent-ink-tint-35);
     background: var(--accent-ink-tint-06);
-    border-radius: var(--radius-round);
+    border-radius: var(--radius-sharp);
     color: var(--accent-ink);
     cursor: pointer;
     flex-shrink: 0;
@@ -241,7 +241,7 @@
   }
   .comp {
     margin: 0 0 8px;
-    font-size: 12px;
+    font-size: var(--fs-label-xs);
     line-height: 1.5;
   }
   .comp a {
@@ -265,7 +265,7 @@
   .checks li {
     display: flex;
     gap: 7px;
-    font-size: 11.5px;
+    font-size: var(--fs-label-xs);
     line-height: 1.45;
     color: rgba(28, 22, 17, 0.7);
     margin-bottom: 4px;

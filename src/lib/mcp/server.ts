@@ -41,12 +41,6 @@ export interface McpTool {
   annotations?: { destructiveHint?: boolean };
 }
 
-export interface McpCallRequest {
-  name: string;
-  arguments: Record<string, unknown>;
-  bridgeToken: string;
-}
-
 export interface McpCallResult {
   content: Array<{ type: 'text'; text: string }>;
 }
@@ -63,6 +57,35 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
   };
 }
 
+/**
+ * Today's date, in London.
+ *
+ * The Hermes system prompt carries no date at all, and most jkai tools want an
+ * absolute ISO instant, so "3 days ago" or "tomorrow" cost a `current_date`
+ * round trip before anything else could run — four of them across the ten
+ * conversations this came out of.
+ *
+ * **This must never be attached to a tool DESCRIPTION.** It was, briefly, and
+ * that was wrong: Hermes discovers tools once on connect and re-discovers only
+ * on a `notifications/tools/list_changed` notification, which this server does
+ * not send. So a date in the manifest is frozen at connect time and goes stale
+ * for as long as the gateway stays up — and a confidently-stated wrong date is
+ * strictly worse than no date, because the model has no reason to doubt it.
+ * It rides `jkai_extended` RESULTS instead, which are built per call and can
+ * never be stale.
+ *
+ * **Date only, never a clock**, for the same reason it is worth stating at all:
+ * results are not cached, but keeping the two surfaces identical means nobody
+ * later moves a timestamp into the cached one.
+ */
+export function todayLine(now: Date = new Date()): string {
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+  const weekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'long' }).format(now);
+  return `${weekday} ${date} (Europe/London)`;
+}
+
 export async function listMcpTools(): Promise<McpTool[]> {
   const tools = getTools();
   const policy = await getActivePolicy();
@@ -72,7 +95,8 @@ export async function listMcpTools(): Promise<McpTool[]> {
       .map((t) => toolToMcp(t, policy));
     // Cross-cutting call-efficiency rules ride on the meta-tool description:
     // it is the one definition every turn sees regardless of which tools the
-    // model ends up reaching for.
+    // model ends up reaching for. Anything that CHANGES over time must not —
+    // see `todayLine`, which is why the date lives on results instead.
     const guidance = renderGlobalGuidance(policy);
     const meta = guidance
       ? { ...JKAI_EXTENDED_TOOL, description: JKAI_EXTENDED_TOOL.description + guidance }
