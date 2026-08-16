@@ -2304,6 +2304,28 @@ export const workflowFiles = pgTable(
 export type WorkflowFile = typeof workflowFiles.$inferSelect;
 export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
 
+// A high-entropy bearer capability scoped to exactly one generated route file.
+// Raw tokens are returned once for WhatsApp delivery; only their hash persists.
+export const routeExportTokens = pgTable(
+  'route_export_token',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    fileId: text('file_id').notNull().references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    useCount: integer('use_count').notNull().default(0),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex('route_export_token_hash_idx').on(t.tokenHash),
+    byFile: index('route_export_token_file_idx').on(t.fileId),
+  }),
+);
+
+export type RouteExportToken = typeof routeExportTokens.$inferSelect;
+
 export type WorkflowFilePermissions = {
   read: boolean;
   write: boolean;

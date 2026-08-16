@@ -17,6 +17,9 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
+  // A high-entropy per-file capability validates inside its handler; the drive
+  // itself remains owner-gated.
+  '/api/route-exports',
   // Read-only public serving of blog post images — referenced by <img src> on the
   // public /blog pages, so it must be reachable by anonymous readers. The UPLOAD
   // endpoint (/api/admin/blog/upload-image) stays owner-gated; this serves only
