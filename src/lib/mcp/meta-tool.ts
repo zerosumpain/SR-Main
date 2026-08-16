@@ -31,6 +31,24 @@ export interface MetaToolInput {
 interface ExtendedToolListEntry {
   name: string;
   description: string;
+  /**
+   * The tool's required argument names, omitted when it has none.
+   *
+   * The cheapest thing a `schema` round trip bought was usually this — over
+   * ten measured conversations, 18 of 68 discovery calls were schema fetches,
+   * most for tools with four arguments or fewer.
+   *
+   * Measured cost: 104 of 145 tools carry one, +2,824 bytes over the WHOLE
+   * catalogue (+12.9% compact, +6.5% full). That is the worst case — an
+   * unfiltered survey — and a `query` narrows it to tens of bytes, which is
+   * how the model actually calls this. Against it: one fewer request, response
+   * and assistant turn per tool first reached for.
+   *
+   * Names only, deliberately: types and optional arguments are what `schema`
+   * is still for, and inlining them would rebuild the manifest this dispatcher
+   * exists to avoid.
+   */
+  required?: string[];
   /** True when the tool has a side effect that should be confirmed first. */
   destructive?: boolean;
 }
@@ -61,17 +79,26 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
   name: 'jkai_extended',
   description:
     "Discover and invoke jkai's extended tool catalogue (~128 tools across " +
-    'blog, health, workflow, gmail, research, scraper, files, build, ' +
-    'schedule, home-assistant, render, document, image, audio, system ' +
-    'domains). Use this when you need a capability beyond the essential ' +
-    'tools you can see directly. Workflow: operation="list" to discover ' +
-    '(optionally with a "query" — plain words work, e.g. "add a tool" or ' +
-    '"read my calendar"; results are ranked by how well they match — or ' +
-    'compact=true for a cheap ' +
-    'name+truncated-description catalogue survey), operation="schema" with ' +
-    '"name" (or "names" to batch several schemas in one call) to fetch the ' +
-    'exact argument schema, then operation="invoke" with "name" and ' +
-    '"args" to run it.',
+    // The domain list is the model's cheapest map of what jkai can reach, and
+    // for a long time it named `gmail` but neither `calendar` nor `payments`.
+    // That is not cosmetic: on 2026-08-15 two calendar questions routed to
+    // Google before Apple Calendar, and on 2026-08-16 a PayPal question spent
+    // fourteen Gmail searches while `api_integration_call` sat one call away.
+    // A domain that is absent here is a domain the model does not know it has.
+    'blog, health, calendar, workflow, gmail, payments and API integrations, ' +
+    'research, scraper, files and drive, datastore, the intel knowledge graph, ' +
+    'build, schedule, monitors, agents, decks, home-assistant, render, ' +
+    'document, image, audio, system domains). Use this when you need a ' +
+    'capability beyond the essential tools you can see directly. Workflow: ' +
+    'operation="list" to discover (optionally with a "query" — plain words ' +
+    'work, e.g. "add a tool" or "read my calendar"; results are ranked by how ' +
+    'well they match — or compact=true for a cheap name+truncated-description ' +
+    'catalogue survey). Every list entry carries its REQUIRED argument names, ' +
+    'so for a tool with few arguments you can go straight from "list" to ' +
+    '"invoke" — operation="schema" is only worth a round trip when you need ' +
+    'the full types or the optional arguments. Use operation="schema" with ' +
+    '"name" (or "names" to batch several schemas in one call) for that, then ' +
+    'operation="invoke" with "name" and "args" to run it.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -102,7 +129,7 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
       compact: {
         type: 'boolean',
         description:
-          'For operation="list" only. When true, returns a leaner entry per tool — just {name, description} with the description truncated to ~120 chars and no destructive flag — so a full-catalogue survey costs far fewer tokens.',
+          'For operation="list" only. When true, returns a leaner entry per tool — {name, description, required} with the description truncated to ~120 chars and no destructive flag — so a full-catalogue survey costs far fewer tokens. The required argument names are kept even here, because they are what lets you skip the schema call.',
       },
       args: {
         type: 'object',
@@ -167,6 +194,20 @@ export function searchTools<T extends { name: string; description?: string }>(
   return scored.map((s) => s.t);
 }
 
+/**
+ * The `required` names off a tool's JSON Schema, or nothing.
+ *
+ * Returns a spreadable object rather than an array so an empty list is simply
+ * absent from the entry — `required: []` reads as "this tool takes no
+ * arguments", which is a different and often wrong claim.
+ */
+export function withRequired(parameters: unknown): { required?: string[] } {
+  const raw = (parameters as { required?: unknown } | null)?.required;
+  if (!Array.isArray(raw)) return {};
+  const names = raw.filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+  return names.length ? { required: names } : {};
+}
+
 function truncateDescription(desc: string): string {
   return desc.length > MAX_COMPACT_DESC
     ? `${desc.slice(0, MAX_COMPACT_DESC - 1).trimEnd()}…`
@@ -218,14 +259,19 @@ export async function dispatchMetaTool(
   if (operation === 'list') {
     const filtered = query ? searchTools(extended, query) : extended;
     if (compact) {
+      // `required` rides even the compact survey. It is the one field that can
+      // replace a whole round trip, and a handful of argument names is cheaper
+      // than the description already being returned beside it.
       return filtered.map((t) => ({
         name: t.name,
         description: truncateDescription(describeWithPolicy(policy, t.name, t.description ?? '')),
+        ...withRequired(t.parameters),
       }));
     }
     return filtered.map((t) => ({
       name: t.name,
       description: describeWithPolicy(policy, t.name, t.description ?? ''),
+      ...withRequired(t.parameters),
       ...(t.destructive ? { destructive: true } : {}),
     }));
   }

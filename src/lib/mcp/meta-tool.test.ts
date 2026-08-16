@@ -292,3 +292,89 @@ describe('listMcpTools() env-flag behaviour', () => {
     }
   });
 });
+
+describe('list entries carry required argument names', () => {
+  it('names the required arguments so a schema round trip is optional', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list', query: 'apple calendar' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const create = list.find((e) => e.name === 'apple_calendar_create');
+    expect(create).toBeTruthy();
+    // 18 of 68 discovery calls over ten conversations were schema fetches,
+    // mostly for tools with a handful of arguments. This is what replaces them.
+    expect(create!.required).toEqual(expect.arrayContaining(['calendar', 'title']));
+  });
+
+  it('omits `required` entirely for a tool that has none', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const optional = list.find((e) => !('required' in e));
+    // `required: []` would read as "this tool takes no arguments", which is a
+    // different and usually wrong claim — absence is the honest encoding.
+    expect(optional).toBeTruthy();
+    for (const entry of list) {
+      if ('required' in entry) expect((entry.required as string[]).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps them on the compact survey, which is where a call is most likely skipped', async () => {
+    const list = (await dispatchMetaTool({ operation: 'list', compact: true, query: 'apple calendar' }, fakeCtx)) as unknown as Array<Record<string, unknown>>;
+    const create = list.find((e) => e.name === 'apple_calendar_create');
+    expect(create!.required).toEqual(expect.arrayContaining(['calendar', 'title']));
+    expect('destructive' in create!).toBe(false);
+  });
+});
+
+describe('the domain map the model navigates by', () => {
+  it('names the domains whose absence caused real misroutes', () => {
+    const d = JKAI_EXTENDED_TOOL.description.toLowerCase();
+    // Calendar and payments were both missing while `gmail` was present, and
+    // both produced a wrong-source turn in the same week.
+    for (const domain of ['calendar', 'payments', 'datastore', 'intel knowledge graph', 'decks', 'monitors']) {
+      expect(d, domain).toContain(domain);
+    }
+  });
+
+  it('tells the caller that list may be enough on its own', () => {
+    expect(JKAI_EXTENDED_TOOL.description).toContain('REQUIRED argument names');
+  });
+});
+
+describe("today's date rides the one definition every turn sees", () => {
+  it('states the date, in London, with no clock in it', async () => {
+    const { todayLine } = await import('./server');
+    const line = todayLine(new Date('2026-08-16T09:30:00Z'));
+    expect(line).toContain('2026-08-16');
+    expect(line).toContain('Sunday');
+    expect(line).toContain('Europe/London');
+    // A clock would change the cached prompt prefix on EVERY request and
+    // destroy prompt caching, which is worth far more than the call it saves.
+    expect(line).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it('reads the London day, not the UTC one, across the BST boundary', async () => {
+    const { todayLine } = await import('./server');
+    // 23:30 UTC on 15 Aug is 00:30 on the 16th in London (BST).
+    expect(todayLine(new Date('2026-08-15T23:30:00Z'))).toContain('2026-08-16');
+    // In January the two agree, which is the control.
+    expect(todayLine(new Date('2026-01-15T23:30:00Z'))).toContain('2026-01-15');
+  });
+});
+
+describe('listMcpTools() carries the date onto the dispatcher', () => {
+  const originalFlag = process.env.JKAI_MCP_META_TOOL;
+
+  it('appends today to the jkai_extended description when the meta-tool is on', async () => {
+    process.env.JKAI_MCP_META_TOOL = '1';
+    try {
+      const tools = await listMcpTools();
+      const meta = tools.find((t) => t.name === 'jkai_extended');
+      expect(meta).toBeTruthy();
+      expect(meta!.description).toContain('Europe/London');
+      expect(meta!.description).toMatch(/Today is \w+ \d{4}-\d{2}-\d{2}/);
+      // The base description survives — the suffix is additive, and the
+      // policy overlay's global guidance appends after it.
+      expect(meta!.description).toContain("jkai's extended tool catalogue");
+    } finally {
+      if (originalFlag === undefined) delete process.env.JKAI_MCP_META_TOOL;
+      else process.env.JKAI_MCP_META_TOOL = originalFlag;
+    }
+  });
+});
