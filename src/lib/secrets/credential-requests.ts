@@ -276,6 +276,32 @@ export interface CustomCredentialProposal {
 
 const MAX_CUSTOM_FIELDS = 8;
 
+/**
+ * Which catalogued provider, if any, a `custom` proposal is really describing.
+ *
+ * Two ways to claim it, both deliberately narrow:
+ *
+ *  * every word of the provider key appears in the proposal's own text, so
+ *    `darwin-ldbws` claims "National Rail Darwin LDBWS — consumer user and
+ *    password" but not a proposal that merely says "darwin";
+ *  * the suggested host is one the catalogued entry is already bound to.
+ *
+ * Returns the provider key, or null when nothing in the catalogue covers it.
+ */
+export function catalogueClaims(input: CustomCredentialProposal): string | null {
+  const text = [input.label, input.suggestedHandle, input.suggestedHost]
+    .map((v) => String(v ?? '').toLowerCase())
+    .join(' ');
+  const host = hostFromEndpoint(input.suggestedHost);
+
+  for (const [key, spec] of Object.entries(CREDENTIAL_REQUEST_SPECS)) {
+    if (host && spec.binding.allowedHosts.some((h) => h.toLowerCase() === host)) return key;
+    const words = key.split(/[-_]/).filter((w) => w.length > 2);
+    if (words.length > 0 && words.every((w) => text.includes(w))) return key;
+  }
+  return null;
+}
+
 /** Field keys address JSON the owner typed, so they are narrow by construction. */
 function sanitiseFieldKey(raw: unknown): string {
   return String(raw ?? '')
@@ -326,16 +352,41 @@ function sanitiseCustomFields(raw: CustomCredentialProposal['fields']): Credenti
  * a set that cannot be authenticated is stored rather than guessed at.
  */
 export function customSpec(input: CustomCredentialProposal): CredentialRequestSpec {
+  // A catalogued provider claims its own territory. Told to prefer the enum, the
+  // model went `custom` anyway and proposed National Rail Darwin against
+  // `realtime.nationalrail.co.uk` — the portal retired in early 2026 — while
+  // `darwin-ldbws` sat in the enum with the right fields, the right host and the
+  // right injection (2026-08-16, twice, then again after the description was
+  // strengthened). Guidance in a description is advice; this is the rule.
+  const claimed = catalogueClaims(input);
+  if (claimed) {
+    throw new CredentialSpecError(
+      `"${claimed}" is already catalogued and covers this service — call request_credential again with ` +
+        `provider="${claimed}" instead of "custom". It already knows the fields the vendor issues, the current ` +
+        `API hostname and how the credential is sent, none of which you have to guess.`,
+    );
+  }
+
   const handle = String(input.suggestedHandle ?? '')
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
     .slice(0, 48);
 
-  const proposed = sanitiseCustomFields(input.fields);
-  const fields: CredentialField[] =
-    proposed.length > 0
-      ? proposed
-      : [{ key: 'value', label: 'API key / token', type: 'password', required: true }];
+  const fields = sanitiseCustomFields(input.fields);
+  if (fields.length === 0) {
+    // There used to be a fallback here: one box labelled "API key / token".
+    // That fallback IS the original bug — a service issuing a key and a secret,
+    // or a group plus a login, was asked for "an API key", and the owner had no
+    // way to give the rest. Saying so is better than guessing: the model can
+    // always propose a single field when a single key really is all there is,
+    // and it has to have looked at the service to know that.
+    throw new CredentialSpecError(
+      'a custom credential must say what the service actually issues — set custom.fields to one entry per ' +
+        'value the owner will be asked for, e.g. [{"key":"api_key","label":"API key"}] for a single-key API, ' +
+        'or one entry each for a client id, secret, group, username and so on. Check the service\'s ' +
+        'documentation first; asking for "an API key" when it issues three values stores something unusable.',
+    );
+  }
   const isSet = fields.length > 1;
   const keys = new Set(fields.map((f) => f.key));
 
