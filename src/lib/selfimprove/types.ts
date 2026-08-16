@@ -85,6 +85,20 @@ export const WORK_CAPS = {
   repairErrorRateThreshold: 0.25,
   /** Minimum runs before an error rate is meaningful. */
   repairMinRuns: 5,
+  /**
+   * Days a tool sits out after a repair attempt is rejected.
+   *
+   * Without it the phase grinds: `pickRepairTargets` sorts by error COUNT, a
+   * rejected repair leaves the tool unchanged, so it is still the worst tool
+   * tomorrow and gets picked again. Measured 2026-08-16 — the same two tools
+   * (`reverse_geocode`, `reverse_geocode_osm`) were re-authored every night for
+   * eight consecutive nights, 31 lifetime attempts for 1 ship, while
+   * `nearby_places` sat third on the list and was never once reached.
+   *
+   * A cooldown rather than an exclusion: the tool may become repairable later,
+   * once the upstream settles or better smoke cases exist.
+   */
+  repairCooldownDays: 7,
   /** Leave this much wall-clock headroom for the report phase. */
   reserveWallMs: 60 * 1000,
 } as const;

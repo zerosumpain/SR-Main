@@ -16,7 +16,7 @@
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { upsertRecord } from '$lib/datastore';
+import { queryRecords, upsertRecord } from '$lib/datastore';
 import {
   COLLECTIONS,
   SYSTEM_ACTOR,
@@ -30,17 +30,85 @@ import type { Budget } from './run';
 import { buildContextPack, loadCustomToolHealth, renderContext, type CustomToolHealth } from './context';
 import { passCount, smokeTest, staticScan, type SmokeCase } from './verify';
 
-/** Candidates worth repairing: enabled, used enough to trust the rate, failing too often. */
-export function pickRepairTargets(tools: CustomToolHealth[], limit: number): CustomToolHealth[] {
+/**
+ * Tools whose repair was rejected recently enough to still be on cooldown.
+ *
+ * Reads the attempt ledger this phase already writes, so there is no new state
+ * to keep in step. Never throws — a datastore that is down must cost the phase
+ * its cooldown, not its run.
+ */
+export async function recentlyFailedRepairs(
+  now: Date = new Date(),
+  days: number = WORK_CAPS.repairCooldownDays,
+): Promise<Set<string>> {
+  const since = now.getTime() - days * 24 * 60 * 60 * 1000;
+  const out = new Set<string>();
+  try {
+    const { records } = await queryRecords(
+      COLLECTIONS.toolAttempts,
+      // Sorted on `updatedAt` because the datastore only orders by its own
+      // columns; the window is then checked against the record's own
+      // `attemptedAt`, which is the timestamp that actually means "when this
+      // repair was tried".
+      { sort: { field: 'updatedAt', dir: 'desc' }, limit: 200 },
+      SYSTEM_ACTOR,
+    );
+    for (const record of records) {
+      const data = record.data as unknown as Partial<ToolAttemptData>;
+      if (data?.mode !== 'repair' || data.status !== 'rejected') continue;
+      const at = Date.parse(String(data.attemptedAt ?? ''));
+      if (Number.isFinite(at) && at >= since && data.name) out.add(String(data.name));
+    }
+  } catch (err) {
+    console.error('[selfimprove] recentlyFailedRepairs failed; no cooldown applied:', errMsg(err));
+  }
+  return out;
+}
+
+/**
+ * Candidates worth repairing: enabled, used enough to trust the rate, failing
+ * too often — and not already tried and rejected this week.
+ *
+ * The cooldown is the load-bearing part. Sorting by error COUNT with no memory
+ * of past attempts is a deterministic loop: a rejected repair leaves the tool
+ * untouched, so it is still the worst tool tomorrow night and gets re-authored
+ * again. Measured on 2026-08-16, `reverse_geocode` and `reverse_geocode_osm`
+ * were picked every night for eight consecutive nights — 31 lifetime attempts,
+ * 1 ship — while `nearby_places` sat third of three eligible tools and was
+ * never reached, because only two are repaired per night.
+ *
+ * `optimise.ts` already learned this and skips a tool whose last overlay was
+ * rolled back, for the same reason: a thing that has been tested and failed
+ * should not have tonight spent on it.
+ */
+export function pickRepairTargets(
+  tools: CustomToolHealth[],
+  limit: number,
+  onCooldown: Set<string> = new Set(),
+): CustomToolHealth[] {
   return tools
     .filter(
       (t) =>
         t.enabled &&
         t.runCount >= WORK_CAPS.repairMinRuns &&
-        t.errorRate > WORK_CAPS.repairErrorRateThreshold,
+        t.errorRate > WORK_CAPS.repairErrorRateThreshold &&
+        !onCooldown.has(t.name),
     )
     .sort((a, b) => b.errorCount - a.errorCount)
     .slice(0, limit);
+}
+
+/** Eligible but skipped tonight — reported so a quiet phase is explicable. */
+export function repairsOnCooldown(tools: CustomToolHealth[], onCooldown: Set<string>): string[] {
+  return tools
+    .filter(
+      (t) =>
+        t.enabled &&
+        t.runCount >= WORK_CAPS.repairMinRuns &&
+        t.errorRate > WORK_CAPS.repairErrorRateThreshold &&
+        onCooldown.has(t.name),
+    )
+    .map((t) => t.name);
 }
 
 interface RepairSpec {
@@ -144,7 +212,21 @@ export async function repairTools(budget: Budget, runId: string): Promise<RunAct
   const actions: RunAction[] = [];
 
   const health = await loadCustomToolHealth(true);
-  const targets = pickRepairTargets(health, WORK_CAPS.maxToolsRepaired);
+  const onCooldown = await recentlyFailedRepairs();
+  const targets = pickRepairTargets(health, WORK_CAPS.maxToolsRepaired, onCooldown);
+
+  // Never a silent skip. A phase that does nothing because every candidate is
+  // resting reads identically to a phase that found nothing wrong, and the two
+  // want opposite responses from whoever reads the ledger.
+  const resting = repairsOnCooldown(health, onCooldown);
+  if (resting.length > 0) {
+    actions.push({
+      kind: 'efficiency_measured',
+      detail:
+        `repair: ${resting.join(', ')} skipped — a repair was rejected within the last ` +
+        `${WORK_CAPS.repairCooldownDays} days, so tonight goes to the next candidate instead.`,
+    });
+  }
   if (targets.length === 0) return actions;
 
   const contextText = renderContext(await buildContextPack());
