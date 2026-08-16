@@ -57,6 +57,29 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
   };
 }
 
+/**
+ * Today's date, stated once where the model will see it before composing any
+ * arguments.
+ *
+ * The Hermes system prompt carries no date at all, and most jkai tools want an
+ * absolute ISO instant, so "3 days ago" or "tomorrow" cost a `current_date`
+ * round trip before anything else could run — four of them across the ten
+ * conversations this came out of.
+ *
+ * **Date only, never a time.** Tool definitions sit in the cached prompt
+ * prefix, so this text is part of the cache key: a date changes it once a day
+ * (one miss, self-healing), while a clock would change it on every single
+ * request and destroy prompt caching outright — which is worth far more than
+ * the call it saves. See the 82x caching note in the OpenRouter reference.
+ */
+export function todayLine(now: Date = new Date()): string {
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(now);
+  const weekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'long' }).format(now);
+  return ` Today is ${weekday} ${date} (Europe/London) — use it directly rather than spending a call to ask the date.`;
+}
+
 export async function listMcpTools(): Promise<McpTool[]> {
   const tools = getTools();
   const policy = await getActivePolicy();
@@ -66,10 +89,11 @@ export async function listMcpTools(): Promise<McpTool[]> {
       .map((t) => toolToMcp(t, policy));
     // Cross-cutting call-efficiency rules ride on the meta-tool description:
     // it is the one definition every turn sees regardless of which tools the
-    // model ends up reaching for.
+    // model ends up reaching for. Today's date rides the same carrier.
     const guidance = renderGlobalGuidance(policy);
-    const meta = guidance
-      ? { ...JKAI_EXTENDED_TOOL, description: JKAI_EXTENDED_TOOL.description + guidance }
+    const suffix = `${todayLine()}${guidance}`;
+    const meta = suffix
+      ? { ...JKAI_EXTENDED_TOOL, description: JKAI_EXTENDED_TOOL.description + suffix }
       : JKAI_EXTENDED_TOOL;
     return [...essentials, meta];
   }
