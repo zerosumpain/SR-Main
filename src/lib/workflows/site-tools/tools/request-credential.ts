@@ -208,8 +208,11 @@ const def: ToolDefinition = {
         type: 'string',
         enum: credentialProviderKeys(),
         description:
-          'Which credential. Use a known provider where one fits; "custom" for anything else, ' +
-          'with the `custom` object filled in.',
+          'Which credential. ALWAYS prefer a catalogued provider when one covers the service you need — ' +
+          'read the enum before reaching for "custom". A catalogued entry already knows the right field ' +
+          'names, the current API hostname and how the credential is sent, and "custom" makes you guess ' +
+          'all three; a wrong guess stores a credential bound to a host the vendor retired. ' +
+          'Use "custom" only when nothing in the enum fits, and fill in the `custom` object.',
       },
       reason: {
         type: 'string',
