@@ -29,6 +29,7 @@ import './tools/request-change';
 import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/scraper';
+import './tools/file-share';
 import './tools/files';
 import './tools/route-export';
 import './tools/knowledge';

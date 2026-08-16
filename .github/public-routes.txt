@@ -41,6 +41,7 @@
 /api/deepdive/reindex-facts
 /api/dfe-data-strategy/intel
 /api/dfe-data-strategy/seed-workflows
+/api/file-shares/[token]/download
 /api/health/apple/ingest
 /api/health/workflow-engine
 /api/jkai/cors/[...url]

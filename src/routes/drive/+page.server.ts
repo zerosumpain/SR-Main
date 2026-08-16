@@ -4,6 +4,7 @@ import { driveFolderSettings, workflowFiles } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { resolveDefaultModel } from '$lib/server/models/settings';
+import { SHARE_TTL_DAYS } from '$lib/file-shares';
 
 // Endpoint's own per-file cap (see /api/files/upload). The effective client-side
 // limit is the smaller of this and the adapter's BODY_SIZE_LIMIT — exceeding
@@ -39,5 +40,7 @@ export const load: PageServerLoad = async () => {
     intelMode: r.intelMode,
     categoryIds: r.categoryIds ?? [],
   }));
-  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId, folderSettings };
+  // The share list itself is fetched client-side (it changes without a reload),
+  // but the lifetime is needed for button copy before that lands.
+  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId, folderSettings, shareTtlDays: SHARE_TTL_DAYS };
 };

@@ -188,6 +188,7 @@
     if (v === 'grid' || v === 'list') viewMode = v;
     onboardDismissed = localStorage.getItem('drive:onboarded') === '1';
     loadCollections();
+    loadShares();
   });
   function dismissOnboard() {
     onboardDismissed = true;
@@ -610,6 +611,90 @@
     files = files.filter((x) => x.id !== f.id);
     delete selected[f.id];
   }
+
+  // ——— Share links ———
+  // A share is a capability URL that works without a login, so the two things
+  // this UI must never do are hide one and lose one. Every link ever minted is
+  // listed with its expiry and a Revoke button; the raw URL is shown ONCE at
+  // mint time because the server keeps only its hash and cannot show it again.
+
+  type ShareRow = {
+    id: string;
+    fileId: string;
+    fileName: string;
+    label: string | null;
+    createdBy: string;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt: string | null;
+    lastUsedAt: string | null;
+    useCount: number;
+    active: boolean;
+  };
+
+  let shares = $state<ShareRow[]>([]);
+  let sharesLoaded = $state(false);
+  let shareBusyId = $state<string | null>(null);
+  /** The one-time reveal after minting. Cleared when the owner dismisses it. */
+  let mintedShare = $state<{ url: string; name: string; expiresAt: string } | null>(null);
+  let copiedMinted = $state(false);
+
+  const activeShareCount = $derived(shares.filter((s) => s.active).length);
+  const sharedFileIds = $derived(new Set(shares.filter((s) => s.active).map((s) => s.fileId)));
+
+  async function loadShares() {
+    const res = await fetch('/api/files/shares');
+    if (!res.ok) return;
+    const body = await res.json().catch(() => null);
+    shares = (body?.shares ?? []) as ShareRow[];
+    sharesLoaded = true;
+  }
+
+  async function shareFile(f: FileRow) {
+    shareBusyId = f.id;
+    try {
+      const res = await fetch('/api/files/shares', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fileId: f.id }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        alert(`Could not create a link: ${body?.message ?? res.status}`);
+        return;
+      }
+      copiedMinted = false;
+      mintedShare = { url: body.url, name: baseName(f.name), expiresAt: body.expiresAt };
+      await navigator.clipboard?.writeText(body.url).then(() => (copiedMinted = true)).catch(() => {});
+      await loadShares();
+    } finally {
+      shareBusyId = null;
+    }
+  }
+
+  async function revokeShare(s: ShareRow) {
+    if (!confirm(`Revoke the link to "${baseName(s.fileName)}"? Anyone holding it stops being able to download.`)) return;
+    shareBusyId = s.id;
+    try {
+      const res = await fetch(`/api/files/shares?id=${encodeURIComponent(s.id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert(`Revoke failed (${res.status})`);
+        return;
+      }
+      await loadShares();
+    } finally {
+      shareBusyId = null;
+    }
+  }
+
+  function shareExpiry(iso: string): string {
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return 'expired';
+    const days = Math.floor(ms / 86400000);
+    if (days >= 1) return `${days}d left`;
+    const hours = Math.max(1, Math.floor(ms / 3600000));
+    return `${hours}h left`;
+  }
 </script>
 
 <!-- Stop the browser from navigating when a file is dropped outside the zone. -->
@@ -805,6 +890,16 @@
         {/if}
         <button type="button" class="row-link" disabled={busyId === f.id} onclick={() => (convertModalFor = { id: f.id, name: f.name })}>Convert</button>
         <button type="button" class="row-link" onclick={() => startEdit(f)}>Edit</button>
+        <button
+          type="button"
+          class="row-link"
+          class:shared={sharedFileIds.has(f.id)}
+          disabled={shareBusyId === f.id}
+          title={sharedFileIds.has(f.id) ? 'Already has a live link — this mints another' : `Anyone with the link can download this for ${data.shareTtlDays ?? 7} days`}
+          onclick={() => shareFile(f)}
+        >
+          {shareBusyId === f.id ? 'Linking…' : sharedFileIds.has(f.id) ? 'Share ·' : 'Share'}
+        </button>
         <button type="button" class="row-link danger" onclick={() => deleteRow(f)}>Delete</button>
       {/snippet}
 
@@ -912,6 +1007,61 @@
 
       {#if intelNotice}
         <p class="intel-notice">{intelNotice}</p>
+      {/if}
+
+      <!-- Shown once, because only the hash is stored and the server cannot
+           reproduce the URL afterwards. -->
+      {#if mintedShare}
+        <div class="share-reveal">
+          <div class="share-reveal-head">
+            <span class="share-reveal-title">Link ready — {mintedShare.name}</span>
+            <span class="share-reveal-meta">
+              anyone with this can download · {shareExpiry(mintedShare.expiresAt)}{copiedMinted ? ' · copied' : ''}
+            </span>
+          </div>
+          <input class="share-url nm-text-input" readonly value={mintedShare.url} onfocus={(e) => e.currentTarget.select()} />
+          <div class="share-reveal-actions">
+            <button
+              type="button"
+              class="row-link"
+              onclick={() => navigator.clipboard?.writeText(mintedShare!.url).then(() => (copiedMinted = true)).catch(() => {})}
+            >{copiedMinted ? 'Copied' : 'Copy'}</button>
+            <button type="button" class="row-link" onclick={() => (mintedShare = null)}>Done</button>
+          </div>
+        </div>
+      {/if}
+
+      {#if sharesLoaded && shares.length > 0}
+        <details class="share-panel" open={activeShareCount > 0}>
+          <summary>
+            Share links
+            <span class="share-count">{activeShareCount} live{shares.length > activeShareCount ? ` · ${shares.length - activeShareCount} dead` : ''}</span>
+          </summary>
+          <table class="share-table">
+            <thead>
+              <tr><th>File</th><th>Created by</th><th>Uses</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {#each shares as s (s.id)}
+                <tr class:dead={!s.active}>
+                  <td class="share-file">{baseName(s.fileName)}{#if s.label}<span class="share-label">{s.label}</span>{/if}</td>
+                  <td class="share-by">{s.createdBy}</td>
+                  <td class="share-uses">{s.useCount}</td>
+                  <td class="share-status">
+                    {#if s.revokedAt}revoked{:else}{shareExpiry(s.expiresAt)}{/if}
+                  </td>
+                  <td class="share-act">
+                    {#if s.active}
+                      <button type="button" class="row-link danger" disabled={shareBusyId === s.id} onclick={() => revokeShare(s)}>
+                        {shareBusyId === s.id ? 'Revoking…' : 'Revoke'}
+                      </button>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </details>
       {/if}
 
       {#if subfolders.length === 0 && visibleFiles.length === 0}
@@ -1975,6 +2125,66 @@
     color: var(--text-secondary);
   }
   .folder-del:hover { color: var(--error); }
+
+  /* ——— Share links ——— */
+  /* The reveal is the only place the raw URL ever appears, so it is loud on
+     purpose: a link the owner scrolls past is one they never revoke. */
+  .share-reveal {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    background: var(--accent-tint-04);
+    border-left: 3px solid var(--accent);
+    display: grid;
+    gap: 8px;
+  }
+  .share-reveal-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .share-reveal-title {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-primary);
+  }
+  .share-reveal-meta { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .share-url { font-family: var(--font-mono); font-size: var(--fs-label-xs); width: 100%; }
+  .share-reveal-actions { display: flex; gap: 12px; }
+
+  .share-panel { margin: 10px 0 0; border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+  .share-panel summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .share-count { color: var(--accent); letter-spacing: 0.06em; }
+  /* Wide content scrolls inside its own box rather than the page. */
+  .share-table { width: 100%; border-collapse: collapse; margin-top: 8px; display: block; overflow-x: auto; }
+  .share-table th,
+  .share-table td {
+    text-align: left;
+    padding: 5px 10px 5px 0;
+    font-size: var(--fs-label-xs);
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  .share-table th {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-tertiary, var(--text-secondary));
+    font-weight: 400;
+  }
+  .share-table tr.dead { opacity: 0.5; }
+  .share-file { white-space: normal; }
+  .share-label { display: block; color: var(--text-secondary); }
+  .share-by,
+  .share-status { color: var(--text-secondary); font-family: var(--font-mono); }
+  .row-link.shared { color: var(--accent-ink, var(--accent)); }
 
   .folder-row {
     display: grid;
