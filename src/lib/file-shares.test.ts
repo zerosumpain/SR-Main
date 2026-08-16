@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  SHARE_TTL_DAYS,
-  hashShareToken,
-  isAgentCreated,
-  isLegacyTokenTooOld,
-  shareDownloadUrl,
-} from './file-shares';
-
-const DAY = 24 * 60 * 60 * 1000;
+import { SHARE_TTL_DAYS, hashShareToken, isAgentCreated, shareDownloadUrl } from './file-shares';
 
 describe('who may share what', () => {
   // The whole point of the tool restriction: a prompt-injected model must not
@@ -52,23 +44,3 @@ describe('share links', () => {
   });
 });
 
-describe('the legacy immortal-token cap', () => {
-  // route_export_token.expires_at is nullable and was never written, so every
-  // row in it is a permanent anonymous URL. The cap is applied at read time.
-  const now = Date.parse('2026-08-16T17:00:00Z');
-
-  it('still serves a token minted today', () => {
-    expect(isLegacyTokenTooOld(new Date(now - 1 * DAY), now)).toBe(false);
-  });
-
-  it('stops serving one older than the share lifetime', () => {
-    expect(isLegacyTokenTooOld(new Date(now - 8 * DAY), now)).toBe(true);
-  });
-
-  it('expires the real production row on schedule', () => {
-    // The one live token, created 2026-08-16 16:41:30Z with a null expires_at.
-    const created = new Date('2026-08-16T16:41:30Z');
-    expect(isLegacyTokenTooOld(created, Date.parse('2026-08-22T00:00:00Z'))).toBe(false);
-    expect(isLegacyTokenTooOld(created, Date.parse('2026-08-24T00:00:00Z'))).toBe(true);
-  });
-});

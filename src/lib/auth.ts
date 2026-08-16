@@ -17,15 +17,10 @@ const PUBLIC_PATHS = [
   '/api/jkai/proxy',
   '/api/jkai/cors',
   '/api/live-walk',
-  // A high-entropy per-file capability validates inside its handler; the drive
-  // itself remains owner-gated. LEGACY — nothing mints these any more and the
-  // remaining tokens are capped at seven days from creation, so this entry and
-  // the route under it can be deleted once they have aged out.
-  '/api/route-exports',
-  // The general form: one hashed 256-bit capability per shared drive file,
-  // resolved in $lib/file-shares. Expired, revoked and unknown tokens all 404
-  // alike. Both of these are PREFIXES — check-public-routes.mjs is what stops
-  // a new sibling route becoming anonymous without anyone noticing.
+  // One hashed 256-bit capability per shared drive file, resolved in
+  // $lib/file-shares; the drive itself stays owner-gated. Expired, revoked and
+  // unknown tokens all 404 alike. This is a PREFIX — check-public-routes.mjs
+  // is what stops a new sibling route becoming anonymous unnoticed.
   '/api/file-shares',
   // Read-only public serving of blog post images — referenced by <img src> on the
   // public /blog pages, so it must be reachable by anonymous readers. The UPLOAD

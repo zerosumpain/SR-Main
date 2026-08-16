@@ -64,7 +64,6 @@
 /api/policy-engine/seed-workflows
 /api/releases/ingest
 /api/releases/summarise
-/api/route-exports/[token]/download
 /api/scraper/interactive
 /api/scraper/interactive/[id]
 /api/scraper/node
