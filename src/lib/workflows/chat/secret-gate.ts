@@ -20,8 +20,9 @@ import { publishJobEvent, createWaiter, getJob } from './job-store';
 import { notifyAllSubscribers } from '$lib/server/push';
 import { getSecretMeta } from '$lib/secrets/registry';
 import type { CredentialRequestSpec } from '$lib/secrets/credential-requests';
-import { buildUpdatePlan } from '$lib/secrets/credential-requests';
+import { buildCreatePlan, buildUpdatePlan } from '$lib/secrets/credential-requests';
 import { registerPendingUpdate, discardPendingUpdate } from '$lib/secrets/pending-updates';
+import { registerPendingCreate, discardPendingCreate } from '$lib/secrets/pending-creates';
 import type { SecretRequestOutcome, SecretUpdateRequest } from '$lib/jkai/tool-step-bus';
 import { SECRET_REQUEST_TIMEOUT_MS } from '$lib/jkai/tool-step-bus';
 
@@ -36,37 +37,14 @@ export async function requireSecret(
   const requestId = crypto.randomUUID();
   const openedAt = Date.now();
 
-  publishJobEvent(jobId, {
-    type: 'secret_request',
-    requestId,
-    provider: spec.provider,
-    title: spec.title,
-    // Quoted verbatim to the owner as the model's stated purpose. The modal
-    // renders it as quoted text, never as instruction.
-    reason: String(reason ?? '').slice(0, 200),
-    helpUrl: spec.helpUrl,
-    fields: spec.fields.map((f) => ({
-      key: f.key,
-      label: f.label,
-      type: f.type,
-      required: f.required,
-      placeholder: f.placeholder,
-      help: f.help,
-    })),
-    destination: {
-      handle: spec.binding.handle,
-      store: 'api_secrets',
-      hosts: spec.binding.allowedHosts,
-      methods: spec.binding.allowedMethods,
-      storeOnly: spec.binding.injection.kind === 'none',
-    },
-    companions: (spec.companions ?? []).map((c) => ({
-      handle: c.handle,
-      hosts: c.allowedHosts,
-      methods: c.allowedMethods,
-    })),
-    assemble: spec.assemble,
-  });
+  // Author the write BEFORE the form is shown and park it under the request id,
+  // exactly as the update path does. The browser then posts only what the owner
+  // typed; the handle, source, injection, methods and path scoping all come from
+  // here. See $lib/secrets/pending-creates.
+  const { event, write } = buildCreatePlan({ requestId, spec, reason });
+  registerPendingCreate({ requestId, ...write }, SECRET_REQUEST_TIMEOUT_MS);
+
+  publishJobEvent(jobId, { type: 'secret_request', ...event });
 
   try {
     const conversationId = getJob(jobId)?.scope.conversationId ?? null;
@@ -89,9 +67,13 @@ export async function requireSecret(
     ack = await awaitResponse();
   } catch {
     // Job cancelled or reaped while the modal was open.
+    discardPendingCreate(requestId);
     return { status: 'declined' };
   }
 
+  // Whatever the answer, the plan is spent. A declined form must not leave a
+  // usable write sitting in memory for the rest of its TTL.
+  discardPendingCreate(requestId);
   if (!ack?.stored) return { status: 'declined' };
 
   // Independent verification. `getSecretMeta` returns SecretMeta, which has no

@@ -38,8 +38,25 @@ import { normaliseHost, hostMatchesPattern, hostAllowed } from './host-match';
 
 export type SecretInjection =
   | { kind: 'bearer' }
-  | { kind: 'header'; name: string }
-  | { kind: 'query'; name: string }
+  /**
+   * `field` names one key of a stored credential SET (see `parseCredentialSet`).
+   * Absent means the whole stored value is the credential — the original,
+   * single-value behaviour, and still the common case.
+   *
+   * This is what makes a multi-field credential USABLE rather than merely
+   * storable. Plenty of APIs hand over three or four values of which exactly one
+   * is the thing that goes on the wire (Darwin: a consumer key alongside a group
+   * and a topic), and before this the only way to hold the set was `{kind:'none'}`,
+   * which no request path will touch.
+   */
+  | { kind: 'header'; name: string; field?: string }
+  | { kind: 'query'; name: string; field?: string }
+  /**
+   * HTTP Basic, composed from two fields of a stored credential set. The
+   * base64 is built at call time and never stored, so rotating either half is a
+   * normal field amend.
+   */
+  | { kind: 'basic'; usernameField?: string; passwordField?: string }
   /**
    * STORE-ONLY. The value is never attached to an outbound request by this
    * module; it exists so a multi-field credential SET (a client_id +
@@ -256,11 +273,24 @@ export function redactSecrets<T>(value: T, plaintexts: string[]): T {
 // Row mapping / listing (metadata only)
 // ---------------------------------------------------------------------------
 
+/** A stored field name, or undefined. Same charset the write path validates. */
+function fieldOf(raw: unknown): string | undefined {
+  const f = String(raw ?? '').trim();
+  return /^[a-z0-9_]{1,32}$/.test(f) ? f : undefined;
+}
+
 function injectionOf(row: ApiSecretRow): SecretInjection {
   const raw = (row.injection ?? {}) as Record<string, unknown>;
   const kind = String(raw.kind ?? 'bearer');
-  if (kind === 'header') return { kind: 'header', name: String(raw.name ?? 'X-API-Key') };
-  if (kind === 'query') return { kind: 'query', name: String(raw.name ?? 'key') };
+  if (kind === 'header') return { kind: 'header', name: String(raw.name ?? 'X-API-Key'), field: fieldOf(raw.field) };
+  if (kind === 'query') return { kind: 'query', name: String(raw.name ?? 'key'), field: fieldOf(raw.field) };
+  if (kind === 'basic') {
+    return {
+      kind: 'basic',
+      usernameField: fieldOf(raw.usernameField) ?? 'username',
+      passwordField: fieldOf(raw.passwordField) ?? 'password',
+    };
+  }
   if (kind === 'none') return { kind: 'none' };
   return { kind: 'bearer' };
 }
@@ -370,10 +400,28 @@ export interface UpsertSecretInput {
   notes?: string;
 }
 
+/** A field name that may address one key of a stored credential set. Narrow on
+ *  purpose: it is looked up in JSON the owner typed, never used as a header name. */
+function validateFieldName(raw: unknown, what: string): string {
+  const f = String(raw ?? '').trim();
+  if (!/^[a-z0-9_]{1,32}$/.test(f)) {
+    throw new SecretError(`invalid ${what} "${f}" — lower-case letters, digits and underscore, 1-32 chars`);
+  }
+  return f;
+}
+
 function validateInjection(injection: SecretInjection): SecretInjection {
   const kind = injection?.kind;
   if (kind === 'none') return { kind: 'none' };
   if (kind === 'bearer') return { kind: 'bearer' };
+  if (kind === 'basic') {
+    const i = injection as { usernameField?: string; passwordField?: string };
+    return {
+      kind: 'basic',
+      usernameField: validateFieldName(i.usernameField ?? 'username', 'username field'),
+      passwordField: validateFieldName(i.passwordField ?? 'password', 'password field'),
+    };
+  }
   if (kind === 'header' || kind === 'query') {
     const name = String((injection as { name?: string }).name ?? '').trim();
     if (!name) throw new SecretError(`injection kind "${kind}" needs a name`);
@@ -381,10 +429,15 @@ function validateInjection(injection: SecretInjection): SecretInjection {
     if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) {
       throw new SecretError(`invalid ${kind} name "${name}" — letters, digits, dot, dash, underscore only`);
     }
-    return kind === 'header' ? { kind: 'header', name } : { kind: 'query', name };
+    const rawField = (injection as { field?: string }).field;
+    const field = rawField === undefined || rawField === null || rawField === ''
+      ? undefined
+      : validateFieldName(rawField, `${kind} field`);
+    return kind === 'header' ? { kind: 'header', name, field } : { kind: 'query', name, field };
   }
   throw new SecretError(
-    'injection must be {kind:"bearer"} | {kind:"header",name} | {kind:"query",name} | {kind:"none"}',
+    'injection must be {kind:"bearer"} | {kind:"header",name,field?} | {kind:"query",name,field?} | ' +
+      '{kind:"basic",usernameField?,passwordField?} | {kind:"none"}',
   );
 }
 
@@ -472,7 +525,7 @@ export async function upsertSecret(input: UpsertSecretInput): Promise<SecretMeta
       const value = input.value.trim();
       if (!value) throw new SecretError('value is empty');
       payloadEnc = encryptPayload(value);
-      hint = value.length > 4 ? value.slice(-4) : null;
+      hint = hintOf(value);
     } else if (!existing) {
       throw new SecretError('a vault secret needs a value on first save');
     }
@@ -571,8 +624,15 @@ export async function deleteSecret(handle: string): Promise<boolean> {
 // caller that resolved it. That change stays an owner action at /admin/ai/apis.
 // ---------------------------------------------------------------------------
 
-/** Last-4 identification hint, or null when the value is too short to hint at. */
+/**
+ * Last-4 identification hint, or null when there is nothing useful to show.
+ *
+ * A credential SET gets no hint at all: the last four characters of a JSON blob
+ * are `"..."}`, which identifies nothing, and the fields it holds are named in
+ * the catalogue anyway.
+ */
 function hintOf(value: string): string | null {
+  if (value.trim().startsWith('{')) return null;
   return value.length > 4 ? value.slice(-4) : null;
 }
 
@@ -864,6 +924,96 @@ export async function assertSecretAllowedForUrl(handle: string, url: string, met
 }
 
 /**
+ * A stored credential SET — the JSON object a multi-field credential is kept as.
+ *
+ * Storage is deliberately unchanged: one encrypted string per row, holding JSON
+ * when the credential has more than one part. That is the shape
+ * `oauth-refresh.ts` has read since the OAuth work, so nothing about the
+ * database, the crypto or the "no caller ever receives a value" contract moves
+ * to support multi-field credentials.
+ */
+function parseCredentialSet(handle: string, value: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new SecretError(
+      `secret "${handle}" is configured to send one field of a credential set, but its stored value is a ` +
+        `single value, not a set. Re-enter it with the fields the API needs, or bind it as a whole-value credential.`,
+    );
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new SecretError(`secret "${handle}" does not hold a credential set (expected a JSON object).`);
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof v === 'string' || typeof v === 'number') out[k] = String(v);
+  }
+  return out;
+}
+
+function requiredField(handle: string, set: Record<string, string>, field: string): string {
+  const v = (set[field] ?? '').trim();
+  if (!v) {
+    // Names the missing FIELD, never a value or any other field's content.
+    throw new SecretError(
+      `secret "${handle}" has no "${field}" in its stored credential set. ` +
+        `Ask the owner to update it (update_credential with change="value") and fill that field in.`,
+    );
+  }
+  return v;
+}
+
+/**
+ * Turn a resolved value into the headers/query it authenticates with.
+ *
+ * Pure and exported so the composition rules — especially which plaintexts the
+ * caller must scrub back out — are testable without a database. `plaintexts`
+ * carries every secret string that reached the wire, including composed forms
+ * like the base64 of a Basic pair, because a response echoing either would
+ * otherwise slip past the scrubber.
+ */
+export function composeInjection(
+  handle: string,
+  injection: SecretInjection,
+  value: string,
+): { headers: Record<string, string>; query: Record<string, string>; plaintexts: string[] } {
+  const headers: Record<string, string> = {};
+  const query: Record<string, string> = {};
+
+  if (injection.kind === 'bearer') {
+    headers.Authorization = `Bearer ${value}`;
+    return { headers, query, plaintexts: [value] };
+  }
+
+  if (injection.kind === 'basic') {
+    const set = parseCredentialSet(handle, value);
+    const user = requiredField(handle, set, injection.usernameField ?? 'username');
+    const pass = requiredField(handle, set, injection.passwordField ?? 'password');
+    const encoded = Buffer.from(`${user}:${pass}`, 'utf8').toString('base64');
+    headers.Authorization = `Basic ${encoded}`;
+    // The password, the composed pair and its base64 all count as plaintext.
+    // The username does not: it is frequently a customer id that appears in
+    // ordinary response bodies, and scrubbing it would corrupt them.
+    return { headers, query, plaintexts: [pass, `${user}:${pass}`, encoded] };
+  }
+
+  if (injection.kind === 'header' || injection.kind === 'query') {
+    const sent = injection.field
+      ? requiredField(handle, parseCredentialSet(handle, value), injection.field)
+      : value;
+    if (injection.kind === 'header') headers[injection.name] = sent;
+    else query[injection.name] = sent;
+    return { headers, query, plaintexts: [sent] };
+  }
+
+  // 'none' is unreachable from resolveSecretForUrl — assertBindingAllows throws
+  // on store-only rows first. Kept explicit so adding a kind is a compile error
+  // here rather than a silent fall-through that injects a value in the wrong place.
+  throw new SecretError(`secret "${handle}" has no injectable form`);
+}
+
+/**
  * Resolve a secret for a specific request URL, enforcing the owner-set host and
  * path binding. Throws (never returns a partial result) if the binding fails.
  *
@@ -885,21 +1035,11 @@ export async function resolveSecretForUrl(handle: string, url: string, method?: 
   assertBindingAllows(row, url, method);
 
   const value = await resolveValue(row);
-  const injection = injectionOf(row);
-
-  const headers: Record<string, string> = {};
-  const query: Record<string, string> = {};
-  if (injection.kind === 'bearer') headers.Authorization = `Bearer ${value}`;
-  else if (injection.kind === 'header') headers[injection.name] = value;
-  else if (injection.kind === 'query') query[injection.name] = value;
-  // 'none' is unreachable — assertBindingAllows above throws on store-only rows.
-  // Kept explicit so adding a kind is a compile error here rather than a silent
-  // fall-through that injects a value in the wrong place.
-  else throw new SecretError(`secret "${row.handle}" has no injectable form`);
+  const { headers, query, plaintexts } = composeInjection(row.handle, injectionOf(row), value);
 
   void noteSecretUse(h);
 
-  return { handle: row.handle, headers, query, plaintexts: [value] };
+  return { handle: row.handle, headers, query, plaintexts };
 }
 
 /** Best-effort usage bookkeeping. Never throws, never records the value. */

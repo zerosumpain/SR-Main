@@ -38,7 +38,7 @@
     label: string;
     source: string;
     refKey?: string;
-    injection: { kind: string; name?: string };
+    injection: { kind: string; name?: string; field?: string; usernameField?: string; passwordField?: string };
     allowedHosts: string[];
     allowedPathPrefixes: string[];
     allowedMethods: string[];
@@ -152,8 +152,13 @@
   let sSource = $state<'ref' | 'vault'>('vault');
   let sValue = $state('');
   let sRefKey = $state(refSources[0]?.key ?? '');
-  let sInjKind = $state<'bearer' | 'header' | 'query' | 'none'>('bearer');
+  let sInjKind = $state<'bearer' | 'header' | 'query' | 'basic' | 'none'>('bearer');
   let sInjName = $state('');
+  /** Which field of a stored credential SET is sent (header/query), and which
+   *  two make up a Basic pair. Blank = the whole stored value. */
+  let sInjField = $state('');
+  let sInjUserField = $state('');
+  let sInjPassField = $state('');
   let sHosts = $state('');
   let sPaths = $state('');
   let sMethods = $state('GET, HEAD');
@@ -166,8 +171,11 @@
     sSource = s.source === 'ref' ? 'ref' : 'vault';
     sValue = '';
     sRefKey = s.refKey ?? refSources[0]?.key ?? '';
-    sInjKind = (s.injection.kind as 'bearer' | 'header' | 'query' | 'none') ?? 'bearer';
+    sInjKind = (s.injection.kind as 'bearer' | 'header' | 'query' | 'basic' | 'none') ?? 'bearer';
     sInjName = s.injection.name ?? '';
+    sInjField = s.injection.field ?? '';
+    sInjUserField = s.injection.usernameField ?? '';
+    sInjPassField = s.injection.passwordField ?? '';
     sHosts = s.allowedHosts.join(', ');
     sPaths = s.allowedPathPrefixes.join(', ');
     sMethods = (s.allowedMethods ?? ['GET', 'HEAD']).join(', ');
@@ -183,6 +191,9 @@
     sRefKey = refSources[0]?.key ?? '';
     sInjKind = 'bearer';
     sInjName = '';
+    sInjField = '';
+    sInjUserField = '';
+    sInjPassField = '';
     sHosts = '';
     sPaths = '';
     sMethods = 'GET, HEAD';
@@ -195,8 +206,8 @@
   // OAuth provider's stored credential set PLUS the ref row that mints access
   // tokens from it) has to be assembled by hand in the right order, and getting
   // it wrong leaves a handle that looks registered and fails at run time. This
-  // posts `{provider, value}` to the same endpoint path the jkai modal uses, so
-  // the server writes every row from the code catalogue in one go.
+  // posts `{provider, fields}` to the same endpoint the jkai modal uses, so the
+  // server writes every row from the code catalogue in one go.
   let quickProvider = $state('');
   let quickValues = $state<Record<string, string>>({});
 
@@ -220,23 +231,19 @@
     if (!spec || quickMissing) return;
     busy = 'quick';
     try {
-      // 'json' assembles the multi-field credential set into one encrypted
-      // value — the shape $lib/secrets/oauth-refresh reads back.
-      const value =
-        spec.assemble === 'json'
-          ? JSON.stringify(
-              Object.fromEntries(
-                spec.fields
-                  .map((f) => [f.key, String(quickValues[f.key] ?? '').trim()])
-                  .filter(([, v]) => v !== ''),
-              ),
-            )
-          : String(quickValues[spec.fields[0]?.key] ?? '').trim();
-
+      // The server assembles a multi-field credential set from exactly the keys
+      // the catalogue declared, so a set can never gain a field here.
       const res = await fetch(qs('/api/admin/apis/secrets'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: spec.provider, value }),
+        body: JSON.stringify({
+          provider: spec.provider,
+          fields: Object.fromEntries(
+            spec.fields
+              .map((f) => [f.key, String(quickValues[f.key] ?? '').trim()])
+              .filter(([, v]) => v !== ''),
+          ),
+        }),
       });
       const body = await res.json();
       if (res.ok) {
@@ -265,7 +272,13 @@
           injection:
             sInjKind === 'bearer' || sInjKind === 'none'
               ? { kind: sInjKind }
-              : { kind: sInjKind, name: sInjName },
+              : sInjKind === 'basic'
+                ? {
+                    kind: 'basic',
+                    usernameField: sInjUserField.trim() || 'username',
+                    passwordField: sInjPassField.trim() || 'password',
+                  }
+                : { kind: sInjKind, name: sInjName, field: sInjField.trim() || undefined },
           allowedHosts: sHosts.split(',').map((h) => h.trim()).filter(Boolean),
           allowedPathPrefixes: sPaths.split(',').map((p) => p.trim()).filter(Boolean),
           allowedMethods: sMethods.split(',').map((m) => m.trim().toUpperCase()).filter(Boolean),
@@ -619,6 +632,7 @@
             <option value="bearer">Authorization: Bearer &lt;key&gt;</option>
             <option value="header">Custom header</option>
             <option value="query">Query parameter</option>
+            <option value="basic">HTTP Basic — username + password from a set</option>
             <option value="none">Store only — never attached to a request</option>
           </select>
         </label>
@@ -627,8 +641,29 @@
             <span class="sr-label-tight">{sInjKind === 'header' ? 'Header name' : 'Parameter name'}</span>
             <input class="nm-text-input" type="text" bind:value={sInjName} placeholder={sInjKind === 'header' ? 'X-API-Key' : 'api_key'} />
           </label>
+          <label class="nm-field">
+            <span class="sr-label-tight">Field <em>(optional — for a credential set)</em></span>
+            <input class="nm-text-input" type="text" bind:value={sInjField} placeholder="consumer_key" />
+          </label>
+        {/if}
+        {#if sInjKind === 'basic'}
+          <label class="nm-field">
+            <span class="sr-label-tight">Username field</span>
+            <input class="nm-text-input" type="text" bind:value={sInjUserField} placeholder="username" />
+          </label>
+          <label class="nm-field">
+            <span class="sr-label-tight">Password field</span>
+            <input class="nm-text-input" type="text" bind:value={sInjPassField} placeholder="password" />
+          </label>
         {/if}
       </div>
+      {#if sInjKind === 'basic' || ((sInjKind === 'header' || sInjKind === 'query') && sInjField)}
+        <p class="inj-note">
+          This reads a credential <em>set</em>: paste the value as a JSON object with those field names, e.g.
+          <code>{'{"username":"…","password":"…"}'}</code>. Only the named field reaches the wire — the rest of
+          the set stays encrypted at rest.
+        </p>
+      {/if}
       {#if sInjKind === 'none'}
         <p class="inj-note">
           A store-only credential is never attached to an outbound request — <code>resolveSecretForUrl</code>
