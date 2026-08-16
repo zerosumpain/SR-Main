@@ -487,6 +487,53 @@
 
   let chatContainer: HTMLDivElement;
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
+
+  // ── Follow-the-tail scrolling ───────────────────────────────────────────────
+  // The view only chases new content while the reader is parked at the bottom.
+  // Scroll up mid-turn to re-read something and the stream stops yanking you
+  // back; scroll (or click "latest") to within `SCROLL_SLACK` of the end and the
+  // follow re-arms itself. Read by the template, so it has to be `$state`.
+  let stickToBottom = $state(true);
+  const SCROLL_SLACK = 80;
+  // rAF coalescer for the observer below — an internal handle, never `$state`.
+  let stickPending = false;
+
+  function onListScroll() {
+    if (!chatContainer) return;
+    stickToBottom =
+      chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < SCROLL_SLACK;
+  }
+
+  /**
+   * Sticky-bottom for everything that grows the list *without* going through
+   * `scrollToBottom` — streamed markdown re-rendering, a tool drawer opening,
+   * the thinking timeline expanding, images and iframes settling late. Without
+   * this the reply starts rendering just under the fold. Mirrors the same
+   * pattern in BuilderChatNode.
+   */
+  function stickyBottom(node: HTMLDivElement): { destroy(): void } {
+    const follow = () => {
+      if (!stickToBottom || stickPending) return;
+      stickPending = true;
+      requestAnimationFrame(() => {
+        stickPending = false;
+        if (stickToBottom) node.scrollTop = node.scrollHeight;
+      });
+    };
+    const mo = new MutationObserver(follow);
+    mo.observe(node, { childList: true, subtree: true, characterData: true });
+    // Catches height changes the mutation observer can't see: the composer
+    // growing as you type, the mobile keyboard, a window resize.
+    const ro = new ResizeObserver(follow);
+    ro.observe(node);
+    return {
+      destroy() {
+        mo.disconnect();
+        ro.disconnect();
+      },
+    };
+  }
+
   let chatStream: ChatStreamHandle | null = null;
 
   // Index of the most recent assistant message — drives whether the in-chat
@@ -529,7 +576,7 @@
       toolSteps: [],
       createdAt: new Date().toISOString(),
     }];
-    scrollToBottom();
+    scrollToBottom('auto', true);
 
     try {
       const postRes = await fetch('/api/workflows/orchestrator/chat', {
@@ -710,10 +757,13 @@
     // Coming to the front. The transcript's own scroll maths ran while this pane
     // sat in a `display: none` subtree, where scrollHeight is 0, so it has to be
     // redone now or a long thread opens at its first message.
+    // Forced: hiding and re-showing the pane can fire a scroll event at
+    // scrollTop 0, which reads as "the user scrolled up" and would otherwise
+    // leave the follow disarmed at the top of the thread.
     if (!active) return;
     void tick().then(() => {
-      scrollToBottom('instant');
-      setTimeout(() => scrollToBottom('instant'), 50);
+      scrollToBottom('instant', true);
+      setTimeout(() => scrollToBottom('instant', true), 50);
     });
   });
 
@@ -988,9 +1038,9 @@
     // Jump instantly to the latest message on initial load / conversation switch.
     // Child content (markdown, tool drawers, attachments) renders across multiple
     // frames, so retry after layout settles to catch the real scrollHeight.
-    scrollToBottom('instant');
-    setTimeout(() => scrollToBottom('instant'), 50);
-    setTimeout(() => scrollToBottom('instant'), 200);
+    scrollToBottom('instant', true);
+    setTimeout(() => scrollToBottom('instant', true), 50);
+    setTimeout(() => scrollToBottom('instant', true), 200);
   });
 
   // Real-time follow-up messages. The connection itself is shared: every open
@@ -2102,7 +2152,9 @@
       createdAt: new Date().toISOString(),
     };
     messages = [...messages, userMsg];
-    scrollToBottom();
+    // Sending is an explicit "take me to the bottom" — re-arms the follow even
+    // if the user had scrolled up to read something before typing.
+    scrollToBottom('auto', true);
 
     // Offline short-circuit: if the browser reports it's offline, skip the
     // POST entirely, enqueue via the PWA outbox, and mark the user bubble
@@ -2286,7 +2338,21 @@
     }
   }
 
-  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+  /**
+   * Every SSE frame calls this — token deltas, tool cards, status lines. It
+   * only moves the view while `stickToBottom` holds, so scrolling up through
+   * the history during a turn is no longer fought by the stream.
+   *
+   * `force` re-arms the follow and is for things the *user* just did: sending a
+   * message, firing a slash command, opening a thread.
+   *
+   * Behaviour defaults to instant, not smooth: a smooth scroll fires scroll
+   * events at every intermediate position, and those read as "the user scrolled
+   * up" and would unstick the follow mid-animation.
+   */
+  function scrollToBottom(behavior: ScrollBehavior = 'auto', force = false) {
+    if (force) stickToBottom = true;
+    else if (!stickToBottom) return;
     requestAnimationFrame(() => {
       chatContainer?.scrollTo({ top: chatContainer.scrollHeight, behavior });
     });
@@ -2484,7 +2550,7 @@
 
 
   <!-- Messages -->
-  <div bind:this={chatContainer} class="msg-list">
+  <div bind:this={chatContainer} class="msg-list" onscroll={onListScroll} use:stickyBottom>
     {#if !conversationId}
       <div class="flex items-center justify-center h-full">
         <p class="text-sm" style="color: var(--text-ghost);">
@@ -2960,6 +3026,18 @@
           Drop files to attach
         </div>
       {/if}
+      <!-- Only while the reader has scrolled off the tail: says the view is no
+           longer following, and clicking re-arms it. -->
+      {#if !stickToBottom}
+        <button
+          type="button"
+          class="jump-latest"
+          onclick={() => scrollToBottom('auto', true)}
+          title="Jump to the latest message and resume following"
+        >
+          ↓ Latest
+        </button>
+      {/if}
       <div class="composer-inner">
         <!-- Follow-ups typed while the reply was still streaming. Shown rather
              than dropped into the transcript as optimistic bubbles: they have not
@@ -3382,6 +3460,33 @@
     margin: 0 auto;
   }
 
+  /* Detached-from-the-tail affordance. Floats over the bottom of the message
+     list rather than inside it, so it can't trip the sticky-bottom observer. */
+  .jump-latest {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 20px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-sharp);
+    background: var(--card-bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s ease-out, border-color 0.2s ease-out;
+  }
+  .jump-latest:hover {
+    color: var(--accent);
+    border-color: var(--accent-tint-35);
+  }
+
   .chip-row {
     display: flex;
     align-items: center;
@@ -3484,8 +3589,14 @@
     color: var(--text-primary);
     resize: none;
     /* Height is driven by the autosize effect; this is where it stops growing
-       and starts scrolling. */
+       and starts scrolling — silently. The box keeps scrolling past its
+       max-height, it just doesn't put a scrollbar in the middle of the
+       composer to say so. */
     overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .composer-textarea::-webkit-scrollbar {
+    display: none;
   }
   .composer-textarea::placeholder {
     color: var(--text-ghost);
