@@ -337,15 +337,14 @@ describe('the domain map the model navigates by', () => {
   });
 });
 
-describe("today's date rides the one definition every turn sees", () => {
-  it('states the date, in London, with no clock in it', async () => {
+describe("today's date never rides a cached tool description", () => {
+  it('formats the London day with no clock in it', async () => {
     const { todayLine } = await import('./server');
     const line = todayLine(new Date('2026-08-16T09:30:00Z'));
-    expect(line).toContain('2026-08-16');
-    expect(line).toContain('Sunday');
-    expect(line).toContain('Europe/London');
-    // A clock would change the cached prompt prefix on EVERY request and
-    // destroy prompt caching, which is worth far more than the call it saves.
+    expect(line).toBe('Sunday 2026-08-16 (Europe/London)');
+    // A clock in a cached surface would change the prompt prefix on every
+    // request and destroy prompt caching, which is worth far more than the
+    // call this saves.
     expect(line).not.toMatch(/\d{1,2}:\d{2}/);
   });
 
@@ -353,28 +352,38 @@ describe("today's date rides the one definition every turn sees", () => {
     const { todayLine } = await import('./server');
     // 23:30 UTC on 15 Aug is 00:30 on the 16th in London (BST).
     expect(todayLine(new Date('2026-08-15T23:30:00Z'))).toContain('2026-08-16');
-    // In January the two agree, which is the control.
+    // January is GMT, where the two agree — the control.
     expect(todayLine(new Date('2026-01-15T23:30:00Z'))).toContain('2026-01-15');
   });
-});
 
-describe('listMcpTools() carries the date onto the dispatcher', () => {
-  const originalFlag = process.env.JKAI_MCP_META_TOOL;
-
-  it('appends today to the jkai_extended description when the meta-tool is on', async () => {
+  it('is ABSENT from the tools/list manifest', async () => {
+    const originalFlag = process.env.JKAI_MCP_META_TOOL;
     process.env.JKAI_MCP_META_TOOL = '1';
     try {
       const tools = await listMcpTools();
       const meta = tools.find((t) => t.name === 'jkai_extended');
       expect(meta).toBeTruthy();
-      expect(meta!.description).toContain('Europe/London');
-      expect(meta!.description).toMatch(/Today is \w+ \d{4}-\d{2}-\d{2}/);
-      // The base description survives — the suffix is additive, and the
-      // policy overlay's global guidance appends after it.
-      expect(meta!.description).toContain("jkai's extended tool catalogue");
+      // Load-bearing. Hermes discovers tools ONCE on connect and re-discovers
+      // only on a `notifications/tools/list_changed` notification this server
+      // never sends, so a date here freezes at connect time and goes stale for
+      // as long as the gateway stays up. A confidently-stated wrong date is
+      // worse than none.
+      expect(meta!.description).not.toMatch(/Today is/);
+      expect(meta!.description).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     } finally {
       if (originalFlag === undefined) delete process.env.JKAI_MCP_META_TOOL;
       else process.env.JKAI_MCP_META_TOOL = originalFlag;
     }
+  });
+
+  it('rides jkai_extended list/schema RESULTS, which are built per call', async () => {
+    const { datestampContent } = await import('./jsonrpc');
+    expect(datestampContent('jkai_extended', { operation: 'list' })[0].text).toMatch(/Today is \w+ \d{4}-\d{2}-\d{2}/);
+    expect(datestampContent('jkai_extended', { operation: 'schema', name: 'x' })).toHaveLength(1);
+    // Not on invoke — by then the arguments are already composed, and every
+    // result carrying a date line is noise.
+    expect(datestampContent('jkai_extended', { operation: 'invoke', name: 'x' })).toEqual([]);
+    expect(datestampContent('gmail_search', { query: 'x' })).toEqual([]);
+    expect(datestampContent('jkai_extended', {})).toEqual([]);
   });
 });
