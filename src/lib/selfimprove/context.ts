@@ -24,7 +24,15 @@ export interface ToolSummary {
   name: string;
   description: string;
   toolset: string;
+  /** Required argument names. Same idea as `jkai_extended.list` returning
+   *  them: it is the cheapest thing that stops a caller guessing. */
+  required?: string[];
 }
+
+/** Descriptions are truncated to this in the context pack. Mirrors the
+ *  meta-tool's compact listing — enough to tell two tools apart, not enough
+ *  to rebuild the manifest inside a nightly prompt. */
+export const MAX_TOOL_DESC = 120;
 
 export interface CatalogApiSummary {
   name: string;
@@ -82,12 +90,24 @@ const UNSAFE_TO_SUGGEST = new Set([
 
 async function loadPlatformTools(): Promise<ToolSummary[]> {
   try {
-    const { getToolsetManifest } = await import('$lib/workflows/site-tools/registry');
-    return getToolsetManifest()
-      .flatMap((ts) =>
-        ts.tools.map((t) => ({ name: t.name, description: t.description, toolset: ts.toolset })),
-      )
-      .filter((t) => !UNSAFE_TO_SUGGEST.has(t.name));
+    // `getTools()` rather than `getToolsetManifest()` because the manifest
+    // carries no parameter schemas, and the required-argument names are half
+    // the point of this section.
+    const { getTools } = await import('$lib/workflows/site-tools/registry');
+    return getTools()
+      .filter((t) => !UNSAFE_TO_SUGGEST.has(t.name))
+      .map((t) => {
+        const raw = (t.parameters as { required?: unknown } | null)?.required;
+        const required = Array.isArray(raw)
+          ? raw.filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+          : [];
+        return {
+          name: t.name,
+          description: t.description ?? '',
+          toolset: t.toolset ?? 'other',
+          ...(required.length ? { required } : {}),
+        };
+      });
   } catch (err) {
     console.error('[selfimprove] loadPlatformTools failed:', errMsg(err));
     return [];
@@ -206,7 +226,16 @@ export async function buildContextPack(): Promise<ContextPack> {
 export function renderContext(pack: ContextPack): string {
   const lines: string[] = [];
 
+  // Names AND what each one does AND what it requires.
+  //
+  // This used to render `t.name` only — the descriptions were loaded into the
+  // pack and thrown away here. An author told that `apple_calendar_list`
+  // exists, with no description and no arguments, has no option but to guess
+  // the arguments; guessed argument names are exactly the failure that made
+  // `ha_query_state` 404 on 32 of 72 live calls and `workflow_inspect` report
+  // "Workflow not found" on 35 of 73. The engine was set up to reproduce it.
   lines.push('## Tools you can compose with platform.call(name, args)');
+  lines.push('Format: `name(requiredArgs) — what it does`. Arguments not listed are optional.');
   const byToolset = new Map<string, ToolSummary[]>();
   for (const t of pack.platformTools) {
     const list = byToolset.get(t.toolset) ?? [];
@@ -214,7 +243,14 @@ export function renderContext(pack: ContextPack): string {
     byToolset.set(t.toolset, list);
   }
   for (const [toolset, list] of byToolset) {
-    lines.push(`- ${toolset}: ${list.map((t) => t.name).join(', ')}`);
+    lines.push(`### ${toolset}`);
+    for (const t of list) {
+      const args = t.required?.length ? `(${t.required.join(', ')})` : '()';
+      const desc = t.description.length > MAX_TOOL_DESC
+        ? `${t.description.slice(0, MAX_TOOL_DESC - 1).trimEnd()}…`
+        : t.description;
+      lines.push(`- ${t.name}${args}${desc ? ` — ${desc}` : ''}`);
+    }
   }
 
   lines.push('');
