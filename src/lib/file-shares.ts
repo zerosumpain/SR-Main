@@ -12,26 +12,19 @@
 //     match it, so no prompt-injected model can turn a bank statement into a
 //     public URL by guessing a file id.
 //
-// Generalised from $lib/route-exports (the GPX-only original). What changed and
-// why is documented on `fileShareTokens` in $lib/db/schema.
+// Generalised from the GPX-only capability that shipped in #308, whose tokens
+// had a nullable `expires_at` that was never written — every link it minted was
+// permanent, unlisted and unkillable. `expires_at` is NOT NULL here so that
+// cannot recur. $lib/route-exports still owns GPX validation and naming; it
+// mints through this module.
 
 import { createHash, randomBytes } from 'node:crypto';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { fileShareTokens, routeExportTokens, workflowFiles } from '$lib/db/schema';
+import { fileShareTokens, workflowFiles } from '$lib/db/schema';
 
 /** How long a newly minted link lives. Renewable by minting another. */
 export const SHARE_TTL_DAYS = 7;
-
-/**
- * The maximum age of a token in the LEGACY `route_export_token` table.
- *
- * That table's `expires_at` is nullable and `createRouteExport` never set it,
- * so every row it holds is an anonymous URL that works forever. Rather than
- * migrate data, the same seven-day policy is applied here at read time: a
- * legacy token stops resolving once it is this old, whatever the column says.
- */
-const LEGACY_MAX_AGE_DAYS = 7;
 
 /**
  * Uploader tags that count as "created by an agent" and are therefore
@@ -226,53 +219,4 @@ export async function revokeFileShare(id: string): Promise<boolean> {
     .where(and(eq(fileShareTokens.id, id), isNull(fileShareTokens.revokedAt)))
     .returning({ id: fileShareTokens.id });
   return revoked.length > 0;
-}
-
-/**
- * Legacy read path for `/api/route-exports/<token>/download`.
- *
- * Kept only so links already sent over WhatsApp keep working until they age
- * out. Nothing mints into this table any more; once the last row passes
- * LEGACY_MAX_AGE_DAYS the endpoint and the table can both go.
- */
-export async function resolveLegacyRouteExport(token: string): Promise<ResolvedShare | null> {
-  if (!token || token.length < 32 || token.length > 128) return null;
-  const [row] = await db
-    .select({
-      tokenId: routeExportTokens.id,
-      createdAt: routeExportTokens.createdAt,
-      expiresAt: routeExportTokens.expiresAt,
-      revokedAt: routeExportTokens.revokedAt,
-      id: workflowFiles.id,
-      name: workflowFiles.name,
-      mimeType: workflowFiles.mimeType,
-      sizeBytes: workflowFiles.sizeBytes,
-      diskPath: workflowFiles.diskPath,
-    })
-    .from(routeExportTokens)
-    .innerJoin(workflowFiles, eq(routeExportTokens.fileId, workflowFiles.id))
-    .where(eq(routeExportTokens.tokenHash, hashShareToken(token)))
-    .limit(1);
-
-  if (!row || row.revokedAt) return null;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
-  if (isLegacyTokenTooOld(row.createdAt)) return null;
-
-  void db
-    .update(routeExportTokens)
-    .set({ lastUsedAt: new Date(), useCount: sql`${routeExportTokens.useCount} + 1` })
-    .where(eq(routeExportTokens.id, row.tokenId))
-    .catch(() => {});
-
-  return {
-    id: row.id,
-    name: row.name,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    diskPath: row.diskPath,
-  };
-}
-
-export function isLegacyTokenTooOld(createdAt: Date, now: number = Date.now()): boolean {
-  return now - createdAt.getTime() > LEGACY_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 }

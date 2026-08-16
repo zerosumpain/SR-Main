@@ -4,7 +4,7 @@
 // naming the file. The capability link is minted by $lib/file-shares, which
 // applies the same expiry and revocation rules to every drive share. The
 // token/resolve helpers that used to live here were the immortal-link path and
-// have been removed; the legacy read lives in `resolveLegacyRouteExport`.
+// have been removed along with the `route_export_token` table they wrote to.
 
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
