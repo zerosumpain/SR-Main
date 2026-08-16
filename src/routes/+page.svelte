@@ -139,9 +139,10 @@
 
 <PageHeader title="strange ramblings" titleHref="/" />
 
-<!-- Owner-only, and only when an account has actually stopped syncing. Null for
-     every visitor, in which case the component renders nothing at all. -->
-<AccountSyncBanner summary={data.syncAttention} />
+<!-- Owner-only: an account that has stopped syncing, and work sitting mergeable
+     on GitHub. Both null for every visitor, in which case the component renders
+     nothing at all. -->
+<AccountSyncBanner summary={data.syncAttention} prs={data.mergeablePrs} />
 
 <!-- HERO — viewport minus nav. Two columns: display type on the page ground,
      the live rail flush against the right edge on the rail surface. -->

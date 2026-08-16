@@ -78,5 +78,15 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress }) 
         .catch(() => null)
     : null;
 
-  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention };
+  // Same banner, second signal: work finished and waiting on GitHub. Unlike the
+  // sync summary this one cannot be answered locally, so $lib/github/open-prs
+  // answers from cache and refreshes in the background — this read never waits
+  // on GitHub, and a cold or broken cache just means no line in the banner.
+  const mergeablePrs = isOwner
+    ? await import('$lib/github/open-prs')
+        .then((m) => m.mergeablePrSummary())
+        .catch(() => null)
+    : null;
+
+  return { steps, dateStr, initialBiome, heroTitle, releases, isOwner, syncAttention, mergeablePrs };
 };
