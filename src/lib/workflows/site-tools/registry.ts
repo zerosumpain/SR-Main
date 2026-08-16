@@ -30,6 +30,7 @@ import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/scraper';
 import './tools/files';
+import './tools/route-export';
 import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/agents';
