@@ -403,7 +403,7 @@
           {#if detail.neighbours.length}
             <h3>Linked to</h3>
             <ul class="recs">
-              {#each detail.neighbours.slice(0, 8) as nb (nb.path + nb.kind)}
+              {#each detail.neighbours.slice(0, 8) as nb, i (`${nb.kind}:${nb.path}:${i}`)}
                 <li><span class="ek">{nb.kind}</span> {nb.path.split('/').slice(-2).join('/')}{nb.weight > 1 ? ` ×${nb.weight}` : ''}</li>
               {/each}
             </ul>
