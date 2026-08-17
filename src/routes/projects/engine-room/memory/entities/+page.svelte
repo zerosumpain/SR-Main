@@ -45,14 +45,14 @@
 </script>
 
 <svelte:head>
-  <title>Is this the same person? · The Engine Room</title>
+  <title>Entities · The Engine Room</title>
   <meta name="description" content="Ten signals, one threshold: how two records are judged to be the same thing, and what is allowed to happen above the bar." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Is this the same person?"
+    title="Entities"
     line="Two records, ten signals, one threshold. Clear the bar and they are merged overnight with nobody watching. Fall short and it waits for me, which is the correct way round."
     lineEli5="Sometimes two records are probably the same person. The system weighs the evidence and only joins them when it clears a high bar — because a wrong merge is nearly impossible to undo, while a missed one is just two records." />
 

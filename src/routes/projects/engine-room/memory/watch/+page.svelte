@@ -23,14 +23,14 @@
 </script>
 
 <svelte:head>
-  <title>Standing questions · The Engine Room</title>
+  <title>Watchlist · The Engine Room</title>
   <meta name="description" content="Watching a knowledge graph for change rather than querying it: nine structural alarms, thresholds that are both relative and absolute, and a saved perspective that narrows a view and briefs the assistant at the same time." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Standing questions"
+    title="Watchlist"
     line="A graph will happily tell you its shape any time you ask. What it will not tell you is what moved since you last looked — which is the only part worth being interrupted for."
     lineEli5="You mark things as worth watching. Overnight it checks what actually moved, and only speaks up when the movement is worth being interrupted for — the whole design is about staying quiet." />
 

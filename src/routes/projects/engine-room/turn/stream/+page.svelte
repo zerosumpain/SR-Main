@@ -47,14 +47,14 @@
 </script>
 
 <svelte:head>
-  <title>Getting it back · The Engine Room</title>
+  <title>Streaming · The Engine Room</title>
   <meta name="description" content="How a streamed answer arrives as a chain of segments, and the accumulator that once overwrote a finished answer." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Getting it back"
+    title="Streaming"
     line="A streamed answer turns up as a chain of segments down one channel. The entire job is stopping them treading on one another."
     lineEli5="The answer arrives as a stream of small pieces, and the job here is putting them together without losing or overwriting any. That is harder than it sounds — this page shows the one mistake that ruins it." />
 

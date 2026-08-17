@@ -341,7 +341,7 @@ function buildChunks(): Chunk[] {
 
   // ---- ground: storage ----
   for (const s of STORES)
-    add({ id: `store-${s.id}`, sourceKey: 'storage', sourceType: 'ground', title: `Where the bytes live: ${s.label}`, url: `${B}/ground/storage`,
+    add({ id: `store-${s.id}`, sourceKey: 'storage', sourceType: 'ground', title: `Storage: ${s.label}`, url: `${B}/ground/storage`,
       text: `Holds: ${s.holds} Why here: ${s.why} What losing it costs: ${s.loss}` });
   add({ id: 'store-index', sourceKey: 'storage', sourceType: 'ground', title: BIG_INDEX.title, url: `${B}/ground/storage`, text: BIG_INDEX.body });
   add({ id: 'store-failures', sourceKey: 'recovery', sourceType: 'ground', title: 'What survives what', url: `${B}/ground/storage`,
@@ -417,7 +417,7 @@ function buildChunks(): Chunk[] {
     text: MEM_SURFACES.map((s) => `${s.k}: ${s.why}`).join(' ') });
 
   // ---- the outdoors (reach/trails) ----
-  add({ id: 'trails-what', sourceKey: 'trails', sourceType: 'trails', title: 'Out of signal: the route planner and offline maps', url: `${B}/reach/trails`,
+  add({ id: 'trails-what', sourceKey: 'trails', sourceType: 'trails', title: 'Trails: the route planner and offline maps', url: `${B}/reach/trails`,
     text: `${PWA.body} Workouts arrive from the wearable with their GPS tracks; a router draws candidate loops over real mapped paths and the site's own scorer ranks them.` });
   add({ id: 'trails-tiles', sourceKey: 'trails', sourceType: 'trails', title: 'What an offline map costs to download', url: `${B}/reach/trails`,
     text: `Map tiles for a route are fetched at every zoom level from ${TILE.minZoom} to ${TILE.maxZoom}, padded by ${TILE.pad} whole tiles on each side, at a planning figure of ${Math.round(TILE.bytesPerTile / 1000)} KB per tile — a sample of real tiles averaged about ${TILE.measuredKb} KB, where an earlier estimate had assumed ${TILE.assumedKb}. ${PAD_STORY.body} Tiles are fetched one at a time, never as a parallel burst, because the tile service is volunteer-run and its policy asks for no bulk downloading.` });

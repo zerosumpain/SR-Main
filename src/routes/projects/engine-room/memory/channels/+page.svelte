@@ -18,14 +18,14 @@
 </script>
 
 <svelte:head>
-  <title>Where it all comes from · The Engine Room</title>
+  <title>Channels · The Engine Room</title>
   <meta name="description" content="Eight channels feed one knowledge graph — notes, messages, documents, mail, research, the web, automation and conversation — and they are graded by who authored them, not by how they arrived." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Where it all comes from"
+    title="Channels"
     line="Eight doors feed one graph. What separates them is not volume, and it is not cost — it is who actually wrote the words. Grade by authorship and the same sentence stops scoring two different ways depending on how it wandered in."
     lineEli5="Information arrives eight different ways — notes, messages, documents, mail, research, the web. How much each piece is trusted depends on who wrote it, not which door it came through, so the same sentence cannot score differently just because it travelled differently." />
 

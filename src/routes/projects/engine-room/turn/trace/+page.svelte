@@ -23,14 +23,14 @@
 </script>
 
 <svelte:head>
-  <title>Trace a turn · The Engine Room</title>
+  <title>Turn trace · The Engine Room</title>
   <meta name="description" content="Follow one message through six stages and six layers of a personal AI system, with a live clock and a running bill." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Trace a turn"
+    title="Turn trace"
     line="One message, followed from keystroke to bill. Pick a scenario, press play, and watch an alarming amount happen on your behalf."
     lineEli5="One message goes in, and this is everything that happens before the answer comes back. Pick an example and press play — the clock and the bill are both real."
   />

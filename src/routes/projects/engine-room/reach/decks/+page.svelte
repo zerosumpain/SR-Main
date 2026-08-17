@@ -39,14 +39,14 @@
 </script>
 
 <svelte:head>
-  <title>Making the case · The Engine Room</title>
+  <title>Decks · The Engine Room</title>
   <meta name="description" content="A slide deck built by the same system: a fixed page that never scrolls, one block registry serving four consumers, and a deterministic composer behind the clever one." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="Making the case"
+    title="Decks"
     line="A deck the assistant builds out of a conversation, onto a page that is a fixed size, never scrolls, and unsentimentally cuts off anything past the edge. Slides have been doing this to us for thirty years; here it is at least deliberate."
     lineEli5="It can turn a conversation into a slide deck. A page is a fixed size, so anything that does not fit is lost — which is why the composer is told up front exactly how much fits, rather than finding out afterwards." />
 

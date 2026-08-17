@@ -18,14 +18,14 @@
 </script>
 
 <svelte:head>
-  <title>Keys it can use and cannot read · The Engine Room</title>
+  <title>Credentials · The Engine Room</title>
   <meta name="description" content="Credentials an autonomous agent can authenticate with but never see: owner-set host binding enforced on every request and every redirect hop, optional path and method narrowing, and a request flow with no dangerous parameter." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="Keys it can use and cannot read"
+    title="Credentials"
     line="The assistant logs in to a dozen services and has never laid eyes on a single one of their credentials. Where a key is permitted to travel is baked into the key, set by hand, and checked on every request without exception."
     lineEli5="It can log in to services on my behalf, but it is never shown the passwords — and each key only works on the exact address it was set up for. Asking it nicely to send a key somewhere else simply fails." />
 

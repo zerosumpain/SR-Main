@@ -52,14 +52,14 @@
 </script>
 
 <svelte:head>
-  <title>Wiring it together · The Engine Room</title>
+  <title>Workflows · The Engine Room</title>
   <meta name="description" content="The join where two branches meet one node, and one of them silently disappears before the run starts." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="Wiring it together"
+    title="Workflows"
     line="{NODE_COUNT} node types wire the system to itself. Where two branches meet at one node, one of them quietly ceases to exist, and everything downstream carries on as though nothing has happened."
     lineEli5="Automations are built from blocks joined with lines. Where two lines meet at one block, one of them can vanish without a word of warning — here you can make it happen where it costs nothing." />
 

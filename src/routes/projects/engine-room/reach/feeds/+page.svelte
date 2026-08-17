@@ -21,14 +21,14 @@
 </script>
 
 <svelte:head>
-  <title>Reading from the outside · The Engine Room</title>
+  <title>Connectors · The Engine Room</title>
   <meta name="description" content="Hard-wired connectors and a catalogue of callable APIs, and the failure they share: a stored status column is a memory of the last run, not evidence that anything works now." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="Reading from the outside"
+    title="Connectors"
     line="Some feeds turn up on their own and some have to be fetched. Both will cheerfully tell you they are working. The column saying so is a memory of the last time something ran, which is not at all the same claim."
     lineEli5="It reads data from other services — some push it in, some have to be fetched. The hard part is not connecting; it is noticing when one has quietly given up while still claiming to be fine." />
 

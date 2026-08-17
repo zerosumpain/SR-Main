@@ -57,14 +57,14 @@
 </script>
 
 <svelte:head>
-  <title>Picking a model · The Engine Room</title>
+  <title>Model routing · The Engine Room</title>
   <meta name="description" content="Four ways a model gets chosen, the pool it is chosen from, and the many sellers behind one model name." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Picking a model"
+    title="Model routing"
     line="Asking for a model by name settles far less than you would hope. Four things get a vote, and the name is only one of them."
     lineEli5="Naming an AI model settles less than you would think: four rules get a say in which one answers, and several different companies could be the one actually running it. This page shows who decides what." />
 

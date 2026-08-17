@@ -39,14 +39,14 @@
 </script>
 
 <svelte:head>
-  <title>One doorway · The Engine Room</title>
+  <title>MCP · The Engine Room</title>
   <meta name="description" content="How outside tools connect over one open protocol, and where the check on a destructive call actually sits." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="One doorway"
+    title="MCP"
     line="One open protocol carries every tool to every caller. Which means the check on a dangerous call has to live in the doorway, because trusting four separate callers to each remember is not a plan."
     lineEli5="Outside apps can plug into the same tools the assistant uses. The safety check lives in the socket rather than in each plug — so a new plug cannot forget to bring one." />
 

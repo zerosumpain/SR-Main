@@ -37,14 +37,14 @@
 </script>
 
 <svelte:head>
-  <title>Getting it live · The Engine Room</title>
+  <title>Deployment · The Engine Room</title>
   <meta name="description" content="Six stages between a change and production, and the one stage a machine cannot clear on its own." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="change"
-    title="Getting it live"
+    title="Deployment"
     line="Six stages stand between a change and production. Which of them a machine may clear on its own comes down to something wonderfully unglamorous: which files it touched."
     lineEli5="Six steps sit between a change and the live site. Whether the machine can finish them by itself comes down to something pleasingly dull: which files it touched." />
 
