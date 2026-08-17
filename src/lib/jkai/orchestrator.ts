@@ -29,6 +29,7 @@ import { runTests, extractDiagnostics, formatTestSummary } from './test-runner';
 import { emitLog, onBuildLog } from './log-emitter';
 import { planBuild, replanBuild } from './planner';
 import type { BudgetConfig, FailureEnvelope } from './types';
+import { formatRescuePrBody } from './rescue-body';
 import { emitStage } from './stage-events';
 import { notifyAllSubscribers } from '$lib/server/push';
 
@@ -129,27 +130,6 @@ type QueuedAction =
   | { kind: 'continue'; prompt: string; modelOverride?: { provider?: string; modelId?: string } }
   | { kind: 'rejectIteration'; notes: string };
 
-export function formatRescuePrBody(failure: FailureEnvelope): string {
-  const gateDetails = failure.gateCommand || failure.diagnostics
-    ? [
-        '',
-        '## Gate failure',
-        failure.gateCommand ? `Command: \`${failure.gateCommand}\`` : '',
-        failure.diagnostics
-          ? ['', 'Diagnostics:', ...failure.diagnostics.split('\n').map((line) => `    ${line}`)].join('\n')
-          : '',
-      ].filter(Boolean).join('\n')
-    : '';
-
-  return [
-    `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the builder's gate, run in the build workspace, did not pass. CI runs its own gate on this PR and may reach a different result, so read the CI checks before judging the work.`,
-    '',
-    `> ${(failure.message ?? '').slice(0, 500)}`,
-    gateDetails,
-    '',
-    'Review the diff before doing anything with it. To continue the work, resume the build rather than starting a new one — the workspace and branch are still on the VPS.',
-  ].join('\n');
-}
 
 class Orchestrator {
   private activeBuildId: string | null = null;
