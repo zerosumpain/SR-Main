@@ -14,6 +14,7 @@ import { startOrphanSweep } from '$lib/jkai/media/sweep';
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
+import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
 import { rateLimit } from '$lib/server/rate-limit';
@@ -291,7 +292,7 @@ function retiredMapsTarget(pathname: string): string {
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
 
-  if (event.url.hostname === RETIRED_MAPS_HOST) {
+  if (requestHost(event) === RETIRED_MAPS_HOST) {
     throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
   }
 
