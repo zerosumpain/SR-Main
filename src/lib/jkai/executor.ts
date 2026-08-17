@@ -137,7 +137,7 @@ export async function executeIteration(
   // A git-target build is editing an existing repo and its deliverable is a
   // diff, not a preview server. It needs a different system prompt — see
   // REPO_SYSTEM_PROMPT in ./prompt for why the app-build one actively harms it.
-  const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string } | null })
+  const gitTarget = (build as JkaiBuild & { gitTargetConfig?: { gateCommand?: string; finalGateCommand?: string } | null })
     .gitTargetConfig;
   const originIsStudio = (build as JkaiBuild & { origin?: string }).origin === 'studio';
   const promptMode: BuildPromptMode = gitTarget ? 'repo' : originIsStudio ? 'studio' : 'app';
@@ -369,6 +369,7 @@ export async function executeIteration(
     isStudio
       ? ((build as JkaiBuild & { chapterPlan?: Array<ChapterPlanEntry> }).chapterPlan ?? null)
       : null,
+    gitTarget?.finalGateCommand ?? null,
   );
 
   const attachedIds = (build as JkaiBuild & { attachedWorkflowIds?: string[] }).attachedWorkflowIds ?? [];
