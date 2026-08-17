@@ -67,6 +67,16 @@ describe('buildIterationContext', () => {
   it('omits the definition of done when there is no gate command', () => {
     expect(ctx('repo', null)).not.toContain('Definition of Done');
   });
+
+  it('describes a repo digest as partial while preserving app digest guidance', () => {
+    const repo = buildIterationContext('do the thing', null, '', null, 2, 8123, '## Codebase Digest', 'repo')[0].content;
+    const app = buildIterationContext('do the thing', null, '', null, 2, 8123, '## Codebase Digest', 'app')[0].content;
+
+    expect(repo).not.toContain('Trust the digest for "what exists and where".');
+    expect(repo).toContain('partial, recency-ranked sample of the workspace');
+    expect(repo).toContain('use grep or find rather than assuming it does not exist');
+    expect(app).toContain('DO NOT re-read or re-list these files unless you\'re about to modify one. Trust the digest for "what exists and where".');
+  });
 });
 
 describe('studio prompt mode', () => {
