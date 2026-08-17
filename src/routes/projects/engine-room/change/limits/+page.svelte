@@ -51,7 +51,7 @@
     part="change"
     title="What it cannot do"
     line={`${RAILS.length} guardrails, plotted by whether they hold regardless of what anyone intends — and by where each one had to be put in order to hold at all.`}
-    lineEli5="Some rules are walls. Some are polite requests. Here is which is which, and where each one sits." />
+    lineEli5="Some of the rules here are walls — they hold whatever anyone intends. Some are polite requests. This page is honest about which is which, and where each one had to sit in order to hold at all." />
 
   <Instrument
     kicker="The instrument"

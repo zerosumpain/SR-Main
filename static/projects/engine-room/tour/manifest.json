@@ -1,20 +1,15 @@
 {
-  "base": "http://localhost:5173",
+  "base": "http://localhost:4999",
   "surfaces": [
     {
-      "id": "canvas",
-      "path": "/jkai/canvas/morning-briefing",
-      "capturedAt": "2026-08-10T07:18:21.438Z"
+      "id": "intel",
+      "path": "/jkai/intel",
+      "capturedAt": "2026-08-17T18:08:52.128Z"
     },
     {
-      "id": "briefing",
-      "path": "/jkai/briefing",
-      "capturedAt": "2026-08-10T07:18:26.506Z"
-    },
-    {
-      "id": "improvement",
-      "path": "/admin/ai/improvement",
-      "capturedAt": "2026-08-10T07:18:31.522Z"
+      "id": "entities",
+      "path": "/jkai/intel/entities",
+      "capturedAt": "2026-08-17T18:08:57.050Z"
     }
   ]
 }

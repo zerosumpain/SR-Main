@@ -42,8 +42,8 @@
     <p class="hero-line">
       {#if eli}
         This site looks like an ordinary blog. Behind it is an assistant that reads my email, runs my house,
-        remembers what it learns, and quietly rewrites its own code while I am asleep. This page takes the lid
-        off and shows you all of it.
+        remembers what it learns, and quietly rewrites bits of its own code while I am asleep. This page takes
+        the lid off: what each part does, why it was built, and what it turned out to be worth.
       {:else}
         This site looks like a blog. It is a blog. It is also an assistant with its hands in my mail, my files
         and my house, a workflow engine, a knowledge graph that grades its own confidence, and a night shift
@@ -63,7 +63,7 @@
   <Chapter
     no="Chapter one"
     title="It really does look like a blog"
-    sub="Nineteen pages hold this place up. Five of them you can see without asking; the other fourteen need a password and are where all the interesting mess lives. Hover any card to see what it connects to — click one for a proper look."
+    sub="Nineteen pages hold this place up. Five of them you can see without asking; the other fourteen need a password, and they are where the actual work happens. Hover any card to see what it connects to — click one for a proper look."
     lead
   >
     <SiteTour />
@@ -105,8 +105,8 @@
 
   <Chapter
     no="Chapter five"
-    title="Five parts, twenty-seven pages"
-    sub="Everything above is the tour. This is the study proper — each part is a short hub over three to eight single-idea pages, and every page carries one instrument you can actually drive."
+    title="Five parts, twenty-nine pages"
+    sub="Everything above is the tour. This is the study proper — each part is a short hub over a handful of single-idea pages, and every page carries one instrument you can actually drive."
     tone="var(--accent-ink)"
   >
     <nav class="parts" aria-label="Parts of the study">
@@ -170,8 +170,8 @@
 <style>
   .er-index { padding-bottom: 40px; }
 
-  /* ---- hero ---------------------------------------------------------- */
-  .hero { margin: 0 0 clamp(52px, 8vw, 104px); max-width: 78ch; }
+  /* ---- hero — full width under the headline, like every headline here. */
+  .hero { margin: 0 0 clamp(52px, 8vw, 104px); }
   .hero-title {
     margin: 6px 0 16px;
     font-family: var(--fs-serif); font-weight: 600;
@@ -183,7 +183,7 @@
     margin: 0 0 24px;
     font-size: clamp(17px, 1.9vw, 22px);
     line-height: 1.5; color: rgba(28, 22, 17, 0.78);
-    max-width: 60ch; text-wrap: pretty;
+    text-wrap: pretty;
   }
   .hero-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .hero-cta { display: inline-flex; align-items: center; gap: 14px; text-decoration: none;

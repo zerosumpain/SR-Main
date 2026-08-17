@@ -82,7 +82,7 @@ export const SURFACES: Surface[] = [
     route: '/',
     kicker: 'Public',
     open: true,
-    line: 'A heartbeat, a mood, and a wall of tiles quietly admitting what the machine has been up to. The heart rate is mine, which felt clever until it started publishing how badly I sleep.',
+    line: 'A heartbeat, a mood, and a wall of tiles showing what the machine has actually been doing — live counts from the running system, not brochure numbers. The heart rate is mine.',
     features: [
       { label: 'Live vital signs', what: 'Tiles pull real counts from the running system rather than a figure I typed in once and forgot.', section: 'reach/feeds' },
       { label: 'The heartbeat line', what: 'Wearable data, normalised on read, because three devices had three opinions about what a step is.', section: 'reach/feeds' },
@@ -97,7 +97,7 @@ export const SURFACES: Surface[] = [
     route: '/blog',
     kicker: 'Public',
     open: true,
-    line: 'The part of a personal site everyone builds first and nobody fills. Mine is no exception, which is why the screenshot is mostly white space and quiet dignity.',
+    line: 'Ordinary posts, ordinarily neglected. The useful part is invisible: anything written here is indexed into the assistant’s memory, so writing a post also teaches the system something.',
     features: [
       { label: 'Drafts and previews', what: 'Unpublished posts get a token link, so a draft can be read without being indexed.', section: 'change/shipping' },
       { label: 'Indexed for the assistant', what: 'Posts are chunked into the same retrieval index the assistant searches. Writing something teaches it something.', section: 'memory/retrieval' },
@@ -140,7 +140,7 @@ export const SURFACES: Surface[] = [
     route: '/releases',
     kicker: 'Public',
     open: true,
-    line: 'Every deploy this site has ever had, summarised by a machine reading its own commit log. Four hundred and eighteen releases, which is either dedication or a cry for help.',
+    line: 'Every deploy this site has ever had, written up by a machine reading its own commit log. It exists so the record keeps itself: each entry is generated from what actually shipped, not from memory.',
     features: [
       { label: 'Written from the diff', what: 'Each entry is generated from the deployed commit range, so it cannot describe a change that did not ship.', section: 'change/shipping' },
       { label: 'Watch the language', what: 'Machine-written summaries get read before they publish. They are enthusiastic about things they should not mention.', section: 'change/limits' },
@@ -206,6 +206,7 @@ export const SURFACES: Surface[] = [
     features: [
       { label: 'Plan before code', what: 'It writes a plan and a design system, then holds itself to both. Skipping this produced beautiful nonsense.', section: 'change/nights' },
       { label: 'It runs what it wrote', what: 'The build executes in a sandboxed container and iterates on real errors, not imagined ones.', section: 'change/gate' },
+      { label: 'It remembers what failed before', what: 'Each build starts with the slice of build history that touches its files — verified fixes and hard-won lessons, keyed by file set and error.', section: 'change/lessons' },
       { label: 'A token ceiling', what: 'Capped per build, counting output tokens, because an unbounded agent is just a bill with ambition.', section: 'turn/cost' },
       { label: 'Publish to a real URL', what: 'A finished build can be promoted to a card on the projects page without a deploy.', section: 'change/shipping' },
     ],
@@ -265,7 +266,7 @@ export const SURFACES: Surface[] = [
     route: '/drive',
     kicker: 'Owner only',
     open: false,
-    line: 'Drop a file in and it becomes something the assistant can answer questions about. Also mountable as a network drive, so the Finder thinks it is 2004 and everything is fine.',
+    line: 'Drop a file in and it becomes something the assistant can answer questions about. It also mounts as an ordinary network drive, because the fastest way into a clever system is a boring door.',
     features: [
       { label: 'Six kinds of file, six routes', what: 'A photograph has further to travel than a text file before it is searchable. The page shows the journey.', section: 'reach/drive' },
       { label: 'Grounded answers with citations', what: 'Chat over a selection of documents, with the answer pointing back at the page it came from.', section: 'memory/retrieval' },
@@ -381,4 +382,4 @@ export const shot = (id: string, size: 'thumb' | 'full' = 'thumb') =>
  * runtime: a public page must not couple to a build artefact, and a figure that goes
  * stale silently is worse than one that admits its date.
  */
-export const CAPTURED = '10 August 2026';
+export const CAPTURED = '17 August 2026';

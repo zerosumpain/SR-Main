@@ -30,13 +30,14 @@
     part="reach"
     title="Reading from the outside"
     line="Some feeds turn up on their own and some have to be fetched. Both will cheerfully tell you they are working. The column saying so is a memory of the last time something ran, which is not at all the same claim."
-    lineEli5="It reads data from other services. The hard part is not connecting to them — it is noticing when one has quietly given up." />
+    lineEli5="It reads data from other services — some push it in, some have to be fetched. The hard part is not connecting; it is noticing when one has quietly given up while still claiming to be fine." />
 
   <Instrument
     kicker="The instrument"
     title="What the column says, and what a probe just saw"
     tone={TONE}
     reading="The same five connectors, filled two different ways."
+    readingEli5="The same five connectors, described two ways: what the stored status says, and what a live check just found."
     takeaway={HONESTY.body}>
     <ProbeBoard />
   </Instrument>
@@ -51,7 +52,8 @@
     title="Three feeds, two ways in, two ways to fail"
     tone={TONE}
     reading="Pick a feed."
-    takeaway="A pushed feed fails silently, because no data looks identical to a quiet day. So it is called stale after two days rather than the three everything else gets. A pulled feed has the decency to fail where you can see it, since using it is the test.">
+    takeaway="A pushed feed fails silently, because no data looks identical to a quiet day. So it is called stale after two days rather than the three everything else gets. A pulled feed has the decency to fail where you can see it, since using it is the test."
+    takeawayEli5="A feed that pushes data in fails silently — no data looks exactly like a quiet day — so it is treated as stale sooner than everything else. A feed you fetch at least fails where you can see it, because using it is the test.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Feeds">
         {#each FEEDS as f (f.id)}
@@ -73,6 +75,7 @@
     title="Every measurement is an integer of hundredths"
     tone={TONE}
     reading="Pick a measurement and read the column three ways."
+    readingEli5="Pick a measurement and read the same stored number three different ways."
     takeaway={FIXED_POINT.body}>
     <UnitTrap />
   </Instrument>
@@ -82,7 +85,9 @@
     title="Calling an API nobody wrote code for"
     tone={TONE}
     reading="What the model may do with a catalogued data source, and what it may not."
-    takeaway="The model can write to this register itself, so nothing in it gets the benefit of the doubt. Every rule below is enforced at call time against my settings, not against whatever the record says about itself.">
+    readingEli5="What the AI may do with a catalogued data source, and what it may not."
+    takeaway="The model can write to this register itself, so nothing in it gets the benefit of the doubt. Every rule below is enforced at call time against my settings, not against whatever the record says about itself."
+    takeawayEli5="The AI can add entries to this catalogue itself, so nothing in it is taken on trust. Every rule is checked at the moment of the call, against my settings — never against whatever the entry says about itself.">
     <ul class="rules">
       {#each CATALOGUE_RULES as r (r.k)}
         <li><b>{r.k}</b><span>{r.why}</span></li>

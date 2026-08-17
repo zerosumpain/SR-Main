@@ -155,6 +155,7 @@
 /projects/engine-room/ask
 /projects/engine-room/change
 /projects/engine-room/change/gate
+/projects/engine-room/change/lessons
 /projects/engine-room/change/limits
 /projects/engine-room/change/nights
 /projects/engine-room/change/shipping
@@ -178,6 +179,7 @@
 /projects/engine-room/reach/keys
 /projects/engine-room/reach/mcp
 /projects/engine-room/reach/tools
+/projects/engine-room/reach/trails
 /projects/engine-room/reach/workflows
 /projects/engine-room/turn
 /projects/engine-room/turn/cost

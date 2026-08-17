@@ -3,8 +3,11 @@
 // reads, persisted by the layout. DOM-free, self-contained to this route folder.
 
 class AppState {
-  /** 'research' = the full engineering explanation; 'eli5' = the same thing in plain English. */
-  narrative = $state<'research' | 'eli5'>('research');
+  /**
+   * 'eli5' = plain English, the default — the study should read for someone who has never
+   * heard of any of this; 'research' = the full engineering explanation for those who ask.
+   */
+  narrative = $state<'research' | 'eli5'>('eli5');
   mounted = $state(false);
 }
 

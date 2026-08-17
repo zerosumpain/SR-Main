@@ -26,7 +26,7 @@
     part="ground"
     title="Where the bytes live"
     line="Four places a byte can end up, each chosen by answering a single question — and one kind of loss about which a flawless, nightly, off-site backup can do absolutely nothing."
-    lineEli5="Different things are kept in different places, on purpose. One of them can be lost in a way that no backup will fix."
+    lineEli5="Different things are kept in different places, on purpose — and one of them can be lost in a way no backup will fix. Knowing which one, in advance, is the entire value of this page."
   />
 
   <Instrument
@@ -34,7 +34,9 @@
     title="Break something"
     tone={TONE}
     reading="Pick a failure. What recovers it is listed in the order it would actually be reached."
-    takeaway="Four of the five are survivable and thoroughly boring, which is precisely the goal. The fifth is the one worth losing sleep over: encrypting credentials at rest is obviously the right thing to do, and it quietly creates a second thing to lose.">
+    readingEli5="Pick a failure. What brings things back is listed in the order it would actually be tried."
+    takeaway="Four of the five are survivable and thoroughly boring, which is precisely the goal. The fifth is the one worth losing sleep over: encrypting credentials at rest is obviously the right thing to do, and it quietly creates a second thing to lose."
+    takeawayEli5="Four of the five failures are survivable and thoroughly boring, which is exactly the goal. The fifth is the one worth losing sleep over: encrypting stored secrets is obviously right, and it quietly creates one more thing that can be lost.">
     <FailureLadder />
   </Instrument>
 
@@ -47,7 +49,8 @@
     kicker="The four"
     title="Each store answers one question"
     tone={TONE}
-    reading="Pick one.">
+    reading="Pick one."
+    readingEli5="Pick a place.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Stores">
         {#each STORES as s (s.id)}

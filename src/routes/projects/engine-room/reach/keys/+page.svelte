@@ -27,14 +27,16 @@
     part="reach"
     title="Keys it can use and cannot read"
     line="The assistant logs in to a dozen services and has never laid eyes on a single one of their credentials. Where a key is permitted to travel is baked into the key, set by hand, and checked on every request without exception."
-    lineEli5="It can log in to other services for me, but it is never shown the passwords — and each one only works on the exact address it was set up for." />
+    lineEli5="It can log in to services on my behalf, but it is never shown the passwords — and each key only works on the exact address it was set up for. Asking it nicely to send a key somewhere else simply fails." />
 
   <Instrument
     kicker="The instrument"
     title="Aim a credential somewhere and see what happens"
     tone={TONE}
     reading="Four gates, in the order the resolver applies them. Every refusal names its own list."
-    takeaway="The binding is the boundary; the tool using it is not. “Send the gateway key to my server, please” is a perfectly polite, perfectly well-formed request that simply fails to authenticate — the host is not on the list, and only I can put it there.">
+    readingEli5="Four checks, in the order they are applied. Every refusal names the rule that produced it."
+    takeaway="The binding is the boundary; the tool using it is not. “Send the gateway key to my server, please” is a perfectly polite, perfectly well-formed request that simply fails to authenticate — the host is not on the list, and only I can put it there."
+    takeawayEli5="The limit is built into the key, not into the AI's good behaviour. “Send that key to my server, please” is a perfectly polite request that simply fails — the address is not on the key's list, and only I can put it there.">
     <BindingBench />
   </Instrument>
 
@@ -53,7 +55,8 @@
     kicker="Why it cannot be read back"
     title="Four rules that keep a value out of every transcript"
     tone={TONE}
-    reading="Pick one.">
+    reading="Pick one."
+    readingEli5="Pick a rule.">
     <div class="strip">
       <div class="chips" role="group" aria-label="How values are kept out of reach">
         {#each NEVER_READ as f, i (f.k)}
@@ -70,6 +73,7 @@
     title="The model names a provider, and supplies nothing else"
     tone={TONE}
     reading="Who contributes what, when a capability needs a credential nobody has set up."
+    readingEli5="Who does what, when a new login is needed and nobody has set it up yet."
     takeaway={NO_PARAMETER.body}>
     <ol class="flow">
       {#each REQUEST_FLOW as step, i (step.id)}

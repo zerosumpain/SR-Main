@@ -6,14 +6,19 @@
   // Order is deliberate: label, controls, the visual, then at most one sentence of payoff.
   // The caption goes UNDER the instrument — if it goes above, people read instead of touch.
   import type { Snippet } from 'svelte';
+  import { app } from '../../lib/appState.svelte';
 
   interface Props {
     kicker?: string;
     title: string;
     /** One line naming what is plotted. Not an argument — an axis label in prose. */
     reading?: string;
+    /** Same line for the plain-English register (the default). Falls back to `reading`. */
+    readingEli5?: string;
     /** The payoff, under 40 words. Optional: a good instrument often needs none. */
     takeaway?: string;
+    /** Same payoff for the plain-English register (the default). Falls back to `takeaway`. */
+    takeawayEli5?: string;
     tone?: string;
     /** Controls render top-right, always above the visual so they are found first. */
     controls?: Snippet;
@@ -21,7 +26,11 @@
     /** Let the visual bleed to the frame edge (maps, matrices). */
     flush?: boolean;
   }
-  let { kicker, title, reading, takeaway, tone, controls, children, flush = false }: Props = $props();
+  let { kicker, title, reading, readingEli5, takeaway, takeawayEli5, tone, controls, children, flush = false }: Props = $props();
+
+  const eli = $derived(app.narrative === 'eli5');
+  const readingText = $derived(eli && readingEli5 ? readingEli5 : reading);
+  const takeawayText = $derived(eli && takeawayEli5 ? takeawayEli5 : takeaway);
 </script>
 
 <figure class="inst" style={tone ? `--tone:${tone}` : ''}>
@@ -33,12 +42,12 @@
     {#if controls}<div class="i-ctl">{@render controls()}</div>{/if}
   </div>
 
-  {#if reading}<p class="i-read">{reading}</p>{/if}
+  {#if readingText}<p class="i-read">{readingText}</p>{/if}
 
   <div class="i-body" class:flush>{@render children()}</div>
 
-  {#if takeaway}
-    <figcaption class="i-take"><span class="t-mark" aria-hidden="true">▸</span>{takeaway}</figcaption>
+  {#if takeawayText}
+    <figcaption class="i-take"><span class="t-mark" aria-hidden="true">▸</span>{takeawayText}</figcaption>
   {/if}
 </figure>
 
@@ -57,14 +66,14 @@
     margin: 0; color: var(--text-primary); letter-spacing: -0.01em; }
   .i-ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 
-  .i-read { margin: 6px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.6); max-width: 78ch; }
+  .i-read { margin: 6px 0 0; font-size: var(--fs-label); line-height: 1.5; color: rgba(28,22,17,0.6); }
 
   .i-body { margin-top: 12px; min-width: 0; }
   .i-body.flush { margin-left: -16px; margin-right: -16px; }
 
   .i-take { display: flex; gap: 7px; margin: 12px 0 0; padding-top: 10px;
     border-top: 1px dashed rgba(28,22,17,0.18); font-size: var(--fs-label); line-height: 1.55;
-    color: rgba(28,22,17,0.78); max-width: 84ch; }
+    color: rgba(28,22,17,0.78); }
   .t-mark { color: var(--tone); flex-shrink: 0; }
   .i-take :global(b) { color: var(--text-primary); }
 

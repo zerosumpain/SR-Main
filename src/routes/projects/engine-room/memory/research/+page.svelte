@@ -91,13 +91,14 @@
     part="memory"
     title="Reading the web"
     line="Three sources, composed two different ways. One of the answers contains a sentence that nobody anywhere ever wrote, and it reads exactly as convincingly as the rest."
-    lineEli5="Squash your sources together into one blob and the answer can end up saying things nobody actually said." />
+    lineEli5="Squash your sources together into one blob and the answer can end up saying things nobody actually said. Keeping every fact pinned to its source is what stops that — and you can watch it go wrong below." />
 
   <Instrument
     kicker="The instrument"
     title="Same sources, two compositions"
     tone={TONE}
-    takeaway="Merge first and you throw away provenance; having thrown it away, the model cheerfully fills the gap. The invented bit is indistinguishable from the true bits, which is the entire problem.">
+    takeaway="Merge first and you throw away provenance; having thrown it away, the model cheerfully fills the gap. The invented bit is indistinguishable from the true bits, which is the entire problem."
+    takeawayEli5="Merge the sources first and you lose track of who said what — and the model then happily fills any gap. The invented sentence reads exactly as confidently as the real ones, which is the whole problem.">
     <ProvenanceDemo />
   </Instrument>
 
@@ -106,7 +107,9 @@
     title="What survives to the answer"
     tone={TONE}
     reading="Pick a stage."
-    takeaway="Corroboration turns out to be thin on the ground. Most of what survives is cited rather than confirmed, and the page says which is which rather than rounding up.">
+    readingEli5="Pick a stage of the pipeline."
+    takeaway="Corroboration turns out to be thin on the ground. Most of what survives is cited rather than confirmed, and the page says which is which rather than rounding up."
+    takeawayEli5="Genuine confirmation turns out to be rare: most of what survives has one source behind it, not two. The answer says which is which, rather than rounding everything up to 'confirmed'.">
     <Steps items={PIPE} selected={stage} onselect={(id) => (stage = id)} tone={TONE} />
     <p class="readout" aria-live="polite" title={RESEARCH_FACTS.find((f) => f.k === stage)?.why}>{WHY[stage] ?? ''}</p>
 
@@ -120,7 +123,8 @@
     kicker="The desk"
     title="Where a run lands"
     tone={TONE}
-    reading="Pick one.">
+    reading="Pick one."
+    readingEli5="Six house rules for a finished research run. Pick one.">
     <div class="rules">
       {#each DESK as d, i (d.k)}
         <button class="rule" class:on={rule === d.k} aria-pressed={rule === d.k}

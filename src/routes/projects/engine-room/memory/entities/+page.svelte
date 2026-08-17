@@ -54,14 +54,16 @@
     part="memory"
     title="Is this the same person?"
     line="Two records, ten signals, one threshold. Clear the bar and they are merged overnight with nobody watching. Fall short and it waits for me, which is the correct way round."
-    lineEli5="The system spots two records that might be the same thing. It weighs up the evidence, and only joins them if it is sure enough." />
+    lineEli5="Sometimes two records are probably the same person. The system weighs the evidence and only joins them when it clears a high bar — because a wrong merge is nearly impossible to undo, while a missed one is just two records." />
 
   <Instrument
     kicker="The instrument"
     title="Toggle the evidence"
     tone={TONE}
     reading="Pick a worked case, then pull the evidence out of it."
-    takeaway="Merge two people who are not the same and you have destroyed something no amount of re-running will bring back. So the rules decide. The model is allowed to suggest, and that is where its authority ends.">
+    readingEli5="Pick a worked case, then switch pieces of evidence on and off to see what happens to the decision."
+    takeaway="Merge two people who are not the same and you have destroyed something no amount of re-running will bring back. So the rules decide. The model is allowed to suggest, and that is where its authority ends."
+    takeawayEli5="Merging two people who are not the same destroys information for good, so the decision belongs to fixed rules, not to the AI. The model may suggest a match; it is never allowed to act on one.">
     <EntityResolver />
   </Instrument>
 
@@ -70,7 +72,9 @@
     title="What each signal is worth"
     tone={TONE}
     reading="Every scored signal on one nought-to-one scale. The dashed rule is the merge bar."
-    takeaway="A shared address beats every clever thing you can do with a name. {belowBar} of the {primaryBars.length} cannot merge a pair on their own no matter how confident they feel, and the biggest nudge any corroborating signal can manage is {maxNudge}.">
+    readingEli5="Every piece of evidence, scored on the same nought-to-one scale. The dashed line is the bar a pair must clear to be joined automatically."
+    takeaway="A shared address beats every clever thing you can do with a name. {belowBar} of the {primaryBars.length} cannot merge a pair on their own no matter how confident they feel, and the biggest nudge any corroborating signal can manage is {maxNudge}."
+    takeawayEli5="A shared address beats every clever thing you can do with a name. {belowBar} of the {primaryBars.length} main signals cannot join a pair on their own, and the biggest nudge a supporting signal can add is {maxNudge} — deliberately never enough to tip a decision by itself.">
     <div class="ladder">
       <div class="band">
         <span class="band-lab">Sets the confidence · strongest one wins</span>

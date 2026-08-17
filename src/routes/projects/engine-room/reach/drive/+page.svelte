@@ -28,14 +28,16 @@
     part="reach"
     title="The filing cabinet"
     line="Keeping a document is easy. Being able to ask it a question means turning six kinds of file into the one thing a search index actually understands — and being honest about which two never make it."
-    lineEli5="Everything you put in can be searched by what is inside it — except a photo has to be described first, and a video is not read at all." />
+    lineEli5="Anything dropped in can be searched by what is inside it — except a photo has to be described by a model first, and a video is not read at all. The search box is uniform; the work behind it is not." />
 
   <Instrument
     kicker="The instrument"
     title="Six kinds in, one index out"
     tone={TONE}
     reading="Pick a kind of file and follow it."
-    takeaway="A photograph has no text, so a model writes some for it — a plain description plus whatever words are visible in the picture — and that description is what search is really matching on. The uniform surface is genuine. The uniform capability behind it is a polite fiction.">
+    readingEli5="Pick a kind of file and follow its journey to the search index."
+    takeaway="A photograph has no text, so a model writes some for it — a plain description plus whatever words are visible in the picture — and that description is what search is really matching on. The uniform surface is genuine. The uniform capability behind it is a polite fiction."
+    takeawayEli5="A photograph has no text, so a model writes some — a description plus any words visible in the picture — and that is what search actually matches on. The uniform search box is real; the sameness behind it is a polite fiction.">
     <FilePipeline />
   </Instrument>
 
@@ -49,7 +51,9 @@
     title="Folders that do not exist, with two inheritance rules"
     tone={TONE}
     reading="Set a policy anywhere on the path. The verdict for a file in the deepest folder is computed below it."
-    takeaway="Exclude the whole tree, re-include one folder inside it, and the file feeds the graph — while a label from the excluded parent still applies to it. One setting takes the nearest answer; the other takes all of them.">
+    readingEli5="Set a rule anywhere along the path. The verdict for the deepest file is worked out underneath."
+    takeaway="Exclude the whole tree, re-include one folder inside it, and the file feeds the graph — while a label from the excluded parent still applies to it. One setting takes the nearest answer; the other takes all of them."
+    takeawayEli5="Exclude a whole tree, re-allow one folder inside it, and files there count again — while a label from the excluded parent still applies to them. One setting takes the nearest answer; the other takes all of them.">
     <FolderPolicy />
   </Instrument>
 

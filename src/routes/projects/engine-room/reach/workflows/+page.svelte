@@ -61,14 +61,16 @@
     part="reach"
     title="Wiring it together"
     line="{NODE_COUNT} node types wire the system to itself. Where two branches meet at one node, one of them quietly ceases to exist, and everything downstream carries on as though nothing has happened."
-    lineEli5="The system is built from blocks you join up. Where two lines join, one of them can vanish without a word of warning." />
+    lineEli5="Automations are built from blocks joined with lines. Where two lines meet at one block, one of them can vanish without a word of warning — here you can make it happen where it costs nothing." />
 
   <Instrument
     kicker="The instrument"
     title="Two branches, one node"
     tone={TONE}
     reading="Two API calls into one node. Pick a wiring; watch what arrives."
-    takeaway="A daily spending summary managed this twice: one branch wiped the other, then three more collapsed into one. The build passed, the save passed, the editor looked delighted. The engine now names overlapping keys before a run, which it might have mentioned earlier.">
+    readingEli5="Two data sources feed one block. Pick a wiring and watch what actually arrives."
+    takeaway="A daily spending summary managed this twice: one branch wiped the other, then three more collapsed into one. The build passed, the save passed, the editor looked delighted. The engine now names overlapping keys before a run, which it might have mentioned earlier."
+    takeawayEli5="A real daily-spending summary lost data this way twice: one branch wiped out another, then three more collapsed into one — and everything looked fine throughout. The engine now names the clash before a run starts, so the mistake is caught while it is still free.">
     <FanInTrap tone={TONE} />
   </Instrument>
 
@@ -90,7 +92,8 @@
     kicker="The engine"
     title="Six lines about the runner"
     tone={TONE}
-    reading="Pick one for why.">
+    reading="Pick one for why."
+    readingEli5="Pick a line for the reason behind it.">
     <div class="kvs" role="group" aria-label="Facts about the workflow runner">
       {#each ENGINE_FACTS as f (f.k)}
         <button class="kv" class:on={fact === f.k} aria-pressed={fact === f.k}

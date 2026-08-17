@@ -51,10 +51,10 @@
     <div class="detail" role="group" aria-label="Explanation detail">
       <span class="d-lab">Explain it as</span>
       <div class="seg">
+        <button class:on={app.narrative === 'eli5'} onclick={() => (app.narrative = 'eli5')}
+                title="Plain English — the default. What it does, why it exists, no jargon.">Plain English</button>
         <button class:on={app.narrative === 'research'} onclick={() => (app.narrative = 'research')}
                 title="Engineering view — the full explanation, with the mechanism.">Engineering</button>
-        <button class:on={app.narrative === 'eli5'} onclick={() => (app.narrative = 'eli5')}
-                title="Plain English — the same thing without the jargon.">Plain English</button>
       </div>
     </div>
   </div>
