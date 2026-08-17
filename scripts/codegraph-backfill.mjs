@@ -302,10 +302,16 @@ function edgesFrom(events) {
   const out = [];
   // Cap: a 40-file session yields 780 pairs, most of them meaningless. The
   // sessions that edit half the repo are exactly the ones whose pairs mean least.
+  // co_change is SYMMETRIC, so the pair is stored sorted. Unsorted, one
+  // session emitting (a,b) and another emitting (b,a) produces two rows for one
+  // relationship, each with half the weight — which is how a strong habit ends
+  // up looking like two coincidences.
   if (edited.length >= 2 && edited.length <= 12) {
     for (let a = 0; a < edited.length; a++)
-      for (let b = a + 1; b < edited.length; b++)
-        out.push({ source: edited[a], target: edited[b], kind: 'co_change', weight: 1 });
+      for (let b = a + 1; b < edited.length; b++) {
+        const [x, y] = [edited[a], edited[b]].sort();
+        out.push({ source: x, target: y, kind: 'co_change', weight: 1 });
+      }
   }
   for (const e of edited.slice(0, 12))
     for (const r of read.slice(0, 12))
@@ -348,6 +354,94 @@ function lessonsFromMemory() {
       citedPaths: [...cited],
       observedAt: modified || null,
     });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// STATIC linkage: imports and test-subject pairs, read from the tree at HEAD.
+//
+// The behavioural edges (co_change, needs_context) only exist where a session
+// happened to touch two files together, which left half the graph isolated and
+// the layout with nothing to cluster on. `import` is exact, directional and
+// dense, and needs no history at all. Mirrors src/lib/codegraph/imports.ts —
+// duplicated because this script is plain node with no TS build step, and the
+// resolution rules are pinned by imports.test.ts.
+// ---------------------------------------------------------------------------
+const IMPORT_RE = /(?:^|\n)\s*(?:import|export)\s[^'"\n]*?from\s*['"]([^'"]+)['"]|(?:^|[^\w.])import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const EXTS = ['.ts', '.js', '.svelte', '.mjs', '.svelte.ts', '.json'];
+const IDXS = ['/index.ts', '/index.js', '/index.svelte'];
+
+function normPath(p) {
+  const out = [];
+  for (const seg of p.split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') out.pop();
+    else out.push(seg);
+  }
+  return out.join('/');
+}
+
+function resolveSpec(spec, fromPath, exists) {
+  let base;
+  if (spec.startsWith('$lib/')) base = 'src/lib/' + spec.slice(5);
+  else if (spec === '$lib') base = 'src/lib';
+  else if (spec.startsWith('./') || spec.startsWith('../'))
+    base = normPath(fromPath.split('/').slice(0, -1).join('/') + '/' + spec);
+  else return null; // external — never invent a node for it
+  if (exists.has(base)) return base;
+  for (const e of EXTS) if (exists.has(base + e)) return base + e;
+  for (const i of IDXS) if (exists.has(base + i)) return base + i;
+  return null;
+}
+
+function subjectOfTest(path, exists) {
+  const m = path.match(/^(.*)\.(test|spec)\.([tj]sx?)$/);
+  if (!m) return null;
+  const [, stem, , ext] = m;
+  for (const c of [`${stem}.${ext}`, `${stem}.svelte`, `${stem}.ts`, `${stem}.js`])
+    if (exists.has(c)) return c;
+  return null;
+}
+
+/** Every static edge in the tree at HEAD, weighted 1 (a dependency either is or isn't). */
+function staticEdgesFromTree() {
+  let tracked;
+  try {
+    tracked = execFileSync('git', ['ls-files'], { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+      .split('\n').filter(Boolean);
+  } catch (e) {
+    console.error('git ls-files failed — skipping static edges:', e.message);
+    return [];
+  }
+  const exists = new Set(tracked);
+  const scannable = tracked.filter((p) => /\.(ts|js|mjs|svelte)$/.test(p) && canonicalise(p));
+  const out = [];
+  const seen = new Set();
+  for (const path of scannable) {
+    let src;
+    try { src = readFileSync(join(REPO_ROOT, path), 'utf8'); } catch { continue; }
+    if (src.length > 400_000) continue;
+    const specs = new Set();
+    for (const m of src.matchAll(IMPORT_RE)) { const sp = m[1] ?? m[2]; if (sp) specs.add(sp); }
+    for (const sp of specs) {
+      const to = resolveSpec(sp, path, exists);
+      if (!to || to === path) continue;
+      const a = canonicalise(path), b = canonicalise(to);
+      if (!a || !b || a === b) continue;
+      const k = `imports|${a}|${b}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ source: a, target: b, kind: 'imports', weight: 1 });
+    }
+    const subj = subjectOfTest(path, exists);
+    if (subj) {
+      const a = canonicalise(path), b = canonicalise(subj);
+      if (a && b && a !== b) {
+        const k = `tests|${a}|${b}`;
+        if (!seen.has(k)) { seen.add(k); out.push({ source: a, target: b, kind: 'tests', weight: 1 }); }
+      }
+    }
   }
   return out;
 }
@@ -433,6 +527,21 @@ async function main() {
 
     console.log(`transcripts: ${picked.length} files, ${(picked.reduce((a, b) => a + b.s, 0) / 1e6).toFixed(0)} MB`);
 
+    // Edge weights are ACCUMULATED here, across every session, and posted once
+    // at the end — not per session.
+    //
+    // The endpoint REPLACES weight rather than adding to it, because adding
+    // would make a re-run inflate every number (the same non-idempotency that
+    // doubled the episode table). So the total has to be computed caller-side.
+    // Posting per session with weight 1 is what left every edge in the graph at
+    // weight exactly 1, p50 and max alike: nothing could tell a habit from a
+    // coincidence.
+    const edgeTotals = new Map(); // "kind|source|target" -> weight
+    const addEdge = (e) => {
+      const k = `${e.kind}|${e.source}|${e.target}`;
+      edgeTotals.set(k, (edgeTotals.get(k) ?? 0) + (e.weight ?? 1));
+    };
+
     let done = 0;
     for (const { p } of picked) {
       let scan;
@@ -446,21 +555,39 @@ async function main() {
         existsOnHead: head ? head.has(cp) : true,
       }));
 
-      if (nodes.length || episodes.length || edges.length) {
+      for (const e of edges) addEdge(e);
+
+      if (nodes.length || episodes.length) {
         // Chunked: the endpoint caps a batch at 5,000 units.
         for (let i = 0; i < Math.max(1, Math.ceil(nodes.length / 800)); i++) {
           const r = await post({
             repo: REPO,
             nodes: nodes.slice(i * 800, (i + 1) * 800),
-            edges: i === 0 ? edges.slice(0, 1500) : [],
             episodes: i === 0 ? episodes : [],
           });
           totals.nodes += r.counts?.nodes ?? 0;
-          totals.edges += r.counts?.edges ?? 0;
           totals.episodes += r.counts?.episodes ?? 0;
         }
       }
       if (++done % 10 === 0) console.log(`  ${done}/${picked.length} — ${JSON.stringify(totals)}`);
+    }
+
+    // Static structure, folded in with the behavioural edges. A dependency
+    // either exists or it does not, so these carry weight 1 and do not
+    // accumulate — their value is coverage, not frequency.
+    const staticEdges = staticEdgesFromTree();
+    console.log(`static edges from tree: ${staticEdges.length}`);
+    for (const e of staticEdges) addEdge(e);
+
+    const allEdges = [...edgeTotals.entries()].map(([k, weight]) => {
+      const [kind, source, target] = k.split('|');
+      return { source, target, kind, weight };
+    });
+    const strong = allEdges.filter((e) => e.weight > 1).length;
+    console.log(`edges: ${allEdges.length} total, ${strong} with weight > 1`);
+    for (let i = 0; i < allEdges.length; i += 1500) {
+      const r = await post({ repo: REPO, edges: allEdges.slice(i, i + 1500) });
+      totals.edges += r.counts?.edges ?? 0;
     }
   }
 

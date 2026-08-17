@@ -62,9 +62,17 @@ export const SURFACES: CodegraphSurface[] = [
     warnAbove: 25,
   },
   {
+    href: '/jkai/codegraph/relevance',
+    label: 'Relevance',
+    stage: '04 rank',
+    question: 'What would be pulled into the next build, and why that order?',
+    ratherThan:
+      'Serves is what DID happen. This is what WOULD happen, and which term of the score decided it — the only place a bad ranking is visible before builds get worse.',
+  },
+  {
     href: '/jkai/codegraph/serves',
     label: 'Serves',
-    stage: '04 measure',
+    stage: '05 measure',
     question: 'Every retrieval, including the ones that found nothing — is this actually being used?',
     ratherThan:
       'The honest usage record. Nothing else here can tell you whether the graph is earning its place.',

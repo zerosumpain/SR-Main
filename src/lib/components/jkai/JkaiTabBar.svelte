@@ -34,6 +34,10 @@
     <span class="glyph" aria-hidden="true">#</span>
     <span class="label">intel</span>
   </a>
+  <a class="tab" class:active={page.url.pathname.startsWith('/jkai/codegraph')} href="/jkai/codegraph">
+    <span class="glyph" aria-hidden="true">⌗</span>
+    <span class="label">code</span>
+  </a>
   <button type="button" class="tab" class:active={hub.menuOpen} onclick={toggleHubMenu} data-hub-menu>
     <span class="glyph" aria-hidden="true">≡</span>
     <span class="label">more</span>

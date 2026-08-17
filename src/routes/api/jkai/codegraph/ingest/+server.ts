@@ -42,7 +42,7 @@ interface LessonIn {
 }
 
 const VERDICTS = new Set(['verified', 'landed', 'unverified', 'repaired', 'abandoned']);
-const EDGE_KINDS = new Set(['co_change', 'needs_context', 'gated_by', 'imports', 'fixed_by']);
+const EDGE_KINDS = new Set(['co_change', 'needs_context', 'gated_by', 'imports', 'fixed_by', 'tests']);
 const MAX_BATCH = 5000;
 
 function ts(v: string | undefined | null): Date | null {
@@ -256,6 +256,21 @@ export const POST: RequestHandler = async ({ request }) => {
     for (let i = 0; i < values.length; i += 500) {
       const slice = values.slice(i, i + 500);
       if (!slice.length) continue;
+      // REPLACE the weight, do not add to it — and the caller must therefore
+      // send the TOTAL for that pair, not one occurrence.
+      //
+      // This looks like the wrong operator and is not. `weight + excluded.weight`
+      // is the obvious reading of "count how often these change together", but
+      // it makes the ingest non-idempotent: every re-run of the backfill would
+      // inflate every weight, exactly as re-running once doubled the episode
+      // table before it got a natural key. The scanner aggregates per pair
+      // across the whole corpus in memory and posts each edge once, so REPLACE
+      // is both correct and re-runnable.
+      //
+      // Until 2026-08-17 the caller sent 1 per occurrence and this replaced with
+      // 1, so every edge in the graph had weight exactly 1: p50 and max alike.
+      // Nothing could distinguish a habit from a coincidence, the force layout
+      // pulled every pair equally, and half the graph read as unclustered noise.
       await db.insert(codegraphEdges).values(slice).onConflictDoUpdate({
         target: [codegraphEdges.sourceId, codegraphEdges.targetId, codegraphEdges.kind],
         set: { weight: sql`excluded.weight`, lastSeenAt: new Date() },

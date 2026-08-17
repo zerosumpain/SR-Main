@@ -239,9 +239,44 @@ jobs:
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # git, NOT actions/checkout, on the self-hosted runner only.
+      #
+      # The action is fetched as a tarball from codeload.github.com at the start
+      # of every job. On 2026-08-17 codeload began 429-ing this runner's IP and
+      # stayed there ~25 minutes: `prebuild` died in "Set up job", before a line
+      # of our own code ran, and took the deploy with it. Nothing was wrong with
+      # the commit — production simply could not be reached. github.com itself
+      # returned 200 throughout; only the tarball CDN was limited, and the
+      # runner wipes `_work/_actions` at job start so the action cannot be
+      # pre-seeded.
+      #
+      # Inlined rather than put in scripts/: this runs BEFORE the repo exists in
+      # the workspace, so a checked-in script could not be the thing that checks
+      # the repo out. The workflow file is delivered by the runner itself.
+      #
+      # The GitHub-hosted jobs (gate, risk-tier, auto-merge) deliberately keep
+      # using the action — it ships on their image, so it costs them no network
+      # call and gets the usual maintenance.
+      #
+      # Detached at the exact triggering sha, never a branch name: a branch can
+      # move between trigger and run, and the deploy must ship the commit that
+      # was tested. Full history because ci-release.sh diffs the previously
+      # deployed sha against HEAD.
+      - name: Checkout (git, not the action)
+        run: |
+          set -euo pipefail
+          if [ ! -d .git ]; then
+            git init -q .
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --quiet --tags --force origin
+          git -c advice.detachedHead=false checkout --quiet --force "${GITHUB_SHA}"
+          # Leftovers from a previous job on this reused workspace would
+          # otherwise be packaged into the release. node_modules is preserved:
+          # npm ci re-creates it and deleting it costs minutes every deploy.
+          git clean -qfd -e node_modules
+          echo "checked out $(git rev-parse --short HEAD)"
 
       - name: Runtime versions
         run: node --version && npm --version
@@ -299,13 +334,44 @@ jobs:
     runs-on: [self-hosted, srmain]
     timeout-minutes: 15
     steps:
-      # Full history: scripts/ci-release.sh records the release log by diffing
-      # the previously-deployed sha against HEAD, and the default depth-1
-      # checkout has no such commit to diff against. The self-hosted runner
-      # reuses its workspace, so this is a one-off cost rather than a full clone.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      # git, NOT actions/checkout, on the self-hosted runner only.
+      #
+      # The action is fetched as a tarball from codeload.github.com at the start
+      # of every job. On 2026-08-17 codeload began 429-ing this runner's IP and
+      # stayed there ~25 minutes: `prebuild` died in "Set up job", before a line
+      # of our own code ran, and took the deploy with it. Nothing was wrong with
+      # the commit — production simply could not be reached. github.com itself
+      # returned 200 throughout; only the tarball CDN was limited, and the
+      # runner wipes `_work/_actions` at job start so the action cannot be
+      # pre-seeded.
+      #
+      # Inlined rather than put in scripts/: this runs BEFORE the repo exists in
+      # the workspace, so a checked-in script could not be the thing that checks
+      # the repo out. The workflow file is delivered by the runner itself.
+      #
+      # The GitHub-hosted jobs (gate, risk-tier, auto-merge) deliberately keep
+      # using the action — it ships on their image, so it costs them no network
+      # call and gets the usual maintenance.
+      #
+      # Detached at the exact triggering sha, never a branch name: a branch can
+      # move between trigger and run, and the deploy must ship the commit that
+      # was tested. Full history because ci-release.sh diffs the previously
+      # deployed sha against HEAD.
+      - name: Checkout (git, not the action)
+        run: |
+          set -euo pipefail
+          if [ ! -d .git ]; then
+            git init -q .
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --quiet --tags --force origin
+          git -c advice.detachedHead=false checkout --quiet --force "${GITHUB_SHA}"
+          # Leftovers from a previous job on this reused workspace would
+          # otherwise be packaged into the release. node_modules is preserved:
+          # npm ci re-creates it and deleting it costs minutes every deploy.
+          git clean -qfd -e node_modules
+          echo "checked out $(git rev-parse --short HEAD)"
 
       # No setup-node and, deliberately, no `npm ci`. Nothing this job runs
       # needs node_modules: the release-log ingest imports only node: builtins
