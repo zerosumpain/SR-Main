@@ -35,14 +35,16 @@
     part="memory"
     title="How things connect"
     line="Ranking the most connected entities exactly took forty seconds. Rearranging how the data sat in memory — not touching the algorithm — brought it down to 1.7, bit for bit identical. The clever approximation was never needed."
-    lineEli5="Working out which things are most connected took forty seconds. Storing the data differently made it far quicker, with exactly the same answer at the end." />
+    lineEli5="Ranking the most connected things took forty seconds — too slow to use. Rearranging how the data was stored got the exact same answer in under two, so the fast-but-slightly-wrong shortcut could be binned." />
 
   <Instrument
     kicker="The instrument"
     title="Three ways to rank the most connected"
     tone={TONE}
     reading="Pick an approach. Time along the top, then what its answer actually looks like."
-    takeaway="The twenty-four-fold win came out of the data layout, before anybody had to start bargaining away precision. So the approximation was shown the door and the exact answer is simply cached for a minute. Reach for the boring fix first.">
+    readingEli5="Pick an approach: how long it takes along the top, then what its answer actually looks like."
+    takeaway="The twenty-four-fold win came out of the data layout, before anybody had to start bargaining away precision. So the approximation was shown the door and the exact answer is simply cached for a minute. Reach for the boring fix first."
+    takeawayEli5="The speed-up came from rearranging the data, not from accepting a rougher answer. The approximation genuinely got rankings wrong; the exact one now just gets cached for a minute. Try the boring fix before the clever one.">
     <RankingBench />
   </Instrument>
 
@@ -60,7 +62,9 @@
     title="A blast radius, not a rate limit"
     tone={TONE}
     reading="Each square is one merge the nightly pass is allowed to make."
-    takeaway="At four in the morning the interesting question is not how fast it can go. It is how much it can get wrong before a human wanders past and notices.">
+    readingEli5="Each square is one merge the overnight pass is allowed to make before it has to stop."
+    takeaway="At four in the morning the interesting question is not how fast it can go. It is how much it can get wrong before a human wanders past and notices."
+    takeawayEli5="The cap is not about speed. It is the most the machine can get wrong overnight before a human next looks — and every one of those merges can be undone.">
     <div class="blast">
       <div class="dots" role="img"
            aria-label="{NIGHTLY_CAP} squares — the most pairs the nightly pass may merge before it stops.">
@@ -80,7 +84,8 @@
     kicker="Underneath"
     title="One store, six properties"
     tone={TONE}
-    reading="What the schema-free store provides. Pick one.">
+    reading="What the schema-free store provides. Pick one."
+    readingEli5="What the store underneath all this promises. Pick one.">
     <div class="strip">
       <div class="chips" role="group" aria-label="Six properties of the flexible store">
         {#each DATASTORE as d, i (d.k)}

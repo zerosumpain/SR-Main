@@ -66,14 +66,16 @@
     part="turn"
     title="Picking a model"
     line="Asking for a model by name settles far less than you would hope. Four things get a vote, and the name is only one of them."
-    lineEli5="Asking for an AI by name decides surprisingly little. Four things pick it, and several different companies might end up running it." />
+    lineEli5="Naming an AI model settles less than you would think: four rules get a say in which one answers, and several different companies could be the one actually running it. This page shows who decides what." />
 
   <Instrument
     kicker="The chooser"
     title="Four ways a model gets chosen"
     tone={TONE}
     reading="Four layers, in precedence order."
-    takeaway="First match wins. Only the bottom layer re-scores itself overnight; the rest sit there until somebody changes their mind.">
+    readingEli5="Four rules, checked top to bottom. The first one that applies wins."
+    takeaway="First match wins. Only the bottom layer re-scores itself overnight; the rest sit there until somebody changes their mind."
+    takeawayEli5="Only the bottom rule updates itself — it re-scores the whole market nightly, so the default cannot quietly rot while new models ship weekly. The other three wait for a human to change their mind.">
     <ResolutionTrack tone={TONE} />
   </Instrument>
 
@@ -82,7 +84,9 @@
     title="One name, many sellers"
     tone={TONE}
     reading="Same model id, different shop. Choose how one gets picked and see who you end up with."
-    takeaway="{SELLER_FACTS.mixDefault.fp8} full precision, {SELLER_FACTS.mixDefault.unknown} unstated, {SELLER_FACTS.mixDefault.fp4} quantised — of {SELLER_FACTS.endpointsDefault} sellers on the default model, {SELLER_FACTS.endpointsAgentic} on the agentic, {SELLER_FACTS.priceSpread} cheapest to dearest.">
+    readingEli5="The same model name is sold by several companies, at different speeds, precisions and prices. Pick a strategy and see who you end up with."
+    takeaway="{SELLER_FACTS.mixDefault.fp8} full precision, {SELLER_FACTS.mixDefault.unknown} unstated, {SELLER_FACTS.mixDefault.fp4} quantised — of {SELLER_FACTS.endpointsDefault} sellers on the default model, {SELLER_FACTS.endpointsAgentic} on the agentic, {SELLER_FACTS.priceSpread} cheapest to dearest."
+    takeawayEli5="Of {SELLER_FACTS.endpointsDefault} sellers offering the default model, {SELLER_FACTS.mixDefault.fp8} run the full version, {SELLER_FACTS.mixDefault.unknown} do not say, and {SELLER_FACTS.mixDefault.fp4} run a compressed copy — at prices {SELLER_FACTS.priceSpread} apart. The cheapest is rarely the same product, which is why price never gets the only vote.">
     <SellerRoulette />
   </Instrument>
 
@@ -91,7 +95,9 @@
     title="What is allowed to win"
     tone={TONE}
     reading="Narrowed by rule, then split by profile."
-    takeaway="Price gets a weighting, not a free run — otherwise cheap and useless wins every time. Two of these rules do not negotiate at all.">
+    readingEli5="Start with the whole market, remove what cannot do the job, then split what is left by task."
+    takeaway="Price gets a weighting, not a free run — otherwise cheap and useless wins every time. Two of these rules do not negotiate at all."
+    takeawayEli5="Price is a weighting, not a veto — uncapped, cheap-but-useless wins every time. Two rules are hard stops: too dear, or too small a working memory, and a model is simply out.">
     <Bars items={NARROWING} tone={TONE} />
 
     <p class="sub">Per-profile shortlist</p>

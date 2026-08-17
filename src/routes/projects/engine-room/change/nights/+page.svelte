@@ -12,8 +12,10 @@
   import NightRun from './components/NightRun.svelte';
   import { NIGHT_CAPS } from '../../lib/building';
   import { href } from '../../lib/nav';
+  import { app } from '../../lib/appState.svelte';
 
   const TONE = '#8a2d3a';
+  const eli = $derived(app.narrative === 'eli5');
 </script>
 
 <svelte:head>
@@ -26,15 +28,49 @@
     part="change"
     title="The night shift"
     line="At half past three, with nobody watching, it reads back its own failures and writes improvements. Eight phases, and six caps deciding exactly how much rope any one night gets."
-    lineEli5="While everyone is asleep, it looks at what went wrong, has a go at fixing it, and is only allowed to do so much before it has to stop."
+    lineEli5="Every night at half past three, part of this system reviews its own week and tries to do better. This page explains what that actually means, and how much it is allowed to do about it."
   />
+
+  <div class="pe-prose intro">
+    {#if eli}
+      <p>
+        Most software improves because a person sits down and improves it. This site also does that
+        to itself. Overnight, while nothing else is happening, a separate part of the system reads
+        back the last week of use — the questions the assistant could not answer, the tools that
+        kept failing — and has a go at doing something about it: registering a new data source,
+        writing a small tool, or repairing one with a bad record.
+      </p>
+      <p>
+        It exists because the small gaps appeared faster than my evenings could close them. The
+        interesting part is not the ambition but the restraint: a night's work is bounded on every
+        side — a fixed spend, a fixed number of attempts, a hard stop on the clock — and anything
+        bigger than a small tool becomes a written proposal for me to read over breakfast, not a
+        change it makes itself.
+      </p>
+    {:else}
+      <p>
+        The engine behind this page is a nightly, unattended run: it gathers a week of conversation
+        and tool telemetry, distils unmet needs, discovers and verifies candidate data sources, then
+        authors at most one runtime tool — which goes live only if it clears the gate on the next
+        page. It was built because the backlog of small capability gaps grew faster than the time
+        available to close them by hand.
+      </p>
+      <p>
+        The design centre is restraint rather than reach. Every phase is separately caught, every
+        resource is capped, and the ceiling on ambition is structural: repository-level ideas leave
+        the run as written proposals, never as changes.
+      </p>
+    {/if}
+  </div>
 
   <Instrument
     kicker="The instrument"
     title="One night, eight phases"
     tone={TONE}
     reading="Pick a phase to read it. Break one, and see what the run makes of that."
+    readingEli5="Pick a phase to read what it does. Break one, and see what the night makes of that."
     takeaway="Every phase is caught on its own, so one falling over marks the night partial rather than writing the whole thing off. The other seven carry on regardless, like professionals."
+    takeawayEli5="Each phase is caught on its own, so one falling over marks the night as partial rather than wasted — the other seven carry on regardless."
   >
     <NightRun tone={TONE} />
   </Instrument>
@@ -44,7 +80,9 @@
     title="What one night may spend"
     tone={TONE}
     reading="Six ceilings. Autonomy here is bounded by arithmetic rather than by the model being on its best behaviour."
+    readingEli5="Six ceilings. How much it may do in a night is fixed by arithmetic, not by trusting it to behave."
     takeaway="It writes the code and opens a draft pull request. It cannot merge one. That is not a setting; there is no code that does it."
+    takeawayEli5="It can write code and open a draft change for review. It cannot approve one — and not because a setting says so: there is simply no code that does it."
   >
     <div class="caps">
       {#each NIGHT_CAPS as c (c.k)}
@@ -59,6 +97,8 @@
 </section>
 
 <style>
+  .intro { margin: 0 0 20px; }
+
   .caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 9px; }
 
   .onward { margin: 11px 0 0; font-size: var(--fs-label); line-height: 1.55; }

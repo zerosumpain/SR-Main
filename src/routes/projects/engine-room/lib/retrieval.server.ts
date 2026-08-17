@@ -50,12 +50,21 @@ import {
   ALARMS, THRESHOLDS as WATCH_T, BOTH_KINDS, ANCHOR, SNAPSHOT,
   LENS, LENS_RULES, LENS_FILTERS, STANDING, WATCH_LESSON,
 } from './watch';
+import {
+  KEYS_NOTE, EVIDENCE as MEM_EVIDENCE, CHANNELS as MEM_CHANNELS, CORPUS as MEM_CORPUS,
+  LATENCY as MEM_LATENCY, HYGIENE as MEM_HYGIENE, FEEDBACK as MEM_FEEDBACK, BASELINE as MEM_BASELINE,
+} from './lessons';
+import {
+  TILE, PAD_STORY, BANDS as TRAIL_BANDS, SPORT_LABEL, NAISMITH,
+  PLANNER as TRAIL_PLANNER, GUARDS as TRAIL_GUARDS, WHY_PRIVATE, PWA,
+} from './trails';
 
 export type SourceType =
   | 'overview' | 'trace' | 'models' | 'chat' | 'tools'
   | 'memory' | 'research' | 'automation' | 'building' | 'shipping' | 'guardrails'
   | 'channels' | 'trust' | 'drive' | 'decks' | 'feeds' | 'ground'
-  | 'keys' | 'store' | 'house' | 'watch' | 'tour' | 'city';
+  | 'keys' | 'store' | 'house' | 'watch' | 'tour' | 'city'
+  | 'lessons' | 'trails';
 
 export interface Chunk {
   id: string;
@@ -377,6 +386,34 @@ function buildChunks(): Chunk[] {
   add({ id: 'watch-lens', sourceKey: 'lenses', sourceType: 'watch', title: LENS.title, url: `${B}/memory/watch`,
     text: `${LENS.body} ${LENS_RULES.map((r) => `${r.k}: ${r.why}`).join(' ')} A lens filters ${LENS_FILTERS.map((f) => `${f.k} (${f.v})`).join(', ')}. ${STANDING.body} ${WATCH_LESSON.body}` });
 
+  // ---- the build's memory (change/lessons) ----
+  add({ id: 'lessons-what', sourceKey: 'build-memory', sourceType: 'lessons', title: "The build's memory: what it is and why", url: `${B}/change/lessons`,
+    text: `A second knowledge graph, separate from the entity graph: it holds what building this system has already taught it. Nodes are files and gates because those persist while chat transcripts get deleted; episodes (verified fail-fix-pass chains) and curated lessons hang off them. It was built because the builder historically took ${MEM_BASELINE.iterationsPerBuild} iterations per completed build with ${MEM_BASELINE.failingPct}% of builds failing, and each iteration spent much of its time rediscovering the codebase. Counted 17 August 2026.` });
+  add({ id: 'lessons-keys', sourceKey: 'build-memory', sourceType: 'lessons', title: KEYS_NOTE.title, url: `${B}/change/lessons`, text: KEYS_NOTE.body });
+  add({ id: 'lessons-evidence', sourceKey: 'build-memory', sourceType: 'lessons', title: 'The measured facts that shaped the build memory', url: `${B}/change/lessons`,
+    text: MEM_EVIDENCE.map((e) => `${e.k} (${e.v}): ${e.why}`).join(' ') });
+  add({ id: 'lessons-channels', sourceKey: 'build-memory', sourceType: 'lessons', title: 'How the build memory is delivered', url: `${B}/change/lessons`,
+    text: `${MEM_CHANNELS.map((c) => `${c.k} (${c.v}): ${c.why}`).join(' ')} Against the alternative: a static codebase digest described 60 of 3,359 files, under two per cent, because a fixed briefing cannot know which files the next build will need. The graph answers per build, keyed to the files actually in hand.` });
+  add({ id: 'lessons-corpus', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What the build memory holds, and how fast it answers', url: `${B}/change/lessons`,
+    text: `Counted 17 August 2026: ${MEM_CORPUS.nodes.toLocaleString('en-GB')} nodes (files and gates, ${MEM_CORPUS.nodesAtHead.toLocaleString('en-GB')} still existing — deleted files are flagged, not dropped), ${MEM_CORPUS.edges.toLocaleString('en-GB')} edges, ${MEM_CORPUS.episodes} verified episodes, ${MEM_CORPUS.lessons} lessons of which ${MEM_CORPUS.staleLessons} are flagged stale, all in ${MEM_CORPUS.dbGrowthMb} MB of database growth. Measured latency: ${MEM_LATENCY.map((l) => `${l.k} ${l.v} — ${l.why}`).join(' ')}` });
+  add({ id: 'lessons-hygiene', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Forgetting, staleness and honest metrics in the build memory', url: `${B}/change/lessons`,
+    text: MEM_HYGIENE.map((h) => `${h.k} (${h.v}): ${h.why}`).join(' ') });
+  add({ id: 'lessons-feedback', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What one helpful serve is worth', url: `${B}/change/lessons`,
+    text: `${MEM_FEEDBACK.note} The baseline the graph exists to beat: ${MEM_BASELINE.iterationsPerBuild} iterations per completed build (${MEM_BASELINE.last30Days} over the thirty days to 17 August 2026), with ${MEM_BASELINE.failingPct}% of builds failing. Whether it moves those numbers is not yet knowable, and the page says "too early to tell" rather than guessing.` });
+
+  // ---- the outdoors (reach/trails) ----
+  add({ id: 'trails-what', sourceKey: 'trails', sourceType: 'trails', title: 'Out of signal: the route planner and offline maps', url: `${B}/reach/trails`,
+    text: `${PWA.body} Workouts arrive from the wearable with their GPS tracks; a router draws candidate loops over real mapped paths and the site's own scorer ranks them.` });
+  add({ id: 'trails-tiles', sourceKey: 'trails', sourceType: 'trails', title: 'What an offline map costs to download', url: `${B}/reach/trails`,
+    text: `Map tiles for a route are fetched at every zoom level from ${TILE.minZoom} to ${TILE.maxZoom}, padded by ${TILE.pad} whole tiles on each side, at a planning figure of ${Math.round(TILE.bytesPerTile / 1000)} KB per tile — a sample of real tiles averaged about ${TILE.measuredKb} KB, where an earlier estimate had assumed ${TILE.assumedKb}. ${PAD_STORY.body} Tiles are fetched one at a time, never as a parallel burst, because the tile service is volunteer-run and its policy asks for no bulk downloading.` });
+  add({ id: 'trails-difficulty', sourceKey: 'trails', sourceType: 'trails', title: 'Grading a route by climb: equivalent kilometres', url: `${B}/reach/trails`,
+    text: `${NAISMITH.body} The live bands (upper bounds of easy, moderate and hard, in equivalent km): ${Object.entries(TRAIL_BANDS).map(([s, b]) => `${SPORT_LABEL[s] ?? s} ${b.join('/')}`).join('; ')}.` });
+  add({ id: 'trails-planner', sourceKey: 'trails', sourceType: 'trails', title: 'Who draws a route and who ranks it', url: `${B}/reach/trails`,
+    text: TRAIL_PLANNER.map((p) => `${p.k} (${p.v}): ${p.why}`).join(' ') });
+  add({ id: 'trails-guards', sourceKey: 'trails', sourceType: 'trails', title: 'The rules that keep the route planner honest', url: `${B}/reach/trails`,
+    text: TRAIL_GUARDS.map((g) => `${g.k} (${g.v}): ${g.why}`).join(' ') });
+  add({ id: 'trails-private', sourceKey: 'trails', sourceType: 'trails', title: WHY_PRIVATE.title, url: `${B}/reach/trails`, text: WHY_PRIVATE.body });
+
   return out;
 }
 
@@ -452,6 +489,10 @@ const GROUPS: string[][] = [
   ['watchlist', 'watch', 'watched', 'alarm', 'alarms', 'alert', 'alerts', 'changed', 'change', 'moved', 'diff', 'snapshot', 'threshold', 'thresholds', 'insight', 'insights'],
   ['lens', 'lenses', 'view', 'views', 'perspective', 'saved', 'filter', 'filters', 'professional', 'personal'],
   ['broker', 'bridge', 'centrality', 'cluster', 'community', 'louvain', 'degree', 'neighbour', 'neighbours', 'influence'],
+  // Added with the build's-memory and trails pages. Same rule: every word a reader might
+  // type gets its own entry, because expansion is per-term.
+  ['lesson', 'lessons', 'episode', 'episodes', 'codegraph', 'history', 'learned', 'learning', 'learns', 'remembered', 'fingerprint', 'iteration', 'iterations', 'rediscovery', 'digest', 'briefing', 'recall', 'forgetting', 'forget', 'retire', 'retired', 'tombstone'],
+  ['trail', 'trails', 'route', 'routes', 'map', 'maps', 'offline', 'tile', 'tiles', 'gps', 'hike', 'hiking', 'walk', 'walking', 'running', 'ride', 'riding', 'cycling', 'outdoors', 'outdoor', 'signal', 'download', 'downloaded', 'downloads', 'naismith', 'climb', 'ascent', 'elevation', 'difficulty', 'planner', 'loop', 'loops', 'pwa', 'installed', 'app'],
 ];
 
 // Every term in a group expands to every other term in that group.

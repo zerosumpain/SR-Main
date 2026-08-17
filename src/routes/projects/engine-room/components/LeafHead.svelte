@@ -38,5 +38,6 @@
     text-transform: uppercase; color: rgba(28,22,17,0.45); }
   .lh-part:hover .lp-name { color: rgba(28,22,17,0.75); }
   .lh :global(.pe-h1) { margin-bottom: 8px; }
-  .lh-line { margin: 0; font-size: var(--fs-body); line-height: 1.55; color: rgba(28,22,17,0.74); max-width: 68ch; }
+  /* Full width under the headline — a measured cap here read as a half-empty page. */
+  .lh-line { margin: 0; font-size: var(--fs-body); line-height: 1.55; color: rgba(28,22,17,0.74); }
 </style>

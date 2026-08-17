@@ -162,6 +162,8 @@ const SURFACES: Surface[] = [
       { sel: 'svg text', pool: 'person' },
       { sel: '[class*="entity"] [class*="name"], [class*="node"] [class*="label"]', pool: 'person' },
       { sel: '[class*="note"] p, [class*="claim"] p, [class*="finding"] p', pool: 'line' },
+      // The upcoming-events rail draws real timeline entries out of the graph.
+      { sel: '[class*="tl-txt"]', pool: 'thread' },
     ],
   },
   {
@@ -172,7 +174,9 @@ const SURFACES: Surface[] = [
     settleMs: 1800,
     scrub: [
       { sel: 'tbody tr td:first-child, [class*="row"] [class*="name"], [class*="card"] h3', pool: 'person' },
-      { sel: 'tbody tr td:first-child div:not(:first-child), [class*="summary"], [class*="desc"]', pool: 'line' },
+      // The one-line summary moved into a `.sum` span when the register was rebuilt;
+      // [class*="summary"] no longer matched anything and real prose survived the shot.
+      { sel: 'tbody tr td:first-child div:not(:first-child), [class*="summary"], [class*="sum"], [class*="desc"]', pool: 'line' },
       { sel: '[class*="sub"], [class*="meta"]', pool: 'org' },
     ],
   },

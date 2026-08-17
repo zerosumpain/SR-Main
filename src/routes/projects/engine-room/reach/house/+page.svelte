@@ -31,13 +31,14 @@
     part="reach"
     title="The house"
     line="Home automation hands you several hundred identifiers in a flat list, which is nobody's idea of a house. Sorting them by room, and letting an automation be watched before it is armed, is what makes them safe to wire anything to."
-    lineEli5="It can read and control things around the house. You pick a room instead of hunting through a list, and you can watch what it would do before you let it." />
+    lineEli5="It can read and control things around the house. You pick a room instead of hunting through several hundred identifiers, and any automation can be watched saying what it would do before it is allowed to actually do it." />
 
   <Instrument
     kicker="The instrument"
     title="Room, then kind, then thing"
     tone={TONE}
     reading="Pick a room and something in it, choose an operation, and — this is the important bit — leave the dry run on."
+    readingEli5="Pick a room and something in it, choose an operation, and — the important bit — leave the dry run on."
     takeaway={DRY_RUN.body}>
     <HouseTree />
   </Instrument>

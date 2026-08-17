@@ -48,7 +48,7 @@
   .ph :global(.pe-h1) { margin-bottom: 4px; }
   .ph-strap { margin: 0 0 10px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
     letter-spacing: 0.04em; color: rgba(28,22,17,0.55); }
-  .ph-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: rgba(28,22,17,0.76); max-width: 66ch; }
+  .ph-lede { margin: 0; font-size: 16.5px; line-height: 1.55; color: rgba(28,22,17,0.76); }
 
   .ph-vis { margin: 18px 0 22px; }
 

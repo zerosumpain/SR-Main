@@ -71,7 +71,7 @@
     part="turn"
     title="Where the money goes"
     line="A median prompt runs to {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens. One measured answer came back as a single word. You are paying for the reading, not the wisdom."
-    lineEli5="You mostly pay for what it reads, not for what it says back. The reading is enormous." />
+    lineEli5="Most of the cost is what the model reads, not what it writes: a typical message makes it read {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens of context first. One measured answer, after all that, was a single word." />
 
   {#snippet controls()}
     <div class="ctl" role="group" aria-label="Tool manifest mode">
@@ -86,7 +86,9 @@
     tone={TONE}
     {controls}
     reading="The median prompt itemised, with reasoning and answer from one measured call. Volume, not price. The toggle puts every hidden tool description back."
-    takeaway="Thinking is a hairline. The answer is invisible. Sending all {MANIFEST.registered} tool descriptions rather than {MANIFEST.shown} adds {MANIFEST.savedTokens.toLocaleString('en-GB')} tokens to every single turn, for the privilege of describing tools nobody asked for.">
+    readingEli5="Everything the model was sent for one typical message, drawn to scale. The toggle puts back the tool descriptions that are normally kept out of it."
+    takeaway="Thinking is a hairline. The answer is invisible. Sending all {MANIFEST.registered} tool descriptions rather than {MANIFEST.shown} adds {MANIFEST.savedTokens.toLocaleString('en-GB')} tokens to every single turn, for the privilege of describing tools nobody asked for."
+    takeawayEli5="The thinking is a hairline and the answer is invisible — the cost is the reading. Keeping {MANIFEST.hidden} tool descriptions out of every message, and only sending the {MANIFEST.shown} likely to be needed, is the single biggest saving on this page.">
     <StackBar {segments} selected={picked} onselect={(l) => (picked = picked === l ? null : l)} height={46} />
   </Instrument>
 
@@ -95,7 +97,9 @@
     title="Budget the thinking, or get nothing"
     tone={TONE}
     reading="Drag the output budget. Below what the model needs in order to think, it hands back an empty string and no error whatsoever."
-    takeaway="Reasoning comes out before the answer does. Set the budget too tight and you have paid, in full, for thoughts nobody will ever read.">
+    readingEli5="Drag the budget for the reply. Set it below what the model needs for its private thinking and you get back nothing at all — and no error either."
+    takeaway="Reasoning comes out before the answer does. Set the budget too tight and you have paid, in full, for thoughts nobody will ever read."
+    takeawayEli5="The model thinks before it answers, and the thinking is billed like the answer. Cut the budget too tight and you pay full price for thoughts you never get to see — which is why the budget has a floor.">
     <ReasoningFloor />
   </Instrument>
 
@@ -104,6 +108,7 @@
     title="The bytes never changed"
     tone={TONE}
     reading="The cacheable-prefix marker was only ever being sent to one vendor’s models. Everything else paid full whack, every turn, for bytes that had not moved."
+    readingEli5="Most of each message is identical to the one before it. These bars compare what gets re-sent at full price with how much of it actually changed."
     takeaway={CACHE_STORY.lesson}>
     <Bars items={CACHE_BARS} unit=" tok" tone={TONE} height={24} />
   </Instrument>

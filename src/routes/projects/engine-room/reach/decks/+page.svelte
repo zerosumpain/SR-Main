@@ -48,13 +48,14 @@
     part="reach"
     title="Making the case"
     line="A deck the assistant builds out of a conversation, onto a page that is a fixed size, never scrolls, and unsentimentally cuts off anything past the edge. Slides have been doing this to us for thirty years; here it is at least deliberate."
-    lineEli5="It can turn a conversation into a slide deck. The pages are a fixed size, so anything that does not fit is simply lost — which is why it is told up front exactly how much fits." />
+    lineEli5="It can turn a conversation into a slide deck. A page is a fixed size, so anything that does not fit is lost — which is why the composer is told up front exactly how much fits, rather than finding out afterwards." />
 
   <Instrument
     kicker="The instrument"
     title="A page that will not grow"
     tone={TONE}
     reading="Choose how the page is set, then add content. The limits are the ones the composer is given."
+    readingEli5="Choose how the page is set, then keep adding content. The limits are the real ones the composer works to."
     takeaway={OVERFLOW.body}>
     <StageFit />
   </Instrument>
@@ -82,6 +83,7 @@
     title="Four consumers, one definition of a valid slide"
     tone={TONE}
     reading="Each of these validates against the same schemas."
+    readingEli5="Everything that makes or reads a slide checks it against the same single set of rules."
     takeaway={REGISTRY_NOTE.body}>
     <div class="cons">
       {#each CONSUMERS as c (c.id)}

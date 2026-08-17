@@ -32,7 +32,7 @@
     part="turn"
     title="Trace a turn"
     line="One message, followed from keystroke to bill. Pick a scenario, press play, and watch an alarming amount happen on your behalf."
-    lineEli5="You type one message to an AI. An enormous amount then happens very fast. Pick an example and press play."
+    lineEli5="One message goes in, and this is everything that happens before the answer comes back. Pick an example and press play — the clock and the bill are both real."
   />
 
   <Instrument
@@ -40,7 +40,9 @@
     title="One turn, end to end"
     tone="var(--accent-ink)"
     reading="Six stages across, six layers down, one instant on every row."
+    readingEli5="Each column is one step on the way to an answer; each row is a part of the system doing its bit. Press play to run it at real speed."
     takeaway="⚠ marks a spot where this is known to be capable of going sideways: {hazCells} of {allCells} cells, spread across {hazLayers} layers."
+    takeawayEli5="The ⚠ marks are the {hazCells} places out of {allCells} where this can genuinely go wrong. Most of the rest of the study exists to sit on one of them."
   >
     <TurnTrace {depth} />
   </Instrument>

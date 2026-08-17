@@ -51,14 +51,16 @@
     part="memory"
     title="Deciding what to believe"
     line="Every claim in the graph carries a number between nought and one. The number is worth precisely nothing unless it comes apart into the four things that made it, so it does."
-    lineEli5="Everything it thinks it knows gets a confidence score, and the score can always be pulled apart into the reasons behind it." />
+    lineEli5="Everything it believes carries a score between nought and one, and the score can always be pulled apart into the reasons behind it: who said it, whether it holds up, how many sources agree, and how old the evidence is." />
 
   <Instrument
     kicker="The instrument"
     title="Grade a claim and watch the score assemble"
     tone={TONE}
     reading="Two independent axes, how many sources say it, how old that is, and whether a person has signed it off."
-    takeaway="The parts add up to the total exactly. That is the design constraint rather than a happy accident: a score you cannot take apart is just an assertion that has put on a decimal point and hopes you will not ask.">
+    readingEli5="Set who said a thing, how well it holds up, how many sources agree and how old it all is — then watch the score assemble itself."
+    takeaway="The parts add up to the total exactly. That is the design constraint rather than a happy accident: a score you cannot take apart is just an assertion that has put on a decimal point and hopes you will not ask."
+    takeawayEli5="The parts always add up to the total, exactly — that is the point of the design. A confidence number you cannot take apart is just an opinion wearing a decimal point.">
     <TrustBench />
   </Instrument>
 
@@ -72,6 +74,7 @@
     title="Neither scale bottoms out where you expect"
     tone={TONE}
     reading="What each grade contributes, as a fraction of its axis."
+    readingEli5="What each grade is worth, on both of the two scales."
     takeaway={NEUTRAL_NOTE.body}>
     <div class="two">
       <div class="col">
@@ -90,6 +93,7 @@
     title="Repetition saturates"
     tone={TONE}
     reading="What each additional independent source is worth, as a fraction of the corroboration axis."
+    readingEli5="What each extra independent source actually adds to the score."
     takeaway={SATURATION_NOTE.body}>
     <Bars items={satBars} max={1} grouped={false} tone="#2d7a3a" height={20} />
   </Instrument>
@@ -98,7 +102,8 @@
     kicker="Reading the number"
     title="Four bands, and one of them is honesty"
     tone={TONE}
-    reading="Where the boundaries sit, and why the bottom band is not called 'low'. It is not low. It is empty, which is a different problem.">
+    reading="Where the boundaries sit, and why the bottom band is not called 'low'. It is not low. It is empty, which is a different problem."
+    readingEli5="Where the score boundaries sit. The bottom band is not 'low confidence' — it means nothing is known yet, which is a different thing and worth saying out loud.">
     <div class="bands">
       {#each BANDS as b (b.id)}
         <div class="band">
