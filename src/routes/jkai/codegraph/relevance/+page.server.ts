@@ -32,7 +32,12 @@ export const load: PageServerLoad = async () => {
         served: l.servedCount,
         helpful: l.helpfulCount,
         unhelpful: l.unhelpfulCount,
-        observedAt: l.observedAt ?? l.updatedAt ?? null,
+        // `observedAt` ONLY — never `updatedAt`. updatedAt is when the backfill
+        // wrote the row, which is the same instant for all 273 of them, so
+        // falling back to it made every lesson look brand new and every score
+        // land on an identical 0.500. Ingest clock is not observation clock;
+        // unknown age must stay unknown so it can be scored as such.
+        observedAt: l.observedAt ?? null,
         stale: Boolean(l.staleAt),
       }),
     })),

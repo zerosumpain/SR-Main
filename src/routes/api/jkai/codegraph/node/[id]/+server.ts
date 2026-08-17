@@ -49,16 +49,24 @@ export const GET: RequestHandler = async ({ params }) => {
 
   // Both directions in one pass — an import edge is directional, but "what is
   // this connected to" is not a directional question.
+  // GROUPED by (neighbour, kind), summing weight.
+  //
+  // Without the grouping a pair joined in both directions under one kind comes
+  // back twice — which is duplicate noise in the list, and was worse than that
+  // in the UI: the keyed `{#each}` threw `each_key_duplicate` and blanked the
+  // whole panel. Deduping here rather than in the component keeps every caller
+  // of this endpoint honest, not just the one that happened to crash.
   const neighbours = await db
     .execute(sql`
-      SELECT n.canonical_path AS path, e.kind, e.weight
+      SELECT n.canonical_path AS path, e.kind, sum(e.weight)::int AS weight
       FROM codegraph_edges e
       JOIN codegraph_nodes n
         ON n.id = CASE WHEN e.source_id = ${id} THEN e.target_id ELSE e.source_id END
       WHERE (e.source_id = ${id} OR e.target_id = ${id})
         AND e.suppressed = false
         AND n.merged_into_id IS NULL
-      ORDER BY e.weight DESC, n.canonical_path
+      GROUP BY n.canonical_path, e.kind
+      ORDER BY sum(e.weight) DESC, n.canonical_path
       LIMIT 60
     `)
     .then((r) => r.rows);
