@@ -26,13 +26,15 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphEpisodes, codegraphLessons, codegraphQueries } from '$lib/db/schema';
 import { fingerprintsIn } from './fingerprint';
-import { resolveServe } from './relevance';
+import { resolveServe, serveIsAttributable } from './relevance';
 
 export interface ResolveResult {
   resolved: number;
   outcome: 'helpful' | 'unhelpful' | 'unresolved' | 'none';
   lessons: number;
   episodes: number;
+  /** Serves closed without being counted, because nothing was being fixed. */
+  unattributable?: number;
 }
 
 /**
@@ -132,6 +134,25 @@ export async function resolveBuildServes(input: {
  * builds fail on provider errors, token caps and stalls far more often than on
  * bad context, and counting those as `unhelpful` would punish good intelligence
  * for unrelated infrastructure faults.
+ *
+ * FINGERPRINTED SERVES ONLY, and this is the load-bearing part.
+ *
+ * The first version of this credited every open serve on a green finish, which
+ * made `helpful` mean "was served to a build that happened to succeed" rather
+ * than "helped". A serve keyed on the FILE SET is made before any gate has run:
+ * there was no error to address, so a first-pass win says nothing about it —
+ * the build would very likely have succeeded with nothing at all. Crediting it
+ * is not a weak measurement, it is a measurement of the wrong thing, and it
+ * inflates exactly the counters that ranking depends on.
+ *
+ * `planBuildQuery` already said so at the point of retrieval:
+ *
+ *     // No fingerprints: a file-set serve cannot be resolved by "did the error
+ *     // recur", so it stays unresolved rather than being credited for free.
+ *
+ * Those serves are closed as `unattributable` — recorded, never counted. Real
+ * evidence only ever comes from a serve made in answer to a specific gate
+ * error, resolved by whether that error came back.
  */
 export async function resolveCompletedBuildServes(buildId: string): Promise<ResolveResult> {
   const pending = await db
@@ -149,12 +170,24 @@ export async function resolveCompletedBuildServes(buildId: string): Promise<Reso
   let resolved = 0;
   let lessons = 0;
   let episodes = 0;
+  let unattributable = 0;
 
   for (const q of pending) {
-    // An `empty` serve carries nothing, so a successful build says nothing
-    // about it. Crediting "no precedent found" for the win would inflate the
-    // helpful count with serves that contributed literally no text.
-    if (q.outcome !== 'served') continue;
+    // An `empty` serve carries nothing; a file-set serve was made before
+    // anything had failed. Neither can be shown to have helped by a build
+    // finishing green — see `serveIsAttributable`.
+    if (!serveIsAttributable({ outcome: q.outcome, servedFor: (q.servedFor as string[]) ?? [] })) {
+      // `empty` serves stay open (they may still be resolved by a recurring
+      // fingerprint); a fingerprint-less serve never can be, so close it.
+      if (q.outcome === 'served') {
+        await db
+          .update(codegraphQueries)
+          .set({ resolution: 'unattributable', resolvedAt: new Date() })
+          .where(eq(codegraphQueries.id, q.id));
+        unattributable++;
+      }
+      continue;
+    }
 
     const lessonIds = (q.lessonIds as string[]) ?? [];
     const episodeIds = (q.episodeIds as string[]) ?? [];
@@ -181,7 +214,7 @@ export async function resolveCompletedBuildServes(buildId: string): Promise<Reso
     resolved++;
   }
 
-  return { resolved, outcome: resolved ? 'helpful' : 'none', lessons, episodes };
+  return { resolved, outcome: resolved ? 'helpful' : 'none', lessons, episodes, unattributable };
 }
 
 /**

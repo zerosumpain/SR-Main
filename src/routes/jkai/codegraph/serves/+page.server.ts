@@ -79,7 +79,13 @@ export const load: PageServerLoad = async () => {
   const [resolution] = await db.execute(sql`
     SELECT count(*) FILTER (WHERE resolution = 'helpful')::int   AS helpful,
            count(*) FILTER (WHERE resolution = 'unhelpful')::int AS unhelpful,
-           count(*) FILTER (WHERE resolution IS NULL)::int       AS unresolved
+           count(*) FILTER (WHERE resolution IS NULL)::int       AS unresolved,
+           -- Closed, deliberately uncounted: served on a file set, so no error
+           -- existed for the outcome to be attributed to. Broken out rather
+           -- than folded into the unresolved bucket, which would read as "we
+           -- have not measured this yet" when the truth is "this can never be
+           -- measured".
+           count(*) FILTER (WHERE resolution = 'unattributable')::int AS unattributable
     FROM codegraph_queries WHERE channel = 'push'
   `).then((r) => r.rows as Array<Record<string, unknown>>);
 

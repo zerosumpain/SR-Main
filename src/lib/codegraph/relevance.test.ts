@@ -9,6 +9,7 @@ import {
   NEUTRAL_PRIOR,
   RECENCY_FLOOR,
   EVIDENCE_MATURITY,
+  serveIsAttributable,
 } from './relevance';
 
 const NOW = Date.UTC(2026, 7, 17);
@@ -174,5 +175,27 @@ describe('resolving what a serve was worth', () => {
     expect(
       resolveServe({ servedFor: [], nextFingerprints: [], nextGatePassed: false }),
     ).toBe('unresolved');
+  });
+});
+
+describe('what can be evidence at all', () => {
+  it('accepts a serve made in answer to a specific gate error', () => {
+    expect(serveIsAttributable({ outcome: 'served', servedFor: ['typecheck:TS2345'] })).toBe(true);
+  });
+
+  it('rejects a file-set serve, however the build ends', () => {
+    /*
+     * Made before any gate had run, so there was no error for the outcome to
+     * be attributed to. Crediting it on a first-pass win is what made
+     * `helpful` mean "was served to a build that happened to succeed" — two
+     * builds, eight units credited, one of them a lesson about a chat hub
+     * redesign served to a task about PR bodies.
+     */
+    expect(serveIsAttributable({ outcome: 'served', servedFor: [] })).toBe(false);
+  });
+
+  it('rejects a serve that carried no text', () => {
+    expect(serveIsAttributable({ outcome: 'empty', servedFor: [] })).toBe(false);
+    expect(serveIsAttributable({ outcome: 'failed', servedFor: ['x'] })).toBe(false);
   });
 });

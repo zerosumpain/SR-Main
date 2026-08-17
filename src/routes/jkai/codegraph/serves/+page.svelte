@@ -68,10 +68,17 @@
     <strong>unresolved</strong> rather than being guessed at — a wrong "helpful" is
     indistinguishable from a real one afterwards and would bias every future ranking.
   </p>
+  <p class="lede small">
+    A serve keyed on the <strong>file set</strong> rather than on a gate error is
+    <strong>unattributable</strong>: it was made before anything had failed, so a build that then
+    passes first time says nothing about it. Those are closed and never counted. Only helpful and
+    unhelpful are evidence, and only they move the ranking.
+  </p>
   <dl class="tiles">
     <div><dt>Helpful</dt><dd>{n(data.resolution.helpful)}</dd></div>
     <div><dt>Unhelpful</dt><dd>{n(data.resolution.unhelpful)}</dd></div>
     <div><dt>Unresolved</dt><dd>{n(data.resolution.unresolved)}</dd></div>
+    <div><dt>Unattributable</dt><dd>{n(data.resolution.unattributable)}</dd></div>
   </dl>
 
   <h2>Per build</h2>

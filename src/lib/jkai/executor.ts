@@ -277,12 +277,35 @@ export async function executeIteration(
         );
       }
 
-      const { planBuildQuery } = await import('$lib/codegraph/build-context');
-      const planned = planBuildQuery({
-        prompt: build.prompt,
-        previousEvaluation: prevIteration?.evaluation ?? null,
-        previousActions: prevIteration?.actions ?? null,
-      });
+      const { planBuildQuery, bareNamesInText, dirHintsInText } = await import(
+        '$lib/codegraph/build-context'
+      );
+      // Bare filenames need the node table to become paths, so the lookup
+      // happens here rather than inside the pure planner. Without it a task
+      // that names `orchestrator.ts` instead of `src/lib/jkai/orchestrator.ts`
+      // retrieves nothing at all — which is how build f85ed296 ran with no
+      // context and no serve recorded.
+      const { lookupNamedFiles } = await import('$lib/codegraph/name-lookup');
+      const named = await lookupNamedFiles(
+        bareNamesInText(build.prompt),
+        dirHintsInText(build.prompt),
+      );
+      if (named.ambiguous.length) {
+        await emitLog(
+          build.id,
+          'system',
+          `Codegraph: ignored ${named.ambiguous.length} ambiguous filename(s) — ${named.ambiguous.join(', ')} (name each with its full path to seed from it)`,
+          iteration.id,
+        );
+      }
+      const planned = planBuildQuery(
+        {
+          prompt: build.prompt,
+          previousEvaluation: prevIteration?.evaluation ?? null,
+          previousActions: prevIteration?.actions ?? null,
+        },
+        named.resolved,
+      );
       if (!planned) {
         await emitLog(build.id, 'system', 'Codegraph: nothing to query (no gate error, no file set)', iteration.id);
       } else {

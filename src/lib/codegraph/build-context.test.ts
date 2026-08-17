@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { planBuildQuery, pathsInText, editedPathsFromActions } from './build-context';
+import {
+  planBuildQuery,
+  pathsInText,
+  editedPathsFromActions,
+  bareNamesInText,
+  dirHintsInText,
+  pickNamedFiles,
+} from './build-context';
 import { parseCgql } from './query';
 import { buildSystemPrompt } from '$lib/jkai/prompt';
 
@@ -89,5 +96,80 @@ describe('path extraction', () => {
   it('survives junk actions without throwing', () => {
     expect(editedPathsFromActions(null)).toEqual([]);
     expect(editedPathsFromActions([null, 'nope', {}, { tool: 'Edit' }])).toEqual([]);
+  });
+});
+
+describe('bare filenames — the way people actually write a task', () => {
+  /*
+   * Build f85ed296 (2026-08-17) asked to fix a duplication "in src/lib/jkai/"
+   * between `orchestrator.ts` and `rescue-body.ts`. planBuildQuery returned
+   * null: no query, no serve, no context. The three builds that DID retrieve
+   * only did so because their prompts were written with full paths, by the
+   * same person who wrote the regex.
+   */
+  const REAL_PROMPT =
+    'In src/lib/jkai/, the first line of the gate diagnostics is duplicated. ' +
+    'orchestrator.ts embeds it into the failure message, and rescue-body.ts renders it again.';
+
+  it('finds the names a full-path regex misses', () => {
+    expect(bareNamesInText(REAL_PROMPT)).toEqual(['orchestrator.ts', 'rescue-body.ts']);
+    expect(pathsInText(REAL_PROMPT)).toEqual([]);
+  });
+
+  it('does not offer a name that is already part of a full path', () => {
+    // Otherwise `src/lib/jkai/executor.ts` resolves once as a path and again,
+    // ambiguously, as `executor.ts`.
+    expect(bareNamesInText('update src/lib/jkai/executor.ts please')).toEqual([]);
+  });
+
+  it('picks up the directory a task mentions', () => {
+    expect(dirHintsInText(REAL_PROMPT)).toEqual(['src/lib/jkai/']);
+  });
+
+  it('resolves a name that lands on exactly one file', () => {
+    const { resolved, ambiguous } = pickNamedFiles(
+      ['orchestrator.ts'],
+      [],
+      ['src/lib/jkai/orchestrator.ts', 'src/lib/jkai/executor.ts'],
+    );
+    expect(resolved).toEqual(['src/lib/jkai/orchestrator.ts']);
+    expect(ambiguous).toEqual([]);
+  });
+
+  it('refuses to guess when a name is ambiguous', () => {
+    // `types.ts` matches 39 files in this repo and `+server.ts` 369. Seeding
+    // from whichever sorted first would inject a precedent from an unrelated
+    // part of the tree, which reads as authoritative and is worse than nothing.
+    const { resolved, ambiguous } = pickNamedFiles(
+      ['types.ts'],
+      [],
+      ['src/lib/jkai/types.ts', 'src/lib/trails/types.ts', 'src/lib/intel/types.ts'],
+    );
+    expect(resolved).toEqual([]);
+    expect(ambiguous).toEqual(['types.ts']);
+  });
+
+  it('uses a mentioned directory to break the tie', () => {
+    const { resolved, ambiguous } = pickNamedFiles(
+      ['types.ts'],
+      ['src/lib/jkai/'],
+      ['src/lib/jkai/types.ts', 'src/lib/trails/types.ts', 'src/lib/intel/types.ts'],
+    );
+    expect(resolved).toEqual(['src/lib/jkai/types.ts']);
+    expect(ambiguous).toEqual([]);
+  });
+
+  it('matches on the whole basename, not a suffix', () => {
+    // `body.ts` must not resolve to `rescue-body.ts`.
+    expect(pickNamedFiles(['body.ts'], [], ['src/lib/jkai/rescue-body.ts']).resolved).toEqual([]);
+  });
+
+  it('plans a query from resolved names, which is the whole point', () => {
+    expect(planBuildQuery({ prompt: REAL_PROMPT })).toBeNull();
+    const planned = planBuildQuery({ prompt: REAL_PROMPT }, ['src/lib/jkai/orchestrator.ts']);
+    expect(planned?.query).toContain('file:src/lib/jkai/orchestrator.ts');
+    // Still no fingerprints — a file-set serve is not evidence and must not be
+    // credited when the build passes first time.
+    expect(planned?.fingerprints).toEqual([]);
   });
 });

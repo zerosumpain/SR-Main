@@ -57,7 +57,13 @@ export const load: PageServerLoad = async () => {
   ].sort((a, b) => b.relevance.score - a.relevance.score);
 
   const [{ resolved }] = await db
-    .execute(sql`SELECT count(*)::int AS resolved FROM codegraph_queries WHERE resolution IS NOT NULL`)
+    // Only serves that produced EVIDENCE count towards ranking maturity.
+    // `unattributable` rows are resolved in the sense of being closed, but they
+    // measured nothing, and counting them would tell the regime indicator the
+    // corpus knows more than it does.
+    .execute(
+      sql`SELECT count(*)::int AS resolved FROM codegraph_queries WHERE resolution IN ('helpful', 'unhelpful')`,
+    )
     .then((r) => r.rows as Array<{ resolved: number }>);
 
   const totalObservations = scored.reduce((a, s) => a + s.relevance.observations, 0);
