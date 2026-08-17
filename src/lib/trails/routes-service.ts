@@ -81,7 +81,9 @@ export async function saveRoute(input: SaveRouteInput): Promise<string> {
     distanceM: input.distanceM ?? trackDistanceM(points),
     ascentM: input.ascentM ?? elevation.gainM,
     descentM: input.descentM ?? elevation.lossM,
-    durationS: input.durationS ?? null,
+    // duration_s is an integer column and ORS durations are floats — an
+    // unrounded 3070.9 fails the whole insert at the database.
+    durationS: input.durationS != null ? Math.round(input.durationS) : null,
     score: input.score ?? null,
     scoreBreakdown: input.scoreBreakdown ?? null,
     targetDistanceM: input.targetDistanceM ?? null,

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { saveRecording } from '$lib/trails/recordings';
+import { describeSaveError } from '$lib/trails/api-errors';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -20,6 +21,7 @@ export const POST: RequestHandler = async ({ request }) => {
     });
     return json(result, { status: 201 });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'save failed' }, { status: 400 });
+    console.error('[trails/recordings] save failed:', err);
+    return json({ error: describeSaveError(err) }, { status: 400 });
   }
 };
