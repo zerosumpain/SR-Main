@@ -2,24 +2,53 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import PlannerMap from '$lib/components/trails/PlannerMap.svelte';
   import LineChart from '$lib/components/trails/LineChart.svelte';
+  import DifficultyChip from '$lib/components/trails/DifficultyChip.svelte';
   import { formatDistance, formatDuration, formatElevation, activityLabel } from '$lib/trails/format';
+  import { gradeDifficulty, type Difficulty } from '$lib/trails/difficulty';
+  import { networkLabel, type SharedRouteSummary } from '$lib/trails/discover';
   import type { Coord } from '$lib/trails/scoring';
 
   let { data } = $props();
 
   const SPORTS = ['run', 'trail_run', 'ride', 'mtb', 'hike', 'walk'] as const;
 
-  let sport = $state<(typeof SPORTS)[number]>('run');
+  // The form opens on what the engine would commission today; every control
+  // stays live, so the proposal is a starting point, never a decision.
+  let sport = $state<(typeof SPORTS)[number]>(data.proposal?.sport ?? 'run');
   let start = $state<[number, number] | null>(null);
   let finish = $state<[number, number] | null>(null);
   let mode = $state<'loop' | 'point'>('loop');
   let picking = $state<'start' | 'finish'>('start');
 
-  let targetKm = $state(data.suggested ? Number((data.suggested.distanceM / 1000).toFixed(1)) : 8);
+  let targetKm = $state(data.proposal ? Number((data.proposal.distanceM / 1000).toFixed(1)) : 8);
   let climbPerKm = $state<number | null>(null);
-  let prefer = $state<'any' | 'steady' | 'spiky'>('any');
+  let prefer = $state<'any' | 'steady' | 'spiky'>(data.proposal?.prefer ?? 'any');
   let allowOutAndBack = $state(false);
   let candidateCount = $state(5);
+
+  // Natural-language commissioning.
+  let commissionText = $state('');
+  let interpreting = $state(false);
+  let interpretError = $state<string | null>(null);
+  let interpretation = $state<string[]>([]);
+  let proposalHint = $state<string | null>(null);
+
+  // Shared OSM routes near the start.
+  interface SharedDetail {
+    osmId: number;
+    name: string;
+    coordinates: Coord[];
+    distanceM: number;
+    ascentM: number | null;
+    difficulty: Difficulty;
+  }
+  let shared = $state<SharedRouteSummary[] | null>(null);
+  let discovering = $state(false);
+  let discoverError = $state<string | null>(null);
+  let sharedDetail = $state<SharedDetail | null>(null);
+  let sharedLoadingId = $state<number | null>(null);
+  let sharedSaving = $state(false);
+  let sharedSavedId = $state<string | null>(null);
 
   let planning = $state(false);
   let locating = $state(false);
@@ -57,6 +86,15 @@
 
   const candidates = $derived(result?.routes.map((r) => r.coordinates) ?? []);
   const chosen = $derived(result?.routes[selected] ?? null);
+
+  // Results are graded against the sport they were planned with — grading
+  // against the live chip would silently re-grade old results on every click.
+  let plannedSport = $state<(typeof SPORTS)[number]>(data.proposal?.sport ?? 'run');
+
+  // A shared route being viewed takes over the map; clearing it hands the map
+  // back to the planned candidates.
+  const mapRoutes = $derived(sharedDetail ? [sharedDetail.coordinates] : candidates);
+  const mapSelected = $derived(sharedDetail ? 0 : selected);
 
   const elevationPoints = $derived.by(() => {
     if (!chosen) return [] as [number, number][];
@@ -119,6 +157,8 @@
     planning = true;
     error = null;
     savedId = null;
+    sharedDetail = null;
+    plannedSport = sport;
 
     try {
       const res = await fetch('/api/trails/plan', {
@@ -149,6 +189,147 @@
       error = e instanceof Error ? e.message : String(e);
     } finally {
       planning = false;
+    }
+  }
+
+  async function interpretAndPlan() {
+    const text = commissionText.trim();
+    if (!text) return;
+    interpreting = true;
+    interpretError = null;
+    interpretation = [];
+
+    try {
+      const res = await fetch('/api/trails/interpret', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          focus: start ? { lat: start[1], lng: start[0] } : undefined,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        interpretError = body?.error ?? `Could not read that (${res.status})`;
+        return;
+      }
+
+      // Apply only what was actually said; everything else keeps its value.
+      const p = body.parsed ?? {};
+      if (p.sport) sport = p.sport;
+      if (p.targetKm) targetKm = p.targetKm;
+      if (p.climbPerKm) climbPerKm = p.climbPerKm;
+      if (p.prefer) prefer = p.prefer;
+      if (p.allowOutAndBack != null) allowOutAndBack = p.allowOutAndBack;
+      if (body.start) {
+        start = [body.start.lng, body.start.lat];
+        savedId = null;
+      }
+      if (body.finish) {
+        finish = [body.finish.lng, body.finish.lat];
+        mode = 'point';
+      } else if (p.mode) {
+        mode = p.mode;
+      }
+      interpretation = body.interpretation ?? [];
+
+      if (start) {
+        await plan();
+      } else {
+        interpretError =
+          'No start point yet — name one (“from …”), tap the map, or use your location.';
+      }
+    } catch (e) {
+      interpretError = e instanceof Error ? e.message : String(e);
+    } finally {
+      interpreting = false;
+    }
+  }
+
+  async function applyProposal() {
+    const p = data.proposal;
+    if (!p) return;
+    sport = p.sport;
+    targetKm = Number((p.distanceM / 1000).toFixed(1));
+    prefer = p.prefer;
+    if (start) {
+      proposalHint = null;
+      await plan();
+    } else {
+      proposalHint = 'Set a start point first — tap the map below or use your location.';
+    }
+  }
+
+  async function findShared() {
+    if (!start) return;
+    discovering = true;
+    discoverError = null;
+    sharedDetail = null;
+    sharedSavedId = null;
+
+    try {
+      const res = await fetch(
+        `/api/trails/discover?lat=${start[1]}&lng=${start[0]}&sport=${sport}`,
+      );
+      const body = await res.json();
+      if (!res.ok) {
+        discoverError = body?.error ?? `Search failed (${res.status})`;
+        shared = null;
+        return;
+      }
+      shared = body.routes ?? [];
+    } catch (e) {
+      discoverError = e instanceof Error ? e.message : String(e);
+    } finally {
+      discovering = false;
+    }
+  }
+
+  async function viewShared(osmId: number) {
+    sharedLoadingId = osmId;
+    discoverError = null;
+    try {
+      const res = await fetch(`/api/trails/discover?osmId=${osmId}&sport=${sport}`);
+      const body = await res.json();
+      if (!res.ok) {
+        discoverError = body?.error ?? `Could not load that route (${res.status})`;
+        return;
+      }
+      sharedDetail = body;
+      sharedSavedId = null;
+    } catch (e) {
+      discoverError = e instanceof Error ? e.message : String(e);
+    } finally {
+      sharedLoadingId = null;
+    }
+  }
+
+  async function saveShared() {
+    if (!sharedDetail) return;
+    sharedSaving = true;
+    try {
+      const res = await fetch('/api/trails/routes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: sharedDetail.name,
+          sport,
+          coordinates: sharedDetail.coordinates,
+          distanceM: sharedDetail.distanceM,
+          ascentM: sharedDetail.ascentM,
+          durationS: sharedDetail.difficulty.estimatedTimeS,
+          source: 'imported',
+          notes: `Shared route from OpenStreetMap (relation ${sharedDetail.osmId}).`,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        discoverError = body?.error ?? 'Could not save the route';
+        return;
+      }
+      sharedSavedId = body.id;
+    } finally {
+      sharedSaving = false;
     }
   }
 
@@ -196,8 +377,9 @@
       <div class="kicker">Trails · Planner</div>
       <h1>Plan a route</h1>
       <p class="sub">
-        Candidates come from openrouteservice; the ranking is ours — retracing, out-and-back
-        sections, surface and the shape of the climbing.
+        Say what you want, or use the form. Candidates come from openrouteservice; the ranking
+        is ours — retracing, out-and-back sections, surface, the shape of the climbing — and
+        every route gets a difficulty grade.
       </p>
     </div>
     <a class="back-link" href="/trails">All trails</a>
@@ -223,6 +405,73 @@
         That link opens a single box. Everything else — where the key is sent, which host it may
         reach — is already set, so there is nothing else to fill in. Then reload this page.
       </p>
+    </section>
+  {/if}
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd"><span class="sr-label-tight">Commission</span></div>
+    <p class="where-lede">
+      Describe it — <strong>“hilly 12 km trail run from Darlington station, one big climb”</strong>
+      — and the form fills itself and plans. Anything you leave unsaid, the engine chooses from
+      your recent training.
+    </p>
+    <form
+      class="commission"
+      onsubmit={(e) => {
+        e.preventDefault();
+        interpretAndPlan();
+      }}
+    >
+      <input
+        class="nm-text-input commission-input"
+        type="text"
+        placeholder="Describe the route you want…"
+        bind:value={commissionText}
+        disabled={interpreting}
+      />
+      <button
+        type="submit"
+        class="nm-save-btn"
+        disabled={interpreting || !commissionText.trim() || !data.configured}
+      >
+        {interpreting ? 'Reading…' : 'Commission'}
+      </button>
+    </form>
+    {#if interpretation.length}
+      <ul class="rationale commission-read">
+        {#each interpretation as line (line)}<li>{line}</li>{/each}
+      </ul>
+    {/if}
+    {#if interpretError}
+      <p class="error-line">{interpretError}</p>
+    {/if}
+  </section>
+
+  {#if data.proposal}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Today's proposal</span>
+        <span class="nm-sec-meta">from readiness · training load · recent outings</span>
+      </div>
+      <p class="proposal-line">
+        <strong>{activityLabel(data.proposal.sport)}</strong> · {formatDistance(data.proposal.distanceM)}
+        {#if data.proposal.prefer !== 'any'}
+          · {data.proposal.prefer === 'steady' ? 'steady climbing' : 'one big climb'}
+        {/if}
+      </p>
+      {#if data.proposal.rationale.length}
+        <ul class="rationale">
+          {#each data.proposal.rationale as line (line)}<li>{line}</li>{/each}
+        </ul>
+      {/if}
+      <div class="actions">
+        <button class="nm-save-btn" onclick={applyProposal} disabled={planning || !data.configured}>
+          {planning ? 'Planning…' : 'Plan this'}
+        </button>
+      </div>
+      {#if proposalHint}
+        <p class="error-line">{proposalHint}</p>
+      {/if}
     </section>
   {/if}
 
@@ -271,7 +520,7 @@
       <p class="error-line where-error">{locationError}</p>
     {/if}
 
-    <PlannerMap {start} finish={mode === 'point' ? finish : null} {candidates} selectedIndex={selected} {picking} {onpick} />
+    <PlannerMap {start} finish={mode === 'point' ? finish : null} candidates={mapRoutes} selectedIndex={mapSelected} {picking} {onpick} />
   </section>
 
   <section class="nm-sec">
@@ -368,8 +617,22 @@
       <ol class="candidates">
         {#each result.routes as route, i (route.rank)}
           {@const b = route.breakdown}
+          {@const diff = gradeDifficulty({
+            distanceM: route.distanceM,
+            ascentM: route.ascentM,
+            sport: plannedSport,
+            stepsShare: b.terrain.stepsShare,
+          })}
           <li>
-            <button type="button" class="candidate" class:on={selected === i} onclick={() => (selected = i)}>
+            <button
+              type="button"
+              class="candidate"
+              class:on={selected === i && !sharedDetail}
+              onclick={() => {
+                selected = i;
+                sharedDetail = null;
+              }}
+            >
               <span class="cand-rank">{route.rank}</span>
               <span class="cand-main">
                 <span class="cand-top">
@@ -382,6 +645,9 @@
                   {#if b.notes.length}{b.notes.join(' · ')}{:else}Clean loop{/if}
                 </span>
               </span>
+              <span class="cand-diff">
+                <DifficultyChip band={diff.band} title={diff.reasons.join(' ')} />
+              </span>
               <span class="cand-scores">
                 <span class="score">{Math.round(b.total * 100)}</span>
                 <span class="score-label">score</span>
@@ -390,6 +656,7 @@
 
             {#if selected === i}
               <dl class="breakdown">
+                <div><dt>Effort</dt><dd>{diff.equivalentKm} eq-km</dd></div>
                 <div><dt>Retraced</dt><dd>{Math.round(b.overlap.ratio * 100)}%</dd></div>
                 <div><dt>Out-and-back</dt><dd>{b.spurs.spurs.length}</dd></div>
                 <div><dt>Longest spur</dt><dd>{formatElevation(b.spurs.longestM).replace(' m', ' m')}</dd></div>
@@ -429,6 +696,101 @@
           <a class="row-link" href="/api/trails/routes/{savedId}/gpx">Download GPX</a>
         {/if}
       </div>
+    </section>
+  {/if}
+
+  {#if start}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Shared routes nearby</span>
+        <span class="nm-sec-meta">OpenStreetMap · within 15 km of the start</span>
+      </div>
+
+      {#if shared === null}
+        <p class="where-lede">
+          Named trails other people have mapped and shared — the Teesdale Way, a national cycle
+          route — passing near your start.
+        </p>
+        <div class="actions">
+          <button class="chip" onclick={findShared} disabled={discovering}>
+            {discovering ? 'Searching…' : 'Find shared routes'}
+          </button>
+        </div>
+      {:else if shared.length === 0}
+        <p class="footnote">
+          Nothing mapped within 15 km of the start for this sport.
+          <button type="button" class="row-link relink" onclick={findShared}>Search again</button>
+        </p>
+      {:else}
+        <ol class="shared-list">
+          {#each shared as s (s.osmId)}
+            <li>
+              <button
+                type="button"
+                class="candidate"
+                class:on={sharedDetail?.osmId === s.osmId}
+                onclick={() => viewShared(s.osmId)}
+              >
+                <span class="cand-main">
+                  <span class="cand-top">
+                    <strong>{s.name}</strong>
+                    {#if s.ref}<span class="cand-sub">{s.ref}</span>{/if}
+                  </span>
+                  <span class="cand-notes">
+                    {networkLabel(s.network)}{#if s.distanceKm}
+                      · {s.distanceKm} km{/if}{#if s.operator}
+                      · {s.operator}{/if}
+                  </span>
+                </span>
+                <span class="cand-scores">
+                  <span class="score-label">
+                    {sharedLoadingId === s.osmId ? 'loading…' : 'view'}
+                  </span>
+                </span>
+              </button>
+
+              {#if sharedDetail?.osmId === s.osmId}
+                <div class="shared-detail">
+                  <p class="shared-stats">
+                    <DifficultyChip
+                      band={sharedDetail.difficulty.band}
+                      title={sharedDetail.difficulty.reasons.join(' ')}
+                    />
+                    <span>
+                      {formatDistance(sharedDetail.distanceM)}
+                      {#if sharedDetail.ascentM != null}
+                        · {formatElevation(sharedDetail.ascentM)} climb{/if}
+                      · about {formatDuration(sharedDetail.difficulty.estimatedTimeS)} — drawn on
+                      the map above
+                    </span>
+                  </p>
+                  {#if sharedDetail.difficulty.reasons.length}
+                    <ul class="rationale">
+                      {#each sharedDetail.difficulty.reasons as line (line)}<li>{line}</li>{/each}
+                    </ul>
+                  {/if}
+                  <div class="actions">
+                    <button class="nm-save-btn" onclick={saveShared} disabled={sharedSaving}>
+                      {sharedSaving ? 'Saving…' : 'Save this route'}
+                    </button>
+                    <button type="button" class="chip" onclick={() => (sharedDetail = null)}>
+                      Back to candidates
+                    </button>
+                    {#if sharedSavedId}
+                      <a class="row-link" href="/trails/routes/{sharedSavedId}">Saved — open it</a>
+                      <a class="row-link" href="/api/trails/routes/{sharedSavedId}/gpx">Download GPX</a>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ol>
+      {/if}
+
+      {#if discoverError}
+        <p class="error-line">{discoverError}</p>
+      {/if}
     </section>
   {/if}
 </main>
@@ -511,6 +873,61 @@
     line-height: 1.5;
     color: var(--text-muted);
     max-width: 62ch;
+  }
+
+  .commission {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .commission-input {
+    flex: 1 1 20rem;
+    min-width: 0;
+    /* Inputs stay at 16px so mobile browsers don't zoom the page on focus. */
+    font-size: 1rem;
+  }
+  .commission-read {
+    margin-top: 0.75rem;
+    margin-bottom: 0;
+  }
+
+  .proposal-line {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-sm);
+    color: var(--text-primary);
+  }
+
+  .shared-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-strong);
+  }
+  .shared-detail {
+    padding: 0.75rem 0.4rem 1rem;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .shared-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0 0 0.6rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+  .relink {
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .cand-diff {
+    flex-shrink: 0;
   }
 
   .where-controls,

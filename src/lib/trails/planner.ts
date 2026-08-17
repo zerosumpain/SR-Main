@@ -148,6 +148,80 @@ export async function suggestTarget(sport: string): Promise<{
   return { distanceM: Math.round(median * factor), source: 'training-load', rationale };
 }
 
+export interface SessionProposal {
+  sport: PlannerSport;
+  distanceM: number;
+  prefer: 'steady' | 'spiky' | 'any';
+  source: PlanResult['targetSource'];
+  rationale: string[];
+}
+
+/**
+ * What the engine would commission today, unprompted: the sport the body has
+ * actually been doing, at a distance the load can absorb, with the climbing
+ * shape readiness can take. Everything here is advisory — the caller renders
+ * it as a proposal card, never acts on it silently.
+ */
+export async function proposeSession(): Promise<SessionProposal> {
+  const rationale: string[] = [];
+  let sport: PlannerSport = 'run';
+
+  try {
+    const since = Math.floor(Date.now() / 1000) - 56 * 86400;
+    const rows = await db
+      .select({
+        activityType: activities.activityType,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(activities)
+      .where(gte(activities.startDate, since))
+      .groupBy(activities.activityType)
+      .orderBy(desc(sql`count(*)`));
+
+    const favourite = rows.find((r) => r.activityType && r.activityType in ORS_PROFILES);
+    if (favourite && favourite.n >= 2) {
+      sport = favourite.activityType as PlannerSport;
+      rationale.push(
+        `Most of the last 8 weeks has been ${sport.replace('_', ' ')}s (${favourite.n} outings).`,
+      );
+    } else {
+      rationale.push('Not enough recent history to read a favourite sport — proposing a run.');
+    }
+  } catch (err) {
+    console.warn('[trails/planner] sport lookup failed:', (err as Error)?.message);
+    rationale.push('Activity history was unavailable — proposing a run.');
+  }
+
+  // Readiness can veto the impact, not just trim the distance: a body that is
+  // not recovered gets a walk proposed instead of a run, never just less run.
+  let prefer: SessionProposal['prefer'] = 'any';
+  try {
+    const readiness = await getReadiness();
+    if (readiness.score < 40 && (sport === 'run' || sport === 'trail_run')) {
+      sport = 'walk';
+      rationale.push(
+        `Readiness is ${Math.round(readiness.score)} — proposing a walk instead of a run today.`,
+      );
+    } else if (readiness.score < 55) {
+      prefer = 'steady';
+      rationale.push(
+        `Readiness is ${Math.round(readiness.score)} — keep the climbing steady rather than one big effort.`,
+      );
+    }
+  } catch {
+    /* advisory */
+  }
+
+  const target = await suggestTarget(sport);
+  return {
+    sport,
+    distanceM: target.distanceM,
+    prefer,
+    source: target.source,
+    rationale: [...rationale, ...target.rationale],
+  };
+}
+
 function toCoords(route: OrsRoute): Coord[] {
   return route.coordinates as Coord[];
 }

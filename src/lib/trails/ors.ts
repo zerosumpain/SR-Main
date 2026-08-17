@@ -221,3 +221,93 @@ export function pointToPoint(args: {
     signal: args.signal,
   });
 }
+
+export interface GeocodeHit {
+  lngLat: [number, number];
+  label: string;
+}
+
+/**
+ * Resolve a place name to coordinates — same key, same host as directions.
+ * `focus` biases results toward a point (the current start, usually), so
+ * "the station" finds the near one rather than the famous one.
+ */
+export async function geocode(
+  text: string,
+  opts: { focus?: [number, number]; signal?: AbortSignal } = {},
+): Promise<GeocodeHit | null> {
+  const params = new URLSearchParams({ text, size: '1' });
+  if (opts.focus) {
+    params.set('focus.point.lon', String(opts.focus[0]));
+    params.set('focus.point.lat', String(opts.focus[1]));
+  }
+  const url = `${BASE}/geocode/search?${params}`;
+  const auth = await orsAuthHeaders(url, 'GET');
+
+  const res = await fetch(url, { headers: auth, signal: opts.signal });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new OrsError(
+      `ORS geocode ${res.status}: ${detail.slice(0, 300)}`,
+      res.status,
+      res.status === 429 || res.status === 503,
+    );
+  }
+
+  const data = await res.json();
+  const feature = data?.features?.[0];
+  const coords = feature?.geometry?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  return {
+    lngLat: [coords[0], coords[1]],
+    label: typeof feature.properties?.label === 'string' ? feature.properties.label : text,
+  };
+}
+
+/**
+ * Add elevation to a bare [lng, lat] line — used for shared OSM geometry,
+ * which never carries altitude. ORS caps the line at 2000 vertices, so long
+ * routes are downsampled rather than rejected; the ascent that computes from
+ * the result is an estimate either way.
+ */
+export async function elevationLine(
+  coordinates: [number, number][],
+  signal?: AbortSignal,
+): Promise<[number, number, number][]> {
+  const MAX_POINTS = 1500;
+  const step = Math.ceil(coordinates.length / MAX_POINTS);
+  const sampled =
+    step > 1
+      ? coordinates.filter((_, i) => i % step === 0 || i === coordinates.length - 1)
+      : coordinates;
+
+  const url = `${BASE}/elevation/line`;
+  const auth = await orsAuthHeaders(url, 'POST');
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      format_in: 'geojson',
+      format_out: 'geojson',
+      geometry: { type: 'LineString', coordinates: sampled },
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new OrsError(
+      `ORS elevation ${res.status}: ${text.slice(0, 300)}`,
+      res.status,
+      res.status === 429 || res.status === 503,
+    );
+  }
+
+  const data = await res.json();
+  const line = data?.geometry?.coordinates;
+  if (!Array.isArray(line) || !line.length) {
+    throw new OrsError('ORS elevation returned no geometry');
+  }
+  return line;
+}
