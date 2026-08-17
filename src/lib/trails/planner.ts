@@ -10,6 +10,7 @@ import { activities } from '$lib/db/schema';
 import { getReadiness } from '$lib/health/readiness-service';
 import { getTrainingLoad } from '$lib/health/training-load-service';
 import {
+  ORS_KEY_HELP,
   ORS_PROFILES,
   ORS_ROUND_TRIP_MAX_M,
   OrsError,
@@ -152,10 +153,8 @@ function toCoords(route: OrsRoute): Coord[] {
 }
 
 export async function planRoutes(req: PlanRequest): Promise<PlanResult> {
-  if (!orsConfigured()) {
-    throw new OrsError(
-      'Route planning needs ORS_API_KEY. Get a free key at openrouteservice.org/dev and add it to the environment.',
-    );
+  if (!(await orsConfigured())) {
+    throw new OrsError(`Route planning needs an openrouteservice key. ${ORS_KEY_HELP}`);
   }
 
   const profile = ORS_PROFILES[req.sport];

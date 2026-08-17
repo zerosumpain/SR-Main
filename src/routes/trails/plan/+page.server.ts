@@ -11,5 +11,5 @@ export const load: PageServerLoad = async () => {
     console.warn('[trails/plan] target suggestion failed:', (err as Error)?.message);
   }
 
-  return { configured: orsConfigured(), suggested };
+  return { configured: await orsConfigured(), suggested };
 };

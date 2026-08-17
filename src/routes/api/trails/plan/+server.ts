@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ url }) => {
   if (!(sport in ORS_PROFILES)) return json({ error: 'unknown sport' }, { status: 400 });
 
   const suggested = await suggestTarget(sport);
-  return json({ configured: orsConfigured(), ...suggested });
+  return json({ configured: await orsConfigured(), ...suggested });
 };
 
 export const POST: RequestHandler = async ({ request }) => {

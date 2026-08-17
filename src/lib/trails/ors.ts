@@ -33,8 +33,60 @@ export class OrsError extends Error {
   }
 }
 
-export function orsConfigured(): boolean {
-  return Boolean(env.ORS_API_KEY);
+/** The handle the owner registers the key under at /admin/ai/apis. */
+export const ORS_SECRET_HANDLE = 'openrouteservice';
+
+export const ORS_KEY_HELP =
+  `Add the key at /admin/ai/apis under the handle "${ORS_SECRET_HANDLE}" — ` +
+  'injection: header "Authorization", host: api.openrouteservice.org, and allow POST ' +
+  '(an empty method list means read-only, and directions is a POST). ' +
+  'A free key comes from openrouteservice.org/dev.';
+
+/**
+ * Resolve the ORS credential.
+ *
+ * The registry is the real home for it: the value stays encrypted, bound by the
+ * owner to one host, and jkai can use it without being able to read it. The
+ * `ORS_API_KEY` env var remains as a fallback because the registry is
+ * production-only — homeserv sets `API_REGISTRY_DISABLED=1` and holds no
+ * registry at all, so local development would otherwise have no way to plan.
+ *
+ * A missing registration falls through to the env var. Any OTHER registry
+ * error — most likely a binding that forbids POST or the wrong host — is
+ * surfaced, because reporting "no key configured" when the key is right there
+ * but mis-bound sends you looking in the wrong place entirely.
+ */
+async function orsAuthHeaders(url: string, method: string): Promise<Record<string, string>> {
+  try {
+    const { resolveSecretForUrl } = await import('$lib/secrets/registry');
+    const resolved = await resolveSecretForUrl(ORS_SECRET_HANDLE, url, method);
+    return resolved.headers;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const notRegistered = /no secret registered under the handle/i.test(message);
+    if (!notRegistered) {
+      throw new OrsError(`openrouteservice credential rejected: ${message}`);
+    }
+  }
+
+  if (env.ORS_API_KEY) return { Authorization: env.ORS_API_KEY };
+
+  throw new OrsError(`No openrouteservice credential. ${ORS_KEY_HELP}`);
+}
+
+/**
+ * Whether a credential exists at all — used to decide if the planner UI should
+ * offer the button or explain why it cannot.
+ */
+export async function orsConfigured(): Promise<boolean> {
+  if (env.ORS_API_KEY) return true;
+  try {
+    const { getSecretMeta } = await import('$lib/secrets/registry');
+    const meta = await getSecretMeta(ORS_SECRET_HANDLE);
+    return Boolean(meta?.available);
+  } catch {
+    return false;
+  }
 }
 
 export interface OrsExtraSummary {
@@ -64,12 +116,8 @@ interface DirectionsOptions {
 }
 
 async function directions(opts: DirectionsOptions): Promise<OrsRoute> {
-  const key = env.ORS_API_KEY;
-  if (!key) {
-    throw new OrsError(
-      'ORS_API_KEY is not set — get a free key at openrouteservice.org/dev and add it to the environment',
-    );
-  }
+  const url = `${BASE}/v2/directions/${opts.profile}/geojson`;
+  const auth = await orsAuthHeaders(url, 'POST');
 
   const body: Record<string, unknown> = {
     coordinates: opts.coordinates,
@@ -89,10 +137,10 @@ async function directions(opts: DirectionsOptions): Promise<OrsRoute> {
   if (opts.avoidFeatures?.length) options.avoid_features = opts.avoidFeatures;
   if (Object.keys(options).length) body.options = options;
 
-  const res = await fetch(`${BASE}/v2/directions/${opts.profile}/geojson`, {
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: key,
+      ...auth,
       'Content-Type': 'application/json',
       Accept: 'application/geo+json',
     },

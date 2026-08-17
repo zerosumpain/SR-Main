@@ -191,7 +191,11 @@
     <section class="nm-sec nm-sec-error">
       <span class="sr-label-tight error">Planner not configured</span>
       <p class="err-body">
-        <code>ORS_API_KEY</code> is not set, so no routes can be requested. A free key from
+        No openrouteservice credential, so no routes can be requested. Add one at
+        <a href="/admin/ai/apis">/admin/ai/apis</a> under the handle
+        <code>openrouteservice</code> — header injection named <code>Authorization</code>, host
+        <code>api.openrouteservice.org</code>, and <strong>allow POST</strong> (an empty method
+        list means read-only, and directions is a POST). A free key from
         <strong>openrouteservice.org/dev</strong> allows 2,500 requests a day.
       </p>
     </section>
