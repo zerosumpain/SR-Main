@@ -120,6 +120,71 @@ export async function resolveBuildServes(input: {
 }
 
 /**
+ * Resolve every still-open serve for a build that COMPLETED successfully.
+ *
+ * `resolveBuildServes` runs at the start of the next iteration, which never
+ * happens when a build gets it right first time — the best outcome there is
+ * produced the least evidence, which is exactly backwards. A green final gate
+ * and an open PR is the strongest signal available that the context served was
+ * the right context.
+ *
+ * Success path only. A failed build is not evidence against what it was served:
+ * builds fail on provider errors, token caps and stalls far more often than on
+ * bad context, and counting those as `unhelpful` would punish good intelligence
+ * for unrelated infrastructure faults.
+ */
+export async function resolveCompletedBuildServes(buildId: string): Promise<ResolveResult> {
+  const pending = await db
+    .select()
+    .from(codegraphQueries)
+    .where(
+      and(
+        eq(codegraphQueries.buildId, buildId),
+        eq(codegraphQueries.channel, 'push'),
+        isNull(codegraphQueries.resolution),
+      ),
+    )
+    .limit(20);
+
+  let resolved = 0;
+  let lessons = 0;
+  let episodes = 0;
+
+  for (const q of pending) {
+    // An `empty` serve carries nothing, so a successful build says nothing
+    // about it. Crediting "no precedent found" for the win would inflate the
+    // helpful count with serves that contributed literally no text.
+    if (q.outcome !== 'served') continue;
+
+    const lessonIds = (q.lessonIds as string[]) ?? [];
+    const episodeIds = (q.episodeIds as string[]) ?? [];
+
+    if (lessonIds.length) {
+      await db
+        .update(codegraphLessons)
+        .set({ helpfulCount: sql`${codegraphLessons.helpfulCount} + 1` })
+        .where(inArray(codegraphLessons.id, lessonIds));
+      lessons += lessonIds.length;
+    }
+    if (episodeIds.length) {
+      await db
+        .update(codegraphEpisodes)
+        .set({ helpfulCount: sql`${codegraphEpisodes.helpfulCount} + 1` })
+        .where(inArray(codegraphEpisodes.id, episodeIds));
+      episodes += episodeIds.length;
+    }
+
+    await db
+      .update(codegraphQueries)
+      .set({ resolution: 'helpful', resolvedAt: new Date() })
+      .where(eq(codegraphQueries.id, q.id));
+    resolved++;
+  }
+
+  return { resolved, outcome: resolved ? 'helpful' : 'none', lessons, episodes };
+}
+
+/**
  * Record that these units were served, at the moment of serving.
  *
  * Separate from the outcome counters on purpose: `served` says the graph spent
