@@ -102,6 +102,16 @@ const HOOK_BYPASSES = [
   // Read-only search over research the owner has already gathered, POST only,
   // same per-build bridge token. Publishes no new data.
   '/api/jkai/studio/research', // JKAI_BRIDGE_TOKEN
+  // The homeserv scanner posts extracted graph units here; the transcripts are
+  // 858 MB and exist only on homeserv, so extraction cannot happen on the VPS.
+  // POST only, Bearer CLAUDE_CHANGELOG_SECRET, and it FAILS CLOSED when that is
+  // unset in production — which it was, from June until 2026-08-17, leaving an
+  // unauthenticated write into claude_sessions open to the internet.
+  '/api/claude-changelog/ingest', // CLAUDE_CHANGELOG_SECRET
+  '/api/jkai/codegraph/ingest', // CLAUDE_CHANGELOG_SECRET
+  // Read-only retrieval, POST only. Reached from a build by bash via
+  // scripts/codegraph-query.mjs, and by the owner from chat and the UI.
+  '/api/jkai/codegraph/query', // CLAUDE_CHANGELOG_SECRET or owner session
 ];
 
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection

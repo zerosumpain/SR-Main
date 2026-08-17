@@ -109,6 +109,32 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
 - `src/routes/admin/` — admin UIs (blog, biome, scraper, gmail, jkai)
 - `src/routes/jkai/` — jkai chat hub + autonomous builder
 - `src/lib/datastore/` — permanent flexible datastore (collections + jsonb records, row-level permissions, query DSL, audit, TTL). Surfaces: `database` workflow node, `datastore` toolset, `/admin/ai/datastore`. Spec: `docs/superpowers/specs/2026-07-18-datastore-and-self-improvement-design.md`
+- `src/lib/codegraph/` — the **build-history knowledge graph**. Nodes are files and gates;
+  episodes (a gate failed, edits followed, the gate passed) and lessons (the 272 curated
+  `~/.claude/.../memory/*.md` notes, imported verbatim) hang off them. Surfaces:
+  `/jkai/codegraph` (ER map, ask, review + forget, serves), the `codegraph` toolset, and
+  `scripts/codegraph-query.mjs`.
+
+  **Retrieval is keyed on code, not prose.** 29% of John's prompts are ≤25 chars, so
+  "crack on" embeds to nothing. The two keys are mechanical and cost no LLM call: the
+  FILE SET a build is touching, and the FINGERPRINT of the gate error it just hit
+  (`orchestrator.ts` has already appended those diagnostics to `evaluation`).
+
+  **Two channels, and neither is the tool bridge.** All 5,214 tool actions across 280
+  production build iterations are pi built-ins — the bridge has never once been called.
+  So: PUSH is computed in-process at `executor.ts` and appended to the user prompt; PULL
+  is `scripts/codegraph-query.mjs` over **bash**, the only transport pi never strips.
+  A new script needs its own rsync line in `ci-release.sh` or it silently does not exist
+  in production.
+
+  **Forgetting is a tombstone with a required reason**, filtered in exactly one place
+  (`retrieve.ts`). Staleness (every cited path gone from that repo) ranks a lesson down
+  and flags it; it never hides it on its own, and the sweep refuses to run when its
+  sentinel check fails rather than quarantining the whole corpus.
+
+  Backfill: `node scripts/codegraph-backfill.mjs --all` on homeserv (the transcripts are
+  858 MB and live only there). Spec: `docs/superpowers/specs/2026-08-17-code-memory-graph.md`.
+
 - `src/lib/selfimprove/` — nightly self-improvement engine (03:30 Europe/London, prod-only via hostname gate, kill switch `selfimprove.enabled`). Dashboard: `/admin/ai/improvement`.
 
   Phases: `gather → learn → discover → build → repair → optimise → propose → report`. All LLM calls are pinned to

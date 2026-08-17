@@ -3316,3 +3316,299 @@ export const datastoreAuditLog = pgTable(
 
 export type DatastoreAuditLogRow = typeof datastoreAuditLog.$inferSelect;
 export type NewDatastoreAuditLogRow = typeof datastoreAuditLog.$inferInsert;
+
+// ==========================================
+// Codegraph — the build-history knowledge graph
+// ==========================================
+//
+// A SECOND graph, deliberately separate from `intel_*`. Intel is about the
+// world (people, organisations, documents). This is about THIS CODEBASE and
+// what building it has already taught us, and its only job is to put the right
+// context in front of a pi build at the moment that build needs it.
+//
+// WHY THE NODES ARE FILES AND GATES, NOT SESSIONS
+//
+// Sessions end and their transcripts are deleted — 54 of 150 production
+// sessions already have no `.jsonl` on disk. `src/lib/jkai/executor.ts`, by
+// contrast, appears across the whole corpus and will be edited again next week.
+// Code identity is the only durable key here, so files and gates are the nodes
+// and the history (episodes, lessons) hangs off them.
+//
+// WHY RETRIEVAL IS NOT KEYED ON THE PROMPT
+//
+// 29% of John's real prompts are 25 characters or fewer. "crack on" embeds to
+// nothing, so prose similarity cannot be the entry point. The two keys that
+// ARE sharp are both extracted deterministically with regex and zero LLM calls:
+//   1. the FILE SET a build is about to touch, and
+//   2. the FINGERPRINT of the gate error it just hit — which orchestrator.ts
+//      has already appended to the previous iteration's evaluation.
+//
+// WHY EVERY UNIT CARRIES AN OUTCOME
+//
+// 17.1% of merged PRs were themselves repairs of an earlier merge, so "it
+// merged" is not "it was right". Ranking multiplies by a verdict tier, meaning
+// retrieval returns what demonstrably worked rather than what merely reads
+// similarly. Standard RAG has no notion of whether its chunk was ever correct.
+
+/**
+ * A durable thing in the codebase: a file, a directory, a gate, a route, a
+ * table. `canonicalPath` is repo-relative and is the identity — never an
+ * absolute path, because the same file is `/home/john/...` on homeserv and
+ * `/home/jkai/workspace/<id>/dev/...` inside a build sandbox.
+ */
+export const codegraphNodes = pgTable(
+  'codegraph_nodes',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** 'file' | 'dir' | 'gate' | 'route' | 'table' | 'tool' | 'skill' */
+    kind: text('kind').notNull().default('file'),
+    /** Repo-relative path, or the gate name for kind='gate'. Identity. */
+    canonicalPath: text('canonical_path').notNull(),
+    /** Which repo this belongs to — staleness resolves against THIS tree only. */
+    repo: text('repo').notNull().default('SR-Main'),
+    displayName: text('display_name'),
+    /** Template-generated, never LLM-written. See the fabrication memory. */
+    summary: text('summary'),
+    embedding: vector('embedding'),
+    episodeCount: integer('episode_count').notNull().default(0),
+    lessonCount: integer('lesson_count').notNull().default(0),
+    /**
+     * Does this path still exist at git HEAD? A node whose file was deleted
+     * cannot teach anything actionable. Refreshed by the sweep, and NEVER
+     * trusted when the sentinel self-test fails — see codegraph/liveness.ts.
+     */
+    existsOnHead: boolean('exists_on_head').notNull().default(true),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    /** Tombstone, mirroring intel's merge model. Never a magic string. */
+    mergedIntoId: text('merged_into_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_nodes_repo_path_idx').on(t.repo, t.canonicalPath),
+    index('codegraph_nodes_kind_idx').on(t.kind),
+    index('codegraph_nodes_merged_idx').on(t.mergedIntoId),
+  ],
+);
+export type CodegraphNode = typeof codegraphNodes.$inferSelect;
+export type NewCodegraphNode = typeof codegraphNodes.$inferInsert;
+
+/**
+ * A relation between two nodes. `co_change` is measured (they were edited in
+ * the same session), `needs_context` is asserted (reading one required reading
+ * the other). `weight` is the observation count, so a one-off pairing ranks
+ * below a habit.
+ */
+export const codegraphEdges = pgTable(
+  'codegraph_edges',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    targetId: text('target_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    /** 'co_change' | 'needs_context' | 'gated_by' | 'imports' | 'fixed_by' */
+    kind: text('kind').notNull(),
+    weight: integer('weight').notNull().default(1),
+    /** Suppressed by a human in review — filtered by the one loader, not deleted. */
+    suppressed: boolean('suppressed').notNull().default(false),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_edges_triple_idx').on(t.sourceId, t.targetId, t.kind),
+    index('codegraph_edges_source_idx').on(t.sourceId),
+    index('codegraph_edges_target_idx').on(t.targetId),
+  ],
+);
+export type CodegraphEdge = typeof codegraphEdges.$inferSelect;
+export type NewCodegraphEdge = typeof codegraphEdges.$inferInsert;
+
+/**
+ * One recorded piece of work: something was attempted against some files, a
+ * gate said something about it, and it either held or it did not.
+ *
+ * `fingerprint` is the hot lane — a normalised, ANSI-stripped error key such as
+ * `tsc:TS2345` or `vitest:AssertionError`. Measured: agents almost never re-run
+ * a byte-identical command (1 exact-command repeat across 25 sessions), so the
+ * key must be the error class, not the command. Plain btree, sub-10ms.
+ */
+export const codegraphEpisodes = pgTable(
+  'codegraph_episodes',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    repo: text('repo').notNull().default('SR-Main'),
+    /** Claude Code session id, or a jkai build id — provenance, not identity. */
+    sourceKind: text('source_kind').notNull().default('session'),
+    sourceId: text('source_id'),
+    title: text('title'),
+    /** What went wrong, verbatim-ish and trimmed. Never LLM-written. */
+    problem: text('problem'),
+    /** What was changed. Template-assembled from the recorded edits. */
+    resolution: text('resolution'),
+    /** How we know it worked — the command whose exit code changed. */
+    verification: text('verification'),
+    /** Normalised error key, e.g. 'tsc:TS2345'. Null when not gate-derived. */
+    fingerprint: text('fingerprint'),
+    /** 'svelte-check' | 'vitest' | 'build' | 'lint' | null */
+    gate: text('gate'),
+    /**
+     * verified > landed > unverified > repaired > abandoned.
+     * Ranking multiplies by this: 'merged' is not 'correct'.
+     */
+    verdict: text('verdict').notNull().default('unverified'),
+    filesTouched: jsonb('files_touched').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    prNumber: integer('pr_number'),
+    embedding: vector('embedding'),
+    /** How often this episode has been SERVED, and how often it preceded a pass. */
+    servedCount: integer('served_count').notNull().default(0),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    retiredReason: text('retired_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('codegraph_episodes_fingerprint_idx').on(t.fingerprint),
+    index('codegraph_episodes_verdict_idx').on(t.verdict),
+    index('codegraph_episodes_gate_idx').on(t.gate),
+    index('codegraph_episodes_occurred_idx').on(t.occurredAt),
+    index('codegraph_episodes_retired_idx').on(t.retiredAt),
+  ],
+);
+export type CodegraphEpisode = typeof codegraphEpisodes.$inferSelect;
+export type NewCodegraphEpisode = typeof codegraphEpisodes.$inferInsert;
+
+/**
+ * A durable rule about this codebase — "a new `scripts/` file needs its own
+ * rsync line in ci-release.sh or it silently never ships".
+ *
+ * Seeded VERBATIM from the 272 hand-written `~/.claude/.../memory/*.md` notes,
+ * which are the highest-quality knowledge body in the estate (median 2,919 B,
+ * already claim-plus-consequence, 117 citing concrete `src/` paths) and which
+ * jkai could not previously read a single byte of. No distillation pass: the
+ * text is already better than anything an LLM would write over it, and
+ * rewriting recorded facts is how fabrication gets in.
+ */
+export const codegraphLessons = pgTable(
+  'codegraph_lessons',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    repo: text('repo').notNull().default('SR-Main'),
+    slug: text('slug'),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    /** 'memory-note' | 'session' | 'build' | 'manual' */
+    origin: text('origin').notNull().default('memory-note'),
+    originRef: text('origin_ref'),
+    /** Repo-relative paths this lesson names. Drives staleness AND retrieval. */
+    citedPaths: jsonb('cited_paths').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    embedding: vector('embedding'),
+    servedCount: integer('served_count').notNull().default(0),
+    /**
+     * Forgetting, three distinct states — conflating them is what makes a
+     * "forget" button destructive:
+     *   retiredAt   — no longer true, keep for provenance, never served
+     *   supersededById — a REAL id, never a magic string (forget_memory's
+     *                    literal 'forgotten' left 23 dangling rows)
+     *   staleAt     — every path it cites is gone from its OWN repo
+     */
+    retiredAt: timestamp('retired_at', { withTimezone: true }),
+    retiredReason: text('retired_reason'),
+    supersededById: text('superseded_by_id'),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    observedAt: timestamp('observed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('codegraph_lessons_repo_slug_idx').on(t.repo, t.slug),
+    index('codegraph_lessons_retired_idx').on(t.retiredAt),
+    index('codegraph_lessons_stale_idx').on(t.staleAt),
+    index('codegraph_lessons_origin_idx').on(t.origin),
+  ],
+);
+export type CodegraphLesson = typeof codegraphLessons.$inferSelect;
+export type NewCodegraphLesson = typeof codegraphLessons.$inferInsert;
+
+/**
+ * Which lessons attach to which nodes. Composite PK, deliberately: the sibling
+ * `intel_note_entities` shipped without one and silently accumulated duplicate
+ * links until a repair run removed them.
+ */
+export const codegraphNodeLessons = pgTable(
+  'codegraph_node_lessons',
+  {
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    lessonId: text('lesson_id')
+      .notNull()
+      .references(() => codegraphLessons.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.nodeId, t.lessonId] }),
+    index('codegraph_node_lessons_lesson_idx').on(t.lessonId),
+  ],
+);
+
+/** Same, for episodes. */
+export const codegraphNodeEpisodes = pgTable(
+  'codegraph_node_episodes',
+  {
+    nodeId: text('node_id')
+      .notNull()
+      .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
+    episodeId: text('episode_id')
+      .notNull()
+      .references(() => codegraphEpisodes.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.nodeId, t.episodeId] }),
+    index('codegraph_node_episodes_episode_idx').on(t.episodeId),
+  ],
+);
+
+/**
+ * Every serve, logged. This table is the whole reason we will be able to answer
+ * "is it working?" honestly.
+ *
+ * The precedent is painful and exact: the builder's site-tool bridge logged
+ * "Tool bridge OK — 167 site tools" for sixty days while every one of 5,214
+ * production tool actions was a pi built-in and not one was a bridged call.
+ * Self-reported health proved nothing; only SQL over recorded actions did. So
+ * the retrieval path records what it served, to which build and iteration,
+ * joinable to `jkai_iterations` — including the serves that returned NOTHING,
+ * because a system that only logs its hits cannot be shown to be idle.
+ */
+export const codegraphQueries = pgTable(
+  'codegraph_queries',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    /** 'push' | 'pull' | 'chat' — which channel asked. */
+    channel: text('channel').notNull(),
+    buildId: text('build_id'),
+    iterationId: text('iteration_id'),
+    /** The CGQL actually executed, verbatim, so a bad serve is reproducible. */
+    query: text('query').notNull(),
+    /** 'served' | 'empty' | 'failed' — empty and failed are NOT the same. */
+    outcome: text('outcome').notNull(),
+    episodeIds: jsonb('episode_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    lessonIds: jsonb('lesson_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    charsServed: integer('chars_served').notNull().default(0),
+    durationMs: integer('duration_ms'),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('codegraph_queries_build_idx').on(t.buildId),
+    index('codegraph_queries_channel_idx').on(t.channel),
+    index('codegraph_queries_outcome_idx').on(t.outcome),
+    index('codegraph_queries_created_idx').on(t.createdAt),
+  ],
+);
+export type CodegraphQuery = typeof codegraphQueries.$inferSelect;
+export type NewCodegraphQuery = typeof codegraphQueries.$inferInsert;

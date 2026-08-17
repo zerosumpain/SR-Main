@@ -78,6 +78,13 @@ rsync -a scripts/studio-gate.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/studio-verify.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/studio-image.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
+# The build-history graph's pull channel. The agent is told in REPO_SYSTEM_PROMPT
+# to run this by path, so the same allow-list trap applies exactly as above:
+# without this line the command named in the prompt does not exist on the VPS,
+# every invocation fails, and the agent falls back to rediscovering by hand —
+# the 10.5-discovery-actions-per-iteration behaviour this change set exists to
+# reduce. Nothing else would report the absence.
+rsync -a scripts/codegraph-query.mjs "$VPS_DIR/scripts/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of

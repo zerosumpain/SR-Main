@@ -446,7 +446,30 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // /api/policy-engine above). GET (debug summary) is deliberately NOT bypassed —
   // it falls through to the owner gate below (spec Decision Log #6: reads stay
   // owner-only).
-  if (pathname.startsWith('/api/claude-changelog/') && event.request.method === 'POST') {
+  //
+  // Matched EXACTLY, not by prefix — the same rule the tools/studio bypasses
+  // above already follow. A prefix here silently hands the exemption to every
+  // future `/api/claude-changelog/*` route somebody adds, which is how an
+  // endpoint ends up unauthenticated without anyone choosing that. Today only
+  // `/ingest` has a POST handler; the exemption should name it and no more.
+  if (pathname === '/api/claude-changelog/ingest' && event.request.method === 'POST') {
+    return resolve(event);
+  }
+
+  // /api/jkai/codegraph/{ingest,query} POST are service-to-service: the
+  // homeserv backfill posts extracted graph units, and a running build reaches
+  // the graph through `scripts/codegraph-query.mjs` over bash — bash being the
+  // only transport pi has never stripped (all 5,214 recorded build actions are
+  // pi built-ins; the site-tool bridge has never once been called). Both
+  // self-authenticate with `Authorization: Bearer CLAUDE_CHANGELOG_SECRET` and
+  // fail CLOSED when it is unset in production; /query additionally accepts an
+  // owner session for chat and the UI.
+  //
+  // Exact pathnames, never a prefix — see the note above.
+  if (
+    (pathname === '/api/jkai/codegraph/ingest' || pathname === '/api/jkai/codegraph/query') &&
+    event.request.method === 'POST'
+  ) {
     return resolve(event);
   }
 
