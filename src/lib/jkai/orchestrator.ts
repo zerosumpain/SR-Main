@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
-import { eq, and, desc, asc, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, asc, isNotNull, sql } from 'drizzle-orm';
 import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
@@ -854,22 +854,77 @@ class Orchestrator {
 
   // --- Private: Loop ---
 
+  /**
+   * Arm the loop for the next iteration, replacing any timer already armed.
+   *
+   * The `clearTimeout` is the whole point. This used to assign `loopTimer`
+   * without clearing it, and there are fourteen call sites — start, resume,
+   * restart, plan approval, iteration approval, the budget sleep, the retry
+   * paths. Any two of them firing left TWO live timers, both calling
+   * `runIteration` for the same build, and the only guard there was
+   * `activeBuildId !== buildId`, which is true for both because it is the same
+   * build. The orchestrator then ran a build's iterations CONCURRENTLY.
+   *
+   * Measured on build 42244cc0 (2026-08-17): eleven iterations, of which
+   * iterations 1 and 2 started in the same second and 3-9 overlapped in a
+   * rolling pile-up. The consequences were not subtle — each agent redid work
+   * another had already done and reported it as "confirming the existing
+   * change", they mutated one workspace underneath each other (one concluded
+   * `svelte-kit` was missing while another was installing), and the
+   * `iterationsCompleted` read-modify-write below lost six of eleven
+   * increments, so `maxIterations: 8` never bound and the build ran until it
+   * was killed by hand.
+   */
   private scheduleNext(buildId: string, delayMs = 0): void {
+    if (this.loopTimer) clearTimeout(this.loopTimer);
     this.loopTimer = setTimeout(() => this.runIteration(buildId), delayMs);
   }
+
+  /**
+   * The build whose iteration is in flight right now.
+   *
+   * Belt to `scheduleNext`'s braces. Clearing the timer stops the two-timers
+   * case, but any path that calls `runIteration` while one is already awaiting
+   * — a late-resolving promise, a future caller that forgets the timer — would
+   * reopen the same hole. A build's iterations must be serial, so this says so
+   * directly rather than relying on every caller behaving.
+   *
+   * NOT `activeBuildId`: that means "the build this orchestrator is working
+   * on", which stays set for the build's whole life and across the gaps
+   * between iterations. This is only ever set while one iteration is running.
+   */
+  private iteratingBuildId: string | null = null;
 
   private async runIteration(buildId: string): Promise<void> {
     if (this.stopped || this.activeBuildId !== buildId) return;
 
-    // Liveness ping for the whole iteration, including the gate. `updated_at`
-    // is only stamped at iteration boundaries, and the gate can run for twenty
-    // minutes writing nothing — so without this a build in the gate and a build
-    // whose sidecar died look identical to every reader. Same shape as the
-    // workflow engine's run heartbeat: a ticker around the long await, cleared
-    // in `finally`.
-    const liveness = this.startLivenessTicker(buildId);
+    if (this.iteratingBuildId) {
+      // Do NOT reschedule here. The iteration that is running will schedule the
+      // next one when it finishes; arming another timer from inside a rejected
+      // call is how a single build ends up with a growing pile of them.
+      console.warn(
+        `[orchestrator] refusing a concurrent iteration for ${buildId} — ${this.iteratingBuildId} is already in flight`,
+      );
+      return;
+    }
+    this.iteratingBuildId = buildId;
+
+    // Everything from here is inside the try, INCLUDING starting the liveness
+    // ticker. The guard above is only safe if it is always released, and it was
+    // being set before this line: had `startLivenessTicker` thrown, the guard
+    // would have stuck and the build would have refused every later iteration
+    // forever — a permanent deadlock, strictly worse than the concurrency it
+    // exists to prevent.
+    let liveness: ReturnType<typeof setInterval> | null = null;
 
     try {
+      // Liveness ping for the whole iteration, including the gate. `updated_at`
+      // is only stamped at iteration boundaries, and the gate can run for
+      // twenty minutes writing nothing — so without this a build in the gate
+      // and a build whose sidecar died look identical to every reader. Same
+      // shape as the workflow engine's run heartbeat: a ticker around the long
+      // await, cleared in `finally`.
+      liveness = this.startLivenessTicker(buildId);
       // Re-fetch build to get latest counters
       const [build] = await db
         .select()
@@ -1093,14 +1148,24 @@ class Orchestrator {
           // `server_is_overloaded` — and because budget.ts files a build that
           // exhausts maxIterations as `completed`, a build killed by someone
           // else's load would have been recorded as having finished.
-          iterationsCompleted: transient ? build.iterationsCompleted : build.iterationsCompleted + 1,
-          tokensUsed: build.tokensUsed + result.tokensUsed,
+          // Incremented in SQL, not read-modify-write. `build` was read at the
+          // top of this iteration, so `build.iterationsCompleted + 1` writes a
+          // value derived from a snapshot — and when two iterations overlapped,
+          // the later write silently discarded the earlier one's increment.
+          // Build 42244cc0 ran eleven iterations and recorded five, so the
+          // `maxIterations` check in budget.ts never bound. `scheduleNext` and
+          // `iteratingBuildId` should now make overlap impossible; this makes
+          // the counter correct even if they ever fail to.
+          iterationsCompleted: transient
+            ? sql`${jkaiBuilds.iterationsCompleted}`
+            : sql`${jkaiBuilds.iterationsCompleted} + 1`,
+          tokensUsed: sql`${jkaiBuilds.tokensUsed} + ${result.tokensUsed}`,
           // Wall-clock accrues whatever the iteration actually burned, pass or
           // fail. It used to accrue only on success, so a build whose every
           // iteration failed reported 0 active minutes and maxTotalMinutes
           // could never bind — contradicting the comment in budget.ts that says
           // a failed iteration costs as much as a successful one.
-          activeMinutesUsed: build.activeMinutesUsed + durationMs / 60000,
+          activeMinutesUsed: sql`${jkaiBuilds.activeMinutesUsed} + ${durationMs / 60000}`,
           consecutiveFailures: newConsecutiveFailures,
           updatedAt: new Date(),
         })
@@ -1775,7 +1840,8 @@ class Orchestrator {
       console.error(`[orchestrator] iteration error for ${buildId}:`, err);
       this.scheduleNext(buildId, 30000);
     } finally {
-      clearInterval(liveness);
+      if (liveness) clearInterval(liveness);
+      if (this.iteratingBuildId === buildId) this.iteratingBuildId = null;
     }
   }
 

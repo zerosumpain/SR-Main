@@ -491,6 +491,18 @@ export function buildIterationContext(
   mode: BuildPromptMode = 'app',
   gateCommand: string | null = null,
   chapterPlan: Array<ChapterPlanEntry> | null = null,
+  /*
+   * The FINAL gate, when the target has one, and it has to be named.
+   *
+   * "Do not run the gate yourself" used to name only `gateCommand`. The target
+   * splits its gate in two — `gateCommand` per iteration, `finalGateCommand`
+   * (a full vite build) once before the PR — so an agent told not to run the
+   * first was never told anything about the second. Build 42244cc0 ran
+   * `npm run gate:build` and hit `exit 124` at the 300-second tool limit, over
+   * and over, correctly concluding "full gate is not yet green" each time. It
+   * was obeying the instruction it was given. The instruction was incomplete.
+   */
+  finalGateCommand: string | null = null,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
@@ -537,7 +549,7 @@ export function buildIterationContext(
       // on two type errors. Vitest transpiles — it does not typecheck — so a
       // green focused run says nothing about the half of the gate that fails
       // most often. Say so, and say plainly that a red gate outranks it.
-      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself: every command you run is killed at 300 seconds, and the gate takes longer, so you would only ever see a timeout. If it fails, the failing lines appear at the top of your next iteration under "The gate FAILED".\n\nVerify narrowly in the meantime — the one test file covering what you touched. But know what that does NOT prove: **vitest transpiles without typechecking**, so a passing focused run tells you nothing about \`svelte-check\`, which is the part of the gate that most often refuses a change. A one-argument call to a two-argument function passes vitest and fails the gate every time.\n\nSo: while the gate is red you are NOT finished, however green your own tests are. Fix what the gate names before writing anything else, and never close an iteration reporting success on a red gate — say what is still failing instead.`;
+      contextMessage += `\n\n## Definition of Done\nThis change ships when \`${gateCommand}\` exits 0 — but the ORCHESTRATOR runs that for you after this iteration, with a budget you do not have. Do not run it yourself${finalGateCommand ? `, and do not run \`${finalGateCommand}\` either — the orchestrator runs that too, once, after the gate above is green` : ''}: every command you run is killed at 300 seconds, and both take longer, so you would only ever see a timeout. If it fails, the failing lines appear at the top of your next iteration under "The gate FAILED".\n\nVerify narrowly in the meantime — the one test file covering what you touched. But know what that does NOT prove: **vitest transpiles without typechecking**, so a passing focused run tells you nothing about \`svelte-check\`, which is the part of the gate that most often refuses a change. A one-argument call to a two-argument function passes vitest and fails the gate every time.\n\nSo: while the gate is red you are NOT finished, however green your own tests are. Fix what the gate names before writing anything else, and never close an iteration reporting success on a red gate — say what is still failing instead.`;
     }
     contextMessage += `\n\nBegin iteration ${iterationNumber}. Deliver the smallest correct change, get the gate green, then close with ## Evaluation and ## Next Steps.`;
   } else if (mode === 'studio') {
