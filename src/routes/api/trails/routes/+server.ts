@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { listRoutes, saveRoute } from '$lib/trails/routes-service';
+import { describeSaveError } from '$lib/trails/api-errors';
 import { ORS_PROFILES } from '$lib/trails/ors';
 import type { RequestHandler } from './$types';
 
@@ -35,6 +36,7 @@ export const POST: RequestHandler = async ({ request }) => {
     });
     return json({ id }, { status: 201 });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : 'save failed' }, { status: 400 });
+    console.error('[trails/routes] save failed:', err);
+    return json({ error: describeSaveError(err) }, { status: 400 });
   }
 };
