@@ -42,5 +42,46 @@ export const load: PageServerLoad = async () => {
     WHERE b.git_target_config IS NOT NULL AND b.git_target_config::text <> 'null'
   `).then((r) => (r.rows as Array<Record<string, unknown>>)[0] ?? {});
 
-  return { recent, byChannel, iterations };
+  // Did serving actually change anything? Joined to jkai_iterations so the
+  // answer comes from build records, not from the graph's own opinion of itself.
+  const perBuild = await db.execute(sql`
+    SELECT b.id,
+           left(coalesce(b.title, b.prompt), 60)                    AS title,
+           b.status,
+           b.iterations_completed                                   AS iterations,
+           count(q.id)::int                                         AS serves,
+           count(*) FILTER (WHERE q.outcome = 'served')::int         AS served,
+           count(*) FILTER (WHERE q.outcome = 'empty')::int          AS empty,
+           count(*) FILTER (WHERE q.resolution = 'helpful')::int     AS helpful,
+           count(*) FILTER (WHERE q.resolution = 'unhelpful')::int   AS unhelpful,
+           b.created_at
+    FROM jkai_builds b
+    JOIN codegraph_queries q ON q.build_id = b.id
+    GROUP BY b.id
+    ORDER BY b.created_at DESC
+    LIMIT 25
+  `).then((r) => r.rows as Array<Record<string, unknown>>);
+
+  // The headline comparison. Repo builds only — an app build has no history in
+  // this graph, so including them would dilute the very thing being measured.
+  const [impact] = await db.execute(sql`
+    WITH served AS (SELECT DISTINCT build_id FROM codegraph_queries WHERE outcome = 'served')
+    SELECT
+      count(*) FILTER (WHERE s.build_id IS NULL)::int                              AS builds_without,
+      round(avg(b.iterations_completed) FILTER (WHERE s.build_id IS NULL)::numeric, 2) AS mean_without,
+      count(*) FILTER (WHERE s.build_id IS NOT NULL)::int                          AS builds_with,
+      round(avg(b.iterations_completed) FILTER (WHERE s.build_id IS NOT NULL)::numeric, 2) AS mean_with
+    FROM jkai_builds b
+    LEFT JOIN served s ON s.build_id = b.id
+    WHERE b.git_target_config IS NOT NULL AND b.git_target_config::text <> 'null'
+  `).then((r) => r.rows as Array<Record<string, unknown>>);
+
+  const [resolution] = await db.execute(sql`
+    SELECT count(*) FILTER (WHERE resolution = 'helpful')::int   AS helpful,
+           count(*) FILTER (WHERE resolution = 'unhelpful')::int AS unhelpful,
+           count(*) FILTER (WHERE resolution IS NULL)::int       AS unresolved
+    FROM codegraph_queries WHERE channel = 'push'
+  `).then((r) => r.rows as Array<Record<string, unknown>>);
+
+  return { recent, byChannel, iterations, perBuild, impact: impact ?? {}, resolution: resolution ?? {} };
 };

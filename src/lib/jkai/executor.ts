@@ -258,6 +258,25 @@ export async function executeIteration(
   let codegraphBlock = '';
   if (promptMode === 'repo' && process.env.CODEGRAPH_PUSH !== '0') {
     try {
+      // Close the loop on the PREVIOUS iteration's serve first. This is the
+      // earliest moment the answer exists: the gate has now run and its
+      // diagnostics are in prevIteration.evaluation. Without this the evidence
+      // counters stay at zero forever and ranking never leaves its recency bias.
+      const { resolveBuildServes, recordServed } = await import('$lib/codegraph/feedback');
+      const resolution = await resolveBuildServes({
+        buildId: build.id,
+        nextEvaluation: prevIteration?.evaluation ?? null,
+        nextGatePassed: prevIteration ? /gate.{0,20}(passed|green)/i.test(prevIteration.evaluation ?? '') : null,
+      }).catch(() => null);
+      if (resolution && resolution.resolved > 0) {
+        await emitLog(
+          build.id,
+          'system',
+          `Codegraph feedback: ${resolution.resolved} serve(s) resolved as ${resolution.outcome} — ${resolution.lessons} lesson(s), ${resolution.episodes} episode(s) updated`,
+          iteration.id,
+        );
+      }
+
       const { planBuildQuery } = await import('$lib/codegraph/build-context');
       const planned = planBuildQuery({
         prompt: build.prompt,
@@ -275,17 +294,23 @@ export async function executeIteration(
           new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
         ]);
         codegraphBlock = buildContextBlock(result);
+        const servedLessonIds = result.lessons.map((l) => l.id);
+        const servedEpisodeIds = result.episodes.map((e) => e.id);
         await database.insert(codegraphQueries).values({
           channel: 'push',
           buildId: build.id,
           iterationId: iteration.id,
           query: planned.query,
           outcome: result.outcome,
-          episodeIds: result.episodes.map((e) => e.id),
-          lessonIds: result.lessons.map((l) => l.id),
+          episodeIds: servedEpisodeIds,
+          lessonIds: servedLessonIds,
+          // The fingerprints that CAUSED this retrieval, kept so the next
+          // iteration can tell whether what was served actually addressed them.
+          servedFor: planned.fingerprints ?? [],
           charsServed: codegraphBlock.length,
           durationMs: result.durationMs,
         }).catch(() => {});
+        await recordServed({ lessonIds: servedLessonIds, episodeIds: servedEpisodeIds }).catch(() => {});
         await emitLog(
           build.id,
           'system',

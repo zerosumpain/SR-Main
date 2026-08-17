@@ -116,6 +116,36 @@
   }
 
   const selected = $derived(network?.nodes.find((n) => n.id === selectedId) ?? null);
+
+  // Double-click opens the full record. Single click only selects — the two
+  // gestures answer different questions ("which is this" vs "tell me everything")
+  // and collapsing them would fire a fetch on every stray click while panning.
+  let detail = $state<{
+    path: string;
+    episodes: Array<Record<string, unknown>>;
+    lessons: Array<Record<string, unknown>>;
+    neighbours: Array<{ path: string; kind: string; weight: number }>;
+  } | null>(null);
+  let detailLoading = $state(false);
+  let detailError = $state<string | null>(null);
+  let detailSeq = 0;
+
+  async function openNode(id: string) {
+    selectedId = id;
+    const mine = ++detailSeq;
+    detailLoading = true;
+    detailError = null;
+    try {
+      const r = await fetch(`/api/jkai/codegraph/node/${encodeURIComponent(id)}`);
+      if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 100)}`);
+      const j = await r.json();
+      if (mine === detailSeq) detail = j;
+    } catch (e) {
+      if (mine === detailSeq) detailError = (e as Error).message;
+    } finally {
+      if (mine === detailSeq) detailLoading = false;
+    }
+  }
   const groupLabel = $derived(GROUP_BY.find((g) => g.id === groupBy)?.label ?? '');
   const groupQuestion = $derived(GROUP_BY.find((g) => g.id === groupBy)?.question ?? '');
 
@@ -320,6 +350,7 @@
             {explode}
             communities={network.communities ?? []}
             onSelect={(id) => (selectedId = id)}
+            onOpen={(id) => openNode(id)}
           />
         {:else}
           <NetworkGraph
@@ -329,6 +360,7 @@
             {selectedId}
             {focusCommunities}
             onSelect={(id) => (selectedId = id)}
+            onOpen={(id) => openNode(id)}
           />
         {/if}
       {/if}
@@ -347,6 +379,42 @@
           <div><dt>At HEAD</dt><dd>{selected.confirmed ? 'yes' : 'deleted'}</dd></div>
           <div><dt>Group</dt><dd>{selected.categories[0]}</dd></div>
         </dl>
+        {#if detailLoading}
+          <p class="hint">Loading the record…</p>
+        {:else if detailError}
+          <p class="err">Could not load the record: {detailError}</p>
+        {:else if detail && detail.path === selected.type}
+          {#if detail.lessons.length}
+            <h3>Rules ({detail.lessons.length})</h3>
+            <ul class="recs">
+              {#each detail.lessons.slice(0, 6) as l (l.id)}
+                <li><strong>{l.title}</strong>{l.stale_at ? ' · stale' : ''}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if detail.episodes.length}
+            <h3>Episodes ({detail.episodes.length})</h3>
+            <ul class="recs">
+              {#each detail.episodes.slice(0, 6) as e (e.id)}
+                <li><code>{e.fingerprint ?? e.gate ?? '—'}</code> · {e.verdict}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if detail.neighbours.length}
+            <h3>Linked to</h3>
+            <ul class="recs">
+              {#each detail.neighbours.slice(0, 8) as nb (nb.path + nb.kind)}
+                <li><span class="ek">{nb.kind}</span> {nb.path.split('/').slice(-2).join('/')}{nb.weight > 1 ? ` ×${nb.weight}` : ''}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if !detail.lessons.length && !detail.episodes.length && !detail.neighbours.length}
+            <p class="hint">Nothing recorded against this file yet.</p>
+          {/if}
+        {:else}
+          <p class="hint">Double-click the node to load its full record.</p>
+        {/if}
+
         <a
           class="ask"
           href="/jkai/codegraph/ask?q={encodeURIComponent(`file:${selected.type} | hops 1`)}"
@@ -360,7 +428,10 @@
           nodes no longer exist at HEAD.
         </p>
         <p class="hint">Accent links cross a group boundary; those are usually the interesting ones.</p>
-        <p class="hint">Drag to rotate in 3D, scroll to zoom, click a node to pin it.</p>
+        <p class="hint">
+          Drag to rotate in 3D, scroll to zoom, click to select — <strong>double-click to open the
+          full record</strong>.
+        </p>
       {/if}
     </aside>
   </section>
@@ -588,6 +659,14 @@
     word-break: break-all;
     margin: 0 0 0.6rem;
   }
+  .detail h3 { font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary); margin: 0.9rem 0 0.3rem; }
+  .recs { list-style: none; padding: 0; margin: 0; font-size: var(--fs-label); }
+  .recs li { padding: 0.15rem 0; border-top: 1px solid var(--divider); word-break: break-word; }
+  .recs code { font-family: var(--font-mono); font-size: var(--fs-label-xs); }
+  .ek { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary);
+        border: 1px solid var(--divider); padding: 0 0.25rem; margin-right: 0.25rem; }
+  .err { color: var(--error); font-size: var(--fs-label); }
   .ask {
     display: inline-block;
     margin-top: 0.8rem;

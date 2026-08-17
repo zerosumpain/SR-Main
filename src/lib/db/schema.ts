@@ -3409,7 +3409,17 @@ export const codegraphEdges = pgTable(
     targetId: text('target_id')
       .notNull()
       .references(() => codegraphNodes.id, { onDelete: 'cascade' }),
-    /** 'co_change' | 'needs_context' | 'gated_by' | 'imports' | 'fixed_by' */
+    /**
+     * 'imports'       — STATIC: this file imports that one. Exact, directional,
+     *                   and available without any session history. The strongest
+     *                   linkage in a codebase and the one the first cut missed
+     *                   entirely, which is why half the graph was isolated.
+     * 'tests'         — STATIC: a test file and its subject.
+     * 'co_change'     — BEHAVIOURAL: edited in the same session. Symmetric, so
+     *                   the pair is stored sorted to avoid two rows per pair.
+     * 'needs_context' — BEHAVIOURAL: read before the other was edited.
+     * 'gated_by' | 'fixed_by' — reserved.
+     */
     kind: text('kind').notNull(),
     weight: integer('weight').notNull().default(1),
     /** Suppressed by a human in review — filtered by the one loader, not deleted. */
@@ -3473,6 +3483,9 @@ export const codegraphEpisodes = pgTable(
     embedding: vector('embedding'),
     /** How often this episode has been SERVED, and how often it preceded a pass. */
     servedCount: integer('served_count').notNull().default(0),
+    helpfulCount: integer('helpful_count').notNull().default(0),
+    unhelpfulCount: integer('unhelpful_count').notNull().default(0),
+    lastServedAt: timestamp('last_served_at', { withTimezone: true }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }),
     retiredAt: timestamp('retired_at', { withTimezone: true }),
     retiredReason: text('retired_reason'),
@@ -3522,6 +3535,19 @@ export const codegraphLessons = pgTable(
     citedPaths: jsonb('cited_paths').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     embedding: vector('embedding'),
     servedCount: integer('served_count').notNull().default(0),
+    /**
+     * Outcome evidence — the input to `relevance.ts`.
+     *
+     * `helpful` and `unhelpful` are resolved MECHANICALLY from what the build
+     * did next (did the fingerprint that triggered the retrieval recur?), never
+     * by a model's judgement. A wrong "helpful" is indistinguishable from a real
+     * one afterwards and would poison the ranking permanently, so an
+     * unresolvable serve is left uncounted rather than guessed at — which is
+     * why `served` is deliberately larger than `helpful + unhelpful`.
+     */
+    helpfulCount: integer('helpful_count').notNull().default(0),
+    unhelpfulCount: integer('unhelpful_count').notNull().default(0),
+    lastServedAt: timestamp('last_served_at', { withTimezone: true }),
     /**
      * Forgetting, three distinct states — conflating them is what makes a
      * "forget" button destructive:
@@ -3617,10 +3643,20 @@ export const codegraphQueries = pgTable(
     charsServed: integer('chars_served').notNull().default(0),
     durationMs: integer('duration_ms'),
     errorMessage: text('error_message'),
+    /**
+     * The fingerprints that CAUSED this retrieval. Kept so the serve can be
+     * resolved later: if they recur in the next iteration's gate, what was
+     * served did not address them.
+     */
+    servedFor: jsonb('served_for').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** 'helpful' | 'unhelpful' | null while still unresolved. */
+    resolution: text('resolution'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('codegraph_queries_build_idx').on(t.buildId),
+    index('codegraph_queries_resolution_idx').on(t.resolution),
     index('codegraph_queries_channel_idx').on(t.channel),
     index('codegraph_queries_outcome_idx').on(t.outcome),
     index('codegraph_queries_created_idx').on(t.createdAt),

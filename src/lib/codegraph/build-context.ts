@@ -77,12 +77,14 @@ export function editedPathsFromActions(actions: unknown, max = 12): string[] {
  * genuinely nothing to ask about — which the caller must log as `empty` rather
  * than as a failure, because the two mean very different things.
  */
-export function planBuildQuery(input: BuildRetrievalInput): { query: string; reason: string } | null {
+export function planBuildQuery(
+  input: BuildRetrievalInput,
+): { query: string; reason: string; fingerprints: string[] } | null {
   // 1. The sharpest key: what the gate just said.
   const fps = fingerprintsIn(input.previousEvaluation ?? '', 'npm run gate');
   if (fps.length) {
     const q = cgqlForFingerprints(fps, 3);
-    if (q) return { query: q, reason: `gate failure (${fps.slice(0, 3).join(', ')})` };
+    if (q) return { query: q, reason: `gate failure (${fps.slice(0, 3).join(', ')})`, fingerprints: fps };
   }
 
   // 2. Otherwise the file set: what was edited last, else what the task names.
@@ -94,7 +96,9 @@ export function planBuildQuery(input: BuildRetrievalInput): { query: string; rea
   const unique = [...new Set(files)];
   if (unique.length) {
     const q = cgqlForFiles(unique, { hops: 1 });
-    if (q) return { query: q, reason: `file set (${unique.length} path(s))` };
+    // No fingerprints: a file-set serve cannot be resolved by "did the error
+    // recur", so it stays unresolved rather than being credited for free.
+    if (q) return { query: q, reason: `file set (${unique.length} path(s))`, fingerprints: [] };
   }
 
   return null;
