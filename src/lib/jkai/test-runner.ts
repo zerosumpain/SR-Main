@@ -168,7 +168,7 @@ export function extractDiagnostics(output: string, limit = 2000): string {
 
   if (picked.length === 0) {
     // Nothing recognisable. The end of the log beats the beginning every time.
-    const body = plain.length <= limit ? plain : `…\n${plain.slice(-limit)}`;
+    const body = plain.length <= limit ? plain : `… (${plain.length - limit} characters dropped)\n${plain.slice(-limit)}`;
     return plain ? `${prefix}${body}` : '';
   }
 
@@ -183,7 +183,7 @@ export function extractDiagnostics(output: string, limit = 2000): string {
   // Overflow drops the HEAD, not the tail. The gate is an `&&` chain, so it
   // stops at the stage that failed and the failure is the last thing in the
   // log; keeping the first n characters keeps whatever ran before the problem.
-  const body = joined.length <= limit ? joined : `… (earlier output dropped)\n${joined.slice(-limit)}`;
+  const body = joined.length <= limit ? joined : `… (${joined.length - limit} characters dropped)\n${joined.slice(-limit)}`;
   return `${prefix}${body}`;
 }
 

@@ -105,6 +105,17 @@ describe('extractDiagnostics', () => {
     expect(extractDiagnostics(out)).toContain('…');
   });
 
+  it('reports how many diagnostic characters were dropped when truncating', () => {
+    const out = `Error: ${'x'.repeat(2_100)}`;
+    expect(extractDiagnostics(out)).toMatch(/^… \(107 characters dropped\)\n/);
+  });
+
+  it('does not claim truncation when diagnostics fit the 2,000-character budget', () => {
+    const d = extractDiagnostics('Error: still visible');
+    expect(d).toBe('Error: still visible');
+    expect(d).not.toContain('characters dropped');
+  });
+
   it('returns nothing for empty input rather than throwing', () => {
     expect(extractDiagnostics('')).toBe('');
   });
