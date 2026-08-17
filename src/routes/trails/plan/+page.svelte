@@ -3,6 +3,7 @@
   import PlannerMap from '$lib/components/trails/PlannerMap.svelte';
   import LineChart from '$lib/components/trails/LineChart.svelte';
   import DifficultyChip from '$lib/components/trails/DifficultyChip.svelte';
+  import GpxDownload from '$lib/components/trails/GpxDownload.svelte';
   import { formatDistance, formatDuration, formatElevation, activityLabel } from '$lib/trails/format';
   import { gradeDifficulty, type Difficulty } from '$lib/trails/difficulty';
   import { networkLabel, type SharedRouteSummary } from '$lib/trails/discover';
@@ -15,7 +16,12 @@
   // The form opens on what the engine would commission today; every control
   // stays live, so the proposal is a starting point, never a decision.
   let sport = $state<(typeof SPORTS)[number]>(data.proposal?.sport ?? 'run');
-  let start = $state<[number, number] | null>(null);
+  // The start defaults to the last place Home Assistant saw the john device;
+  // any manual placement (map tap, geolocation, geocoded place) replaces it.
+  let start = $state<[number, number] | null>(
+    data.deviceLocation ? [data.deviceLocation.lng, data.deviceLocation.lat] : null,
+  );
+  let startFromDevice = $state(Boolean(data.deviceLocation));
   let finish = $state<[number, number] | null>(null);
   let mode = $state<'loop' | 'point'>('loop');
   let picking = $state<'start' | 'finish'>('start');
@@ -117,9 +123,19 @@
   });
 
   function onpick(lngLat: [number, number], which: 'start' | 'finish') {
-    if (which === 'start') start = lngLat;
-    else finish = lngLat;
+    if (which === 'start') {
+      start = lngLat;
+      startFromDevice = false;
+    } else {
+      finish = lngLat;
+    }
     savedId = null;
+  }
+
+  function deviceAge(): string {
+    const mins = data.deviceLocation?.ageMins;
+    if (mins == null) return '';
+    return mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`;
   }
 
   function useMyLocation() {
@@ -134,6 +150,7 @@
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         start = [pos.coords.longitude, pos.coords.latitude];
+        startFromDevice = false;
         locating = false;
         locationError = null;
         savedId = null;
@@ -223,6 +240,7 @@
       if (p.allowOutAndBack != null) allowOutAndBack = p.allowOutAndBack;
       if (body.start) {
         start = [body.start.lng, body.start.lat];
+        startFromDevice = false;
         savedId = null;
       }
       if (body.finish) {
@@ -479,7 +497,13 @@
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Where</span>
       <span class="nm-sec-meta">
-        {#if start}{start[1].toFixed(4)}, {start[0].toFixed(4)}{:else}no start set{/if}
+        {#if start && startFromDevice && data.deviceLocation}
+          {data.deviceLocation.label} · your device, {deviceAge()}{data.deviceLocation.stale
+            ? ' (stale)'
+            : ''}
+        {:else if start}
+          {start[1].toFixed(4)}, {start[0].toFixed(4)}
+        {:else}no start set{/if}
       </span>
     </div>
 
@@ -489,6 +513,8 @@
           the finish{/if}. Or use your location.
       {:else if mode === 'point' && !finish}
         Start is set. Now <strong>tap the map</strong> for the finish.
+      {:else if startFromDevice}
+        Start is where Home Assistant last saw your device — tap the map to move it.
       {:else}
         Start is set — tap the map again to move it.
       {/if}
@@ -510,7 +536,7 @@
         {locating ? 'Locating…' : 'Use my location'}
       </button>
       {#if start}
-        <button type="button" class="chip" onclick={() => { start = null; finish = null; result = null; savedId = null; }}>
+        <button type="button" class="chip" onclick={() => { start = null; startFromDevice = false; finish = null; result = null; savedId = null; }}>
           Clear
         </button>
       {/if}
@@ -693,7 +719,10 @@
         </button>
         {#if savedId}
           <a class="row-link" href="/trails/routes/{savedId}">Saved — open it</a>
-          <a class="row-link" href="/api/trails/routes/{savedId}/gpx">Download GPX</a>
+          <GpxDownload
+            url="/api/trails/routes/{savedId}/gpx"
+            name={chosen ? `${activityLabel(plannedSport)} ${(chosen.distanceM / 1000).toFixed(1)} km` : 'route'}
+          />
         {/if}
       </div>
     </section>
@@ -778,7 +807,10 @@
                     </button>
                     {#if sharedSavedId}
                       <a class="row-link" href="/trails/routes/{sharedSavedId}">Saved — open it</a>
-                      <a class="row-link" href="/api/trails/routes/{sharedSavedId}/gpx">Download GPX</a>
+                      <GpxDownload
+                        url="/api/trails/routes/{sharedSavedId}/gpx"
+                        name={sharedDetail.name}
+                      />
                     {/if}
                   </div>
                 </div>

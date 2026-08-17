@@ -13,6 +13,7 @@
   import { estimateTimeS } from '$lib/trails/field/nav';
   import { gradeDifficulty } from '$lib/trails/difficulty';
   import DifficultyChip from '$lib/components/trails/DifficultyChip.svelte';
+  import GpxDownload from '$lib/components/trails/GpxDownload.svelte';
   import type { TrackPoint } from '$lib/trails/track';
   import type { Coord } from '$lib/trails/scoring';
 
@@ -165,7 +166,7 @@
     <div class="nm-sec-hd"><span class="sr-label-tight">Take it out</span></div>
     <div class="actions">
       <a class="nm-save-btn" href="/trails/record?route={r.id}">Follow and record</a>
-      <a class="row-link" href="/api/trails/routes/{r.id}/gpx">Download GPX</a>
+      <GpxDownload url="/api/trails/routes/{r.id}/gpx" name={r.name} />
       <button class="row-link danger" onclick={remove} disabled={deleting}>
         {deleting ? 'Deleting…' : 'Delete route'}
       </button>
