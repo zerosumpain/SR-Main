@@ -5,6 +5,7 @@ import {
   writeFileInSandboxChunked,
   seedDevCommand,
   parseBuiltChapterCount,
+  truncateOutputWithNotice,
   type ExecResult,
 } from './sandbox';
 
@@ -27,6 +28,22 @@ describe('seedDevCommand', () => {
     const cmd = seedDevCommand(BASE, false);
     expect(cmd).toContain(`find ${BASE}/dev -mindepth 1 -maxdepth 1 -exec rm -rf {} +`);
     expect(cmd.indexOf('rm -rf')).toBeLessThan(cmd.indexOf('cp -a'));
+  });
+});
+
+describe('truncateOutputWithNotice', () => {
+  it('returns untruncated output unchanged', () => {
+    const output = 'fatal: repository not found';
+
+    expect(truncateOutputWithNotice(output)).toBe(output);
+  });
+
+  it('reports exactly how many characters were dropped', () => {
+    const output = 'a'.repeat(2_007);
+
+    expect(truncateOutputWithNotice(output)).toBe(
+      `${'a'.repeat(2_000)}\n[7 characters truncated]`,
+    );
   });
 });
 

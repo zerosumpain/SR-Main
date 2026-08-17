@@ -312,7 +312,9 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
   if (cloneRes.exitCode !== 0) {
     // Redact the token from the command echo (effectiveRemote) and any output.
     throw new Error(
-      redactToken(`git clone failed: ${cloneRes.stdout}\n${cloneRes.stderr}`).slice(0, 2000),
+      truncateOutputWithNotice(
+        redactToken(`git clone failed: ${cloneRes.stdout}\n${cloneRes.stderr}`),
+      ),
     );
   }
 
@@ -662,6 +664,17 @@ function tokenlessRemoteUrl(repoUrl: string): string {
 /** Scrub any `x-access-token:<token>@` credentials out of text before logging/storing. */
 function redactToken(text: string): string {
   return text.replace(/x-access-token:[^@\s]+@/g, 'x-access-token:***@');
+}
+
+/**
+ * Keep failure output readable without hiding that its tail was omitted.
+ * Redact credentials before calling this helper so the notice cannot expose a
+ * token that appears after the retained prefix.
+ */
+export function truncateOutputWithNotice(output: string, maxLength = 2000): string {
+  if (output.length <= maxLength) return output;
+  const dropped = output.length - maxLength;
+  return `${output.slice(0, maxLength)}\n[${dropped} characters truncated]`;
 }
 
 /** True when a `gh` CLI is on PATH in the sandbox/host. Cached per-process. */
