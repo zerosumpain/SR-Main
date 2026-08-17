@@ -98,6 +98,21 @@ describe('extractDiagnostics', () => {
     const out = `${'preamble line\n'.repeat(400)}the summary nobody saw`;
     const d = extractDiagnostics(out, 200);
     expect(d).toContain('the summary nobody saw');
+    expect(d).toContain(`${out.length - 200} characters dropped`);
+  });
+
+  it('states how many diagnostic characters were dropped when the result is truncated', () => {
+    const limit = 200;
+    const out = `Error: ${'x'.repeat(250)}`;
+    const d = extractDiagnostics(out, limit);
+    expect(d).toContain(`${out.length - limit} characters dropped`);
+    expect(d.endsWith('x'.repeat(limit))).toBe(true);
+  });
+
+  it('does not claim characters were dropped when diagnostics fit within the limit', () => {
+    const out = 'Error: the actual cause';
+    expect(extractDiagnostics(out, 200)).toBe(out);
+    expect(extractDiagnostics(out, 200)).not.toContain('characters dropped');
   });
 
   it('marks where it skipped, so nobody reads it as a contiguous log', () => {
