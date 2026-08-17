@@ -1625,6 +1625,40 @@ class Orchestrator {
             .update(jkaiBuilds)
             .set({ status: 'completed', publishedSlug: prUrl, updatedAt: new Date() })
             .where(eq(jkaiBuilds.id, buildId));
+
+          // Resolve any codegraph serve that is still open.
+          //
+          // Feedback otherwise runs ONLY at the start of the next iteration,
+          // and a build that gets it right first time has no next iteration —
+          // so its serve stayed unresolved forever and the evidence never
+          // accrued. The loop could learn from builds that struggled but not
+          // from ones that went well, which is backwards: a first-time pass is
+          // the strongest possible evidence that what was served was right.
+          //
+          // Found by running a real build (e71e7b33): the push served 4,987
+          // characters, the build completed in one iteration with a green gate
+          // and an open PR, and helpful/unhelpful both stayed at 0.
+          //
+          // Only on the SUCCESS path, deliberately. A failed build is not
+          // evidence against what it was served — it fails for provider errors,
+          // token caps and stalls far more often than for bad context — and
+          // counting those as `unhelpful` would punish good intelligence for
+          // unrelated infrastructure faults.
+          try {
+            const { resolveCompletedBuildServes } = await import('$lib/codegraph/feedback');
+            const r = await resolveCompletedBuildServes(buildId);
+            if (r.resolved > 0) {
+              await emitLog(
+                buildId,
+                'system',
+                `Codegraph feedback: ${r.resolved} serve(s) resolved as helpful on first-pass completion — ${r.lessons} lesson(s), ${r.episodes} episode(s)`,
+                iteration.id,
+              );
+            }
+          } catch {
+            // Never let bookkeeping fail a build that has already succeeded.
+          }
+
           await emitLog(buildId, 'system', prUrl ? `Build complete — PR: ${prUrl}` : 'Build complete — no changes to publish.', iteration.id);
           await emitStage(buildId, { stage: 'completed', message: prUrl ?? undefined } as any);
           try {
