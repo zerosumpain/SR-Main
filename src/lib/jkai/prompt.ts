@@ -517,7 +517,10 @@ export function buildIterationContext(
   // this to skip the tool-call discovery phase that previously ate the
   // first 20-50 actions of every iteration.
   if (codebaseDigest.trim()) {
-    contextMessage += `\n\n${codebaseDigest}\n\nDO NOT re-read or re-list these files unless you're about to modify one. Trust the digest for "what exists and where".`;
+    const digestGuidance = mode === 'repo'
+      ? 'This codebase digest is a partial, recency-ranked sample of the workspace. For anything you cannot see in the digest, use grep or find rather than assuming it does not exist.'
+      : 'DO NOT re-read or re-list these files unless you\'re about to modify one. Trust the digest for "what exists and where".';
+    contextMessage += `\n\n${codebaseDigest}\n\n${digestGuidance}`;
   } else if (fileList.trim()) {
     contextMessage += `\n\n## Current Workspace Files\n\`\`\`\n${fileList}\n\`\`\``;
   } else {
