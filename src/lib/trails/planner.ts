@@ -80,30 +80,43 @@ export async function suggestTarget(sport: string): Promise<{
     mtb: 20_000,
   };
 
+  // A median needs a sample. With one or two outings the "typical distance" is
+  // just whichever one happened, so below this the default wins — otherwise a
+  // single short test run drags every future suggestion down with it.
+  const MIN_SAMPLE = 3;
+
   let median: number | null = null;
+  let sampleCount = 0;
   try {
     const since = Math.floor(Date.now() / 1000) - 56 * 86400;
     const [row] = await db
       .select({
         median: sql<number | null>`percentile_cont(0.5) within group (order by ${activities.distanceM})`,
+        n: sql<number>`count(*)::int`,
       })
       .from(activities)
       .where(
         sql`${activities.activityType} = ${sport} and ${activities.startDate} >= ${since} and ${activities.distanceM} is not null`,
       );
-    if (row?.median && row.median > 500) median = row.median;
+    sampleCount = row?.n ?? 0;
+    if (row?.median && row.median > 500 && sampleCount >= MIN_SAMPLE) median = row.median;
   } catch (err) {
     console.warn('[trails/planner] median distance lookup failed:', (err as Error)?.message);
   }
 
   if (median == null) {
+    const fallback = DEFAULTS[sport] ?? 8000;
     rationale.push(
-      `No recent ${sport} history, so the target is the default ${Math.round((DEFAULTS[sport] ?? 8000) / 1000)} km.`,
+      sampleCount > 0
+        ? `Only ${sampleCount} recent ${sport}${sampleCount === 1 ? '' : 's'} on record — too few to read a typical distance from, so the target is the default ${Math.round(fallback / 1000)} km.`
+        : `No recent ${sport} history, so the target is the default ${Math.round(fallback / 1000)} km.`,
     );
-    return { distanceM: DEFAULTS[sport] ?? 8000, source: 'default', rationale };
+    return { distanceM: fallback, source: 'default', rationale };
   }
 
-  rationale.push(`Typical recent ${sport}: ${(median / 1000).toFixed(1)} km.`);
+  rationale.push(
+    `Typical recent ${sport} over ${sampleCount} outings: ${(median / 1000).toFixed(1)} km.`,
+  );
 
   let factor = 1;
   try {

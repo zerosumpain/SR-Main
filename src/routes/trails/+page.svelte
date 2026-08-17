@@ -51,7 +51,12 @@
         Every outdoor workout Apple Health has sent, with its GPS trace, heart rate and splits.
       </p>
     </div>
-    <a class="back-link" href="/health">Health</a>
+    <nav class="hdr-nav">
+      <a href="/trails/plan">Plan</a>
+      <a href="/trails/routes">Routes</a>
+      <a href="/trails/record">Record</a>
+      <a href="/health">Health</a>
+    </nav>
   </header>
 
   {#if data.error}
@@ -189,16 +194,22 @@
     color: var(--text-secondary);
     max-width: 64ch;
   }
-  .back-link {
+  .hdr-nav {
+    display: flex;
+    gap: 1rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .hdr-nav a {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--accent);
     text-decoration: none;
-    flex-shrink: 0;
   }
-  .back-link:hover {
+  .hdr-nav a:hover {
     text-decoration: underline;
   }
 
