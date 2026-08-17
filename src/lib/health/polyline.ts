@@ -37,3 +37,38 @@ export function decodePolyline(encoded: string): [number, number][] {
 
   return points;
 }
+
+function encodeSigned(value: number, out: string[]): void {
+  let v = value < 0 ? ~(value << 1) : value << 1;
+  while (v >= 0x20) {
+    out.push(String.fromCharCode((0x20 | (v & 0x1f)) + 63));
+    v >>= 5;
+  }
+  out.push(String.fromCharCode(v + 63));
+}
+
+/**
+ * Encode [lat, lng] pairs into a Google encoded polyline — the inverse of
+ * decodePolyline above.
+ *
+ * Used to store a compact rendering of an activity track so the /trails list
+ * can draw route shapes without loading every full coordinate array. The 1e5
+ * rounding costs about a metre of precision, which is invisible at list scale
+ * and never used for measurement — distances come from the stored track.
+ */
+export function encodePolyline(points: [number, number][]): string {
+  const out: string[] = [];
+  let prevLat = 0;
+  let prevLng = 0;
+
+  for (const [lat, lng] of points) {
+    const roundedLat = Math.round(lat * 1e5);
+    const roundedLng = Math.round(lng * 1e5);
+    encodeSigned(roundedLat - prevLat, out);
+    encodeSigned(roundedLng - prevLng, out);
+    prevLat = roundedLat;
+    prevLng = roundedLng;
+  }
+
+  return out.join('');
+}

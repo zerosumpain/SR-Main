@@ -3,6 +3,8 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
 import { appleHealthMetrics } from '$lib/db/schema';
 import { and, eq, gte, lte } from 'drizzle-orm';
+import { ingestWorkouts } from '$lib/trails/ingest';
+import type { HaeWorkout } from '$lib/trails/hae-workouts';
 import type { RequestHandler } from './$types';
 
 const SUPPORTED_METRICS = [
@@ -46,6 +48,9 @@ export const POST: RequestHandler = async ({ request }) => {
   const start = Date.now();
   const payload = await request.json();
   const metrics: AppleHealthMetric[] = payload?.data?.metrics || [];
+  const workouts: HaeWorkout[] = Array.isArray(payload?.data?.workouts)
+    ? payload.data.workouts
+    : [];
 
   console.log(
     `[apple-ingest] received ${metrics.length} metric(s): ` +
@@ -113,6 +118,25 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
+  // Workouts — the /trails half. Independent of the metrics loop above: a
+  // failure in either must not cost the other its batch.
+  let workoutResult = { workoutsSynced: 0, tracksSynced: 0, seriesSynced: 0, skipped: 0 };
+  if (workouts.length) {
+    console.log(`[apple-ingest] received ${workouts.length} workout(s)`);
+    const ingested = await ingestWorkouts(workouts);
+    errors.push(...ingested.errors);
+    workoutResult = {
+      workoutsSynced: ingested.workoutsSynced,
+      tracksSynced: ingested.tracksSynced,
+      seriesSynced: ingested.seriesSynced,
+      skipped: ingested.skipped,
+    };
+    console.log(
+      `[apple-ingest] workouts — ${ingested.workoutsSynced} synced, ` +
+        `${ingested.tracksSynced} track(s), ${ingested.seriesSynced} series`,
+    );
+  }
+
   console.log(
     `[apple-ingest] done — ${totalSynced} record(s) synced` +
       (errors.length ? `, errors: ${errors.join('; ')}` : ''),
@@ -121,6 +145,7 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({
     success: errors.length === 0,
     recordsSynced: totalSynced,
+    ...workoutResult,
     errors: errors.length ? errors : undefined,
     duration: Date.now() - start,
   });

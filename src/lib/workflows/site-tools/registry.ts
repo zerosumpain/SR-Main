@@ -32,6 +32,7 @@ import './tools/scraper';
 import './tools/file-share';
 import './tools/files';
 import './tools/route-export';
+import './tools/route-plan';
 import './tools/knowledge';
 import './tools/intel-graph';
 import './tools/agents';
