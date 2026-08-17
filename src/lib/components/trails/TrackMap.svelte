@@ -7,12 +7,15 @@
     bounds = null,
     colourBy = 'none',
     height = '420px',
+    offline = false,
   }: {
     coordinates: TrackPoint[];
     bounds?: { n: number; s: number; e: number; w: number } | null;
     /** 'pace' renders the trace as a speed ramp instead of one flat line. */
     colourBy?: 'none' | 'pace';
     height?: string;
+    /** Read downloaded tiles from IndexedDB before going to the network. */
+    offline?: boolean;
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
@@ -125,10 +128,15 @@
           map.scrollWheelZoom.disable();
         });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
+        if (offline) {
+          const { createOfflineTileLayer } = await import('$lib/trails/field/offline-layer');
+          createOfflineTileLayer(L).addTo(map);
+        } else {
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap',
+            maxZoom: 19,
+          }).addTo(map);
+        }
 
         const latlngs = coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
 

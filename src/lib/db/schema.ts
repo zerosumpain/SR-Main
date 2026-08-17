@@ -435,6 +435,68 @@ export const activitySeries = pgTable(
 export type ActivitySeriesRecord = typeof activitySeries.$inferSelect;
 export type NewActivitySeries = typeof activitySeries.$inferInsert;
 
+// A route you intend to run, as opposed to one you have run. Kept apart from
+// `activities` because the two answer different questions and have different
+// lifecycles — a plan can be discarded, re-planned, or run many times.
+//
+// A recording made in the field does NOT land here: it becomes a row in
+// `activities` with source='recorded', so it sits alongside the Apple ones on
+// /trails instead of in a parallel world.
+export const plannedRoutes = pgTable(
+  'planned_routes',
+  {
+    id: text('id').primaryKey(), // uuid
+    name: text('name').notNull(),
+    sport: text('sport').notNull(), // run | trail_run | ride | mtb | hike | walk
+    source: text('source').notNull().default('planned'), // 'planned' | 'imported'
+
+    coordinates: jsonb('coordinates').notNull(), // [[lng, lat, ele|null], ...]
+    bounds: jsonb('bounds').notNull(),
+    polyline: text('polyline'),
+
+    distanceM: doublePrecision('distance_m').notNull(),
+    ascentM: doublePrecision('ascent_m'),
+    descentM: doublePrecision('descent_m'),
+    durationS: integer('duration_s'), // the router's estimate
+
+    /** 0..1 from the loop-quality scorer. Null for an imported GPX. */
+    score: doublePrecision('score'),
+    /** Full RouteScore — overlap, spurs, terrain, profile, notes. */
+    scoreBreakdown: jsonb('score_breakdown'),
+    targetDistanceM: doublePrecision('target_distance_m'),
+
+    notes: text('notes'),
+    createdAt: integer('created_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [index('planned_routes_created_idx').on(t.createdAt), index('planned_routes_sport_idx').on(t.sport)],
+);
+
+export type PlannedRouteRecord = typeof plannedRoutes.$inferSelect;
+export type NewPlannedRoute = typeof plannedRoutes.$inferInsert;
+
+// Points of interest hung off a planned route — parking, water, a gate that
+// sticks. Ported from JKAImaps, where they lived in IndexedDB and could not be
+// seen from anywhere else.
+export const routeWaypoints = pgTable(
+  'route_waypoints',
+  {
+    id: text('id').primaryKey(),
+    routeId: text('route_id')
+      .notNull()
+      .references(() => plannedRoutes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    icon: text('icon').notNull().default('custom'), // parking | water | viewpoint | pub | shelter | gate | custom
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    note: text('note'),
+    createdAt: integer('created_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [index('route_waypoints_route_idx').on(t.routeId)],
+);
+
+export type RouteWaypointRecord = typeof routeWaypoints.$inferSelect;
+export type NewRouteWaypoint = typeof routeWaypoints.$inferInsert;
+
 // ==========================================
 // Biome Config
 // ==========================================
