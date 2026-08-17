@@ -79,6 +79,9 @@
     { label: 'Chat', href: '/jkai', meta: 'THREAD' },
     { label: 'Canvas', href: '/jkai/canvas', meta: canvasMeta },
     { label: 'Intel', href: '/jkai/intel', meta: 'GRAPH' },
+    // Beside Intel, not under it: the two graphs answer different questions
+    // (the world vs this codebase) and neither is a subsection of the other.
+    { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Builds', href: '/jkai/builds', meta: 'AUTONOMOUS' },
   ]);
   const library: MenuRow[] = [

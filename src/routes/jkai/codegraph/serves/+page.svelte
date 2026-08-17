@@ -47,6 +47,55 @@
     </tbody>
   </table>
 
+  <h2>Did it change the builds?</h2>
+  <p class="lede small">
+    Repo builds only — an app build has no history in this graph, so including them would dilute
+    the thing being measured. Two arms, not a before/after line: a date split would credit the
+    graph for anything else that changed on the same day.
+  </p>
+  <table>
+    <thead><tr><th></th><th>Builds</th><th>Mean iterations</th></tr></thead>
+    <tbody>
+      <tr><td>Without a served block</td><td>{n(data.impact.builds_without)}</td><td>{n(data.impact.mean_without)}</td></tr>
+      <tr><td>With a served block</td><td>{n(data.impact.builds_with)}</td><td>{n(data.impact.mean_with)}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Feedback resolved</h2>
+  <p class="lede small">
+    A serve is <strong>helpful</strong> when the failure that triggered it did not come back, and
+    <strong>unhelpful</strong> when it did. Anything the gate cannot answer stays
+    <strong>unresolved</strong> rather than being guessed at — a wrong "helpful" is
+    indistinguishable from a real one afterwards and would bias every future ranking.
+  </p>
+  <dl class="tiles">
+    <div><dt>Helpful</dt><dd>{n(data.resolution.helpful)}</dd></div>
+    <div><dt>Unhelpful</dt><dd>{n(data.resolution.unhelpful)}</dd></div>
+    <div><dt>Unresolved</dt><dd>{n(data.resolution.unresolved)}</dd></div>
+  </dl>
+
+  <h2>Per build</h2>
+  {#if !data.perBuild.length}
+    <p class="alarm">No build has been served yet.</p>
+  {:else}
+    <table>
+      <thead><tr><th>Build</th><th>Status</th><th>Iters</th><th>Served</th><th>Empty</th><th>Helped</th><th>Didn't</th></tr></thead>
+      <tbody>
+        {#each data.perBuild as b (b.id)}
+          <tr>
+            <td class="t">{b.title}</td>
+            <td>{b.status}</td>
+            <td class="num">{n(b.iterations)}</td>
+            <td class="num">{n(b.served)}</td>
+            <td class="num">{n(b.empty)}</td>
+            <td class="num good">{n(b.helpful)}</td>
+            <td class="num" class:bad={Number(b.unhelpful) > 0}>{n(b.unhelpful)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  {/if}
+
   <h2>Recent queries</h2>
   {#if !data.recent.length}
     <p class="alarm">Nothing recorded yet.</p>
@@ -85,5 +134,12 @@
   code { font-family: var(--font-mono); font-size: 0.76rem; word-break: break-all; flex: 1; min-width: 200px; }
   .muted { color: var(--text-secondary); font-size: var(--fs-label-xs); }
   .err { color: var(--error); font-size: var(--fs-label-xs); }
+  .tiles { display: flex; gap: 1.5rem; margin: 0 0 1rem; }
+  .tiles div { display: flex; flex-direction: column; }
+  .tiles dt { font-size: var(--fs-label-xs); text-transform: uppercase; color: var(--text-secondary); }
+  .tiles dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-body-lg); }
+  td.t { max-width: 44ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.num { text-align: right; }
+  td.good { color: var(--accent-ink); }
   .alarm { border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error); padding: 0.8rem; font-size: 0.85rem; }
 </style>

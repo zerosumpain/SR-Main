@@ -18,6 +18,7 @@ import {
   codegraphNodes,
 } from '$lib/db/schema';
 import { parseCgql, type Pick, type QueryPlan, VERDICTS } from './query';
+import { relevanceOf, packByRelevance, type RelevanceParts } from './relevance';
 
 export interface RetrievedLesson {
   id: string;
@@ -25,6 +26,8 @@ export interface RetrievedLesson {
   body: string;
   citedPaths: string[];
   origin: string;
+  /** Why this was ranked where it was — surfaced in the UI and the audit. */
+  relevance: RelevanceParts;
 }
 
 export interface RetrievedEpisode {
@@ -39,6 +42,7 @@ export interface RetrievedEpisode {
   filesTouched: string[];
   prNumber: number | null;
   occurredAt: Date | null;
+  relevance: RelevanceParts;
 }
 
 export interface RetrievedNode {
@@ -317,6 +321,13 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
         lessons.push({
           id: l.id, title: l.title, body: l.body,
           citedPaths: (l.citedPaths as string[]) ?? [], origin: l.origin,
+          relevance: relevanceOf({
+            served: l.servedCount ?? 0,
+            helpful: l.helpfulCount ?? 0,
+            unhelpful: l.unhelpfulCount ?? 0,
+            observedAt: l.observedAt ?? l.updatedAt ?? null,
+            stale: Boolean(l.staleAt),
+          }),
         });
       }
     } else if (pick.kind === 'episodes') {
@@ -326,6 +337,12 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
           verification: e.verification, fingerprint: e.fingerprint, gate: e.gate,
           verdict: e.verdict, filesTouched: (e.filesTouched as string[]) ?? [],
           prNumber: e.prNumber, occurredAt: e.occurredAt,
+          relevance: relevanceOf({
+            served: e.servedCount ?? 0,
+            helpful: e.helpfulCount ?? 0,
+            unhelpful: e.unhelpfulCount ?? 0,
+            observedAt: e.occurredAt ?? null,
+          }),
         });
       }
     } else if (nodeIds.length) {
@@ -342,6 +359,12 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
       nodes.push(...rows);
     }
   }
+
+  // Rank by measured relevance before anything is spent on it. This is the
+  // point at which atrophy reaches a build: a lesson that has never helped
+  // sinks here, and the budget below simply never reaches it.
+  lessons.sort((a, b) => b.relevance.score - a.relevance.score);
+  episodes.sort((a, b) => b.relevance.score - a.relevance.score);
 
   return {
     plan,
@@ -391,15 +414,20 @@ export function buildContextBlock(result: RetrievalResult): string {
   let used = lines[0].length;
   // Lessons first: a rule is shorter and more general than an episode, so it
   // buys more per character when the budget is tight.
+  //
+  // Packed BY RELEVANCE rather than in list order, and with `break` replaced by
+  // a skip: one oversized lesson used to end the section, silently costing
+  // every smaller high-relevance rule behind it.
   if (result.lessons.length) {
     lines.push('', '### Rules that apply here');
-    for (const l of result.lessons) {
-      const body = trim(l.body, 700);
-      const entry = `\n**${l.title}**\n${body}`;
-      if (used + entry.length > budget) break;
-      lines.push(entry);
-      used += entry.length;
-    }
+    const entries = result.lessons.map((l) => ({
+      item: `\n**${l.title}**\n${trim(l.body, 700)}`,
+      score: l.relevance.score,
+      cost: trim(l.body, 700).length + l.title.length + 6,
+    }));
+    const packed = packByRelevance(entries, Math.max(0, budget - used));
+    for (const e of packed.chosen) lines.push(e);
+    used += packed.spent;
   }
 
   if (result.episodes.length) {

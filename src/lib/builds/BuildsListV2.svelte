@@ -245,7 +245,13 @@
         Autonomous AI development. <code>plan</code>-first, <code>design-system</code>-locked, fully observable.
       </p>
     </div>
-    <a class="back-link" href="/jkai">← JKAI</a>
+    <nav class="hdr-links">
+      <!-- Anchored from here because this is where you ask "why did that build
+           take five iterations": the answer is what it was, or was not, told. -->
+      <a class="back-link" href="/jkai/codegraph">⌗ Codegraph</a>
+      <a class="back-link" href="/jkai/codegraph/serves">Build impact</a>
+      <a class="back-link" href="/jkai">← JKAI</a>
+    </nav>
   </header>
 
   <section class="nm-sec">
@@ -538,6 +544,7 @@
     color: var(--text-muted);
   }
 
+  .hdr-links { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
   .page-hdr {
     display: flex;
     justify-content: space-between;
