@@ -92,6 +92,14 @@
 /projects
 /projects/[slug]/[...path]
 /projects/archetype/llm
+/projects/bathroom
+/projects/bathroom/brief
+/projects/bathroom/ideas
+/projects/bathroom/money
+/projects/bathroom/planner
+/projects/bathroom/programme
+/projects/bathroom/signoff
+/projects/bathroom/trades
 /projects/broads-pilot
 /projects/broads-pilot/method
 /projects/data-convergence

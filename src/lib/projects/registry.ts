@@ -24,6 +24,7 @@ export const STATIC_PROJECT_KEYS = [
   'brass-and-rails',
   'archetype',
   'data-convergence',
+  'bathroom',
 ] as const;
 
 // Keys that may legitimately be toggled: the static cards plus any currently
