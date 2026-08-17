@@ -1,4 +1,36 @@
 import { describe, it, expect } from 'vitest';
+import { requestHost } from './request-host';
+
+describe('requestHost', () => {
+  const event = (host: string | null, url = 'https://strangeramblings.com/create') => ({
+    request: new Request(url, host ? { headers: { host } } : undefined),
+    url: new URL(url),
+  });
+
+  it('reads the header, not the URL — the bug this exists for', () => {
+    // Production sets ORIGIN, so event.url is ALWAYS the canonical host.
+    // Testing against url.hostname is what let the redirect ship doing nothing.
+    expect(requestHost(event('maps.strangeramblings.com'))).toBe('maps.strangeramblings.com');
+  });
+
+  it('falls back to the URL when there is no Host header', () => {
+    const e = event(null);
+    e.request.headers.delete('host');
+    expect(requestHost(e)).toBe('strangeramblings.com');
+  });
+
+  it('strips a port', () => {
+    expect(requestHost(event('maps.strangeramblings.com:443'))).toBe('maps.strangeramblings.com');
+  });
+
+  it('lowercases', () => {
+    expect(requestHost(event('MAPS.StrangeRamblings.com'))).toBe('maps.strangeramblings.com');
+  });
+
+  it('leaves the canonical host alone', () => {
+    expect(requestHost(event('strangeramblings.com'))).toBe('strangeramblings.com');
+  });
+});
 
 // The mapping is duplicated here rather than exported from hooks.server.ts:
 // importing that module pulls in Auth.js, the database and the whole workflow
