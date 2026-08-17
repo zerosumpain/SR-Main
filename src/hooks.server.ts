@@ -267,9 +267,33 @@ const { handle: authHandle } = SvelteKitAuth({
   },
 });
 
+// JKAImaps (maps.strangeramblings.com) was retired in favour of /trails, which
+// does the same job with a server behind it — routes and recordings live in
+// Postgres instead of one phone's IndexedDB. The hostname now points at this
+// app, so every request arriving under it is a stale bookmark: send it to the
+// nearest equivalent rather than dumping everything on one landing page.
+//
+// This runs before the auth gate on purpose. /trails is owner-only, so a
+// redirect emitted after the gate would send visitors to /login?callbackUrl=…
+// instead of telling them where the thing went.
+const RETIRED_MAPS_HOST = 'maps.strangeramblings.com';
+
+function retiredMapsTarget(pathname: string): string {
+  const path = pathname.replace(/\/+$/, '').toLowerCase();
+  if (path === '/create' || path === '/discover') return '/trails/plan';
+  if (path === '/record' || path.endsWith('/record')) return '/trails/record';
+  if (path.startsWith('/route')) return '/trails/routes';
+  if (path.startsWith('/history')) return '/trails';
+  return '/trails';
+}
+
 // Route protection
 const protectionHandle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
+
+  if (event.url.hostname === RETIRED_MAPS_HOST) {
+    throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
+  }
 
   // Admin consolidation (2026-07): the /admin route tree was reorganised into
   // six sections. 308-redirect the old flat URLs to their new homes (preserving
