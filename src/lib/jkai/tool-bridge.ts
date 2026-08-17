@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import {
   executeTool,
   getTool,
@@ -6,43 +5,10 @@ import {
   getToolsetManifest,
 } from '$lib/workflows/site-tools/registry';
 
-function secret(): string {
-  const value = process.env.JKAI_BRIDGE_SECRET;
-  if (!value || value.length < 32) {
-    throw new Error(
-      'JKAI_BRIDGE_SECRET must be set to a strong random value (>=32 chars)',
-    );
-  }
-  return value;
-}
-
-export function signBridgeToken(buildId: string): string {
-  const payload = `${buildId}.${Date.now()}`;
-  const sig = crypto.createHmac('sha256', secret()).update(payload).digest('hex');
-  return Buffer.from(`${payload}.${sig}`).toString('base64url');
-}
-
-export function verifyBridgeToken(token: string): string | null {
-  try {
-    const decoded = Buffer.from(token, 'base64url').toString('utf-8');
-    const parts = decoded.split('.');
-    if (parts.length !== 3) return null;
-    const [buildId, ts, sig] = parts;
-    const expected = crypto
-      .createHmac('sha256', secret())
-      .update(`${buildId}.${ts}`)
-      .digest('hex');
-    if (
-      sig.length !== expected.length ||
-      !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-    ) {
-      return null;
-    }
-    return buildId;
-  } catch {
-    return null;
-  }
-}
+// The per-build credential lives in `bridge-token.ts` — re-exported here so
+// existing callers keep working, and importable on its own by anything that
+// needs to check a build's identity without pulling in the tool registry.
+export { signBridgeToken, verifyBridgeToken } from './bridge-token';
 
 /**
  * Destructive tools are not on the bridge. Ever.

@@ -49,9 +49,10 @@ if (!TOKEN) {
   // Say which variable and where it comes from. "unauthorized" with no cause
   // is what made the bridge's failures take months to diagnose.
   console.error(
-    'codegraph: no bridge token in the environment (JKAI_BRIDGE_TOKEN). ' +
-      'The orchestrator sets this per build; if you are seeing this inside a build, ' +
-      'the sidecar env is stale — it is read once at process start.',
+    'codegraph: no credential in the environment. Inside a build the executor ' +
+      'sets JKAI_BRIDGE_TOKEN; outside one, set CLAUDE_CHANGELOG_SECRET. If you ' +
+      'are seeing this inside a build, the sidecar env is stale — it is read ' +
+      'once at process start.',
   );
   process.exit(2);
 }
