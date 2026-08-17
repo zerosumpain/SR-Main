@@ -178,6 +178,58 @@ export const SEEDED_APIS: SeedApiEntry[] = [
       { label: 'List models', method: 'GET', url: 'https://openrouter.ai/api/v1/models' },
     ],
   },
+  {
+    // Not to be confused with OpenRouter above — openrouteservice is a routing
+    // engine, nothing to do with LLMs. Prefer the `route_plan` tool over a raw
+    // api_call: the tool adds the loop-quality scoring that turns a raw ORS
+    // round_trip into a route worth running.
+    name: 'openrouteservice (ORS)',
+    baseUrl: 'https://api.openrouteservice.org',
+    docsUrl: 'https://openrouteservice.org/dev/#/api-docs',
+    description:
+      'OpenStreetMap routing engine — directions, round trips, isochrones and elevation for running, road cycling, mountain biking and hiking. Returns surface, waytype and steepness breakdowns alongside the geometry. Free tier: 2,500 requests/day, 40/minute; round-trip and alternative routes are capped at 100 km.',
+    capabilities: [
+      'route planning',
+      'running routes',
+      'cycling routes',
+      'mountain bike routes',
+      'hiking routes',
+      'circular routes',
+      'round trip',
+      'elevation profile',
+      'surface and terrain',
+      'isochrones',
+      'geocoding',
+    ],
+    tags: ['routing', 'maps', 'osm', 'gpx', 'running', 'cycling', 'mtb', 'hiking'],
+    auth: { kind: 'header-env', envVar: 'ORS_API_KEY', header: 'Authorization' },
+    exampleRequests: [
+      {
+        label: 'Circular running route, ~10 km from a start point',
+        method: 'POST',
+        url: 'https://api.openrouteservice.org/v2/directions/foot-hiking/geojson',
+        body: {
+          coordinates: [[-1.5023, 53.4012]],
+          options: { round_trip: { length: 10000, points: 5, seed: 1 } },
+          elevation: true,
+          extra_info: ['surface', 'waytype', 'steepness'],
+        },
+      },
+      {
+        label: 'Mountain-bike route between two points, with terrain breakdown',
+        method: 'POST',
+        url: 'https://api.openrouteservice.org/v2/directions/cycling-mountain/geojson',
+        body: {
+          coordinates: [
+            [-1.5023, 53.4012],
+            [-1.4712, 53.3688],
+          ],
+          elevation: true,
+          extra_info: ['surface', 'waytype', 'steepness'],
+        },
+      },
+    ],
+  },
 ];
 
 /**

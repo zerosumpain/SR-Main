@@ -137,13 +137,16 @@ Mapping rules:
 
 ### Payload size
 
-HAE's own docs warn route-bearing exports reach hundreds of megabytes. Three mitigations:
+HAE's own docs warn route-bearing exports reach hundreds of megabytes. A 10 km run at 1 Hz with
+route and heart rate is already ~580 KB, past adapter-node's 512 KB default.
 
-1. `BODY_SIZE_LIMIT` set explicitly for adapter-node (default is 512 KB — every routed workout
-   would 413 today).
-2. The endpoint accepts a single workout per request, so the phone automation can be configured
-   to post one at a time.
-3. Track coordinates are decimated on write: consecutive points closer than 3 m are dropped.
+**Checked rather than assumed: production already sets `BODY_SIZE_LIMIT=20971520` (20 MB) in its
+`.env`.** No infrastructure change is needed, and none should be made — that file is `chattr +i`
+precisely because overwriting it caused a 33-hour outage. Two mitigations remain in our hands:
+
+1. The endpoint accepts a single workout per request, so the phone automation can be configured
+   to post one at a time and stay well inside 20 MB.
+2. Track coordinates are decimated on write: consecutive points closer than 3 m are dropped.
    A 10 km run lands around 1,500 points rather than 6,000+ with no visible loss of shape.
 
 ## Surfaces

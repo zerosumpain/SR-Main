@@ -10,7 +10,7 @@ register({
   name: 'route_export',
   destructive: true,
   description:
-    'Save a GPX 1.1 outdoor route under drive/routes/ and send John a WhatsApp download link. Use only after generating snapped OSM geometry and exact route distance.',
+    'Save a GPX 1.1 outdoor route under drive/routes/ and send John a WhatsApp download link. Call route_plan FIRST and pass its gpx through — never hand-write coordinates, because invented geometry cannot know surface, gradient, or whether a lane is a dead end.',
   parameters: {
     type: 'object',
     properties: {
