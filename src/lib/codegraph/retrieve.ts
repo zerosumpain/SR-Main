@@ -325,7 +325,9 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
             served: l.servedCount ?? 0,
             helpful: l.helpfulCount ?? 0,
             unhelpful: l.unhelpfulCount ?? 0,
-            observedAt: l.observedAt ?? l.updatedAt ?? null,
+            // observedAt only — updatedAt is the ingest clock, identical for
+            // every backfilled row. See relevance/+page.server.ts.
+            observedAt: l.observedAt ?? null,
             stale: Boolean(l.staleAt),
           }),
         });
