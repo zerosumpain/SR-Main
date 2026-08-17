@@ -335,6 +335,107 @@ export type AppleHealthMetricRecord = typeof appleHealthMetrics.$inferSelect;
 export type NewAppleHealthMetric = typeof appleHealthMetrics.$inferInsert;
 
 // ==========================================
+// Trails — Activities, Tracks, Series
+// ==========================================
+// Source-agnostic workout records for /trails. Written by the Apple Health
+// (Health Auto Export) workout ingest; `source` leaves room to union in the
+// dormant strava_activities / whoop_workouts rows later without a migration.
+//
+// UNITS: these tables store real SI units in doublePrecision — metres,
+// seconds, kilojoules, bpm. They deliberately do NOT follow the `value * 100`
+// integer convention used by apple_health_metrics above. That convention has
+// already produced values wrong by 100× on steps and strain, which read as
+// display bugs and were not. Convert at the edge, never in storage.
+
+export const activities = pgTable(
+  'activities',
+  {
+    id: text('id').primaryKey(), // `${source}:${externalId}`
+    source: text('source').notNull(), // 'apple' | 'strava' | 'whoop' | 'manual'
+    externalId: text('external_id').notNull(),
+
+    name: text('name').notNull(),
+    // Normalised: run | trail_run | ride | mtb | walk | hike | swim | other
+    activityType: text('activity_type').notNull(),
+    rawType: text('raw_type'), // the source's own label, kept verbatim
+
+    startDate: integer('start_date').notNull(), // unix seconds
+    endDate: integer('end_date').notNull(),
+    startDateLocal: text('start_date_local').notNull(), // ISO string for display
+    timezone: text('timezone'),
+
+    distanceM: doublePrecision('distance_m'),
+    durationS: integer('duration_s').notNull(),
+    activeDurationS: integer('active_duration_s'),
+    elevationGainM: doublePrecision('elevation_gain_m'),
+    elevationLossM: doublePrecision('elevation_loss_m'),
+
+    avgHeartrate: integer('avg_heartrate'),
+    maxHeartrate: integer('max_heartrate'),
+
+    activeEnergyKj: doublePrecision('active_energy_kj'),
+    totalEnergyKj: doublePrecision('total_energy_kj'),
+    avgPaceSPerKm: doublePrecision('avg_pace_s_per_km'),
+    avgCadence: doublePrecision('avg_cadence'),
+
+    hasTrack: boolean('has_track').notNull().default(false),
+    // Everything the source sent that we don't model, verbatim.
+    metadata: jsonb('metadata'),
+
+    syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [
+    uniqueIndex('activities_source_external_idx').on(t.source, t.externalId),
+    index('activities_start_idx').on(t.startDate),
+    index('activities_type_idx').on(t.activityType),
+  ],
+);
+
+export type ActivityRecord = typeof activities.$inferSelect;
+export type NewActivity = typeof activities.$inferInsert;
+
+// The GPS trace. One row per activity; coordinates are decimated on write.
+export const activityTracks = pgTable(
+  'activity_tracks',
+  {
+    id: serial('id').primaryKey(),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    // [[lng, lat, elevationM | null, secondsFromStart], ...]
+    coordinates: jsonb('coordinates').notNull(),
+    pointCount: integer('point_count').notNull(),
+    bounds: jsonb('bounds').notNull(), // { n, s, e, w }
+    polyline: text('polyline'), // encoded, for cheap list rendering
+    distanceM: doublePrecision('distance_m'),
+  },
+  (t) => [uniqueIndex('activity_tracks_activity_idx').on(t.activityId)],
+);
+
+export type ActivityTrackRecord = typeof activityTracks.$inferSelect;
+export type NewActivityTrack = typeof activityTracks.$inferInsert;
+
+// Per-workout time series. One row per metric, samples inline as jsonb —
+// a 1 Hz hour of heart rate is 3,600 points that are only ever read whole.
+export const activitySeries = pgTable(
+  'activity_series',
+  {
+    id: serial('id').primaryKey(),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+    metric: text('metric').notNull(), // heart_rate | speed | cadence | altitude | power
+    units: text('units').notNull(),
+    sampleCount: integer('sample_count').notNull(),
+    samples: jsonb('samples').notNull(), // [[secondsFromStart, value], ...]
+  },
+  (t) => [uniqueIndex('activity_series_activity_metric_idx').on(t.activityId, t.metric)],
+);
+
+export type ActivitySeriesRecord = typeof activitySeries.$inferSelect;
+export type NewActivitySeries = typeof activitySeries.$inferInsert;
+
+// ==========================================
 // Biome Config
 // ==========================================
 

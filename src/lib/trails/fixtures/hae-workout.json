@@ -1,0 +1,41 @@
+{
+  "data": {
+    "workouts": [
+      {
+        "id": "B3C0A1F2-5D44-4E9A-9C21-7F0E2A8B1D66",
+        "name": "Outdoor Run",
+        "start": "2026-08-16 07:12:03 +0100",
+        "end": "2026-08-16 07:14:03 +0100",
+        "duration": 118,
+        "distance": { "qty": 0.4, "units": "km" },
+        "elevationUp": { "qty": 6, "units": "m" },
+        "activeEnergyBurned": { "qty": 148, "units": "kcal" },
+        "totalEnergy": { "qty": 162, "units": "kcal" },
+        "temperature": { "qty": 14.5, "units": "degC" },
+        "humidity": { "qty": 78, "units": "%" },
+        "heartRateData": [
+          { "date": "2026-08-16 07:12:03 +0100", "qty": 118, "units": "count/min" },
+          { "date": "2026-08-16 07:12:33 +0100", "qty": 141, "units": "count/min" },
+          { "date": "2026-08-16 07:13:03 +0100", "qty": 152, "units": "count/min" },
+          { "date": "2026-08-16 07:13:33 +0100", "qty": 161, "units": "count/min" },
+          { "date": "2026-08-16 07:14:03 +0100", "qty": 149, "units": "count/min" }
+        ],
+        "stepCadence": [
+          { "date": "2026-08-16 07:12:03 +0100", "qty": 168, "units": "spm" },
+          { "date": "2026-08-16 07:13:03 +0100", "qty": 174, "units": "spm" }
+        ],
+        "route": [
+          { "lat": 53.4012, "lon": -1.5023, "altitude": 101.2, "timestamp": "2026-08-16 07:12:03 +0100" },
+          { "lat": 53.402, "lon": -1.5023, "altitude": 102.0, "timestamp": "2026-08-16 07:12:18 +0100" },
+          { "lat": 53.4029, "lon": -1.5022, "altitude": 104.4, "timestamp": "2026-08-16 07:12:33 +0100" },
+          { "lat": 53.4038, "lon": -1.502, "altitude": 106.9, "timestamp": "2026-08-16 07:12:48 +0100" },
+          { "lat": 53.4047, "lon": -1.5017, "altitude": 107.1, "timestamp": "2026-08-16 07:13:03 +0100" },
+          { "lat": 53.4056, "lon": -1.5013, "altitude": 106.2, "timestamp": "2026-08-16 07:13:18 +0100" },
+          { "lat": 53.4064, "lon": -1.5008, "altitude": 104.8, "timestamp": "2026-08-16 07:13:33 +0100" },
+          { "lat": 53.4072, "lon": -1.5002, "altitude": 103.1, "timestamp": "2026-08-16 07:13:48 +0100" },
+          { "lat": 53.408, "lon": -1.4995, "altitude": 101.9, "timestamp": "2026-08-16 07:14:03 +0100" }
+        ]
+      }
+    ]
+  }
+}
