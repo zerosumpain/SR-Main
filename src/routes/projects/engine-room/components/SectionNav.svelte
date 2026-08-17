@@ -39,7 +39,7 @@
         </a>
       {/each}
       <a class="tab tracelink" class:active={onTrace} href={TRACE}
-         title="Follow one message through every stage and every layer">◧ Trace a turn</a>
+         title="Follow one message through every stage and every layer">◧ Turn trace</a>
     </nav>
 
     <button class="burger" onclick={() => (menuOpen = !menuOpen)} aria-expanded={menuOpen} aria-label="Study menu">
