@@ -122,8 +122,8 @@ export const PARTS: Part[] = [
         blurb: 'Fourteen patterns standing between a model and my server' },
       { slug: 'shipping', label: 'Getting it live', instrument: 'Push a change down the pipeline and break it',
         blurb: 'Six stages between a good idea and a live one' },
-      { slug: 'lessons', label: "The build's memory", instrument: 'Ask the graph what it knows about a file or a failure',
-        blurb: 'Every failed build is filed, and the next one reads the file' },
+      { slug: 'lessons', label: 'Codegraph', instrument: 'Query the build-history graph, then run its ranking arithmetic yourself',
+        blurb: "The build's memory in full — schema, fingerprints, query language, ranking" },
       { slug: 'limits', label: 'What it cannot do', instrument: 'Every guardrail, plotted by whether it actually holds',
         blurb: 'The difference between a wall and a strongly worded note' },
     ],
@@ -165,6 +165,8 @@ export const neighbours = (pathname: string) => {
 
 /** Old flat routes → their new home. Kept because the first version of this study was public. */
 export const REDIRECTS: Record<string, string> = {
+  // Not a legacy route — a friendly name: the subsystem is called codegraph everywhere else.
+  codegraph: `${B}/change/lessons`,
   trace: `${B}/turn/trace`,
   chat: `${B}/turn/stream`,
   models: `${B}/turn/routing`,
