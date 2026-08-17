@@ -17,14 +17,14 @@
 </script>
 
 <svelte:head>
-  <title>Where the bytes live · The Engine Room</title>
+  <title>Storage · The Engine Room</title>
   <meta name="description" content="Four stores — a database, object storage, a disposable disk and an off-site snapshot — and the one failure none of them survives." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="ground"
-    title="Where the bytes live"
+    title="Storage"
     line="Four places a byte can end up, each chosen by answering a single question — and one kind of loss about which a flawless, nightly, off-site backup can do absolutely nothing."
     lineEli5="Different things are kept in different places, on purpose — and one of them can be lost in a way no backup will fix. Knowing which one, in advance, is the entire value of this page."
   />

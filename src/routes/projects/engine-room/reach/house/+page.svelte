@@ -22,14 +22,14 @@
 </script>
 
 <svelte:head>
-  <title>The house · The Engine Room</title>
+  <title>House · The Engine Room</title>
   <meta name="description" content="Home automation reached as area, kind and thing rather than as several hundred identifiers — with a dry run that reports the call it would make instead of making it." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="The house"
+    title="House"
     line="Home automation hands you several hundred identifiers in a flat list, which is nobody's idea of a house. Sorting them by room, and letting an automation be watched before it is armed, is what makes them safe to wire anything to."
     lineEli5="It can read and control things around the house. You pick a room instead of hunting through several hundred identifiers, and any automation can be watched saying what it would do before it is allowed to actually do it." />
 

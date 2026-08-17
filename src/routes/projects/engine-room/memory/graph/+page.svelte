@@ -26,14 +26,14 @@
 </script>
 
 <svelte:head>
-  <title>How things connect · The Engine Room</title>
+  <title>Graph · The Engine Room</title>
   <meta name="description" content="Why an exact ranking of the most connected entities was cached rather than approximated, and what the approximation got wrong." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="How things connect"
+    title="Graph"
     line="Ranking the most connected entities exactly took forty seconds. Rearranging how the data sat in memory — not touching the algorithm — brought it down to 1.7, bit for bit identical. The clever approximation was never needed."
     lineEli5="Ranking the most connected things took forty seconds — too slow to use. Rearranging how the data was stored got the exact same answer in under two, so the fast-but-slightly-wrong shortcut could be binned." />
 

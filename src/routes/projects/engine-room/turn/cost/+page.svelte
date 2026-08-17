@@ -62,14 +62,14 @@
 </script>
 
 <svelte:head>
-  <title>Where the money goes · The Engine Room</title>
+  <title>Costs · The Engine Room</title>
   <meta name="description" content="A median prompt drawn to scale: what it is made of, and why context costs more than thinking." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Where the money goes"
+    title="Costs"
     line="A median prompt runs to {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens. One measured answer came back as a single word. You are paying for the reading, not the wisdom."
     lineEli5="Most of the cost is what the model reads, not what it writes: a typical message makes it read {MANIFEST.medianPrompt.toLocaleString('en-GB')} tokens of context first. One measured answer, after all that, was a single word." />
 

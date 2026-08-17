@@ -43,14 +43,14 @@
 </script>
 
 <svelte:head>
-  <title>Out of signal · The Engine Room</title>
+  <title>Trails · The Engine Room</title>
   <meta name="description" content="A route planner and offline map kit: what a downloaded map really costs, how a route is graded by climb, and the rules that keep an unattended planner honest." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="Out of signal"
+    title="Trails"
     line="Workouts arrive with their GPS tracks, a router draws candidate loops, our scorer ranks them — and the field kit caches every map tile a route needs, because the whole point of a good route is that it leaves signal behind."
     lineEli5="A route planner and an outdoor map that keep working when the phone has no signal. Plan a loop, download its map, go — the interesting engineering all happens before you leave the house." />
 

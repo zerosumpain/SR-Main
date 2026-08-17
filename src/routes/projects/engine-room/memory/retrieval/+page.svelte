@@ -36,14 +36,14 @@
 </script>
 
 <svelte:head>
-  <title>Finding things · The Engine Room</title>
+  <title>Retrieval · The Engine Room</title>
   <meta name="description" content="How a document becomes searchable chunks, why there are two embedding indexes rather than one, and what comes back." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Finding things"
+    title="Retrieval"
     line="Keeping a document and finding it again are two entirely different problems, and only one of them is easy. A document gets cut, embedded and permission-filtered long before a prompt lays eyes on it."
     lineEli5="Saving a document is the easy half. The hard half is pulling out the one right paragraph months later — so every document is cut up, indexed and permission-checked long before any question is asked of it." />
 

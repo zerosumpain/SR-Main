@@ -28,14 +28,14 @@
 </script>
 
 <svelte:head>
-  <title>Where the time goes · The Engine Room</title>
+  <title>Latency · The Engine Room</title>
   <meta name="description" content="Where the wait in one message actually goes: milliseconds of site code, then seconds of the model reading the prompt." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="turn"
-    title="Where the time goes"
+    title="Latency"
     line={`From pressing send to the first character, my own code accounts for ${siteMs} milliseconds. The other ${modelS} seconds is the model having a read, at what I can only describe as its own pace.`}
     lineEli5="Almost none of the wait is the website — my code finishes in a fraction of a second. The rest is the AI reading your message before it starts to answer. Measuring that stopped me optimising the wrong thing." />
 

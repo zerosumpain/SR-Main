@@ -98,14 +98,14 @@
 </script>
 
 <svelte:head>
-  <title>The cost of being able · The Engine Room</title>
+  <title>Tools · The Engine Room</title>
   <meta name="description" content="Every tool a model can call is described to it on every turn. What that costs, and the dispatcher that stops it." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="reach"
-    title="The cost of being able"
+    title="Tools"
     line="Every tool a model may call is described to it in full, on every single turn, before you have typed a word. Capability is billed as prompt whether you use it or not."
     lineEli5="The AI is told about every button it could press, on every message you send — and it is charged for the telling. This page is about keeping that list short without losing any of the buttons." />
 

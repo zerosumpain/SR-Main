@@ -47,7 +47,7 @@
 </script>
 
 <svelte:head>
-  <title>The gate · The Engine Room</title>
+  <title>Verification · The Engine Room</title>
   <meta
     name="description"
     content="{FORBIDDEN.length} deny-list patterns and a smoke test stand between code an AI wrote overnight and a live runtime." />
@@ -56,7 +56,7 @@
 <section class="pe-route wide">
   <LeafHead
     part="change"
-    title="The gate"
+    title="Verification"
     line="Tools the night shift writes go live with nobody in the loop, which is a sentence that ought to worry you. A scan of {FORBIDDEN.length} patterns and a smoke test are the entire reason it does not."
     lineEli5="The system writes new abilities for itself overnight and switches them on with nobody in the loop. These checks are the entire reason that is not as alarming as it sounds." />
 

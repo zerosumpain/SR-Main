@@ -42,14 +42,14 @@
 </script>
 
 <svelte:head>
-  <title>Deciding what to believe · The Engine Room</title>
+  <title>Trust · The Engine Room</title>
   <meta name="description" content="An explainable confidence score for a knowledge graph: two independent grading axes, saturating corroboration, decay with a floor, and a human confirmation that does not rot." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Deciding what to believe"
+    title="Trust"
     line="Every claim in the graph carries a number between nought and one. The number is worth precisely nothing unless it comes apart into the four things that made it, so it does."
     lineEli5="Everything it believes carries a score between nought and one, and the score can always be pulled apart into the reasons behind it: who said it, whether it holds up, how many sources agree, and how old the evidence is." />
 

@@ -19,14 +19,14 @@
 </script>
 
 <svelte:head>
-  <title>The night shift · The Engine Room</title>
+  <title>Self-improvement · The Engine Room</title>
   <meta name="description" content="The unattended improvement run: eight phases you can step through, one you can break, and the six caps that bound a night." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="change"
-    title="The night shift"
+    title="Self-improvement"
     line="At half past three, with nobody watching, it reads back its own failures and writes improvements. Eight phases, and six caps deciding exactly how much rope any one night gets."
     lineEli5="Every night at half past three, part of this system reviews its own week and tries to do better. This page explains what that actually means, and how much it is allowed to do about it."
   />
@@ -90,7 +90,7 @@
       {/each}
     </div>
 
-    <p class="onward"><a href={href('change', 'shipping')}>Getting it live →</a></p>
+    <p class="onward"><a href={href('change', 'shipping')}>Deployment →</a></p>
   </Instrument>
 
   <PageFoot />

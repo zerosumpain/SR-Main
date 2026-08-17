@@ -19,14 +19,14 @@
 </script>
 
 <svelte:head>
-  <title>Somewhere to put anything · The Engine Room</title>
+  <title>Datastore · The Engine Room</title>
   <meta name="description" content="A schema-free store built to be written to unattended: an actor on every call, permissions resolved on the row, a query language with no concatenation in it, and an expiry date." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Somewhere to put anything"
+    title="Datastore"
     line="A typed table is exactly right when you know the shape, and a millstone when you do not. Everything else lands here. Dropping the schema was the easy half; every rule that makes it safe to write to at 3am unsupervised is bolted on the outside."
     lineEli5="A drawer for anything that does not deserve its own database table. The drawer was the easy part — the value is the rules around it: who may see each thing, who may change it, and when it quietly expires." />
 

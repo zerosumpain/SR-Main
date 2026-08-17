@@ -82,14 +82,14 @@
 </script>
 
 <svelte:head>
-  <title>Reading the web · The Engine Room</title>
+  <title>Research · The Engine Room</title>
   <meta name="description" content="How merging sources invents facts, and how separating facts from gaps stops it." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="memory"
-    title="Reading the web"
+    title="Research"
     line="Three sources, composed two different ways. One of the answers contains a sentence that nobody anywhere ever wrote, and it reads exactly as convincingly as the rest."
     lineEli5="Squash your sources together into one blob and the answer can end up saying things nobody actually said. Keeping every fact pinned to its source is what stops that — and you can watch it go wrong below." />
 

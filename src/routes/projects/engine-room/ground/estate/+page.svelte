@@ -16,14 +16,14 @@
 </script>
 
 <svelte:head>
-  <title>Three places, one codebase · The Engine Room</title>
+  <title>Estate · The Engine Room</title>
   <meta name="description" content="A public origin with no inbound port, a machine at home doing the three things a data centre cannot, and a disposable machine for unreviewed code — with the same code on all of them." />
 </svelte:head>
 
 <section class="pe-route wide">
   <LeafHead
     part="ground"
-    title="Three places, one codebase"
+    title="Estate"
     line="There is no production branch. The same code runs everywhere, and what a process is permitted to do gets decided at startup by the software working out where it has woken up and adjusting its expectations accordingly."
     lineEli5="The same program runs on a public server, on a computer at home, and on a throwaway machine that checks new code. What each copy is allowed to do depends on where it woke up — decided at startup, not by keeping separate versions." />
 
