@@ -3479,10 +3479,13 @@ export const codegraphEpisodes = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Partial unique: rows minted before this column existed carry NULL, and
-    // several NULLs must stay legal. Postgres treats NULLs as distinct in a
-    // unique index anyway; the WHERE makes that intent explicit.
-    uniqueIndex('codegraph_episodes_dedupe_idx').on(t.dedupeKey).where(sql`${t.dedupeKey} IS NOT NULL`),
+    // Plain unique, NOT partial. Postgres already treats NULLs as distinct in a
+    // unique index, so rows minted before this column existed coexist happily
+    // without a predicate — and a PARTIAL index cannot serve as an ON CONFLICT
+    // arbiter unless the statement repeats its exact WHERE clause, which made
+    // every episode insert fail with a 500 the moment it shipped. The predicate
+    // bought nothing and cost the whole ingest.
+    uniqueIndex('codegraph_episodes_dedupe_idx').on(t.dedupeKey),
     index('codegraph_episodes_fingerprint_idx').on(t.fingerprint),
     index('codegraph_episodes_verdict_idx').on(t.verdict),
     index('codegraph_episodes_gate_idx').on(t.gate),
