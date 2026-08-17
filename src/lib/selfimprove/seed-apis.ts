@@ -202,6 +202,10 @@ export const SEEDED_APIS: SeedApiEntry[] = [
       'geocoding',
     ],
     tags: ['routing', 'maps', 'osm', 'gpx', 'running', 'cycling', 'mtb', 'hiking'],
+    // The key lives in the secret registry under the handle "openrouteservice"
+    // (header injection, Authorization, bound to api.openrouteservice.org, POST
+    // allowed). ORS_API_KEY is only a local-development fallback, because
+    // homeserv holds no registry.
     auth: { kind: 'header-env', envVar: 'ORS_API_KEY', header: 'Authorization' },
     exampleRequests: [
       {
