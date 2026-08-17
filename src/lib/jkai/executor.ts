@@ -244,6 +244,70 @@ export async function executeIteration(
   const devFiles = await listDevFiles(build.id).catch(() => []);
   const codebaseDigest = await buildCodebaseDigest(build.id, devFiles).catch(() => '');
 
+  // Codegraph push — what this codebase has already learned about the files
+  // this iteration is touching, or about the gate error the last one hit.
+  //
+  // Repo mode only: an app/studio build is greenfield and has no history in
+  // this graph, so the retrieval would be a guaranteed miss and pure latency.
+  //
+  // Deliberately not fatal and deliberately not silent. The tool bridge spent
+  // sixty days logging "OK" while returning nothing to 280 iterations, so this
+  // logs three DISTINCT outcomes — served, empty, failed — and `empty` is a
+  // real finding ("no precedent"), not a soft error. Timeboxed, because a slow
+  // graph must cost the build nothing.
+  let codegraphBlock = '';
+  if (promptMode === 'repo' && process.env.CODEGRAPH_PUSH !== '0') {
+    try {
+      const { planBuildQuery } = await import('$lib/codegraph/build-context');
+      const planned = planBuildQuery({
+        prompt: build.prompt,
+        previousEvaluation: prevIteration?.evaluation ?? null,
+        previousActions: prevIteration?.actions ?? null,
+      });
+      if (!planned) {
+        await emitLog(build.id, 'system', 'Codegraph: nothing to query (no gate error, no file set)', iteration.id);
+      } else {
+        const { runCgql, buildContextBlock } = await import('$lib/codegraph/retrieve');
+        const { db: database } = await import('$lib/db');
+        const { codegraphQueries } = await import('$lib/db/schema');
+        const result = await Promise.race([
+          runCgql(planned.query),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+        ]);
+        codegraphBlock = buildContextBlock(result);
+        await database.insert(codegraphQueries).values({
+          channel: 'push',
+          buildId: build.id,
+          iterationId: iteration.id,
+          query: planned.query,
+          outcome: result.outcome,
+          episodeIds: result.episodes.map((e) => e.id),
+          lessonIds: result.lessons.map((l) => l.id),
+          charsServed: codegraphBlock.length,
+          durationMs: result.durationMs,
+        }).catch(() => {});
+        await emitLog(
+          build.id,
+          'system',
+          result.outcome === 'served'
+            ? `Codegraph: ${result.lessons.length} lesson(s), ${result.episodes.length} episode(s) from ${planned.reason} — ${codegraphBlock.length} chars in ${result.durationMs}ms`
+            : `Codegraph: NO PRECEDENT for ${planned.reason} — this is new ground`,
+          iteration.id,
+        );
+      }
+    } catch (err) {
+      // Loud, and distinguishable from "nothing found". A retrieval that fails
+      // quietly is the failure mode this whole system exists to stop repeating.
+      codegraphBlock = '';
+      await emitLog(
+        build.id,
+        'error',
+        `Codegraph push FAILED (continuing without): ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  }
+
   const contextMessages = buildIterationContext(
     build.prompt,
     prevIteration,
@@ -309,7 +373,10 @@ export async function executeIteration(
   const deliveries = await consumePendingDeliveries(build.id, 10).catch(() => []);
   const deliveriesBlock = buildDeliveriesBlock(deliveries);
 
-  const userPrompt = [deliveriesBlock, contextMessages.map((m) => m.content).join('\n\n')]
+  // Codegraph last: it is the most specific thing in the prompt, and what the
+  // history says about THIS file set should be the freshest instruction the
+  // agent reads before it starts work.
+  const userPrompt = [deliveriesBlock, contextMessages.map((m) => m.content).join('\n\n'), codegraphBlock]
     .filter((s) => s.length > 0)
     .join('\n\n');
 

@@ -161,6 +161,15 @@ MATCH THE SURROUNDING CODE. Before writing anything, read two existing files of 
 WORK IN THIS ORDER, EVERY ITERATION:
   1. Read the task. Identify the smallest set of files that can deliver it.
   2. Read those files, plus two precedents. Use the codebase digest below rather than re-listing the tree.
+     ASK THE HISTORY FIRST — it is cheaper than reading, and it knows things the code does not say:
+       node __CODEGRAPH_CMD__ 'file:src/lib/example.ts | hops 1'
+       node __CODEGRAPH_CMD__ 'fingerprint:typecheck:TS2345'      # after a gate failure
+       node __CODEGRAPH_CMD__ 'topic:"how deploys pick up new scripts"'
+     It returns the rules that apply to those files and what happened the last time
+     they were changed, with the verdict of each past attempt. If it says NO PRECEDENT,
+     that means the graph was asked and had nothing — treat it as new ground, not as
+     permission. One call costs a few hundred milliseconds; re-deriving the same
+     context by grepping costs you a third of your iteration.
   3. Make the change.
   4. Add or update tests next to the existing tests for that area.
   5. Check your work with the NARROWEST command that can prove it (see below).
@@ -425,6 +434,17 @@ export function studioResearchScript(cwd: string = process.cwd()): string {
   return `${cwd}/scripts/studio-research.mjs`;
 }
 
+/**
+ * Absolute path to the build-history graph query, same reason again: the agent
+ * runs it over bash by path, and a relative path resolves against its workspace
+ * rather than the repo. Shipped to the VPS by its own line in ci-release.sh —
+ * that file is an allow-list, and a script missing from it silently does not
+ * exist in production.
+ */
+export function codegraphQueryScript(cwd: string = process.cwd()): string {
+  return `${cwd}/scripts/codegraph-query.mjs`;
+}
+
 export function buildSystemPrompt(
   buildId: string,
   assignedPort: number,
@@ -433,9 +453,14 @@ export function buildSystemPrompt(
   if (mode === 'studio') {
     const verify = studioVerifyCommand().replace('$PORT', String(assignedPort));
     return (
-      STUDIO_SYSTEM_PROMPT.replace('__STUDIO_VERIFY_CMD__', verify)
-        .replace('__STUDIO_IMAGE_CMD__', studioImageScript())
-        .replace('__STUDIO_RESEARCH_CMD__', studioResearchScript()) +
+      // replaceAll, not replace: a string-argument `replace` substitutes only
+      // the FIRST occurrence, so the moment a placeholder is used twice the
+      // later ones survive into the prompt and the agent is told to run a
+      // command literally named `__STUDIO_VERIFY_CMD__`. Caught by
+      // build-context.test.ts, which asserts no placeholder survives in any mode.
+      STUDIO_SYSTEM_PROMPT.replaceAll('__STUDIO_VERIFY_CMD__', verify)
+        .replaceAll('__STUDIO_IMAGE_CMD__', studioImageScript())
+        .replaceAll('__STUDIO_RESEARCH_CMD__', studioResearchScript()) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nYour assigned server port: ${assignedPort} (use this in serve.json and your startCommand)` +
       `\nThe chapter spine (titles, lever and outcome ids) is at /home/jkai/workspace/${buildId}/.studio/spine.json — the checker reads it automatically.`
@@ -443,7 +468,7 @@ export function buildSystemPrompt(
   }
   if (mode === 'repo') {
     return (
-      REPO_SYSTEM_PROMPT +
+      REPO_SYSTEM_PROMPT.replaceAll('__CODEGRAPH_CMD__', codegraphQueryScript()) +
       `\n\n---\n\nYour workspace: /home/jkai/workspace/${buildId}/dev` +
       `\nThis is a git clone. You are already on the correct branch — do not create, switch or delete branches, and do not commit or push. The orchestrator commits and opens the pull request for you once the gate passes.`
     );

@@ -48,6 +48,18 @@ const TOOLSET_PATTERNS: Array<{ toolset: string; pattern: RegExp }> = [
   // Without an entry here the whole toolset was unreachable unless the model
   // thought to call activate_toolset('intel-graph') off its own bat.
   { toolset: 'intel-graph', pattern: /knowledge\s*graph|entity\s*graph|\bentities\b|\bdossiers?\b|connect(?:ed|ion)s?\s+(?:between|to)|\brelationships?\b|\bpath\b[^.]*\bbetween\b|\bunlikely\s+(?:relation|connection)/i },
+  // The BUILD-history graph, distinct from the entity graph above: that one is
+  // about the world, this one is about this codebase. Deliberately keyed on
+  // repo/change language ("why does X work that way", "has this broken
+  // before", a bare src/... path) rather than on the word "graph", which
+  // belongs to intel. Without a row here the toolset is unreachable unless the
+  // model thinks to call activate_toolset('codegraph') unprompted — the exact
+  // reason intel-graph needed its own entry.
+  {
+    toolset: 'codegraph',
+    pattern:
+      /\bcodegraph\b|build\s+history|past\s+builds?|(?:why|how)\s+(?:is|does|do|did)\s+.{0,40}\b(?:work|done|built|written)\b|has\s+(?:this|that|it)\s+(?:ever\s+)?(?:broken|failed)\s+before|previous(?:ly)?\s+(?:fixed|broke|failed)|what\s+changed\s+.{0,30}\b(?:last\s+time|before)\b|\b(?:src|scripts|packages)\/[\w.\-/]+\.(?:ts|svelte|mjs|js|sql)\b|precedents?\s+for/i,
+  },
   { toolset: 'decks', pattern: DECK_PATTERN },
   { toolset: 'presentations', pattern: DECK_PATTERN },
   { toolset: 'capabilities', pattern: /what\s+can\s+you\s+do|what\s+are\s+you\s+(?:able|capable)|your\s+capabilit|\bcapabilit(?:y|ies)\b/i },
