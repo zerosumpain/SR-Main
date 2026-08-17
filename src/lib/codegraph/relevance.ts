@@ -265,6 +265,29 @@ export function packByRelevance<T>(
  */
 export type ServeOutcome = 'helpful' | 'unhelpful' | 'unresolved';
 
+/**
+ * Whether a serve is capable of being evidence at all, before asking what it
+ * showed.
+ *
+ * Two ways a serve can be unattributable no matter how the build ends:
+ *
+ *  - it carried no text (`empty` — "no precedent found"), so nothing it did not
+ *    say can have helped; or
+ *  - it was keyed on the FILE SET rather than on a gate error, which means it
+ *    was made before anything had failed. There is no "did the error recur"
+ *    question to ask, and a build that then passes first time would very likely
+ *    have passed with no context at all.
+ *
+ * This exists because the first version of the completed-build resolver skipped
+ * the second case and credited every open serve on a green finish, which made
+ * `helpful` mean "was served to a build that happened to succeed". Measured on
+ * real data: two builds, eight units credited, zero of them demonstrably useful
+ * — one of the served lessons was about a chat hub redesign.
+ */
+export function serveIsAttributable(serve: { outcome: string; servedFor: string[] }): boolean {
+  return serve.outcome === 'served' && serve.servedFor.length > 0;
+}
+
 export function resolveServe(input: {
   /** Fingerprints that caused the retrieval. */
   servedFor: string[];
