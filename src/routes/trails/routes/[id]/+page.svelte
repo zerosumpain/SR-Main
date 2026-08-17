@@ -11,6 +11,8 @@
     activityLabel,
   } from '$lib/trails/format';
   import { estimateTimeS } from '$lib/trails/field/nav';
+  import { gradeDifficulty } from '$lib/trails/difficulty';
+  import DifficultyChip from '$lib/components/trails/DifficultyChip.svelte';
   import type { TrackPoint } from '$lib/trails/track';
   import type { Coord } from '$lib/trails/scoring';
 
@@ -48,6 +50,15 @@
   });
 
   const ourEstimate = $derived(estimateTimeS(r.distanceM, r.ascentM ?? 0, r.sport));
+
+  const difficulty = $derived(
+    gradeDifficulty({
+      distanceM: r.distanceM,
+      ascentM: r.ascentM,
+      sport: r.sport,
+      stepsShare: r.scoreBreakdown?.terrain?.stepsShare,
+    }),
+  );
 
   async function remove() {
     if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return;
@@ -91,6 +102,10 @@
     <div class="stat">
       <span class="stat-value">{r.score == null ? '—' : Math.round(r.score * 100)}</span>
       <span class="sr-label-tight">Score</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value"><DifficultyChip band={difficulty.band} title={difficulty.reasons.join(' ')} /></span>
+      <span class="sr-label-tight">Difficulty · {difficulty.equivalentKm} eq-km</span>
     </div>
   </section>
 
