@@ -53,6 +53,9 @@ import {
 import {
   KEYS_NOTE, EVIDENCE as MEM_EVIDENCE, CHANNELS as MEM_CHANNELS, CORPUS as MEM_CORPUS,
   LATENCY as MEM_LATENCY, HYGIENE as MEM_HYGIENE, FEEDBACK as MEM_FEEDBACK, BASELINE as MEM_BASELINE,
+  RELEVANCE as MEM_RELEVANCE, RESOLUTION as MEM_RESOLUTION, ANATOMY as MEM_ANATOMY,
+  EDGE_KINDS as MEM_EDGE_KINDS, DEDUPE as MEM_DEDUPE, CGQL as MEM_CGQL,
+  FINGERPRINT as MEM_FINGERPRINT, PROOF as MEM_PROOF, GRAPH_SURFACES as MEM_SURFACES,
 } from './lessons';
 import {
   TILE, PAD_STORY, BANDS as TRAIL_BANDS, SPORT_LABEL, NAISMITH,
@@ -400,6 +403,18 @@ function buildChunks(): Chunk[] {
     text: MEM_HYGIENE.map((h) => `${h.k} (${h.v}): ${h.why}`).join(' ') });
   add({ id: 'lessons-feedback', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What one helpful serve is worth', url: `${B}/change/lessons`,
     text: `${MEM_FEEDBACK.note} The baseline the graph exists to beat: ${MEM_BASELINE.iterationsPerBuild} iterations per completed build (${MEM_BASELINE.last30Days} over the thirty days to 17 August 2026), with ${MEM_BASELINE.failingPct}% of builds failing. Whether it moves those numbers is not yet knowable, and the page says "too early to tell" rather than guessing.` });
+  add({ id: 'lessons-anatomy', sourceKey: 'build-memory', sourceType: 'lessons', title: 'What codegraph is made of', url: `${B}/change/lessons`,
+    text: `${MEM_ANATOMY.map((a) => `${a.k} (${a.v}): ${a.why}`).join(' ')} The five edge kinds: ${MEM_EDGE_KINDS.map((e) => `${e.k} — ${e.why}`).join('; ')}. ${MEM_DEDUPE.body}` });
+  add({ id: 'lessons-cgql', sourceKey: 'build-memory', sourceType: 'lessons', title: 'CGQL, the codegraph query language', url: `${B}/change/lessons`,
+    text: `A five-verb, non-Turing pipeline: ${MEM_CGQL.grammar.map((g) => `${g.k} (${g.v}) — ${g.why}`).join(' ')} ${MEM_CGQL.security} ${MEM_CGQL.topic}` });
+  add({ id: 'lessons-fingerprint', sourceKey: 'build-memory', sourceType: 'lessons', title: 'How a gate failure becomes a retrieval fingerprint', url: `${B}/change/lessons`,
+    text: `A failed check's raw output is reduced to a stable error-class fingerprint by regular expression — no model call. Three measured findings shaped it: ${MEM_FINGERPRINT.map((f) => `${f.k} (${f.v}) — ${f.why}`).join(' ')}` });
+  add({ id: 'lessons-ranking', sourceKey: 'build-memory', sourceType: 'lessons', title: 'The relevance arithmetic: what deserves the prompt budget', url: `${B}/change/lessons`,
+    text: `Relevance is a product of computed terms: a Wilson lower bound over a lesson's helped/didn't-help record (neutral prior ${MEM_RELEVANCE.neutralPrior} when unproven, floor ${MEM_RELEVANCE.outcomeFloor} so failure demotes rather than deletes), an age decay with half-life ${MEM_RELEVANCE.halfLifeDays} days and floor ${MEM_RELEVANCE.recencyFloor} because old is not wrong, and a stale weight of ${MEM_RELEVANCE.staleWeight}. The balance shifts with evidence: at ${MEM_RELEVANCE.evidenceHalfWeight} resolved outcomes recency and outcome carry equal weight, and the corpus-level readout refuses to claim outcome-based ranking below ${MEM_RELEVANCE.evidenceMaturity} resolved serves. Serve outcomes are resolved mechanically from the next gate run, never by a model: ${MEM_RESOLUTION.map((r) => `${r.k} → ${r.v}`).join('; ')}.` });
+  add({ id: 'lessons-proof', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Codegraph proven on two instrumented builds', url: `${B}/change/lessons`,
+    text: MEM_PROOF.body });
+  add({ id: 'lessons-surfaces', sourceKey: 'build-memory', sourceType: 'lessons', title: 'Where codegraph can be inspected', url: `${B}/change/lessons`,
+    text: MEM_SURFACES.map((s) => `${s.k}: ${s.why}`).join(' ') });
 
   // ---- the outdoors (reach/trails) ----
   add({ id: 'trails-what', sourceKey: 'trails', sourceType: 'trails', title: 'Out of signal: the route planner and offline maps', url: `${B}/reach/trails`,
@@ -492,6 +507,7 @@ const GROUPS: string[][] = [
   // Added with the build's-memory and trails pages. Same rule: every word a reader might
   // type gets its own entry, because expansion is per-term.
   ['lesson', 'lessons', 'episode', 'episodes', 'codegraph', 'history', 'learned', 'learning', 'learns', 'remembered', 'fingerprint', 'iteration', 'iterations', 'rediscovery', 'digest', 'briefing', 'recall', 'forgetting', 'forget', 'retire', 'retired', 'tombstone'],
+  ['cgql', 'query', 'queries', 'grammar', 'seed', 'hops', 'verdict', 'wilson', 'ranking', 'ranked', 'relevance', 'atrophy', 'demoted', 'served', 'serve', 'serves', 'helpful', 'unhelpful', 'unresolved', 'dedupe', 'backfill', 'stale'],
   ['trail', 'trails', 'route', 'routes', 'map', 'maps', 'offline', 'tile', 'tiles', 'gps', 'hike', 'hiking', 'walk', 'walking', 'running', 'ride', 'riding', 'cycling', 'outdoors', 'outdoor', 'signal', 'download', 'downloaded', 'downloads', 'naismith', 'climb', 'ascent', 'elevation', 'difficulty', 'planner', 'loop', 'loops', 'pwa', 'installed', 'app'],
 ];
 

@@ -373,9 +373,19 @@ export const SURFACES: Surface[] = [
 export const byTier = (t: TierId) => SURFACES.filter((s) => s.tier === t);
 export const surfaceById = (id: string) => SURFACES.find((s) => s.id === id);
 
+/**
+ * Cache-buster for the screenshot URLs. Bump this whenever the shots are re-captured.
+ *
+ * The files are replaced in place under the same names, and the edge caches images for
+ * four hours — so a re-capture that ships without changing the URL keeps showing every
+ * returning visitor the old pictures until the cache expires. The 2026-08-17 refresh
+ * deployed correctly and looked entirely unrefreshed for exactly this reason.
+ */
+export const SHOT_VERSION = '20260817';
+
 /** Where the screenshots live. Written by scripts/capture-engine-room-tour.ts. */
 export const shot = (id: string, size: 'thumb' | 'full' = 'thumb') =>
-  `/projects/engine-room/tour/${id}${size === 'thumb' ? '-thumb' : ''}.webp`;
+  `/projects/engine-room/tour/${id}${size === 'thumb' ? '-thumb' : ''}.webp?v=${SHOT_VERSION}`;
 
 /**
  * When the screenshots were taken. Hardcoded rather than read from the manifest at
