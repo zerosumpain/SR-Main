@@ -22,6 +22,12 @@
   let candidateCount = $state(5);
 
   let planning = $state(false);
+  let locating = $state(false);
+  // Two error slots, not one. A single shared `error` rendered at the bottom of
+  // the "What" section put the geolocation failure ~950px below the button that
+  // caused it — off-screen, so a denied location permission was
+  // indistinguishable from the button doing nothing at all.
+  let locationError = $state<string | null>(null);
   let error = $state<string | null>(null);
   let result = $state<{
     routes: Array<{
@@ -78,18 +84,28 @@
     savedId = null;
   }
 
-  async function useMyLocation() {
+  function useMyLocation() {
     if (!navigator.geolocation) {
-      error = 'This browser has no geolocation.';
+      locationError = 'This browser has no geolocation — click the map instead.';
       return;
     }
+    // A fix can take several seconds, and without a pending state the button
+    // looks broken for the whole wait.
+    locating = true;
+    locationError = null;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         start = [pos.coords.longitude, pos.coords.latitude];
-        error = null;
+        locating = false;
+        locationError = null;
+        savedId = null;
       },
       (err) => {
-        error = `Could not get your location: ${err.message}`;
+        locating = false;
+        locationError =
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission is blocked for this site. Allow it in your browser settings, or just click the map.'
+            : `Could not get your location: ${err.message}. Click the map instead.`;
       },
       { enableHighAccuracy: true, timeout: 15_000 },
     );
@@ -218,17 +234,42 @@
       </span>
     </div>
 
+    <p class="where-lede">
+      {#if !start}
+        <strong>Tap the map</strong> to drop your start point{#if mode === 'point'}, then tap again for
+          the finish{/if}. Or use your location.
+      {:else if mode === 'point' && !finish}
+        Start is set. Now <strong>tap the map</strong> for the finish.
+      {:else}
+        Start is set — tap the map again to move it.
+      {/if}
+    </p>
+
     <div class="where-controls">
-      <button type="button" class="chip" class:on={picking === 'start'} onclick={() => (picking = 'start')}>
-        Set start
-      </button>
       {#if mode === 'point'}
+        <!-- Only a real choice when there are two points to place. With one, a
+             "Set start" button is already the active mode and pressing it
+             changes nothing, which reads as a dead control. -->
+        <button type="button" class="chip" class:on={picking === 'start'} onclick={() => (picking = 'start')}>
+          Placing: start
+        </button>
         <button type="button" class="chip" class:on={picking === 'finish'} onclick={() => (picking = 'finish')}>
-          Set finish
+          Placing: finish
         </button>
       {/if}
-      <button type="button" class="chip" onclick={useMyLocation}>Use my location</button>
+      <button type="button" class="chip" onclick={useMyLocation} disabled={locating}>
+        {locating ? 'Locating…' : 'Use my location'}
+      </button>
+      {#if start}
+        <button type="button" class="chip" onclick={() => { start = null; finish = null; result = null; savedId = null; }}>
+          Clear
+        </button>
+      {/if}
     </div>
+
+    {#if locationError}
+      <p class="error-line where-error">{locationError}</p>
+    {/if}
 
     <PlannerMap {start} finish={mode === 'point' ? finish : null} {candidates} selectedIndex={selected} {picking} {onpick} />
   </section>
@@ -480,6 +521,24 @@
   }
   .where-controls {
     margin-bottom: 0.75rem;
+  }
+
+  .where-lede {
+    margin: 0 0 0.7rem;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  /* Sits directly under the button that produced it. */
+  .where-error {
+    margin: 0 0 0.75rem;
+    max-width: 62ch;
+  }
+
+  .chip:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .chip {

@@ -186,7 +186,7 @@
   <div class="map-frame" style:height>
     <div class="map" bind:this={container}></div>
     {#if picking !== 'none'}
-      <p class="hint">Click the map to set the {picking}</p>
+      <p class="hint">Tap the map to set the {picking}</p>
     {/if}
   </div>
 {/if}
@@ -221,6 +221,9 @@
     transform: translateX(-50%);
     bottom: 10px;
     z-index: 500;
+    /* The hint floats OVER the map, so without this it swallows any tap that
+       lands on it — the one place a caption must never intercept a click. */
+    pointer-events: none;
     margin: 0;
     padding: 5px 10px;
     background: var(--surface-card);
