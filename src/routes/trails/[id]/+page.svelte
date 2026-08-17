@@ -189,10 +189,18 @@
     text-decoration: underline;
   }
 
+  /* Fixed column count rather than auto-fit: eight stats against an auto-fit
+     track fits seven on a row and orphans the eighth. Four-up divides evenly. */
   .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem 1.25rem;
+  }
+
+  @media (max-width: 700px) {
+    .stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .stat {

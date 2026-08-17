@@ -4,15 +4,20 @@
 
   let { splits, paceSport = true }: { splits: Split[]; paceSport?: boolean } = $props();
 
-  // The bar is scaled against the slowest split, not against zero, so the
-  // difference between a 4:45 and a 5:05 km is visible. Faster reads longer.
-  const slowest = $derived(splits.length ? Math.max(...splits.map((s) => s.paceSPerKm)) : 1);
   const fastest = $derived(splits.length ? Math.min(...splits.map((s) => s.paceSPerKm)) : 1);
 
+  /**
+   * Bar length is proportional to SPEED, against the fastest split.
+   *
+   * Deliberately not stretched between the fastest and slowest split. That
+   * normalisation makes the bars fill the full width no matter how small the
+   * real spread is, so a set of splits one second apart draws as though it
+   * were a collapse. Proportional bars stay honest: near-identical splits look
+   * near-identical, and a genuine blow-up is visibly short.
+   */
   function barWidth(pace: number): number {
-    if (slowest === fastest) return 100;
-    // Invert: a faster (smaller) pace gets a longer bar.
-    return 25 + ((slowest - pace) / (slowest - fastest)) * 75;
+    if (!Number.isFinite(pace) || pace <= 0) return 0;
+    return Math.max(6, Math.min(100, (fastest / pace) * 100));
   }
 
   const fullSplits = $derived(splits.filter((s) => s.distanceM >= 995));
