@@ -3440,6 +3440,15 @@ export const codegraphEpisodes = pgTable(
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
     repo: text('repo').notNull().default('SR-Main'),
+    /**
+     * Natural key, so re-ingesting the same transcript updates rather than
+     * duplicates. Its absence was a real bug: nodes and lessons had natural
+     * keys and episodes did not, so the first re-run of the backfill took the
+     * corpus from 83 episodes to 166 — and a daily refresh cron would have
+     * doubled it every night while every count on every surface kept rising.
+     * Derived by the caller from (sourceId, fingerprint, files, occurredAt).
+     */
+    dedupeKey: text('dedupe_key'),
     /** Claude Code session id, or a jkai build id — provenance, not identity. */
     sourceKind: text('source_kind').notNull().default('session'),
     sourceId: text('source_id'),
@@ -3470,6 +3479,10 @@ export const codegraphEpisodes = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // Partial unique: rows minted before this column existed carry NULL, and
+    // several NULLs must stay legal. Postgres treats NULLs as distinct in a
+    // unique index anyway; the WHERE makes that intent explicit.
+    uniqueIndex('codegraph_episodes_dedupe_idx').on(t.dedupeKey).where(sql`${t.dedupeKey} IS NOT NULL`),
     index('codegraph_episodes_fingerprint_idx').on(t.fingerprint),
     index('codegraph_episodes_verdict_idx').on(t.verdict),
     index('codegraph_episodes_gate_idx').on(t.gate),

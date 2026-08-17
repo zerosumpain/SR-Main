@@ -14,6 +14,7 @@
  * nobody dares re-run.
  */
 import { json, error } from '@sveltejs/kit';
+import { createHash } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import {
@@ -184,7 +185,22 @@ export const POST: RequestHandler = async ({ request }) => {
       const verdict = VERDICTS.has(e.verdict ?? '') ? e.verdict! : 'unverified';
       const files = (e.filesTouched ?? []).filter(Boolean).slice(0, 40);
 
+      // The natural key. Computed server-side so every caller gets the same
+      // one — a client-supplied key would drift the moment a second ingester
+      // existed, which is exactly how the duplicate-episode bug would come back.
+      const dedupeKey = createHash('sha256')
+        .update([
+          e.repo || repo,
+          e.sourceId ?? '',
+          e.fingerprint ?? '',
+          e.occurredAt ?? '',
+          files.join(','),
+        ].join('|'))
+        .digest('hex')
+        .slice(0, 40);
+
       const [row] = await db.insert(codegraphEpisodes).values({
+        dedupeKey,
         repo: e.repo || repo,
         sourceKind: e.sourceKind || 'session',
         sourceId: e.sourceId ?? null,
@@ -198,7 +214,22 @@ export const POST: RequestHandler = async ({ request }) => {
         filesTouched: files,
         prNumber: e.prNumber ?? null,
         occurredAt: ts(e.occurredAt),
+      }).onConflictDoUpdate({
+        target: codegraphEpisodes.dedupeKey,
+        set: {
+          // Refresh the mutable facts; never touch retiredAt/servedCount, or a
+          // nightly re-ingest would silently un-retire what someone forgot on
+          // purpose and reset the usage evidence.
+          problem: sql`excluded.problem`,
+          resolution: sql`excluded.resolution`,
+          verification: sql`excluded.verification`,
+          verdict: sql`excluded.verdict`,
+          prNumber: sql`excluded.pr_number`,
+        },
       }).returning({ id: codegraphEpisodes.id });
+      // An upsert that updated an existing row returns it too, so this counts
+      // "units accepted", not "new rows" — the log says posted, the table says
+      // distinct, and those are different numbers by design.
       counts.episodes += 1;
 
       const nodeMap = await ensureNodes([...files, ...(e.nodes ?? [])], repo);
