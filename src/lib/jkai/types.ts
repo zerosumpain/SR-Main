@@ -85,5 +85,9 @@ export interface FailureEnvelope {
   lastEventAgeMs?: number;
   tokensBeforeStall?: number;
   stderrTail?: string;
+  /** Configured gate command that failed before this build was aborted. */
+  gateCommand?: string;
+  /** Extracted gate diagnostics shown to the next iteration. */
+  diagnostics?: string;
   attempts: number;
 }

@@ -129,6 +129,28 @@ type QueuedAction =
   | { kind: 'continue'; prompt: string; modelOverride?: { provider?: string; modelId?: string } }
   | { kind: 'rejectIteration'; notes: string };
 
+export function formatRescuePrBody(failure: FailureEnvelope): string {
+  const gateDetails = failure.gateCommand || failure.diagnostics
+    ? [
+        '',
+        '## Gate failure',
+        failure.gateCommand ? `Command: \`${failure.gateCommand}\`` : '',
+        failure.diagnostics
+          ? ['', 'Diagnostics:', ...failure.diagnostics.split('\n').map((line) => `    ${line}`)].join('\n')
+          : '',
+      ].filter(Boolean).join('\n')
+    : '';
+
+  return [
+    `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the builder's gate, run in the build workspace, did not pass. CI runs its own gate on this PR and may reach a different result, so read the CI checks before judging the work.`,
+    '',
+    `> ${(failure.message ?? '').slice(0, 500)}`,
+    gateDetails,
+    '',
+    'Review the diff before doing anything with it. To continue the work, resume the build rather than starting a new one — the workspace and branch are still on the VPS.',
+  ].join('\n');
+}
+
 class Orchestrator {
   private activeBuildId: string | null = null;
   private loopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1303,7 +1325,7 @@ class Orchestrator {
       // non-zero exit is a failed iteration whose output feeds the next
       // iteration's context (same shape/contract as runTests, so all the
       // downstream post-processing is unchanged).
-      let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string };
+      let testResult: { passed: boolean; output: string; testCount: number; failCount: number; diagnostics: string; gateCommand?: string };
       if (build.gitTargetConfig) {
         await emitStage(buildId, { stage: 'running_tests', iteration: iterationNumber }, iteration.id);
         const dev = `/home/jkai/workspace/${buildId}/dev`;
@@ -1331,10 +1353,10 @@ class Orchestrator {
         // gate could read moves. It fails SAFE: no fingerprint, run the gate.
         const fingerprint = await this.workspaceFingerprint(dev);
         const cached = this.lastGate;
-        let gate: { out: string; passed: boolean };
+        let gate: { out: string; passed: boolean; command: string };
 
         if (fingerprint && cached && cached.buildId === buildId && cached.fingerprint === fingerprint) {
-          gate = { out: cached.out, passed: cached.passed };
+          gate = { out: cached.out, passed: cached.passed, command: cached.command };
           await emitLog(
             buildId,
             'system',
@@ -1345,7 +1367,7 @@ class Orchestrator {
           );
         } else {
           gate = await this.runGateChain(runGate, build.gitTargetConfig);
-          if (fingerprint) this.lastGate = { buildId, fingerprint, out: gate.out, passed: gate.passed };
+          if (fingerprint) this.lastGate = { buildId, fingerprint, out: gate.out, passed: gate.passed, command: gate.command };
         }
 
         testResult = {
@@ -1360,6 +1382,7 @@ class Orchestrator {
           // From the FULL output, not the truncated copy: a gate prints its
           // passing steps first, so the useful part is always near the end.
           diagnostics: gate.passed ? '' : extractDiagnostics(gate.out),
+          gateCommand: gate.command,
         };
       } else {
         await emitLog(buildId, 'system', 'Running tests...', iteration.id);
@@ -1422,6 +1445,8 @@ class Orchestrator {
             message: testResult.diagnostics
               ? `${this.consecutiveIdleIterations} consecutive iterations changed no files while the gate was still failing: ${testResult.diagnostics.split('\n').find((l) => l.trim())?.slice(0, 200) ?? ''}`
               : `${this.consecutiveIdleIterations} consecutive iterations changed no files.`,
+            gateCommand: testResult.gateCommand,
+            diagnostics: testResult.diagnostics,
             attempts: 1,
           });
           return;
@@ -1812,13 +1837,7 @@ class Orchestrator {
       'Build failed with uncommitted work — pushing the branch and opening a draft PR so it is not lost.',
     );
 
-    const body = [
-      `This build **failed** (\`${failure.kind}\`) and this pull request is a rescue of the work it had already done. It is a DRAFT: the builder's gate, run in the build workspace, did not pass. CI runs its own gate on this PR and may reach a different result, so read the CI checks before judging the work.`,
-      '',
-      `> ${(failure.message ?? '').slice(0, 500)}`,
-      '',
-      'Review the diff before doing anything with it. To continue the work, resume the build rather than starting a new one — the workspace and branch are still on the VPS.',
-    ].join('\n');
+    const body = formatRescuePrBody(failure);
 
     const res = await publishViaGit(buildId, { ...cfg, openPr: true }, {
       draft: true,
@@ -1838,7 +1857,7 @@ class Orchestrator {
    * FINAL verdict — after `finalGateCommand`, when that ran — because that is
    * what the caller acts on.
    */
-  private lastGate: { buildId: string; fingerprint: string; out: string; passed: boolean } | null = null;
+  private lastGate: { buildId: string; fingerprint: string; out: string; passed: boolean; command: string } | null = null;
 
   /**
    * Hash of the working tree against HEAD, or null when it cannot be computed.
@@ -1876,10 +1895,13 @@ class Orchestrator {
   private async runGateChain(
     runGate: (cmd: string) => Promise<{ out: string; passed: boolean }>,
     cfg: { gateCommand: string; finalGateCommand?: string },
-  ): Promise<{ out: string; passed: boolean }> {
+  ): Promise<{ out: string; passed: boolean; command: string }> {
     const gate = await runGate(cfg.gateCommand);
-    if (gate.passed && cfg.finalGateCommand) return runGate(cfg.finalGateCommand);
-    return gate;
+    if (gate.passed && cfg.finalGateCommand) {
+      const finalGate = await runGate(cfg.finalGateCommand);
+      return { ...finalGate, command: cfg.finalGateCommand };
+    }
+    return { ...gate, command: cfg.gateCommand };
   }
 
   /** Which build `consecutiveIdleIterations` / `consecutiveTransient` describe. */
