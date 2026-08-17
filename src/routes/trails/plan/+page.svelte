@@ -189,14 +189,23 @@
 
   {#if !data.configured}
     <section class="nm-sec nm-sec-error">
-      <span class="sr-label-tight error">Planner not configured</span>
-      <p class="err-body">
-        No openrouteservice credential, so no routes can be requested. Add one at
-        <a href="/admin/ai/apis">/admin/ai/apis</a> under the handle
-        <code>openrouteservice</code> — header injection named <code>Authorization</code>, host
-        <code>api.openrouteservice.org</code>, and <strong>allow POST</strong> (an empty method
-        list means read-only, and directions is a POST). A free key from
-        <strong>openrouteservice.org/dev</strong> allows 2,500 requests a day.
+      <span class="sr-label-tight error">Planner needs a key</span>
+      <p class="err-body">Two steps, about a minute:</p>
+      <ol class="setup-steps">
+        <li>
+          Get a free key at
+          <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener noreferrer">
+            openrouteservice.org/dev
+          </a>
+          — sign up, then copy the token under <strong>Tokens</strong>. 2,500 routes a day, no card.
+        </li>
+        <li>
+          <a href="/admin/ai/apis?provider=openrouteservice">Paste it here</a> and press Save.
+        </li>
+      </ol>
+      <p class="err-note">
+        That link opens a single box. Everything else — where the key is sent, which host it may
+        reach — is already set, so there is nothing else to fill in. Then reload this page.
       </p>
     </section>
   {/if}
@@ -440,6 +449,27 @@
   .err-body code {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
+  }
+
+  .setup-steps {
+    margin: 0.6rem 0 0.6rem;
+    padding-left: 1.2rem;
+    font-size: var(--fs-body-sm);
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 62ch;
+  }
+  .setup-steps li + li {
+    margin-top: 0.35rem;
+  }
+
+  .err-note {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.5;
+    color: var(--text-muted);
+    max-width: 62ch;
   }
 
   .where-controls,

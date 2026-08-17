@@ -1,6 +1,7 @@
 <svelte:head><title>API Registry — Admin</title></svelte:head>
 <script lang="ts">
   import { getContext } from 'svelte';
+  import { page } from '$app/state';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   // The SAME predicate the server binds with. `$lib/secrets/registry` is
@@ -208,7 +209,15 @@
   // it wrong leaves a handle that looks registered and fails at run time. This
   // posts `{provider, fields}` to the same endpoint the jkai modal uses, so the
   // server writes every row from the code catalogue in one go.
-  let quickProvider = $state('');
+  // `?provider=<key>` opens that provider's form straight away, so a page
+  // elsewhere that needs a credential can link a novice directly to the one
+  // field they have to fill rather than to a nine-field generic form. Unknown
+  // values are ignored, leaving the page in its normal state.
+  let quickProvider = $state(
+    credentialSpecs.some((s) => s.provider === page.url.searchParams.get('provider'))
+      ? (page.url.searchParams.get('provider') as string)
+      : '',
+  );
   let quickValues = $state<Record<string, string>>({});
 
   const quickSpec = $derived(credentialSpecs.find((s) => s.provider === quickProvider) ?? null);

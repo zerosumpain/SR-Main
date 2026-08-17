@@ -157,6 +157,37 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
     ],
   },
 
+  openrouteservice: {
+    provider: 'openrouteservice',
+    title: 'openrouteservice (route planning)',
+    helpUrl: 'https://openrouteservice.org/dev/#/signup',
+    assemble: 'single',
+    fields: [
+      {
+        key: 'value',
+        label: 'API key',
+        type: 'password',
+        required: true,
+        placeholder: 'paste the token from your ORS dashboard',
+        help: 'Sign up free at openrouteservice.org/dev, then copy the token listed under "Tokens". The free plan allows 2,500 route requests a day.',
+      },
+    ],
+    binding: {
+      handle: 'openrouteservice',
+      source: 'vault',
+      // ORS wants the raw key in Authorization — NOT "Bearer <key>" — so this
+      // is a header injection rather than the usual bearer.
+      injection: { kind: 'header', name: 'Authorization' },
+      allowedHosts: ['api.openrouteservice.org'],
+      // POST is required, not optional: the directions endpoint is a POST, and
+      // the default GET+HEAD binding would reject every route request with a
+      // permissions error that reads nothing like "wrong method".
+      allowedMethods: ['POST', 'GET', 'HEAD'],
+      allowedPathPrefixes: ['/v2/'],
+      notes: 'Route planning for /trails — used by the planner page and the route_plan tool.',
+    },
+  },
+
   // National Rail Darwin, via the Rail Data Marketplace (raildata.org.uk). The
   // old self-service portal at realtime.nationalrail.co.uk was retired in early
   // 2026; everything is now issued as an RDM product subscription.
