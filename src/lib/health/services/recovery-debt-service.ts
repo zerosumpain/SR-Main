@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { whoopSleep, whoopCycles, whoopRecovery } from '$lib/db/schema';
 import { gte, eq, and, asc } from 'drizzle-orm';
+import { realStrain } from '$lib/health/whoop';
 import { computeRecoveryDebt, type RecoverySample } from '$lib/health/analytics/recovery-debt';
 
 export async function getRecoveryDebt() {
@@ -45,7 +46,7 @@ export async function getRecoveryDebt() {
   for (const c of cycles) {
     const date = new Date(c.start * 1000).toISOString().slice(0, 10);
     const ent = byDay.get(date) ?? { date, sleepNeedMin: 0, sleepActualMin: 0, strain: 0, recoveryScore: 0 };
-    ent.strain = c.strain;
+    ent.strain = realStrain(c.strain);
     byDay.set(date, ent);
   }
   for (const r of recoveries) {

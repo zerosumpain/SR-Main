@@ -285,3 +285,11 @@ export async function getWhoopBodyMeasurement(
     return null;
   }
 }
+
+// Whoop strain is a 0–21 score, but some historical rows landed in the DB at
+// strain × 100 (legacy sync path — see series-30d-service, which carried this
+// fix first). Every reader of whoop_cycles.strain must pass through this, or
+// four corrupt days from July 2026 poison any average they feed.
+export function realStrain(raw: number): number {
+  return raw > 22 ? raw / 100 : raw;
+}
