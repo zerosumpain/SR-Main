@@ -27,10 +27,26 @@
  */
 
 // eslint-disable-next-line no-control-regex
-const ANSI = /\[[0-9;]*[A-Za-z]/g;
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
+
+/*
+ * The SAME sequence with its escape byte already gone.
+ *
+ * Of 827 production build error logs, ZERO contain an escape byte and 42 contain
+ * bare `[31m`-style codes — something between pi and the log store removes the
+ * escape and leaves the rest. `ANSI` above needs the escape, so those fragments
+ * survived into the key and a coloured failure fingerprinted as `gate:1mError`
+ * instead of `gate:TypeError`. Every colour variant would have become its own
+ * key the moment a pi gate failure was promoted to an episode.
+ *
+ * Deliberately narrower than `ANSI`: digits then `m` only. `[2J` or `[1A` are
+ * plausible in prose (an array index, a citation), whereas `[31m` is not, and a
+ * strip that eats real text is worse than one that leaves a stray code.
+ */
+const ORPHAN_SGR = /\[[0-9;]{1,11}m/g;
 
 export function stripAnsi(text: string): string {
-  return String(text ?? '').replace(ANSI, '');
+  return String(text ?? '').replace(ANSI, '').replace(ORPHAN_SGR, '');
 }
 
 /** Gate families we can name. Anything else fingerprints as 'cmd'. */
@@ -92,6 +108,29 @@ export function gateOf(command: string): GateName {
  * different files share a fingerprint on purpose; the episodes hanging off it
  * carry the specifics.
  */
+/**
+ * The gate's own failure summary, as a last-resort class.
+ *
+ * `extractDiagnostics` reports a failed gate by naming the STAGE — "The gate
+ * failed in `gate:sync`. Run that stage, not a narrower one." — which is the
+ * right message for a human and unusable as a key, because every sharper
+ * pattern here wants an error CLASS. So the hot lane never fired: all 16
+ * production push serves used the file lane, `served_for` empty on every row,
+ * including eight consecutive iterations of build 42244cc0 that each followed
+ * a failed gate.
+ *
+ * Five stable values, one per gate stage. Coarse on purpose — it says "the
+ * build tripped over `gate:sync` again", which is exactly the recurrence the
+ * feedback loop needs to see, and it can never outrank a TS code or a named
+ * exception because it is checked last.
+ */
+export function gateStageIn(text: string): string | null {
+  const m = text.match(/gate failed in\s*[`'"]?(gate:[a-z-]+)/i)
+    ?? text.match(/[`'"](gate:[a-z-]+)[`'"]\s*(?:failed|exited)/i);
+  if (!m) return null;
+  return `${m[1].replace(/^gate:/, 'gate:')}-failed`;
+}
+
 export function fingerprintOf(rawText: string, command = ''): string | null {
   const t = stripAnsi(rawText);
   if (!t.trim()) return null;
@@ -120,6 +159,12 @@ export function fingerprintOf(rawText: string, command = ''): string | null {
 
   const assertion = t.match(/\bAssertionError\b/);
   if (assertion) return `${gate}:AssertionError`;
+
+  // The gate's stage, when nothing sharper is present. Below every real error
+  // class, above a bare exit code — "gate:sync-failed" is a usable key and
+  // "gate:exit-1" is not.
+  const stage = gateStageIn(t);
+  if (stage) return stage;
 
   if (/\bexit code\s*([1-9]\d*)\b/.test(t)) {
     const code = t.match(/\bexit code\s*([1-9]\d*)\b/)![1];
@@ -152,6 +197,11 @@ export function fingerprintsIn(rawText: string, command = ''): string[] {
     const single = fingerprintOf(rawText, command);
     if (single) out.add(single);
   }
+  // A gate summary rides ALONGSIDE any class found above: a run that reports
+  // both `TS2345` and "failed in gate:check" should be queryable either way,
+  // and the stage is what recurs when the same wall is hit twice.
+  const stage = gateStageIn(t);
+  if (stage) out.add(stage);
   // Bounded: a catastrophic run can name dozens, and a query seeded with all of
   // them is neither fast nor focused.
   return [...out].slice(0, 8);

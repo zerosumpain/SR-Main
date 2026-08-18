@@ -242,7 +242,13 @@ export async function executeIteration(
   const { listDevFiles } = await import('./sandbox');
   const { buildCodebaseDigest } = await import('./codebase-digest');
   const devFiles = await listDevFiles(build.id).catch(() => []);
-  const codebaseDigest = await buildCodebaseDigest(build.id, devFiles).catch(() => '');
+  // The precedent channel spends ~4.8 KB of the same context. Shrink the digest
+  // by the same amount rather than adding to a prompt that is already ~19 KB —
+  // the digest's tail is its least relevant part.
+  const precedentEnabled = promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0';
+  const codebaseDigest = await buildCodebaseDigest(build.id, devFiles, {
+    sharingBudgetWithPrecedent: precedentEnabled,
+  }).catch(() => '');
 
   // Codegraph push — what this codebase has already learned about the files
   // this iteration is touching, or about the gate error the last one hit.
@@ -356,6 +362,103 @@ export async function executeIteration(
     }
   }
 
+  /*
+   * The precedent channel — what this repo's code actually LOOKS like.
+   *
+   * Separate from the codegraph push on purpose: different question, different
+   * heading, its own kill switch and its own ledger row, so either can be
+   * switched off and A/B'd without the other. Merging them would make the
+   * budget impossible to attribute.
+   *
+   * codegraph picks the paths; the bytes come from this build's own workspace.
+   * A sibling the clone does not have is skipped rather than injected as a file
+   * the agent cannot open.
+   */
+  let precedentBlock = '';
+  if (promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0') {
+    try {
+      const { precedentTargets, precedentQuery, skeleton, buildPrecedentBlock, PRECEDENT_MAX_FILES } =
+        await import('$lib/codegraph/precedent');
+      const { editedPathsFromActions, pathsInText, bareNamesInText, dirHintsInText } = await import(
+        '$lib/codegraph/build-context'
+      );
+      const { lookupNamedFiles } = await import('$lib/codegraph/name-lookup');
+      const named = await lookupNamedFiles(bareNamesInText(build.prompt), dirHintsInText(build.prompt));
+      const targets = precedentTargets(
+        editedPathsFromActions(prevIteration?.actions ?? null),
+        pathsInText(build.prompt),
+        named.resolved,
+      );
+
+      if (!targets.length) {
+        await emitLog(build.id, 'system', 'Precedent: no target file to match a shape against', iteration.id);
+      } else {
+        const { runCgql } = await import('$lib/codegraph/retrieve');
+        const { readDevFile } = await import('./sandbox');
+        const { db: database } = await import('$lib/db');
+        const { codegraphQueries } = await import('$lib/db/schema');
+
+        const chosen: Array<{ target: string; path: string; source: string }> = [];
+        const asked: string[] = [];
+        const missing: string[] = [];
+
+        for (const target of targets) {
+          if (chosen.length >= PRECEDENT_MAX_FILES) break;
+          const q = precedentQuery(target, PRECEDENT_MAX_FILES - chosen.length);
+          if (!q) continue;
+          asked.push(q);
+          const result = await Promise.race([
+            runCgql(q),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+          ]);
+          for (const node of result.nodes) {
+            if (chosen.length >= PRECEDENT_MAX_FILES) break;
+            if (chosen.some((c) => c.path === node.canonicalPath)) continue;
+            // The workspace is the authority on what exists. A read that fails
+            // means this clone predates the file, which is a fact about the
+            // branch, not an error worth failing the iteration over.
+            const source = await readDevFile(build.id, node.canonicalPath).catch(() => '');
+            if (!source) { missing.push(node.canonicalPath); continue; }
+            chosen.push({ target, path: node.canonicalPath, source: skeleton(source) });
+          }
+        }
+
+        precedentBlock = buildPrecedentBlock(chosen);
+        await database.insert(codegraphQueries).values({
+          channel: 'precedent',
+          buildId: build.id,
+          iterationId: iteration.id,
+          query: asked.join(' ;; ').slice(0, 2000),
+          outcome: chosen.length ? 'served' : 'empty',
+          episodeIds: [],
+          lessonIds: [],
+          servedFor: [],
+          charsServed: precedentBlock.length,
+          durationMs: 0,
+        }).catch(() => {});
+
+        await emitLog(
+          build.id,
+          'system',
+          chosen.length
+            ? `Precedent: ${chosen.map((c) => c.path).join(', ')} — ${precedentBlock.length} chars` +
+              (missing.length ? ` (${missing.length} not in this clone)` : '')
+            : `Precedent: NO PRECEDENT for ${targets.join(', ')} — no file of that shape in the graph`,
+          iteration.id,
+        );
+      }
+    } catch (err) {
+      // Loud and non-fatal, same contract as the codegraph push.
+      precedentBlock = '';
+      await emitLog(
+        build.id,
+        'error',
+        `Precedent channel FAILED (continuing without): ${(err as Error).message}`,
+        iteration.id,
+      );
+    }
+  }
+
   const contextMessages = buildIterationContext(
     build.prompt,
     prevIteration,
@@ -425,7 +528,14 @@ export async function executeIteration(
   // Codegraph last: it is the most specific thing in the prompt, and what the
   // history says about THIS file set should be the freshest instruction the
   // agent reads before it starts work.
-  const userPrompt = [deliveriesBlock, contextMessages.map((m) => m.content).join('\n\n'), codegraphBlock]
+  const userPrompt = [
+    deliveriesBlock,
+    contextMessages.map((m) => m.content).join('\n\n'),
+    // Shape first, then history: "here is how we write this" is context for
+    // "here is what went wrong last time", not the other way round.
+    precedentBlock,
+    codegraphBlock,
+  ]
     .filter((s) => s.length > 0)
     .join('\n\n');
 

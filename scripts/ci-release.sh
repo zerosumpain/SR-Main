@@ -85,6 +85,7 @@ rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
 # the 10.5-discovery-actions-per-iteration behaviour this change set exists to
 # reduce. Nothing else would report the absence.
 rsync -a scripts/codegraph-query.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/codegraph-tree-pass.mjs "$VPS_DIR/scripts/"
 
 # Production deps only when the lockfile actually changed. Measured: 26% of
 # commits change it. The hash is kept by us rather than read back out of
@@ -193,6 +194,26 @@ if timeout 90 bash -c "until curl -fsS -o /dev/null '$PUBLIC_URL'; do sleep 3; d
         --via github-actions \
         --built-at "$(sed -n 's/^built_at=//p' "$RELEASE_DIR/.deploy-sha" | head -1)" \
       || echo "    warn: release-log ingest failed (deploy is fine)"
+  fi
+
+  # Teach the build-history graph what the tree looks like AT THIS COMMIT.
+  #
+  # This job is the only place in the system that has both a git checkout
+  # detached at the deployed sha and a credential for the ingest, which is
+  # exactly what the old liveness pass lacked: it ran `git ls-files` in
+  # homeserv's working copy, which sits on whatever branch someone left it on,
+  # and marked 216 files gone when 138 of them were on master.
+  #
+  # Non-fatal, like the release log above: the graph is a record of production,
+  # never a gate on it.
+  echo "==> Refreshing the codegraph tree..."
+  CODEGRAPH_TOKEN="$(sed -n 's/^CLAUDE_CHANGELOG_SECRET=//p' "$VPS_DIR/.env" 2>/dev/null | tr -d '"' | head -1 || true)"
+  if [ -z "$CODEGRAPH_TOKEN" ]; then
+    echo "    skipped: CLAUDE_CHANGELOG_SECRET is not set in $VPS_DIR/.env"
+  else
+    CODEGRAPH_TOKEN="$CODEGRAPH_TOKEN" \
+      node scripts/codegraph-tree-pass.mjs --ref "${GITHUB_SHA:-HEAD}" \
+      || echo "    warn: codegraph tree pass failed (deploy is fine)"
   fi
 else
   echo "==> ERROR: $PUBLIC_URL did not return 200 within 90s. Service state:" >&2

@@ -20,6 +20,7 @@ import {
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { parseCgql, topicTokens, type Pick, type QueryPlan, VERDICTS } from './query';
 import { relevanceOf, packByRelevance, type RelevanceParts } from './relevance';
+import { familyOf, siblingScore } from './family';
 
 export interface RetrievedLesson {
   id: string;
@@ -335,10 +336,97 @@ async function pickEpisodes(
   return out.slice(0, pick.limit);
 }
 
+
+/**
+ * Files of the same shape as `path`, best precedent first.
+ *
+ * Runs as a normal seed so `nodeVisible()` applies: a node merged away is not a
+ * precedent, and that predicate stays in this one loader rather than being
+ * reimplemented by whoever wants examples. It is the only thing that can ever
+ * express "stop holding that file up as an example".
+ *
+ * In-degree is counted from `imports` edges — 6,681 of them, built by parsing
+ * the tree and, until now, never read by any query. A file many others import is
+ * the one that set the convention.
+ */
+async function siblingNodes(path: string, repo: string, limit: number): Promise<RetrievedNode[]> {
+  const family = familyOf(path);
+  if (!family) return [];
+
+  const candidates = await db
+    .select({
+      id: codegraphNodes.id,
+      canonicalPath: codegraphNodes.canonicalPath,
+      kind: codegraphNodes.kind,
+      episodeCount: codegraphNodes.episodeCount,
+      lessonCount: codegraphNodes.lessonCount,
+    })
+    .from(codegraphNodes)
+    .where(
+      and(
+        eq(codegraphNodes.repo, repo),
+        eq(codegraphNodes.family, family),
+        nodeVisible(),
+        // A deleted file cannot be copied. This is the one query where
+        // liveness HIDES rather than ranks down: a lesson about a moved file
+        // is often still true, a precedent that is not in the tree is not.
+        eq(codegraphNodes.existsOnHead, true),
+      ),
+    )
+    .limit(600);
+
+  const others = candidates.filter((c) => c.canonicalPath !== path);
+  if (!others.length) return [];
+
+  const inDegree = new Map<string, number>();
+  const rows = await db
+    .select({ target: codegraphEdges.targetId })
+    .from(codegraphEdges)
+    .where(
+      and(
+        eq(codegraphEdges.kind, 'imports'),
+        eq(codegraphEdges.suppressed, false),
+        inArray(codegraphEdges.targetId, others.map((o) => o.id)),
+      ),
+    );
+  for (const r of rows) inDegree.set(r.target, (inDegree.get(r.target) ?? 0) + 1);
+
+  return others
+    .map((c) => ({
+      node: c,
+      score: siblingScore(path, {
+        path: c.canonicalPath,
+        inDegree: inDegree.get(c.id) ?? 0,
+        episodes: c.episodeCount ?? 0,
+        lessons: c.lessonCount ?? 0,
+      }),
+    }))
+    .sort((a, b) => b.score - a.score || a.node.canonicalPath.localeCompare(b.node.canonicalPath))
+    .slice(0, limit)
+    .map((x) => x.node);
+}
+
 /** Execute a parsed plan. Throws only on infrastructure failure. */
 export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Promise<RetrievalResult> {
   const started = Date.now();
   const repo = opts.repo ?? 'SR-Main';
+
+  // The siblings seed answers with nodes and nothing else — no walk, no prose.
+  // It is a different question from "what have we learned about this file", and
+  // mixing them would make the caller's budget impossible to attribute.
+  if (plan.seed.type === 'siblings') {
+    const limit = plan.picks.find((p) => p.kind === 'nodes')?.limit ?? 2;
+    const nodes = await siblingNodes(plan.seed.path, repo, limit);
+    return {
+      plan,
+      seedNodeIds: [],
+      nodes,
+      lessons: [],
+      episodes: [],
+      outcome: nodes.length ? 'served' : 'empty',
+      durationMs: Date.now() - started,
+    };
+  }
 
   const seeds = await seedNodes(plan, repo);
   const nodeIds = await walk(seeds, plan);
@@ -433,6 +521,30 @@ function trim(s: string | null | undefined, n: number): string {
  */
 export function buildContextBlock(result: RetrievalResult): string {
   const budget = result.plan.budgetChars;
+
+  // A siblings query is answering a different question, so it gets its own
+  // heading. The pull channel prints this; the push channel ignores it and
+  // injects the source itself (see codegraph/precedent.ts).
+  if (result.plan.seed.type === 'siblings') {
+    if (!result.nodes.length) {
+      return [
+        '## Files of the same shape',
+        '',
+        `NO PRECEDENT — nothing in the graph shares a shape with \`${result.plan.seed.path}\`.`,
+        'Either it is a new kind of file here, or the tree pass has not seen it yet.',
+      ].join('\n');
+    }
+    return [
+      '## Files of the same shape',
+      '',
+      'Closest precedents first — same directory, then import centrality, then recorded history.',
+      '',
+      ...result.nodes.map((n, i) => `${i + 1}. \`${n.canonicalPath}\``),
+      '',
+      'Read them before writing. Copy their structure, naming, error handling and helpers.',
+    ].join('\n');
+  }
+
   const lines: string[] = ['## What this codebase has already learned'];
 
   if (result.outcome === 'empty') {
