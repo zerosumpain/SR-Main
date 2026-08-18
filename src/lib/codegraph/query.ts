@@ -294,7 +294,16 @@ export function cgqlForFingerprints(fingerprints: string[], limit = 3): string |
   return `fingerprint:${clean.slice(0, 8).join(',')} | episodes verdict=verified,landed limit=${limit}`;
 }
 
-/** Build CGQL from the file set a build is about to touch. */
+/**
+ * Build CGQL from the file set a build is about to touch.
+ *
+ * The `nodes` pick is not decoration. The walk that selects these lessons
+ * already knows which files move WITH the seed — and until this pick existed
+ * that neighbourhood was computed, used to pick prose, and then thrown away.
+ * The agent is told to "read two existing files of the same shape" before it
+ * writes anything; this is the graph answering that instruction with the pairs
+ * history actually observed, rather than leaving it to a grep.
+ */
 export function cgqlForFiles(paths: string[], opts: { hops?: number; budget?: number } = {}): string | null {
   const clean = paths
     .map((p) => p.trim())
@@ -305,6 +314,71 @@ export function cgqlForFiles(paths: string[], opts: { hops?: number; budget?: nu
   const budget = Math.min(MAX_BUDGET, opts.budget ?? DEFAULT_BUDGET);
   return (
     `file:${clean.join(',')} | hops ${hops} | lessons limit=4 | ` +
-    `episodes verdict=verified,landed limit=4 | budget ${budget}`
+    `episodes verdict=verified,landed limit=4 | nodes limit=10 | budget ${budget}`
   );
+}
+
+/**
+ * Split free text into searchable tokens.
+ *
+ * Lives in this module, not in the retriever, because `planBuildQuery` has to
+ * decide whether a task is even askable before any database is involved — and
+ * that decision must stay testable without one.
+ *
+ * Stopwords go, because "how does the tool bridge work" is four noise words and
+ * two real ones, and letting "how"/"the" score would rank every note equally.
+ * Short tokens go for the same reason.
+ */
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been',
+  'how', 'what', 'why', 'when', 'where', 'who', 'which', 'does', 'do', 'did',
+  'for', 'to', 'of', 'in', 'on', 'at', 'by', 'with', 'from', 'this', 'that',
+  'it', 'its', 'we', 'you', 'i', 'my', 'our', 'work', 'works', 'use', 'used',
+]);
+
+export function topicTokens(text: string, max = 8): string[] {
+  const out: string[] = [];
+  for (const raw of String(text).toLowerCase().split(/[^a-z0-9_.\-/]+/)) {
+    const t = raw.replace(/^[-._/]+|[-._/]+$/g, '');
+    if (t.length < 3 || STOPWORDS.has(t)) continue;
+    if (!out.includes(t)) out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * The floor under a topic query, and why it is three.
+ *
+ * `topicLessons` requires half a query's tokens to appear in a note, so a
+ * two-token seed needs ONE hit — which any common word satisfies, and the
+ * answer is then whatever sorted first. Three tokens need two, which is the
+ * point at which a match starts meaning something. It also declines exactly the
+ * prompts that motivated keying on code in the first place: "crack on" yields
+ * one token, "fix the header" two.
+ */
+export const MIN_TOPIC_TOKENS = 3;
+
+/**
+ * Build CGQL from free text — the last resort, for a task that names no file
+ * and follows no gate failure.
+ *
+ * Capped at six tokens deliberately. The scoring floor rises with the token
+ * count (half of them must appear), so feeding a whole task paragraph in makes
+ * the query STRICTER and returns nothing; the topic searches that work in
+ * practice are four or five terms.
+ *
+ * Episodes are not picked. Their searchable text is a title of the form
+ * `gate: fingerprint`, a compiler excerpt and a template sentence — prose about
+ * what a build is trying to achieve will not match it except by accident, and
+ * an accidental match here is a wrong precedent presented as an authority.
+ */
+export function cgqlForTopic(text: string, opts: { limit?: number; budget?: number } = {}): string | null {
+  const tokens = topicTokens(text, 6);
+  if (tokens.length < MIN_TOPIC_TOKENS) return null;
+  const limit = Math.min(MAX_LIMIT, opts.limit ?? 4);
+  const budget = Math.min(MAX_BUDGET, opts.budget ?? DEFAULT_BUDGET);
+  // Tokens are [a-z0-9_.-/] by construction, so no quote can reach the seed and
+  // the `topic:"…"` literal cannot be broken out of.
+  return `topic:"${tokens.join(' ')}" | lessons limit=${limit} | budget ${budget}`;
 }

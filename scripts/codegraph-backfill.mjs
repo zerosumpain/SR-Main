@@ -324,7 +324,82 @@ function edgesFrom(events) {
 // ---------------------------------------------------------------------------
 const PATH_RE = /(?:^|[\s`'"(\[])((?:src|scripts|packages|static|docs|tests|field-study-system|\.github)\/[A-Za-z0-9_\-./\[\]]+\.[A-Za-z0-9]{1,6})/g;
 
-function lessonsFromMemory() {
+// ---------------------------------------------------------------------------
+// Citation resolution. Mirrors src/lib/codegraph/citations.ts — duplicated for
+// the same reason as the fingerprint and import rules above (plain node, no TS
+// build step), and pinned by citations.test.ts, which asserts the same cases.
+//
+// 117 of 277 notes cite no full path, so before these lanes existed they were
+// linked to no node and unreachable from any file seed. They are not vague:
+// they say `$lib/connectors/`, `monitor.ts`, `/admin/connections/gmail`.
+// ---------------------------------------------------------------------------
+const LIB_REF = /\$lib\/([A-Za-z0-9_\-./\[\]]*)/g;
+const ROUTE_REF = /(?:^|[\s`'"(])(\/(?:admin|jkai|api|projects|blog)\/[a-z0-9\-/\[\]_.]*[a-z0-9\]])/gi;
+const BARE_NAME_RE = /(?:^|[^\w/.-])([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|js|mjs|svelte|json|css|md|sh|py))\b/g;
+const DIR_HINT_RE = /\b((?:src|scripts|packages|static|docs|tests|field-study-system|\.github)\/[A-Za-z0-9_\-./]*\/)/g;
+const CITE_EXTS = ['.ts', '.js', '.svelte', '.mjs', '.svelte.ts', '.json'];
+const CITE_INDEXES = ['/index.ts', '/index.js', '/index.svelte'];
+const MAX_DIR_FILES = 6;
+
+function resolveLibRef(body, tracked) {
+  const clean = body.replace(/[.,;:)\]`'"]+$/, '');
+  if (!clean) return [];
+  const base = `src/lib/${clean.replace(/\/$/, '')}`;
+  if (tracked.has(base)) return [base];
+  for (const e of CITE_EXTS) if (tracked.has(base + e)) return [base + e];
+  for (const i of CITE_INDEXES) if (tracked.has(base + i)) return [base + i];
+  const prefix = `${base}/`;
+  const under = [];
+  for (const p of tracked) {
+    if (p.startsWith(prefix)) under.push(p);
+    if (under.length > MAX_DIR_FILES) return [];   // too broad to mean anything
+  }
+  return under;
+}
+
+function resolveRouteRef(route, tracked) {
+  const rel = route.replace(/^\//, '').replace(/\/$/, '');
+  if (!rel) return [];
+  for (const leaf of ['+page.svelte', '+page.server.ts', '+server.ts', '+layout.svelte']) {
+    const p = `src/routes/${rel}/${leaf}`;
+    if (tracked.has(p)) return [p];
+  }
+  return [];
+}
+
+/** Every file a note can be SHOWN to be about. Exactly-one-match or decline. */
+export function resolveCitations(text, tracked, max = 40) {
+  const out = new Set();
+  const take = (p) => { if (out.size < max && tracked.has(p) && canonicalise(p)) out.add(p); };
+
+  for (const m of text.matchAll(PATH_RE)) {
+    const c = canonicalise(m[1].replace(/[.,;:)`'"]+$/, ''));
+    if (c) take(c);
+  }
+  for (const m of text.matchAll(LIB_REF)) for (const p of resolveLibRef(m[1], tracked)) take(p);
+  for (const m of text.matchAll(ROUTE_REF)) for (const p of resolveRouteRef(m[1], tracked)) take(p);
+
+  // Bare names, disambiguated by a directory the note itself names.
+  const dirHints = [...new Set([...text.matchAll(DIR_HINT_RE)].map((m) => m[1]))].slice(0, 12);
+  const inFullPaths = new Set([...out].map((p) => p.slice(p.lastIndexOf('/') + 1)));
+  const names = [...new Set([...text.matchAll(BARE_NAME_RE)].map((m) => m[1]))]
+    .filter((n) => !inFullPaths.has(n))
+    .slice(0, 24);
+  if (names.length) {
+    const candidates = [...tracked];
+    for (const name of names) {
+      const matches = candidates.filter((p) => p.slice(p.lastIndexOf('/') + 1) === name);
+      if (matches.length === 1) { take(matches[0]); continue; }
+      if (matches.length > 1 && dirHints.length) {
+        const narrowed = matches.filter((p) => dirHints.some((d) => p.startsWith(d)));
+        if (narrowed.length === 1) take(narrowed[0]);
+      }
+    }
+  }
+  return [...out];
+}
+
+function lessonsFromMemory(tracked) {
   if (!existsSync(MEMORY_DIR)) return [];
   const files = readdirSync(MEMORY_DIR).filter((f) => f.endsWith('.md') && f !== 'MEMORY.md');
   const out = [];
@@ -334,11 +409,16 @@ function lessonsFromMemory() {
     const desc = (body.match(/^description:\s*["']?(.+?)["']?\s*$/m) || [])[1]?.trim();
     const modified = (body.match(/^\s*modified:\s*(.+)$/m) || [])[1]?.trim();
 
-    const cited = new Set();
-    for (const m of body.matchAll(PATH_RE)) {
-      const c = canonicalise(m[1].replace(/[.,;:)`'"]+$/, ''));
-      if (c) cited.add(c);
-    }
+    // With no tracked file list (the liveness sentinel refused, or git is not
+    // available) fall back to full paths only. A degraded citation set is
+    // recoverable on the next run; guessing without the tree is not.
+    const cited = tracked
+      ? new Set(resolveCitations(body, tracked))
+      : new Set(
+          [...body.matchAll(PATH_RE)]
+            .map((m) => canonicalise(m[1].replace(/[.,;:)`'"]+$/, '')))
+            .filter(Boolean),
+        );
     // Strip the frontmatter; the prose is the lesson. Kept VERBATIM — these
     // notes are better written than anything a distillation pass would produce.
     const prose = body.replace(/^---[\s\S]*?^---\s*/m, '').trim();
@@ -501,8 +581,13 @@ async function main() {
   const totals = { nodes: 0, edges: 0, episodes: 0, lessons: 0 };
 
   if (doLessons) {
-    const lessons = lessonsFromMemory();
-    console.log(`memory notes: ${lessons.length}, citing ${lessons.reduce((a, l) => a + l.citedPaths.length, 0)} repo paths`);
+    if (!head) console.error('no tracked file list — citations degrade to full paths only');
+    const lessons = lessonsFromMemory(head);
+    const linked = lessons.filter((l) => l.citedPaths.length).length;
+    console.log(
+      `memory notes: ${lessons.length}, citing ${lessons.reduce((a, l) => a + l.citedPaths.length, 0)} repo paths ` +
+        `(${linked} notes linked, ${lessons.length - linked} unreachable from any file seed)`,
+    );
     for (let i = 0; i < lessons.length; i += 100) {
       const r = await post({ repo: REPO, lessons: lessons.slice(i, i + 100) });
       totals.lessons += r.counts?.lessons ?? 0;

@@ -25,7 +25,7 @@
  * Both cost a regex. Neither costs an LLM call, which is what makes it
  * affordable on every iteration of every build.
  */
-import { cgqlForFiles, cgqlForFingerprints } from './query';
+import { cgqlForFiles, cgqlForFingerprints, cgqlForTopic } from './query';
 import { fingerprintsIn } from './fingerprint';
 
 /** Paths that look like repo files, taken from free text. */
@@ -191,6 +191,31 @@ export function planBuildQuery(
     // No fingerprints: a file-set serve cannot be resolved by "did the error
     // recur", so it stays unresolved rather than being credited for free.
     if (q) return { query: q, reason: `file set (${unique.length} path(s))`, fingerprints: [] };
+  }
+
+  /*
+   * 3. Last resort: what the task is ABOUT.
+   *
+   * The two keys above are both retrospective — they need a gate that has
+   * already failed, or a file that already exists and was already named. A task
+   * like "add a Notion connector" satisfies neither, and until this lane existed
+   * it produced no query at all: the graph held five notes on exactly that
+   * subject (which service the credential binds to, why a credential in node
+   * config spreads to nine tables, that Strava is parked by design) and served
+   * none of them, because none of those notes' subject matter is expressible as
+   * a path the prompt happens to contain.
+   *
+   * Deliberately BELOW the file set, not above it. Prose matching is the weaker
+   * signal — it was rejected as the primary key because 29% of prompts are 25
+   * characters or fewer — and this lane only runs where the sharp keys have
+   * already declined. `cgqlForTopic` returns null when the text is too thin to
+   * ask with, so "crack on" still plans nothing, which is the honest answer.
+   */
+  const topic = cgqlForTopic(input.prompt);
+  if (topic) {
+    // Unattributable for the same reason as a file set, and more so: no error
+    // was in play, so nothing about the next gate result can credit it.
+    return { query: topic, reason: 'task topic', fingerprints: [] };
   }
 
   return null;
