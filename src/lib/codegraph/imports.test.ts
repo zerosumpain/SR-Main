@@ -122,3 +122,32 @@ describe('whole-tree edges', () => {
     expect(staticEdges(self)).toEqual([]);
   });
 });
+
+describe('qualified test names', () => {
+  const exists = new Set([
+    'src/lib/jkai/test-runner.ts',
+    'src/lib/apis/integrations.ts',
+    'src/lib/canvas/palette.ts',
+    'src/lib/a.ts',
+  ]);
+
+  it('peels a qualifier to reach the real subject', () => {
+    // 91 of 342 test files here are named this way, including the one whose
+    // subject builds kept guessing wrong.
+    expect(subjectOfTest('src/lib/jkai/test-runner.diagnostics.test.ts', exists))
+      .toBe('src/lib/jkai/test-runner.ts');
+    expect(subjectOfTest('src/lib/apis/integrations.status.test.ts', exists))
+      .toBe('src/lib/apis/integrations.ts');
+  });
+
+  it('returns null for a test with no subject at all', () => {
+    // `palette-parity` is not `palette`. Peeling stops at dots, and a hyphen
+    // is part of the name — otherwise every test would find a subject.
+    expect(subjectOfTest('src/lib/canvas/palette-parity.test.ts', exists)).toBeNull();
+  });
+
+  it('never peels across a directory boundary', () => {
+    // `a/b.test.ts` must not resolve to `a.ts`.
+    expect(subjectOfTest('src/lib/a/b.test.ts', new Set(['src/lib/a.ts']))).toBeNull();
+  });
+});

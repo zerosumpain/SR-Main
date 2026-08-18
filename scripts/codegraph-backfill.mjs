@@ -486,8 +486,15 @@ function subjectOfTest(path, exists) {
   const m = path.match(/^(.*)\.(test|spec)\.([tj]sx?)$/);
   if (!m) return null;
   const [, stem, , ext] = m;
-  for (const c of [`${stem}.${ext}`, `${stem}.svelte`, `${stem}.ts`, `${stem}.js`])
-    if (exists.has(c)) return c;
+  // Qualified names — `x.diagnostics.test.ts` covers `x.ts`. Mirrors
+  // src/lib/codegraph/imports.ts; 91 of 342 test files need it.
+  let s = stem;
+  while (s) {
+    for (const c of [`${s}.${ext}`, `${s}.svelte`, `${s}.ts`, `${s}.js`]) if (exists.has(c)) return c;
+    const cut = s.lastIndexOf('.');
+    if (cut === -1 || s.slice(cut).includes('/')) break;
+    s = s.slice(0, cut);
+  }
   return null;
 }
 
