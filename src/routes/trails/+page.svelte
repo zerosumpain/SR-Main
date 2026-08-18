@@ -1,6 +1,8 @@
 <script lang="ts">
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
+  import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
+  import type { ACWRZone } from '$lib/health/analytics/acwr';
   import {
     formatDistance,
     formatDuration,
@@ -14,6 +16,33 @@
   } from '$lib/trails/format';
 
   let { data } = $props();
+
+  const STRIP_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function shortDay(day: string): string {
+    const dt = new Date(Date.parse(day + 'T00:00:00Z'));
+    return `${dt.getUTCDate()} ${STRIP_MONTHS[dt.getUTCMonth()]}`;
+  }
+
+  const weekBars = $derived.by((): Bar[] => {
+    return (data.strip?.weeks ?? []).map((w) => ({
+      key: w.weekStart,
+      tick: shortDay(w.weekStart),
+      value: w.totalS,
+      readout: w.totalS
+        ? `${formatDuration(w.totalS)}${w.totalDistanceM ? ` · ${formatDistance(w.totalDistanceM)}` : ''}`
+        : 'no workouts',
+      readoutSub: `wk ${shortDay(w.weekStart)}`,
+    }));
+  });
+
+  const acwr = $derived(data.strip?.strainAcwr ?? null);
+  const ACWR_TONE: Record<ACWRZone, 'good' | 'warn' | 'bad'> = {
+    detraining: 'warn',
+    undertraining: 'warn',
+    optimal: 'good',
+    caution: 'warn',
+    danger: 'bad',
+  };
 
   const RANGES = [
     { label: 'All', days: null },
@@ -52,6 +81,7 @@
       </p>
     </div>
     <nav class="hdr-nav">
+      <a href="/trails/dashboard">Dashboard</a>
       <a href="/trails/plan">Plan</a>
       <a href="/trails/routes">Routes</a>
       <a href="/trails/record">Record</a>
@@ -83,6 +113,29 @@
       <span class="sr-label-tight">Climbed</span>
     </div>
   </section>
+
+  {#if data.strip && weekBars.some((b) => b.value > 0)}
+    <section class="nm-sec strip">
+      <div class="strip-chart">
+        <Bars
+          bars={weekBars}
+          label="Training — last 12 weeks"
+          height={110}
+          formatY={(v) => `${(v / 3600).toFixed(v >= 36000 ? 0 : 1)}h`}
+        />
+      </div>
+      <div class="strip-side">
+        {#if acwr && acwr.sufficiency === 'ok'}
+          <span class="sr-label-tight">Load ratio</span>
+          <span class="strip-acwr">{acwr.value.ratio.toFixed(2)}</span>
+          <span class="tag" class:good={ACWR_TONE[acwr.value.zone] === 'good'} class:warn={ACWR_TONE[acwr.value.zone] === 'warn'} class:bad={ACWR_TONE[acwr.value.zone] === 'bad'}>
+            {acwr.value.zone.toUpperCase()}
+          </span>
+        {/if}
+        <a class="strip-link" href="/trails/dashboard">Full dashboard →</a>
+      </div>
+    </section>
+  {/if}
 
   {#if hasTypes}
     <nav class="filters" aria-label="Filter activities">
@@ -230,6 +283,80 @@
     font-size: var(--fs-num-md);
     color: var(--text-primary);
     line-height: 1.1;
+  }
+
+  .strip {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5rem;
+  }
+
+  .strip-chart {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .strip-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+    flex-shrink: 0;
+    padding-bottom: 0.25rem;
+  }
+
+  .strip-acwr {
+    font-family: var(--font-mono);
+    font-size: var(--fs-num-md);
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    padding: 0.15rem 0.5rem;
+    border: 1px solid var(--line-strong);
+    color: var(--text-secondary);
+  }
+  .tag.good {
+    border-color: var(--success);
+    color: var(--success);
+  }
+  .tag.warn {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+  .tag.bad {
+    border-color: var(--error);
+    color: var(--error);
+  }
+
+  .strip-link {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-decoration: none;
+    margin-top: 0.35rem;
+  }
+  .strip-link:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 700px) {
+    .strip {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .strip-side {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.6rem;
+    }
   }
 
   .filters {

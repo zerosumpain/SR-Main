@@ -3,6 +3,9 @@
   import TrackMap from '$lib/components/trails/TrackMap.svelte';
   import LineChart from '$lib/components/trails/LineChart.svelte';
   import SplitsTable from '$lib/components/trails/SplitsTable.svelte';
+  import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
+  import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
+  import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import {
     formatDistance,
     formatDuration,
@@ -19,7 +22,15 @@
   let { data } = $props();
 
   const a = $derived(data.activity);
+  const phys = $derived(data.physio);
   const pace = $derived(isPaceSport(a.activityType));
+
+  let drawerOpen = $state(false);
+  let drawerFocus = $state<string | null>(null);
+  function openEvidence(id: string) {
+    drawerFocus = id;
+    drawerOpen = true;
+  }
 
   const elevationPoints = $derived(
     a.elevation.map((p) => [p.distanceM, p.elevationM] as [number, number]),
@@ -28,19 +39,59 @@
   const heartRate = $derived(a.series.find((s) => s.metric === 'heart_rate') ?? null);
   const cadence = $derived(a.series.find((s) => s.metric === 'cadence') ?? null);
 
-  const stats = $derived([
-    { label: 'Distance', value: formatDistance(a.distanceM) },
-    { label: 'Moving', value: formatDuration(a.activeDurationS ?? a.durationS) },
-    {
-      label: pace ? 'Avg pace' : 'Avg speed',
-      value: pace ? formatPace(a.avgPaceSPerKm) : formatSpeed(a.avgPaceSPerKm),
-    },
-    { label: 'Climb', value: formatElevation(a.elevationGainM) },
-    { label: 'Descent', value: formatElevation(a.elevationLossM) },
-    { label: 'Avg HR', value: formatHeartrate(a.avgHeartrate) },
-    { label: 'Max HR', value: formatHeartrate(a.maxHeartrate) },
-    { label: 'Energy', value: formatEnergy(a.activeEnergyKj) },
-  ]);
+  const stats = $derived.by(() => {
+    const rows = [
+      { label: 'Distance', value: formatDistance(a.distanceM) },
+      { label: 'Moving', value: formatDuration(a.activeDurationS ?? a.durationS) },
+      {
+        label: pace ? 'Avg pace' : 'Avg speed',
+        value: pace ? formatPace(a.avgPaceSPerKm) : formatSpeed(a.avgPaceSPerKm),
+      },
+      { label: 'Climb', value: formatElevation(a.elevationGainM) },
+      { label: 'Descent', value: formatElevation(a.elevationLossM) },
+      { label: 'Avg HR', value: formatHeartrate(a.avgHeartrate) },
+      { label: 'Max HR', value: formatHeartrate(a.maxHeartrate) },
+      { label: 'Energy', value: formatEnergy(a.activeEnergyKj) },
+    ];
+    if (phys?.trimp != null) rows.push({ label: 'Load (TRIMP)', value: String(Math.round(phys.trimp)) });
+    if (phys?.ef != null) rows.push({ label: 'Efficiency', value: phys.ef.toFixed(2) });
+    if (phys?.hrr60 != null) rows.push({ label: 'HRR 1 min', value: `−${phys.hrr60} bpm` });
+    if (phys?.mets != null) rows.push({ label: 'Intensity', value: `${phys.mets.toFixed(1)} METs` });
+    return rows;
+  });
+
+  // Plain-English effort read: decoupling verdict + this workout against the
+  // athlete's own same-sport medians. Absent data drops clauses, never zeros.
+  const effortLine = $derived.by(() => {
+    if (!phys) return '';
+    const parts: string[] = [];
+    if (phys.decouplingPct != null) {
+      const d = phys.decouplingPct;
+      parts.push(
+        d <= 5
+          ? `Aerobic decoupling ${d.toFixed(1)}% — pace-per-beat held to the end`
+          : `Aerobic decoupling ${d.toFixed(1)}% — the second half cost more beats per metre (over ~5% suggests the aerobic base ran out)`,
+      );
+    }
+    if (phys.typical.n >= 3) {
+      const t = phys.typical;
+      const vs: string[] = [];
+      if (pace && a.avgPaceSPerKm && t.paceSPerKm) {
+        const pct = Math.round(((t.paceSPerKm - a.avgPaceSPerKm) / t.paceSPerKm) * 100);
+        if (pct !== 0) vs.push(`pace ${Math.abs(pct)}% ${pct > 0 ? 'faster' : 'slower'} than your ${activityLabel(a.activityType).toLowerCase()} median`);
+      }
+      if (a.avgHeartrate && t.avgHr) {
+        const diff = Math.round(a.avgHeartrate - t.avgHr);
+        if (diff !== 0) vs.push(`HR ${diff > 0 ? '+' : ''}${diff} bpm vs typical`);
+      }
+      if (phys.ef != null && t.ef) {
+        const pct = Math.round(((phys.ef - t.ef) / t.ef) * 100);
+        if (pct !== 0) vs.push(`efficiency ${pct > 0 ? '+' : ''}${pct}%`);
+      }
+      if (vs.length) parts.push(`Against your last ${t.n} ${activityLabel(a.activityType).toLowerCase()}s: ${vs.join(', ')}`);
+    }
+    return parts.join('. ') + (parts.length ? '.' : '');
+  });
 </script>
 
 <svelte:head>
@@ -118,6 +169,48 @@
     </section>
   {/if}
 
+  {#if phys?.zones}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Heart-rate zones</span>
+        <span class="nm-sec-meta">
+          HRmax {phys.hrMax} <EvidenceChip id="hr-zones" onopen={openEvidence} />
+        </span>
+      </div>
+      <ZoneBar zones={phys.zones} edges={phys.zoneEdges} />
+    </section>
+  {/if}
+
+  {#if phys && (phys.hrrCurve || effortLine)}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Effort &amp; recovery</span>
+        <span class="nm-sec-meta">
+          {#if phys.hrr60 != null}
+            HRR60 −{phys.hrr60} bpm <EvidenceChip id="hrr60" onopen={openEvidence} />
+          {:else if phys.decouplingPct != null}
+            <EvidenceChip id="decoupling" onopen={openEvidence} />
+          {/if}
+        </span>
+      </div>
+
+      {#if phys.hrrCurve}
+        <LineChart
+          points={phys.hrrCurve}
+          label="Heart rate after finishing"
+          unitSuffix=" bpm"
+          xKind="time"
+          colour="var(--accent-ink)"
+          height={140}
+        />
+      {/if}
+
+      {#if effortLine}
+        <p class="effort-line">{effortLine}</p>
+      {/if}
+    </section>
+  {/if}
+
   <section class="nm-sec">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Splits</span>
@@ -135,9 +228,27 @@
       <div><dt>Reported as</dt><dd>{a.rawType ?? '—'}</dd></div>
       <div><dt>Local offset</dt><dd>{a.timezone ?? '—'}</dd></div>
       <div><dt>GPS trace</dt><dd>{a.hasTrack ? 'yes' : 'no'}</dd></div>
+      {#if phys?.temperatureC != null}
+        <div><dt>Temperature</dt><dd>{phys.temperatureC.toFixed(0)}°C</dd></div>
+      {/if}
+      {#if phys?.humidityPct != null}
+        <div><dt>Humidity</dt><dd>{phys.humidityPct.toFixed(0)}%</dd></div>
+      {/if}
+      {#if phys?.minHr != null}
+        <div><dt>Min HR</dt><dd>{Math.round(phys.minHr)} bpm</dd></div>
+      {/if}
+      {#if phys?.trimpBasis === 'average'}
+        <div><dt>Load basis</dt><dd>avg HR (no series)</dd></div>
+      {/if}
     </dl>
   </section>
 </main>
+
+<MethodologyDrawer
+  open={drawerOpen}
+  focusId={drawerFocus}
+  onclose={() => (drawerOpen = false)}
+/>
 
 <style>
   .wrap {
@@ -248,5 +359,13 @@
     font-size: var(--fs-label);
     color: var(--text-primary);
     overflow-wrap: anywhere;
+  }
+
+  .effort-line {
+    margin: 0.4rem 0 0;
+    font-size: var(--fs-body-sm);
+    line-height: 1.55;
+    color: var(--text-secondary);
+    max-width: 72ch;
   }
 </style>

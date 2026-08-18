@@ -8,7 +8,7 @@ import { env } from '$env/dynamic/private';
 // (HEALTH_DOB=YYYY-MM-DD, HEALTH_SEX=male|female) so the real values stay out of
 // the repo; age is derived at request time so the percentile never goes stale.
 // Falls back to a neutral default when unset.
-function resolveProfile(): Profile {
+export function resolveHealthProfile(): Profile {
   const sex: Profile['sex'] = env.HEALTH_SEX === 'female' ? 'female' : 'male';
   const dob = env.HEALTH_DOB;
   let age = 32;
@@ -34,5 +34,5 @@ export async function getVO2Max() {
     .filter((r) => r.value != null)
     .map((r) => ({ date: new Date(r.date * 1000).toISOString().slice(0, 10), value: (r.value as number) / 100 }));
 
-  return computeVO2MaxResult(series, resolveProfile());
+  return computeVO2MaxResult(series, resolveHealthProfile());
 }

@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { whoopCycles } from '$lib/db/schema';
 import { gte, asc } from 'drizzle-orm';
+import { realStrain } from '$lib/health/whoop';
 import { computeMonotony } from '$lib/health/analytics/monotony';
 
 export async function getMonotony() {
@@ -14,7 +15,7 @@ export async function getMonotony() {
   const byDay = new Map<string, number>();
   for (const r of rows) {
     const day = new Date(r.start * 1000).toISOString().slice(0, 10);
-    byDay.set(day, (byDay.get(day) ?? 0) + r.strain);
+    byDay.set(day, (byDay.get(day) ?? 0) + realStrain(r.strain));
   }
   const today = new Date();
   const series: number[] = [];
