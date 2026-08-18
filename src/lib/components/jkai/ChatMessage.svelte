@@ -365,7 +365,8 @@
      row with an 84px mono gutter (who / when) and a body column beside it,
      divided by a hairline. The row is full-bleed so the divider and the
      assistant wash reach the pane edges, while the content inside stays on the
-     900px reading column via the centring padding. */
+     900px reading column via the centring padding. Under 800px the gutter
+     folds into a header line above the body (see the media query below). */
   .msg-row {
     display: grid;
     grid-template-columns: 84px minmax(0, 1fr);
@@ -570,6 +571,19 @@
     .msg-meta,
     .cost-stamp {
       font-size: var(--fs-label-xs);
+    }
+    /* The 84px gutter + 16px gap is ~100px of a ~360px pane — over a quarter
+       of the reading width spent on "who". Fold the meta into a header line so
+       the turn owns the full width, name just inside the top-left. */
+    .msg-row {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+    .msg-meta {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 8px;
+      padding-top: 0;
     }
   }
   .chat-markdown :global(p) {
