@@ -24,10 +24,34 @@ export interface HaeQuantity {
 }
 
 export interface HaeRoutePoint {
+  /** Workouts v1 dialect. */
   lat?: number;
   lon?: number;
+  /** Workouts v2 dialect — the same coordinates spelt out in full. */
+  latitude?: number;
+  longitude?: number;
   altitude?: number;
   timestamp?: string;
+  /** v2 also sends course/accuracy/speed fields we do not read. */
+  [key: string]: unknown;
+}
+
+/**
+ * Coordinates of one route point, whichever dialect it arrived in: HAE's
+ * Workouts v1 says `lat`/`lon`, v2 says `latitude`/`longitude`, and real
+ * phones send v2 while the documentation examples are mostly v1. Returns null
+ * unless a finite, in-range pair is present.
+ */
+export function routePointCoords(
+  p: HaeRoutePoint | null | undefined,
+): { lat: number; lon: number } | null {
+  if (!p || typeof p !== 'object') return null;
+  const lat = typeof p.lat === 'number' ? p.lat : p.latitude;
+  const lon = typeof p.lon === 'number' ? p.lon : p.longitude;
+  if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
 }
 
 export interface HaeSample {
@@ -257,13 +281,12 @@ function mapTrack(route: HaeRoutePoint[] | undefined, startDate: number): Mapped
 
   const raw: TrackPoint[] = [];
   for (const p of route) {
-    if (typeof p?.lat !== 'number' || typeof p?.lon !== 'number') continue;
-    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
-    if (Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) continue;
-    const at = parseHaeDate(p.timestamp);
+    const coords = routePointCoords(p);
+    if (!coords) continue;
+    const at = parseHaeDate(p?.timestamp);
     raw.push([
-      p.lon,
-      p.lat,
+      coords.lon,
+      coords.lat,
       typeof p.altitude === 'number' && Number.isFinite(p.altitude) ? p.altitude : null,
       at == null ? 0 : at - startDate,
     ]);

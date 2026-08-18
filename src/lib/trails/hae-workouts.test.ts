@@ -263,6 +263,61 @@ describe('mapWorkout — edge cases', () => {
     expect(mapped.track!.pointCount).toBe(2);
   });
 
+  it('maps a Workouts v2 route (latitude/longitude, not lat/lon)', () => {
+    // What real phones send — the fixture's lat/lon shape is the v1 dialect.
+    // This exact mismatch shipped 0 tracks to production for a day.
+    const mapped = mapWorkout({
+      name: 'Outdoor Cycling',
+      start: '2026-08-16 07:00:00 +0100',
+      end: '2026-08-16 07:10:00 +0100',
+      route: [
+        {
+          latitude: 53.4012,
+          longitude: -1.5023,
+          altitude: 101.2,
+          horizontalAccuracy: 3.1,
+          speed: 4.2,
+          timestamp: '2026-08-16 07:00:00 +0100',
+        },
+        {
+          latitude: 53.402,
+          longitude: -1.5023,
+          altitude: 102.0,
+          horizontalAccuracy: 2.9,
+          speed: 4.4,
+          timestamp: '2026-08-16 07:02:00 +0100',
+        },
+        {
+          latitude: 53.4029,
+          longitude: -1.5022,
+          altitude: 104.4,
+          horizontalAccuracy: 3.0,
+          speed: 4.1,
+          timestamp: '2026-08-16 07:04:00 +0100',
+        },
+      ],
+    });
+    expect(mapped.track).not.toBeNull();
+    expect(mapped.track!.pointCount).toBe(3);
+    expect(mapped.track!.coordinates[0][0]).toBeCloseTo(-1.5023, 6);
+    expect(mapped.track!.coordinates[0][1]).toBeCloseTo(53.4012, 6);
+    expect(mapped.track!.coordinates[2][3]).toBe(240);
+    expect(mapped.activity.hasTrack).toBe(true);
+  });
+
+  it('prefers v1 keys when both dialects are present on one point', () => {
+    const mapped = mapWorkout({
+      name: 'Outdoor Run',
+      start: '2026-08-16 07:00:00 +0100',
+      end: '2026-08-16 07:10:00 +0100',
+      route: [
+        { lat: 53.4, lon: -1.5, latitude: 10, longitude: 10, timestamp: '2026-08-16 07:00:00 +0100' },
+        { lat: 53.41, lon: -1.5, latitude: 10, longitude: 10, timestamp: '2026-08-16 07:02:00 +0100' },
+      ],
+    });
+    expect(mapped.track!.coordinates[0][1]).toBeCloseTo(53.4, 6);
+  });
+
   it('ignores a route too short to be a line', () => {
     const mapped = mapWorkout({
       name: 'Outdoor Run',
