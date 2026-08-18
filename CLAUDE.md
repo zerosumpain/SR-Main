@@ -115,10 +115,14 @@ redefining it would invalidate 82 `font-size` declarations. Only `--fs-serif` is
   `/jkai/codegraph` (ER map, ask, review + forget, serves), the `codegraph` toolset, and
   `scripts/codegraph-query.mjs`.
 
-  **Retrieval is keyed on code, not prose.** 29% of John's prompts are ≤25 chars, so
-  "crack on" embeds to nothing. The two keys are mechanical and cost no LLM call: the
-  FILE SET a build is touching, and the FINGERPRINT of the gate error it just hit
-  (`orchestrator.ts` has already appended those diagnostics to `evaluation`).
+  **Retrieval is keyed on code first, prose last.** 29% of John's prompts are ≤25 chars,
+  so "crack on" embeds to nothing. The two sharp keys are mechanical and cost no LLM call:
+  the FILE SET a build is touching, and the FINGERPRINT of the gate error it just hit
+  (`orchestrator.ts` has already appended those diagnostics to `evaluation`). Both are
+  retrospective, so a greenfield task ("add a Notion connector") matches neither — for
+  that, and only after both decline, `planBuildQuery` falls back to a `topic:` seed built
+  from the task text. It needs three meaningful tokens, so the short prompts that
+  motivated keying on code still plan nothing at all.
 
   **Two channels, and neither is the tool bridge.** All 5,214 tool actions across 280
   production build iterations are pi built-ins — the bridge has never once been called.

@@ -165,11 +165,59 @@ describe('bare filenames — the way people actually write a task', () => {
   });
 
   it('plans a query from resolved names, which is the whole point', () => {
-    expect(planBuildQuery({ prompt: REAL_PROMPT })).toBeNull();
+    // Without the resolved name there is no FILE query — the topic lane below
+    // now catches it, but a topic match is the weak signal and must never
+    // stand in for the path the prompt actually named.
+    expect(planBuildQuery({ prompt: REAL_PROMPT })?.query).not.toContain('file:');
     const planned = planBuildQuery({ prompt: REAL_PROMPT }, ['src/lib/jkai/orchestrator.ts']);
     expect(planned?.query).toContain('file:src/lib/jkai/orchestrator.ts');
     // Still no fingerprints — a file-set serve is not evidence and must not be
     // credited when the build passes first time.
     expect(planned?.fingerprints).toEqual([]);
+  });
+});
+
+/*
+ * The lane that exists because "add a Notion connector" is a real task.
+ *
+ * Both sharp keys are retrospective: one needs a gate that already failed, the
+ * other a file that already exists and was already named. A greenfield task
+ * satisfies neither, and the graph's connector knowledge — which service a
+ * credential binds to, why one in node config spreads to nine tables, that
+ * Strava is parked by design — was unreachable from it.
+ */
+describe('the topic fallback', () => {
+  it('asks about a task that names no file and follows no failure', () => {
+    const planned = planBuildQuery({ prompt: 'Add a Notion connector with OAuth refresh' });
+    expect(planned?.reason).toBe('task topic');
+    expect(planned?.query).toContain('topic:"');
+    expect(planned?.query).toContain('notion');
+    expect(planned?.query).toContain('connector');
+    // Unattributable: no error was in play, so no gate result can credit it.
+    expect(planned?.fingerprints).toEqual([]);
+  });
+
+  it('stays BELOW both sharp keys', () => {
+    // A named path wins, even though the prose would also have matched.
+    const withPath = planBuildQuery({
+      prompt: 'Add a Notion connector in src/lib/connectors/probes.ts with OAuth refresh',
+    });
+    expect(withPath?.reason).toContain('file set');
+    expect(withPath?.query).toContain('file:src/lib/connectors/probes.ts');
+
+    // A gate failure wins over both.
+    const withGate = planBuildQuery({
+      prompt: 'Add a Notion connector with OAuth refresh',
+      previousEvaluation: 'src/lib/connectors/probes.ts(4,1): error TS2345: bad arg',
+    });
+    expect(withGate?.query).toContain('fingerprint:');
+  });
+
+  it('still refuses the prompts that motivated keying on code', () => {
+    // 29% of real prompts are 25 characters or fewer. These must plan nothing,
+    // not something vague — "nothing to query" is an honest log line.
+    for (const prompt of ['crack on', 'go ahead', 'fix the header', 'yup', '']) {
+      expect(planBuildQuery({ prompt })).toBeNull();
+    }
   });
 });

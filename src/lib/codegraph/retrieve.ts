@@ -17,7 +17,7 @@ import {
   codegraphNodeLessons,
   codegraphNodes,
 } from '$lib/db/schema';
-import { parseCgql, type Pick, type QueryPlan, VERDICTS } from './query';
+import { parseCgql, topicTokens, type Pick, type QueryPlan, VERDICTS } from './query';
 import { relevanceOf, packByRelevance, type RelevanceParts } from './relevance';
 
 export interface RetrievedLesson {
@@ -148,31 +148,6 @@ async function walk(seedIds: string[], plan: QueryPlan): Promise<string[]> {
   // Bounded: two hops on a dense file graph can reach most of the repo, and a
   // retrieval that returns everything has told the agent nothing.
   return [...seen].slice(0, 300);
-}
-
-/**
- * Split a topic into searchable tokens.
- *
- * Stopwords go, because "how does the tool bridge work" is four noise words and
- * two real ones, and letting "how"/"the" score would rank every note equally.
- * Short tokens go for the same reason.
- */
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been',
-  'how', 'what', 'why', 'when', 'where', 'who', 'which', 'does', 'do', 'did',
-  'for', 'to', 'of', 'in', 'on', 'at', 'by', 'with', 'from', 'this', 'that',
-  'it', 'its', 'we', 'you', 'i', 'my', 'our', 'work', 'works', 'use', 'used',
-]);
-
-export function topicTokens(text: string, max = 8): string[] {
-  const out: string[] = [];
-  for (const raw of String(text).toLowerCase().split(/[^a-z0-9_.\-/]+/)) {
-    const t = raw.replace(/^[-._/]+|[-._/]+$/g, '');
-    if (t.length < 3 || STOPWORDS.has(t)) continue;
-    if (!out.includes(t)) out.push(t);
-    if (out.length >= max) break;
-  }
-  return out;
 }
 
 /**
@@ -414,6 +389,29 @@ export function buildContextBlock(result: RetrievalResult): string {
   }
 
   let used = lines[0].length;
+
+  /*
+   * The related-file list is costed FIRST and held back, then appended last.
+   *
+   * It used to be assembled after lessons and episodes had spent the budget,
+   * guarded by an `if it still fits` — and since the lessons packer fills the
+   * budget by design, it never fitted. The section existed, was never rendered,
+   * and no counter said so. It is ~200 characters against a 5,000 budget and it
+   * is the only part of the block that answers "what else moves with this
+   * file", so it gets its space before the prose does.
+   *
+   * The seed files are dropped: naming the agent the files it just told us
+   * about is pure cost, and it crowds out the neighbours that are the point.
+   */
+  const seedPaths = new Set(result.plan.seed.type === 'file' ? result.plan.seed.paths : []);
+  const related = result.nodes
+    .filter((n) => !seedPaths.has(n.canonicalPath))
+    .slice(0, 10)
+    .map((n) => n.canonicalPath);
+  const relatedEntry = related.length
+    ? `\n### Files that change alongside these\n${related.join(', ')}`
+    : '';
+  const reserved = relatedEntry.length;
   // Lessons first: a rule is shorter and more general than an episode, so it
   // buys more per character when the budget is tight.
   //
@@ -427,7 +425,7 @@ export function buildContextBlock(result: RetrievalResult): string {
       score: l.relevance.score,
       cost: trim(l.body, 700).length + l.title.length + 6,
     }));
-    const packed = packByRelevance(entries, Math.max(0, budget - used));
+    const packed = packByRelevance(entries, Math.max(0, budget - used - reserved));
     for (const e of packed.chosen) lines.push(e);
     used += packed.spent;
   }
@@ -444,17 +442,13 @@ export function buildContextBlock(result: RetrievalResult): string {
         e.filesTouched.length ? `- Files: ${e.filesTouched.slice(0, 6).join(', ')}` : '',
       ].filter(Boolean);
       const entry = bits.join('\n');
-      if (used + entry.length > budget) break;
+      if (used + entry.length > budget - reserved) break;
       lines.push(entry);
       used += entry.length;
     }
   }
 
-  if (result.nodes.length) {
-    const names = result.nodes.slice(0, 10).map((n) => n.canonicalPath).join(', ');
-    const entry = `\n### Related files\n${names}`;
-    if (used + entry.length <= budget) lines.push(entry);
-  }
+  if (relatedEntry) lines.push(relatedEntry);
 
   lines.push(
     '',

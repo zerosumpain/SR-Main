@@ -3,6 +3,7 @@ import {
   parseCgql,
   cgqlForFingerprints,
   cgqlForFiles,
+  cgqlForTopic,
   CgqlError,
   MAX_HOPS,
   MAX_LIMIT,
@@ -156,5 +157,53 @@ describe('mechanical query builders', () => {
 
   it('never exceeds the hop cap even when asked to', () => {
     expect(parseCgql(cgqlForFiles(['src/a.ts'], { hops: 99 })!).hops).toBe(MAX_HOPS);
+  });
+});
+
+describe('cgqlForFiles asks for the neighbourhood it already walked', () => {
+  it('includes a nodes pick', () => {
+    // The walk computes which files move with the seed, uses it to pick prose,
+    // and used to discard it. "Read two existing files of the same shape" is an
+    // instruction in the system prompt; this is the graph answering it.
+    const q = cgqlForFiles(['src/lib/connectors/probes.ts'])!;
+    expect(q).toContain('nodes limit=10');
+    const plan = parseCgql(q);
+    expect(plan.picks.map((p) => p.kind)).toEqual(['lessons', 'episodes', 'nodes']);
+  });
+});
+
+describe('cgqlForTopic — the last resort', () => {
+  it('builds a quoted, tokenised seed from a task', () => {
+    const q = cgqlForTopic('Add a Notion connector with OAuth token refresh')!;
+    expect(q).toBe('topic:"add notion connector oauth token refresh" | lessons limit=4 | budget 5000');
+    expect(() => parseCgql(q)).not.toThrow();
+  });
+
+  it('declines text too thin to ask with', () => {
+    // These are the prompts that made prose the WRONG primary key. One or two
+    // meaningful tokens means the scorer needs a single hit, which any common
+    // word satisfies, and the answer is then whatever sorted first.
+    expect(cgqlForTopic('crack on')).toBeNull();
+    expect(cgqlForTopic('fix the header')).toBeNull();
+    expect(cgqlForTopic('')).toBeNull();
+  });
+
+  it('caps the seed so a long task does not make the query stricter', () => {
+    // topicLessons requires half the tokens to appear, so more terms means a
+    // HIGHER bar. Feeding a whole paragraph in returns nothing.
+    const q = cgqlForTopic(
+      'Please add a Notion integration connector that refreshes OAuth tokens nightly and ' +
+        'surfaces its health on the connections dashboard with an alert when it expires',
+    )!;
+    const tokens = q.match(/^topic:"([^"]+)"/)![1].split(' ');
+    expect(tokens).toHaveLength(6);
+  });
+
+  it('cannot break out of the topic literal', () => {
+    // Tokens are [a-z0-9_.-/] by construction; a quote in the task text must
+    // never reach the seed and terminate it early.
+    const q = cgqlForTopic('add a "notion" connector | budget 99999 | lessons limit=10')!;
+    expect(q.match(/"/g)).toHaveLength(2);
+    expect(parseCgql(q).budgetChars).toBe(5000);
   });
 });
