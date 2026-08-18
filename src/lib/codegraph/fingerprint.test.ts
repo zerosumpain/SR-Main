@@ -114,3 +114,66 @@ describe('fingerprints are stable, low-cardinality error CLASSES', () => {
     expect(fingerprintsIn('svelte-check found 0 errors', 'npm run gate:check')).toEqual([]);
   });
 });
+
+/*
+ * The strings below are REAL production output, pulled from `jkai_logs` and
+ * `jkai_iterations.evaluation` on 2026-08-18. They are here because the hot
+ * lane looked correct against invented examples and had, in fact, never fired
+ * once: all 16 push serves used the file lane and `served_for` was empty on
+ * every row.
+ */
+describe('the gate summary, which is what a failed gate actually says', () => {
+  const REAL_EVALUATION =
+    'The gate FAILED. Fix these before doing anything else — a focused test run does not ' +
+    'typecheck, so passing vitest is not passing the gate:\n' +
+    'The gate failed in `gate:sync`. Run that stage, not a narrower one.\n' +
+    '> strange-rambling-svelte@0.0.1 gate:public-routes\n> node scripts/check-public-routes.mjs';
+
+  it('keys on the stage, where it once returned nothing', () => {
+    // Build 42244cc0 ran eight consecutive iterations on this exact text, each
+    // following a failed gate, and planned a non-fingerprint query every time.
+    expect(fingerprintsIn(REAL_EVALUATION, 'npm run gate')).toContain('gate:sync-failed');
+    expect(fingerprintOf(REAL_EVALUATION, 'npm run gate')).toBe('gate:sync-failed');
+  });
+
+  it('covers the other stages the gate can die in', () => {
+    for (const stage of ['gate:build', 'gate:test', 'gate:check', 'gate:public-routes']) {
+      const text = `FAIL Tests: 0/1 passed (1 failed)\nThe gate failed in \`${stage}\`. Run that stage, not a narrower one.`;
+      expect(fingerprintsIn(text, 'npm run gate')).toContain(`${stage}-failed`);
+    }
+  });
+
+  it('never outranks a real error class', () => {
+    // The stage is the coarsest key we have. A TS code says what is actually
+    // wrong; the stage only says where the build tripped.
+    const withCode = 'The gate failed in `gate:check`.\nsrc/a.ts:3:1 - error TS2345: Argument of type X';
+    expect(fingerprintOf(withCode, 'npm run gate')).toBe('gate:TS2345');
+    // …but both are queryable, because the stage is what recurs.
+    const all = fingerprintsIn(withCode, 'npm run gate');
+    expect(all).toContain('typecheck:TS2345');
+    expect(all).toContain('gate:check-failed');
+  });
+
+  it('is not fooled by a passing gate', () => {
+    expect(fingerprintsIn('svelte-check found 0 errors', 'npm run gate')).toEqual([]);
+  });
+});
+
+describe('ANSI that arrived without its escape byte', () => {
+  it('strips orphaned colour codes', () => {
+    // Zero of 827 production error logs contain an escape byte; 42 contain bare
+    // `[31m`-style codes. Without this the key was `gate:1mError`, and every
+    // colour variant would have become its own key.
+    const real = '[31m❯[39m src/lib/a.test.ts [2m([22m[31m1 failed[39m[2m)[22m\n[41m[1m FAIL [22m[49m TypeError: x is not a function';
+    expect(stripAnsi(real)).not.toContain('[31m');
+    expect(stripAnsi(real)).not.toContain('[1m');
+    expect(fingerprintsIn(real, 'npm run gate')).toContain('gate:TypeError');
+    expect(fingerprintsIn(real, 'npm run gate').some((f) => /\dm/.test(f))).toBe(false);
+  });
+
+  it('leaves text that merely looks like a code alone', () => {
+    // Narrower than the escape-prefixed form on purpose: `[2J` or `[1A` are
+    // plausible in prose, and a strip that eats real text is the worse failure.
+    expect(stripAnsi('see note [12] and appendix [2A]')).toBe('see note [12] and appendix [2A]');
+  });
+});

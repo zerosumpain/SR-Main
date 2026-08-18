@@ -72,7 +72,10 @@ export function canonicalise(raw) {
 // copy is caught by fingerprint.test.ts sharing the same corpus of cases.
 // ---------------------------------------------------------------------------
 const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*[A-Za-z]', 'g');
-const stripAnsi = (t) => String(t ?? '').replace(ANSI, '');
+// The same sequence with its escape already gone — 42 of 827 production error
+// logs arrive that way, and without this a coloured failure keys as `1mError`.
+const ORPHAN_SGR = /\[[0-9;]{1,11}m/g;
+const stripAnsi = (t) => String(t ?? '').replace(ANSI, '').replace(ORPHAN_SGR, '');
 
 function looksFailed(raw) {
   const t = stripAnsi(raw).slice(0, 40000);
@@ -114,6 +117,10 @@ function fingerprintOf(raw, cmd = '') {
   if (mod) return `${gate}:missing-module:${mod[1].split('/').slice(0, 2).join('/')}`;
   const ff = t.match(/FAIL\s+(\S+\.(?:test|spec)\.[jt]sx?)/);
   if (ff) return `vitest:${ff[1].split('/').pop()}`;
+  // Last resort: the gate names the STAGE it died in, which is a usable key
+  // when nothing sharper is present. Mirrors gateStageIn in fingerprint.ts.
+  const stage = t.match(/gate failed in\s*[`'"]?(gate:[a-z-]+)/i);
+  if (stage) return `${stage[1]}-failed`;
   return null;
 }
 
@@ -527,7 +534,15 @@ function staticEdgesFromTree() {
 }
 
 // ---------------------------------------------------------------------------
-// Liveness — does each cited path still exist at HEAD?
+// Liveness — SUPERSEDED by scripts/codegraph-tree-pass.mjs, which runs in the
+// release job against the deployed sha. Kept only to supply the tracked file
+// list that citation resolution needs; it no longer stamps `existsOnHead`,
+// because stamping it from this working copy is what marked 216 files gone when
+// 138 of them were on master. A checkout is not a ref.
+//
+// Original note follows.
+//
+// Does each cited path still exist at HEAD?
 // SENTINEL SELF-TEST: if a path we KNOW exists reads as missing, the check
 // itself is broken (wrong cwd, no git, detached tree) and we must not stamp
 // anything — a mass false-quarantine is far worse than stale liveness.
@@ -634,11 +649,11 @@ async function main() {
       const episodes = episodesFrom(scan.events, scan.meta);
       const edges = edgesFrom(scan.events);
       const paths = [...new Set(scan.events.filter((e) => e.path).map((e) => e.path))];
-      const nodes = paths.map((cp) => ({
-        canonicalPath: cp,
-        kind: 'file',
-        existsOnHead: head ? head.has(cp) : true,
-      }));
+      // No `existsOnHead` here. A transcript proves a file was touched once,
+      // not that it exists now, and this process cannot know which commit is
+      // live. The tree pass owns liveness; saying nothing leaves whatever it
+      // last stamped intact, which is the correct answer for a history writer.
+      const nodes = paths.map((cp) => ({ canonicalPath: cp, kind: 'file' }));
 
       for (const e of edges) addEdge(e);
 

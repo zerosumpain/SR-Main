@@ -36,7 +36,13 @@ export type Seed =
   | { type: 'file'; paths: string[] }
   | { type: 'gate'; gates: string[] }
   | { type: 'fingerprint'; fingerprints: string[] }
-  | { type: 'topic'; text: string };
+  | { type: 'topic'; text: string }
+  /**
+   * "Show me files of the same shape as this one." The seed is the file being
+   * written or changed; the answer is other members of its family, ranked. It
+   * addresses NODES, not prose — the caller wants paths to read.
+   */
+  | { type: 'siblings'; path: string };
 
 export interface Pick {
   kind: PickKind;
@@ -146,10 +152,22 @@ function parseSeed(text: string, pos: number): Seed {
     throw new CgqlError('topic: text must be quoted, e.g. topic:"the tool bridge"', pos);
   }
 
+  const sib = trimmed.match(/^siblings:\s*(.+)$/s);
+  if (sib) {
+    const paths = sib[1].split(',').map((x) => x.trim()).filter(Boolean);
+    if (paths.length !== 1) {
+      // One target, deliberately. Siblings are ranked RELATIVE to a path — same
+      // directory, shared depth — so two targets would mean two orderings, and
+      // merging them would silently answer neither question.
+      throw new CgqlError('siblings: takes exactly one path', pos);
+    }
+    return { type: 'siblings', path: sanitisePath(paths[0], pos) };
+  }
+
   const m = trimmed.match(/^(file|gate|fingerprint):\s*(.+)$/s);
   if (!m) {
     throw new CgqlError(
-      `a query must start with file:, gate:, fingerprint: or topic:"..." — got "${trimmed.slice(0, 40)}"`,
+      `a query must start with file:, gate:, fingerprint:, siblings: or topic:"..." — got "${trimmed.slice(0, 40)}"`,
       pos,
     );
   }
@@ -316,6 +334,21 @@ export function cgqlForFiles(paths: string[], opts: { hops?: number; budget?: nu
     `file:${clean.join(',')} | hops ${hops} | lessons limit=4 | ` +
     `episodes verdict=verified,landed limit=4 | nodes limit=10 | budget ${budget}`
   );
+}
+
+
+/**
+ * Build CGQL for "what does this shape look like here".
+ *
+ * `nodes` only: the answer is a ranked list of paths, and the source belongs to
+ * whoever asked — the graph holds no file contents and should not start now. A
+ * build reads the bytes out of its own workspace, so a path its clone happens to
+ * lack simply drops out rather than being injected as a file that does not exist.
+ */
+export function cgqlForSiblings(path: string, limit = 2): string | null {
+  const clean = String(path ?? '').trim();
+  if (!clean || /[%\\,]/.test(clean) || clean.includes('..')) return null;
+  return `siblings:${clean} | nodes limit=${Math.min(MAX_LIMIT, limit)}`;
 }
 
 /**

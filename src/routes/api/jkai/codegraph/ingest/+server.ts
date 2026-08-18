@@ -26,6 +26,7 @@ import {
   codegraphNodes,
 } from '$lib/db/schema';
 import { codegraphServiceAuthorized } from '$lib/codegraph/auth';
+import { familyOf } from '$lib/codegraph/family';
 import type { RequestHandler } from './$types';
 
 interface NodeIn { kind?: string; canonicalPath: string; repo?: string; displayName?: string; summary?: string; existsOnHead?: boolean }
@@ -76,10 +77,15 @@ async function ensureNodes(paths: string[], repo: string): Promise<Map<string, s
         canonicalPath: p,
         kind: p.includes('.') ? 'file' : 'dir',
         displayName: p.split('/').pop() ?? p,
+        // Stamped HERE, never taken from the body. Family is a pure function of
+        // the path, so the server can always compute it — and a caller that
+        // disagreed (an older tree pass, a hand-rolled curl) would silently
+        // split one family in two and make "the siblings of X" wrong.
+        family: familyOf(p),
       })))
       .onConflictDoUpdate({
         target: [codegraphNodes.repo, codegraphNodes.canonicalPath],
-        set: { updatedAt: new Date() },
+        set: { updatedAt: new Date(), family: sql`excluded.family` },
       })
       .returning({ id: codegraphNodes.id, p: codegraphNodes.canonicalPath });
     for (const r of inserted) map.set(r.p, r.id);
@@ -92,6 +98,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const body = (await request.json().catch(() => null)) as {
     repo?: string; nodes?: NodeIn[]; edges?: EdgeIn[]; episodes?: EpisodeIn[]; lessons?: LessonIn[];
+    liveness?: { ref?: string; paths?: string[] };
   } | null;
   if (!body) throw error(400, 'invalid json');
 
@@ -106,6 +113,9 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const counts = { nodes: 0, edges: 0, episodes: 0, lessons: 0 };
+  // Reported separately: liveness is a stamp over the whole repo, not a count
+  // of units received, and conflating them hid a 64% error rate once already.
+  let liveness: { live: number; dead: number } | { skipped: string } | null = null;
 
   // --- Nodes -------------------------------------------------------------
   if (nodesIn.length) {
@@ -118,18 +128,68 @@ export const POST: RequestHandler = async ({ request }) => {
         kind: n.kind || 'file',
         displayName: n.displayName ?? n.canonicalPath.split('/').pop(),
         summary: n.summary ?? null,
+        family: familyOf(n.canonicalPath),
         existsOnHead: n.existsOnHead ?? true,
         lastSeenAt: new Date(),
       }))).onConflictDoUpdate({
         target: [codegraphNodes.repo, codegraphNodes.canonicalPath],
         set: {
-          existsOnHead: sql`excluded.exists_on_head`,
+          // NOT updated here. A new node is presumed live on insert, but the
+          // only writer that may CHANGE liveness is the whole-tree statement
+          // below, which knows which commit it is looking at. Left in this set,
+          // a history writer that simply omitted the field would silently
+          // resurrect every deleted file it mentioned, because the column
+          // defaults to true.
           summary: sql`coalesce(excluded.summary, ${codegraphNodes.summary})`,
+          family: sql`excluded.family`,
           lastSeenAt: new Date(),
           updatedAt: new Date(),
         },
       });
       counts.nodes += slice.length;
+    }
+  }
+
+  /*
+   * Liveness, and why it is guarded like this.
+   *
+   * A full tree arrives from `codegraph-tree-pass.mjs` at a NAMED ref, so the
+   * honest thing to do is mark everything else deleted. The last time this repo
+   * stamped liveness it did so from a working copy on the wrong branch and
+   * marked 216 files gone, 138 of them wrongly — including codegraph's own
+   * source. That was not caught by a sentinel check, because the two sentinel
+   * files it looked for exist on every branch.
+   *
+   * So the guard is not "do these files exist" but "is this plausibly a whole
+   * tree". A partial payload cannot be told from a truncated one, and the cost
+   * of being wrong is asymmetric: a stale `true` is a precedent that no longer
+   * compiles, a wrong `false` deletes the graph's memory of a live file.
+   */
+  if (body.liveness?.paths?.length) {
+    const paths = body.liveness.paths.filter((p) => typeof p === 'string' && p);
+    const MIN_TREE = 1000;
+    if (paths.length < MIN_TREE) {
+      liveness = { skipped: `${paths.length} paths is below the ${MIN_TREE} floor` };
+    } else {
+      const live = await db
+        .update(codegraphNodes)
+        .set({ existsOnHead: true, lastSeenAt: new Date() })
+        .where(and(eq(codegraphNodes.repo, repo), inArray(codegraphNodes.canonicalPath, paths)))
+        .returning({ id: codegraphNodes.id });
+
+      const dead = await db
+        .update(codegraphNodes)
+        .set({ existsOnHead: false })
+        .where(
+          and(
+            eq(codegraphNodes.repo, repo),
+            eq(codegraphNodes.kind, 'file'),
+            sql`${codegraphNodes.canonicalPath} <> ALL(${paths})`,
+          ),
+        )
+        .returning({ id: codegraphNodes.id });
+
+      liveness = { live: live.length, dead: dead.length };
     }
   }
 
@@ -288,5 +348,5 @@ export const POST: RequestHandler = async ({ request }) => {
     WHERE n.repo = ${repo}
   `);
 
-  return json({ ok: true, counts });
+  return json({ ok: true, counts, liveness });
 };

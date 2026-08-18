@@ -4,6 +4,7 @@ import {
   cgqlForFingerprints,
   cgqlForFiles,
   cgqlForTopic,
+  cgqlForSiblings,
   CgqlError,
   MAX_HOPS,
   MAX_LIMIT,
@@ -205,5 +206,29 @@ describe('cgqlForTopic — the last resort', () => {
     const q = cgqlForTopic('add a "notion" connector | budget 99999 | lessons limit=10')!;
     expect(q.match(/"/g)).toHaveLength(2);
     expect(parseCgql(q).budgetChars).toBe(5000);
+  });
+});
+
+describe('the siblings seed', () => {
+  it('parses a single path and defaults to a nodes pick', () => {
+    const p = parseCgql('siblings:src/routes/api/jkai/x/+server.ts | nodes limit=2');
+    expect(p.seed).toEqual({ type: 'siblings', path: 'src/routes/api/jkai/x/+server.ts' });
+    expect(p.picks).toEqual([{ kind: 'nodes', limit: 2 }]);
+  });
+
+  it('takes exactly one target', () => {
+    // Siblings are ranked RELATIVE to a path. Two targets would mean two
+    // orderings, and merging them would silently answer neither question.
+    expect(() => parseCgql('siblings:a.ts,b.ts')).toThrow(CgqlError);
+  });
+
+  it('is named in the error when a query starts with nothing valid', () => {
+    expect(() => parseCgql('nonsense')).toThrow(/siblings:/);
+  });
+
+  it('round-trips through the builder', () => {
+    const q = cgqlForSiblings('src/lib/workflows/nodes/thing.def.ts', 3)!;
+    expect(() => parseCgql(q)).not.toThrow();
+    expect(parseCgql(q).picks[0]).toEqual({ kind: 'nodes', limit: 3 });
   });
 });

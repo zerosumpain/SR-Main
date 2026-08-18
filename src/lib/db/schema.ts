@@ -3370,6 +3370,15 @@ export const codegraphNodes = pgTable(
     /** Template-generated, never LLM-written. See the fabrication memory. */
     summary: text('summary'),
     embedding: vector('embedding'),
+    /**
+     * What KIND of file this is — 'api-endpoint', 'site-tool', 'test', … — a
+     * pure function of the path (see codegraph/family.ts), stamped server-side
+     * at ingest so no caller can disagree about it.
+     *
+     * Null is meaningful: a file with no family has no siblings, and a
+     * catch-all would make every unclassified file a precedent for every other.
+     */
+    family: text('family'),
     episodeCount: integer('episode_count').notNull().default(0),
     lessonCount: integer('lesson_count').notNull().default(0),
     /**
