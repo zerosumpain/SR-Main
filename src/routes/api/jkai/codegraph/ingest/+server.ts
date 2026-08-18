@@ -27,6 +27,7 @@ import {
 } from '$lib/db/schema';
 import { codegraphServiceAuthorized } from '$lib/codegraph/auth';
 import { familyOf } from '$lib/codegraph/family';
+import { pgTextArray } from '$lib/db/sql-array';
 import type { RequestHandler } from './$types';
 
 interface NodeIn { kind?: string; canonicalPath: string; repo?: string; displayName?: string; summary?: string; existsOnHead?: boolean }
@@ -174,7 +175,10 @@ export const POST: RequestHandler = async ({ request }) => {
       const live = await db
         .update(codegraphNodes)
         .set({ existsOnHead: true, lastSeenAt: new Date() })
-        .where(and(eq(codegraphNodes.repo, repo), inArray(codegraphNodes.canonicalPath, paths)))
+        .where(and(
+          eq(codegraphNodes.repo, repo),
+          sql`${codegraphNodes.canonicalPath} = ANY(${pgTextArray(paths)}::text[])`,
+        ))
         .returning({ id: codegraphNodes.id });
 
       const dead = await db
@@ -184,7 +188,11 @@ export const POST: RequestHandler = async ({ request }) => {
           and(
             eq(codegraphNodes.repo, repo),
             eq(codegraphNodes.kind, 'file'),
-            sql`${codegraphNodes.canonicalPath} <> ALL(${paths})`,
+            // `pgTextArray`, not a bare array. Drizzle binds a JS array as a
+            // TUPLE — `<> ALL(($4, $5, …))` — which Postgres reads as a row
+            // expression and rejects, 500ing the whole ingest. This repo has
+            // paid for that once already; see src/lib/db/sql-array.ts.
+            sql`${codegraphNodes.canonicalPath} <> ALL(${pgTextArray(paths)}::text[])`,
           ),
         )
         .returning({ id: codegraphNodes.id });
