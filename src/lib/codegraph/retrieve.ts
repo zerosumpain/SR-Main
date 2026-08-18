@@ -17,6 +17,7 @@ import {
   codegraphNodeLessons,
   codegraphNodes,
 } from '$lib/db/schema';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { parseCgql, topicTokens, type Pick, type QueryPlan, VERDICTS } from './query';
 import { relevanceOf, packByRelevance, type RelevanceParts } from './relevance';
 
@@ -63,6 +64,25 @@ export interface RetrievalResult {
   outcome: 'served' | 'empty';
   durationMs: number;
 }
+
+/*
+ * Recency, with NULLS LAST — and this is not a nicety.
+ *
+ * Postgres puts NULLs FIRST on a DESC ordering. 92 of 277 lessons carry no
+ * `observedAt` (their memory note has no `modified:` in its frontmatter), so a
+ * plain `desc(observedAt)` ranked every undated note above every dated one, in
+ * every query, since the graph shipped. The rows fetched before the limit were
+ * therefore whichever undated notes the walk happened to touch, and the
+ * relevance sort that runs afterwards could not rescue what the cut had already
+ * dropped. Seeding on the connector files returned four notes about the admin
+ * console and the landing page — all four undated, none of them connected to
+ * connectors by anything but a co-change edge.
+ *
+ * An unknown date is not a recent one. `recencyWeight` already says so, scoring
+ * it 0.6 against a fresh 1.0; the SQL simply disagreed with it.
+ */
+const LESSON_RECENCY = sql`${codegraphLessons.observedAt} DESC NULLS LAST`;
+const EPISODE_RECENCY = sql`${codegraphEpisodes.occurredAt} DESC NULLS LAST`;
 
 /** Rank order for verdicts: 'merged' is not 'correct'. */
 const VERDICT_RANK = Object.fromEntries(VERDICTS.map((v, i) => [v, i]));
@@ -160,7 +180,7 @@ async function topicLessons(text: string, base: SQL | undefined, limit: number) 
   const tokens = topicTokens(text);
   if (!tokens.length) {
     return db.select().from(codegraphLessons).where(base)
-      .orderBy(desc(codegraphLessons.observedAt)).limit(limit);
+      .orderBy(LESSON_RECENCY).limit(limit);
   }
 
   const titleScore = tokens.map((t) => sql`(CASE WHEN ${codegraphLessons.title} ILIKE ${'%' + t + '%'} THEN 3 ELSE 0 END)`);
@@ -176,11 +196,36 @@ async function topicLessons(text: string, base: SQL | undefined, limit: number) 
     .select()
     .from(codegraphLessons)
     .where(and(base, sql`(${hits}) >= ${needed}`))
-    .orderBy(sql`(${score}) DESC`, desc(codegraphLessons.observedAt))
+    .orderBy(sql`(${score}) DESC`, LESSON_RECENCY)
     .limit(limit);
 }
 
-async function pickLessons(nodeIds: string[], plan: QueryPlan, pick: Pick, repo: string) {
+/**
+ * Rank what is attached to the files the caller actually named above what the
+ * walk merely reached.
+ *
+ * One hop off a file in this repo reaches up to 300 nodes, and every lesson on
+ * any of them competed on equal terms with the lessons on the seed itself. A
+ * note about the connector monitor, attached to `src/lib/connectors/monitor.ts`,
+ * lost its place to a note attached to an admin route that had once been edited
+ * in the same session. Proximity to the seed is the strongest signal a
+ * structural query has; it should not be the one thing the ordering ignores.
+ *
+ * Expressed through `inArray` rather than a bound array literal — a raw `= ANY`
+ * needs the array binding this codebase has been bitten by before.
+ */
+function seedFirst(column: AnyPgColumn, seedIds: string[]): SQL | null {
+  if (!seedIds.length) return null;
+  return sql`(CASE WHEN ${inArray(column, seedIds)} THEN 0 ELSE 1 END)`;
+}
+
+async function pickLessons(
+  nodeIds: string[],
+  plan: QueryPlan,
+  pick: Pick,
+  repo: string,
+  seedIds: string[] = [],
+) {
   const base = and(eq(codegraphLessons.repo, repo), lessonVisible());
 
   if (plan.seed.type === 'topic' || !nodeIds.length) {
@@ -198,17 +243,18 @@ async function pickLessons(nodeIds: string[], plan: QueryPlan, pick: Pick, repo:
     // first, which is how a search for "rsync" answered with a note about Azure.
     if (plan.seed.type !== 'topic') {
       return db.select().from(codegraphLessons).where(base)
-        .orderBy(desc(codegraphLessons.observedAt)).limit(pick.limit);
+        .orderBy(LESSON_RECENCY).limit(pick.limit);
     }
     return topicLessons(plan.seed.text, base, pick.limit);
   }
 
+  const nearestLesson = seedFirst(codegraphNodeLessons.nodeId, seedIds);
   const rows = await db
     .select({ l: codegraphLessons })
     .from(codegraphNodeLessons)
     .innerJoin(codegraphLessons, eq(codegraphLessons.id, codegraphNodeLessons.lessonId))
     .where(and(inArray(codegraphNodeLessons.nodeId, nodeIds), base))
-    .orderBy(desc(codegraphLessons.observedAt))
+    .orderBy(...(nearestLesson ? [nearestLesson, LESSON_RECENCY] : [LESSON_RECENCY]))
     .limit(pick.limit * 3);
 
   // Dedupe: one lesson attached to four of the seed's files must appear once.
@@ -223,7 +269,13 @@ async function pickLessons(nodeIds: string[], plan: QueryPlan, pick: Pick, repo:
   return out;
 }
 
-async function pickEpisodes(nodeIds: string[], plan: QueryPlan, pick: Pick, repo: string) {
+async function pickEpisodes(
+  nodeIds: string[],
+  plan: QueryPlan,
+  pick: Pick,
+  repo: string,
+  seedIds: string[] = [],
+) {
   const conds: SQL[] = [eq(codegraphEpisodes.repo, repo), episodeVisible()];
   if (pick.verdicts?.length) conds.push(inArray(codegraphEpisodes.verdict, pick.verdicts));
   if (pick.gate) conds.push(eq(codegraphEpisodes.gate, pick.gate));
@@ -232,7 +284,7 @@ async function pickEpisodes(nodeIds: string[], plan: QueryPlan, pick: Pick, repo
   if (plan.seed.type === 'fingerprint') {
     conds.push(inArray(codegraphEpisodes.fingerprint, plan.seed.fingerprints));
     return db.select().from(codegraphEpisodes).where(and(...conds))
-      .orderBy(desc(codegraphEpisodes.occurredAt)).limit(pick.limit);
+      .orderBy(EPISODE_RECENCY).limit(pick.limit);
   }
 
   if (plan.seed.type === 'topic') {
@@ -247,19 +299,24 @@ async function pickEpisodes(nodeIds: string[], plan: QueryPlan, pick: Pick, repo
       );
       conds.push(sql`(${hits}) >= ${Math.max(1, Math.ceil(tokens.length / 2))}`);
       return db.select().from(codegraphEpisodes).where(and(...conds))
-        .orderBy(sql`(${hits}) DESC`, desc(codegraphEpisodes.occurredAt)).limit(pick.limit);
+        .orderBy(sql`(${hits}) DESC`, EPISODE_RECENCY).limit(pick.limit);
     }
     return db.select().from(codegraphEpisodes).where(and(...conds))
-      .orderBy(desc(codegraphEpisodes.occurredAt)).limit(pick.limit);
+      .orderBy(EPISODE_RECENCY).limit(pick.limit);
   }
 
   if (!nodeIds.length) return [];
 
+  // Same proximity rule as lessons: an episode on the file the caller named
+  // beats one on a file the walk merely reached. The unordered fetch below took
+  // whatever the planner returned, so a wide walk decided it by accident.
+  const nearestEpisode = seedFirst(codegraphNodeEpisodes.nodeId, seedIds);
   const rows = await db
     .select({ e: codegraphEpisodes })
     .from(codegraphNodeEpisodes)
     .innerJoin(codegraphEpisodes, eq(codegraphEpisodes.id, codegraphNodeEpisodes.episodeId))
     .where(and(inArray(codegraphNodeEpisodes.nodeId, nodeIds), ...conds))
+    .orderBy(...(nearestEpisode ? [nearestEpisode, EPISODE_RECENCY] : [EPISODE_RECENCY]))
     .limit(pick.limit * 4);
 
   const seen = new Set<string>();
@@ -292,7 +349,7 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
 
   for (const pick of plan.picks) {
     if (pick.kind === 'lessons') {
-      for (const l of await pickLessons(nodeIds, plan, pick, repo)) {
+      for (const l of await pickLessons(nodeIds, plan, pick, repo, seeds)) {
         lessons.push({
           id: l.id, title: l.title, body: l.body,
           citedPaths: (l.citedPaths as string[]) ?? [], origin: l.origin,
@@ -308,7 +365,7 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
         });
       }
     } else if (pick.kind === 'episodes') {
-      for (const e of await pickEpisodes(nodeIds, plan, pick, repo)) {
+      for (const e of await pickEpisodes(nodeIds, plan, pick, repo, seeds)) {
         episodes.push({
           id: e.id, title: e.title, problem: e.problem, resolution: e.resolution,
           verification: e.verification, fingerprint: e.fingerprint, gate: e.gate,
