@@ -377,8 +377,10 @@ export async function executeIteration(
   let precedentBlock = '';
   if (promptMode === 'repo' && process.env.CODEGRAPH_PRECEDENT !== '0') {
     try {
-      const { precedentTargets, precedentQuery, skeleton, buildPrecedentBlock, PRECEDENT_MAX_FILES } =
-        await import('$lib/codegraph/precedent');
+      const {
+        precedentTargets, precedentQuery, testQuery, skeleton, buildPrecedentBlock,
+        PRECEDENT_MAX_FILES,
+      } = await import('$lib/codegraph/precedent');
       const { editedPathsFromActions, pathsInText, bareNamesInText, dirHintsInText } = await import(
         '$lib/codegraph/build-context'
       );
@@ -398,9 +400,36 @@ export async function executeIteration(
         const { db: database } = await import('$lib/db');
         const { codegraphQueries } = await import('$lib/db/schema');
 
+        // Timeboxed the same way the push is: a slow graph must cost the build
+        // nothing, and a lookup that fails is worth strictly less than the
+        // iteration it would delay.
+        const runCgqlSafely = async (q: string): Promise<string[]> => {
+          try {
+            const r = await Promise.race([
+              runCgql(q),
+              new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+            ]);
+            return r.nodes.map((n) => n.canonicalPath);
+          } catch {
+            return [];
+          }
+        };
+
         const chosen: Array<{ target: string; path: string; source: string }> = [];
+        const pairings: Array<{ target: string; tests: string[] }> = [];
         const asked: string[] = [];
         const missing: string[] = [];
+
+        // Which file tests this one. Asked for EVERY target, including ones
+        // that got no sibling: a build that already knows the shape can still
+        // be wrong about the filename, which is the failure this fixes.
+        for (const target of targets) {
+          const tq = testQuery(target, 2);
+          if (!tq) continue;
+          asked.push(tq);
+          const found = await runCgqlSafely(tq);
+          if (found.length) pairings.push({ target, tests: found });
+        }
 
         for (const target of targets) {
           if (chosen.length >= PRECEDENT_MAX_FILES) break;
@@ -423,13 +452,13 @@ export async function executeIteration(
           }
         }
 
-        precedentBlock = buildPrecedentBlock(chosen);
+        precedentBlock = buildPrecedentBlock(chosen, pairings);
         await database.insert(codegraphQueries).values({
           channel: 'precedent',
           buildId: build.id,
           iterationId: iteration.id,
           query: asked.join(' ;; ').slice(0, 2000),
-          outcome: chosen.length ? 'served' : 'empty',
+          outcome: chosen.length || pairings.length ? 'served' : 'empty',
           episodeIds: [],
           lessonIds: [],
           servedFor: [],
@@ -441,7 +470,9 @@ export async function executeIteration(
           build.id,
           'system',
           chosen.length
-            ? `Precedent: ${chosen.map((c) => c.path).join(', ')} — ${precedentBlock.length} chars` +
+            ? `Precedent: ${chosen.map((c) => c.path).join(', ') || 'no exemplar'}` +
+              (pairings.length ? ` · tests ${pairings.flatMap((p) => p.tests).join(', ')}` : '') +
+              ` — ${precedentBlock.length} chars` +
               (missing.length ? ` (${missing.length} not in this clone)` : '')
             : `Precedent: NO PRECEDENT for ${targets.join(', ')} — no file of that shape in the graph`,
           iteration.id,

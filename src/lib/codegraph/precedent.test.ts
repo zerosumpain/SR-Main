@@ -5,6 +5,7 @@ import {
   skeleton,
   buildPrecedentBlock,
   PRECEDENT_CHARS_PER_FILE,
+  testQuery,
 } from './precedent';
 import { parseCgql } from './query';
 
@@ -75,5 +76,47 @@ describe('the block', () => {
     expect(block).toContain('```svelte');
     expect(block).toContain('src/routes/api/y/+server.ts');
     expect(block).toContain('Precedent for `src/routes/api/x/+server.ts`');
+  });
+});
+
+describe('naming the test file', () => {
+  it('asks for what covers a target', () => {
+    const q = testQuery('src/lib/jkai/test-runner.ts', 2)!;
+    expect(q).toContain('tests:src/lib/jkai/test-runner.ts');
+    expect(() => parseCgql(q)).not.toThrow();
+  });
+
+  it('names the path rather than injecting the file', () => {
+    /*
+     * The recorded failure is a NAMING failure: builds looked for
+     * `test-runner.test.ts` when the real file is
+     * `test-runner.diagnostics.test.ts` — 19 ENOENTs across three builds. A
+     * path settles it for sixty characters; the contents would cost 2.4 KB
+     * and teach nothing the exemplars do not.
+     */
+    const block = buildPrecedentBlock([], [
+      { target: 'src/lib/jkai/test-runner.ts', tests: ['src/lib/jkai/test-runner.diagnostics.test.ts'] },
+    ]);
+    expect(block).toContain('test-runner.diagnostics.test.ts');
+    expect(block).toContain('Do not guess at the filename');
+    expect(block).not.toContain('```');
+  });
+
+  it('renders a block for tests alone, with no exemplar', () => {
+    // A build can know the shape perfectly and still be wrong about the
+    // filename, so this half must stand on its own.
+    expect(buildPrecedentBlock([], [{ target: 'a.ts', tests: ['a.test.ts'] }])).not.toBe('');
+    expect(buildPrecedentBlock([], [{ target: 'a.ts', tests: [] }])).toBe('');
+    expect(buildPrecedentBlock([], [])).toBe('');
+  });
+
+  it('carries both halves when both are found', () => {
+    const block = buildPrecedentBlock(
+      [{ target: 'src/lib/a.ts', path: 'src/lib/b.ts', source: 'export const b = 1;' }],
+      [{ target: 'src/lib/a.ts', tests: ['src/lib/a.test.ts'] }],
+    );
+    expect(block).toContain('How this repo writes files like this');
+    expect(block).toContain('The tests that cover this');
+    expect(block).toContain('```ts');
   });
 });

@@ -25,7 +25,7 @@
  * have simply drops out instead of being injected as a file the agent cannot
  * open.
  */
-import { cgqlForSiblings } from './query';
+import { cgqlForSiblings, cgqlForTests } from './query';
 
 /** Chars of each exemplar that reach the prompt. */
 export const PRECEDENT_CHARS_PER_FILE = 2400;
@@ -68,6 +68,11 @@ export function precedentQuery(target: string, limit: number): string | null {
   return cgqlForSiblings(target, limit);
 }
 
+/** The companion query: which file tests this one. */
+export function testQuery(target: string, limit = 2): string | null {
+  return cgqlForTests(target, limit);
+}
+
 /**
  * The head of a file, cut at a line boundary.
  *
@@ -95,22 +100,49 @@ export interface PrecedentFile {
   source: string;
 }
 
+/** A target and the file that tests it. */
+export interface TestPairing {
+  target: string;
+  tests: string[];
+}
+
 /**
  * Render the block. Absence is INFORMATIVE, exactly as it is for the codegraph
  * push: an empty section is indistinguishable from a channel that never ran,
  * which is precisely how the tool bridge stayed broken for sixty days while
  * logging that it was fine.
  */
-export function buildPrecedentBlock(files: PrecedentFile[]): string {
-  if (!files.length) return '';
+export function buildPrecedentBlock(files: PrecedentFile[], pairings: TestPairing[] = []): string {
+  const withTests = pairings.filter((p) => p.tests.length);
+  if (!files.length && !withTests.length) return '';
 
-  const lines: string[] = [
-    '## How this repo writes files like this',
-    '',
-    'Closest precedents for what you are about to change, chosen by shape and by how',
-    'much of the repo imports them. Copy their structure, naming, error handling and',
-    'helpers. Where they disagree with a habit you have, they win.',
-  ];
+  const lines: string[] = ['## How this repo writes files like this'];
+
+  if (files.length) {
+    lines.push(
+      '',
+      'Closest precedents for what you are about to change, chosen by shape and by how',
+      'much of the repo imports them. Copy their structure, naming, error handling and',
+      'helpers. Where they disagree with a habit you have, they win.',
+    );
+  }
+
+  /*
+   * The test paths are NAMED, not injected.
+   *
+   * The failure they fix is a naming failure, not a shape one: builds looked
+   * for `test-runner.test.ts` when the file is `test-runner.diagnostics.test.ts`
+   * and produced 19 ENOENTs across three builds. A path costs sixty characters
+   * and settles it; the file's contents cost 2.4 KB and teach nothing the
+   * exemplars above do not already.
+   */
+  if (withTests.length) {
+    lines.push('', '### The tests that cover this');
+    for (const p of withTests) {
+      lines.push(`- \`${p.target}\` → ${p.tests.map((t) => `\`${t}\``).join(', ')}`);
+    }
+    lines.push('', 'Update them with your change. Do not guess at the filename — those are it.');
+  }
 
   for (const f of files) {
     const ext = f.path.slice(f.path.lastIndexOf('.') + 1);

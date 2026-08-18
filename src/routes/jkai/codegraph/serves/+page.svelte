@@ -34,6 +34,47 @@
     </table>
   {/if}
 
+  <h2>Discovery cost — the measure this is actually judged on</h2>
+  <p class="lede small">
+    Half of what a build does is looking for things, and that is what handing it an exemplar is
+    meant to replace. Iterations-to-green is a noisier proxy: a build fails on a provider outage
+    as readily as on bad context. Baseline frozen 2026-08-18, before the first precedent serve —
+    <strong>13.9</strong> discovery actions per iteration, <strong>3.20</strong> reads per
+    distinct file, over 38 repo builds and 84 iterations.
+  </p>
+  {#if !data.discovery.length}
+    <p class="alarm">No iterations with recorded actions. Nothing to measure yet.</p>
+  {:else}
+    <table>
+      <thead>
+        <tr>
+          <th></th><th>Iterations</th><th>Discovery / iter</th>
+          <th>Edits / iter</th><th>Reads</th><th>Files</th><th>Reads / file</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each data.discovery as r (String(r.served))}
+          <tr>
+            <td>{r.served ? 'With precedent served' : 'Without'}</td>
+            <td>{n(r.iterations)}</td>
+            <td>{n(r.discovery_per_iteration)}</td>
+            <td>{n(r.edits_per_iteration)}</td>
+            <td>{n(r.reads)}</td>
+            <td>{n(r.files)}</td>
+            <td>{n(r.reads_per_file)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+    {#if Number(data.discovery.find((r) => r.served)?.iterations ?? 0) < 10}
+      <p class="lede small">
+        Too few served iterations to read anything into the difference yet. Both arms need
+        roughly ten before the comparison means more than noise — the same reason the relevance
+        prior stays in its recency regime until the evidence arrives.
+      </p>
+    {/if}
+  {/if}
+
   <h2>The measure: iterations per repo build</h2>
   <p class="lede small">
     Baseline frozen at ship time — 66 builds, 280 iterations, mean 4.24 (5.14 over the

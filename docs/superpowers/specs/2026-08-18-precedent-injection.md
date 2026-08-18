@@ -15,10 +15,18 @@ Across 275 production repo iterations that costs:
 
 | | |
 |---|---|
-| discovery actions (read/grep/find/ls) | 2,797 of 5,546 — **50.4%** |
-| edits and writes | 764 — 13.8% |
-| reads per distinct file | **6.45** (2,342 reads over 363 files) |
+| discovery actions (read/grep/find/ls) | 1,168 of 1,868 — **62.5%** |
+| edits and writes | 193 — 10.3% |
+| reads per distinct file | **3.20** (782 reads over 244 files) |
 | files read across 7+ unrelated builds | `registry-internal.ts`, `registry.ts` — registries and canonical exemplars |
+
+**Corrected 2026-08-18.** The first cut of these figures selected repo builds
+with `git_target_config IS NOT NULL`, and **44 of the 82 rows that passes hold
+the JSON literal `null`** — app and studio builds. It reported 81 repo builds
+and 275 iterations where the truth is 38 and 84, and 6.45 reads per file where
+the truth is 3.20. The direction is unchanged and the discovery share is worse
+than first stated; the cross-build re-read table is identical. Any query on this
+subject must carry the `<> 'null'` half of the filter.
 
 Files read by one build are its task. Files read by eight unrelated builds are
 precedent lookups the system could have answered before the agent spent a turn.
