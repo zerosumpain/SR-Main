@@ -4,7 +4,12 @@ import { db } from '$lib/db';
 import { appleHealthMetrics } from '$lib/db/schema';
 import { and, eq, gte, lte } from 'drizzle-orm';
 import { ingestWorkouts } from '$lib/trails/ingest';
-import { normaliseActivityType, OUTDOOR_TYPES, type HaeWorkout } from '$lib/trails/hae-workouts';
+import {
+  normaliseActivityType,
+  OUTDOOR_TYPES,
+  routePointCoords,
+  type HaeWorkout,
+} from '$lib/trails/hae-workouts';
 import type { RequestHandler } from './$types';
 
 const SUPPORTED_METRICS = [
@@ -137,17 +142,26 @@ export const POST: RequestHandler = async ({ request }) => {
         `${ingested.tracksSynced} track(s), ${ingested.seriesSynced} series`,
     );
 
-    // An outdoor workout with no GPS trace usually means route data never made
-    // it into the payload (HAE toggle off, or the request was rejected upstream
-    // for size before a retry without routes). Warn — in the log and in the
-    // response so HAE's activity log shows it — but do not fail the sync:
-    // the workout itself landed, and HAE retries failed batches indefinitely.
+    // An outdoor workout with no usable GPS trace means either the payload
+    // carried no route (HAE toggle off, or the request was rejected upstream
+    // for size) or the route arrived in a shape the mapper rejects — the v2
+    // key-name change slipped through here once, invisibly, because `route`
+    // is a modelled key and unusable points leave no trace in metadata. So
+    // when points exist but fail, name the keys of the first one. Warn — in
+    // the log and in the response so HAE's activity log shows it — but do not
+    // fail the sync: the workout itself landed, and HAE retries failed
+    // batches indefinitely.
     for (const w of workouts) {
       if (!w || typeof w !== 'object') continue;
       const type = normaliseActivityType(typeof w.name === 'string' ? w.name : null);
-      if (OUTDOOR_TYPES.has(type) && (!Array.isArray(w.route) || w.route.length < 2)) {
-        warnings.push(`${w.name ?? 'workout'} (${w.start ?? 'no date'}): outdoor workout arrived without route data`);
-      }
+      if (!OUTDOOR_TYPES.has(type)) continue;
+      const route = Array.isArray(w.route) ? w.route : [];
+      const usable = route.filter((p) => routePointCoords(p) !== null).length;
+      if (usable >= 2) continue;
+      const detail = route.length
+        ? `route has ${route.length} point(s) but ${usable} usable; first point keys: ${Object.keys(route[0] ?? {}).join(',')}`
+        : 'no route data in payload';
+      warnings.push(`${w.name ?? 'workout'} (${w.start ?? 'no date'}): outdoor workout without a usable GPS trace — ${detail}`);
     }
     if (warnings.length) {
       console.log(`[apple-ingest] warnings: ${warnings.join('; ')}`);
