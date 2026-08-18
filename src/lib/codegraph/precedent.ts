@@ -70,6 +70,7 @@ export function precedentQuery(target: string, limit: number): string | null {
 
 /**
  * The head of a file, cut at a line boundary.
+ * The default budget is 2,400 characters.
  *
  * The head is where the shape lives: the imports that say which helpers this
  * repo reaches for, the module comment that says why, the first exported symbol
