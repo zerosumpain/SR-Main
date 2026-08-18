@@ -54,6 +54,12 @@ describe('buildLoadDays', () => {
     expect(buildLoadDays([])).toEqual([]);
     expect(buildLoadDays([workout('2026-08-18', null)])).toEqual([]);
   });
+
+  it('keeps a workout whose LOCAL day is ahead of UTC-today (00:30 BST)', () => {
+    // System clock is 2026-08-18 UTC; the workout's local day is the 19th.
+    const days = buildLoadDays([workout('2026-08-19', 40)]);
+    expect(days).toEqual([{ date: '2026-08-19', load: 40 }]);
+  });
 });
 
 describe('weeklyVolume', () => {
@@ -69,6 +75,13 @@ describe('weeklyVolume', () => {
     expect(weeks[11].weekStart).toBe('2026-08-17');
     expect(weeks[0].weekStart).toBe('2026-06-01');
     expect(weeks.every((w) => w.totalS === 0)).toBe(true);
+  });
+
+  it('keeps a Monday-00:30-BST workout while UTC is still Sunday', () => {
+    vi.setSystemTime(new Date('2026-08-23T23:30:00Z')); // Sunday night UTC
+    const weeks = weeklyVolume([workout('2026-08-24', 10)], 12); // local Monday
+    expect(weeks[11].weekStart).toBe('2026-08-24');
+    expect(weeks[11].totalS).toBe(3600);
   });
 
   it('buckets workouts into their week and splits seconds by type', () => {

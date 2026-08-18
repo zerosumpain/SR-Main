@@ -6,6 +6,7 @@
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import { zoneEdges } from '$lib/health/analytics/hr-zones';
+  import type { ACWRZone } from '$lib/health/analytics/acwr';
   import { formatDuration, formatDistance, activityLabel, isPaceSport } from '$lib/trails/format';
 
   let { data } = $props();
@@ -38,6 +39,17 @@
     return { diff, good };
   }
 
+  // A dead feed must not present its last week as current: the trailing means
+  // are already anchored on today (so they null out as the window empties),
+  // and any reading older than 3 days is labelled with its age.
+  function staleNote(lastDate: string | null | undefined): string {
+    if (!lastDate) return '';
+    const ageDays = Math.floor(
+      (Date.parse(new Date().toISOString().slice(0, 10)) - Date.parse(lastDate)) / 86400000,
+    );
+    return ageDays > 3 ? ` · last reading ${ageDays}d ago` : '';
+  }
+
   const tiles = $derived.by((): Tile[] => {
     if (!d) return [];
     const out: Tile[] = [];
@@ -61,7 +73,7 @@
         label: 'Resting HR',
         value: String(Math.round(d.rhr.latest7)),
         unit: 'bpm · 7d',
-        sub: dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—',
+        sub: (dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—') + staleNote(d.rhr.lastDate),
         tone: dl ? (dl.good ? 'good' : dl.diff >= 3 ? 'warn' : 'neutral') : 'neutral',
         evidence: 'autonomic-balance',
       });
@@ -73,7 +85,7 @@
         label: 'HRV (RMSSD)',
         value: String(Math.round(d.hrv.latest7)),
         unit: 'ms · 7d',
-        sub: dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—',
+        sub: (dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—') + staleNote(d.hrv.lastDate),
         tone: dl ? (dl.good ? 'good' : dl.diff <= -5 ? 'warn' : 'neutral') : 'neutral',
         evidence: 'autonomic-balance',
       });
@@ -86,7 +98,7 @@
         label: 'Recovery',
         value: String(v),
         unit: '% · Whoop',
-        sub: v >= 67 ? 'green band' : v >= 34 ? 'amber band' : 'red band',
+        sub: (v >= 67 ? 'green band' : v >= 34 ? 'amber band' : 'red band') + staleNote(lastRecovery.date),
         tone: v >= 67 ? 'good' : v >= 34 ? 'warn' : 'bad',
         evidence: 'recovery-debt',
       });
@@ -141,7 +153,7 @@
     }));
   });
 
-  const ZONE_LABELS: Record<string, { label: string; tone: Tone }> = {
+  const ZONE_LABELS: Record<ACWRZone, { label: string; tone: Tone }> = {
     detraining: { label: 'DETRAINING', tone: 'warn' },
     undertraining: { label: 'UNDERTRAINING', tone: 'warn' },
     optimal: { label: 'OPTIMAL', tone: 'good' },
@@ -306,7 +318,11 @@
             <span class="sr-label-tight">Whoop strain ACWR</span>
             <span class="acwr-value">{a.value.ratio.toFixed(2)}</span>
             <span class="tag" class:good={z.tone === 'good'} class:warn={z.tone === 'warn'} class:bad={z.tone === 'bad'}>{z.label}</span>
-            <span class="acwr-note">wrist-measured, covers non-trail days</span>
+            <span class="acwr-note">
+              wrist-measured, covers non-trail days{a.sufficiency === 'partial'
+                ? ' · early — under 28 days of history'
+                : ''}
+            </span>
           </div>
         {/if}
       </div>

@@ -60,6 +60,9 @@
 
   const day = (d: string) => Math.floor(Date.parse(d + 'T00:00:00Z') / 86400000);
 
+  // An empty rolling array must behave like no rolling at all — [] is truthy
+  // and would otherwise suppress the raw line entirely.
+  const hasRolling = $derived((rolling?.length ?? 0) > 0);
   const allPoints = $derived([...points, ...(rolling ?? [])]);
   const xMin = $derived(allPoints.length ? Math.min(...allPoints.map((p) => day(p.date))) : 0);
   const xMax = $derived(allPoints.length ? Math.max(...allPoints.map((p) => day(p.date))) : 1);
@@ -87,8 +90,8 @@
       .join('');
   }
 
-  const rawPath = $derived(rolling ? '' : linePath(points));
-  const rollingPath = $derived(rolling ? linePath(rolling) : '');
+  const rawPath = $derived(hasRolling ? '' : linePath(points));
+  const rollingPath = $derived(hasRolling ? linePath(rolling!) : '');
 
   const yTicks = $derived(Array.from({ length: 4 }, (_, i) => yMin + ((yMax - yMin) / 3) * i));
   // Never more ticks than there are distinct days — a 3-day domain at 5 ticks
@@ -172,7 +175,7 @@
           </text>
         {/if}
 
-        {#if rolling}
+        {#if hasRolling}
           {#each points as p, pi (pi)}
             <circle class="raw-dot" cx={sx(day(p.date))} cy={sy(p.value)} r="2.5" />
           {/each}

@@ -3,7 +3,7 @@
 // Z1 50–60%, Z2 60–70%, Z3 70–80%, Z4 80–90%, Z5 90%+; below 50% is Z0
 // (rest/idle) so the zone rows always sum to the sampled duration.
 
-import type { HrSample } from './trimp';
+import { eachInterval, type HrSample } from './series-intervals';
 
 export interface ZoneSeconds {
   z0: number;
@@ -15,8 +15,6 @@ export interface ZoneSeconds {
 }
 
 export const ZONE_BOUNDS = [0.5, 0.6, 0.7, 0.8, 0.9] as const;
-
-const MAX_INTERVAL_S = 300; // same dropout clamp as trimp.ts
 
 export function zoneOf(hr: number, hrMax: number): keyof ZoneSeconds {
   if (hrMax <= 0) return 'z0';
@@ -35,16 +33,12 @@ export function zoneEdges(hrMax: number): number[] {
 }
 
 export function timeInZones(samples: HrSample[], hrMax: number): ZoneSeconds | null {
-  if (samples.length < 2 || hrMax <= 0) return null;
-  const sorted = [...samples].sort((a, b) => a[0] - b[0]);
+  if (hrMax <= 0) return null;
   const zones: ZoneSeconds = { z0: 0, z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 };
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const [t, hr] = sorted[i];
-    const dt = Math.min(sorted[i + 1][0] - t, MAX_INTERVAL_S);
-    if (dt <= 0) continue;
+  const ok = eachInterval(samples, (dt, hr) => {
     zones[zoneOf(hr, hrMax)] += dt;
-  }
-  return zones;
+  });
+  return ok ? zones : null;
 }
 
 export function addZones(a: ZoneSeconds, b: ZoneSeconds): ZoneSeconds {

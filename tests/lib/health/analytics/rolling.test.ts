@@ -21,16 +21,24 @@ describe('rollingMean', () => {
 });
 
 describe('trailingMean', () => {
-  it('means the readings inside the trailing window only', () => {
+  it('means the readings inside the anchored trailing window only', () => {
     const series = [
       { date: day(1), value: 100 },
       { date: day(20), value: 50 },
       { date: day(21), value: 60 },
     ];
-    expect(trailingMean(series, 7)).toBeCloseTo(55);
+    expect(trailingMean(series, 7, day(21))).toBeCloseTo(55);
+  });
+
+  it('goes null when the feed died before the window — stale data must not read as current', () => {
+    const series = [
+      { date: day(1), value: 100 },
+      { date: day(2), value: 90 },
+    ];
+    expect(trailingMean(series, 7, day(20))).toBeNull();
   });
 
   it('returns null on empty input', () => {
-    expect(trailingMean([], 7)).toBeNull();
+    expect(trailingMean([], 7, day(1))).toBeNull();
   });
 });

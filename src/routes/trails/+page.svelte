@@ -2,6 +2,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
   import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
+  import type { ACWRZone } from '$lib/health/analytics/acwr';
   import {
     formatDistance,
     formatDuration,
@@ -35,7 +36,7 @@
   });
 
   const acwr = $derived(data.strip?.strainAcwr ?? null);
-  const ACWR_TONE: Record<string, 'good' | 'warn' | 'bad'> = {
+  const ACWR_TONE: Record<ACWRZone, 'good' | 'warn' | 'bad'> = {
     detraining: 'warn',
     undertraining: 'warn',
     optimal: 'good',
@@ -124,7 +125,7 @@
         />
       </div>
       <div class="strip-side">
-        {#if acwr && acwr.sufficiency !== 'insufficient'}
+        {#if acwr && acwr.sufficiency === 'ok'}
           <span class="sr-label-tight">Load ratio</span>
           <span class="strip-acwr">{acwr.value.ratio.toFixed(2)}</span>
           <span class="tag" class:good={ACWR_TONE[acwr.value.zone] === 'good'} class:warn={ACWR_TONE[acwr.value.zone] === 'warn'} class:bad={ACWR_TONE[acwr.value.zone] === 'bad'}>

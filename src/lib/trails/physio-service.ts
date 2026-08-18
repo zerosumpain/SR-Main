@@ -11,7 +11,13 @@ import {
   appleHealthMetrics,
   whoopRecovery,
 } from '$lib/db/schema';
-import { trimpFromSamples, trimpFromAvg, type HrProfile, type HrSample } from '$lib/health/analytics/trimp';
+import {
+  trimpFromSamples,
+  trimpFromAvg,
+  type HrProfile,
+  type HrSample,
+} from '$lib/health/analytics/trimp';
+import { MIN_DECOUPLING_DURATION_S } from '$lib/health/analytics/efficiency';
 import {
   timeInZones,
   zoneEdges,
@@ -29,9 +35,9 @@ import { computeACWR, type ACWRResult, type LoadDay } from '$lib/health/analytic
 import { computePolarised, type PolarisedResult } from '$lib/health/analytics/polarised';
 import { rollingMean, trailingMean, type DayPoint } from '$lib/health/analytics/rolling';
 import type { MetricResult } from '$lib/health/analytics/types';
-import { getVO2Max, resolveHealthProfile } from '$lib/health/services/vo2max-service';
+import { resolveHealthProfile } from '$lib/health/services/vo2max-service';
 import { getACWR } from '$lib/health/services/acwr-service';
-import type { VO2Result } from '$lib/health/analytics/vo2max-percentile';
+import { computeVO2MaxResult, type VO2Result } from '$lib/health/analytics/vo2max-percentile';
 import type { ActivityDetail } from './activities-service';
 
 // ---------------------------------------------------------------------------
@@ -40,8 +46,9 @@ import type { ActivityDetail } from './activities-service';
 export interface TrendSeries {
   daily: DayPoint[];
   rolling7: DayPoint[];
-  latest7: number | null; // trailing 7-day mean
-  baseline28: number | null; // trailing 28-day mean
+  latest7: number | null; // trailing 7-day mean, anchored on today
+  baseline28: number | null; // trailing 28-day mean, anchored on today
+  lastDate: string | null; // most recent reading, for staleness display
 }
 
 export interface WorkoutPhysio {
@@ -115,33 +122,44 @@ async function safe<T>(label: string, p: Promise<T>): Promise<T | null> {
   }
 }
 
+// An optical wrist reading can spike far above any real heart rate; a single
+// such row would otherwise ratchet hrMax up permanently and deflate every
+// zone and TRIMP after it. Workout maxima (watch, during exercise) are
+// trusted as-is; the all-day optical stream only counts when plausible.
+const APPLE_MAX_PLAUSIBLE = 210;
+const HR_MAX_CEILING = 215;
+
 export async function resolveHrProfile(): Promise<HrProfile & { hrMaxSource: string }> {
   const { age, sex } = resolveHealthProfile();
   const tanaka = Math.round(TANAKA_INTERCEPT - TANAKA_SLOPE * age);
 
-  const [actMaxRow] = (await safe(
-    'observed activity max HR',
-    db.select({ m: sql<number | null>`max(${activities.maxHeartrate})` }).from(activities),
-  )) ?? [null];
-  const [appleMaxRow] = (await safe(
-    'observed apple max HR',
-    db
-      .select({ m: sql<number | null>`max(${appleHealthMetrics.maxValue})` })
-      .from(appleHealthMetrics)
-      .where(eq(appleHealthMetrics.metricName, 'heart_rate')),
-  )) ?? [null];
+  const [actMaxRows, appleMaxRows, rhrRows] = await Promise.all([
+    safe(
+      'observed activity max HR',
+      db.select({ m: sql<number | null>`max(${activities.maxHeartrate})` }).from(activities),
+    ),
+    safe(
+      'observed apple max HR',
+      db
+        .select({ m: sql<number | null>`max(${appleHealthMetrics.maxValue})` })
+        .from(appleHealthMetrics)
+        .where(eq(appleHealthMetrics.metricName, 'heart_rate')),
+    ),
+    safe(
+      'whoop RHR for hrRest',
+      db
+        .select({ created: whoopRecovery.createdDate, rhr: whoopRecovery.restingHeartRate })
+        .from(whoopRecovery)
+        .where(gte(whoopRecovery.createdDate, epochDaysAgo(28))),
+    ),
+  ]);
 
-  const observed = Math.max(actMaxRow?.m ?? 0, (appleMaxRow?.m ?? 0) / 100);
-  const hrMax = Math.max(tanaka, Math.round(observed));
+  const actMax = actMaxRows?.[0]?.m ?? 0;
+  const appleMax = fromAppleScale(appleMaxRows?.[0]?.m ?? 0);
+  const observed = Math.max(actMax, appleMax <= APPLE_MAX_PLAUSIBLE ? appleMax : 0);
+  const hrMax = Math.min(Math.max(tanaka, Math.round(observed)), HR_MAX_CEILING);
   const hrMaxSource = observed > tanaka ? 'observed' : 'tanaka';
 
-  const rhrRows = await safe(
-    'whoop RHR for hrRest',
-    db
-      .select({ created: whoopRecovery.createdDate, rhr: whoopRecovery.restingHeartRate })
-      .from(whoopRecovery)
-      .where(gte(whoopRecovery.createdDate, epochDaysAgo(28))),
-  );
   const hrRest = rhrRows?.length
     ? Math.round(rhrRows.reduce((a, r) => a + r.rhr, 0) / rhrRows.length)
     : DEFAULT_HR_REST;
@@ -153,17 +171,16 @@ export async function resolveHrProfile(): Promise<HrProfile & { hrMaxSource: str
 // Dashboard
 
 export async function getTrailsDashboard(): Promise<TrailsDashboard> {
-  const profile = await resolveHrProfile();
-
-  const [vo2Result, vo2Series, whoopDaily, sdnnDaily, activityRows, strainAcwr] =
-    await Promise.all([
-      safe('vo2 result', getVO2Max()),
-      safe('vo2 series', fetchVo2Series()),
-      safe('whoop daily', fetchWhoopDaily(180)),
-      safe('apple sdnn', fetchSdnnDaily(180)),
-      safe('activities 90d', fetchActivitiesWithHr(90)),
-      safe('strain acwr', getACWR()),
-    ]);
+  // The profile queries are independent of the batch below — run everything
+  // in one round trip's worth of wall clock.
+  const [profile, vo2, whoopDaily, sdnnDaily, activityRows, strainAcwr] = await Promise.all([
+    resolveHrProfile(),
+    safe('vo2', fetchVo2()),
+    safe('whoop daily', fetchWhoopDaily(180)),
+    safe('apple sdnn', fetchSdnnDaily(180)),
+    safe('activities 90d', fetchActivitiesWithHr(90)),
+    safe('strain acwr', getACWR()),
+  ]);
 
   const workouts: WorkoutPhysio[] = [];
   let zones28: ZoneSeconds | null = null;
@@ -207,7 +224,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
 
   return {
     profile,
-    vo2: { result: vo2Result, series: vo2Series ?? [] },
+    vo2: vo2 ?? { result: null, series: [] },
     rhr: whoopDaily ? trend(whoopDaily.rhr) : null,
     hrv: whoopDaily ? trend(whoopDaily.hrv) : null,
     hrvSdnn: sdnnDaily ? trend(sdnnDaily) : null,
@@ -230,8 +247,8 @@ export interface TrailsStrip {
 }
 
 export async function getTrailsStrip(): Promise<TrailsStrip> {
-  const rows =
-    (await safe(
+  const [rowsResult, strainAcwr] = await Promise.all([
+    safe(
       'strip activities',
       db
         .select({
@@ -245,7 +262,10 @@ export async function getTrailsStrip(): Promise<TrailsStrip> {
         })
         .from(activities)
         .where(gte(activities.startDate, epochDaysAgo(90))),
-    )) ?? [];
+    ),
+    safe('strip strain acwr', getACWR()),
+  ]);
+  const rows = rowsResult ?? [];
 
   const workouts: WorkoutPhysio[] = rows.map((r) => ({
     id: r.id,
@@ -261,17 +281,17 @@ export async function getTrailsStrip(): Promise<TrailsStrip> {
     hrr60: null,
   }));
 
-  return {
-    weeks: weeklyVolume(workouts, 12),
-    strainAcwr: await safe('strip strain acwr', getACWR()),
-  };
+  return { weeks: weeklyVolume(workouts, 12), strainAcwr };
 }
 
 // ---------------------------------------------------------------------------
 // Per-activity enrichment
 
 export async function getActivityPhysio(detail: ActivityDetail): Promise<ActivityPhysio> {
-  const profile = await resolveHrProfile();
+  const [profile, typical] = await Promise.all([
+    resolveHrProfile(),
+    safe('typical medians', typicalForSport(detail)),
+  ]);
   const hrSeries = detail.series.find((s) => s.metric === 'heart_rate');
   const samples = (hrSeries?.samples as HrSample[] | undefined) ?? null;
   const duration = detail.activeDurationS ?? detail.durationS;
@@ -284,14 +304,13 @@ export async function getActivityPhysio(detail: ActivityDetail): Promise<Activit
 
   const curve = hrrCurve(meta.heartRateRecovery);
 
-  // Decoupling only means something on sustained steady work.
-  const longEnough = duration >= 1200;
+  // Decoupling only means something on sustained steady work — the threshold
+  // lives beside the maths so it can't drift from the methodology text.
+  const longEnough = duration >= MIN_DECOUPLING_DURATION_S;
   const halves =
     longEnough && detail.coordinates && samples
       ? splitHalves(detail.coordinates as Array<[number, number, number | null, number]>, samples)
       : null;
-
-  const typical = await safe('typical medians', typicalForSport(detail));
 
   return {
     trimp,
@@ -303,9 +322,9 @@ export async function getActivityPhysio(detail: ActivityDetail): Promise<Activit
     zones: samples ? timeInZones(samples, profile.hrMax) : null,
     zoneEdges: zoneEdges(profile.hrMax),
     hrMax: profile.hrMax,
-    mets: qty(meta.intensity), // kcal/hr·kg ≡ METs
+    mets: metsFrom(meta.intensity),
     minHr: qty((meta.heartRate as Record<string, unknown> | undefined)?.min),
-    temperatureC: qty(meta.temperature),
+    temperatureC: celsiusFrom(meta.temperature),
     humidityPct: qty(meta.humidity),
     typical: typical ?? { paceSPerKm: null, avgHr: null, ef: null, n: 0 },
   };
@@ -344,19 +363,34 @@ async function typicalForSport(detail: ActivityDetail) {
 // ---------------------------------------------------------------------------
 // Fetch helpers
 
-async function fetchVo2Series(): Promise<DayPoint[]> {
+// One scan of the vo2_max rows serves both consumers: the ACSM percentile
+// result (same 90-day all-samples window getVO2Max uses on /health) and the
+// all-time chart series (latest reading per day).
+async function fetchVo2(): Promise<{
+  result: MetricResult<VO2Result>;
+  series: DayPoint[];
+}> {
   const rows = await db
     .select({ date: appleHealthMetrics.date, value: appleHealthMetrics.value })
     .from(appleHealthMetrics)
     .where(eq(appleHealthMetrics.metricName, 'vo2_max'))
     .orderBy(appleHealthMetrics.date);
-  // Several readings can land on one day — keep the latest per day.
+
+  const since = epochDaysAgo(90);
+  const windowed = rows
+    .filter((r) => r.value != null && r.date >= since)
+    .map((r) => ({ date: isoDay(r.date), value: fromAppleScale(r.value as number) }));
+
   const byDay = new Map<string, number>();
   for (const r of rows) {
     if (r.value == null) continue;
-    byDay.set(isoDay(r.date), r.value / 100);
+    byDay.set(isoDay(r.date), fromAppleScale(r.value));
   }
-  return [...byDay.entries()].map(([date, value]) => ({ date, value }));
+
+  return {
+    result: computeVO2MaxResult(windowed, resolveHealthProfile()),
+    series: [...byDay.entries()].map(([date, value]) => ({ date, value })),
+  };
 }
 
 async function fetchWhoopDaily(days: number) {
@@ -396,7 +430,7 @@ async function fetchSdnnDaily(days: number): Promise<DayPoint[]> {
   for (const r of rows) {
     if (r.value == null) continue;
     const day = isoDay(r.date);
-    (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(r.value / 100);
+    (byDay.get(day) ?? byDay.set(day, []).get(day)!).push(fromAppleScale(r.value));
   }
   return [...byDay.entries()]
     .map(([date, vals]) => ({ date, value: Math.round(median(vals)! * 10) / 10 }))
@@ -460,12 +494,25 @@ async function fetchActivitiesWithHr(days: number): Promise<ActivityWithHr[]> {
 // Pure assembly helpers (exported for tests)
 
 export function trend(daily: DayPoint[]): TrendSeries {
+  const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
+  const today = new Date().toISOString().slice(0, 10);
   return {
-    daily,
-    rolling7: rollingMean(daily, 7),
-    latest7: round1(trailingMean(daily, 7)),
-    baseline28: round1(trailingMean(daily, 28)),
+    daily: sorted,
+    rolling7: rollingMean(sorted, 7),
+    latest7: round1(trailingMean(sorted, 7, today)),
+    baseline28: round1(trailingMean(sorted, 28, today)),
+    lastDate: sorted.at(-1)?.date ?? null,
   };
+}
+
+// Workout days are LOCAL calendar days (the phone's own clock); the server
+// runs UTC. Just after midnight BST a workout's local day is ahead of
+// UTC-today, so every "up to today" range must extend to whichever is later —
+// otherwise that workout silently vanishes from load and volume.
+function anchorDay(workouts: WorkoutPhysio[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+  const lastWorkoutDay = workouts.reduce((m, w) => (w.day > m ? w.day : m), '');
+  return lastWorkoutDay > today ? lastWorkoutDay : today;
 }
 
 export function buildLoadDays(workouts: WorkoutPhysio[]): LoadDay[] {
@@ -477,9 +524,9 @@ export function buildLoadDays(workouts: WorkoutPhysio[]): LoadDay[] {
   }
   if (byDay.size === 0) return [];
   const first = [...byDay.keys()].sort()[0];
-  const today = new Date().toISOString().slice(0, 10);
+  const end = anchorDay(workouts);
   const out: LoadDay[] = [];
-  for (let d = Date.parse(first + 'T00:00:00Z'); d <= Date.parse(today + 'T00:00:00Z'); d += 86400000) {
+  for (let d = Date.parse(first + 'T00:00:00Z'); d <= Date.parse(end + 'T00:00:00Z'); d += 86400000) {
     const date = new Date(d).toISOString().slice(0, 10);
     out.push({ date, load: Math.round((byDay.get(date) ?? 0) * 10) / 10 });
   }
@@ -488,7 +535,7 @@ export function buildLoadDays(workouts: WorkoutPhysio[]): LoadDay[] {
 
 export function weeklyVolume(workouts: WorkoutPhysio[], weeks: number): WeekVolume[] {
   const buckets = new Map<string, WeekVolume>();
-  const thisMonday = mondayOf(new Date().toISOString().slice(0, 10));
+  const thisMonday = mondayOf(anchorDay(workouts));
   for (let i = weeks - 1; i >= 0; i--) {
     const start = new Date(Date.parse(thisMonday + 'T00:00:00Z') - i * 7 * 86400000)
       .toISOString()
@@ -522,11 +569,46 @@ export function polarisedFromZones(zones: ZoneSeconds): MetricResult<PolarisedRe
 
 // ---------------------------------------------------------------------------
 
-function qty(v: unknown): number | null {
-  if (v && typeof v === 'object' && typeof (v as { qty?: unknown }).qty === 'number') {
-    return Math.round((v as { qty: number }).qty * 10) / 10;
+function quantityOf(v: unknown): { qty: number; units: string } | null {
+  if (
+    v &&
+    typeof v === 'object' &&
+    typeof (v as { qty?: unknown }).qty === 'number' &&
+    Number.isFinite((v as { qty: number }).qty)
+  ) {
+    const units = (v as { units?: unknown }).units;
+    return { qty: (v as { qty: number }).qty, units: typeof units === 'string' ? units : '' };
   }
   return null;
+}
+
+function qty(v: unknown): number | null {
+  const q = quantityOf(v);
+  return q ? Math.round(q.qty * 10) / 10 : null;
+}
+
+/** HAE temperature follows the phone's units — a Fahrenheit phone sends degF. */
+function celsiusFrom(v: unknown): number | null {
+  const q = quantityOf(v);
+  if (!q) return null;
+  const c = /f/i.test(q.units) ? ((q.qty - 32) * 5) / 9 : q.qty;
+  return Math.round(c * 10) / 10;
+}
+
+/** Intensity is METs only when the units actually say so (1 MET = 1 kcal/kg·hr). */
+function metsFrom(v: unknown): number | null {
+  const q = quantityOf(v);
+  if (!q) return null;
+  const u = q.units.toLowerCase();
+  if (u.includes('met') || (u.includes('kcal') && u.includes('kg'))) {
+    return Math.round(q.qty * 10) / 10;
+  }
+  return null;
+}
+
+/** apple_health_metrics stores value/min/max ×100 (schema.ts) — the one /100 here. */
+function fromAppleScale(v: number): number {
+  return v / 100;
 }
 
 function median(xs: number[]): number | null {

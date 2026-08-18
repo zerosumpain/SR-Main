@@ -40,6 +40,11 @@ describe('hrr60', () => {
     expect(hrr60(curve)).toBe(30);
   });
 
+  it('refuses a rising curve — a late-started recording must not render as "−-N bpm"', () => {
+    const curve = hrrCurve([rawSample(0, 120), rawSample(40, 130), rawSample(80, 140)])!;
+    expect(hrr60(curve)).toBeNull();
+  });
+
   it('refuses a curve shorter than a minute — truncated data must not read as poor fitness', () => {
     const curve = hrrCurve([rawSample(0, 170), rawSample(45, 150)])!;
     expect(hrr60(curve)).toBeNull();

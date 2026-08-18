@@ -6,7 +6,14 @@
 // holds pace-per-beat steady (< ~5% drift on steady work — Friel's heuristic;
 // durability literature: Maunder 2021).
 
-import type { HrSample } from './trimp';
+import type { HrSample } from './series-intervals';
+import { haversineM } from '$lib/trails/track';
+
+/**
+ * Decoupling is only claimed for sustained steady work. The methodology entry
+ * says "~40 minutes"; this constant is the single place that threshold lives.
+ */
+export const MIN_DECOUPLING_DURATION_S = 2400;
 
 /** metres/min per bpm; null when either input can't support it. */
 export function efficiencyFactor(
@@ -35,14 +42,21 @@ export function splitHalves(
   hrSamples: HrSample[],
 ): { first: HalfStats; second: HalfStats } | null {
   if (coords.length < 4 || hrSamples.length < 4) return null;
+  // GPS lock can arrive well after the workout starts, so the track's span is
+  // [t0, tEnd], not [0, tEnd]. Halving from 0 would charge the first half a
+  // duration it has no distance for and skew decoupling negative.
+  const t0 = coords[0][3];
   const tEnd = coords[coords.length - 1][3];
-  if (tEnd <= 0) return null;
-  const tMid = tEnd / 2;
+  if (tEnd <= t0) return null;
+  const tMid = t0 + (tEnd - t0) / 2;
 
   let dFirst = 0;
   let dSecond = 0;
   for (let i = 1; i < coords.length; i++) {
-    const d = haversineM(coords[i - 1], coords[i]);
+    const d = haversineM(
+      [coords[i - 1][0], coords[i - 1][1]],
+      [coords[i][0], coords[i][1]],
+    );
     if (coords[i][3] <= tMid) dFirst += d;
     else dSecond += d;
   }
@@ -52,7 +66,7 @@ export function splitHalves(
   if (firstHr.length < 2 || secondHr.length < 2) return null;
 
   return {
-    first: { distanceM: dFirst, durationS: tMid, avgHr: mean(firstHr) },
+    first: { distanceM: dFirst, durationS: tMid - t0, avgHr: mean(firstHr) },
     second: { distanceM: dSecond, durationS: tEnd - tMid, avgHr: mean(secondHr) },
   };
 }
@@ -76,18 +90,4 @@ export function decoupling(halves: { first: HalfStats; second: HalfStats } | nul
 
 function mean(xs: number[]): number {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-
-function haversineM(
-  a: [number, number, number | null, number],
-  b: [number, number, number | null, number],
-): number {
-  const R = 6371000;
-  const toRad = Math.PI / 180;
-  const dLat = (b[1] - a[1]) * toRad;
-  const dLng = (b[0] - a[0]) * toRad;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(a[1] * toRad) * Math.cos(b[1] * toRad) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
 }

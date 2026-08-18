@@ -53,6 +53,17 @@ describe('splitHalves + decoupling', () => {
     expect(d).toBeLessThan(15);
   });
 
+  it('is unbiased when GPS lock arrives late (track starts at t0 > 0)', () => {
+    // Same steady effort as above, but the whole track shifted +300 s.
+    const coords = straightTrack(1200, 3).map(
+      (p) => [p[0], p[1], p[2], p[3] + 300] as [number, number, number | null, number],
+    );
+    const hr: [number, number][] = Array.from({ length: 121 }, (_, i) => [300 + i * 10, 150]);
+    const d = decoupling(splitHalves(coords, hr));
+    expect(d).not.toBeNull();
+    expect(Math.abs(d!)).toBeLessThan(1);
+  });
+
   it('returns null on thin data', () => {
     expect(splitHalves([], [])).toBeNull();
     expect(decoupling(null)).toBeNull();

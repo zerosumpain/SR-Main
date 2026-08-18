@@ -4,7 +4,7 @@
 // HRR60 = HR at cooldown start minus HR 60 s later — ≤12 bpm is the abnormal
 // band in Cole 1999 (NEJM); bigger drops indicate stronger vagal reactivation.
 
-import { parseHaeDate } from '$lib/trails/hae-workouts';
+import { parseHaeDate } from '$lib/trails/hae-dates';
 
 /** [secondsFromCurveStart, bpm] — normalised for charting. */
 export type HrrPoint = [number, number];
@@ -43,6 +43,9 @@ export function hrrCurve(raw: unknown): HrrPoint[] | null {
  * watch starts the curve at exercise end); the 60 s value is interpolated.
  * Null when the curve doesn't span a full minute — a truncated curve would
  * understate the drop, which reads as bad fitness and is really missing data.
+ * A non-positive drop is also null: HR rising after the recorded end means the
+ * curve didn't start at peak (a late watch, a sprint finish mid-cooldown), so
+ * the number would measure the artefact, not recovery.
  */
 export function hrr60(curve: HrrPoint[] | null): number | null {
   if (!curve || curve.length < 2) return null;
@@ -51,7 +54,8 @@ export function hrr60(curve: HrrPoint[] | null): number | null {
   const start = curve[0][1];
   const at60 = interpolate(curve, 60);
   if (at60 == null) return null;
-  return Math.round(start - at60);
+  const drop = Math.round(start - at60);
+  return drop > 0 ? drop : null;
 }
 
 function interpolate(curve: HrrPoint[], t: number): number | null {

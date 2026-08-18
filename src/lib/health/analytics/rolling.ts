@@ -30,13 +30,27 @@ export function rollingMean(series: DayPoint[], windowDays: number, minCount = 3
   return out;
 }
 
-/** Mean of the readings in the trailing `windowDays` days ending today-ish (the series max date). */
-export function trailingMean(series: DayPoint[], windowDays: number): number | null {
+/**
+ * Mean of the readings in the trailing `windowDays` days ending at `anchorDay`
+ * (YYYY-MM-DD — pass today). Anchoring on the series' own max date instead
+ * would keep presenting the last pre-outage week as current for months after
+ * a sync dies; anchored on today, a stalled feed goes null and the tile
+ * disappears rather than lying.
+ */
+export function trailingMean(
+  series: DayPoint[],
+  windowDays: number,
+  anchorDay: string,
+): number | null {
   if (series.length === 0) return null;
-  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-  const end = dayNumber(sorted[sorted.length - 1].date);
+  const end = dayNumber(anchorDay);
   const start = end - windowDays + 1;
-  const vals = sorted.filter((p) => dayNumber(p.date) >= start).map((p) => p.value);
+  const vals = series
+    .filter((p) => {
+      const d = dayNumber(p.date);
+      return d >= start && d <= end;
+    })
+    .map((p) => p.value);
   if (vals.length === 0) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
