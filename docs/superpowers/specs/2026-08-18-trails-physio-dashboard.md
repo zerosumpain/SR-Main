@@ -30,6 +30,12 @@ improve the workout detail view and the overview; weave in health research.
 6. Whoop is live (recovery scored 2026-08-18: 236 daily rows ≈ 8 months of RHR
    / RMSSD / recovery) — that is the progression backbone until the trails
    corpus (7 activities, started 2026-08-11) grows.
+7. **Found during QA:** four July 2026 `whoop_cycles` rows store strain ×100
+   (635/634/1401/431 on a 0–21 scale). series-30d and correlations already
+   unscaled at read; acwr, monotony, recovery-debt and training-load did not —
+   so the /health strain ACWR has been reporting 0.20 "detraining" when the
+   real ratio is 1.04 "optimal". Fixed with a shared `realStrain()` applied in
+   all four readers (code-only; the rows are left as-is deliberately).
 
 ## What ships
 
@@ -98,6 +104,7 @@ the new page.
 | Apple SDNN vs Whoop RMSSD | mix into one HRV chart · separate, labelled | **separate, labelled** | SDNN and RMSSD are not comparable measures; mixing fabricates a trend | n/a — correctness |
 | Weekly volume encoding | stacked per-sport hues · single hue + tooltip breakdown | **single hue + tooltip** | house rule is warm monochrome; avoids categorical palette for 3 sports on a private page | yes |
 | Overview list rows | add load column · leave alone | **leave alone** | 5 stat columns already wrap on mobile; the strip section carries the new signal | yes |
+| Legacy ×100 strain rows | repair prod data · normalise at read | **normalise at read** (`realStrain()` in all four unpatched readers) | matches the fix series-30d/correlations already ship; no prod UPDATE to get wrong | yes |
 
 ## Verification
 
