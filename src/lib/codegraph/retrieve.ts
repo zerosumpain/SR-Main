@@ -406,6 +406,58 @@ async function siblingNodes(path: string, repo: string, limit: number): Promise<
     .map((x) => x.node);
 }
 
+
+/**
+ * The file paired with `path` by a `tests` edge, in whichever direction.
+ *
+ * Both directions on purpose. Given a module it answers "what covers this";
+ * given a test it answers "what does this cover" — and a build writing tests
+ * wants the second as much as a build changing code wants the first.
+ *
+ * This is the cheapest fix on the board for a measured failure: agents guessing
+ * test filenames produced 19 ENOENTs across three builds, looking for
+ * `test-runner.test.ts` when the real file is `test-runner.diagnostics.test.ts`.
+ * The edge has existed since the first backfill and nothing ever read it.
+ */
+async function testNodes(path: string, repo: string, limit: number): Promise<RetrievedNode[]> {
+  const [target] = await db
+    .select({ id: codegraphNodes.id })
+    .from(codegraphNodes)
+    .where(and(eq(codegraphNodes.repo, repo), eq(codegraphNodes.canonicalPath, path), nodeVisible()))
+    .limit(1);
+  if (!target) return [];
+
+  const edges = await db
+    .select({ source: codegraphEdges.sourceId, target: codegraphEdges.targetId })
+    .from(codegraphEdges)
+    .where(
+      and(
+        eq(codegraphEdges.kind, 'tests'),
+        eq(codegraphEdges.suppressed, false),
+        or(eq(codegraphEdges.sourceId, target.id), eq(codegraphEdges.targetId, target.id)),
+      ),
+    )
+    .limit(20);
+
+  const otherIds = [...new Set(edges.flatMap((e) => [e.source, e.target]))].filter((id) => id !== target.id);
+  if (!otherIds.length) return [];
+
+  return db
+    .select({
+      id: codegraphNodes.id,
+      canonicalPath: codegraphNodes.canonicalPath,
+      kind: codegraphNodes.kind,
+      episodeCount: codegraphNodes.episodeCount,
+      lessonCount: codegraphNodes.lessonCount,
+    })
+    .from(codegraphNodes)
+    // Liveness hides here for the same reason it does for siblings: a build
+    // cannot open a test that is no longer in the tree, and naming one is
+    // exactly the guess this is meant to stop.
+    .where(and(inArray(codegraphNodes.id, otherIds), nodeVisible(), eq(codegraphNodes.existsOnHead, true)))
+    .limit(limit);
+}
+
 /** Execute a parsed plan. Throws only on infrastructure failure. */
 export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Promise<RetrievalResult> {
   const started = Date.now();
@@ -414,9 +466,11 @@ export async function runPlan(plan: QueryPlan, opts: { repo?: string } = {}): Pr
   // The siblings seed answers with nodes and nothing else — no walk, no prose.
   // It is a different question from "what have we learned about this file", and
   // mixing them would make the caller's budget impossible to attribute.
-  if (plan.seed.type === 'siblings') {
+  if (plan.seed.type === 'siblings' || plan.seed.type === 'tests') {
     const limit = plan.picks.find((p) => p.kind === 'nodes')?.limit ?? 2;
-    const nodes = await siblingNodes(plan.seed.path, repo, limit);
+    const nodes = plan.seed.type === 'siblings'
+      ? await siblingNodes(plan.seed.path, repo, limit)
+      : await testNodes(plan.seed.path, repo, limit);
     return {
       plan,
       seedNodeIds: [],
@@ -525,6 +579,24 @@ export function buildContextBlock(result: RetrievalResult): string {
   // A siblings query is answering a different question, so it gets its own
   // heading. The pull channel prints this; the push channel ignores it and
   // injects the source itself (see codegraph/precedent.ts).
+  if (result.plan.seed.type === 'tests') {
+    const p = result.plan.seed.path;
+    return result.nodes.length
+      ? [
+          '## The tests for this file',
+          '',
+          ...result.nodes.map((n) => `- \`${n.canonicalPath}\``),
+          '',
+          'Update them alongside your change. Do not guess at the filename — this is it.',
+        ].join('\n')
+      : [
+          '## The tests for this file',
+          '',
+          `NO PRECEDENT — the graph holds no test paired with \`${p}\`.`,
+          'If you add one, put it where this repo puts the others for that area.',
+        ].join('\n');
+  }
+
   if (result.plan.seed.type === 'siblings') {
     if (!result.nodes.length) {
       return [

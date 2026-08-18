@@ -5,6 +5,7 @@ import {
   cgqlForFiles,
   cgqlForTopic,
   cgqlForSiblings,
+  cgqlForTests,
   CgqlError,
   MAX_HOPS,
   MAX_LIMIT,
@@ -230,5 +231,20 @@ describe('the siblings seed', () => {
     const q = cgqlForSiblings('src/lib/workflows/nodes/thing.def.ts', 3)!;
     expect(() => parseCgql(q)).not.toThrow();
     expect(parseCgql(q).picks[0]).toEqual({ kind: 'nodes', limit: 3 });
+  });
+});
+
+describe('the tests seed', () => {
+  it('parses one path and answers with nodes', () => {
+    const p = parseCgql('tests:src/lib/jkai/test-runner.ts | nodes limit=2');
+    expect(p.seed).toEqual({ type: 'tests', path: 'src/lib/jkai/test-runner.ts' });
+  });
+
+  it('takes exactly one path', () => {
+    expect(() => parseCgql('tests:a.ts,b.ts')).toThrow(CgqlError);
+  });
+
+  it('is offered in the error when a query starts with nothing valid', () => {
+    expect(() => parseCgql('nonsense')).toThrow(/tests:/);
   });
 });

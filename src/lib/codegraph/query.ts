@@ -42,7 +42,15 @@ export type Seed =
    * written or changed; the answer is other members of its family, ranked. It
    * addresses NODES, not prose — the caller wants paths to read.
    */
-  | { type: 'siblings'; path: string };
+  | { type: 'siblings'; path: string }
+  /**
+   * "What is the test for this file?" — or, given a test, what it covers.
+   *
+   * Its own seed rather than a flag on `siblings:` because it answers a
+   * different question: siblings are files of the same SHAPE, this is the one
+   * file that is specifically paired with the target.
+   */
+  | { type: 'tests'; path: string };
 
 export interface Pick {
   kind: PickKind;
@@ -152,6 +160,13 @@ function parseSeed(text: string, pos: number): Seed {
     throw new CgqlError('topic: text must be quoted, e.g. topic:"the tool bridge"', pos);
   }
 
+  const tst = trimmed.match(/^tests:\s*(.+)$/s);
+  if (tst) {
+    const paths = tst[1].split(',').map((x) => x.trim()).filter(Boolean);
+    if (paths.length !== 1) throw new CgqlError('tests: takes exactly one path', pos);
+    return { type: 'tests', path: sanitisePath(paths[0], pos) };
+  }
+
   const sib = trimmed.match(/^siblings:\s*(.+)$/s);
   if (sib) {
     const paths = sib[1].split(',').map((x) => x.trim()).filter(Boolean);
@@ -167,7 +182,7 @@ function parseSeed(text: string, pos: number): Seed {
   const m = trimmed.match(/^(file|gate|fingerprint):\s*(.+)$/s);
   if (!m) {
     throw new CgqlError(
-      `a query must start with file:, gate:, fingerprint:, siblings: or topic:"..." — got "${trimmed.slice(0, 40)}"`,
+      `a query must start with file:, gate:, fingerprint:, siblings:, tests: or topic:"..." — got "${trimmed.slice(0, 40)}"`,
       pos,
     );
   }
@@ -349,6 +364,21 @@ export function cgqlForSiblings(path: string, limit = 2): string | null {
   const clean = String(path ?? '').trim();
   if (!clean || /[%\\,]/.test(clean) || clean.includes('..')) return null;
   return `siblings:${clean} | nodes limit=${Math.min(MAX_LIMIT, limit)}`;
+}
+
+/**
+ * Build CGQL for "what covers this file".
+ *
+ * The failure this answers is specific and recorded: builds guessing test
+ * filenames. `src/lib/jkai/test-runner.ts` is covered by
+ * `test-runner.diagnostics.test.ts`, and agents went looking for
+ * `test-runner.test.ts` — 19 ENOENTs across three builds. The graph has held
+ * the answer in a `tests` edge the whole time.
+ */
+export function cgqlForTests(path: string, limit = 2): string | null {
+  const clean = String(path ?? '').trim();
+  if (!clean || /[%\\,]/.test(clean) || clean.includes('..')) return null;
+  return `tests:${clean} | nodes limit=${Math.min(MAX_LIMIT, limit)}`;
 }
 
 /**

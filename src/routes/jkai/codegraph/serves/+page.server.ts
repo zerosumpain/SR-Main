@@ -89,5 +89,67 @@ export const load: PageServerLoad = async () => {
     FROM codegraph_queries WHERE channel = 'push'
   `).then((r) => r.rows as Array<Record<string, unknown>>);
 
-  return { recent, byChannel, iterations, perBuild, impact: impact ?? {}, resolution: resolution ?? {} };
+
+  /*
+   * DISCOVERY COST — the measure the precedent channel is actually judged on.
+   *
+   * Iterations-to-green is a noisy proxy: a build fails on a provider outage or
+   * a missing module as readily as on bad context, and neither has anything to
+   * do with whether the agent knew what this codebase looks like. Discovery
+   * does: it is the work of finding out, and it is what handing over an
+   * exemplar is supposed to replace.
+   *
+   * NOTE ON THE FILTER. `git_target_config IS NOT NULL` is NOT enough — 44 of
+   * the 82 rows that pass it hold the JSON literal `null` and are app or studio
+   * builds. An earlier measurement of this same question was taken over that
+   * contaminated set and reported 81 repo builds where there were 38. Every
+   * query on this page that says "repo build" must carry the `<> 'null'` half.
+   *
+   * Baseline frozen 2026-08-18, before the first precedent serve: 38 repo
+   * builds, 84 iterations with recorded actions, 1,868 actions of which 1,168
+   * (62.5%) were discovery and 193 (10.3%) were edits or writes; 782 reads over
+   * 244 distinct files = 3.20 reads per file.
+   */
+  const discovery = await db.execute(sql`
+    WITH iter AS (
+      SELECT i.id,
+             EXISTS (
+               SELECT 1 FROM codegraph_queries q
+               WHERE q.iteration_id = i.id AND q.channel = 'precedent' AND q.outcome = 'served'
+             ) AS served
+      FROM jkai_iterations i
+      JOIN jkai_builds b ON b.id = i.build_id
+      WHERE b.git_target_config IS NOT NULL AND b.git_target_config::text <> 'null'
+        AND jsonb_typeof(i.actions) = 'array' AND jsonb_array_length(i.actions) > 0
+    ),
+    act AS (
+      SELECT iter.id, iter.served, a->>'lang' AS lang, a->>'code' AS code
+      FROM iter
+      JOIN jkai_iterations i ON i.id = iter.id
+      CROSS JOIN LATERAL jsonb_array_elements(i.actions) a
+    ),
+    per_iter AS (
+      SELECT id, served,
+             count(*) FILTER (WHERE lang IN ('read','grep','find','ls'))::int AS discovery,
+             count(*) FILTER (WHERE lang IN ('edit','write'))::int            AS productive
+      FROM act GROUP BY id, served
+    ),
+    per_lane AS (
+      SELECT served,
+             count(*) FILTER (WHERE lang = 'read')::int              AS reads,
+             count(DISTINCT code) FILTER (WHERE lang = 'read')::int  AS files
+      FROM act GROUP BY served
+    )
+    SELECT p.served,
+           count(*)::int                       AS iterations,
+           round(avg(p.discovery), 2)          AS discovery_per_iteration,
+           round(avg(p.productive), 2)         AS edits_per_iteration,
+           l.reads, l.files,
+           round(l.reads::numeric / nullif(l.files, 0), 2) AS reads_per_file
+    FROM per_iter p JOIN per_lane l ON l.served = p.served
+    GROUP BY p.served, l.reads, l.files
+    ORDER BY p.served
+  `).then((r) => r.rows as Array<Record<string, unknown>>);
+
+  return { recent, byChannel, iterations, perBuild, discovery, impact: impact ?? {}, resolution: resolution ?? {} };
 };
