@@ -9,6 +9,7 @@
     { href: '/decks', label: 'Decks' },
     { href: '/blog', label: 'Writing' },
     { href: '/health', label: 'Health' },
+    { href: '/trails', label: 'Trails' },
     { href: '/live', label: 'Live' },
     { href: '/jkai', label: 'jkai' },
     { href: '/drive', label: 'Drive' },
