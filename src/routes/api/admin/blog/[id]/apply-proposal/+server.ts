@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { updatePostFields, replaceTags, getPostById } from '$lib/blog';
-import { appendMessage } from '$lib/blog/assistant/messages';
+import { recordResolutionBestEffort } from '$lib/blog/assistant/resolution';
 import { db } from '$lib/db';
 import { blogPostRevisions } from '$lib/db/schema';
 
@@ -9,7 +9,20 @@ type Body = {
   proposalId: string;
   field: 'title' | 'excerpt' | 'slug' | 'tags' | 'status' | 'cover_alt';
   value: unknown;
+  /** The model's stated justification, carried through to the resolution record. */
+  reason?: string;
+  /** What the model originally proposed, when the author edited it before
+   *  accepting. Absent means `value` is the model's suggestion unchanged. */
+  suggested?: unknown;
 };
+
+/** Meta values are unknown-typed (tags arrive as an array, status as a string).
+ *  Flatten to the text form the resolution record stores. */
+function asText(v: unknown): string | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v);
+}
 
 export const POST: RequestHandler = async ({ params, request }) => {
   const postId = Number(params.id);
@@ -21,6 +34,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   // Snapshot the previous value BEFORE applying so the user can roll back.
   const cur = await getPostById(postId);
+  let previousValue: string | undefined;
   if (cur) {
     let prev: string;
     switch (field) {
@@ -32,6 +46,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       case 'cover_alt': prev = (cur as { coverImageAlt?: string | null }).coverImageAlt ?? ''; break;
       default: prev = '';
     }
+    previousValue = prev;
     await db.insert(blogPostRevisions).values({
       postId,
       proposalId: body.proposalId ?? null,
@@ -71,10 +86,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   if (body.proposalId) {
-    await appendMessage(
-      postId, 'proposal_resolved',
-      JSON.stringify({ id: body.proposalId, status: 'accepted' }),
-    ).catch(() => undefined);
+    // Best-effort: the post has already been updated by this point, so failing
+    // the whole request over a missing audit row would be the worse outcome.
+    const recorded = await recordResolutionBestEffort(postId, {
+      id: body.proposalId,
+      status: 'accepted',
+      kind: 'meta',
+      field,
+      original: previousValue,
+      suggested: asText(body.suggested !== undefined ? body.suggested : value),
+      final: asText(value),
+      reason: body.reason,
+    });
+    if (!recorded) console.warn('[apply-proposal] resolution not recorded', postId, body.proposalId);
   }
 
   const post = await getPostById(postId);

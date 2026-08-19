@@ -40,12 +40,28 @@ export const blogPosts = pgTable('blog_posts', {
   coverImageUrl: text('cover_image_url'),
   coverImageAlt: text('cover_image_alt'),
   contentFormat: text('content_format').default('html').notNull(),
+  // Who actually wrote the prose. Load-bearing for the voice system: only
+  // 'human' posts may seed the Voice Card or supply exemplars. Feeding
+  // generated text back into the corpus is model collapse in miniature —
+  // with a corpus this small a handful of generated posts would outweigh
+  // the real ones inside a month. Default 'unknown' so untagged rows are
+  // excluded rather than silently trusted.
+  authorship: text('authorship').notNull().default('unknown'),
   previewToken: text('preview_token').$defaultFn(() => crypto.randomUUID()),
   status: text('status').notNull().default('draft'),
   publishedAt: timestamp('published_at'),
   createdAt: timestamp('created_at'),
   updatedAt: timestamp('updated_at'),
 });
+
+// Authorship vocabulary lives in $lib/blog/authorship so the admin UI can import
+// it without pulling this file into the client bundle. Re-exported here for the
+// server-side callers that already import from the schema.
+export {
+  BLOG_AUTHORSHIP,
+  isBlogAuthorship,
+  type BlogAuthorship,
+} from '$lib/blog/authorship';
 
 export const blogPostTags = pgTable('blog_post_tags', {
   id: serial('id').primaryKey(),
