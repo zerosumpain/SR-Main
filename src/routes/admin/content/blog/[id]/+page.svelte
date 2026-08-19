@@ -390,57 +390,5 @@
     color: var(--code-text);
     padding: 0.08rem 0.38rem;
   }
-  .content-area { min-height: 480px; line-height: 1.6; font-family: var(--font-mono); font-size: var(--fs-label-xs); }
   .bottom-row { display: flex; justify-content: flex-start; padding: 0.5rem 0 1.5rem; }
-
-  .prose :global(h1),
-  .prose :global(h2),
-  .prose :global(h3) {
-    font-family: var(--font-display);
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: -0.01em;
-    color: var(--text-primary);
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-  }
-  .prose :global(h2) { font-size: 1.5rem; }
-  .prose :global(h3) { font-size: 1.25rem; }
-  .prose :global(p) {
-    margin-bottom: 1.25em;
-    line-height: 1.8;
-    font-size: 1rem;
-    color: var(--text-secondary);
-  }
-  .prose :global(a) {
-    color: var(--accent);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-  .prose :global(code) {
-    font-family: var(--font-mono);
-    font-size: max(0.875em, var(--fs-label-xs));
-    padding: 0.2em 0.5em;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-  }
-  .prose :global(pre) {
-    padding: 1.25em 1.5em;
-    overflow-x: auto;
-    margin: 1.5em 0;
-    font-size: 0.875rem;
-    background: var(--card-bg);
-    border: 2px solid var(--card-border);
-  }
-  .prose :global(pre code) { padding: 0; background: none; border: none; }
-  .prose :global(blockquote) {
-    border-left: 3px solid var(--accent);
-    padding-left: 1.25em;
-    margin: 1.5em 0;
-    font-style: italic;
-    color: var(--text-muted);
-  }
-  .prose :global(ul), .prose :global(ol) { padding-left: 1.5em; margin-bottom: 1.25em; }
-  .prose :global(li) { margin-bottom: 0.5em; line-height: 1.8; color: var(--text-secondary); }
-  .prose :global(img) { max-width: 100%; margin: 1.5em 0; }
 </style>

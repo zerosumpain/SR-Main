@@ -83,10 +83,30 @@
     color: var(--text-muted);
   }
 
+  /* Tailwind's preflight strips list markers globally — restore them here. */
   .prose :global(ul),
   .prose :global(ol) {
     padding-left: 1.5em;
     margin-bottom: 1.25em;
+  }
+
+  .prose :global(ul) {
+    list-style: disc;
+  }
+
+  .prose :global(ul ul) {
+    list-style: circle;
+    margin-top: 0.5em;
+    margin-bottom: 0;
+  }
+
+  .prose :global(ol) {
+    list-style: decimal;
+  }
+
+  .prose :global(ol ol) {
+    margin-top: 0.5em;
+    margin-bottom: 0;
   }
 
   .prose :global(li) {
@@ -96,9 +116,64 @@
     color: var(--text-secondary);
   }
 
+  .prose :global(li::marker) {
+    color: var(--accent);
+  }
+
+  .prose :global(ol > li::marker) {
+    font-family: var(--font-mono);
+  }
+
   .prose :global(img) {
     max-width: 100%;
     margin: 1.5em 0;
+    border: 1px solid var(--card-border);
+  }
+
+  .prose :global(figure) {
+    margin: 2em 0;
+  }
+
+  .prose :global(figure img) {
+    margin: 0;
+  }
+
+  .prose :global(figcaption) {
+    margin-top: 0.6em;
+    font-family: var(--font-mono);
+    font-size: max(0.8125rem, var(--fs-label-xs));
+    color: var(--text-muted);
+  }
+
+  .prose :global(figure.project-embed) {
+    border: 2px solid var(--line-strong);
+    background: var(--card-bg);
+  }
+
+  .prose :global(figure.project-embed iframe) {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border: 0;
+  }
+
+  .prose :global(figure.project-embed figcaption) {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border-top: 2px solid var(--line-strong);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .prose :global(figure.project-embed figcaption a) {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .prose :global(figure.project-embed figcaption a:hover) {
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .prose :global(hr) {
