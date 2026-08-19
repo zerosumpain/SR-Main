@@ -659,10 +659,23 @@
     color: var(--text-muted);
   }
 
+  /* Tailwind's preflight strips list markers globally — restore them here. */
   .preview-pane :global(ul),
   .preview-pane :global(ol) {
     padding-left: 1.5em;
     margin-bottom: 1.25em;
+  }
+
+  .preview-pane :global(ul) {
+    list-style: disc;
+  }
+
+  .preview-pane :global(ul ul) {
+    list-style: circle;
+  }
+
+  .preview-pane :global(ol) {
+    list-style: decimal;
   }
 
   .preview-pane :global(li) {
@@ -671,9 +684,29 @@
     color: var(--text-secondary);
   }
 
+  .preview-pane :global(li::marker) {
+    color: var(--accent);
+  }
+
   .preview-pane :global(img) {
     max-width: 100%;
     margin: 1.5em 0;
+    border: 1px solid var(--card-border);
+  }
+
+  .preview-pane :global(figure) {
+    margin: 1.5em 0;
+  }
+
+  .preview-pane :global(figure img) {
+    margin: 0;
+  }
+
+  .preview-pane :global(figcaption) {
+    margin-top: 0.5em;
+    font-family: var(--font-mono);
+    font-size: max(0.8125rem, var(--fs-label-xs));
+    color: var(--text-muted);
   }
 
   /* Status bar */
