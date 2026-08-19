@@ -131,10 +131,13 @@
 </div>
 
 <p class="footnote">
-  Best in each column is marked. Efficiency is metres per minute per beat, the same measure the
-  activity pages use; cost is its mirror — heartbeats spent per kilometre.
+  Efficiency is metres per minute per beat, the same measure the activity pages use; cost is its
+  mirror — heartbeats spent per kilometre. Those two are the ones that answer whether you are
+  getting fitter: the lowest average heart rate is marked like the rest, but on its own it usually
+  just means you took it gently.
   {#if !anyHeartrate}
-    None of these efforts carries heart-rate data, so both are blank throughout.
+    None of these efforts carries heart-rate data, so all three heart-rate columns are blank
+    throughout.
   {/if}
 </p>
 
