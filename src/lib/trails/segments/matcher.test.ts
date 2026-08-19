@@ -63,6 +63,39 @@ describe('discoverSegments — the 500 m / 20 m contract', () => {
     expect(discoverSegments(sources).segments).toHaveLength(1);
     expect(discoverSegments(sources, { minLengthM: 1000 }).segments).toEqual([]);
   });
+
+  it('never returns a segment shorter than the threshold it claims', () => {
+    // A winding shared path: the chord sum between resampled points reads
+    // shorter than the distance walked, which is what let 479 m segments
+    // through a "500 m" filter in the first place.
+    const winding: Array<[number, number]> = [];
+    for (let i = 0; i <= 60; i++) winding.push([i * 10, i % 2 === 0 ? 0 : 9]);
+
+    for (const minLengthM of [500, 400, 600]) {
+      const { segments } = discoverSegments(
+        [makeSource('a', winding), makeSource('b', winding.map(([e, n]) => [e, n + 5]))],
+        { minLengthM },
+      );
+      for (const segment of segments) {
+        expect(segment.distanceM).toBeGreaterThanOrEqual(minLengthM);
+      }
+    }
+  });
+
+  it('spans the threshold in steps, not in points', () => {
+    // 495 m used to qualify: 50 resampled points enclose only 49 steps, so a
+    // "500 m" segment measured 490. It must not any more. Deliberately not
+    // testing exactly 500 m — that lands on a float boundary where the summed
+    // chords come to 499.999…, and a knife-edge case would pin rounding noise
+    // rather than the rule.
+    const at = (m: number): Array<[number, number]> => [[0, 0], [m, 0]];
+    expect(
+      discoverSegments([makeSource('a', at(560)), makeSource('b', at(560))]).segments,
+    ).toHaveLength(1);
+    expect(
+      discoverSegments([makeSource('a', at(495)), makeSource('b', at(495))]).segments,
+    ).toEqual([]);
+  });
 });
 
 describe('discoverSegments — direction', () => {
