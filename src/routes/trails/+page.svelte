@@ -82,6 +82,7 @@
     </div>
     <nav class="hdr-nav">
       <a href="/trails/dashboard">Dashboard</a>
+      <a href="/trails/segments">Segments</a>
       <a href="/trails/plan">Plan</a>
       <a href="/trails/routes">Routes</a>
       <a href="/trails/record">Record</a>

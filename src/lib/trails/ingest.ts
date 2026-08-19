@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activities, activitySeries, activityTracks } from '$lib/db/schema';
 import { mapWorkout, type HaeWorkout } from './hae-workouts';
+import { scheduleSegmentRebuild } from './segments-service';
 
 export interface IngestResult {
   workoutsSynced: number;
@@ -117,6 +118,11 @@ export async function ingestWorkouts(workouts: HaeWorkout[]): Promise<IngestResu
       result.errors.push(`${label}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
+
+  // New ground may repeat old ground. Deliberately not awaited: the phone is
+  // already holding a large upload open, and a segment rebuild is worth a few
+  // seconds of background work but not a few seconds of the handset's time.
+  if (result.tracksSynced > 0) scheduleSegmentRebuild();
 
   return result;
 }

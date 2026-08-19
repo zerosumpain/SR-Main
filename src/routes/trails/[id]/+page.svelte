@@ -3,6 +3,7 @@
   import TrackMap from '$lib/components/trails/TrackMap.svelte';
   import LineChart from '$lib/components/trails/LineChart.svelte';
   import SplitsTable from '$lib/components/trails/SplitsTable.svelte';
+  import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
   import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
@@ -35,6 +36,15 @@
   const elevationPoints = $derived(
     a.elevation.map((p) => [p.distanceM, p.elevationM] as [number, number]),
   );
+
+  const segments = $derived(data.segments ?? []);
+
+  /** "2nd of 11" reads better than "rank 2", and says what the 2 is out of. */
+  function ordinal(n: number): string {
+    const rem100 = n % 100;
+    if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+    return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+  }
 
   const heartRate = $derived(a.series.find((s) => s.metric === 'heart_rate') ?? null);
   const cadence = $derived(a.series.find((s) => s.metric === 'cadence') ?? null);
@@ -219,6 +229,41 @@
     <SplitsTable splits={a.splits} paceSport={pace} />
   </section>
 
+  {#if segments.length}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">Segments on this one</span>
+        <a class="nm-sec-meta seg-all" href="/trails/segments">All segments →</a>
+      </div>
+      <ul class="seg-list">
+        {#each segments as row (`${row.segmentId}:${row.effort.id}`)}
+          <li>
+            <a class="seg-row" href="/trails/segments/{row.segmentId}">
+              <TrackThumb polyline={row.polyline} size={40} />
+              <span class="seg-main">
+                <span class="seg-name">
+                  {row.name}{#if row.effort.lapIndex > 1}<span class="seg-lap"
+                      >lap {row.effort.lapIndex}</span
+                    >{/if}
+                </span>
+                <span class="seg-desc">{row.descriptor}</span>
+              </span>
+              <span class="seg-nums">
+                <span class="seg-time">{formatDuration(row.effort.durationS)}</span>
+                <span class="seg-rank">
+                  {#if row.rankByTime}{ordinal(row.rankByTime)} of {row.effortCount} on time{:else}unranked{/if}
+                  {#if row.rankByEfficiency}
+                    · {ordinal(row.rankByEfficiency)} on efficiency
+                  {/if}
+                </span>
+              </span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   <section class="nm-sec provenance">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Provenance</span>
@@ -251,6 +296,63 @@
 />
 
 <style>
+  .seg-all {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .seg-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .seg-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.55rem 0.15rem;
+    border-bottom: 1px solid var(--line-hair);
+    text-decoration: none;
+    color: inherit;
+  }
+  .seg-row:hover {
+    background: var(--surface-sunken);
+  }
+  .seg-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .seg-name {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+  }
+  .seg-lap {
+    margin-left: 0.4rem;
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+  }
+  .seg-desc,
+  .seg-rank {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+  .seg-nums {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+  }
+  .seg-time {
+    font-family: var(--font-mono);
+    font-size: var(--fs-body);
+    color: var(--text-primary);
+  }
+
   .wrap {
     max-width: 1100px;
     margin: 0 auto;
