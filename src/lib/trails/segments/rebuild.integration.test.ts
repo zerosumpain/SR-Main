@@ -1,15 +1,44 @@
 // Exercises the real rebuild against whatever is in the configured database.
+//
 // Excluded from `gate:test` (the *.integration.test.ts pattern) because it
-// needs Postgres; run it directly when changing the matcher, to see what it
-// actually does to real traces rather than to synthetic ones.
+// needs Postgres, but INCLUDED in the nightly `gate:test:full`, which runs
+// against a throwaway container with no workouts in it. So it does not assume
+// data: an empty database is a real state — it is what production looks like
+// before the first workout syncs — and the rebuild has to answer it with a
+// coherent empty report rather than an exception.
+//
+// With real traces present it prints a readable report, which is the point of
+// running it by hand after changing the matcher: synthetic tests prove the
+// contract, this shows you what it actually did to your own walks.
 import { it, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
+import { db } from '$lib/db';
+import { activityTracks } from '$lib/db/schema';
 import { rebuildSegments, listSegments, getSegment } from '../segments-service';
 import { formatDistance, formatDuration, formatPace } from '../format';
 
-it('rebuilds segments from the real activity set', async () => {
+it('rebuilds segments from whatever traces are stored', async () => {
+  const anyTrack = await db.select({ id: activityTracks.id }).from(activityTracks).limit(1);
+
+  if (!anyTrack.length) {
+    const report = await rebuildSegments();
+    expect(report.activitiesConsidered).toBe(0);
+    expect(report.segments).toBe(0);
+    expect(report.efforts).toBe(0);
+    expect(report.created).toBe(0);
+    return;
+  }
+
   const report = await rebuildSegments();
   const { rows } = await listSegments({ limit: 500 });
+
+  expect(report.activitiesConsidered).toBeGreaterThan(0);
+  expect(rows.length).toBe(report.segments);
+  // Every stored segment must clear both thresholds it claims to enforce.
+  for (const row of rows) {
+    expect(row.distanceM).toBeGreaterThanOrEqual(500);
+    expect(row.effortCount).toBeGreaterThanOrEqual(2);
+  }
 
   const lines: string[] = [
     `activities considered : ${report.activitiesConsidered}`,
@@ -48,6 +77,5 @@ it('rebuilds segments from the real activity set', async () => {
     }
   }
 
-  writeFileSync(process.env.SEG_REPORT ?? '/tmp/seg-report.txt', lines.join('\n'));
-  expect(report.activitiesConsidered).toBeGreaterThan(0);
+  if (process.env.SEG_REPORT) writeFileSync(process.env.SEG_REPORT, lines.join('\n'));
 }, 600_000);
