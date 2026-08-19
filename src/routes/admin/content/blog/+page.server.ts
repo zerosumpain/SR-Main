@@ -40,6 +40,11 @@ export const load: PageServerLoad = async () => {
   // this scale it costs nothing, and the whole point of the authorship column
   // is that guessing is what got us here. Move this into the voice build
   // script once the corpus is large enough for the read to matter.
+  //
+  // Deliberately a second query rather than adding `content` to the select
+  // above: that result is serialised to the browser, and shipping every post
+  // body to a list page to render a word count would be absurd. These rows
+  // never leave the server.
   const bodies = await db
     .select({ authorship: blogPosts.authorship, content: blogPosts.content })
     .from(blogPosts);

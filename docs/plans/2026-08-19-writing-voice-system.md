@@ -8,21 +8,22 @@ Claude Code + builder prompt stacks.
 ## Findings that shape the design (measured, 2026-08-19)
 
 **The corpus is small and unlabelled.** Prod `blog_posts` holds **13 rows**, 1 published.
-Word counts, measured rather than estimated:
+Word counts below are measured with the same `plainTextFromHtml` + `countWords` the corpus
+meter uses — a naive tag-strip in SQL overcounts by ~25%, so only one measure is quoted:
 
 | id | slug | words | authorship |
 |---|---|---|---|
-| 9 | `ai-after-openclaw` | 1,834 | human |
-| 13 | `i-built-a-thing` | 1,221 | human (the published one) |
-| 12 | `the-great-eastern-railway…` | 1,203 | **generated** |
-| 6 | `the-state-of-agentic-coding` | 487 | human |
-| 10 | `hello-world` | 434 | **generated** |
-| 11 | `reflecting-and-projecting` | 330 | human |
-| 8 | `brave-new-world` | 230 | human |
-| 3 | `so-here-it-is` | 67 | human, below the prose floor |
-| 1, 2, 14, 4, 5 | stubs | 21, 20, 18, 7, 3 | human, below the floor |
+| 9 | `ai-after-openclaw` | 1,420 | human |
+| 12 | `the-great-eastern-railway…` | 933 | **generated** |
+| 13 | `i-built-a-thing` | 920 | human (the published one) |
+| 6 | `the-state-of-agentic-coding` | 408 | human |
+| 10 | `hello-world` | 320 | **generated** |
+| 11 | `reflecting-and-projecting` | 269 | human |
+| 8 | `brave-new-world` | 181 | human |
+| 3 | `so-here-it-is` | 45 | human, below the prose floor |
+| 1, 2, 14, 5, 4 | stubs | 15, 15, 15, 5, 4 | human, below the floor |
 
-**Usable corpus: 5 posts, 4,102 words.** Two posts are machine-written, not one:
+**Usable corpus: 5 posts, 3,198 words.** Two posts are machine-written, not one:
 `id=12` is textbook model prose (*"Its story is one of ambition, near-collapse, …"*), and
 `id=10` is written in JKAI's first person (*"Hi. I'm JKAI… a bloke called John"*) — it is
 copy *about* John, not *by* him, and would poison a "write as John" corpus outright.
@@ -55,7 +56,7 @@ roughly 40 are extraction, classification and routing. Global injection would de
 
 ## Architecture (decided)
 
-Not fine-tuning — 4,100 words is two orders of magnitude short, costs per iteration, and
+Not fine-tuning — 3,200 words is two orders of magnitude short, costs per iteration, and
 the stack is OpenRouter-only. Not naive RAG — semantic retrieval returns *topically*
 similar passages when what's wanted is *stylistically* representative ones.
 
@@ -191,7 +192,7 @@ theatre. **Phase 3 gates phases 4–5.**
 
 | Phase | Command / check |
 |---|---|
-| 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 4,102 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
+| 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 3,198 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
 | 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
 | 3 | Committed test: `scoreVoice(post 13) > scoreVoice(post 12)` by the stated margin |

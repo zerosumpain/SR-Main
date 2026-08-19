@@ -23,9 +23,11 @@ export const CORPUS_AUTHORSHIP: BlogAuthorship = 'human';
  * anything about voice. Authorship records *who wrote it* — the stubs really
  * are John's — so the length judgement belongs here rather than in the tag.
  *
- * 100 sits cleanly in the gap. Measured over the 13 production posts: the
- * longest stub (`so-here-it-is`) is 67 words, the next 18; the shortest real
- * post (`brave-new-world`) is 230.
+ * 100 sits in the gap, measured over the 13 production posts with the same
+ * plainTextFromHtml + countWords the meter uses: the longest stub
+ * (`so-here-it-is`) is 45 words and the next is 15; the shortest real post
+ * (`brave-new-world`) is 181. Nothing lands between 45 and 181, so the floor
+ * has ~2x headroom in both directions.
  */
 export const MIN_CORPUS_WORDS = 100;
 
