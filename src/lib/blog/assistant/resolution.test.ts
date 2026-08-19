@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildResolution,
   parseResolution,
@@ -109,6 +109,22 @@ describe('parseResolution', () => {
     expect(parseResolution(JSON.stringify({ id: 'x' }))).toBeNull();
     expect(parseResolution(JSON.stringify({ id: 'x', status: 'pending' }))).toBeNull();
     expect(parseResolution(JSON.stringify({ status: 'accepted' }))).toBeNull();
+  });
+});
+
+describe('recording failures', () => {
+  it('recordResolutionBestEffort swallows and reports false', async () => {
+    vi.resetModules();
+    vi.doMock('./messages', () => ({
+      appendMessage: () => Promise.reject(new Error('db down')),
+    }));
+    const mod = await import('./resolution');
+    await expect(mod.recordResolution(1, { id: 'x', status: 'rejected', kind: 'prose' }))
+      .rejects.toThrow('db down');
+    expect(await mod.recordResolutionBestEffort(1, { id: 'x', status: 'rejected', kind: 'prose' }))
+      .toBe(false);
+    vi.doUnmock('./messages');
+    vi.resetModules();
   });
 });
 

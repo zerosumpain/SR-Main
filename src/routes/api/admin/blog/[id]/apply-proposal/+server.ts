@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { updatePostFields, replaceTags, getPostById } from '$lib/blog';
-import { recordResolution } from '$lib/blog/assistant/resolution';
+import { recordResolutionBestEffort } from '$lib/blog/assistant/resolution';
 import { db } from '$lib/db';
 import { blogPostRevisions } from '$lib/db/schema';
 
@@ -86,7 +86,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
   }
 
   if (body.proposalId) {
-    await recordResolution(postId, {
+    // Best-effort: the post has already been updated by this point, so failing
+    // the whole request over a missing audit row would be the worse outcome.
+    const recorded = await recordResolutionBestEffort(postId, {
       id: body.proposalId,
       status: 'accepted',
       kind: 'meta',
@@ -96,6 +98,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       final: asText(value),
       reason: body.reason,
     });
+    if (!recorded) console.warn('[apply-proposal] resolution not recorded', postId, body.proposalId);
   }
 
   const post = await getPostById(postId);

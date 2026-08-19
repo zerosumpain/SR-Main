@@ -88,11 +88,32 @@ export function buildResolution(input: ResolutionInput): ProposalResolution {
   return out;
 }
 
-/** Persist a resolution. Never throws — a failed record must not break an
- *  otherwise-successful edit the author just made. */
+/**
+ * Persist a resolution, propagating failures. Use this wherever recording IS
+ * the job — a caller that reports success while the write failed would lose
+ * the exact signal this module exists to keep, and lose it silently.
+ */
 export async function recordResolution(postId: number, input: ResolutionInput): Promise<void> {
   const resolution = buildResolution(input);
-  await appendMessage(postId, 'proposal_resolved', JSON.stringify(resolution)).catch(() => undefined);
+  await appendMessage(postId, 'proposal_resolved', JSON.stringify(resolution));
+}
+
+/**
+ * Best-effort variant for callers where something more important already
+ * succeeded — `apply-proposal` has by then mutated the post, and failing the
+ * request over a missing audit row would be the worse outcome. Returns whether
+ * the record landed so the caller can log rather than assume.
+ */
+export async function recordResolutionBestEffort(
+  postId: number,
+  input: ResolutionInput,
+): Promise<boolean> {
+  try {
+    await recordResolution(postId, input);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Tolerant read side. Returns null for anything that isn't a resolution,
