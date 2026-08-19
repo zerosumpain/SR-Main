@@ -187,7 +187,7 @@ jobs:
       # fast before anything expensive starts. Runs at EVERY level — these two
       # are the whole gate for a documentation-only change.
       - name: Lint gates
-        run: npm run gate:public-routes && npm run gate:font-sizes
+        run: npm run gate:public-routes && npm run gate:font-sizes && npm run gate:schema-imports
 
       # svelte-check and vitest, concurrently. See scripts/gate-concurrent.sh for
       # why the exit-code handling in there is written the long way round.

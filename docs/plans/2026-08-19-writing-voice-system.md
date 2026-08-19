@@ -199,6 +199,22 @@ theatre. **Phase 3 gates phases 4–5.**
 | 4 | A live jkai turn and a generated release summary both come back in register; Claude skill appears in the index |
 | 5 | Drift job opens a note, changes nothing on its own |
 
+## Deployment snag found the hard way: schema.ts must be self-contained
+
+Phase 0 merged green and deployed, and the `authorship` column **did not reach
+production**. `ci-release.sh` rsyncs `src/lib/db/schema.ts` to the VPS *on its own*
+(plus `drizzle.config.ts`) and runs `drizzle-kit push` against it there. Nothing sets up
+SvelteKit's `$lib` alias in that context, so schema.ts re-exporting the authorship
+vocabulary from `$lib/blog/authorship` died with `Cannot find module '$lib/blog/authorship'`.
+
+The part that makes this dangerous: **the release does not fail when the push fails.** It
+logs the error, finishes the deploy and reports success. Production ran code expecting a
+column the database did not have, with a green tick on the commit.
+
+Fixed two ways: the re-export is gone (it had no callers — everything already imports from
+`$lib/blog/authorship`), and `scripts/check-schema-imports.mjs` now fails the Lint gates
+step if schema.ts ever grows a `$lib` or relative import again.
+
 ## Deployment snags (known in advance)
 
 - **ci-deploy is an allow-list.** Both new `scripts/` files need their own rsync lines, or
@@ -241,11 +257,18 @@ assistant already absent, which is why the loss is invisible in that diff.
 
 So the assistant has been dead in production since **2026-05-07** — three and a half months.
 
-**Why phase 0 did not restore it.** The restoration is not a revert: the page has since
-been consolidated and restructured, and the deleted block also expects `data.history` and
-`data.stats` from a loader that no longer provides them. It is its own piece of work with
-its own verification burden (an LLM-driven UI needs a real browser pass), and expanding
-phase 0 to absorb it would have been scaling the task up uninvited.
+**Why phase 0 did not restore it.** The restoration is not a revert — the page was
+consolidated and restructured after the deletion — and an LLM-driven UI carries its own
+verification burden, so it was scoped as phase 0.5 rather than folded in uninvited.
+
+**Correction, found while doing 0.5:** the loader was *not* stripped. Both `data.history`
+and `data.stats` are still returned by `admin/content/blog/[id]/+page.server.ts`; only the
+page markup lost the mount, which made the restoration considerably smaller than estimated.
+`BlogStatsCard` is a separate case — it was deliberately retired in `861d3269` (*"retire
+provably unreachable code"*) precisely because the deleted mount had made it unreachable,
+so it stays retired. `data.stats` is consequently computed on every editor page load —
+four Umami round-trips — and rendered by nothing. Worth deleting from the loader; out of
+scope here.
 
 **What phase 0 delivered instead:** the capture layer is complete, tested against a real
 Postgres, and inert only because nothing calls it yet. The moment the UI is mounted, every
@@ -264,6 +287,12 @@ rejection and every edited acceptance is recorded with no further work.
    and `reason` — that is what turns the UI back on *and* starts the corpus growing.
 5. Verify: reject one suggestion in the editor, then
    `select content from blog_assistant_messages where role='proposal_resolved'` returns it.
+
+**Delivered 2026-08-19** (PR #371). Every resolution path now routes through
+`/resolve-proposal`: prose accept and reject are recorded in RichEditor's callbacks — one
+place, so no path is missed and none records twice — meta rejects record directly, and a
+*regenerate* records as a rejection carrying John's own note as the `reason`, which is the
+most explicit statement of taste the editor can produce.
 
 ## Open decision
 
