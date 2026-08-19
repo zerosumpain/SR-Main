@@ -7,12 +7,29 @@ Claude Code + builder prompt stacks.
 
 ## Findings that shape the design (measured, 2026-08-19)
 
-**The corpus is small and unlabelled.** Prod `blog_posts` holds 14 rows, 1 published.
-Six are stubs or test rows (`sausages` 14 chars, `vcvc` 26, `imposting` 30,
-`testing-testing` 94, `ui-test-post` 98, `so-here-it-is` 279). One (`id=12`, Great Eastern
-Railway) is plainly machine-written — *"Its story is one of ambition, near-collapse, …"*.
-That leaves **6 candidate human posts, ~22,500 chars (~3,800 words)**: ids 6, 8, 9, 10, 11, 13.
-There is no `authorship` column, so nothing distinguishes John's writing from the model's.
+**The corpus is small and unlabelled.** Prod `blog_posts` holds **13 rows**, 1 published.
+Word counts, measured rather than estimated:
+
+| id | slug | words | authorship |
+|---|---|---|---|
+| 9 | `ai-after-openclaw` | 1,834 | human |
+| 13 | `i-built-a-thing` | 1,221 | human (the published one) |
+| 12 | `the-great-eastern-railway…` | 1,203 | **generated** |
+| 6 | `the-state-of-agentic-coding` | 487 | human |
+| 10 | `hello-world` | 434 | **generated** |
+| 11 | `reflecting-and-projecting` | 330 | human |
+| 8 | `brave-new-world` | 230 | human |
+| 3 | `so-here-it-is` | 67 | human, below the prose floor |
+| 1, 2, 14, 4, 5 | stubs | 21, 20, 18, 7, 3 | human, below the floor |
+
+**Usable corpus: 5 posts, 4,102 words.** Two posts are machine-written, not one:
+`id=12` is textbook model prose (*"Its story is one of ambition, near-collapse, …"*), and
+`id=10` is written in JKAI's first person (*"Hi. I'm JKAI… a bloke called John"*) — it is
+copy *about* John, not *by* him, and would poison a "write as John" corpus outright.
+Both make good negative controls for the phase-3 discriminator.
+
+There was no `authorship` column, so nothing distinguished John's writing from the
+model's. Phase 0 adds one.
 
 **The style loop exists and has never run.** `src/lib/blog/assistant/prompt.ts:69`
 (`buildStyleCues`) reads `proposal_resolved` history and returns accept/reject counts.
@@ -38,7 +55,7 @@ roughly 40 are extraction, classification and routing. Global injection would de
 
 ## Architecture (decided)
 
-Not fine-tuning — 3,800 words is two orders of magnitude short, costs per iteration, and
+Not fine-tuning — 4,100 words is two orders of magnitude short, costs per iteration, and
 the stack is OpenRouter-only. Not naive RAG — semantic retrieval returns *topically*
 similar passages when what's wanted is *stylistically* representative ones.
 
@@ -127,8 +144,13 @@ fragments, at five times his real rate.
 ## The stop-gate
 
 Before any fan-out: `scoreVoice` must separate `i-built-a-thing` (id 13, John) from
-`the-great-eastern-railway…` (id 12, machine) by a stated margin, as a committed test.
-If it cannot tell those two apart, the card carries no signal and everything downstream is
+**both** machine-written controls — `the-great-eastern-railway…` (id 12, generic model
+prose) and `hello-world` (id 10, first-person copy written as JKAI) — by a stated margin,
+as a committed test. Two controls rather than one because they fail differently: id 12 is
+florid and impersonal, id 10 is chatty and first-person, and a scorer that only measures
+formality would wave the second one straight through.
+
+If it cannot tell them apart, the card carries no signal and everything downstream is
 theatre. **Phase 3 gates phases 4–5.**
 
 ## Build phases
@@ -169,7 +191,7 @@ theatre. **Phase 3 gates phases 4–5.**
 
 | Phase | Command / check |
 |---|---|
-| 0 | `select authorship, count(*), sum(length(content)) from blog_posts group by 1` — human corpus size stated honestly; reject a proposal and confirm a row lands |
+| 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 4,102 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
 | 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
 | 3 | Committed test: `scoreVoice(post 13) > scoreVoice(post 12)` by the stated margin |

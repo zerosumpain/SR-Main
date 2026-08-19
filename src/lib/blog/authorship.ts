@@ -23,8 +23,9 @@ export const CORPUS_AUTHORSHIP: BlogAuthorship = 'human';
  * anything about voice. Authorship records *who wrote it* — the stubs really
  * are John's — so the length judgement belongs here rather than in the tag.
  *
- * 100 sits cleanly in the gap: the longest stub (`so-here-it-is`, 279 chars)
- * is ~47 words; the shortest real post (`brave-new-world`, 971 chars) is ~165.
+ * 100 sits cleanly in the gap. Measured over the 13 production posts: the
+ * longest stub (`so-here-it-is`) is 67 words, the next 18; the shortest real
+ * post (`brave-new-world`) is 230.
  */
 export const MIN_CORPUS_WORDS = 100;
 
