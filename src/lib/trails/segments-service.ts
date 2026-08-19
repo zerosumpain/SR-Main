@@ -78,7 +78,12 @@ export interface ActivitySegmentRow {
   rankByEfficiency: number | null;
 }
 
-function toListRow(row: typeof activitySegments.$inferSelect): SegmentListRow {
+type SegmentListSource = Omit<
+  typeof activitySegments.$inferSelect,
+  'coordinates' | 'bounds' | 'pointCount' | 'updatedAt'
+>;
+
+function toListRow(row: SegmentListSource): SegmentListRow {
   return {
     id: row.id,
     name: row.name,
@@ -110,8 +115,22 @@ export async function listSegments(
   const { types, limit = 200 } = opts;
   const where = types?.length ? inArray(activitySegments.activityType, types) : undefined;
 
+  // Explicit projection, not select(): `coordinates` holds every point of every
+  // segment, so selecting it here would drag megabytes of jsonb off the
+  // database for a list that renders the encoded polyline instead.
   const rows = await db
-    .select()
+    .select({
+      id: activitySegments.id,
+      name: activitySegments.name,
+      activityType: activitySegments.activityType,
+      distanceM: activitySegments.distanceM,
+      elevationGainM: activitySegments.elevationGainM,
+      elevationLossM: activitySegments.elevationLossM,
+      effortCount: activitySegments.effortCount,
+      firstEffortAt: activitySegments.firstEffortAt,
+      lastEffortAt: activitySegments.lastEffortAt,
+      polyline: activitySegments.polyline,
+    })
     .from(activitySegments)
     .where(where)
     // Busiest first: the ground you cover most is the ground worth comparing.
@@ -201,7 +220,15 @@ export async function getActivitySegments(activityId: string): Promise<ActivityS
   if (!segmentIds.length) return [];
 
   const segments = await db
-    .select()
+    .select({
+      id: activitySegments.id,
+      name: activitySegments.name,
+      distanceM: activitySegments.distanceM,
+      elevationGainM: activitySegments.elevationGainM,
+      elevationLossM: activitySegments.elevationLossM,
+      effortCount: activitySegments.effortCount,
+      polyline: activitySegments.polyline,
+    })
     .from(activitySegments)
     .where(inArray(activitySegments.id, segmentIds));
   const allEfforts = await effortsForSegments(segmentIds);
