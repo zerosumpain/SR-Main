@@ -131,6 +131,24 @@ const NET_CLIMB_M = 20;
 /** Rolling: it comes back to where it started, but not gently. */
 const ROLLING_GAIN_M = 40;
 
+export type SegmentTerrain = 'climb' | 'descent' | 'rolling' | 'flat';
+
+/**
+ * One classification for both the descriptor prose and the explorer's terrain
+ * filter — kept together so a chip can never disagree with the sentence
+ * beside it.
+ */
+export function segmentTerrain(input: {
+  elevationGainM: number;
+  elevationLossM: number;
+}): SegmentTerrain {
+  const net = input.elevationGainM - input.elevationLossM;
+  if (net >= NET_CLIMB_M) return 'climb';
+  if (net <= -NET_CLIMB_M) return 'descent';
+  if (input.elevationGainM >= ROLLING_GAIN_M) return 'rolling';
+  return 'flat';
+}
+
 /**
  * The line that rides alongside the name: `1.2 km · +48 m climb · 9 efforts`.
  *
@@ -142,11 +160,13 @@ export function segmentDescriptor(
   options: DescriptorOptions = {},
 ): string {
   const net = input.elevationGainM - input.elevationLossM;
-  let terrain: string;
-  if (net >= NET_CLIMB_M) terrain = `+${Math.round(net)} m climb`;
-  else if (net <= -NET_CLIMB_M) terrain = `−${Math.round(-net)} m descent`;
-  else if (input.elevationGainM >= ROLLING_GAIN_M) terrain = 'rolling';
-  else terrain = 'flat';
+  const kind = segmentTerrain(input);
+  const terrain =
+    kind === 'climb'
+      ? `+${Math.round(net)} m climb`
+      : kind === 'descent'
+        ? `−${Math.round(-net)} m descent`
+        : kind;
 
   const parts = [formatDistance(input.distanceM), terrain];
   if (options.includeEfforts !== false) {

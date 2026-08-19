@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { segmentSeed, segmentName, segmentDescriptor, WORDLISTS } from './naming';
+import { segmentSeed, segmentName, segmentDescriptor, segmentTerrain, WORDLISTS } from './naming';
 
 const line = (n: number, offset = 0): Array<[number, number, number | null, number]> =>
   Array.from({ length: n }, (_, i) => [-1.5 + (i + offset) * 0.0002, 53 + offset * 0.0002, null, i * 10]);
@@ -102,5 +102,24 @@ describe('segmentDescriptor', () => {
     expect(
       segmentDescriptor({ distanceM: 500, elevationGainM: 0, elevationLossM: 0, effortCount: 1 }),
     ).toMatch(/1 effort$/);
+  });
+});
+
+// The explorer's terrain filter chips use this classification directly, so the
+// boundaries the descriptor prose implies are pinned here as values.
+describe('segmentTerrain', () => {
+  it('draws the climb line at +20 m net', () => {
+    expect(segmentTerrain({ elevationGainM: 20, elevationLossM: 0 })).toBe('climb');
+    expect(segmentTerrain({ elevationGainM: 19, elevationLossM: 0 })).toBe('flat');
+  });
+
+  it('draws the descent line at −20 m net', () => {
+    expect(segmentTerrain({ elevationGainM: 0, elevationLossM: 20 })).toBe('descent');
+    expect(segmentTerrain({ elevationGainM: 0, elevationLossM: 19 })).toBe('flat');
+  });
+
+  it('calls near-level ground with 40 m of gain rolling', () => {
+    expect(segmentTerrain({ elevationGainM: 40, elevationLossM: 38 })).toBe('rolling');
+    expect(segmentTerrain({ elevationGainM: 39, elevationLossM: 38 })).toBe('flat');
   });
 });

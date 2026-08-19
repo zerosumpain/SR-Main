@@ -40,10 +40,18 @@
       .sort((a, b) => a.date.localeCompare(b.date)),
   );
 
+  /** Other ground's best EF next to this segment's best, in percent. */
+  function efficiencyDeltaPct(otherEf: number | null): number | null {
+    const ref = segment.bests.efficiencyFactor;
+    if (otherEf == null || ref == null || !(ref > 0)) return null;
+    return ((otherEf - ref) / ref) * 100;
+  }
+
   const stats = $derived([
     { label: 'Length', value: formatDistance(segment.distanceM) },
     { label: 'Climb', value: formatElevation(segment.elevationGainM) },
     { label: 'Descent', value: formatElevation(segment.elevationLossM) },
+    { label: 'Gradient', value: `${segment.gradientPct > 0 ? '+' : ''}${segment.gradientPct}%` },
     { label: 'Efforts', value: String(segment.effortCount) },
     {
       label: 'Best time',
@@ -88,7 +96,7 @@
     <a class="back-link" href="/trails/segments">All segments</a>
   </header>
 
-  <dl class="stats">
+  <dl class="stats cellgrid">
     {#each stats as stat (stat.label)}
       <div><dt>{stat.label}</dt><dd>{stat.value}</dd></div>
     {/each}
@@ -116,7 +124,70 @@
       <DateLineChart points={efficiencyTrend} label="Efficiency" dp={2} />
     </section>
   {/if}
+
+  {#if data.similar.byClimb.length > 0 || data.similar.byEfficiency.length > 0}
+    <section class="nm-sec">
+      <h2 class="sec-title">Comparable ground</h2>
+      <p class="sec-note">
+        Two ways to put this stretch beside the others you know. <em>Looks the same</em> is the
+        nearest {activityLabel(segment.activityType).toLowerCase()} segments in gradient and length
+        — if your efficiency here beats your efficiency there, that is fitness on this ground, not
+        the hill being kinder. <em>Costs the same</em> is the segments whose best efficiency sits
+        closest to this one's, whatever they look like on the map.
+      </p>
+      <div class="compare-grid">
+        {#if data.similar.byClimb.length > 0}
+          <div class="compare">
+            <h3 class="compare-title">Looks the same</h3>
+            {@render compareTable(data.similar.byClimb)}
+          </div>
+        {/if}
+        {#if data.similar.byEfficiency.length > 0}
+          <div class="compare">
+            <h3 class="compare-title">Costs the same</h3>
+            {@render compareTable(data.similar.byEfficiency)}
+          </div>
+        {/if}
+      </div>
+    </section>
+  {/if}
 </main>
+
+{#snippet compareTable(rows: typeof data.similar.byClimb)}
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th scope="col">Segment</th>
+        <th scope="col" class="num">Profile</th>
+        <th scope="col" class="num" title="That segment's best efficiency factor — metres per minute per beat">
+          Best effic.
+        </th>
+        <th scope="col" class="num" title="Its best efficiency relative to this segment's best">
+          vs here
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each rows as entry (entry.row.id)}
+        {@const other = entry.row}
+        {@const delta = efficiencyDeltaPct(other.bests.efficiencyFactor)}
+        <tr>
+          <th scope="row">
+            <a href="/trails/segments/{other.id}">{other.name}</a>
+          </th>
+          <td class="num profile">
+            {formatDistance(other.distanceM)} ·
+            {other.gradientPct > 0 ? '+' : ''}{other.gradientPct}%
+          </td>
+          <td class="num">{other.bests.efficiencyFactor?.toFixed(2) ?? '—'}</td>
+          <td class="num" class:up={delta != null && delta > 0} class:down={delta != null && delta < 0}>
+            {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)}%`}
+          </td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/snippet}
 
 <style>
   .wrap {
@@ -171,18 +242,15 @@
     flex-shrink: 0;
   }
 
+  /* The shared .cellgrid primitive draws the one-border-per-edge cells; this
+     block only sets the columns and the tighter stat padding. */
   .stats {
-    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
-    gap: 1px;
     margin: 0 0 2rem;
-    background: var(--line-hair);
-    border: 1px solid var(--line-hair);
   }
   .stats > div {
     background: var(--bg);
     padding: 0.7rem 0.85rem;
-    min-width: 0;
   }
   .stats dt {
     font-family: var(--font-mono);
@@ -216,6 +284,81 @@
     line-height: 1.55;
     color: var(--text-secondary);
     max-width: 68ch;
+  }
+  .sec-note em {
+    font-style: normal;
+    color: var(--text-primary);
+  }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+  @media (max-width: 860px) {
+    .compare-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .compare {
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .compare-title {
+    margin: 0 0 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+  .compare-table th,
+  .compare-table td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--line-hair);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .compare-table thead th {
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .compare-table tbody th {
+    font-weight: 500;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .compare-table tbody th a {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .compare-table tbody th a:hover {
+    border-bottom-color: var(--accent);
+  }
+  .compare-table .num {
+    text-align: right;
+  }
+  .compare-table .profile {
+    color: var(--text-muted);
+  }
+  .compare-table .up {
+    color: var(--success);
+  }
+  .compare-table .down {
+    color: var(--error);
   }
 
   @media (max-width: 640px) {

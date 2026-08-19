@@ -7,11 +7,19 @@
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import { zoneEdges } from '$lib/health/analytics/hr-zones';
   import type { ACWRZone } from '$lib/health/analytics/acwr';
-  import { formatDuration, formatDistance, activityLabel, isPaceSport } from '$lib/trails/format';
+  import {
+    formatDuration,
+    formatDistance,
+    formatElevation,
+    formatPace,
+    activityLabel,
+    isPaceSport,
+  } from '$lib/trails/format';
 
   let { data } = $props();
 
   const d = $derived(data.dashboard);
+  const segs = $derived(data.segments);
 
   // --- Methodology drawer -------------------------------------------------
   let drawerOpen = $state(false);
@@ -32,9 +40,10 @@
     evidence: string;
   }
 
-  function delta(latest: number | null, baseline: number | null, downIsGood: boolean) {
+  function delta(latest: number | null, baseline: number | null, downIsGood: boolean, dp = 1) {
     if (latest == null || baseline == null) return null;
-    const diff = Math.round((latest - baseline) * 10) / 10;
+    const scale = 10 ** dp;
+    const diff = Math.round((latest - baseline) * scale) / scale;
     const good = downIsGood ? diff <= 0 : diff >= 0;
     return { diff, good };
   }
@@ -91,6 +100,33 @@
       });
     }
 
+    const eff = d.efficiency?.ef;
+    if (eff?.latest7 != null) {
+      const dl = delta(eff.latest7, eff.baseline28, false, 2);
+      out.push({
+        label: 'Efficiency',
+        value: eff.latest7.toFixed(2),
+        unit: 'm/min/bpm · 7d',
+        sub: (dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—') + staleNote(eff.lastDate),
+        tone: dl ? (dl.good ? 'good' : dl.diff <= -0.05 ? 'warn' : 'neutral') : 'neutral',
+        evidence: 'efficiency-factor',
+      });
+    }
+
+    const bkm = d.efficiency?.bkm;
+    if (bkm?.latest7 != null) {
+      // 1 dp, not 0: a +0.4 b/km drift must not round to "+0" in a good tone.
+      const dl = delta(bkm.latest7, bkm.baseline28, true, 1);
+      out.push({
+        label: 'Cost',
+        value: String(Math.round(bkm.latest7)),
+        unit: 'b/km · 7d',
+        sub: (dl ? `${dl.diff > 0 ? '+' : ''}${dl.diff} vs 28d` : '—') + staleNote(bkm.lastDate),
+        tone: dl ? (dl.good ? 'good' : dl.diff >= 20 ? 'warn' : 'neutral') : 'neutral',
+        evidence: 'efficiency-factor',
+      });
+    }
+
     const lastRecovery = d.recovery.at(-1);
     if (lastRecovery) {
       const v = Math.round(lastRecovery.value);
@@ -112,11 +148,23 @@
       .filter((w) => w.ef != null && isPaceSport(w.activityType))
       .map((w) => ({ date: w.day, value: w.ef! })),
   );
+  const bkmPoints = $derived(
+    (d?.workouts ?? [])
+      .filter((w) => w.beatsPerKm != null && isPaceSport(w.activityType))
+      .map((w) => ({ date: w.day, value: w.beatsPerKm! })),
+  );
   const hrrPoints = $derived(
     (d?.workouts ?? [])
       .filter((w) => w.hrr60 != null)
       .map((w) => ({ date: w.day, value: w.hrr60! })),
   );
+
+  // --- Segment highlights ---------------------------------------------------
+  // The PR's day is the phone's own local day, not the server's UTC one — a
+  // half-past-midnight BST effort belongs to the evening it was lived.
+  function prDay(startDateLocal: string): string {
+    return shortDay(startDateLocal.slice(0, 10));
+  }
 
   // --- Load ---------------------------------------------------------------
   const DAY_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -273,6 +321,12 @@
           colour="var(--accent)"
         />
         <DateLineChart
+          points={bkmPoints}
+          label="Cost — heartbeats per km, runs & walks"
+          unitSuffix=" b/km"
+          colour="var(--accent-ink)"
+        />
+        <DateLineChart
           points={hrrPoints}
           label="HRR60 — 1-min recovery per workout"
           unitSuffix=" bpm"
@@ -281,9 +335,10 @@
         />
       </div>
       <p class="note">
-        Rising VO₂max, falling resting HR, rising HRV, rising efficiency factor and a bigger
-        HRR60 drop all point the same way — aerobic fitness improving. Read trends, not single
-        days.
+        Rising VO₂max, falling resting HR, rising HRV, rising efficiency factor, falling cost and
+        a bigger HRR60 drop all point the same way — aerobic fitness improving. Efficiency and
+        cost are the same measure read in both directions: metres per minute per heartbeat, and
+        heartbeats spent per kilometre. Read trends, not single days.
       </p>
     </section>
 
@@ -356,6 +411,85 @@
             <EvidenceChip id="polarised" onopen={openEvidence} />
           </p>
         {/if}
+      </section>
+    {/if}
+
+    {#if segs && segs.totals.segments > 0}
+      <section class="nm-sec">
+        <div class="nm-sec-hd">
+          <span class="sr-label-tight">Segments</span>
+          <span class="nm-sec-meta">
+            {segs.totals.segments} stretches of repeated ground · {segs.totals.efforts} efforts
+            <EvidenceChip id="efficiency-factor" onopen={openEvidence} />
+          </span>
+        </div>
+
+        <dl class="records cellgrid">
+          {#if segs.records.fastestPace}
+            <div>
+              <dt>Fastest pace</dt>
+              <dd>{formatPace(segs.records.fastestPace.value)}</dd>
+              <a class="rec-seg" href="/trails/segments/{segs.records.fastestPace.segmentId}">
+                {segs.records.fastestPace.name}
+              </a>
+            </div>
+          {/if}
+          {#if segs.records.bestEfficiency}
+            <div>
+              <dt>Best efficiency</dt>
+              <dd>{segs.records.bestEfficiency.value.toFixed(2)}</dd>
+              <a class="rec-seg" href="/trails/segments/{segs.records.bestEfficiency.segmentId}">
+                {segs.records.bestEfficiency.name}
+              </a>
+            </div>
+          {/if}
+          {#if segs.records.lowestCost}
+            <div>
+              <dt>Lowest cost</dt>
+              <dd>{Math.round(segs.records.lowestCost.value)} b/km</dd>
+              <a class="rec-seg" href="/trails/segments/{segs.records.lowestCost.segmentId}">
+                {segs.records.lowestCost.name}
+              </a>
+            </div>
+          {/if}
+          {#if segs.records.biggestClimb}
+            <div>
+              <dt>Biggest climb</dt>
+              <dd>+{formatElevation(segs.records.biggestClimb.value)}</dd>
+              <a class="rec-seg" href="/trails/segments/{segs.records.biggestClimb.segmentId}">
+                {segs.records.biggestClimb.name}
+              </a>
+            </div>
+          {/if}
+        </dl>
+
+        {#if segs.recentPrs.length > 0}
+          <div class="prs">
+            <span class="sr-label-tight">New bests — last 30 days</span>
+            <ul class="pr-list">
+              {#each segs.recentPrs as pr (`${pr.segmentId}:${pr.metric}`)}
+                <li>
+                  <span class="pr-date">{prDay(pr.startDateLocal)}</span>
+                  <a class="pr-name" href="/trails/segments/{pr.segmentId}">{pr.name}</a>
+                  <span class="pr-what">
+                    {pr.metric === 'time'
+                      ? `fastest ever — ${formatDuration(pr.value)}`
+                      : `most efficient ever — ${pr.value.toFixed(2)}`}
+                    <span class="pr-of">of {pr.effortCount} efforts</span>
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        <nav class="seg-links">
+          <a href="/trails/segments">All segments</a>
+          <a href="/trails/segments?sort=climb">Biggest climbs</a>
+          <a href="/trails/segments?offroad=1">Offroad</a>
+          <a href="/trails/segments?sort=efficiency">Best efficiency</a>
+          <a href="/trails/segments?sort=cost">Lowest cost</a>
+        </nav>
       </section>
     {/if}
 
@@ -432,7 +566,7 @@
 
   .tile-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     gap: 1rem 1.25rem;
   }
   @media (max-width: 700px) {
@@ -548,6 +682,101 @@
   .tag.bad {
     border-color: var(--error);
     color: var(--error);
+  }
+
+  /* The shared .cellgrid primitive draws the one-border-per-edge cells; this
+     block only sets the columns and the tighter stat padding. */
+  .records {
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+    margin: 0 0 1.25rem;
+  }
+  .records > div {
+    background: var(--bg);
+    padding: 0.7rem 0.85rem;
+  }
+  .records dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+  }
+  .records dd {
+    margin: 0.25rem 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-lg);
+    color: var(--text-primary);
+  }
+  .rec-seg {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rec-seg:hover {
+    text-decoration: underline;
+  }
+
+  .prs {
+    margin-bottom: 1.25rem;
+  }
+  .pr-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+  }
+  .pr-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.75rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--line-hair);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+  .pr-date {
+    color: var(--text-muted);
+    font-size: var(--fs-label-xs);
+    min-width: 3.5rem;
+  }
+  .pr-name {
+    color: var(--text-primary);
+    text-decoration: none;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  .pr-name:hover {
+    border-bottom-color: var(--accent);
+  }
+  .pr-what {
+    color: var(--text-secondary);
+  }
+  .pr-of {
+    color: var(--text-ghost);
+    margin-left: 0.35rem;
+    font-size: var(--fs-label-xs);
+  }
+
+  .seg-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+  }
+  .seg-links a {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .seg-links a:hover {
+    text-decoration: underline;
   }
 
   .methods {

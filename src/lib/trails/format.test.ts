@@ -9,6 +9,7 @@ import {
   formatEnergy,
   activityLabel,
   isPaceSport,
+  isOffroadType,
   formatLocalDate,
 } from './format';
 
@@ -113,6 +114,21 @@ describe('activity labels', () => {
     expect(isPaceSport('hike')).toBe(true);
     expect(isPaceSport('ride')).toBe(false);
     expect(isPaceSport('mtb')).toBe(false);
+  });
+});
+
+describe('isOffroadType', () => {
+  it('counts the sports that only happen off the tarmac', () => {
+    expect(isOffroadType('trail_run')).toBe(true);
+    expect(isOffroadType('mtb')).toBe(true);
+    expect(isOffroadType('hike')).toBe(true);
+  });
+
+  it('leaves the road and ambiguous sports out', () => {
+    expect(isOffroadType('run')).toBe(false);
+    expect(isOffroadType('ride')).toBe(false);
+    expect(isOffroadType('walk')).toBe(false);
+    expect(isOffroadType('swim')).toBe(false);
   });
 });
 
