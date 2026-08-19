@@ -246,6 +246,16 @@ interface Run {
 }
 
 /**
+ * Points needed to span `metres`.
+ *
+ * N points enclose N−1 steps, so the +1 is not decoration: without it a 500 m
+ * threshold admits 49 steps of 10 m and the shortest "500 m" segment is 490.
+ */
+function minPointsFor(metres: number): number {
+  return Math.ceil(metres / STEP_M) + 1;
+}
+
+/**
  * Extend one seed correspondence forwards as far as it holds.
  *
  * At each step the partner point chosen is the nearest one that still moves
@@ -317,7 +327,7 @@ function scanRuns(
   opts: Required<MatchOptions>,
 ): Run[] {
   const runs: Run[] = [];
-  const minPoints = Math.ceil(opts.minLengthM / STEP_M);
+  const minPoints = minPointsFor(opts.minLengthM);
 
   let i = 0;
   while (i < n) {
@@ -405,7 +415,7 @@ function candidatesFor(
   opts: Required<MatchOptions>,
 ): Candidate[] {
   if (!runs.length) return [];
-  const minPoints = Math.ceil(opts.minLengthM / STEP_M);
+  const minPoints = minPointsFor(opts.minLengthM);
 
   const proposals = runs
     .filter((r) => r.to - r.from + 1 >= minPoints)
@@ -629,7 +639,18 @@ function discoverWithinType(
     );
   }
 
-  const segments = accepted.map((a) => buildSegment(a.candidate, usable));
+  // Point counts bound the along-path length; the distance actually REPORTED is
+  // the sum of chords between resampled points, which reads slightly short on
+  // twisty ground. Enforce the threshold on the number that gets stored and
+  // shown, so "at least 500 m" is true of the figure on the page and not just
+  // of an intermediate the reader never sees.
+  const built = accepted.map((a) => buildSegment(a.candidate, usable));
+  const segments = built.filter((s) => s.distanceM >= opts.minLengthM);
+  const short = built.length - segments.length;
+  if (short) {
+    notes.push(`${short} stretches measured just under ${opts.minLengthM} m once drawn and were dropped.`);
+  }
+
   return { segments, notes };
 }
 
