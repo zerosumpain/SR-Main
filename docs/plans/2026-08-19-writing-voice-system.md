@@ -199,6 +199,22 @@ theatre. **Phase 3 gates phases 4–5.**
 | 4 | A live jkai turn and a generated release summary both come back in register; Claude skill appears in the index |
 | 5 | Drift job opens a note, changes nothing on its own |
 
+## Deployment snag found the hard way: schema.ts must be self-contained
+
+Phase 0 merged green and deployed, and the `authorship` column **did not reach
+production**. `ci-release.sh` rsyncs `src/lib/db/schema.ts` to the VPS *on its own*
+(plus `drizzle.config.ts`) and runs `drizzle-kit push` against it there. Nothing sets up
+SvelteKit's `$lib` alias in that context, so schema.ts re-exporting the authorship
+vocabulary from `$lib/blog/authorship` died with `Cannot find module '$lib/blog/authorship'`.
+
+The part that makes this dangerous: **the release does not fail when the push fails.** It
+logs the error, finishes the deploy and reports success. Production ran code expecting a
+column the database did not have, with a green tick on the commit.
+
+Fixed two ways: the re-export is gone (it had no callers — everything already imports from
+`$lib/blog/authorship`), and `scripts/check-schema-imports.mjs` now fails the Lint gates
+step if schema.ts ever grows a `$lib` or relative import again.
+
 ## Deployment snags (known in advance)
 
 - **ci-deploy is an allow-list.** Both new `scripts/` files need their own rsync lines, or

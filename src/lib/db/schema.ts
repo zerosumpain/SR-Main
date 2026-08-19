@@ -54,14 +54,14 @@ export const blogPosts = pgTable('blog_posts', {
   updatedAt: timestamp('updated_at'),
 });
 
-// Authorship vocabulary lives in $lib/blog/authorship so the admin UI can import
-// it without pulling this file into the client bundle. Re-exported here for the
-// server-side callers that already import from the schema.
-export {
-  BLOG_AUTHORSHIP,
-  isBlogAuthorship,
-  type BlogAuthorship,
-} from '$lib/blog/authorship';
+// The authorship vocabulary lives in $lib/blog/authorship — both so the admin UI
+// can import it without pulling this file into the client bundle, and because
+// THIS FILE MUST HAVE NO $lib IMPORTS AT ALL. ci-release.sh rsyncs schema.ts to
+// the VPS on its own and runs drizzle-kit push against it; any $lib import it
+// carries resolves to nothing there and fails the schema push with
+// MODULE_NOT_FOUND, silently leaving production a column behind. (Seen for real
+// on 2026-08-19 — this file briefly re-exported the vocabulary as a
+// convenience and the `authorship` column never reached prod.)
 
 export const blogPostTags = pgTable('blog_post_tags', {
   id: serial('id').primaryKey(),
