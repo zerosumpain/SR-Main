@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { listSegments, rebuildSegments } from '$lib/trails/segments-service';
+import { isMaintenanceAuthorized } from '$lib/server/maintenance-auth';
 import type { RequestHandler } from './$types';
 
 // Owner-gated by absence: /api/trails is not in PUBLIC_PATHS, so hooks.server.ts
@@ -21,8 +22,17 @@ export const GET: RequestHandler = async ({ url }) => {
  * Kept a POST, and kept explicit: a rebuild rewrites the whole set, and
  * although names survive it through geometric reconciliation, it is not the
  * sort of thing a GET should ever do by accident.
+ *
+ * Two callers: the owner from a browser, and a one-off run from the box
+ * carrying the maintenance secret — the latter is how the first build gets
+ * done after a deploy, with no session to speak of. hooks.server.ts lets that
+ * pair through for POST only; this re-checks it, defence in depth.
  */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, locals }) => {
+  if (!(await isMaintenanceAuthorized(request, locals))) {
+    return json({ error: 'unauthorised' }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => ({}));
 
   const options: Parameters<typeof rebuildSegments>[0] = {};
