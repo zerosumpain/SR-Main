@@ -2,7 +2,13 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import { goto, invalidateAll } from '$app/navigation';
-  import { BLOG_AUTHORSHIP, AUTHORSHIP_HINT, isBlogAuthorship, type BlogAuthorship } from '$lib/blog/authorship';
+  import {
+    BLOG_AUTHORSHIP,
+    AUTHORSHIP_HINT,
+    MIN_CORPUS_WORDS,
+    isBlogAuthorship,
+    type BlogAuthorship,
+  } from '$lib/blog/authorship';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import { fade } from 'svelte/transition';
@@ -147,9 +153,12 @@
       <span class="sr-label-tight">Posts</span>
       <span class="nm-sec-meta">
         {filteredPosts.length} / {data.posts.length}
-        <span class="corpus-meter" title="Human-written prose available to seed the Voice Card">
-          · corpus {data.corpus.human.posts} post{data.corpus.human.posts === 1 ? '' : 's'},
-          {data.corpus.human.words.toLocaleString('en-GB')} words
+        <span
+          class="corpus-meter"
+          title={`Human-written posts of at least ${MIN_CORPUS_WORDS} words — what the Voice Card can be built from. ${data.corpus.human.posts} tagged human in total.`}
+        >
+          · corpus {data.usable.posts} post{data.usable.posts === 1 ? '' : 's'},
+          {data.usable.words.toLocaleString('en-GB')} words
         </span>
       </span>
     </div>

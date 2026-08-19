@@ -18,6 +18,16 @@ export function isBlogAuthorship(v: unknown): v is BlogAuthorship {
 /** The one class that feeds the Voice Card. */
 export const CORPUS_AUTHORSHIP: BlogAuthorship = 'human';
 
+/**
+ * Below this, a post is a test row rather than prose and cannot teach a model
+ * anything about voice. Authorship records *who wrote it* — the stubs really
+ * are John's — so the length judgement belongs here rather than in the tag.
+ *
+ * 100 sits cleanly in the gap: the longest stub (`so-here-it-is`, 279 chars)
+ * is ~47 words; the shortest real post (`brave-new-world`, 971 chars) is ~165.
+ */
+export const MIN_CORPUS_WORDS = 100;
+
 export const AUTHORSHIP_HINT: Record<BlogAuthorship, string> = {
   human: 'Written by John. The only class that seeds the Voice Card.',
   assisted: 'Written with model help. Kept out of the corpus.',

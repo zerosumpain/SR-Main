@@ -1,6 +1,11 @@
 import { db } from '$lib/db';
 import { blogPosts } from '$lib/db/schema';
-import { BLOG_AUTHORSHIP, type BlogAuthorship } from '$lib/blog/authorship';
+import {
+  BLOG_AUTHORSHIP,
+  CORPUS_AUTHORSHIP,
+  MIN_CORPUS_WORDS,
+  type BlogAuthorship,
+} from '$lib/blog/authorship';
 import { desc } from 'drizzle-orm';
 import type { PageServerLoad } from './$types';
 import { getUmami } from '$lib/umami/client';
@@ -43,10 +48,20 @@ export const load: PageServerLoad = async () => {
     BLOG_AUTHORSHIP.map((a) => [a, { posts: 0, words: 0 }]),
   ) as Record<BlogAuthorship, { posts: number; words: number }>;
 
+  // What the Voice Card can actually be built from: tagged human AND long
+  // enough to be prose. Reported separately from the raw human tally so the
+  // meter never overstates the corpus by counting test stubs.
+  const usable = { posts: 0, words: 0 };
+
   for (const row of bodies) {
     const bucket = corpus[row.authorship as BlogAuthorship] ?? corpus.unknown;
+    const words = countWords(plainTextFromHtml(row.content ?? ''));
     bucket.posts += 1;
-    bucket.words += countWords(plainTextFromHtml(row.content ?? ''));
+    bucket.words += words;
+    if (row.authorship === CORPUS_AUTHORSHIP && words >= MIN_CORPUS_WORDS) {
+      usable.posts += 1;
+      usable.words += words;
+    }
   }
 
   return {
@@ -55,5 +70,6 @@ export const load: PageServerLoad = async () => {
       views7d: stats[`/blog/${p.slug}`]?.pageviews ?? null,
     })),
     corpus,
+    usable,
   };
 };
