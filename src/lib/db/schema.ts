@@ -435,6 +435,103 @@ export const activitySeries = pgTable(
 export type ActivitySeriesRecord = typeof activitySeries.$inferSelect;
 export type NewActivitySeries = typeof activitySeries.$inferInsert;
 
+// ---------------------------------------------------------------------------
+// Intra-route segments: stretches of ground covered more than once.
+//
+// Discovered by comparing the GPS traces of same-type activities against each
+// other (see $lib/trails/segments). A segment is DIRECTIONAL — the same path
+// walked back the other way is a different segment, because a climb and its
+// descent are not comparable efforts. Laps within one activity each count as
+// their own effort; that is the point of the exercise.
+//
+// Same unit convention as `activities` above: real SI in doublePrecision.
+export const activitySegments = pgTable(
+  'activity_segments',
+  {
+    id: serial('id').primaryKey(),
+    // what3words-style triple, e.g. "heron.copper.stile". Stable across
+    // rebuilds: reconciliation hands a recomputed segment the name of the
+    // stored one it replaces, so a 30 m shift in geometry never renames a
+    // place you have learned.
+    name: text('name').notNull(),
+    activityType: text('activity_type').notNull(),
+
+    distanceM: doublePrecision('distance_m').notNull(),
+    elevationGainM: doublePrecision('elevation_gain_m').notNull().default(0),
+    elevationLossM: doublePrecision('elevation_loss_m').notNull().default(0),
+
+    // [[lng, lat, elevationM | null, metresFromSegmentStart], ...]
+    // The fourth slot is DISTANCE, not seconds: a segment has no clock of its
+    // own. Deliberately the same arity as activity_tracks.coordinates so the
+    // map components render it unchanged.
+    coordinates: jsonb('coordinates').notNull(),
+    pointCount: integer('point_count').notNull(),
+    bounds: jsonb('bounds').notNull(), // { n, s, e, w }
+    polyline: text('polyline'), // encoded, for thumbnails
+
+    effortCount: integer('effort_count').notNull().default(0),
+    firstEffortAt: integer('first_effort_at'), // unix seconds
+    lastEffortAt: integer('last_effort_at'),
+
+    updatedAt: integer('updated_at').default(sql`extract(epoch from now())::integer`),
+  },
+  (t) => [
+    uniqueIndex('activity_segments_name_idx').on(t.name),
+    index('activity_segments_type_idx').on(t.activityType),
+  ],
+);
+
+export type ActivitySegmentRecord = typeof activitySegments.$inferSelect;
+export type NewActivitySegment = typeof activitySegments.$inferInsert;
+
+// One traversal of one segment. `startS`/`endS` are seconds from the start of
+// the ACTIVITY — the same clock as activity_series, so a heart-rate window is
+// a straight filter with no re-basing.
+export const activitySegmentEfforts = pgTable(
+  'activity_segment_efforts',
+  {
+    id: serial('id').primaryKey(),
+    segmentId: integer('segment_id')
+      .notNull()
+      .references(() => activitySegments.id, { onDelete: 'cascade' }),
+    activityId: text('activity_id')
+      .notNull()
+      .references(() => activities.id, { onDelete: 'cascade' }),
+
+    startS: doublePrecision('start_s').notNull(),
+    endS: doublePrecision('end_s').notNull(),
+    durationS: doublePrecision('duration_s').notNull(),
+    // The distance this effort actually covered, not the segment's canonical
+    // length. Pace is computed from this one so nothing is overstated.
+    distanceM: doublePrecision('distance_m').notNull(),
+    speedMps: doublePrecision('speed_mps').notNull(),
+    paceSPerKm: doublePrecision('pace_s_per_km').notNull(),
+
+    avgHeartrate: doublePrecision('avg_heartrate'),
+    maxHeartrate: integer('max_heartrate'),
+    elevationGainM: doublePrecision('elevation_gain_m'),
+
+    // Pace-at-HR, both directions of the same idea:
+    // efficiency factor = metres/min per bpm (higher is better),
+    // beats per km    = heartbeats spent per km (lower is better).
+    efficiencyFactor: doublePrecision('efficiency_factor'),
+    beatsPerKm: doublePrecision('beats_per_km'),
+
+    // Absolute clock, for ordering a leaderboard without joining activities.
+    startedAt: integer('started_at').notNull(),
+    // Which lap this was, when one activity covers a segment more than once.
+    lapIndex: integer('lap_index').notNull().default(1),
+  },
+  (t) => [
+    uniqueIndex('activity_segment_efforts_unique_idx').on(t.segmentId, t.activityId, t.lapIndex),
+    index('activity_segment_efforts_segment_idx').on(t.segmentId),
+    index('activity_segment_efforts_activity_idx').on(t.activityId),
+  ],
+);
+
+export type ActivitySegmentEffortRecord = typeof activitySegmentEfforts.$inferSelect;
+export type NewActivitySegmentEffort = typeof activitySegmentEfforts.$inferInsert;
+
 // A route you intend to run, as opposed to one you have run. Kept apart from
 // `activities` because the two answer different questions and have different
 // lifecycles — a plan can be discarded, re-planned, or run many times.

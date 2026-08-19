@@ -73,6 +73,7 @@
 /api/scraper/script
 /api/space-lander/scores
 /api/space-lander/session
+/api/trails/segments
 /api/whatsapp/inbound
 /auth-error
 /blog

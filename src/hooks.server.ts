@@ -537,12 +537,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // secret + loopback through here; the endpoint re-checks the secret
   // (defence-in-depth). An owner browser (no secret) falls through to the normal
   // owner-gate and still works.
+  // /api/trails/segments is POST-ONLY here, unlike the others: the same path
+  // answers GET with segment geometry, and a GPS trace starts at the front
+  // door. A rebuild is an idempotent recompute of data already stored; handing
+  // out where it happened is not.
   if (
     pathname === '/api/deepdive/index-sources' ||
     pathname === '/api/deepdive/reindex-facts' ||
     pathname === '/api/jkai/intel/backfill' ||
     pathname === '/api/jkai/intel/source-facets' ||
-    pathname === '/api/jkai/intel/clusters/recalculate'
+    pathname === '/api/jkai/intel/clusters/recalculate' ||
+    (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
     let clientAddr = '';
     try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }

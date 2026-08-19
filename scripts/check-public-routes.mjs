@@ -81,6 +81,9 @@ const HOOK_BYPASSES = [
   '/api/jkai/intel/backfill', // loopback + MAINTENANCE_SECRET, re-checked in the handler
   '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
   '/api/jkai/intel/clusters/recalculate', // as above; its own path so the secret cannot reach rename/narrate
+  '/api/trails/segments', // POST ONLY — loopback + MAINTENANCE_SECRET, re-checked in the handler.
+  // GET on the same path is NOT bypassed: it answers with segment geometry, and a
+  // GPS trace starts at the front door. Only the idempotent rebuild is reachable.
   '/api/jkai/intel/source-facets', // as above — both verbs re-check in the handler
   // Starting a studio build. POST only, STUDIO_SERVICE_TOKEN as a Bearer,
   // constant-time compared, refused entirely when the var is unset or under 32
