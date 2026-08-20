@@ -78,16 +78,41 @@ const GLYPH_ALT = `(?:${TOOL_GLYPHS.map((g) => g.replace(/[.*+?^${}()|[\]\\]/g, 
  * half-streamed `⚙️ mcp_jkai_recall_mem` is left alone until it completes
  * rather than being rewritten and then rewritten again.
  *
- * The quoted-argument branch closes on the **last** quote of the line, not the
- * first. Search queries routinely contain their own quotes — Hermes logs
- * `🔍 web_search: ""House of Lords" benefits pension fre..."` — and stopping at
- * the first inner quote captured an empty argument and spilled the remainder of
- * the query into the reply as loose prose. Greedy-to-end-of-line then backtrack
- * is what makes the phrase quoting survive.
+ * The quoted-argument branch cannot close on the first quote: search queries
+ * routinely contain their own, and Hermes logs
+ * `🔍 web_search: ""House of Lords" benefits pension fre..."` — stopping at the
+ * first inner quote captured an empty argument and spilled the remainder of the
+ * query into the reply as loose prose.
+ *
+ * Nor can it close on the LAST quote of the line, which is what it used to do.
+ * Hermes glues the answer straight onto the end of an entry with no newline, and
+ * the answer has curly quotes in it. Real production row:
+ *
+ *   ⚙️ mcp__jkai__jkai_extended: "workflow_run" (×2)The live check completed,
+ *   but it exposed one routing flaw: “new URLs” and “relevant URLs” need sepa…
+ *
+ * Greedy-to-last-quote swallowed two sentences of the reply into the argument.
+ *
+ * The three quoted branches below are ordered most-constrained first, which is
+ * what makes both shapes work. Counted over 45 days of production rows:
+ *
+ *   885  `"arg"` ending the line              → greedy, so a phrase-quoted
+ *                                               query keeps its inner quotes
+ *   153  `"arg" (×N)`                         → lazy up to the repeat marker
+ *    12  `"arg"` with prose glued straight on → lazy up to the FIRST quote;
+ *                                               there is no closing quote at
+ *                                               the end of the line to aim for
+ *
+ * The glued-on text is usually one of Hermes' own `⏳ Working — 3 min` status
+ * lines, which are already English and are deliberately left where they are.
  */
 const ENTRY_RE = new RegExp(
   `${GLYPH_ALT}[ \\t]*([A-Za-z0-9_]+)` +
-    `(?:(?:\\.{3}|…)|[ \\t]*:[ \\t]*(?:["“”'](.*)["“”']|([^\\n(]+?)))` +
+    `(?:(?:\\.{3}|…)|[ \\t]*:[ \\t]*(?:` +
+    `["“”'](.*?)["“”'](?=[ \\t]*\\(×\\d+\\))` + //  …"arg" (×2)
+    `|["“”'](.*)["“”'](?=[ \\t]*(?:\\n|$))` + //    …"arg"  ← ends the line
+    `|["“”'](.*?)["“”']` + //                       …"arg"Prose glued straight on
+    `|([^\\n(]+?)))` + //                           …bare unquoted arg
     `[ \\t]*(?:\\(×(\\d+)\\))?`,
   'g',
 );
@@ -111,9 +136,17 @@ function looksLikeToolToken(name: string): boolean {
   return name.includes('_') || BARE_TOOLS.has(name.toLowerCase());
 }
 
-/** Strip Hermes' `mcp_<server>_` namespace. Server names carry no underscore. */
+/**
+ * Strip Hermes' `mcp_<server>_` namespace. Server names carry no underscore.
+ *
+ * Both separator spellings are live: 342 `mcp_jkai_…` against 176
+ * `mcp__jkai__…` across 45 days of production rows, because the MCP client
+ * changed how it namespaces and the old rows keep the old form. Matching only
+ * the single-underscore spelling left the other 176 rendering as
+ * `Ran mcp jkai jkai extended on …` — the namespace read as the verb.
+ */
 function stripMcpNamespace(tool: string): string {
-  const m = tool.match(/^mcp_[^_]+_(.+)$/);
+  const m = tool.match(/^mcp_{1,2}[^_]+_{1,2}(.+)$/);
   return m ? m[1] : tool;
 }
 
@@ -276,6 +309,9 @@ const PHRASES: Record<string, (arg: string | null) => string> = {
   gmail_reply: () => 'Replied to an email',
 
   // Meta
+  tool_search: (a) => (a ? `Looked for a tool that could ${quote(a)}` : 'Looked for the right tool'),
+  tool_describe: (a) =>
+    a ? `Read how ${humanise(stripMcpNamespace(a))} works` : 'Read a tool definition',
   activate_toolset: (a) => (a ? `Loaded the ${a} toolset` : 'Loaded a toolset'),
   jkai_help: () => 'Checked what it can do',
   delegate_task: (a) => (a ? `Handed a sub-agent the job of ${quote(a)}` : 'Handed work to a sub-agent'),
@@ -338,12 +374,20 @@ export function rewriteHermesToolLog(text: string): string {
 
   const rewritten = text.replace(
     ENTRY_RE,
-    (match, tool: string, quoted: string | undefined, bare: string | undefined, count: string | undefined) => {
+    (
+      match,
+      tool: string,
+      quotedBeforeCount: string | undefined,
+      quotedToEol: string | undefined,
+      quotedThenProse: string | undefined,
+      bare: string | undefined,
+      count: string | undefined,
+    ) => {
       // The glyph alone is not proof: it is also ordinary punctuation in a
       // reply. Require the token to look like a tool name too, and hand back
       // the untouched match when it does not.
       if (!looksLikeToolToken(tool)) return match;
-      const arg = quoted ?? bare ?? null;
+      const arg = quotedBeforeCount ?? quotedToEol ?? quotedThenProse ?? bare ?? null;
       const sentence = describeHermesToolCall({
         tool,
         arg: arg === undefined ? null : arg,
@@ -356,4 +400,38 @@ export function rewriteHermesToolLog(text: string): string {
   // Collapse the blank-line padding we just introduced so a run of consecutive
   // entries doesn't leave a gulf of empty paragraphs behind it.
   return rewritten.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Remove every Hermes tool-log entry from `text`, leaving only the answer.
+ *
+ * This is what the chat bubble uses. The English rewrite above was a halfway
+ * house — it made the machinery readable, but it is still machinery sitting in
+ * the middle of a reply, and the thread already has a proper home for it: the
+ * tool-call trace behind the *analyse* button, which is the durable record of
+ * what actually ran. `rewriteHermesToolLog` stays for that page.
+ *
+ * Same matcher and same two guards as the rewrite, so anything the rewrite
+ * would have left alone — `✅ Corrected:`, `📋 Summary:`, a half-streamed tool
+ * name with no colon yet — survives here untouched too.
+ *
+ * Each entry becomes a paragraph break rather than nothing at all: Hermes glues
+ * entries onto the end of a sentence with no newline, so deleting in place
+ * would run the sentence before straight into the one after. The `\n{3,}`
+ * collapse afterwards means a run of consecutive entries still leaves a single
+ * blank line, not a gulf.
+ */
+export function stripHermesToolLog(text: string): string {
+  if (!text || !TOOL_GLYPHS.some((g) => text.includes(g))) return text;
+
+  const stripped = text.replace(ENTRY_RE, (match, tool: string) =>
+    looksLikeToolToken(tool) ? '\n\n' : match,
+  );
+
+  return stripped
+    // An entry glued to the end of a sentence leaves the space before it behind,
+    // and two trailing spaces are a hard line break in markdown.
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
