@@ -2021,25 +2021,41 @@
     onmodelchange?.({ provider, modelId });
 
     // 2) Tell Hermes for this chat session via the gateway /model command.
-    //    `loading` keeps the composer disabled until the switch turn settles so
-    //    the user's first real message can't race ahead of it.
-    if (!force) loading = true;
+    //
+    //    On the send path (`force`) this is FIRE-AND-FORGET. Awaiting it put a
+    //    whole silent turn — up to 15s — in front of the user's first message,
+    //    which is most of what made a first reply feel 30s slow. The guarantee
+    //    moves rather than disappears: the silent `/model` turn and the user's
+    //    turn are both jobs on the same conversation, and the job store queues
+    //    per conversation (`whenJobSettles`), so the pin is delivered first; and
+    //    the server pump's `ensureModelPinned` re-asserts the conversation's
+    //    stored model before the user turn goes out regardless.
+    //
+    //    The manual picker still waits: nothing is racing it there, and the
+    //    disabled composer is the only feedback that the switch is happening.
+    if (force) {
+      void tellHermesModel(provider, modelId);
+      return;
+    }
+    loading = true;
     try {
       await tellHermesModel(provider, modelId);
     } finally {
-      if (!force) loading = false;
+      loading = false;
     }
   }
-
-  /** The conversation whose model we have already pushed to Hermes. */
-  let hermesModelAssertedFor: string | null = null;
 
   /** Push a model choice to Hermes for this chat session via the gateway
    *  `/model` command. Sent silently (no user bubble) and its confirmation reply
    *  is drained without rendering.
    *
    *  Hermes keys the switch to the chat session and holds it in memory, so it
-   *  has to be pushed once per conversation — see `ensureHermesModel`. */
+   *  has to be pushed once per conversation — see the open-time effect below.
+   *
+   *  Every caller now fires this WITHOUT awaiting it (the one exception is the
+   *  manual model picker, where the user is not mid-send). The drain below still
+   *  runs, so the silent turn's confirmation is consumed rather than left to the
+   *  job's own cleanup — it just no longer holds anybody up. */
   async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
@@ -2056,33 +2072,63 @@
           new Promise((r) => setTimeout(r, 15000)),
         ]);
       }
-      hermesModelAssertedFor = conversationId ?? null;
     } catch {
       // The choice is already persisted site-side; if the /model turn failed
       // Hermes keeps its own default and pricing may be off until the next turn.
     }
   }
 
-  /** Make sure Hermes is running the model this conversation says it is.
+  /** The `conversation:model` pair we have already fired an open-time `/model`
+   *  push for. A plain `let`, never `$state`: the effect below both reads and
+   *  writes it, and as reactive state that is the documented route to
+   *  `effect_update_depth_exceeded`. */
+  let modelPushedForKey: string | null = null;
+
+  /** Make sure Hermes is running the model this conversation says it is —
+   *  pushed when the conversation OPENS, not when the user sends.
    *
    *  A conversation only ever told Hermes its model when the user *changed* the
    *  picker. One that took the chat default silently never told it anything, so
    *  Hermes fell back to `model.default` in its own config.yaml — the UI, the
    *  price snapshot and the cost accounting all said one model while a different
    *  one answered (seen 2026-08-09: a conversation stamped codex/gpt-5.6-terra
-   *  was served by deepseek-v4-flash on OpenRouter).
+   *  was served by deepseek-v4-flash on OpenRouter). That guarantee is still
+   *  here; it has just moved off the send path, where it was costing the user a
+   *  silent turn of up to 15s before their first message was even POSTed.
    *
-   *  Cheap because it runs once per conversation: the model locks after the
-   *  first message, and `switchModel` already covers the hand-picked path. */
-  async function ensureHermesModel(isFirstMessage: boolean): Promise<void> {
-    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
-    if (hermesModelAssertedFor === conversationId) return;
-    // The id decides the provider, never the stored field: `currentModel` falls
-    // back to 'openrouter' whenever the conversation row hasn't loaded, which
-    // would hand Hermes a codex/ id under the wrong provider.
-    const ctx = coerceModelContext(currentModel);
-    await tellHermesModel(ctx.provider, ctx.modelId);
-  }
+   *  Three things hold the guarantee up now:
+   *    1. this push, fired the moment a FRESH conversation has an id — normally
+   *       while the user is still typing;
+   *    2. job-store queuing, which orders the silent turn ahead of the user's
+   *       turn on the same conversation even when they overlap; and
+   *    3. the server pump's `ensureModelPinned`, which re-reads the model off
+   *       the conversation row and re-asserts it before the user turn goes out.
+   *
+   *  Fresh conversations only. Pushing on every thread open would spend a silent
+   *  turn per thread the user merely glanced at, and an established thread's
+   *  model is locked anyway. */
+  $effect(() => {
+    // Tracked reads: only the signals that say "a fresh conversation is open,
+    // and this is the model it should be running".
+    const id = conversationId;
+    const provider = currentModel.provider;
+    const modelId = currentModel.modelId;
+    const fresh = messageCount === 0;
+    const on = hermesEnabled;
+    // Everything else — the guard and the write — is untracked, so this cannot
+    // subscribe to its own bookkeeping.
+    untrack(() => {
+      if (!on || !id || !fresh) return;
+      const key = `${id}:${modelId}`;
+      if (modelPushedForKey === key) return;
+      modelPushedForKey = key;
+      // The id decides the provider, never the stored field: `currentModel`
+      // falls back to 'openrouter' whenever the conversation row hasn't loaded,
+      // which would hand Hermes a codex/ id under the wrong provider.
+      const ctx = coerceModelContext({ provider, modelId });
+      void tellHermesModel(ctx.provider, ctx.modelId);
+    });
+  });
 
   /**
    * Fire the handed-over question once, as soon as it can actually be sent.
@@ -2127,7 +2173,13 @@
     if (queuedText === undefined) input = '';
     resetHistoryCycle();
     loading = true;
-    heartbeat = null;
+    // Acknowledge the submit on the spot. The server's first heartbeat is 5s
+    // away and the typing dots went in 2026-05-28, so until now pressing enter
+    // emptied the composer and then changed nothing on screen for five seconds —
+    // which reads as a dropped send. This is the existing heartbeat mechanism
+    // with a client-only phase, not a second indicator: the first real frame
+    // (heartbeat, token, thinking, tool_start) overwrites or clears it.
+    heartbeat = { summary: '', phase: 'received', elapsedSec: 0, lastBeatAt: Date.now() };
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
@@ -2169,6 +2221,9 @@
       }
       messages = messages.map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
       loading = false;
+      // Nothing is coming — there is no job to stream from. Drop the synthetic
+      // ack so it can't outlive the turn it was acknowledging.
+      heartbeat = null;
       scrollToBottom();
       return;
     }
@@ -2190,16 +2245,13 @@
     }];
     scrollToBottom();
 
-    // Query-adaptive model pick. Deliberately AFTER the bubble and the typing
-    // indicator are on screen: it costs a round trip, and when it switches model
-    // it costs an entire silent /model turn on top (up to 15s). Running it first
-    // meant submit left the composer full and the screen unchanged for all of
-    // that — the send read as dropped. First message of a conversation only.
+    // Query-adaptive model pick. One ~70ms round trip, and it no longer drags a
+    // silent `/model` turn behind it: when routing switches the model the push
+    // is fire-and-forget (see `switchModel`), ordered ahead of this message by
+    // the job store and backstopped by the server pump. The unconditional pin
+    // that used to sit here has moved to conversation-open — see the effect
+    // beside `tellHermesModel`. First message of a conversation only.
     await applyRouting(text, isFirstMessage);
-
-    // Routing may have switched the model (and pushed it to Hermes already); if
-    // it didn't, this conversation still has to tell Hermes what it is running.
-    await ensureHermesModel(isFirstMessage);
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
@@ -2325,6 +2377,10 @@
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {
+      // Client-only phase, set the instant the user hits send so the thread
+      // says something before the first server frame arrives. No server phase
+      // is ever 'received'.
+      case 'received': return 'Received — working…';
       // Keep in sync with $lib/workflows/chat/job-store.ts phaseLabel() —
       // the server-side label is also "Connecting…" for the default
       // 'starting' phase so we match here for any client-only renders.
