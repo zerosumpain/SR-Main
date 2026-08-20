@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "builtAt": "corpus-7de4584f",
+  "builtAt": "corpus-ca123bd7",
   "invariants": [
     "British English throughout: -ise not -ize, -our not -or, whilst and amongst are fine.",
     "Ordinary words. If a plain word will do, it does.",
@@ -30,9 +30,9 @@
   "corpus": {
     "posts": 5,
     "words": 3198,
-    "contrastPosts": 2,
-    "contrastWords": 1253,
-    "sourceNote": "public-prose measured over blog posts tagged 'human' of at least 100 words (ids 6, 8, 9, 11, 13). Distinctive terms are scored against the 2 post(s) tagged 'generated' (ids 10, 12) — a thin contrast, so read the z-scores as a ranking rather than a significance test. chat measured over 1106 of John's own typed turns on web conversations."
+    "contrastPosts": 3,
+    "contrastWords": 1537,
+    "sourceNote": "public-prose measured over blog posts tagged 'human' of at least 100 words (ids 6, 8, 9, 11, 13). Distinctive terms are scored against the 3 post(s) tagged 'generated' (ids 10, 12, 14) — a thin contrast, so read the z-scores as a ranking rather than a significance test. chat measured over 1122 of John's own typed turns on web conversations."
   },
   "registers": {
     "public-prose": {
@@ -88,59 +88,59 @@
         },
         "distinctive": [
           {
-            "term": "i",
-            "z": 2.08,
-            "count": 81
-          },
-          {
-            "term": "it",
-            "z": 1.81,
-            "count": 70
-          },
-          {
             "term": "my",
-            "z": 1.79,
+            "z": 1.58,
             "count": 31
           },
           {
-            "term": "up",
-            "z": 1.32,
-            "count": 17
+            "term": "it",
+            "z": 1.56,
+            "count": 70
           },
           {
             "term": "i've",
-            "z": 1.22,
+            "z": 1.45,
             "count": 20
           },
           {
-            "term": "how",
-            "z": 1.2,
-            "count": 14
-          },
-          {
-            "term": "code",
-            "z": 1.16,
-            "count": 13
-          },
-          {
-            "term": "openclaw",
-            "z": 1.16,
-            "count": 13
-          },
-          {
-            "term": "thing",
-            "z": 1.16,
-            "count": 13
+            "term": "i",
+            "z": 1.37,
+            "count": 81
           },
           {
             "term": "it's",
-            "z": 1.1,
+            "z": 1.35,
             "count": 22
           },
           {
             "term": "you",
-            "z": 1.1,
+            "z": 1.35,
             "count": 22
+          },
+          {
+            "term": "code",
+            "z": 1.33,
+            "count": 13
+          },
+          {
+            "term": "openclaw",
+            "z": 1.33,
+            "count": 13
+          },
+          {
+            "term": "up",
+            "z": 1.3,
+            "count": 17
+          },
+          {
+            "term": "could",
+            "z": 1.23,
+            "count": 11
+          },
+          {
+            "term": "those",
+            "z": 1.11,
+            "count": 9
           },
           {
             "term": "have",
@@ -148,46 +148,47 @@
             "count": 17
           },
           {
-            "term": "could",
-            "z": 1.06,
-            "count": 11
-          },
-          {
-            "term": "more",
-            "z": 1.01,
-            "count": 20
-          },
-          {
-            "term": "that",
-            "z": 1,
-            "count": 50
-          },
-          {
-            "term": "those",
-            "z": 0.96,
-            "count": 9
-          },
-          {
-            "term": "about",
-            "z": 0.94,
-            "count": 14
-          },
-          {
-            "term": "for",
-            "z": 0.93,
-            "count": 41
+            "term": "thing",
+            "z": 1.08,
+            "count": 13
           },
           {
             "term": "claude",
-            "z": 0.91,
+            "z": 1.04,
             "count": 8
           },
           {
+            "term": "for",
+            "z": 1.04,
+            "count": 41
+          },
+          {
+            "term": "things",
+            "z": 1.02,
+            "count": 12
+          },
+          {
             "term": "local",
-            "z": 0.85,
+            "z": 0.98,
             "count": 7
+          },
+          {
+            "term": "agentic",
+            "z": 0.98,
+            "count": 7
+          },
+          {
+            "term": "your",
+            "z": 0.98,
+            "count": 7
+          },
+          {
+            "term": "some",
+            "z": 0.97,
+            "count": 15
           }
         ],
+        "distinctiveNote": "Nothing clears the usual z > 1.96 bar (top term scores 1.58), so read this as a ranking, not a set of findings. The list also mixes style with subject matter — at this corpus size a topic word and a habit are indistinguishable.",
         "caveat": "Measured over 3,198 words across 5 document(s) — below the 10,000-word mark where these figures start describing the author rather than these particular documents. Treat them as bands to stay inside, not targets to hit."
       },
       "exemplarIds": [
@@ -231,12 +232,12 @@
         "Closing with an offer of further help."
       ],
       "measured": {
-        "posts": 1106,
-        "words": 16074,
-        "sentences": 1492,
-        "paragraphs": 1173,
-        "fleschReadingEase": 69.4,
-        "fleschKincaidGrade": 8.3,
+        "posts": 1122,
+        "words": 16268,
+        "sentences": 1509,
+        "paragraphs": 1189,
+        "fleschReadingEase": 69.6,
+        "fleschKincaidGrade": 8.2,
         "audience": "Plain English · 8–9th-grade",
         "sentenceWords": {
           "median": 10,
@@ -250,15 +251,15 @@
         },
         "shortSentenceRate": 0.28,
         "rates": {
-          "contractions": 12.69,
-          "firstPerson": 23.64,
-          "emDash": 16.61,
-          "semicolon": 0.62,
-          "colon": 11.57,
-          "parenthetical": 4.23,
-          "exclamation": 2.49,
-          "question": 28.8,
-          "britishSpellings": 5.79,
+          "contractions": 12.66,
+          "firstPerson": 23.36,
+          "emDash": 17.03,
+          "semicolon": 0.61,
+          "colon": 11.43,
+          "parenthetical": 4.18,
+          "exclamation": 2.46,
+          "question": 29.2,
+          "britishSpellings": 5.72,
           "americanisms": 0.25
         },
         "distinctive": []
