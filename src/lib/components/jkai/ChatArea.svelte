@@ -2730,17 +2730,6 @@
               <!-- Tool progress box — only shown when tools are actually being used -->
               {@const split = splitToolSteps(msg.toolSteps)}
               <div class="progress-bubble mb-3">
-                <div class="progress-bubble-hdr">
-                  <span class="working-dot" aria-hidden="true"></span>
-                  <span class="sr-label-tight working-label">Working</span>
-                  <button
-                    type="button"
-                    onclick={cancelJob}
-                    class="nm-btn-ghost cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
                 {#if pendingPlan}
                   <PlanCard
                     planId={pendingPlan.planId}
@@ -2793,31 +2782,14 @@
                     />
                   </div>
                 {/if}
-                {@render heartbeatLine()}
+                <!-- No heartbeat phase line here: "Thinking" / "Drafting reply"
+                     said nothing the toolchain bar below does not already say,
+                     and it was the second of four stacked status rows. It still
+                     renders in the no-tools branch, where it is all there is. -->
                 {#if connectionWarning}
                   <div class="conn-warning" role="status" aria-live="polite">
                     <span class="hb-dot warn"></span>
                     <span>{connectionWarning}</span>
-                  </div>
-                {/if}
-                {#if thinkingByBubble.has(msg.id)}
-                  {@const t = thinkingByBubble.get(msg.id)!}
-                  <div class="reasoning-panel">
-                    <button
-                      type="button"
-                      class="reasoning-toggle"
-                      onclick={() => toggleThinking(msg.id)}
-                      aria-expanded={t.expanded ? 'true' : 'false'}
-                    >
-                      <span class="reasoning-label">Reasoning</span>
-                      {#if !t.expanded}
-                        <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
-                      {/if}
-                      <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
-                    </button>
-                    {#if t.expanded}
-                      <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
-                    {/if}
                   </div>
                 {/if}
                 {#if split.notes.length > 0}
@@ -2875,12 +2847,15 @@
                         {/if}
                       </button>
                       {#if slowMs >= TOOL_STEP_SLOW_MS}
-                        <!-- The slow-step escape hatch has to be reachable from
-                             the collapsed bar too, or a 16-minute tool call
-                             hides its own Cancel behind a disclosure. -->
+                        <!-- A slow call earns its clock: a 16-minute tool used to
+                             show a pulsing dot and nothing else. -->
                         <span class="step-clock" data-slow="true">{formatStepElapsed(slowMs)}</span>
-                        <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
                       {/if}
+                      <!-- Cancel lives on the bar now. It used to sit in the
+                           "Working" header above, and that header is gone — so
+                           without this the only way out of a running turn would
+                           be to wait two minutes for the slow-step escape hatch. -->
+                      <button type="button" class="step-cancel tc-cancel" onclick={cancelJob}>Cancel</button>
                     </div>
                     {#if open}
                       <ul class="step-cards">
@@ -2976,32 +2951,14 @@
                 />
               {/if}
               <div class="hb-wrap">{@render heartbeatLine()}</div>
-              {#if thinkingByBubble.has(msg.id)}
-                {@const t = thinkingByBubble.get(msg.id)!}
-                <div class="reasoning-panel mb-3">
-                  <button
-                    type="button"
-                    class="reasoning-toggle"
-                    onclick={() => toggleThinking(msg.id)}
-                    aria-expanded={t.expanded ? 'true' : 'false'}
-                  >
-                    <span class="reasoning-label">Reasoning</span>
-                    {#if !t.expanded}
-                      <span class="reasoning-preview">{reasoningPreview(t.text)}</span>
-                    {/if}
-                    <span class="reasoning-chev">{t.expanded ? '▾' : '▸'}</span>
-                  </button>
-                  {#if t.expanded}
-                    <div class="reasoning-body">{@html renderMarkdown(t.text)}</div>
-                  {/if}
-                </div>
-              {/if}
-              <!-- Typing-dots block removed (2026-05-28): the heartbeat-line +
-                   reasoning panel + tool-step card collectively cover every
-                   in-flight state. The dots carried no information beyond
-                   "the bubble is in-flight" — which is already implied by
-                   the bubble's presence — so they were pure visual noise
-                   stacking on top of the more informative indicators. -->
+              <!-- No Reasoning panel while in flight: the finalised bubble below
+                   re-renders it from the same `thinkingByBubble` entry, so waiting
+                   costs nothing and the in-flight state stays one line. -->
+              <!-- Typing-dots block removed (2026-05-28): the heartbeat line
+                   above and the toolchain bar cover every in-flight state
+                   between them. The dots carried no information beyond "the
+                   bubble is in-flight" — which the bubble's presence already
+                   says — so they were noise stacked on the informative rows. -->
             {/if}
           {:else if msg.source === 'status_update'}
             <!-- Mid-task working note — stylistically distinct from a real reply.
@@ -4463,6 +4420,11 @@
     color: var(--warn);
     font-weight: 600;
   }
+  /* Cancel is the last thing on the toolchain bar, hard right, so the tool
+     summary keeps the width it needs. */
+  .tc-cancel {
+    margin-left: auto;
+  }
   .step-cancel {
     flex-shrink: 0;
     padding: 1px 6px;
@@ -4597,30 +4559,6 @@
     background: var(--card-bg);
     border: 1px solid var(--accent);
     overflow: hidden;
-  }
-  .progress-bubble-hdr {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: var(--accent-tint-08);
-    border-bottom: 1px solid var(--line-strong);
-  }
-  .working-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--accent);
-    animation: hb-pulse 1.4s ease-in-out infinite;
-  }
-  .working-label {
-    color: var(--accent);
-    letter-spacing: 0.14em;
-  }
-  .cancel-btn {
-    margin-left: auto;
-    padding: 3px 10px;
-    font-size: var(--fs-label-xs);
   }
 
   /* Inline status-update block inside the step list */
