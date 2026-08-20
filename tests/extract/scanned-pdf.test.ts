@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { extractPdf } from '../../src/lib/jkai/extract/pdf';
-import { indexStatusFor } from '../../src/routes/drive/+page.server';
+import { indexStatusFor } from '../../src/lib/file-index/index-status';
 
 describe('scanned (image-only) PDF', () => {
   it('parses cleanly but yields no text — the case OCR exists for', async () => {

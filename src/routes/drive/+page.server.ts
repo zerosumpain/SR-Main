@@ -2,7 +2,7 @@ import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { driveFolderSettings, fileEmbeddings, workflowFiles } from '$lib/db/schema';
 import { desc, sql } from 'drizzle-orm';
-import { isIndexableMime } from '$lib/file-index/content';
+import { indexStatusFor } from '$lib/file-index/index-status';
 import { env } from '$env/dynamic/private';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { SHARE_TTL_DAYS } from '$lib/file-shares';
@@ -21,31 +21,6 @@ function parseBytes(raw: string | undefined, fallback: number): number {
   const n = parseFloat(m[1]);
   const mult = { '': 1, K: 1024, M: 1024 ** 2, G: 1024 ** 3 }[m[2].toUpperCase()] ?? 1;
   return Math.floor(n * mult);
-}
-
-/**
- * Whether a file made it into the @files index, and why not when it didn't.
- *
- * Derived here rather than in the component because deciding it needs
- * `isIndexableMime`, which reaches the extract + vision modules — server-only
- * code that must not be pulled into the client bundle.
- *
- * The distinction that matters is 'no-text' versus 'failed'. `retireNoText`
- * stamps `content_hash` alongside its reason, meaning the extractor ran and
- * settled the question; `recordIndexError` deliberately leaves the hash alone so
- * the file is retried. So a reason WITH a hash is a verdict, and a reason
- * WITHOUT one is an outstanding failure.
- */
-export type IndexStatus = 'indexed' | 'pending' | 'no-text' | 'failed' | 'skipped';
-
-export function indexStatusFor(
-  file: { mimeType: string; name: string; contentHash: string | null; indexError: string | null },
-  chunks: number,
-): IndexStatus {
-  if (chunks > 0) return 'indexed';
-  if (!isIndexableMime(file.mimeType, file.name)) return 'skipped';
-  if (file.indexError) return file.contentHash ? 'no-text' : 'failed';
-  return file.contentHash ? 'no-text' : 'pending';
 }
 
 export const load: PageServerLoad = async () => {
