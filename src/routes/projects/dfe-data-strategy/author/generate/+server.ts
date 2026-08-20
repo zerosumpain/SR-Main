@@ -53,6 +53,8 @@ function cleanAnswers(raw: unknown): InterviewAnswer[] {
 
 const STYLE = `Style rules — follow all of them:
 - British English, plain and active. Say "we will", name owners and dates where the answers imply them.
+  (Deliberately NOT $lib/voice — this is institutional departmental voice, not John's. Giving a
+   DfE strategy document his first person and his self-deprecation would be the register split failing.)
 - Decisions, not aspirations: every paragraph should either decide something, commit to something, or evidence something.
 - Ground claims in the EVIDENCE PACK by naming the source in prose (e.g. "the 2025 State of Digital Government review found…"). Never include URLs.
 - Mostly flowing paragraphs; a short bulleted list is allowed where it genuinely helps. Use ### sub-headings only in sections over 450 words.

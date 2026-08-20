@@ -92,6 +92,14 @@ export type Exemplar = {
 
 export type RegisterCard = {
   register: Register;
+  /**
+   * Whether this register writes *as* John. True for prose and chat; false for
+   * changelogs, alerts and triage findings, which should follow his conventions
+   * (British English, no marketing language, no invented figures) without
+   * putting his personality into a machine-generated line. Getting this wrong in
+   * either direction is the failure the register split exists to prevent.
+   */
+  usesPersona: boolean;
   /** Prose rules. Hand-written; the model reads these verbatim. */
   rules: string[];
   /** Things never to do in this register. */
@@ -105,8 +113,10 @@ export type VoiceCard = {
   version: number;
   /** ISO date the numbers were computed. Stamped by the build script. */
   builtAt: string;
-  /** Rules that hold in every register. */
+  /** Conventions that hold in every register, persona or not. */
   invariants: string[];
+  /** Who is speaking. Applied only to registers with `usesPersona`. */
+  persona: string[];
   /** Never do these, anywhere. */
   neverDo: string[];
   /**

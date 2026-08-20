@@ -1,6 +1,7 @@
 import { getLLMClient } from '$lib/jkai/llm-client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import type { HealthDay } from './series-30d-service';
+import { voiceBlock } from '$lib/voice/block';
 
 export type NarrativeStats = {
   recToday: number;
@@ -50,7 +51,11 @@ function buildStats(series: HealthDay[], rhrBaseline: number): Stats {
   };
 }
 
-const SYSTEM_PROMPT = `You are John's voice writing the weekly note on his /health page.
+// Built lazily rather than as a module-level constant: voiceBlock() reads the
+// Voice Card off disk, and doing that at import time would run a filesystem read
+// on module load and freeze the card until the next restart.
+function systemPrompt(): string {
+  return `You are John's voice writing the weekly note on his /health page.
 
 VOICE: Dry. Self-aware. Pithy. Mildly funny when the numbers are bad. Brutally honest when warranted. The reader is John, talking to himself — not a coach, not a clinician.
 
@@ -59,12 +64,15 @@ RULES:
 - Wrap key numbers and standout values in <em>...</em> tags. Numbers, day names, percentages, deltas — anything quantitative.
 - No medical advice. No "consult your doctor". No clichés ("listen to your body", "rest is productive", "you've got this").
 - No greetings, no headers, no preamble. Start mid-thought if needed.
-- Use British spelling.
+- Follow the voice notes below for spelling and register.
 - Refer to John in second person ("you") or just describe what happened.
 - If recovery is bad, lean into the joke without being precious.
 - Avoid the word "journey".
 
-OUTPUT: Just the paragraph. No JSON, no labels, no markdown beyond the inline <em> tags.`;
+OUTPUT: Just the paragraph. No JSON, no labels, no markdown beyond the inline <em> tags.
+
+${voiceBlock('explanatory', { exemplars: 0, bands: false })}`;
+}
 
 type CacheEntry = { key: string; text: string; expiresAt: number };
 const cache = new Map<string, CacheEntry>();
@@ -118,7 +126,7 @@ export async function getNarrative(
         temperature: 0.9,
         max_tokens: 220,
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt() },
           { role: 'user', content: userPayload },
         ],
       }),

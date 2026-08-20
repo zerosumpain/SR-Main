@@ -31,15 +31,47 @@ export function plainTextFromHtml(html: string): string {
     div.querySelectorAll('pre, code').forEach((el) => el.remove());
     return div.textContent ?? '';
   }
-  return html
-    .replace(/<pre[\s\S]*?<\/pre>/gi, ' ')
-    .replace(/<code[\s\S]*?<\/code>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  return decodeEntities(
+    html
+      .replace(/<pre[\s\S]*?<\/pre>/gi, ' ')
+      .replace(/<code[\s\S]*?<\/code>/gi, ' ')
+      .replace(/<[^>]+>/g, ' '),
+  );
+}
+
+/**
+ * Decode the entities a rich-text editor actually emits.
+ *
+ * Numeric entities matter more than they look. TipTap writes apostrophes as
+ * `&#39;`, and leaving those encoded corrupts every downstream measurement at
+ * once: `I&#39;m` stops matching as a contraction, and the trailing semicolon
+ * counts as punctuation the author never typed. One post measured 0 contractions
+ * and 66 semicolons per 1,000 words purely from this, which is a completely
+ * different writer from the one who wrote it.
+ *
+ * The browser branch above gets this free via innerHTML; this is the server
+ * branch catching up.
+ */
+function decodeEntities(text: string): string {
+  return text
     .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"');
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, d: string) => safeCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeCodePoint(parseInt(h, 16)))
+    // &amp; last, so "&amp;#39;" does not become an apostrophe.
+    .replace(/&amp;/g, '&');
+}
+
+function safeCodePoint(n: number): string {
+  if (!Number.isFinite(n) || n < 0 || n > 0x10ffff) return '';
+  try {
+    return String.fromCodePoint(n);
+  } catch {
+    return '';
+  }
 }
 
 function countSyllablesInWord(raw: string): number {

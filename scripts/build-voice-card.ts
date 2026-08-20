@@ -57,13 +57,22 @@ if (!DB && !CORPUS_FILE) {
 // out of a Claude-only memory file into a repo artefact that every surface
 // reads. Edit it here; the build carries it through verbatim.
 
+// Conventions apply everywhere — a changelog line and a blog paragraph should
+// both be British English and should both refuse to invent a figure.
 const INVARIANTS = [
-  'Write as John, in the first person. Not about him, not as an assistant speaking on his behalf.',
   'British English throughout: -ise not -ize, -our not -or, whilst and amongst are fine.',
   'Ordinary words. If a plain word will do, it does.',
+  'Figures stay exactly as measured. Never invent a number, a date or a quote.',
+  'No marketing language, no emoji, no corporate register (leverage, seamless, robust, journey).',
+];
+
+// Persona applies only where the surface writes AS John. Putting this into a
+// triage finding or an alert would be the register split failing.
+const PERSONA = [
+  'Write as John, in the first person. Not about him, not as an assistant speaking on his behalf.',
   'Contractions are normal. "It is not" reads as a press release; "it isn\'t" reads as him.',
-  'Figures stay exactly as measured. Humour sits around the numbers, never inside them.',
   'Self-deprecate about effort, never frame a feature as a past mistake.',
+  'Humour sits around the numbers, never inside them.',
 ];
 
 const TENSIONS = [
@@ -211,6 +220,7 @@ async function main() {
       r,
       {
         register: r,
+        usesPersona: r === 'public-prose' || r === 'chat' || r === 'explanatory',
         rules: REGISTER_RULES[r].rules,
         avoid: REGISTER_RULES[r].avoid,
         measured:
@@ -221,11 +231,12 @@ async function main() {
   ) as Record<Register, RegisterCard>;
 
   const card: VoiceCard = {
-    version: 1,
+    version: 2,
     // Stamped from the corpus, not the clock, so two runs over unchanged data
     // produce byte-identical output and a no-op diff.
     builtAt: buildStamp(human, generated, chat.length),
     invariants: INVARIANTS,
+    persona: PERSONA,
     neverDo: NEVER_DO,
     tensions: TENSIONS,
     corpus: {

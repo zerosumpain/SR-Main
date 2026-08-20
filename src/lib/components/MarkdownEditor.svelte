@@ -1,4 +1,6 @@
 <script lang="ts">
+  import VoicePanel from './VoicePanel.svelte';
+  import type { VoiceCard } from '$lib/voice/types';
   import { onMount } from 'svelte';
   import {
     EditorView,
@@ -25,11 +27,14 @@
     onSave,
     onAutoSave,
     uploadImage,
+    voiceCard = null,
   }: {
     content?: string;
     onSave?: (content: string) => Promise<void>;
     onAutoSave?: (content: string) => Promise<void>;
     uploadImage?: (file: File) => Promise<string>;
+    /** Passed through from the page loader. Null simply hides the Voice panel. */
+    voiceCard?: VoiceCard | null;
   } = $props();
 
   let editorContainer: HTMLDivElement | undefined = $state();
@@ -53,11 +58,16 @@
     return `${minutes} min read`;
   }
 
+  // Same plain text feeds the Voice panel, so the two strips cannot disagree
+  // about what document they are describing.
+  let plainForVoice = $state('');
+
   function updateWordCount(text: string) {
     // Strip markdown syntax for a fair readability measure: render to HTML
     // then drop tags, the same way the published page sees it.
     const plain = plainTextFromHtml(renderContent(text, 'markdown'));
     scores = readability(plain);
+    plainForVoice = plain;
   }
 
   function getContent(): string {
@@ -454,6 +464,10 @@
       <span class="r-audience">{scores.audience}</span>
       <span class="r-meta">{scores.sentences} sentences · {(scores.words / Math.max(1, scores.sentences)).toFixed(1)} words/sentence</span>
     </div>
+  {/if}
+
+  {#if voiceCard}
+    <VoicePanel text={plainForVoice} card={voiceCard} />
   {/if}
 
   <!-- Status bar -->

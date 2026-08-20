@@ -188,8 +188,46 @@ theatre. **Phase 3 gates phases 4–5.**
    a subject.
 2. **`$lib/voice` + swap the six.** `voiceBlock(register)`; edit the six hardcoded sites;
    fill `buildStyleCues()` from `blog_post_revisions` + resolutions.
-3. **Scorer + stop-gate.** `src/lib/voice/score.ts`; the discriminator test; Voice panel in
-   both editors.
+3. **Scorer + stop-gate.** ✅ **Delivered 2026-08-20 (PR #377). THE STOP-GATE PASSES.**
+
+   | text | score | verdict |
+   |---|---|---|
+   | `i-built-a-thing` (John, published) | **100** | in voice |
+   | `the-great-eastern-railway…` (machine, florid) | **52** | not his voice |
+   | `hello-world` (machine, chatty first-person) | **63** | drifting |
+
+   Margins of **48** and **37** against a stated 25, with no overlap. All five of John's
+   posts score 100. Phases 4–5 are unblocked.
+
+   `src/lib/voice/score.ts` is pure (no filesystem) so it runs in the browser as he types;
+   `score.server.ts` supplies the committed card for server callers. The Voice panel sits
+   under the readability strip in both editors, with the card shipped via the page loader
+   rather than a request per keystroke.
+
+   **Features were derived from the corpus, not guessed.** A probe over all seven posts
+   found what actually separates them, and it is not one thing: first-person density
+   catches the florid control (0 per 1,000 against his 46) but sails straight past the
+   chatty one (56). Em-dash rate, colon use, sentence median and readability catch the
+   other. Two controls that fail differently is what forced a composite rather than a
+   single test.
+
+   **The probe also found a bug that would have poisoned everything.** `plainTextFromHtml`
+   decoded named entities but not numeric ones, so TipTap's `&#39;` survived into the
+   measurements: `I&#39;m` never matched as a contraction and the trailing semicolon
+   counted as punctuation the author never typed. One post measured 0 contractions and 66
+   semicolons per 1,000 words purely from this — a completely different writer from the one
+   who wrote it. Fixed in `readability.ts`, which also corrects the editor's word counts.
+
+   **The first scorer flagged John's own writing three times**, and every one was the
+   scorer's fault: a `\w+i[sz]?ze` pattern matched "size"; "robust" was on the corporate
+   blacklist though he uses it plainly; "when it comes to" was treated as throat-clearing
+   though it is ordinary English. All three removed. A word he actually writes is not a
+   defect.
+
+   The verdict weighs **breadth as well as total penalty** — three contradicted habits is a
+   different writer whatever the arithmetic says. Hard failures stay reserved for
+   deterministic defects; statistical traits only ever warn, because five posts cannot
+   support failing on a band.
 4. **Fan-out (all four stacks, per John 2026-08-19).** `scripts/sync-voice.sh`;
    Hermes fragment; `john-voice` Claude skill; sr-docs page; `/admin/content/voice`;
    retire `feedback_public_prose_voice.md` to a pointer.
@@ -218,7 +256,7 @@ theatre. **Phase 3 gates phases 4–5.**
 | 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 3,198 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
 | 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
-| 3 | Committed test: `scoreVoice(post 13) > scoreVoice(post 12)` by the stated margin |
+| 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
 | 4 | A live jkai turn and a generated release summary both come back in register; Claude skill appears in the index |
 | 5 | Drift job opens a note, changes nothing on its own |
 

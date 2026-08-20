@@ -14,6 +14,7 @@
 // because both pull in `$env/dynamic/private`, which does not resolve under
 // vitest — the same reason entity-query.ts and insight-store.ts do it.
 import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { voiceBlock } from '$lib/voice/block';
 import {
   intelCommissions,
   intelDossierItems,
@@ -173,14 +174,19 @@ export interface BriefPrompt {
   user: string;
 }
 
-const SYSTEM_BASE = `You write single-page intelligence briefs from a knowledge graph.
+// Built lazily rather than as a module-level constant: voiceBlock() reads the
+// Voice Card off disk, and doing that at import time would run a filesystem read
+// on module load and freeze the card until the next restart.
+function systemBase(): string {
+  return `You write single-page intelligence briefs from a knowledge graph.
 
 Rules:
 - Every factual sentence ends with a citation marker such as [1], naming the SOURCE it came from. Use several — [1][3] — when a claim rests on more than one.
 - Use ONLY the CONTEXT supplied. If the context does not support a claim, do not make it.
 - Anything you infer rather than read is prefixed "Assessment:" and carries no marker.
 - Never invent a source number. Only the numbers listed under SOURCES exist.
-- British English. No preamble, no sign-off, no meta-commentary.
+- No preamble, no sign-off, no meta-commentary.
+${voiceBlock('explanatory', { exemplars: 0 })}
 
 Use these headings, in this order, omitting any the context cannot fill:
 ## Bottom line
@@ -190,6 +196,7 @@ Use these headings, in this order, omitting any the context cannot fill:
 ## Gaps
 
 Keep the whole brief under 500 words.`;
+}
 
 /**
  * Appended for a cluster narrative.
@@ -405,7 +412,7 @@ export function buildBriefPrompt(context: BriefContext): BriefPrompt {
   parts.push('', '## SOURCES', renderSources(context.sources));
 
   const system =
-    (context.cluster ? SYSTEM_BASE + SYSTEM_CLUSTER : SYSTEM_BASE) +
+    (context.cluster ? systemBase() + SYSTEM_CLUSTER : systemBase()) +
     (hasSources ? '' : SYSTEM_UNSOURCED);
 
   return { system, user: parts.join('\n') };

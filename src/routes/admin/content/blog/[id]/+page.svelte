@@ -562,7 +562,7 @@
       {/if}
     </div>
     {#if isMarkdown}
-      <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} />
+      <MarkdownEditor {content} onSave={saveContent} onAutoSave={saveContent} {uploadImage} voiceCard={data.voiceCard} />
     {:else}
       <div bind:this={editorContainer} class="editor-host">
         <RichEditor
@@ -570,6 +570,7 @@
           onSave={saveContent}
           onAutoSave={saveContent}
           {uploadImage}
+          voiceCard={data.voiceCard}
           bind:api={richApi}
           onProposalAccepted={(id, finalText, preAcceptHtml) => {
             proposalStore.resolve(id, 'accepted');
