@@ -96,9 +96,19 @@ export async function resolveVisionModel(): Promise<ModelContext> {
   if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
 
   try {
-    const { loadAssignments } = await import('$lib/routing/events');
-    const assigned = (await loadAssignments()).vision;
-    if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
+    const { isRoutingEnabled, loadAssignments, loadOverrides } = await import('$lib/routing/events');
+    // The kill switch means "stop letting the router choose", everywhere — not
+    // just in chat. With it off, the constant answers.
+    if (await isRoutingEnabled()) {
+      // Overrides before assignments, matching resolveModelForProfile. The
+      // routing admin page lists every profile in PROFILES, so `vision` is now
+      // pinnable there; reading only the nightly assignment would accept the pin
+      // in the UI and then quietly ignore it.
+      const pin = (await loadOverrides()).vision;
+      if (pin?.modelId) return coerceModelContext({ modelId: pin.modelId });
+      const assigned = (await loadAssignments()).vision;
+      if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
+    }
   } catch (err) {
     console.warn(`[models] vision routing lookup failed (${(err as Error).message}); using the fallback`);
   }

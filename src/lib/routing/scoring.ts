@@ -140,6 +140,21 @@ export interface SelectOpts {
  * Price stays log-scaled and clamped to PRICE_WEIGHT_CAP so extra cheapness has
  * diminishing returns.
  */
+/**
+ * OpenRouter's `:batch` variants cannot be called through chat completions at
+ * all — a request returns 404 "This model is only available through the Batch
+ * API. Use the /api/beta/batches endpoint instead."
+ *
+ * They matter because they are priced roughly half their parent, which makes
+ * them magnetic to a cost-aware selector: the vision profile picked
+ * `openai/gpt-5.6-luna:batch` at $0.22/1M over the same model at $2.25/1M, and
+ * every call would have 404'd. 61 of them in the catalogue today, so this is not
+ * a corner case waiting to happen — it is one that did.
+ */
+function isUncallableVariant(id: string): boolean {
+  return id.endsWith(':batch');
+}
+
 export function selectForProfile(
   candidates: Candidate[],
   opts: SelectOpts,
@@ -154,6 +169,7 @@ export function selectForProfile(
   const requireTools = opts.requireTools ?? true;
   const eligible = candidates.filter(
     (c) =>
+      !isUncallableVariant(c.id) &&
       (!requireTools || c.toolsSupported) &&
       (!opts.requireImageInput || c.imageInput) &&
       (!opts.requireFileInput || c.fileInput) &&

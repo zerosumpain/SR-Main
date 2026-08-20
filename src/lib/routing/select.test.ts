@@ -334,3 +334,35 @@ describe('vision profile — must read pictures, need not call tools', () => {
     expect(blind.fileInput).toBe(false);
   });
 });
+
+describe('uncallable catalogue variants', () => {
+  const opts = {
+    weights: DEFAULT_CONFIG.weights.general,
+    qualityFloorFrac: DEFAULT_CONFIG.qualityFloorFrac.general,
+    priceCeilingPerM: DEFAULT_CONFIG.priceCeilingPerM,
+    minContext: DEFAULT_CONFIG.minContext,
+    successBiasK: DEFAULT_CONFIG.successBiasK,
+    openWeightBonus: DEFAULT_CONFIG.openWeightBonus,
+    openWeightsOnly: DEFAULT_CONFIG.openWeightsOnly,
+    successFor: noSuccess,
+  };
+
+  it('never picks a :batch variant, however cheap', () => {
+    // Priced ~half the parent, so a cost-aware score loves them — and every
+    // chat-completions call returns 404 "only available through the Batch API".
+    const models = [
+      cand({ id: 'openai/thing:batch', blendedPerM: 0.22, agenticIndex: 60 }),
+      cand({ id: 'openai/thing', blendedPerM: 2.25, agenticIndex: 60 }),
+    ];
+    const { winner, poolSize } = selectForProfile(models, opts);
+    expect(poolSize).toBe(1);
+    expect(winner?.id).toBe('openai/thing');
+  });
+
+  it('leaves other variant suffixes alone', () => {
+    // :free and :thinking are ordinary chat models; only :batch needs a
+    // different endpoint.
+    const models = [cand({ id: 'x/y:free', blendedPerM: 0.1, agenticIndex: 60 })];
+    expect(selectForProfile(models, opts).winner?.id).toBe('x/y:free');
+  });
+});
