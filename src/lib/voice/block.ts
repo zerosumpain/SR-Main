@@ -104,7 +104,18 @@ export function renderVoiceBlock(
     for (const a of avoid) lines.push(`- ${a}`);
   }
 
-  if (wantBands && rc.measured) {
+  // Bands that describe the counterpart's writing are guidance about who you are
+  // answering, never a target for your own output.
+  if (wantBands && rc.measured && rc.bandsDescribeOutput === false) {
+    const m = rc.measured;
+    lines.push(
+      '',
+      `Who you are answering: his own messages run about ${m.sentenceWords.median} words, ` +
+        `90th percentile ${m.sentenceWords.p90}, and ${Math.round(m.shortSentenceRate * 100)}% are ` +
+        `five words or fewer. Match that register — a reply should not tower over the question. ` +
+        `These are HIS numbers, not a target for yours.`,
+    );
+  } else if (wantBands && rc.measured) {
     const m = rc.measured;
     lines.push(
       '',

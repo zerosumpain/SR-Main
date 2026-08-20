@@ -1,4 +1,6 @@
 <script lang="ts">
+  import VoicePanel from './VoicePanel.svelte';
+  import type { VoiceCard } from '$lib/voice/types';
   import { onMount, onDestroy } from 'svelte';
   import { Editor } from '@tiptap/core';
   import StarterKit from '@tiptap/starter-kit';
@@ -21,6 +23,7 @@
     api = $bindable<RichEditorApi | undefined>(),
     onProposalAccepted,
     onProposalRejected,
+    voiceCard = null,
   }: {
     content?: string;
     onSave?: (html: string) => Promise<void>;
@@ -31,6 +34,8 @@
      *  saw before the accept. Use as the rollback target. */
     onProposalAccepted?: (id: string, finalText: string, htmlBeforeAccept: string) => void;
     onProposalRejected?: (id: string) => void;
+    /** Passed through from the page loader. Null simply hides the Voice panel. */
+    voiceCard?: VoiceCard | null;
   } = $props();
 
   let host: HTMLDivElement | undefined = $state();
@@ -51,9 +56,14 @@
     return `${Math.max(1, Math.ceil(words / 200))} min read`;
   }
 
+  // Recomputed alongside the readability scores, from the same plain text, so
+  // the Voice panel never disagrees with the strip above it about the document.
+  let plainForVoice = $state('');
+
   function recomputeScores() {
     const text = editor?.getText() ?? '';
     scores = readability(text);
+    plainForVoice = text;
   }
 
   function getHTML(): string {
@@ -684,6 +694,10 @@
       <span class="r-audience">{scores.audience}</span>
       <span class="r-meta">{scores.sentences} sentences · {(scores.words / Math.max(1, scores.sentences)).toFixed(1)} words/sentence</span>
     </div>
+  {/if}
+
+  {#if voiceCard}
+    <VoicePanel text={plainForVoice} card={voiceCard} />
   {/if}
 
   <div class="status-bar">

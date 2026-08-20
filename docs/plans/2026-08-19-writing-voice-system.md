@@ -228,14 +228,100 @@ theatre. **Phase 3 gates phases 4–5.**
    full, tally as a footnote — ordered so the strongest signal leads. It had never
    produced one before: nothing wrote resolutions until PR #370 and nothing fired them
    until #371.
-3. **Scorer + stop-gate.** `src/lib/voice/score.ts`; the discriminator test; Voice panel in
-   both editors.
-4. **Fan-out (all four stacks, per John 2026-08-19).** `scripts/sync-voice.sh`;
-   Hermes fragment; `john-voice` Claude skill; sr-docs page; `/admin/content/voice`;
-   retire `feedback_public_prose_voice.md` to a pointer.
-5. **Learn loop.** Recompute on each new `human` post; monthly drift job that *proposes*,
-   never auto-applies.
+3. **Scorer + stop-gate.** ✅ **Delivered 2026-08-20 (PR #377). THE STOP-GATE PASSES.**
 
+   | text | score | verdict |
+   |---|---|---|
+   | `i-built-a-thing` (John, published) | **100** | in voice |
+   | `the-great-eastern-railway…` (machine, florid) | **52** | not his voice |
+   | `hello-world` (machine, chatty first-person) | **63** | drifting |
+
+   Margins of **48** and **37** against a stated 25, with no overlap. All five of John's
+   posts score 100. Phases 4–5 are unblocked.
+
+   `src/lib/voice/score.ts` is pure (no filesystem) so it runs in the browser as he types;
+   `score.server.ts` supplies the committed card for server callers. The Voice panel sits
+   under the readability strip in both editors, with the card shipped via the page loader
+   rather than a request per keystroke.
+
+   **Features were derived from the corpus, not guessed.** A probe over all seven posts
+   found what actually separates them, and it is not one thing: first-person density
+   catches the florid control (0 per 1,000 against his 46) but sails straight past the
+   chatty one (56). Em-dash rate, colon use, sentence median and readability catch the
+   other. Two controls that fail differently is what forced a composite rather than a
+   single test.
+
+   **The probe also found a bug that would have poisoned everything.** `plainTextFromHtml`
+   decoded named entities but not numeric ones, so TipTap's `&#39;` survived into the
+   measurements: `I&#39;m` never matched as a contraction and the trailing semicolon
+   counted as punctuation the author never typed. One post measured 0 contractions and 66
+   semicolons per 1,000 words purely from this — a completely different writer from the one
+   who wrote it. Fixed in `readability.ts`, which also corrects the editor's word counts.
+
+   **The first scorer flagged John's own writing three times**, and every one was the
+   scorer's fault: a `\w+i[sz]?ze` pattern matched "size"; "robust" was on the corporate
+   blacklist though he uses it plainly; "when it comes to" was treated as throat-clearing
+   though it is ordinary English. All three removed. A word he actually writes is not a
+   defect.
+
+   The verdict weighs **breadth as well as total penalty** — three contradicted habits is a
+   different writer whatever the arithmetic says. Hard failures stay reserved for
+   deterministic defects; statistical traits only ever warn, because five posts cannot
+   support failing on a band.
+4. **Fan-out.** ✅ **Delivered 2026-08-20 (PR #378).** `scripts/sync-voice.sh` renders the
+   card through the *same* `renderVoiceBlock` the site uses and writes it to three stacks
+   that cannot see `data/voice/`, plus `/admin/content/voice` and the retired memory file.
+   `--check` writes nothing and exits non-zero when a destination is stale.
+
+   **Hermes gets it in `jkai-general`, not a `jkai-voice` skill.** Hermes truncates every
+   skill description to 60 characters and is told to load anything "even partially
+   relevant", so a voice skill would either be routed past when it mattered or loaded for
+   everything. Voice applies to every reply, so it belongs in the always-loaded router.
+   jkai chat had **no voice instruction at all** before this. Inserted between markers so
+   the other 42,000 characters are untouched; the script restarts `jkai-hermes`, without
+   which a SKILL.md edit does nothing.
+
+   **A design error caught in the act.** The `chat` register is measured from *John's own
+   messages to jkai* — but the block is instructions for *jkai's replies*. The first sync
+   handed the assistant "write as John, in the first person" and "about 24 uses of I/me/my
+   per 1,000 words" as targets. jkai answers him; it does not impersonate him. Fixed with
+   `bandsDescribeOutput` on the register: where the measurement describes the counterpart
+   it renders as *"his messages run about 10 words — match that register; these are HIS
+   numbers, not a target for yours"*, and `chat` no longer carries the persona. Card v3.
+
+   **Deliberately no rsync line in `ci-release.sh`.** Every destination is a homeserv path;
+   nothing here runs on the VPS. New `scripts/` files normally do need one, so the absence
+   is recorded in the script header rather than left to look like an oversight.
+
+   `feedback_public_prose_voice.md` is now a pointer that keeps only the two rules the
+   measurements overturned.
+
+5. **Learn loop.** ✅ **Delivered 2026-08-20 (PR #377).** `drift.ts` compares a fresh
+   measurement against the committed card; `drift-engine.ts` runs it monthly (06:00 on the
+   1st, London) behind the same prod-only hostname gate and settings kill switch as
+   `selfimprove`, writes a datastore note when something moved, and **changes nothing
+   else**. `scripts/voice-drift.ts` runs the same comparison by hand and exits non-zero on
+   material drift. Surfaced on `/admin/content/voice`.
+
+   Rebuilding the card stays a deliberate act with a commit behind it. The card is the one
+   description of how everything writes, and an unattended overnight change to it would be
+   untraceable — so the job's entire output is a note that says which numbers moved and
+   which two commands to run.
+
+   **Thresholds are generous on purpose**: 25% *and* an absolute floor per metric. On five
+   posts a single new one moves every number, and a job that cried drift every month would
+   train John to ignore it, which is worse than not having it. Colons going 0 → 0.4 per
+   1,000 words is a 100% change and means nothing; the floor is what stops that being
+   reported. A new post is material on its own, whatever the rates did.
+
+   Immaterial reports are not stored. A row a month saying "nothing moved" is how a log
+   becomes wallpaper.
+
+   `data/voice/preferences.json` now exists, built from the resolutions phases 0 and 0.5
+   started capturing — rejections and edited acceptances only, since tolerating a
+   suggestion is not the same as wanting it. **It is empty, and correctly so:** nothing
+   recorded resolutions until #370 and nothing fired them until #371, so the pairs
+   accumulate one editing session at a time.
 ## Files to touch (~20)
 
 **Core (10):** `src/lib/db/schema.ts` · `src/lib/voice/{measure,card,score,index}.ts` (new) ·
@@ -258,9 +344,9 @@ theatre. **Phase 3 gates phases 4–5.**
 | 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 3,198 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
 | 2 | ✅ `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing. Plus `wiring.test.ts`, which reads the real prompt strings — the surfaces provably emit the block, and the old "Short sentences are fine" is provably gone |
-| 3 | Committed test: `scoreVoice(post 13) > scoreVoice(post 12)` by the stated margin |
-| 4 | A live jkai turn and a generated release summary both come back in register; Claude skill appears in the index |
-| 5 | Drift job opens a note, changes nothing on its own |
+| 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
+| 4 | ✅ Claude skill **appears in the index** (confirmed in a live session). Release-notes prompt asserted to contain the terse block by `wiring.test.ts`, reading the real prompt string. `sync-voice.sh --check` is clean and idempotent. **Not verified: a live jkai turn** — skill bodies load at runtime and never reach `state.db`, so the file being right and Hermes restarting is as far as it goes without driving a real chat turn |
+| 5 | ✅ `drift.test.ts` — detects a moved metric and a new post, ignores a large percentage move on a tiny base, and asserts the summary never proposes applying anything itself. `scripts/voice-drift.ts` run against the live corpus: no drift, exit 0 |
 
 ## Deployment snag found the hard way: schema.ts must be self-contained
 

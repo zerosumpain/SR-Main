@@ -17,7 +17,9 @@
 // `buildStyleCues` parse keeps working unchanged; the edit signal rides along
 // as a separate `edited` flag rather than a third status value.
 
-import { appendMessage } from './messages';
+// `./messages` reaches the database, which drags in $env and does not resolve
+// outside SvelteKit. The parse helpers below are pure and are imported by
+// scripts/build-voice-card.ts, so the write path loads lazily instead.
 
 /** Longest excerpt stored per field. Sentence-level rewrites sit far below
  *  this; the cap exists so a runaway proposal can't bloat the messages table. */
@@ -95,6 +97,7 @@ export function buildResolution(input: ResolutionInput): ProposalResolution {
  */
 export async function recordResolution(postId: number, input: ResolutionInput): Promise<void> {
   const resolution = buildResolution(input);
+  const { appendMessage } = await import('./messages');
   await appendMessage(postId, 'proposal_resolved', JSON.stringify(resolution));
 }
 

@@ -106,6 +106,17 @@ export type RegisterCard = {
   avoid: string[];
   /** Absent where the corpus cannot support measurement for this register. */
   measured?: Measured;
+  /**
+   * Whether `measured` describes the text this register PRODUCES, or the text it
+   * REPLIES TO.
+   *
+   * For `public-prose` it is the output: John writes the blog, so his bands are
+   * targets. For `chat` it is the opposite — the corpus is John's own messages
+   * to jkai, and jkai is the one writing. Handing those bands over as targets
+   * told the assistant to use 24 first-person pronouns per 1,000 words and write
+   * as John, which is not the assistant's job and not what the numbers mean.
+   */
+  bandsDescribeOutput?: boolean;
   exemplarIds: string[];
 };
 

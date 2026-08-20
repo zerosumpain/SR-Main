@@ -37,6 +37,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     items: [
       { label: 'Blog', href: '/admin/content/blog' },
       { label: 'Hero', href: '/admin/content/hero' },
+      { label: 'Voice', href: '/admin/content/voice' },
       { label: 'Effects', href: '/admin/content/effects' },
     ],
   },

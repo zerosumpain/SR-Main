@@ -45,7 +45,42 @@ const card: VoiceCard = {
       },
     },
     explanatory: { register: 'explanatory', usesPersona: true, rules: ['Plain English.'], avoid: [], exemplarIds: [] },
-    chat: { register: 'chat', usesPersona: true, rules: ['Short.'], avoid: [], exemplarIds: [] },
+    chat: {
+      register: 'chat',
+      usesPersona: false,
+      bandsDescribeOutput: false,
+      rules: ['Short.'],
+      avoid: [],
+      exemplarIds: [],
+      // Real numbers, not a cast-to-never stub: the chat branch of
+      // renderVoiceBlock reads median, p90 and shortSentenceRate straight out
+      // of here, so a stub asserts nothing about the sentence it builds.
+      measured: {
+        posts: 0,
+        words: 90712,
+        sentences: 1106,
+        paragraphs: 1106,
+        fleschReadingEase: 70,
+        fleschKincaidGrade: 6,
+        audience: 'Plain English',
+        sentenceWords: { median: 10, p90: 20, max: 60 },
+        paragraphWords: { median: 12, p90: 26, max: 80 },
+        shortSentenceRate: 0.28,
+        rates: {
+          contractions: 20,
+          firstPerson: 40,
+          emDash: 1,
+          semicolon: 0,
+          colon: 0,
+          parenthetical: 1,
+          exclamation: 1,
+          question: 30,
+          britishSpellings: 3,
+          americanisms: 0,
+        },
+        distinctive: [],
+      },
+    },
     terse: { register: 'terse', usesPersona: false, rules: ['One line.'], avoid: ['Personality.'], exemplarIds: [] },
   },
 };
@@ -113,6 +148,26 @@ describe('renderVoiceBlock', () => {
 
   it('drops the bands when the caller does not want them', () => {
     expect(renderVoiceBlock(card, 'public-prose', exemplars, { bands: false })).not.toContain('median 19');
+  });
+});
+
+describe('chat is about the counterpart, not the author', () => {
+  it('never tells the assistant to write as John', () => {
+    // jkai replies TO him; it does not write AS him. An earlier version handed
+    // the persona and his own first-person density to the assistant as targets.
+    const block = voiceBlock('chat');
+    expect(block).not.toContain('Write as John');
+    expect(block).not.toContain('uses of I/me/my');
+  });
+
+  it('frames his measurements as who you are answering', () => {
+    const block = voiceBlock('chat');
+    expect(block).toContain('Who you are answering');
+    expect(block).toContain('These are HIS numbers, not a target for yours');
+  });
+
+  it('still gives public-prose its bands as targets', () => {
+    expect(voiceBlock('public-prose', { exemplars: 0 })).toContain('bands to stay inside');
   });
 });
 

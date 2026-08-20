@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "builtAt": "corpus-7de4584f",
   "invariants": [
     "British English throughout: -ise not -ize, -our not -or, whilst and amongst are fine.",
@@ -38,6 +38,7 @@
     "public-prose": {
       "register": "public-prose",
       "usesPersona": true,
+      "bandsDescribeOutput": true,
       "rules": [
         "Headlines carry the wit — tabloid-editorial, sarcastic, punchy. \"The site is a rounding error.\"",
         "The text underneath stays low-key, relaxed and factual. The joke lives in the heading, not the paragraph.",
@@ -87,107 +88,106 @@
         },
         "distinctive": [
           {
-            "term": "my",
-            "z": 1.81,
-            "count": 31
-          },
-          {
-            "term": "it",
-            "z": 1.63,
-            "count": 70
-          },
-          {
-            "term": "it's",
-            "z": 1.52,
-            "count": 22
-          },
-          {
-            "term": "i've",
-            "z": 1.45,
-            "count": 20
-          },
-          {
             "term": "i",
-            "z": 1.43,
+            "z": 2.08,
             "count": 81
           },
           {
+            "term": "it",
+            "z": 1.81,
+            "count": 70
+          },
+          {
+            "term": "my",
+            "z": 1.79,
+            "count": 31
+          },
+          {
             "term": "up",
-            "z": 1.34,
+            "z": 1.32,
             "count": 17
           },
           {
+            "term": "i've",
+            "z": 1.22,
+            "count": 20
+          },
+          {
             "term": "how",
-            "z": 1.21,
+            "z": 1.2,
             "count": 14
           },
           {
             "term": "code",
-            "z": 1.17,
+            "z": 1.16,
             "count": 13
           },
           {
             "term": "openclaw",
-            "z": 1.17,
+            "z": 1.16,
             "count": 13
           },
           {
             "term": "thing",
-            "z": 1.17,
+            "z": 1.16,
             "count": 13
           },
           {
+            "term": "it's",
+            "z": 1.1,
+            "count": 22
+          },
+          {
             "term": "you",
-            "z": 1.12,
+            "z": 1.1,
             "count": 22
           },
           {
             "term": "have",
-            "z": 1.11,
+            "z": 1.09,
             "count": 17
           },
           {
             "term": "could",
-            "z": 1.08,
+            "z": 1.06,
             "count": 11
           },
           {
             "term": "more",
-            "z": 1.03,
+            "z": 1.01,
             "count": 20
           },
           {
-            "term": "i'm",
-            "z": 1.03,
-            "count": 10
+            "term": "that",
+            "z": 1,
+            "count": 50
           },
           {
             "term": "those",
-            "z": 0.97,
+            "z": 0.96,
             "count": 9
           },
           {
             "term": "about",
-            "z": 0.96,
+            "z": 0.94,
             "count": 14
           },
           {
             "term": "for",
-            "z": 0.95,
+            "z": 0.93,
             "count": 41
           },
           {
             "term": "claude",
-            "z": 0.92,
+            "z": 0.91,
             "count": 8
           },
           {
-            "term": "that",
-            "z": 0.91,
-            "count": 50
+            "term": "local",
+            "z": 0.85,
+            "count": 7
           }
         ],
-        "distinctiveNote": "Nothing clears the usual z > 1.96 bar (top term scores 1.81), so read this as a ranking, not a set of findings. The list also mixes style with subject matter — at this corpus size a topic word and a habit are indistinguishable.",
         "caveat": "Measured over 3,198 words across 5 document(s) — below the 10,000-word mark where these figures start describing the author rather than these particular documents. Treat them as bands to stay inside, not targets to hit."
       },
       "exemplarIds": [
@@ -202,6 +202,7 @@
     "explanatory": {
       "register": "explanatory",
       "usesPersona": true,
+      "bandsDescribeOutput": true,
       "rules": [
         "Plain English is the default register here, not a toggle-away variant.",
         "Say what a thing is before why it matters, and both before how it works.",
@@ -216,7 +217,8 @@
     },
     "chat": {
       "register": "chat",
-      "usesPersona": true,
+      "usesPersona": false,
+      "bandsDescribeOutput": false,
       "rules": [
         "Short. Most of his own messages are under twenty words, and the reply should not tower over the question.",
         "Answer first, then the caveat — never the reverse.",
@@ -266,6 +268,7 @@
     "terse": {
       "register": "terse",
       "usesPersona": false,
+      "bandsDescribeOutput": true,
       "rules": [
         "One line where one line does. Past tense for what happened, present for what is.",
         "Lead with the thing that changed, not the component it changed in.",

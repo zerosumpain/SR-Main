@@ -33,10 +33,19 @@ describe('surfaces that opted in', () => {
   });
 
   it('release notes carry terse — conventions without the persona', async () => {
-    const block = voiceBlock('terse', { exemplars: 0 });
-    expect(block).toContain('British English');
+    const { systemPrompt } = await import('$lib/releases/summarise');
+    const prompt = systemPrompt();
+    expect(prompt).toContain('VOICE — terse');
+    expect(prompt).toContain('British English');
+    // A changelog line is not John speaking.
+    expect(prompt).not.toContain('Write as John');
+    expect(prompt).not.toContain('I built a thing');
+  });
+
+  it('jkai chat is told to answer him, not impersonate him', async () => {
+    const block = voiceBlock('chat');
+    expect(block).toContain('Who you are answering');
     expect(block).not.toContain('Write as John');
-    expect(block).not.toContain('I built a thing');
   });
 
   it('every register the surfaces ask for renders non-empty', () => {

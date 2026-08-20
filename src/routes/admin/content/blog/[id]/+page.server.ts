@@ -3,6 +3,7 @@ import { db } from '$lib/db';
 import { blogPosts, blogPostTags } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { loadHistory } from '$lib/blog/assistant/messages';
+import { getVoiceCard } from '$lib/voice/card';
 import { getUmami } from '$lib/umami/client';
 import type { PageServerLoad } from './$types';
 
@@ -55,6 +56,9 @@ export const load: PageServerLoad = async ({ params }) => {
   return {
     post: { ...post, tags: tags.map((t) => t.tag) },
     history,
+    // The editor scores in the browser as the author types, so the card travels
+    // with the page rather than costing a request per keystroke.
+    voiceCard: getVoiceCard(),
     stats: { stats30d, statsLifetime, daily, referrers, available: umami !== null },
   };
 };
