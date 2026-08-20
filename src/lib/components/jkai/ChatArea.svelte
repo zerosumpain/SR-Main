@@ -2059,24 +2059,24 @@
 
     // 2) Tell Hermes for this chat session via the gateway /model command.
     //
-    //    On the send path (`force`) this is FIRE-AND-FORGET. Awaiting it put a
-    //    whole silent turn — up to 15s — in front of the user's first message,
-    //    which is most of what made a first reply feel 30s slow. The guarantee
-    //    moves rather than disappears: the silent `/model` turn and the user's
-    //    turn are both jobs on the same conversation, and the job store queues
-    //    per conversation (`whenJobSettles`), so the pin is delivered first; and
-    //    the server pump's `ensureModelPinned` re-asserts the conversation's
-    //    stored model before the user turn goes out regardless.
+    //    On the send path (`force`) we wait only for the POST — one ~90ms local
+    //    round trip that creates the job — not for the silent turn, which used
+    //    to hold the user's first message for up to 15s and was most of what
+    //    made a first reply feel 30s slow. The guarantee moves rather than
+    //    disappears: the pin job now exists before `send()` creates the user's
+    //    job, so the job store queues the user turn behind it per conversation
+    //    (`whenJobSettles`); and the server pump's `ensureModelPinned`
+    //    re-asserts the conversation's stored model regardless.
     //
-    //    The manual picker still waits: nothing is racing it there, and the
-    //    disabled composer is the only feedback that the switch is happening.
+    //    The manual picker waits for the whole turn: nothing is racing it there,
+    //    and the disabled composer is the only feedback the user gets.
     if (force) {
-      void tellHermesModel(provider, modelId);
+      await tellHermesModel(provider, modelId);
       return;
     }
     loading = true;
     try {
-      await tellHermesModel(provider, modelId);
+      await tellHermesModel(provider, modelId, { awaitTurn: true });
     } finally {
       loading = false;
     }
@@ -2096,11 +2096,28 @@
    *  Hermes keys the switch to the chat session and holds it in memory, so it
    *  has to be pushed once per conversation — see the open-time effect below.
    *
-   *  Every caller now fires this WITHOUT awaiting it (the one exception is the
-   *  manual model picker, where the user is not mid-send). The drain below still
-   *  runs, so the silent turn's confirmation is consumed rather than left to the
-   *  job's own cleanup — it just no longer holds anybody up. */
-  async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
+   *  Resolves once the JOB EXISTS, not once the turn finishes. That distinction
+   *  is the whole of WS1: the job is created (and registered against this
+   *  conversation) by the POST, which costs one ~90ms local round trip, while
+   *  waiting for the turn cost up to 15s. Callers that need ordering await the
+   *  POST; nobody awaits the turn except the manual picker (`awaitTurn`), where
+   *  the user is not mid-send and the disabled composer is the feedback.
+   *
+   *  Awaiting the POST is not optional on the send path. Fired truly
+   *  and-forget, the pin's POST and the user turn's POST race each other to
+   *  `createJob`, and when the user's wins, the two run CONCURRENTLY on one
+   *  chat: the user's job then drops the pin turn's frames as foreign, the pin
+   *  job never sees a terminator, and — because the gateway queues — the next
+   *  message on that conversation sits behind it until the 255s idle watchdog
+   *  kills it. Measured 2026-08-20: a follow-up sent straight after a routed
+   *  first message took 4m14s to be answered. Awaiting the POST makes the pin
+   *  job discoverable before the user turn is created, so the user turn queues
+   *  behind it properly and the pin settles in seconds. */
+  async function tellHermesModel(
+    provider: ModelContext['provider'],
+    modelId: string,
+    opts?: { awaitTurn?: boolean },
+  ): Promise<void> {
     // Claim the pair SYNCHRONOUSLY, before the first await. Both push sites — the
     // open-time effect and `switchModel` — read this, so a switch that changes
     // `currentModel` (and therefore re-runs the effect) cannot make the effect
@@ -2117,13 +2134,14 @@
       });
       const data = await res.json().catch(() => null);
       const jobId = data?.jobId;
-      if (jobId) {
-        const stream = streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} });
-        await Promise.race([
-          stream.done.catch(() => {}),
-          new Promise((r) => setTimeout(r, 15000)),
-        ]);
-      }
+      if (!jobId) return;
+      // Drain the silent turn's confirmation so it isn't left to the job's own
+      // cleanup. Backgrounded unless the caller explicitly wants the turn.
+      const drained = Promise.race([
+        streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} }).done.catch(() => {}),
+        new Promise((r) => setTimeout(r, 15000)),
+      ]);
+      if (opts?.awaitTurn) await drained;
     } catch {
       // The choice is already persisted site-side; if the /model turn failed
       // Hermes keeps its own default and pricing may be off until the next turn.
