@@ -1,12 +1,215 @@
 <script lang="ts">
+  import { replaceState } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
-  import { activityLabel } from '$lib/trails/format';
+  import type { SegmentTerrain } from '$lib/trails/segments/naming';
+  import {
+    activityLabel,
+    formatDistance,
+    formatElevation,
+    formatPace,
+    formatSpeed,
+    isPaceSport,
+  } from '$lib/trails/format';
 
   let { data } = $props();
 
-  // Plain let, not $state: this is a request handle, never read by the template
-  // as reactive state — only the two flags below are.
+  type SegmentRow = (typeof data.segments)[number];
+
+  // --- filters & sort -------------------------------------------------------
+  // The whole list is already here; every control below is a $derived pass
+  // over it, seeded once from the URL so dashboard deep links land filtered.
+
+  const TERRAINS: Array<{ key: SegmentTerrain; label: string }> = [
+    { key: 'climb', label: 'Climbs' },
+    { key: 'descent', label: 'Descents' },
+    { key: 'rolling', label: 'Rolling' },
+    { key: 'flat', label: 'Flat' },
+  ];
+
+  const SORTS = [
+    { key: 'efforts', label: 'Most efforts' },
+    { key: 'climb', label: 'Biggest climb' },
+    { key: 'steepest', label: 'Steepest' },
+    { key: 'longest', label: 'Longest' },
+    { key: 'fastest', label: 'Fastest' },
+    { key: 'efficiency', label: 'Best efficiency' },
+    { key: 'cost', label: 'Lowest cost' },
+    { key: 'recent', label: 'Recently run' },
+  ] as const;
+  type SortKey = (typeof SORTS)[number]['key'];
+
+  const isTerrain = (v: string | null): v is SegmentTerrain =>
+    TERRAINS.some((t) => t.key === v);
+  const isSort = (v: string | null): v is SortKey => SORTS.some((s) => s.key === v);
+
+  // Validated like terrain and sort below: a stale link's unknown type must
+  // fall back to the unfiltered view, not an inexplicable empty page.
+  let activeType = $state<string | null>(
+    data.types.some((t) => t.activityType === data.initial.type) ? data.initial.type : null,
+  );
+  let activeTerrain = $state<SegmentTerrain | null>(
+    isTerrain(data.initial.terrain) ? data.initial.terrain : null,
+  );
+  // `terrain=offroad` is accepted as a spelling of the offroad toggle so older
+  // links keep working; it is written back as its own param, because offroad
+  // and terrain are independent filters and must not fight over one key.
+  let offroadOnly = $state(data.initial.offroad === '1' || data.initial.terrain === 'offroad');
+  let sortKey = $state<SortKey>(isSort(data.initial.sort) ? data.initial.sort : 'efforts');
+
+  /** Keep the address bar honest so a filtered view survives a copy-paste. */
+  function syncUrl() {
+    const params = new URLSearchParams();
+    if (activeType) params.set('type', activeType);
+    if (activeTerrain) params.set('terrain', activeTerrain);
+    if (offroadOnly) params.set('offroad', '1');
+    if (sortKey !== 'efforts') params.set('sort', sortKey);
+    const qs = params.toString();
+    replaceState(qs ? `?${qs}` : '/trails/segments', {});
+  }
+
+  const filtered = $derived(
+    data.segments.filter(
+      (s) =>
+        (!activeType || s.activityType === activeType) &&
+        (!activeTerrain || s.terrain === activeTerrain) &&
+        (!offroadOnly || s.offroad),
+    ),
+  );
+
+  // Pace, EF and cost only compare within one kind of moving (a ride's EF sits
+  // around 4 and would top every mixed list), so on those sorts a segment's
+  // value counts only when the set is one sport or the segment is a pace sport
+  // — the same rule the records panel applies. Nulls sink: a segment that
+  // cannot compete still exists.
+  const comparableValue = (s: SegmentRow, v: number | null): number | null =>
+    activeType || isPaceSport(s.activityType) ? v : null;
+
+  function bySortKey(a: SegmentRow, b: SegmentRow): number {
+    const nullsLast = (
+      va: number | null,
+      vb: number | null,
+      dir: 1 | -1,
+    ): number => {
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return (va - vb) * dir;
+    };
+    switch (sortKey) {
+      case 'climb':
+        return b.elevationGainM - a.elevationGainM;
+      case 'steepest':
+        // Magnitude: with the Descents chip on, −15% is steeper than −0.5%.
+        return Math.abs(b.gradientPct) - Math.abs(a.gradientPct);
+      case 'longest':
+        return b.distanceM - a.distanceM;
+      case 'fastest':
+        return nullsLast(comparableValue(a, a.bests.paceSPerKm), comparableValue(b, b.bests.paceSPerKm), 1);
+      case 'efficiency':
+        return nullsLast(
+          comparableValue(a, a.bests.efficiencyFactor),
+          comparableValue(b, b.bests.efficiencyFactor),
+          -1,
+        );
+      case 'cost':
+        return nullsLast(comparableValue(a, a.bests.beatsPerKm), comparableValue(b, b.bests.beatsPerKm), 1);
+      case 'recent':
+        return nullsLast(a.lastEffortAt, b.lastEffortAt, -1);
+      default:
+        return b.effortCount - a.effortCount || b.distanceM - a.distanceM;
+    }
+  }
+
+  const sorted = $derived([...filtered].sort(bySortKey));
+
+  const filtering = $derived(activeType != null || activeTerrain != null || offroadOnly);
+
+  function clearFilters() {
+    activeType = null;
+    activeTerrain = null;
+    offroadOnly = false;
+    syncUrl();
+  }
+
+  // --- records over the filtered set -----------------------------------------
+
+  interface Record_ {
+    label: string;
+    value: string;
+    segment: SegmentRow;
+  }
+
+  const records = $derived.by((): Record_[] => {
+    if (filtered.length === 0) return [];
+    const top = (
+      pool: SegmentRow[],
+      read: (s: SegmentRow) => number | null,
+      pick: 'min' | 'max',
+    ): SegmentRow | null => {
+      let best: SegmentRow | null = null;
+      let bestValue = 0;
+      for (const s of pool) {
+        const v = read(s);
+        if (v == null || !Number.isFinite(v)) continue;
+        if (!best || (pick === 'min' ? v < bestValue : v > bestValue)) {
+          best = s;
+          bestValue = v;
+        }
+      }
+      return best;
+    };
+
+    // Pace, EF and cost only compare within one kind of moving: a ride's EF
+    // sits around 4 and would own the record forever. With a type filter the
+    // set is already one sport; without one, those three records read over the
+    // pace sports only. Climb, length and effort counts compare across anything.
+    const comparable = activeType
+      ? filtered
+      : filtered.filter((s) => isPaceSport(s.activityType));
+
+    const out: Record_[] = [];
+    const fastest = top(comparable, (s) => s.bests.paceSPerKm, 'min');
+    if (fastest)
+      out.push({
+        label: 'Fastest',
+        value: isPaceSport(fastest.activityType)
+          ? formatPace(fastest.bests.paceSPerKm)
+          : formatSpeed(fastest.bests.paceSPerKm),
+        segment: fastest,
+      });
+    const efficient = top(comparable, (s) => s.bests.efficiencyFactor, 'max');
+    if (efficient)
+      out.push({
+        label: 'Best efficiency',
+        value: efficient.bests.efficiencyFactor!.toFixed(2),
+        segment: efficient,
+      });
+    const cheapest = top(comparable, (s) => s.bests.beatsPerKm, 'min');
+    if (cheapest)
+      out.push({
+        label: 'Lowest cost',
+        value: `${Math.round(cheapest.bests.beatsPerKm!)} b/km`,
+        segment: cheapest,
+      });
+    const climb = top(filtered, (s) => s.elevationGainM, 'max');
+    if (climb && climb.elevationGainM > 0)
+      out.push({
+        label: 'Biggest climb',
+        value: `+${formatElevation(climb.elevationGainM)}`,
+        segment: climb,
+      });
+    const longest = top(filtered, (s) => s.distanceM, 'max');
+    if (longest)
+      out.push({ label: 'Longest', value: formatDistance(longest.distanceM), segment: longest });
+    const busiest = top(filtered, (s) => s.effortCount, 'max');
+    if (busiest)
+      out.push({ label: 'Most run', value: `${busiest.effortCount} efforts`, segment: busiest });
+    return out;
+  });
+
+  // --- rebuild ---------------------------------------------------------------
+
   let rebuilding = $state(false);
   let rebuildNote = $state<string | null>(null);
 
@@ -54,28 +257,110 @@
         wherever two traces stay within 20 m of each other. Each one gets a name and a leaderboard.
       </p>
     </div>
-    <a class="back-link" href="/trails">All trails</a>
+    <nav class="hdr-nav">
+      <a href="/trails/dashboard">Dashboard</a>
+      <a href="/trails">All trails</a>
+    </nav>
   </header>
 
   {#if data.error}
     <div class="nm-sec nm-sec-error"><span class="sr-label-tight error">{data.error}</span></div>
   {/if}
 
-  {#if data.types.length > 1 || data.activeType}
-    <nav class="filters">
-      <a class="chip" class:on={!data.activeType} href="/trails/segments">
-        All <span class="count">{data.types.reduce((n, t) => n + t.count, 0)}</span>
-      </a>
-      {#each data.types as type (type.activityType)}
-        <a
+  {#if data.segments.length > 0}
+    <div class="controls">
+      {#if data.types.length > 1}
+        <div class="chip-row" role="group" aria-label="Activity type">
+          <button
+            type="button"
+            class="chip"
+            class:on={!activeType}
+            onclick={() => {
+              activeType = null;
+              syncUrl();
+            }}
+          >
+            All <span class="count">{data.types.reduce((n, t) => n + t.count, 0)}</span>
+          </button>
+          {#each data.types as type (type.activityType)}
+            <button
+              type="button"
+              class="chip"
+              class:on={activeType === type.activityType}
+              onclick={() => {
+                activeType = activeType === type.activityType ? null : type.activityType;
+                syncUrl();
+              }}
+            >
+              {activityLabel(type.activityType)} <span class="count">{type.count}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="chip-row" role="group" aria-label="Terrain">
+        {#each TERRAINS as terrain (terrain.key)}
+          <button
+            type="button"
+            class="chip"
+            class:on={activeTerrain === terrain.key}
+            onclick={() => {
+              activeTerrain = activeTerrain === terrain.key ? null : terrain.key;
+              syncUrl();
+            }}
+          >
+            {terrain.label}
+          </button>
+        {/each}
+        <button
+          type="button"
           class="chip"
-          class:on={data.activeType === type.activityType}
-          href="/trails/segments?type={type.activityType}"
+          class:on={offroadOnly}
+          title="Trail runs, MTB and hikes — the sports that only happen off the tarmac"
+          onclick={() => {
+            offroadOnly = !offroadOnly;
+            syncUrl();
+          }}
         >
-          {activityLabel(type.activityType)} <span class="count">{type.count}</span>
-        </a>
-      {/each}
-    </nav>
+          Offroad
+        </button>
+      </div>
+
+      <label class="sort">
+        <span class="sr-label-tight">Sort</span>
+        <select
+          bind:value={sortKey}
+          onchange={syncUrl}
+        >
+          {#each SORTS as sort (sort.key)}
+            <option value={sort.key}>{sort.label}</option>
+          {/each}
+        </select>
+      </label>
+    </div>
+
+    {#if records.length > 0}
+      <section class="nm-sec">
+        <div class="nm-sec-hd">
+          <span class="sr-label-tight">Records</span>
+          <span class="nm-sec-meta">
+            best single readouts across {filtering ? 'the filtered' : 'all'}
+            {filtered.length} segment{filtered.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <dl class="records cellgrid">
+          {#each records as record (record.label)}
+            <div>
+              <dt>{record.label}</dt>
+              <dd>{record.value}</dd>
+              <a class="rec-seg" href="/trails/segments/{record.segment.id}">
+                {record.segment.name}
+              </a>
+            </div>
+          {/each}
+        </dl>
+      </section>
+    {/if}
   {/if}
 
   {#if data.segments.length === 0}
@@ -90,9 +375,14 @@
       </button>
       {#if rebuildNote}<p class="note">{rebuildNote}</p>{/if}
     </section>
+  {:else if sorted.length === 0}
+    <section class="nm-sec">
+      <p class="empty-title">Nothing matches these filters.</p>
+      <button type="button" class="rebuild" onclick={clearFilters}>Clear filters</button>
+    </section>
   {:else}
     <ol class="segment-list">
-      {#each data.segments as segment (segment.id)}
+      {#each sorted as segment (segment.id)}
         <li>
           <a class="segment-row" href="/trails/segments/{segment.id}" data-segment-row>
             <TrackThumb polyline={segment.polyline} />
@@ -100,7 +390,31 @@
               <span class="row-name">{segment.name}</span>
               <span class="row-meta">
                 <span class="type-tag">{activityLabel(segment.activityType)}</span>
-                {segment.shortDescriptor}
+                {segment.shortDescriptor}{segment.offroad ? ' · offroad' : ''}
+              </span>
+            </div>
+            <div class="row-bests">
+              <span class="best">
+                <span class="best-l">{isPaceSport(segment.activityType) ? 'pace' : 'speed'}</span>
+                <span class="best-v">
+                  {segment.bests.paceSPerKm == null
+                    ? '—'
+                    : isPaceSport(segment.activityType)
+                      ? formatPace(segment.bests.paceSPerKm)
+                      : formatSpeed(segment.bests.paceSPerKm)}
+                </span>
+              </span>
+              <span class="best">
+                <span class="best-l">effic.</span>
+                <span class="best-v">{segment.bests.efficiencyFactor?.toFixed(2) ?? '—'}</span>
+              </span>
+              <span class="best">
+                <span class="best-l">cost</span>
+                <span class="best-v">
+                  {segment.bests.beatsPerKm == null
+                    ? '—'
+                    : `${Math.round(segment.bests.beatsPerKm)} b/km`}
+                </span>
               </span>
             </div>
             <span class="row-efforts">
@@ -117,8 +431,10 @@
         {rebuilding ? 'Rebuilding…' : 'Rebuild segments'}
       </button>
       <p class="foot-note">
-        A rebuild recomputes everything from the stored traces. Segments that land on the same
-        ground keep their name, so nothing you have learned gets renamed.
+        Best pace, efficiency (metres per minute per beat — higher is better) and cost (heartbeats
+        per kilometre — lower is better) are each segment's single best effort. A rebuild
+        recomputes everything from the stored traces; segments that land on the same ground keep
+        their name, so nothing you have learned gets renamed.
       </p>
       {#if rebuildNote}<p class="note">{rebuildNote}</p>{/if}
     </footer>
@@ -162,21 +478,36 @@
     color: var(--text-secondary);
     max-width: 64ch;
   }
-  .back-link {
+  .hdr-nav {
+    display: flex;
+    gap: 1rem;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .hdr-nav a {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--accent);
     text-decoration: none;
-    flex-shrink: 0;
+  }
+  .hdr-nav a:hover {
+    text-decoration: underline;
   }
 
-  .filters {
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .chip-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
   }
   .chip {
     font-family: var(--font-mono);
@@ -187,7 +518,7 @@
     border: 1px solid var(--line-strong);
     background: transparent;
     color: var(--text-secondary);
-    text-decoration: none;
+    cursor: pointer;
   }
   .chip:hover {
     border-color: var(--accent);
@@ -203,6 +534,64 @@
     margin-left: 0.3rem;
   }
 
+  .sort {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+  .sort select {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    padding: 0.3rem 0.5rem;
+    cursor: pointer;
+  }
+  .sort select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* The shared .cellgrid primitive draws the one-border-per-edge cells; this
+     block only sets the columns and the tighter stat padding. */
+  .records {
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+    margin: 0;
+  }
+  .records > div {
+    background: var(--bg);
+    padding: 0.7rem 0.85rem;
+  }
+  .records dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+  }
+  .records dd {
+    margin: 0.25rem 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-body-lg);
+    color: var(--text-primary);
+  }
+  .rec-seg {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rec-seg:hover {
+    text-decoration: underline;
+  }
+
   .segment-list {
     list-style: none;
     margin: 0;
@@ -210,7 +599,7 @@
   }
   .segment-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 1rem;
     padding: 0.75rem 0.25rem;
@@ -244,6 +633,30 @@
     color: var(--accent);
     margin-right: 0.5rem;
   }
+
+  .row-bests {
+    display: flex;
+    gap: 1.25rem;
+  }
+  .best {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-family: var(--font-mono);
+    min-width: 4.5rem;
+  }
+  .best-l {
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-muted);
+  }
+  .best-v {
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
   .row-efforts {
     display: flex;
     flex-direction: column;
@@ -311,11 +724,23 @@
     max-width: 62ch;
   }
 
+  @media (max-width: 900px) {
+    .row-bests {
+      display: none;
+    }
+    .segment-row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+  }
+
   @media (max-width: 640px) {
     .page-hdr {
       flex-direction: column;
       align-items: flex-start;
       gap: 0.75rem;
+    }
+    .sort {
+      margin-left: 0;
     }
     .segment-row {
       grid-template-columns: auto minmax(0, 1fr);

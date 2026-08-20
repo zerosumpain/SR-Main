@@ -38,6 +38,8 @@ import type { MetricResult } from '$lib/health/analytics/types';
 import { resolveHealthProfile } from '$lib/health/services/vo2max-service';
 import { getACWR } from '$lib/health/services/acwr-service';
 import { computeVO2MaxResult, type VO2Result } from '$lib/health/analytics/vo2max-percentile';
+import { beatsPerKm } from './segments/metrics';
+import { isPaceSport } from './format';
 import type { ActivityDetail } from './activities-service';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ export interface WorkoutPhysio {
   avgHeartrate: number | null;
   trimp: number | null;
   ef: number | null;
+  beatsPerKm: number | null;
   hrr60: number | null;
 }
 
@@ -80,6 +83,9 @@ export interface TrailsDashboard {
   hrvSdnn: TrendSeries | null; // Apple SDNN daily medians
   recovery: DayPoint[];
   workouts: WorkoutPhysio[]; // last 90 days, ascending
+  // Pace-at-heart-rate, both directions of the same idea, pace sports only —
+  // a ride's EF is not comparable and would corrupt the trailing means.
+  efficiency: { ef: TrendSeries | null; bkm: TrendSeries | null };
   load: {
     days: LoadDay[]; // daily TRIMP, zero-filled from first activity
     trimpAcwr: MetricResult<ACWRResult> | null;
@@ -206,6 +212,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
       avgHeartrate: row.avgHeartrate,
       trimp,
       ef,
+      beatsPerKm: beatsPerKm(row.distanceM ?? 0, duration, row.avgHeartrate),
       hrr60: hrr60(curve),
     });
 
@@ -230,6 +237,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
     hrvSdnn: sdnnDaily ? trend(sdnnDaily) : null,
     recovery: whoopDaily?.recovery.slice(-90) ?? [],
     workouts,
+    efficiency: efficiencyTrends(workouts),
     load: { days: loadDays, trimpAcwr, strainAcwr },
     weeks: weeklyVolume(workouts, 12),
     zones28: zones28
@@ -278,6 +286,7 @@ export async function getTrailsStrip(): Promise<TrailsStrip> {
     avgHeartrate: null,
     trimp: null,
     ef: null,
+    beatsPerKm: null,
     hrr60: null,
   }));
 
@@ -493,16 +502,56 @@ async function fetchActivitiesWithHr(days: number): Promise<ActivityWithHr[]> {
 // ---------------------------------------------------------------------------
 // Pure assembly helpers (exported for tests)
 
-export function trend(daily: DayPoint[]): TrendSeries {
+// `anchor` exists for series keyed on LOCAL workout days: just after midnight
+// BST a workout's day is ahead of UTC-today, and anchoring on UTC-today alone
+// would leave that workout outside its own trailing window (the same trap
+// anchorDay() closes for load and volume). It never pulls the anchor back —
+// a stalled feed still nulls out.
+export function trend(daily: DayPoint[], anchor?: string): TrendSeries {
   const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
   const today = new Date().toISOString().slice(0, 10);
+  const end = anchor && anchor > today ? anchor : today;
   return {
     daily: sorted,
     rolling7: rollingMean(sorted, 7),
-    latest7: round1(trailingMean(sorted, 7, today)),
-    baseline28: round1(trailingMean(sorted, 28, today)),
+    // 2 dp: an efficiency factor lives around 1.0, where 1 dp would quantise
+    // the tile to steps of 0.1 and erase every real change.
+    latest7: round2(trailingMean(sorted, 7, end)),
+    baseline28: round2(trailingMean(sorted, 28, end)),
     lastDate: sorted.at(-1)?.date ?? null,
   };
+}
+
+/**
+ * The efficiency tiles' day series: per-day means of EF and beats-per-km over
+ * pace-sport workouts only. Multiple same-day workouts average rather than
+ * fight, and the trailing means stay today-anchored via trend() like every
+ * other tile — a quiet fortnight nulls out instead of presenting the last
+ * block as current.
+ */
+export function efficiencyTrends(
+  workouts: WorkoutPhysio[],
+): { ef: TrendSeries | null; bkm: TrendSeries | null } {
+  const efByDay = new Map<string, number[]>();
+  const bkmByDay = new Map<string, number[]>();
+  for (const w of workouts) {
+    if (!isPaceSport(w.activityType)) continue;
+    if (w.ef != null) (efByDay.get(w.day) ?? efByDay.set(w.day, []).get(w.day)!).push(w.ef);
+    if (w.beatsPerKm != null)
+      (bkmByDay.get(w.day) ?? bkmByDay.set(w.day, []).get(w.day)!).push(w.beatsPerKm);
+  }
+  const series = (byDay: Map<string, number[]>): DayPoint[] =>
+    [...byDay.entries()]
+      .map(([date, vals]) => ({
+        date,
+        value: Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+  const ef = series(efByDay);
+  const bkm = series(bkmByDay);
+  const anchor = anchorDay(workouts);
+  return { ef: ef.length ? trend(ef, anchor) : null, bkm: bkm.length ? trend(bkm, anchor) : null };
 }
 
 // Workout days are LOCAL calendar days (the phone's own clock); the server
@@ -618,8 +667,8 @@ function median(xs: number[]): number | null {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function round1(v: number | null): number | null {
-  return v == null ? null : Math.round(v * 10) / 10;
+function round2(v: number | null): number | null {
+  return v == null ? null : Math.round(v * 100) / 100;
 }
 
 function isoDay(epochS: number): string {

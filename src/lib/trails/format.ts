@@ -75,6 +75,16 @@ export function isPaceSport(type: string): boolean {
 }
 
 /**
+ * Offroad by declared sport. Segments carry no surface data (a GPS trace does
+ * not say what it crossed), so the activity type is the honest proxy: the
+ * sports that only happen off the tarmac count, and a road walk that wandered
+ * onto a bridleway does not sneak in.
+ */
+export function isOffroadType(type: string): boolean {
+  return type === 'trail_run' || type === 'mtb' || type === 'hike';
+}
+
+/**
  * Date shown as it was lived, not as the server sees it.
  *
  * `startDateLocal` is the string the phone sent, already in the workout's own

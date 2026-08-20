@@ -6,6 +6,7 @@ import {
   weeklyVolume,
   mondayOf,
   polarisedFromZones,
+  efficiencyTrends,
   type WorkoutPhysio,
 } from '$lib/trails/physio-service';
 
@@ -21,6 +22,7 @@ function workout(day: string, trimp: number | null, extra: Partial<WorkoutPhysio
     avgHeartrate: 150,
     trimp,
     ef: null,
+    beatsPerKm: null,
     hrr60: null,
     ...extra,
   };
@@ -116,5 +118,33 @@ describe('polarisedFromZones', () => {
   it('feeds seconds as milliseconds into the polarised model', () => {
     const r = polarisedFromZones({ z0: 0, z1: 3000, z2: 1500, z3: 300, z4: 300, z5: 0 });
     expect(r).not.toBeNull();
+  });
+});
+
+describe('efficiencyTrends', () => {
+  it('keeps pace sports and drops rides — a bike EF is a different animal', () => {
+    const { ef } = efficiencyTrends([
+      workout('2026-08-01', null, { ef: 1.4, beatsPerKm: 700 }),
+      workout('2026-08-02', null, { activityType: 'ride', ef: 4.2, beatsPerKm: 260 }),
+    ]);
+    expect(ef?.daily).toEqual([{ date: '2026-08-01', value: 1.4 }]);
+  });
+
+  it('averages two workouts on the same day instead of letting them fight', () => {
+    const { bkm } = efficiencyTrends([
+      workout('2026-08-01', null, { beatsPerKm: 700 }),
+      workout('2026-08-01', 1, { activityType: 'walk', beatsPerKm: 900 }),
+    ]);
+    expect(bkm?.daily).toEqual([{ date: '2026-08-01', value: 800 }]);
+  });
+
+  it('skips a workout with no reading rather than inventing a zero', () => {
+    const { ef, bkm } = efficiencyTrends([workout('2026-08-01', null)]);
+    expect(ef).toBeNull();
+    expect(bkm).toBeNull();
+  });
+
+  it('returns null series for no workouts at all', () => {
+    expect(efficiencyTrends([])).toEqual({ ef: null, bkm: null });
   });
 });

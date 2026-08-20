@@ -17,13 +17,34 @@ import {
 import { encodePolyline } from '$lib/health/polyline';
 import type { HrSample } from '$lib/health/analytics/series-intervals';
 import { trackBounds, type TrackPoint } from './track';
+import { isOffroadType, isPaceSport } from './format';
 import { resampleTrack } from './segments/resample';
 import { discoverSegments, type DiscoveredSegment, type MatchOptions } from './segments/matcher';
 import { makeCorridor, corridorMatch, type LngLat } from './segments/corridor';
 import { effortMetrics } from './segments/metrics';
-import { segmentDescriptor, segmentName, segmentSeed } from './segments/naming';
+import {
+  segmentDescriptor,
+  segmentName,
+  segmentSeed,
+  segmentTerrain,
+  type SegmentTerrain,
+} from './segments/naming';
+import {
+  netGradientPct,
+  similarByClimb,
+  similarByEfficiency,
+  type Scored,
+} from './segments/similarity';
 
 export type SegmentGeometry = Array<[number, number, number | null, number]>;
+
+/** Best-of readouts per segment, aggregated over its efforts. */
+export interface SegmentBests {
+  durationS: number | null;
+  paceSPerKm: number | null;
+  efficiencyFactor: number | null;
+  beatsPerKm: number | null;
+}
 
 export interface SegmentListRow {
   id: number;
@@ -37,6 +58,11 @@ export interface SegmentListRow {
   lastEffortAt: number | null;
   polyline: string | null;
   descriptor: string;
+  terrain: SegmentTerrain;
+  /** Net rise over run in percent; a descent reads negative. */
+  gradientPct: number;
+  offroad: boolean;
+  bests: SegmentBests;
 }
 
 export interface SegmentEffortRow {
@@ -83,7 +109,14 @@ type SegmentListSource = Omit<
   'coordinates' | 'bounds' | 'pointCount' | 'updatedAt'
 >;
 
-function toListRow(row: SegmentListSource): SegmentListRow {
+const EMPTY_BESTS: SegmentBests = {
+  durationS: null,
+  paceSPerKm: null,
+  efficiencyFactor: null,
+  beatsPerKm: null,
+};
+
+function toListRow(row: SegmentListSource, bests: SegmentBests = EMPTY_BESTS): SegmentListRow {
   return {
     id: row.id,
     name: row.name,
@@ -101,6 +134,29 @@ function toListRow(row: SegmentListSource): SegmentListRow {
       elevationLossM: row.elevationLossM,
       effortCount: row.effortCount,
     }),
+    terrain: segmentTerrain(row),
+    gradientPct: Math.round(netGradientPct(row) * 10) / 10,
+    offroad: isOffroadType(row.activityType),
+    bests,
+  };
+}
+
+/** min/max the aggregate query does, for callers that already hold the efforts. */
+export function bestsFromEfforts(
+  efforts: Array<Pick<SegmentEffortRow, 'durationS' | 'paceSPerKm' | 'efficiencyFactor' | 'beatsPerKm'>>,
+): SegmentBests {
+  const best = (
+    values: Array<number | null>,
+    pick: (a: number, b: number) => number,
+  ): number | null => {
+    const present = values.filter((v): v is number => v != null && Number.isFinite(v));
+    return present.length ? present.reduce((a, b) => pick(a, b)) : null;
+  };
+  return {
+    durationS: best(efforts.map((e) => e.durationS), Math.min),
+    paceSPerKm: best(efforts.map((e) => e.paceSPerKm), Math.min),
+    efficiencyFactor: best(efforts.map((e) => e.efficiencyFactor), Math.max),
+    beatsPerKm: best(efforts.map((e) => e.beatsPerKm), Math.min),
   };
 }
 
@@ -118,35 +174,55 @@ export async function listSegments(
   // Explicit projection, not select(): `coordinates` holds every point of every
   // segment, so selecting it here would drag megabytes of jsonb off the
   // database for a list that renders the encoded polyline instead.
-  const rows = await db
-    .select({
-      id: activitySegments.id,
-      name: activitySegments.name,
-      activityType: activitySegments.activityType,
-      distanceM: activitySegments.distanceM,
-      elevationGainM: activitySegments.elevationGainM,
-      elevationLossM: activitySegments.elevationLossM,
-      effortCount: activitySegments.effortCount,
-      firstEffortAt: activitySegments.firstEffortAt,
-      lastEffortAt: activitySegments.lastEffortAt,
-      polyline: activitySegments.polyline,
-    })
-    .from(activitySegments)
-    .where(where)
-    // Busiest first: the ground you cover most is the ground worth comparing.
-    .orderBy(desc(activitySegments.effortCount), desc(activitySegments.distanceM))
-    .limit(limit);
+  //
+  // The bests come from one grouped pass over the efforts — the explorer sorts
+  // and crowns records from these without touching the per-effort table again.
+  const [rows, typeCounts, bestRows] = await Promise.all([
+    db
+      .select({
+        id: activitySegments.id,
+        name: activitySegments.name,
+        activityType: activitySegments.activityType,
+        distanceM: activitySegments.distanceM,
+        elevationGainM: activitySegments.elevationGainM,
+        elevationLossM: activitySegments.elevationLossM,
+        effortCount: activitySegments.effortCount,
+        firstEffortAt: activitySegments.firstEffortAt,
+        lastEffortAt: activitySegments.lastEffortAt,
+        polyline: activitySegments.polyline,
+      })
+      .from(activitySegments)
+      .where(where)
+      // Busiest first: the ground you cover most is the ground worth comparing.
+      .orderBy(desc(activitySegments.effortCount), desc(activitySegments.distanceM))
+      .limit(limit),
+    db
+      .select({
+        activityType: activitySegments.activityType,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(activitySegments)
+      .groupBy(activitySegments.activityType)
+      .orderBy(desc(sql`count(*)`)),
+    db
+      .select({
+        segmentId: activitySegmentEfforts.segmentId,
+        durationS: sql<number | null>`min(${activitySegmentEfforts.durationS})`,
+        paceSPerKm: sql<number | null>`min(${activitySegmentEfforts.paceSPerKm})`,
+        efficiencyFactor: sql<number | null>`max(${activitySegmentEfforts.efficiencyFactor})`,
+        beatsPerKm: sql<number | null>`min(${activitySegmentEfforts.beatsPerKm})`,
+      })
+      .from(activitySegmentEfforts)
+      .groupBy(activitySegmentEfforts.segmentId),
+  ]);
+  const bestsById = new Map<number, SegmentBests>(
+    bestRows.map(({ segmentId, ...bests }) => [segmentId, bests]),
+  );
 
-  const typeCounts = await db
-    .select({
-      activityType: activitySegments.activityType,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(activitySegments)
-    .groupBy(activitySegments.activityType)
-    .orderBy(desc(sql`count(*)`));
-
-  return { rows: rows.map(toListRow), types: typeCounts };
+  return {
+    rows: rows.map((row) => toListRow(row, bestsById.get(row.id) ?? EMPTY_BESTS)),
+    types: typeCounts,
+  };
 }
 
 async function effortsForSegments(segmentIds: number[]): Promise<Map<number, SegmentEffortRow[]>> {
@@ -197,10 +273,218 @@ export async function getSegment(id: number): Promise<SegmentDetail | null> {
 
   const efforts = (await effortsForSegments([id])).get(id) ?? [];
   return {
-    ...toListRow(segment),
+    ...toListRow(segment, bestsFromEfforts(efforts)),
     coordinates: (segment.coordinates as SegmentGeometry) ?? [],
     bounds: (segment.bounds as SegmentDetail['bounds']) ?? null,
     efforts,
+  };
+}
+
+// --- cross-segment comparisons ------------------------------------------------
+
+export interface SimilarSegments {
+  /** Ground that looks the same: nearest in gradient and length, same sport. */
+  byClimb: Array<Scored<SegmentListRow>>;
+  /** Ground that costs the same: nearest best efficiency factor, same sport. */
+  byEfficiency: Array<Scored<SegmentListRow>>;
+}
+
+/**
+ * The comparison panels for one segment's page. Candidates are every other
+ * segment of the same sport — the whole list is a couple of hundred rows, so
+ * scoring happens here rather than in SQL.
+ */
+export async function getSimilarSegments(segment: SegmentDetail): Promise<SimilarSegments> {
+  const { rows } = await listSegments({ types: [segment.activityType] });
+  const candidates = rows.map((row) => ({
+    ...row,
+    bestEfficiencyFactor: row.bests.efficiencyFactor,
+  }));
+  const ref = {
+    id: segment.id,
+    distanceM: segment.distanceM,
+    elevationGainM: segment.elevationGainM,
+    elevationLossM: segment.elevationLossM,
+    bestEfficiencyFactor: segment.bests.efficiencyFactor,
+  };
+  return {
+    byClimb: similarByClimb(ref, candidates),
+    byEfficiency: similarByEfficiency(ref, candidates),
+  };
+}
+
+// --- dashboard highlights -----------------------------------------------------
+
+export interface SegmentRecord {
+  segmentId: number;
+  name: string;
+  activityType: string;
+  value: number;
+  startedAt: number | null;
+}
+
+export interface SegmentPr {
+  segmentId: number;
+  name: string;
+  activityType: string;
+  metric: 'time' | 'efficiency';
+  value: number;
+  startedAt: number;
+  /** The activity's own local clock — the day the PR was lived, not UTC's. */
+  startDateLocal: string;
+  effortCount: number;
+}
+
+export interface SegmentHighlights {
+  totals: { segments: number; efforts: number };
+  records: {
+    fastestPace: SegmentRecord | null; // pace sports only — s/km
+    bestEfficiency: SegmentRecord | null;
+    lowestCost: SegmentRecord | null; // beats per km
+    biggestClimb: SegmentRecord | null; // metres of gain
+  };
+  /** All-time bests set in the last 30 days, on ground visited ≥3 times. */
+  recentPrs: SegmentPr[];
+}
+
+const PR_WINDOW_S = 30 * 86400;
+const PR_MIN_EFFORTS = 3;
+
+export async function getSegmentHighlights(): Promise<SegmentHighlights> {
+  const [segments, efforts] = await Promise.all([
+    db
+      .select({
+        id: activitySegments.id,
+        name: activitySegments.name,
+        activityType: activitySegments.activityType,
+        elevationGainM: activitySegments.elevationGainM,
+        effortCount: activitySegments.effortCount,
+      })
+      .from(activitySegments),
+    db
+      .select({
+        segmentId: activitySegmentEfforts.segmentId,
+        durationS: activitySegmentEfforts.durationS,
+        paceSPerKm: activitySegmentEfforts.paceSPerKm,
+        efficiencyFactor: activitySegmentEfforts.efficiencyFactor,
+        beatsPerKm: activitySegmentEfforts.beatsPerKm,
+        startedAt: activitySegmentEfforts.startedAt,
+        startDateLocal: activities.startDateLocal,
+      })
+      .from(activitySegmentEfforts)
+      .innerJoin(activities, eq(activities.id, activitySegmentEfforts.activityId)),
+  ]);
+  const byId = new Map(segments.map((s) => [s.id, s]));
+
+  type EffortLite = (typeof efforts)[number];
+  const record = (
+    pool: EffortLite[],
+    read: (e: EffortLite) => number | null,
+    pick: 'min' | 'max',
+  ): SegmentRecord | null => {
+    let best: EffortLite | null = null;
+    let bestValue = 0;
+    for (const effort of pool) {
+      const value = read(effort);
+      if (value == null || !Number.isFinite(value)) continue;
+      if (!best || (pick === 'min' ? value < bestValue : value > bestValue)) {
+        best = effort;
+        bestValue = value;
+      }
+    }
+    const segment = best ? byId.get(best.segmentId) : null;
+    if (!best || !segment) return null;
+    return {
+      segmentId: segment.id,
+      name: segment.name,
+      activityType: segment.activityType,
+      value: bestValue,
+      startedAt: best.startedAt,
+    };
+  };
+
+  const paceEfforts = efforts.filter((e) => {
+    const segment = byId.get(e.segmentId);
+    return segment ? isPaceSport(segment.activityType) : false;
+  });
+
+  // Positive gain only: an all-flat corpus must omit the record, not crown an
+  // arbitrary segment with "+0 m".
+  const biggest = segments.reduce<(typeof segments)[number] | null>(
+    (top, s) =>
+      s.elevationGainM > 0 && (top == null || s.elevationGainM > top.elevationGainM) ? s : top,
+    null,
+  );
+
+  // A PR is the all-time best on its segment, set recently, on ground with
+  // enough history that beating it means something.
+  const cutoff = Math.floor(Date.now() / 1000) - PR_WINDOW_S;
+  const bySegment = new Map<number, EffortLite[]>();
+  for (const effort of efforts) {
+    (bySegment.get(effort.segmentId) ?? bySegment.set(effort.segmentId, []).get(effort.segmentId)!).push(
+      effort,
+    );
+  }
+
+  const recentPrs: SegmentPr[] = [];
+  for (const [segmentId, pool] of bySegment) {
+    const segment = byId.get(segmentId);
+    if (!segment || segment.effortCount < PR_MIN_EFFORTS) continue;
+
+    const fastest = pool.reduce((a, b) => (b.durationS < a.durationS ? b : a));
+    if (fastest.startedAt >= cutoff) {
+      recentPrs.push({
+        segmentId,
+        name: segment.name,
+        activityType: segment.activityType,
+        metric: 'time',
+        value: fastest.durationS,
+        startedAt: fastest.startedAt,
+        startDateLocal: fastest.startDateLocal,
+        effortCount: segment.effortCount,
+      });
+    }
+
+    const withEf = pool.filter((e) => e.efficiencyFactor != null);
+    if (withEf.length >= PR_MIN_EFFORTS) {
+      const mostEfficient = withEf.reduce((a, b) =>
+        (b.efficiencyFactor ?? 0) > (a.efficiencyFactor ?? 0) ? b : a,
+      );
+      if (mostEfficient.startedAt >= cutoff) {
+        recentPrs.push({
+          segmentId,
+          name: segment.name,
+          activityType: segment.activityType,
+          metric: 'efficiency',
+          value: mostEfficient.efficiencyFactor as number,
+          startedAt: mostEfficient.startedAt,
+          startDateLocal: mostEfficient.startDateLocal,
+          effortCount: segment.effortCount,
+        });
+      }
+    }
+  }
+  recentPrs.sort((a, b) => b.startedAt - a.startedAt);
+
+  return {
+    totals: { segments: segments.length, efforts: efforts.length },
+    records: {
+      fastestPace: record(paceEfforts, (e) => e.paceSPerKm, 'min'),
+      // EF and cost are only comparable within pace sports — a ride's EF sits
+      // around 4 and would own both records forever (the dashboard's own D5).
+      bestEfficiency: record(paceEfforts, (e) => e.efficiencyFactor, 'max'),
+      lowestCost: record(paceEfforts, (e) => e.beatsPerKm, 'min'),
+      biggestClimb: biggest
+        ? {
+            segmentId: biggest.id,
+            name: biggest.name,
+            activityType: biggest.activityType,
+            value: biggest.elevationGainM,
+            startedAt: null,
+          }
+        : null,
+    },
+    recentPrs: recentPrs.slice(0, 6),
   };
 }
 
