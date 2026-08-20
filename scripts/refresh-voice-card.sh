@@ -36,6 +36,9 @@
 #
 # Scheduled 07:00 on the 1st via crontab, an hour after the in-app drift job at
 # 06:00 so the datastore note lands first and the two agree about what moved.
+# Cron calls ~/bin/voice-card-refresh.sh rather than this path: the checkout is
+# routinely parked on a feature branch, where this file is a different version
+# or is not there at all, so the wrapper reads it out of origin/master instead.
 set -uo pipefail   # NOT -e: several steps have expected-nonzero exits (the
                    # drift check exits 1 on material drift, --check exits 1 when
                    # out of date) that must be read rather than aborted on.
