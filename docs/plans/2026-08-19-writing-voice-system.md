@@ -228,12 +228,36 @@ theatre. **Phase 3 gates phases 4–5.**
    different writer whatever the arithmetic says. Hard failures stay reserved for
    deterministic defects; statistical traits only ever warn, because five posts cannot
    support failing on a band.
-4. **Fan-out (all four stacks, per John 2026-08-19).** `scripts/sync-voice.sh`;
-   Hermes fragment; `john-voice` Claude skill; sr-docs page; `/admin/content/voice`;
-   retire `feedback_public_prose_voice.md` to a pointer.
+4. **Fan-out.** ✅ **Delivered 2026-08-20 (PR #378).** `scripts/sync-voice.sh` renders the
+   card through the *same* `renderVoiceBlock` the site uses and writes it to three stacks
+   that cannot see `data/voice/`, plus `/admin/content/voice` and the retired memory file.
+   `--check` writes nothing and exits non-zero when a destination is stale.
+
+   **Hermes gets it in `jkai-general`, not a `jkai-voice` skill.** Hermes truncates every
+   skill description to 60 characters and is told to load anything "even partially
+   relevant", so a voice skill would either be routed past when it mattered or loaded for
+   everything. Voice applies to every reply, so it belongs in the always-loaded router.
+   jkai chat had **no voice instruction at all** before this. Inserted between markers so
+   the other 42,000 characters are untouched; the script restarts `jkai-hermes`, without
+   which a SKILL.md edit does nothing.
+
+   **A design error caught in the act.** The `chat` register is measured from *John's own
+   messages to jkai* — but the block is instructions for *jkai's replies*. The first sync
+   handed the assistant "write as John, in the first person" and "about 24 uses of I/me/my
+   per 1,000 words" as targets. jkai answers him; it does not impersonate him. Fixed with
+   `bandsDescribeOutput` on the register: where the measurement describes the counterpart
+   it renders as *"his messages run about 10 words — match that register; these are HIS
+   numbers, not a target for yours"*, and `chat` no longer carries the persona. Card v3.
+
+   **Deliberately no rsync line in `ci-release.sh`.** Every destination is a homeserv path;
+   nothing here runs on the VPS. New `scripts/` files normally do need one, so the absence
+   is recorded in the script header rather than left to look like an oversight.
+
+   `feedback_public_prose_voice.md` is now a pointer that keeps only the two rules the
+   measurements overturned.
+
 5. **Learn loop.** Recompute on each new `human` post; monthly drift job that *proposes*,
    never auto-applies.
-
 ## Files to touch (~20)
 
 **Core (10):** `src/lib/db/schema.ts` · `src/lib/voice/{measure,card,score,index}.ts` (new) ·
@@ -257,7 +281,7 @@ theatre. **Phase 3 gates phases 4–5.**
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
 | 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
 | 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
-| 4 | A live jkai turn and a generated release summary both come back in register; Claude skill appears in the index |
+| 4 | ✅ Claude skill **appears in the index** (confirmed in a live session). Release-notes prompt asserted to contain the terse block by `wiring.test.ts`, reading the real prompt string. `sync-voice.sh --check` is clean and idempotent. **Not verified: a live jkai turn** — skill bodies load at runtime and never reach `state.db`, so the file being right and Hermes restarting is as far as it goes without driving a real chat turn |
 | 5 | Drift job opens a note, changes nothing on its own |
 
 ## Deployment snag found the hard way: schema.ts must be self-contained

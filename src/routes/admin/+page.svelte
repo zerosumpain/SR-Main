@@ -74,6 +74,12 @@
           <div class="nm-tile-sub">Generate + curate the homepage hero banner pool.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
+        <a class="nm-tile" href={`/admin/content/voice${t}`}>
+          <div class="nm-tile-eyebrow">Voice</div>
+          <div class="nm-tile-title">Writing Voice</div>
+          <div class="nm-tile-sub">What every automated writer is told about how you write.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
         <a class="nm-tile" href={`/admin/content/effects${t}`}>
           <div class="nm-tile-eyebrow">Effects</div>
           <div class="nm-tile-title">Visual Effects</div>

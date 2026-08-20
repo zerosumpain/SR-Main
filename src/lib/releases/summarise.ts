@@ -43,7 +43,9 @@ const MAX_ITEMS = 12;
 // Built lazily rather than as a module-level constant: voiceBlock() reads the
 // Voice Card off disk, and doing that at import time would run a filesystem read
 // on module load and freeze the card until the next restart.
-function systemPrompt(): string {
+/** Exported so the voice wiring can be asserted against the real prompt text
+ *  rather than against the helper it is supposed to call. */
+export function systemPrompt(): string {
   return `You write the release notes for a personal software project (a SvelteKit site with an AI assistant, workflow engine, admin tooling and several sub-projects).
 
 You are given the complete git evidence for ONE production deploy: its commits and the files it changed. Turn that into a short overview plus a list of the distinct things that went live.

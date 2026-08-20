@@ -45,7 +45,15 @@ const card: VoiceCard = {
       },
     },
     explanatory: { register: 'explanatory', usesPersona: true, rules: ['Plain English.'], avoid: [], exemplarIds: [] },
-    chat: { register: 'chat', usesPersona: true, rules: ['Short.'], avoid: [], exemplarIds: [] },
+    chat: {
+      register: 'chat',
+      usesPersona: false,
+      bandsDescribeOutput: false,
+      rules: ['Short.'],
+      avoid: [],
+      exemplarIds: [],
+      measured: { ...({} as never) },
+    },
     terse: { register: 'terse', usesPersona: false, rules: ['One line.'], avoid: ['Personality.'], exemplarIds: [] },
   },
 };
@@ -113,6 +121,26 @@ describe('renderVoiceBlock', () => {
 
   it('drops the bands when the caller does not want them', () => {
     expect(renderVoiceBlock(card, 'public-prose', exemplars, { bands: false })).not.toContain('median 19');
+  });
+});
+
+describe('chat is about the counterpart, not the author', () => {
+  it('never tells the assistant to write as John', () => {
+    // jkai replies TO him; it does not write AS him. An earlier version handed
+    // the persona and his own first-person density to the assistant as targets.
+    const block = voiceBlock('chat');
+    expect(block).not.toContain('Write as John');
+    expect(block).not.toContain('uses of I/me/my');
+  });
+
+  it('frames his measurements as who you are answering', () => {
+    const block = voiceBlock('chat');
+    expect(block).toContain('Who you are answering');
+    expect(block).toContain('These are HIS numbers, not a target for yours');
+  });
+
+  it('still gives public-prose its bands as targets', () => {
+    expect(voiceBlock('public-prose', { exemplars: 0 })).toContain('bands to stay inside');
   });
 });
 

@@ -220,7 +220,11 @@ async function main() {
       r,
       {
         register: r,
-        usesPersona: r === 'public-prose' || r === 'chat' || r === 'explanatory',
+        // chat is deliberately NOT a persona register: jkai replies TO John, it
+        // does not write AS him. Its measurements describe his messages, so they
+        // are context about the counterpart rather than targets for the reply.
+        usesPersona: r === 'public-prose' || r === 'explanatory',
+        bandsDescribeOutput: r !== 'chat',
         rules: REGISTER_RULES[r].rules,
         avoid: REGISTER_RULES[r].avoid,
         measured:
@@ -231,7 +235,7 @@ async function main() {
   ) as Record<Register, RegisterCard>;
 
   const card: VoiceCard = {
-    version: 2,
+    version: 3,
     // Stamped from the corpus, not the clock, so two runs over unchanged data
     // produce byte-identical output and a no-op diff.
     builtAt: buildStamp(human, generated, chat.length),
