@@ -36,6 +36,7 @@ const BACKFILL_LIMIT = 1000;
 
 export type IndexResult =
   | { status: 'skipped'; reason: 'not-indexable' | 'too-large' | 'unchanged' | 'no-text' | 'missing' | 'superseded' }
+  | { status: 'error'; reason: string }
   | { status: 'indexed'; chunkCount: number; modality: string };
 
 /** Remove all embedding rows for a file (used on delete-fallback and when a file becomes non-indexable). */
@@ -43,12 +44,36 @@ export async function removeFile(fileId: string): Promise<void> {
   await db.delete(fileEmbeddings).where(eq(fileEmbeddings.fileId, fileId));
 }
 
-/** Clear a file's rows and stamp its content_hash so it retires from the backfill set (no re-embed until bytes change). */
+/**
+ * Clear a file's rows and stamp its content_hash so it retires from the backfill
+ * set (no re-embed until bytes change).
+ *
+ * Only for a document that genuinely HAS no text. Stamping the hash is
+ * permanent in practice — indexFile's gate then answers 'unchanged' forever, and
+ * even `backfill?full=1` re-reads the bytes only to hit the same gate — so a
+ * crashed extraction must never come through here.
+ */
 async function retireNoText(fileId: string, hash: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(fileEmbeddings).where(eq(fileEmbeddings.fileId, fileId));
-    await tx.update(workflowFiles).set({ contentHash: hash }).where(eq(workflowFiles.id, fileId));
+    await tx
+      .update(workflowFiles)
+      .set({ contentHash: hash, indexError: 'no extractable text in this document' })
+      .where(eq(workflowFiles.id, fileId));
   });
+}
+
+/**
+ * Record WHY indexing failed, leaving content_hash alone so the file stays in
+ * the backfill set and is retried.
+ *
+ * The reason is persisted rather than only logged because the log is the one
+ * place nobody looks: a PDF that silently produced nothing for four days read as
+ * "the extractor doesn't handle this file", when the real reason had been
+ * printed once, to stdout, and discarded.
+ */
+async function recordIndexError(fileId: string, reason: string): Promise<void> {
+  await db.update(workflowFiles).set({ indexError: reason }).where(eq(workflowFiles.id, fileId));
 }
 
 /**
@@ -77,15 +102,25 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
     return { status: 'skipped', reason: 'unchanged' };
   }
 
-  const content = await fileToText(buf, row.mimeType, row.name);
-  if (!content) {
-    // Passed the mime/size pre-checks but produced no text (empty doc, or a
-    // transient caption/transcription failure). Clear rows AND stamp the hash so
-    // this content is not re-read + re-sent to the vision/STT model on every
-    // backfill. A later edit yields a new hash and re-triggers via the hooks.
+  const outcome = await fileToText(buf, row.mimeType, row.name);
+  if (outcome.status === 'error') {
+    // Extraction CRASHED — we do not know whether this file has text. Record why
+    // and leave content_hash untouched so the file stays in the backfill set and
+    // a later run (or a fixed extractor) picks it up. Retiring it here is how a
+    // single bad deploy silently erased every PDF from the index.
+    await recordIndexError(fileId, outcome.reason);
+    return { status: 'error', reason: outcome.reason };
+  }
+  if (outcome.status === 'empty') {
+    // Passed the mime/size pre-checks and the extractor ran, but there is no
+    // text (an empty doc, or a best-effort caption/transcription that declined).
+    // Clear rows AND stamp the hash so this content is not re-read + re-sent to
+    // the vision/STT model on every backfill. A later edit yields a new hash and
+    // re-triggers via the hooks.
     await retireNoText(fileId, hash);
     return { status: 'skipped', reason: 'no-text' };
   }
+  const content = outcome.content;
 
   const pieces = chunkText(content.text);
   if (!pieces.length) {
@@ -125,7 +160,10 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
     if (sha256Hex(await readBuffer(cur.diskPath)) !== hash) return; // bytes moved on — newer write owns it
     await tx.delete(fileEmbeddings).where(eq(fileEmbeddings.fileId, fileId));
     await tx.insert(fileEmbeddings).values(rows);
-    await tx.update(workflowFiles).set({ contentHash: hash }).where(eq(workflowFiles.id, fileId));
+    await tx
+      .update(workflowFiles)
+      .set({ contentHash: hash, indexError: null })
+      .where(eq(workflowFiles.id, fileId));
     applied = true;
   });
 
@@ -167,6 +205,8 @@ export function reindexFileInBackground(fileId: string): void {
     .then((r) => {
       if (r.status === 'indexed') {
         console.log(`[file-index] indexed ${fileId}: ${r.chunkCount} chunks (${r.modality})`);
+      } else if (r.status === 'error') {
+        console.warn(`[file-index] ${fileId} not indexed: ${r.reason}`);
       }
     })
     .catch((err) => console.warn(`[file-index] indexFile(${fileId}) failed: ${(err as Error).message}`));
@@ -200,6 +240,7 @@ export async function backfillMissing(full = false): Promise<BackfillResult> {
     try {
       const r = await indexFile(c.id);
       if (r.status === 'indexed') result.indexed++;
+      else if (r.status === 'error') result.errors++;
       else result.skipped++;
     } catch (err) {
       result.errors++;
