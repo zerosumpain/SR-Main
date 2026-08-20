@@ -44,9 +44,20 @@ if (candidates.length === 0) fail('no server chunk contains the PDF extractor');
 // behaviour rather than by name.
 let extractText = null;
 for (const file of candidates) {
-  const mod = await import(join(CHUNKS, file));
+  let mod;
+  try {
+    mod = await import(join(CHUNKS, file));
+  } catch (err) {
+    // A chunk that cannot be imported standalone (module-scope work needing env,
+    // say) is not this check's business. Skipping keeps an unrelated chunk from
+    // blocking every deploy; if NONE of them yield extractText we still fail.
+    console.log(`  skipped ${file}: ${err?.message?.split('\n')[0]}`);
+    continue;
+  }
   for (const value of Object.values(mod)) {
-    if (typeof value !== 'function') continue;
+    // extractText(buffer, mimeType, filename, options?) — arity narrows the
+    // probe so unrelated exports are not called speculatively.
+    if (typeof value !== 'function' || value.length < 3) continue;
     try {
       const probe = await value(Buffer.from('probe'), 'text/plain', 'probe.txt');
       if (probe && typeof probe.text === 'string' && probe.text.includes('probe')) {
