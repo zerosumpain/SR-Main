@@ -186,8 +186,48 @@ theatre. **Phase 3 gates phases 4–5.**
    labels it a ranking rather than a set of findings. The real signal in it is blunt:
    first-person pronouns dominate — he writes about what he did, the model writes about
    a subject.
-2. **`$lib/voice` + swap the six.** `voiceBlock(register)`; edit the six hardcoded sites;
-   fill `buildStyleCues()` from `blog_post_revisions` + resolutions.
+2. **`$lib/voice` + swap the six.** ✅ **Delivered 2026-08-20 (PR #376).**
+   `src/lib/voice/block.ts`; four surfaces swapped; `buildStyleCues()` rewritten.
+
+   **The "six sites" was wrong in membership, not in number.** Sweeping properly found
+   that two of the original six are not voice sites at all: `deepdive/ask-questions.ts:67`
+   is a *user question template* ("give me the bottom line in plain English"), and
+   `workflowdoctor/classify.ts:522` is mostly a format constraint (240 characters, no
+   markdown). Neither was touched. Two genuine sites the original list missed —
+   `briefing/run.ts` and `general-chat.ts` — are format-bound and left for later.
+
+   Swapped: `blog/assistant/prompt.ts` (public-prose, 2 exemplars),
+   `jkai/intel/brief.ts` + `health/narrative-service.ts` (explanatory),
+   `releases/summarise.ts` (terse). **Deliberately excluded:**
+   `projects/dfe-data-strategy/author/generate/+server.ts`, which writes institutional
+   departmental voice — giving a DfE strategy document John's first person and his
+   self-deprecation would be the register split failing. Marked in-file so it is not
+   "fixed" later.
+
+   **Card bumped to v2**: `invariants` split into always-apply *conventions* and a
+   *persona* applied only where `usesPersona` is set. Without that split, `terse` would
+   have carried "write as John, in the first person" into changelog lines.
+
+   **Three corrections to this plan's own design, made under measurement:**
+
+   - *Rotation was wrong.* The plan said "2 exemplars per call, rotated". A jkai turn
+     ships ~37.5k input tokens and depends on OpenRouter prompt caching, which keys on
+     the prompt prefix — rotating would miss the cache on every call, the same class of
+     mistake as the cache-key churn that once made "ping" cost 3.6¢. Selection is stable
+     and asserted byte-identical across calls.
+   - *The ~400-token budget was a guess made before anything existed.* Measured:
+     terse 182, explanatory 416, chat 467, public-prose 969 with two exemplars. The last
+     rides on a prompt already carrying up to 60k characters of post body, so the real
+     constraint is attention rather than cost. Prohibition lines are capped at 8, because
+     past roughly that a model treats them as scenery.
+   - *Module-level prompts had to become lazy.* All three of `summarise.ts`, `brief.ts`
+     and `narrative-service.ts` held their system prompt in a module-level `const`, which
+     would have run a filesystem read at import time and frozen the card until restart.
+
+   `buildStyleCues()` now emits real cues — rejections and edited acceptances quoted in
+   full, tally as a footnote — ordered so the strongest signal leads. It had never
+   produced one before: nothing wrote resolutions until PR #370 and nothing fired them
+   until #371.
 3. **Scorer + stop-gate.** ✅ **Delivered 2026-08-20 (PR #377). THE STOP-GATE PASSES.**
 
    | text | score | verdict |
@@ -303,7 +343,7 @@ theatre. **Phase 3 gates phases 4–5.**
 |---|---|
 | 0 | Corpus meter on `/admin/content/blog` reads **5 posts, 3,198 words** after tagging; reject a proposal and confirm a `proposal_resolved` row lands |
 | 1 | `npx tsx scripts/build-voice-card.ts --dry` — identical numbers on two consecutive runs |
-| 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
+| 2 | ✅ `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing. Plus `wiring.test.ts`, which reads the real prompt strings — the surfaces provably emit the block, and the old "Short sentences are fine" is provably gone |
 | 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
 | 4 | ✅ Claude skill **appears in the index** (confirmed in a live session). Release-notes prompt asserted to contain the terse block by `wiring.test.ts`, reading the real prompt string. `sync-voice.sh --check` is clean and idempotent. **Not verified: a live jkai turn** — skill bodies load at runtime and never reach `state.db`, so the file being right and Hermes restarting is as far as it goes without driving a real chat turn |
 | 5 | ✅ `drift.test.ts` — detects a moved metric and a new post, ignores a large percentage move on a tiny base, and asserts the summary never proposes applying anything itself. `scripts/voice-drift.ts` run against the live corpus: no drift, exit 0 |
