@@ -21,6 +21,11 @@ import { adaptFrameToCanvasSse, adaptToolFrameToJobEvents, adaptSubagentFrameToJ
 import { createHermesTextAccumulator, frameBelongsToTurn, type HermesStatusFrame } from '$lib/jkai/hermes-frames';
 import { ensureModelPinned, modelPinTurnId } from '$lib/jkai/hermes-model-pin';
 import {
+  buildHermesAttachments,
+  skippedAttachmentNote,
+  type HermesInboundAttachment,
+} from '$lib/jkai/media/hermes-attachments';
+import {
   subscribeToolSteps,
   registerToolConfirmer,
   registerSecretRequester,
@@ -195,13 +200,15 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     pinnedSkill?: string;
     /** Entity ids named with @entity in the composer. */
     intelEntityIds?: string[];
+    /** Rows in `jkai_attachments`, already uploaded by the composer. */
+    attachmentIds?: string[];
   };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'invalid JSON body' }, { status: 400 });
   }
-  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill, intelEntityIds } = body;
+  const { message, workflowId, conversationId, chatNodeId, silent, pinnedSkill, intelEntityIds, attachmentIds } = body;
   if (!message || typeof message !== 'string') {
     return json({ error: 'message is required' }, { status: 400 });
   }
@@ -210,6 +217,34 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   }
   if (!HERMES_SECRET) {
     return json({ error: 'HERMES_BRIDGE_SECRET not configured' }, { status: 500 });
+  }
+
+  // Files the composer uploaded for this turn. Same load + capability guard the
+  // legacy lane runs (see the `attachmentIds` block in handleWithLoop) — this
+  // branch simply ignored the field until now, so an image the user could see in
+  // their own bubble never reached the model and every reply insisted nothing
+  // had been sent.
+  let attachmentRows: Array<typeof jkaiAttachments.$inferSelect> = [];
+  if (attachmentIds && attachmentIds.length > 0) {
+    if (attachmentIds.length > 10) {
+      return json({ error: 'too many attachments (max 10 per turn)' }, { status: 400 });
+    }
+    attachmentRows = await db.select().from(jkaiAttachments).where(inArray(jkaiAttachments.id, attachmentIds));
+    if (attachmentRows.length !== attachmentIds.length) {
+      return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
+    }
+
+    let ctx: ModelContext = await resolveDefaultModel();
+    if (conversationId) {
+      const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+      if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
+    }
+    const caps = getModelCapabilities(ctx);
+    for (const a of attachmentRows) {
+      if (!canAcceptKind(caps, a.kind)) {
+        return json({ error: `model ${ctx.modelId} cannot accept ${a.kind}` }, { status: 400 });
+      }
+    }
   }
 
   const client = new HermesClient({
@@ -330,21 +365,50 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
   // buttons) — the command must reach Hermes but should not clutter the
   // visible history with `/approve` bubbles the user never typed.
   const userMetadata = chatNodeId ? { chatNodeId } : undefined;
+  let insertedUserMsg: { id: string } | null = null;
   if (!silent && conversationId) {
-    await db.insert(orchestratorChats).values({
+    const [m] = await db.insert(orchestratorChats).values({
       conversationId,
       workflowId: workflowId ?? null,
       role: 'user',
       content: message,
       metadata: userMetadata,
-    });
+    }).returning({ id: orchestratorChats.id });
+    insertedUserMsg = m;
   } else if (!silent && workflowId) {
-    await db.insert(orchestratorChats).values({
+    const [m] = await db.insert(orchestratorChats).values({
       workflowId,
       role: 'user',
       content: message,
       metadata: userMetadata,
-    });
+    }).returning({ id: orchestratorChats.id });
+    insertedUserMsg = m;
+  }
+
+  // Bind this turn's uploads to the bubble they were sent with, so a reload
+  // re-renders them under the right message (GET /api/jkai/conversations/[id]
+  // groups attachments by messageId). Unlinked rows are why the user's uploads
+  // showed a message_id of NULL in the incident that prompted this.
+  if (insertedUserMsg && attachmentRows.length > 0) {
+    await db.update(jkaiAttachments)
+      .set({ messageId: insertedUserMsg.id })
+      .where(inArray(jkaiAttachments.id, attachmentRows.map((a) => a.id)));
+  }
+
+  // Read the bytes once, here, rather than per send attempt — `sendUserTurn` can
+  // fire from the re-pin backstop as well as the normal path, and re-reading
+  // (and re-base64ing) 15MB on a retry is pure waste.
+  let hermesAttachments: HermesInboundAttachment[] = [];
+  if (attachmentRows.length > 0) {
+    const built = await buildHermesAttachments(attachmentRows);
+    hermesAttachments = built.attachments;
+    if (built.skipped.length > 0) {
+      console.warn(
+        `[hermes-chat] Job ${jobId}: ${built.skipped.length} attachment(s) not sent — ` +
+        built.skipped.map((s) => `${s.name} (${s.reason})`).join(', '),
+      );
+      outbound += skippedAttachmentNote(built.skipped);
+    }
   }
 
 
@@ -845,13 +909,18 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
         console.log(`[hermes-chat] Job ${jobId} sending user turn (${reason})`);
         await client.sendMessage({
           chatId,
-          text: message,
+          // `outbound`, not `message`: it carries the @entity grounding block and
+          // the not-delivered-attachment note. Sending the raw `message` here
+          // meant naming an entity with @ silently did nothing on this branch —
+          // the grounding was built, stamped on the job, and dropped.
+          text: outbound,
           kind,
           kindId,
           sessionId,
           // Tags every frame this turn emits, so the loop below can tell them
           // from a superseded turn's leftovers in the shared per-chat queue.
           turnId: jobId,
+          attachments: hermesAttachments.length > 0 ? hermesAttachments : undefined,
         });
       };
 
