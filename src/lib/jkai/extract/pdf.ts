@@ -1,6 +1,7 @@
 // src/lib/jkai/extract/pdf.ts
 import { createRequire } from 'node:module';
-import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { ExtractError, type ExtractResult, type ExtractOptions } from './types';
 
 interface PdfJsTextItem {
@@ -56,7 +57,7 @@ function installPdfJsDomShims(): void {
  * resolution fails we leave pdf.js to its own defaults rather than refusing to
  * read a PDF we might still manage.
  */
-function resolvePdfJsAssets(): { workerSrc: string | null; standardFontDataUrl: string | null } {
+export function resolvePdfJsAssets(): { workerSrc: string | null; standardFontDataUrl: string | null } {
   const require = createRequire(import.meta.url);
   const tryResolve = (specifier: string): string | null => {
     try {
@@ -65,11 +66,17 @@ function resolvePdfJsAssets(): { workerSrc: string | null; standardFontDataUrl: 
       return null;
     }
   };
-  const fontFile = tryResolve('pdfjs-dist/standard_fonts/FoxitSans.pfb');
+  // Via package.json, NOT a file inside standard_fonts/ — pdfjs-dist's `exports`
+  // map publishes ./build/* but not ./standard_fonts/*, so resolving a .pfb
+  // directly throws MODULE_NOT_FOUND and silently left this null. The symptom is
+  // easy to miss: text still extracts, pdf.js just warns and falls back for any
+  // font the document does not embed.
+  const pkg = tryResolve('pdfjs-dist/package.json');
+  // pdf.js expects the DIRECTORY, with a trailing separator.
+  const fontDir = pkg ? `${join(dirname(pkg), 'standard_fonts')}/` : null;
   return {
     workerSrc: tryResolve('pdfjs-dist/build/pdf.worker.mjs'),
-    // pdf.js expects the DIRECTORY, with a trailing separator.
-    standardFontDataUrl: fontFile ? `${dirname(fontFile)}/` : null,
+    standardFontDataUrl: fontDir && existsSync(fontDir) ? fontDir : null,
   };
 }
 
