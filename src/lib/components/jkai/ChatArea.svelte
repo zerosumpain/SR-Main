@@ -2082,6 +2082,13 @@
     }
   }
 
+  /** The `conversation:model` pair a `/model` push has already been fired for.
+   *  Written by `tellHermesModel` itself so BOTH push sites share one guard.
+   *  A plain `let`, never `$state`: the open-time effect below both reads and
+   *  writes it, and as reactive state that is the documented route to
+   *  `effect_update_depth_exceeded`. */
+  let modelPushedForKey: string | null = null;
+
   /** Push a model choice to Hermes for this chat session via the gateway
    *  `/model` command. Sent silently (no user bubble) and its confirmation reply
    *  is drained without rendering.
@@ -2094,6 +2101,14 @@
    *  runs, so the silent turn's confirmation is consumed rather than left to the
    *  job's own cleanup — it just no longer holds anybody up. */
   async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
+    // Claim the pair SYNCHRONOUSLY, before the first await. Both push sites — the
+    // open-time effect and `switchModel` — read this, so a switch that changes
+    // `currentModel` (and therefore re-runs the effect) cannot make the effect
+    // push the very model `switchModel` is already pushing. Measured 2026-08-20
+    // before this line existed: a first message sent TWO identical
+    // `/model deepseek-v4-pro` turns, and the user's turn then had to drop the
+    // second one's frames.
+    modelPushedForKey = `${conversationId ?? ''}:${modelId}`;
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -2114,12 +2129,6 @@
       // Hermes keeps its own default and pricing may be off until the next turn.
     }
   }
-
-  /** The `conversation:model` pair we have already fired an open-time `/model`
-   *  push for. A plain `let`, never `$state`: the effect below both reads and
-   *  writes it, and as reactive state that is the documented route to
-   *  `effect_update_depth_exceeded`. */
-  let modelPushedForKey: string | null = null;
 
   /** Make sure Hermes is running the model this conversation says it is —
    *  pushed when the conversation OPENS, not when the user sends.
@@ -2156,13 +2165,16 @@
     // subscribe to its own bookkeeping.
     untrack(() => {
       if (!on || !id || !fresh) return;
-      const key = `${id}:${modelId}`;
-      if (modelPushedForKey === key) return;
-      modelPushedForKey = key;
       // The id decides the provider, never the stored field: `currentModel`
       // falls back to 'openrouter' whenever the conversation row hasn't loaded,
-      // which would hand Hermes a codex/ id under the wrong provider.
+      // which would hand Hermes a codex/ id under the wrong provider. Coerce
+      // BEFORE building the key — `coerceModelContext` rewrites legacy ids and
+      // adds the `codex/` prefix, so a key built from the raw id would never
+      // match the one `tellHermesModel` records and this would fire every time.
       const ctx = coerceModelContext({ provider, modelId });
+      if (modelPushedForKey === `${id}:${ctx.modelId}`) return;
+      // `tellHermesModel` claims the key itself, synchronously, so this and
+      // `switchModel` cannot both push the same pair.
       void tellHermesModel(ctx.provider, ctx.modelId);
     });
   });
