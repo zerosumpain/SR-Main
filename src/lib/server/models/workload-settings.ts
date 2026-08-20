@@ -72,8 +72,38 @@ export const resolveSelfimproveModel = () => resolveById('selfimprove');
 /** The workflow doctor's diagnosis calls. */
 export const resolveDoctorModel = () => resolveById('doctor');
 
-/** Image captioning / OCR for the file index. Must accept image input. */
-export const resolveVisionModel = () => resolveById('vision');
+/**
+ * Image captioning / OCR for the file index. Must accept image input.
+ *
+ * Order of precedence: an explicit pin in `jkai.vision.model` wins, then the
+ * nightly router's `vision` assignment, then the hard-coded fallback.
+ *
+ * The router is consulted because this runs over every image and every scanned
+ * PDF in the Drive, so the right model is "cheapest that reads the page
+ * properly" — a judgement the cost-aware selector already makes nightly against
+ * the live catalogue, and one a constant in the source cannot make at all. That
+ * constant was `openai/gpt-4o-mini` for months, which refused one document in
+ * three.
+ *
+ * `selectModels` filters the vision pool to models that declare image input, so
+ * the assignment cannot be a text-only model. Everything still falls back to the
+ * constant if the nightly run has never produced an assignment, or if reading it
+ * fails — this is on the indexing path and must not throw.
+ */
+export async function resolveVisionModel(): Promise<ModelContext> {
+  const def = SITE_WORKLOADS.find((w) => w.id === 'vision')!;
+  const pinned = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
+  if (pinned?.modelId) return coerceModelContext({ modelId: pinned.modelId });
+
+  try {
+    const { loadAssignments } = await import('$lib/routing/events');
+    const assigned = (await loadAssignments()).vision;
+    if (assigned?.modelId) return coerceModelContext({ modelId: assigned.modelId });
+  } catch (err) {
+    console.warn(`[models] vision routing lookup failed (${(err as Error).message}); using the fallback`);
+  }
+  return coerceModelContext({ modelId: def.fallbackModelId! });
+}
 
 /** Image GENERATION for the studio and the canvas image tool. */
 export const resolveImageModel = () => resolveById('image');

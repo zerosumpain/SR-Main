@@ -56,9 +56,24 @@ export const DEFAULT_SELFIMPROVE_MODEL_ID = 'deepseek/deepseek-v4-flash';
 /** Workflow doctor diagnosis calls — pinned for the same reason. */
 export const DEFAULT_DOCTOR_MODEL_ID = 'deepseek/deepseek-v4-flash';
 
-/** Image captioning + OCR. MUST accept image input: the site default may be a
- *  Codex model, which is text-only and would caption the prompt, not the file. */
-export const DEFAULT_VISION_MODEL_ID = 'openai/gpt-4o-mini';
+/**
+ * Image captioning + OCR. MUST accept image input: the site default may be a
+ * Codex model, which is text-only and would caption the prompt, not the file.
+ *
+ * Was `openai/gpt-4o-mini`, which was wrong twice over. It **refused** to
+ * transcribe roughly one document in three ("I'm unable to provide the
+ * transcript"), and it is not in `OPENROUTER_CAPS` at all — so
+ * `getModelCapabilities()` reported it TEXT_ONLY, meaning the `image-input`
+ * guard would have refused to let anyone select it in the picker. It was only
+ * ever reachable as this hard-coded default.
+ *
+ * gemini-2.5-flash is `ALL` in the capability map (so it is selectable),
+ * transcribed the same scan cleanly 3 runs out of 3, and was the fastest of the
+ * candidates at ~1.2s against ~2.8s for gemini-3.5-flash and ~5.7s for
+ * claude-sonnet-4.5. 3.5-flash also started wrapping its output in
+ * "==Start of OCR for page 1==" markers, which is not what a transcript is.
+ */
+export const DEFAULT_VISION_MODEL_ID = 'google/gemini-2.5-flash';
 
 /** Image GENERATION. Must emit an image; no text model can serve this at all. */
 export const DEFAULT_IMAGE_MODEL_ID = 'google/gemini-3.1-flash-image';
