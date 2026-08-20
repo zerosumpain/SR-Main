@@ -160,7 +160,7 @@ theatre. **Phase 3 gates phases 4–5.**
    (`human | assisted | generated | unknown`); tagging control in the admin blog list;
    fix `apply-proposal/+server.ts` to persist rejections, and add the reject path that
    records John's replacement text. Without this, phase 5 has nothing to learn from.
-1. **Card v1.** ✅ **Delivered 2026-08-20 (PR #372).** `src/lib/voice/{types,measure,card}.ts`,
+1. **Card v1.** ✅ **Delivered 2026-08-20 (PR #374).** `src/lib/voice/{types,measure,card}.ts`,
    `scripts/build-voice-card.ts`, `data/voice/voice-card.json` + six exemplars.
    Measured `public-prose` (5 posts, 3,198 words) and `chat` (1,106 turns, 16,074 words);
    `explanatory` and `terse` carry rules only, because no corpus isolates them and
