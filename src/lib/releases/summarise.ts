@@ -31,6 +31,7 @@ import {
   type ReleaseItemSummary,
 } from './types';
 import { redactDeep } from '$lib/security/sensitive';
+import { voiceBlock } from '$lib/voice/block';
 
 /** Hard ceiling on prompt evidence. Big deploys exist (a 300-file refactor);
  *  past this the extra file paths add noise, not signal. */
@@ -39,7 +40,11 @@ const MAX_FILES_IN_PROMPT = 120;
 const MAX_BODY_CHARS = 700;
 const MAX_ITEMS = 12;
 
-const SYSTEM_PROMPT = `You write the release notes for a personal software project (a SvelteKit site with an AI assistant, workflow engine, admin tooling and several sub-projects).
+// Built lazily rather than as a module-level constant: voiceBlock() reads the
+// Voice Card off disk, and doing that at import time would run a filesystem read
+// on module load and freeze the card until the next restart.
+function systemPrompt(): string {
+  return `You write the release notes for a personal software project (a SvelteKit site with an AI assistant, workflow engine, admin tooling and several sub-projects).
 
 You are given the complete git evidence for ONE production deploy: its commits and the files it changed. Turn that into a short overview plus a list of the distinct things that went live.
 
@@ -48,7 +53,9 @@ Rules:
 2. Group related commits into ONE item. A deploy carrying "add X endpoint", "fix X test" and "style X page" is one item about X, not three. Aim for 1-6 items; never more than ${MAX_ITEMS}.
 3. "includes" = the concrete things the change actually covers, as specific as the evidence allows ("adds a /admin/ops/releases page", "backfills history from git", "adds a bearer-token ingest endpoint").
 4. "excludes" = what it does NOT cover, and this is the most valuable field. Use it for: work the commits explicitly defer ("phase 2", "TODO", "follow-up"), stated non-goals, obvious adjacent surfaces the diff leaves untouched, and limits a reader would otherwise assume away. Only state an exclusion you can justify from the evidence. An empty list is correct and expected when nothing supports one — do NOT pad it.
-5. Write in plain British English, past tense, no marketing language, no emoji. Titles are sentence case, under 70 characters.
+5. Titles are sentence case, under 70 characters. Follow the voice notes below.
+
+${voiceBlock('terse', { exemplars: 0 })}
 6. "files" and "commits" are evidence pointers: file paths and short commit SHAs copied EXACTLY from the evidence, only the ones belonging to that item.
 
 Return JSON of exactly this shape:
@@ -70,6 +77,7 @@ Return JSON of exactly this shape:
     }
   ]
 }`;
+}
 
 /** Compact one commit for the prompt: subject always, body only when it says something. */
 function renderCommit(c: CommitFact): string {
@@ -348,7 +356,7 @@ export async function summariseRelease(id: number, opts: { force?: boolean } = {
   let lastError = 'unknown';
   for (const compact of [false, true]) {
     try {
-      const raw = await jsonCompletion<unknown>(SYSTEM_PROMPT, buildSummaryPrompt(row, compact), {
+      const raw = await jsonCompletion<unknown>(systemPrompt(), buildSummaryPrompt(row, compact), {
         temperature: 0.2,
         maxTokens: compact ? 3500 : 6000,
       });
