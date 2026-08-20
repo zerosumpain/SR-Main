@@ -31,8 +31,14 @@ Rules worth knowing before touching this:
 - **Codex is slower per tool call** (~10 s first call, ~3 s follow-ups, vs
   ~1–2 s on OpenRouter) because each turn starts a fresh Codex process. It is a
   legitimate site default; just know a long builder chain will crawl.
-- **Codex is text-only.** Anything sending images/audio/PDF must check
-  `getModelCapabilities()` first — the site default may now be a Codex model.
+- **Codex is text-only *through this gateway*.** Anything that builds its own
+  content parts must check `getModelCapabilities()` first — the site default may
+  now be a Codex model. **But `/jkai` chat does not go through this gateway**;
+  Hermes answers it, and Hermes owns media handling — it attaches pixels
+  natively where the model does vision and otherwise pre-analyses the image with
+  its auxiliary vision model. Measured: it routes `codex/gpt-5.6-terra` as
+  `native`. So chat asks `getChatInputCapabilities(ctx, { hermes })` instead.
+  Applying the model gate there dropped every image John attached, twice.
 - **Codex prices as `null`, never `0`** — no cash cost, but real quota spend.
 - The bridge lives in `packages/jkai-codex-bridge` (see its README) and is
   deployed by `scripts/deploy-codex-bridge.sh`, **not** by `ci-deploy.sh`, which
