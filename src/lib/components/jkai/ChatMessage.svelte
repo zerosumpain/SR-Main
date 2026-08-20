@@ -5,7 +5,7 @@
   import FileReferenceChips from './FileReferenceChips.svelte';
   import ResearchReferenceChips from './ResearchReferenceChips.svelte';
   import { sanitizeChatHtml } from '$lib/security/sanitize-chat';
-  import { rewriteHermesToolLog } from '$lib/workflows/chat/hermes-tool-log';
+  import { stripHermesToolLog } from '$lib/workflows/chat/hermes-tool-log';
   import { linkifyCitations, fileAnchors, researchAnchors, type CiteTarget } from '$lib/jkai/citation-linkify';
   import { linkifyEntities } from '$lib/jkai/intel/entity-linkify';
   import type { MentionTarget } from '$lib/jkai/intel/entity-card-store';
@@ -136,14 +136,17 @@
   }
 
   // Hermes writes its own tool-call log into the text stream (`⚙️
-  // mcp_jkai_recall_memories: "…"`), which is machinery, not answer. Rewrite it
-  // into plain English BEFORE the markdown parse so both the live stream and
-  // stored history read the same — see $lib/workflows/chat/hermes-tool-log.
+  // mcp_jkai_recall_memories: "…"`), which is machinery, not answer. Strip it
+  // BEFORE the markdown parse so both the live stream and stored history read
+  // the same — see $lib/workflows/chat/hermes-tool-log. The steps are not lost:
+  // they are the tool-call trace behind the *analyse* button, which is where
+  // anyone who wants the play-by-play goes to read it.
+  const answerText = $derived(role === 'assistant' ? stripHermesToolLog(content) : content);
   let renderedContent = $derived(
     role === 'assistant'
       ? wrapTables(
           injectConvParam(
-            sanitizeChatHtml(marked.parse(rewriteHermesToolLog(content)) as string),
+            sanitizeChatHtml(marked.parse(answerText) as string),
             conversationId,
           ),
         )
@@ -246,8 +249,11 @@
   // An attachment-only turn (the model returned a file and no prose) would
   // otherwise draw an empty bubble above the attachment block. Skip the bubble
   // and let the attachment be the message.
+  // Checked against the STRIPPED text: a turn that died inside a tool call has
+  // nothing but log lines in `content`, and that must draw no bubble at all
+  // rather than an empty one.
   const hasBody = $derived(
-    content.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
+    answerText.trim().length > 0 || !!heartbeat || hasThinking || !!metadata?.workflowGenerated,
   );
   let heartbeatLabel = $derived.by(() => {
     if (!heartbeat) return '';
@@ -737,24 +743,6 @@
     background: color-mix(in srgb, var(--card-border) 7%, transparent);
   }
   .chat-markdown :global(.md-table-wrap td) { color: var(--text-primary); }
-
-  /* A rewritten Hermes tool-log entry. Mono + ghost + a quiet accent tick, so a
-     step the model took reads as machinery sitting beside the answer rather than
-     as a sentence of the answer itself. Same left-tick geometry as the in-progress
-     status-update line in ChatArea, which is the other "this is the machine
-     talking" surface in the thread. */
-  .chat-markdown :global(.tool-log-step) {
-    margin: 0.5em 0;
-    padding: 2px 0 2px 8px;
-    border-left: 2px solid var(--accent-tint-20);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.5;
-    color: var(--text-ghost);
-  }
-  .chat-markdown :global(.tool-log-step + .tool-log-step) {
-    margin-top: -0.25em;
-  }
 
   /* Heartbeat-source message styling */
   .hb-msg {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rewriteHermesToolLog, describeHermesToolCall } from './hermes-tool-log';
+import { rewriteHermesToolLog, stripHermesToolLog, describeHermesToolCall } from './hermes-tool-log';
 
 // The fixtures below are real lines taken from production `orchestrator_chats`
 // rows, including the ones where Hermes glues an entry onto the end of a
@@ -161,5 +161,66 @@ describe('rewriteHermesToolLog — leaves prose alone', () => {
     const out = rewriteHermesToolLog('✅ Corrected: see below.\n🔍 web_search: "peers"');
     expect(out).toContain('✅ Corrected: see below.');
     expect(out).toContain('<div class="tool-log-step">Searched the web for “peers”</div>');
+  });
+});
+
+// What the chat bubble actually uses. The steps stay in the tool-call trace
+// behind the *analyse* button; the reply is only the answer.
+describe('stripHermesToolLog', () => {
+  it('removes an entry entirely rather than describing it', () => {
+    expect(stripHermesToolLog('⚙️ mcp_jkai_recall_memories: "david foley"')).toBe('');
+  });
+
+  it('keeps the prose on both sides and does not run the sentences together', () => {
+    const out = stripHermesToolLog(
+      'Applying the dedupe path and adding canvas notes.\n' +
+        '⚙️ mcp_jkai_workflow_amend: "workflow_amend" (×2)\n' +
+        '🔍 web_search: "peers"\n' +
+        'Lint is clean apart from two pre-existing warnings.',
+    );
+    expect(out).toBe(
+      'Applying the dedupe path and adding canvas notes.\n\n' +
+        'Lint is clean apart from two pre-existing warnings.',
+    );
+  });
+
+  it('separates prose when Hermes glues an entry onto the end of a sentence', () => {
+    const out = stripHermesToolLog(
+      'Checking the canvas now. ⚙️ mcp_jkai_workflow_lint: "spine" Lint passes.',
+    );
+    expect(out).toBe('Checking the canvas now.\n\nLint passes.');
+    expect(out).not.toContain('  ');
+  });
+
+  it('leaves a reply with no tool log byte-identical', () => {
+    const text = 'The figure is £371 a day.\n\n- one\n- two';
+    expect(stripHermesToolLog(text)).toBe(text);
+  });
+
+  it('leaves prose that merely uses a tool glyph alone', () => {
+    for (const text of [
+      '✅ Corrected: the figure is £371 a day.',
+      '📋 Summary: three things changed.',
+      '💬 Note: this is only an estimate.',
+      '⏳ Working — 12 min (iteration 5/90, receiving stream response)',
+    ]) {
+      expect(stripHermesToolLog(text)).toBe(text);
+    }
+  });
+
+  it('drops a phrase-quoted search query whole, with no prose spill', () => {
+    const out = stripHermesToolLog('🔍 web_search: ""House of Lords" benefits pension fre..."');
+    expect(out).toBe('');
+  });
+
+  it('collapses a run of consecutive entries to a single break, not a gulf', () => {
+    const out = stripHermesToolLog(
+      'Before.\n⚙️ mcp_jkai_ha_get_history... (×2)\n⚙️ mcp_jkai_ha_query_state...\n🔍 web_search: "x"\nAfter.',
+    );
+    expect(out).toBe('Before.\n\nAfter.');
+  });
+
+  it('leaves a message that is only tool log with nothing at all — the bubble is skipped', () => {
+    expect(stripHermesToolLog('⚙️ mcp_jkai_workflow_run: "spine"\n⚙️ mcp_jkai_workflow_lint...')).toBe('');
   });
 });
