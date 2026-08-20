@@ -2575,6 +2575,7 @@ export const workflowFiles = pgTable(
     permissions: jsonb('permissions').notNull().default(sql`'{"read":true,"write":false,"append":false,"delete":false}'::jsonb`),
     uploadedBy: text('uploaded_by'),                 // email of uploader, nullable for system-generated
     contentHash: text('content_hash'),               // sha256 hex of the current bytes; gates re-embedding (null = never embedded)
+    indexError: text('index_error'),                 // why the last index attempt produced no text; null once it succeeds
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
