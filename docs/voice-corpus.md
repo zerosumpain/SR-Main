@@ -63,10 +63,13 @@ one editing session at a time.
 ## Refreshing after new posts
 
 Everything above happens on its own now. `scripts/refresh-voice-card.sh` runs on homeserv
-at 07:00 on the 1st (cron calls `~/bin/voice-card-refresh.sh`, which reads this script out
-of `origin/master` — the checkout is usually on somebody's branch) — an hour after the in-app drift job, so the datastore note lands
-first — and does the export, the rebuild and the comparison in one go. When the card
-moves it opens a PR; when it doesn't it writes a log line and stops.
+at 07:00 on the 1st — an hour after the in-app drift job, so the datastore note lands
+first — and does the export, the rebuild and the comparison in one go. When the card moves
+it opens a PR; when it doesn't it writes a log line and stops.
+
+Cron calls `~/bin/voice-card-refresh.sh`, which reads this script out of `origin/master`
+and pipes it to bash, because the checkout is usually parked on somebody's branch where
+this file is a different version or missing entirely.
 
 ```bash
 scripts/refresh-voice-card.sh --dry-run                 # export, rebuild, print, change nothing
