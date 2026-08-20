@@ -200,7 +200,10 @@ if [[ -n "$CORPUS_OVERRIDE" ]]; then
 else
   log "exporting the corpus from production"
   rm -f "$CORPUS"
-  ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=20 "$VPS_HOST" \
+  # -n matters: without it ssh reads this script's stdin, and when the script is
+  # itself being piped into bash (which is how cron invokes it) it swallows
+  # every line after this one. The run then ends here, quietly, exit 0.
+  ssh -n -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=20 "$VPS_HOST" \
     "docker exec $CONTAINER sh -lc 'psql -U \$POSTGRES_USER -d \$POSTGRES_DB -tAc \"select json_build_object(
         '\''posts'\'', (select json_agg(json_build_object('\''id'\'', id, '\''slug'\'', slug, '\''authorship'\'', authorship, '\''content'\'', content)) from blog_posts),
         '\''chat'\'',  (select json_agg(o.content) from orchestrator_chats o join jkai_conversations c on c.id = o.conversation_id where o.role = '\''user'\'' and c.source = '\''web'\''),
