@@ -3,7 +3,9 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats, jkaiAttachments, jkaiBuilds, openrouterModels } from '$lib/db/schema';
 import { eq, asc, sql, inArray, and, notInArray, desc } from 'drizzle-orm';
-import { getModelCapabilities } from '$lib/server/models/capabilities';
+import { getChatInputCapabilities } from '$lib/server/models/capabilities';
+import { isHermesChatEnabled } from '$lib/server/models/settings';
+import { env } from '$env/dynamic/private';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
 import { coerceModelContext } from '$lib/constants/default-models';
 
@@ -58,7 +60,12 @@ export const GET: RequestHandler = async ({ params }) => {
 	// still carry provider 'zai' + a bare GLM id — coerce to an OpenRouter
 	// context so old conversations render (and price) as openrouter.
 	const pinnedModel = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
-	const modelCaps = getModelCapabilities(pinnedModel);
+	// What the ACTIVE ENGINE can accept, not what the model can — Hermes routes
+	// a text-only model's images through its vision auxiliary, so the composer
+	// must not grey them out. Falls back to the model's own limits when the
+	// legacy in-process lane is serving chat.
+	const hermes = await isHermesChatEnabled(env.JKAI_HERMES_CANVAS_CHAT === '1').catch(() => false);
+	const modelCaps = getChatInputCapabilities(pinnedModel, { hermes });
 
 	const TERMINAL_BUILD_STATUSES = ['completed', 'failed'] as const;
 	const [activeBuild] = await db
