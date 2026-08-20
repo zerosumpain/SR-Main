@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sha256Hex } from './hash';
 import { fileToText, isIndexableMime } from './content';
-import { looksLikeRefusal } from './describe';
+import { looksLikeRefusal, looksDegenerate } from './describe';
 
 describe('sha256Hex', () => {
   it('is deterministic and content-sensitive', () => {
@@ -94,5 +94,26 @@ describe('looksLikeRefusal', () => {
     // apology must survive, so the guard only applies to short answers.
     const long = "I'm sorry to hear that. " + 'x'.repeat(1200);
     expect(looksLikeRefusal(long)).toBe(false);
+  });
+});
+
+describe('looksDegenerate', () => {
+  // The other way a transcript comes back useless: not a refusal, but noise.
+  // grok-4.5 answered a PDF with leaked tool scaffolding, and it declares `file`
+  // input in the catalogue, so nothing upstream would have stopped it.
+  it('catches repeated tool-scaffolding noise', () => {
+    expect(looksDegenerate('```pdf_browse```pdf_browse```pdf_browse')).toBe(true);
+    expect(looksDegenerate('...'.repeat(40))).toBe(true);
+  });
+
+  it('leaves a real transcript alone', () => {
+    expect(
+      looksDegenerate('Annual Statement\nAccount summary\nOpening balance 01/01/2026 £1,234.56\nClosing balance 31/12/2026 £987.65'),
+    ).toBe(false);
+    expect(looksDegenerate('Hello world from page one.\n\nThis is page two.')).toBe(false);
+  });
+
+  it('ignores long bodies entirely', () => {
+    expect(looksDegenerate('ab '.repeat(900))).toBe(false);
   });
 });

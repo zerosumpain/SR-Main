@@ -144,6 +144,33 @@ export function looksLikeRefusal(text: string): boolean {
 }
 
 /**
+ * Did the model emit noise instead of a transcript?
+ *
+ * A refusal is polite and detectable; this is the other failure. Asked to read a
+ * PDF, `x-ai/grok-4.5` answered "```pdf_browse```pdf_browse```pdf_browse" —
+ * leaked tool-call scaffolding, not a document. It declares `file` input in the
+ * catalogue, so nothing upstream stops it being chosen, and `looksLikeRefusal`
+ * does not fire on it.
+ *
+ * The test is degenerate repetition: a short fragment repeated until it fills
+ * the answer. Real transcripts do not do that, and the threshold (a fragment
+ * under 24 chars covering 60%+ of a short body) leaves ordinary prose alone.
+ */
+export function looksDegenerate(text: string): boolean {
+  const t = text.trim();
+  if (t.length > 2000) return false;
+  const words = t.split(/\s+/).filter((w) => w.length >= 2);
+  if (words.length >= 4 && new Set(words).size / words.length > 0.4) return false;
+  for (let len = 4; len <= 24; len++) {
+    const frag = t.slice(0, len);
+    if (!frag.trim()) continue;
+    const occurrences = t.split(frag).length - 1;
+    if (occurrences >= 3 && (occurrences * len) / t.length > 0.6) return true;
+  }
+  return false;
+}
+
+/**
  * OCR a PDF that has no text layer, via the same vision model used for images.
  *
  * Only for the case where pdf.js extracted nothing: a scan, a fax, or a photo of
@@ -182,11 +209,11 @@ export async function describePdfBestEffort(buf: Buffer, filename: string): Prom
     const text = (response as { choices: Array<{ message?: { content?: string } }> })
       .choices[0]?.message?.content?.trim();
     if (!text) return null;
-    if (looksLikeRefusal(text)) {
+    if (looksLikeRefusal(text) || looksDegenerate(text)) {
       // Throw rather than return null so the caller's fallback runs — a second
       // model often obliges where the first declined, and a refusal is not
       // evidence that the document is blank.
-      throw new Error(`model declined to transcribe: ${text.slice(0, 80)}`);
+      throw new Error(`model returned no usable transcript: ${text.slice(0, 80)}`);
     }
     return text;
   };

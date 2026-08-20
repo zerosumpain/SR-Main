@@ -15,6 +15,8 @@ function cand(over: Partial<Candidate> & { id: string }): Candidate {
     throughput: 100,
     contextLength: 128_000,
     openWeights: false,
+    imageInput: false,
+    fileInput: false,
     ...over,
   };
 }
@@ -250,5 +252,85 @@ describe('classifyQuery', () => {
   });
   it('plain chat → general', () => {
     expect(classifyQuery({ message: 'what do you think about stoicism?' }).profile).toBe('general');
+  });
+});
+
+
+describe('vision profile — must read pictures, need not call tools', () => {
+  const visionOpts = {
+    weights: DEFAULT_CONFIG.weights.vision,
+    qualityFloorFrac: DEFAULT_CONFIG.qualityFloorFrac.vision,
+    priceCeilingPerM: DEFAULT_CONFIG.priceCeilingPerM,
+    minContext: DEFAULT_CONFIG.minContext,
+    successBiasK: DEFAULT_CONFIG.successBiasK,
+    openWeightBonus: DEFAULT_CONFIG.openWeightBonus,
+    openWeightsOnly: DEFAULT_CONFIG.openWeightsOnly,
+    successFor: noSuccess,
+    requireImageInput: true,
+    requireFileInput: true,
+    requireTools: false,
+  };
+
+  it('never picks a text-only model, however cheap and strong', () => {
+    // The whole point: a text-only model would accept the request and describe
+    // the prompt while ignoring the picture — a confident caption of nothing.
+    const models = [
+      cand({ id: 'cheap-text-only', blendedPerM: 0.05, agenticIndex: 70, imageInput: false }),
+      cand({ id: 'pricier-vision', blendedPerM: 4, agenticIndex: 60, imageInput: true, fileInput: true }),
+    ];
+    const { winner } = selectForProfile(models, visionOpts);
+    expect(winner?.id).toBe('pricier-vision');
+  });
+
+  it('prefers the cheaper of two comparable vision models', () => {
+    const models = [
+      cand({ id: 'vision-dear', blendedPerM: 12, agenticIndex: 62, imageInput: true, fileInput: true }),
+      cand({ id: 'vision-cheap', blendedPerM: 0.6, agenticIndex: 60, imageInput: true, fileInput: true }),
+    ];
+    const { winner } = selectForProfile(models, visionOpts);
+    expect(winner?.id).toBe('vision-cheap');
+  });
+
+  it('keeps a vision model that cannot call tools', () => {
+    const models = [cand({ id: 'vision-no-tools', toolsSupported: false, imageInput: true, fileInput: true })];
+    const { winner, poolSize } = selectForProfile(models, visionOpts);
+    expect(poolSize).toBe(1);
+    expect(winner?.id).toBe('vision-no-tools');
+  });
+
+  it('still drops a tool-less model on a query profile', () => {
+    const models = [cand({ id: 'no-tools', toolsSupported: false })];
+    const { winner } = selectForProfile(models, {
+      ...visionOpts,
+      requireImageInput: false,
+      requireTools: true,
+    });
+    expect(winner).toBeNull();
+  });
+
+  it('enrichRow reads image capability off architecture.input_modalities', () => {
+    const seen = enrichRow({
+      id: 'x/vision',
+      name: 'vision',
+      promptPrice: '0.000001',
+      completionPrice: '0.000004',
+      contextLength: 128_000,
+      throughput: '80',
+      raw: { architecture: { input_modalities: ['text', 'image', 'file'] } },
+    } as never);
+    expect(seen.imageInput).toBe(true);
+    expect(seen.fileInput).toBe(true);
+
+    const blind = enrichRow({
+      id: 'x/text',
+      name: 'text',
+      promptPrice: '0.000001',
+      completionPrice: '0.000004',
+      contextLength: 128_000,
+      throughput: '80',
+      raw: { architecture: { input_modalities: ['text'] } },
+    } as never);
+    expect(blind.imageInput).toBe(false);
+    expect(blind.fileInput).toBe(false);
   });
 });

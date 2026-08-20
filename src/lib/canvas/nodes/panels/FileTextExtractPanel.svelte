@@ -41,7 +41,6 @@
     { value: 'z-ai/glm-5-turbo', label: 'GLM 5 Turbo' },
     { value: 'z-ai/glm-5.2', label: 'GLM 5.2' },
     { value: 'z-ai/glm-5.1', label: 'GLM 5.1' },
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o mini (fast, cheap)' },
     { value: 'openai/gpt-4o', label: 'GPT-4o (balanced)' },
     { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet' },
     { value: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku (fast)' },

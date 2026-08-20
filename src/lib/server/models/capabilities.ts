@@ -15,6 +15,18 @@ const IMAGE_ONLY: ModelCapabilities = { image: true, audio: false, video: false,
 const IMAGE_PDF: ModelCapabilities = { image: true, audio: false, video: false, pdf: true, documentText: true };
 const TEXT_ONLY: ModelCapabilities = { image: false, audio: false, video: false, pdf: false, documentText: true };
 
+// STATIC FALLBACK ONLY — the live catalogue is the source of truth.
+//
+// This map was hand-maintained and went stale, in both directions: it called
+// `minimax/minimax-m3` text-only when it reads images perfectly well, and it
+// omitted `openai/gpt-4o-mini` altogether, so that model reported text-only and
+// could never be chosen in a picker that gates on image input — even while it
+// WAS the hard-coded vision default. A list of 400+ models curated by hand
+// against a catalogue that changes weekly cannot stay true.
+//
+// `warmCatalogueCaps` now derives capabilities from `openrouter_models`, which
+// the nightly refresh keeps current. These entries survive only to answer the
+// first few calls after boot, and to cover a model the catalogue has dropped.
 const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
   // GLM family via OpenRouter z-ai/* slugs (multimodal parity with the old
   // direct-z.ai capability map).
@@ -79,13 +91,79 @@ export function getChatInputCapabilities(
   return getModelCapabilities(ctx);
 }
 
+/**
+ * Capabilities derived from the live OpenRouter catalogue, warmed into memory.
+ *
+ * Mirrors the pricing warm-up in `$lib/jkai/llm-pricing` deliberately, for the
+ * same reason: `getModelCapabilities` is called synchronously from request
+ * handlers and pickers, so the load is fire-and-forget and the static map
+ * answers until it lands.
+ *
+ * OpenRouter publishes `architecture.input_modalities` per model — the same
+ * field the routing selector filters the vision pool on — so capabilities and
+ * routing now agree by construction instead of by hand.
+ */
+let catalogueCaps: Map<string, ModelCapabilities> | null = null;
+let capsWarmInFlight = false;
+
+/** `input_modalities` → our capability shape. `file` is OpenRouter's name for
+ *  "accepts a document (PDF) as a content part", which is our `pdf`. */
+export function capsFromModalities(inputs: string[]): ModelCapabilities {
+  return {
+    image: inputs.includes('image'),
+    audio: inputs.includes('audio'),
+    video: inputs.includes('video'),
+    pdf: inputs.includes('file'),
+    // Every chat model takes text; nothing in the catalogue contradicts it.
+    documentText: true,
+  };
+}
+
+function warmCatalogueCaps(): void {
+  if (catalogueCaps || capsWarmInFlight) return;
+  capsWarmInFlight = true;
+  (async () => {
+    const { db } = await import('$lib/db');
+    const { openrouterModels } = await import('$lib/db/schema');
+    const rows = await db
+      .select({ id: openrouterModels.id, raw: openrouterModels.raw })
+      .from(openrouterModels);
+    const map = new Map<string, ModelCapabilities>();
+    for (const r of rows) {
+      const raw = (r.raw ?? {}) as { architecture?: { input_modalities?: unknown } };
+      const inputs = raw.architecture?.input_modalities;
+      // No modality data is not the same as "text only" — skip the row and let
+      // the static map answer, rather than asserting a capability we never read.
+      if (!Array.isArray(inputs) || inputs.length === 0) continue;
+      map.set(r.id, capsFromModalities(inputs.map((m) => String(m))));
+    }
+    if (map.size > 0) catalogueCaps = map;
+  })().catch(() => {
+    // DB unavailable — stay on the static fallback; retry on a later call.
+    capsWarmInFlight = false;
+  });
+}
+
+/** Test/refresh hook: drop the warmed catalogue map. Called by the nightly
+ *  catalogue refresh so a new snapshot takes effect without a restart. */
+export function clearCapabilityCache(): void {
+  catalogueCaps = null;
+  capsWarmInFlight = false;
+}
+
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
-  // Codex serves text only. The SDK does accept images, but as `local_image`
-  // with a filesystem PATH — the site passes base64/URLs, so there is no route
-  // from an uploaded attachment to a Codex turn without staging it to disk.
-  // Claiming image support here would surface a picker option that fails.
+  // Codex serves text only THROUGH THIS GATEWAY. The SDK does accept images,
+  // but as `local_image` with a filesystem PATH — the site passes base64/URLs,
+  // so there is no route from an uploaded attachment to a Codex turn without
+  // staging it to disk. Verified 2026-08-20: sent an image and a PDF to
+  // codex/gpt-5.6-terra through getLLMClient and it answered "I can't access
+  // the image" / "No document was attached". Claiming support here would
+  // surface a picker option that fails. (Chat is different — Hermes stages the
+  // bytes itself; see getChatInputCapabilities.)
   if (ctx.provider === 'codex' || isCodexModelId(ctx.modelId)) return TEXT_ONLY;
-  return OPENROUTER_CAPS[mapLegacyModelId(ctx.modelId)] ?? TEXT_ONLY;
+  warmCatalogueCaps();
+  const id = mapLegacyModelId(ctx.modelId);
+  return catalogueCaps?.get(id) ?? OPENROUTER_CAPS[id] ?? TEXT_ONLY;
 }
 
 /**
