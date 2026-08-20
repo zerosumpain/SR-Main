@@ -2646,7 +2646,7 @@ export const fileEmbeddings = pgTable(
     contentHash: text('content_hash').notNull(),     // hash of the bytes this chunk was embedded from
     chunkOrd: integer('chunk_ord').notNull(),         // 0-based ordinal within the file
     source: text('source').notNull(),                 // file name at embed time (display/citation)
-    modality: text('modality').notNull(),             // 'text' | 'image' | 'audio' — how the text was derived
+    modality: text('modality').notNull(),             // 'text' | 'image' | 'audio' | 'ocr' — how the text was derived
     text: text('text').notNull(),                     // the chunk text that was embedded
     charStart: integer('char_start').notNull(),
     charEnd: integer('char_end').notNull(),

@@ -123,7 +123,8 @@ register({
     'Use this whenever the user asks to find files by what they contain or depict — e.g. ' +
     '"anything referring to a blue shirt and glasses", "the invoice that mentions refunds", ' +
     '"photos of the garden". Returns ranked passages, each with the source file name, its id, the ' +
-    'modality (text/image/audio) and a relevance score. Follow up with file_read for a full file. ' +
+    'modality (text/image/audio/ocr — "ocr" is a scanned PDF read by a vision model, so treat its ' +
+    'wording as approximate) and a relevance score. Follow up with file_read for a full file. ' +
     'When the user writes "@files" in their message, use this tool.',
   parameters: {
     type: 'object',

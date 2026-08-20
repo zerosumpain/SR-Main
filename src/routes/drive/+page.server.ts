@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
-import { driveFolderSettings, workflowFiles } from '$lib/db/schema';
-import { desc } from 'drizzle-orm';
+import { driveFolderSettings, fileEmbeddings, workflowFiles } from '$lib/db/schema';
+import { desc, sql } from 'drizzle-orm';
+import { indexStatusFor } from '$lib/file-index/index-status';
 import { env } from '$env/dynamic/private';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { SHARE_TTL_DAYS } from '$lib/file-shares';
@@ -23,7 +24,7 @@ function parseBytes(raw: string | undefined, fallback: number): number {
 }
 
 export const load: PageServerLoad = async () => {
-  const [files, siteDefault, folderRows] = await Promise.all([
+  const [files, siteDefault, folderRows, indexRows] = await Promise.all([
     db.select().from(workflowFiles).orderBy(desc(workflowFiles.updatedAt)),
     // The RAG chat panel starts on the site default like every other LLM
     // surface, rather than on the hard-coded code fallback.
@@ -31,6 +32,16 @@ export const load: PageServerLoad = async () => {
     // Per-folder entity-resolution policy. Loaded up front so folder tiles can
     // show whether their contents feed the Intel graph without a fetch per tile.
     db.select().from(driveFolderSettings),
+    // One row per indexed file. Chunks of the same file always share a modality,
+    // so min() just picks it deterministically.
+    db
+      .select({
+        fileId: fileEmbeddings.fileId,
+        chunks: sql<number>`count(*)::int`,
+        modality: sql<string>`min(${fileEmbeddings.modality})`,
+      })
+      .from(fileEmbeddings)
+      .groupBy(fileEmbeddings.fileId),
   ]);
   // adapter-node default is '512K' when BODY_SIZE_LIMIT is unset.
   const bodyLimit = parseBytes(env.BODY_SIZE_LIMIT, 512 * 1024);
@@ -40,7 +51,24 @@ export const load: PageServerLoad = async () => {
     intelMode: r.intelMode,
     categoryIds: r.categoryIds ?? [],
   }));
+  const indexByFile = new Map(indexRows.map((r) => [r.fileId, r]));
+  const filesWithIndex = files.map((f) => {
+    const hit = indexByFile.get(f.id);
+    const chunks = hit?.chunks ?? 0;
+    return {
+      ...f,
+      indexChunks: chunks,
+      indexModality: hit?.modality ?? null,
+      indexStatus: indexStatusFor(f, chunks),
+    };
+  });
   // The share list itself is fetched client-side (it changes without a reload),
   // but the lifetime is needed for button copy before that lands.
-  return { files, maxUploadBytes, defaultChatModelId: siteDefault.modelId, folderSettings, shareTtlDays: SHARE_TTL_DAYS };
+  return {
+    files: filesWithIndex,
+    maxUploadBytes,
+    defaultChatModelId: siteDefault.modelId,
+    folderSettings,
+    shareTtlDays: SHARE_TTL_DAYS,
+  };
 };
