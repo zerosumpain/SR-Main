@@ -160,9 +160,32 @@ theatre. **Phase 3 gates phases 4–5.**
    (`human | assisted | generated | unknown`); tagging control in the admin blog list;
    fix `apply-proposal/+server.ts` to persist rejections, and add the reject path that
    records John's replacement text. Without this, phase 5 has nothing to learn from.
-1. **Card v1.** `src/lib/voice/{measure,card}.ts`; `scripts/build-voice-card.ts`;
-   `data/voice/*` committed. Stated layer ported from the memory file; exemplars chosen
-   by John.
+1. **Card v1.** ✅ **Delivered 2026-08-20 (PR #372).** `src/lib/voice/{types,measure,card}.ts`,
+   `scripts/build-voice-card.ts`, `data/voice/voice-card.json` + six exemplars.
+   Measured `public-prose` (5 posts, 3,198 words) and `chat` (1,106 turns, 16,074 words);
+   `explanatory` and `terse` carry rules only, because no corpus isolates them and
+   inventing one would produce figures with nothing behind them. Corpus export procedure
+   in `docs/voice-corpus.md`; `corpus.json` is gitignored — it holds unpublished drafts
+   and private chat turns.
+
+   **Three measurements contradicted the stated rules, and the card records the
+   disagreement rather than papering over it** (`tensions`):
+
+   - *Sentence length.* The blog assistant prompt has long said "short sentences are
+     fine". Measured: median **19** words, p90 **43**, only **13%** at five words or
+     fewer. He writes long, comma-spliced sentences. A model told to write short ones
+     produces something clipped that reads nothing like him. **This one was an error in
+     the old prompt, and the card corrects it.**
+   - *Exclamation marks.* The rule says none; the corpus has them at ~3 per 1,000 words.
+     The rule stands as an *instruction for generated prose* — he earns one, a model
+     reaching for one lands it as enthusiasm. Recorded as instruction, not observation.
+   - *Colons.* Zero in 3,198 words. Nobody wrote that rule down; he simply never does it.
+
+   Distinctiveness is scored against the two `generated` posts. Nothing clears z > 1.96
+   (top term `my` at 1.81) and the list mixes style with subject matter, so the card
+   labels it a ranking rather than a set of findings. The real signal in it is blunt:
+   first-person pronouns dominate — he writes about what he did, the model writes about
+   a subject.
 2. **`$lib/voice` + swap the six.** `voiceBlock(register)`; edit the six hardcoded sites;
    fill `buildStyleCues()` from `blog_post_revisions` + resolutions.
 3. **Scorer + stop-gate.** `src/lib/voice/score.ts`; the discriminator test; Voice panel in
