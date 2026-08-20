@@ -105,13 +105,18 @@ describe('jkai_extended meta-tool', () => {
     });
   });
 
+  // `gmail_get_message` is the stand-in for "an ordinary extended tool" through
+  // this block. It used to be `gmail_search`, which was promoted to an essential
+  // on 2026-08-20 (it is one of the five hottest first-turn tools) — and an
+  // essential is deliberately absent from the extended catalogue, so it can no
+  // longer play the part. Any tool that stays extended will do.
   describe('operation="schema"', () => {
     it('returns name + description + inputSchema for a known extended tool', async () => {
       const result = (await dispatchMetaTool(
-        { operation: 'schema', name: 'gmail_search' },
+        { operation: 'schema', name: 'gmail_get_message' },
         fakeCtx,
       )) as { name: string; description: string; inputSchema: Record<string, unknown> };
-      expect(result.name).toBe('gmail_search');
+      expect(result.name).toBe('gmail_get_message');
       expect(result.description).toBeTruthy();
       expect(result.inputSchema).toBeDefined();
       expect((result.inputSchema as { type?: string }).type).toBe('object');
@@ -144,13 +149,13 @@ describe('jkai_extended meta-tool', () => {
   describe('operation="schema" (batch via names)', () => {
     it('returns an array of schema entries, one per requested tool', async () => {
       const result = (await dispatchMetaTool(
-        { operation: 'schema', names: ['gmail_search', 'blog_list'] },
+        { operation: 'schema', names: ['gmail_get_message', 'blog_list'] },
         fakeCtx,
       )) as unknown as Array<{ name: string; inputSchema: Record<string, unknown> }>;
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(2);
       const names = result.map((e) => e.name);
-      expect(names).toEqual(expect.arrayContaining(['gmail_search', 'blog_list']));
+      expect(names).toEqual(expect.arrayContaining(['gmail_get_message', 'blog_list']));
       for (const entry of result) {
         expect(entry.inputSchema).toBeDefined();
         expect((entry.inputSchema as { type?: string }).type).toBe('object');
@@ -159,7 +164,7 @@ describe('jkai_extended meta-tool', () => {
 
     it('returns a single-object error when names contains an unknown tool and reports it', async () => {
       const result = (await dispatchMetaTool(
-        { operation: 'schema', names: ['gmail_search', 'does_not_exist_anywhere'] },
+        { operation: 'schema', names: ['gmail_get_message', 'does_not_exist_anywhere'] },
         fakeCtx,
       )) as { error?: string };
       expect(Array.isArray(result)).toBe(false);
@@ -178,7 +183,7 @@ describe('jkai_extended meta-tool', () => {
 
     it('dedupes repeated names in a batch', async () => {
       const result = (await dispatchMetaTool(
-        { operation: 'schema', names: ['gmail_search', 'gmail_search'] },
+        { operation: 'schema', names: ['gmail_get_message', 'gmail_get_message'] },
         fakeCtx,
       )) as Array<{ name: string }>;
       expect(result).toHaveLength(1);
@@ -282,7 +287,7 @@ describe('listMcpTools() env-flag behaviour', () => {
       expect(tools.find((t) => t.name === 'whatsapp_send')).toBeTruthy();
       // Extended tools should be hidden.
       expect(tools.find((t) => t.name === 'blog_list')).toBeUndefined();
-      expect(tools.find((t) => t.name === 'gmail_search')).toBeUndefined();
+      expect(tools.find((t) => t.name === 'gmail_get_message')).toBeUndefined();
     } finally {
       if (originalFlag === undefined) {
         delete process.env.JKAI_MCP_META_TOOL;

@@ -1138,6 +1138,43 @@
     return labels[name] || name.replace(/_/g, ' ');
   }
 
+  // ── Streaming toolchain bar ───────────────────────────────────────────────
+  // A live turn rendered one step-card per call, so a chain of eight tools
+  // pushed the answer — and everything above it — off the screen while you
+  // watched. The chain is behind one collapsed bar now: status glyph, count,
+  // and the step that is running right this second. Expanding gives back the
+  // same step-cards list, unchanged. Keyed by the in-flight bubble's id so a
+  // background tab keeps its own open/closed state.
+  let toolchainOpen = $state<Record<string, boolean>>({});
+  function toggleToolchain(bubbleId: string) {
+    toolchainOpen = { ...toolchainOpen, [bubbleId]: !toolchainOpen[bubbleId] };
+  }
+
+  type IndexedStep = { step: ToolStep; index: number };
+
+  /** Split a bubble's steps into the tool chain and the `status_update` notes,
+   *  keeping each step's ORIGINAL index — `toggleStepExpanded` addresses steps
+   *  by position in `msg.toolSteps`, so a filtered list would expand the wrong
+   *  card. The notes are prose the model wrote for the user and stay inline;
+   *  only the chain goes behind the bar. */
+  function splitToolSteps(steps: ToolStep[] | undefined): { chain: IndexedStep[]; notes: IndexedStep[] } {
+    const chain: IndexedStep[] = [];
+    const notes: IndexedStep[] = [];
+    (steps ?? []).forEach((step, index) => {
+      (step.tool === 'status_update' ? notes : chain).push({ step, index });
+    });
+    return { chain, notes };
+  }
+
+  /** The step the collapsed bar speaks for: whichever is still running, else
+   *  the last one to have finished. */
+  function currentChainStep(chain: IndexedStep[]): ToolStep | null {
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (chain[i].step.status === 'running') return chain[i].step;
+    }
+    return chain.length > 0 ? chain[chain.length - 1].step : null;
+  }
+
   function toggleStepExpanded(stepIndex: number) {
     messages = messages.map((m) => {
       if (!m.isProgress || !m.toolSteps) return m;
@@ -2021,26 +2058,74 @@
     onmodelchange?.({ provider, modelId });
 
     // 2) Tell Hermes for this chat session via the gateway /model command.
-    //    `loading` keeps the composer disabled until the switch turn settles so
-    //    the user's first real message can't race ahead of it.
-    if (!force) loading = true;
-    try {
+    //
+    //    On the send path (`force`) we wait only for the POST — one ~90ms local
+    //    round trip that creates the job — not for the silent turn, which used
+    //    to hold the user's first message for up to 15s and was most of what
+    //    made a first reply feel 30s slow. The guarantee moves rather than
+    //    disappears: the pin job now exists before `send()` creates the user's
+    //    job, so the job store queues the user turn behind it per conversation
+    //    (`whenJobSettles`); and the server pump's `ensureModelPinned`
+    //    re-asserts the conversation's stored model regardless.
+    //
+    //    The manual picker waits for the whole turn: nothing is racing it there,
+    //    and the disabled composer is the only feedback the user gets.
+    if (force) {
       await tellHermesModel(provider, modelId);
+      return;
+    }
+    loading = true;
+    try {
+      await tellHermesModel(provider, modelId, { awaitTurn: true });
     } finally {
-      if (!force) loading = false;
+      loading = false;
     }
   }
 
-  /** The conversation whose model we have already pushed to Hermes. */
-  let hermesModelAssertedFor: string | null = null;
+  /** The `conversation:model` pair a `/model` push has already been fired for.
+   *  Written by `tellHermesModel` itself so BOTH push sites share one guard.
+   *  A plain `let`, never `$state`: the open-time effect below both reads and
+   *  writes it, and as reactive state that is the documented route to
+   *  `effect_update_depth_exceeded`. */
+  let modelPushedForKey: string | null = null;
 
   /** Push a model choice to Hermes for this chat session via the gateway
    *  `/model` command. Sent silently (no user bubble) and its confirmation reply
    *  is drained without rendering.
    *
    *  Hermes keys the switch to the chat session and holds it in memory, so it
-   *  has to be pushed once per conversation — see `ensureHermesModel`. */
-  async function tellHermesModel(provider: ModelContext['provider'], modelId: string): Promise<void> {
+   *  has to be pushed once per conversation — see the open-time effect below.
+   *
+   *  Resolves once the JOB EXISTS, not once the turn finishes. That distinction
+   *  is the whole of WS1: the job is created (and registered against this
+   *  conversation) by the POST, which costs one ~90ms local round trip, while
+   *  waiting for the turn cost up to 15s. Callers that need ordering await the
+   *  POST; nobody awaits the turn except the manual picker (`awaitTurn`), where
+   *  the user is not mid-send and the disabled composer is the feedback.
+   *
+   *  Awaiting the POST is not optional on the send path. Fired truly
+   *  and-forget, the pin's POST and the user turn's POST race each other to
+   *  `createJob`, and when the user's wins, the two run CONCURRENTLY on one
+   *  chat: the user's job then drops the pin turn's frames as foreign, the pin
+   *  job never sees a terminator, and — because the gateway queues — the next
+   *  message on that conversation sits behind it until the 255s idle watchdog
+   *  kills it. Measured 2026-08-20: a follow-up sent straight after a routed
+   *  first message took 4m14s to be answered. Awaiting the POST makes the pin
+   *  job discoverable before the user turn is created, so the user turn queues
+   *  behind it properly and the pin settles in seconds. */
+  async function tellHermesModel(
+    provider: ModelContext['provider'],
+    modelId: string,
+    opts?: { awaitTurn?: boolean },
+  ): Promise<void> {
+    // Claim the pair SYNCHRONOUSLY, before the first await. Both push sites — the
+    // open-time effect and `switchModel` — read this, so a switch that changes
+    // `currentModel` (and therefore re-runs the effect) cannot make the effect
+    // push the very model `switchModel` is already pushing. Measured 2026-08-20
+    // before this line existed: a first message sent TWO identical
+    // `/model deepseek-v4-pro` turns, and the user's turn then had to drop the
+    // second one's frames.
+    modelPushedForKey = `${conversationId ?? ''}:${modelId}`;
     try {
       const res = await fetch('/api/workflows/orchestrator/chat', {
         method: 'POST',
@@ -2049,40 +2134,68 @@
       });
       const data = await res.json().catch(() => null);
       const jobId = data?.jobId;
-      if (jobId) {
-        const stream = streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} });
-        await Promise.race([
-          stream.done.catch(() => {}),
-          new Promise((r) => setTimeout(r, 15000)),
-        ]);
-      }
-      hermesModelAssertedFor = conversationId ?? null;
+      if (!jobId) return;
+      // Drain the silent turn's confirmation so it isn't left to the job's own
+      // cleanup. Backgrounded unless the caller explicitly wants the turn.
+      const drained = Promise.race([
+        streamChatJob(jobId, { onEvent: () => {}, onWarning: () => {} }).done.catch(() => {}),
+        new Promise((r) => setTimeout(r, 15000)),
+      ]);
+      if (opts?.awaitTurn) await drained;
     } catch {
       // The choice is already persisted site-side; if the /model turn failed
       // Hermes keeps its own default and pricing may be off until the next turn.
     }
   }
 
-  /** Make sure Hermes is running the model this conversation says it is.
+  /** Make sure Hermes is running the model this conversation says it is —
+   *  pushed when the conversation OPENS, not when the user sends.
    *
    *  A conversation only ever told Hermes its model when the user *changed* the
    *  picker. One that took the chat default silently never told it anything, so
    *  Hermes fell back to `model.default` in its own config.yaml — the UI, the
    *  price snapshot and the cost accounting all said one model while a different
    *  one answered (seen 2026-08-09: a conversation stamped codex/gpt-5.6-terra
-   *  was served by deepseek-v4-flash on OpenRouter).
+   *  was served by deepseek-v4-flash on OpenRouter). That guarantee is still
+   *  here; it has just moved off the send path, where it was costing the user a
+   *  silent turn of up to 15s before their first message was even POSTed.
    *
-   *  Cheap because it runs once per conversation: the model locks after the
-   *  first message, and `switchModel` already covers the hand-picked path. */
-  async function ensureHermesModel(isFirstMessage: boolean): Promise<void> {
-    if (!hermesEnabled || !conversationId || !isFirstMessage) return;
-    if (hermesModelAssertedFor === conversationId) return;
-    // The id decides the provider, never the stored field: `currentModel` falls
-    // back to 'openrouter' whenever the conversation row hasn't loaded, which
-    // would hand Hermes a codex/ id under the wrong provider.
-    const ctx = coerceModelContext(currentModel);
-    await tellHermesModel(ctx.provider, ctx.modelId);
-  }
+   *  Three things hold the guarantee up now:
+   *    1. this push, fired the moment a FRESH conversation has an id — normally
+   *       while the user is still typing;
+   *    2. job-store queuing, which orders the silent turn ahead of the user's
+   *       turn on the same conversation even when they overlap; and
+   *    3. the server pump's `ensureModelPinned`, which re-reads the model off
+   *       the conversation row and re-asserts it before the user turn goes out.
+   *
+   *  Fresh conversations only. Pushing on every thread open would spend a silent
+   *  turn per thread the user merely glanced at, and an established thread's
+   *  model is locked anyway. */
+  $effect(() => {
+    // Tracked reads: only the signals that say "a fresh conversation is open,
+    // and this is the model it should be running".
+    const id = conversationId;
+    const provider = currentModel.provider;
+    const modelId = currentModel.modelId;
+    const fresh = messageCount === 0;
+    const on = hermesEnabled;
+    // Everything else — the guard and the write — is untracked, so this cannot
+    // subscribe to its own bookkeeping.
+    untrack(() => {
+      if (!on || !id || !fresh) return;
+      // The id decides the provider, never the stored field: `currentModel`
+      // falls back to 'openrouter' whenever the conversation row hasn't loaded,
+      // which would hand Hermes a codex/ id under the wrong provider. Coerce
+      // BEFORE building the key — `coerceModelContext` rewrites legacy ids and
+      // adds the `codex/` prefix, so a key built from the raw id would never
+      // match the one `tellHermesModel` records and this would fire every time.
+      const ctx = coerceModelContext({ provider, modelId });
+      if (modelPushedForKey === `${id}:${ctx.modelId}`) return;
+      // `tellHermesModel` claims the key itself, synchronously, so this and
+      // `switchModel` cannot both push the same pair.
+      void tellHermesModel(ctx.provider, ctx.modelId);
+    });
+  });
 
   /**
    * Fire the handed-over question once, as soon as it can actually be sent.
@@ -2127,7 +2240,13 @@
     if (queuedText === undefined) input = '';
     resetHistoryCycle();
     loading = true;
-    heartbeat = null;
+    // Acknowledge the submit on the spot. The server's first heartbeat is 5s
+    // away and the typing dots went in 2026-05-28, so until now pressing enter
+    // emptied the composer and then changed nothing on screen for five seconds —
+    // which reads as a dropped send. This is the existing heartbeat mechanism
+    // with a client-only phase, not a second indicator: the first real frame
+    // (heartbeat, token, thinking, tool_start) overwrites or clears it.
+    heartbeat = { summary: '', phase: 'received', elapsedSec: 0, lastBeatAt: Date.now() };
     pendingPlan = null;
     pendingConfirm = null;
     pendingClarify = null;
@@ -2169,6 +2288,9 @@
       }
       messages = messages.map((m) => (m.id === userMsgId ? { ...m, queued: true } : m));
       loading = false;
+      // Nothing is coming — there is no job to stream from. Drop the synthetic
+      // ack so it can't outlive the turn it was acknowledging.
+      heartbeat = null;
       scrollToBottom();
       return;
     }
@@ -2190,16 +2312,13 @@
     }];
     scrollToBottom();
 
-    // Query-adaptive model pick. Deliberately AFTER the bubble and the typing
-    // indicator are on screen: it costs a round trip, and when it switches model
-    // it costs an entire silent /model turn on top (up to 15s). Running it first
-    // meant submit left the composer full and the screen unchanged for all of
-    // that — the send read as dropped. First message of a conversation only.
+    // Query-adaptive model pick. One ~70ms round trip, and it no longer drags a
+    // silent `/model` turn behind it: when routing switches the model the push
+    // is fire-and-forget (see `switchModel`), ordered ahead of this message by
+    // the job store and backstopped by the server pump. The unconditional pin
+    // that used to sit here has moved to conversation-open — see the effect
+    // beside `tellHermesModel`. First message of a conversation only.
     await applyRouting(text, isFirstMessage);
-
-    // Routing may have switched the model (and pushed it to Hermes already); if
-    // it didn't, this conversation still has to tell Hermes what it is running.
-    await ensureHermesModel(isFirstMessage);
 
     // Throughput clock starts once the model work actually begins — routing is
     // not generation, and billing it here would drag the tok/s meter down.
@@ -2325,6 +2444,10 @@
 
   function phaseHumanLabel(phase: string): string {
     switch (phase) {
+      // Client-only phase, set the instant the user hits send so the thread
+      // says something before the first server frame arrives. No server phase
+      // is ever 'received'.
+      case 'received': return 'Received — working…';
       // Keep in sync with $lib/workflows/chat/job-store.ts phaseLabel() —
       // the server-side label is also "Connecting…" for the default
       // 'starting' phase so we match here for any client-only renders.
@@ -2605,6 +2728,7 @@
             <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
+              {@const split = splitToolSteps(msg.toolSteps)}
               <div class="progress-bubble mb-3">
                 <div class="progress-bubble-hdr">
                   <span class="working-dot" aria-hidden="true"></span>
@@ -2696,75 +2820,132 @@
                     {/if}
                   </div>
                 {/if}
-                <ul class="step-cards">
-                  {#each msg.toolSteps as step, stepIndex}
-                    {#if step.tool === 'status_update'}
+                {#if split.notes.length > 0}
+                  <!-- Status updates render inline as plain prose. Deliberately
+                       OUTSIDE the toolchain bar: this is the model talking to the
+                       user mid-task, not a tool call, and collapsing it would
+                       hide the one thing on the bubble written to be read. -->
+                  <ul class="step-cards">
+                    {#each split.notes as note (note.index)}
                       <li class="step-status-update-wrap">
-                        <!-- Status updates render inline as plain prose -->
                         <div class="status-update-inline">
                           <div class="sr-label-tight status-update-label">Status update</div>
-                          {(step.result as { message?: string })?.message ?? ''}
+                          {(note.step.result as { message?: string })?.message ?? ''}
                         </div>
                       </li>
-                    {:else}
-                      {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
-                      {@const stepCat = categorizeTool(dTool)}
-                      <li class="step-card" data-status={step.status}>
-                        <header class="step-card-hdr">
-                          <span class="step-status" data-status={step.status} aria-label={step.status}>
-                            {#if step.status === 'running'}
-                              <span class="sc-dot"></span>
-                            {:else if step.status === 'error'}
-                              ✗
-                            {:else}
-                              ✓
-                            {/if}
+                    {/each}
+                  </ul>
+                {/if}
+                {#if split.chain.length > 0}
+                  {@const open = toolchainOpen[msg.id] === true}
+                  {@const running = split.chain.filter((e) => e.step.status === 'running').length}
+                  {@const failed = split.chain.filter((e) => e.step.status === 'error').length}
+                  {@const current = currentChainStep(split.chain)}
+                  {@const slowMs = current?.status === 'running' && current.startedAt ? hbNow - current.startedAt : 0}
+                  <!-- One bar for the whole chain, collapsed by default. The
+                       per-call cards are still here, one click away — they were
+                       just never worth pushing the answer off screen for. -->
+                  <div class="toolchain" data-state={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                    <div class="tc-bar">
+                      <button
+                        type="button"
+                        class="tc-toggle"
+                        onclick={() => toggleToolchain(msg.id)}
+                        aria-expanded={open ? 'true' : 'false'}
+                      >
+                        <span class="tc-chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                        <span class="tc-status" data-status={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                          {#if running > 0}
+                            <span class="sc-dot"></span>
+                          {:else if failed > 0}
+                            ✗
+                          {:else}
+                            ✓
+                          {/if}
+                        </span>
+                        <span class="tc-title">toolchain</span>
+                        <span class="tc-count">{split.chain.length}</span>
+                        {#if !open && current}
+                          {@const cTool = resolveDisplayTool(current.tool, current.args).tool}
+                          {@const cCat = categorizeTool(cTool)}
+                          <span class="step-cat" data-cat={cCat}>{cCat}</span>
+                          <span class="tc-latest">
+                            {current.summary || friendlyToolName(cTool)}{current.status === 'running' && !current.summary ? ' …' : ''}
                           </span>
-                          <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
-                          <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
-                          {#if step.status === 'running' && step.startedAt}
-                            {@const stepMs = hbNow - step.startedAt}
-                            <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
-                              {formatStepElapsed(stepMs)}
-                            </span>
-                            {#if stepMs >= TOOL_STEP_SLOW_MS}
-                              <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
-                            {/if}
-                          {/if}
-                          {#if step.result !== undefined || Object.keys(step.args).length > 0}
-                            <button
-                              type="button"
-                              class="step-toggle"
-                              onclick={() => toggleStepExpanded(stepIndex)}
-                              aria-expanded={step.expanded ? 'true' : 'false'}
-                            >
-                              {step.expanded ? 'hide' : 'details'}
-                            </button>
-                          {/if}
-                        </header>
-                        {#if step.children?.length}
-                          <DelegateChildren children={step.children} />
                         {/if}
-                        {#if step.expanded}
-                          <div class="step-card-body">
-                            {#if Object.keys(step.args).length > 0}
-                              <details open>
-                                <summary class="step-body-label">args</summary>
-                                <JsonBlock data={step.args} />
-                              </details>
+                      </button>
+                      {#if slowMs >= TOOL_STEP_SLOW_MS}
+                        <!-- The slow-step escape hatch has to be reachable from
+                             the collapsed bar too, or a 16-minute tool call
+                             hides its own Cancel behind a disclosure. -->
+                        <span class="step-clock" data-slow="true">{formatStepElapsed(slowMs)}</span>
+                        <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                      {/if}
+                    </div>
+                    {#if open}
+                      <ul class="step-cards">
+                        {#each split.chain as entry (entry.index)}
+                          {@const step = entry.step}
+                          {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+                          {@const stepCat = categorizeTool(dTool)}
+                          <li class="step-card" data-status={step.status}>
+                            <header class="step-card-hdr">
+                              <span class="step-status" data-status={step.status} aria-label={step.status}>
+                                {#if step.status === 'running'}
+                                  <span class="sc-dot"></span>
+                                {:else if step.status === 'error'}
+                                  ✗
+                                {:else}
+                                  ✓
+                                {/if}
+                              </span>
+                              <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
+                              <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
+                              {#if step.status === 'running' && step.startedAt}
+                                {@const stepMs = hbNow - step.startedAt}
+                                <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
+                                  {formatStepElapsed(stepMs)}
+                                </span>
+                                {#if stepMs >= TOOL_STEP_SLOW_MS}
+                                  <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                                {/if}
+                              {/if}
+                              {#if step.result !== undefined || Object.keys(step.args).length > 0}
+                                <button
+                                  type="button"
+                                  class="step-toggle"
+                                  onclick={() => toggleStepExpanded(entry.index)}
+                                  aria-expanded={step.expanded ? 'true' : 'false'}
+                                >
+                                  {step.expanded ? 'hide' : 'details'}
+                                </button>
+                              {/if}
+                            </header>
+                            {#if step.children?.length}
+                              <DelegateChildren children={step.children} />
                             {/if}
-                            {#if step.result !== undefined}
-                              <details open>
-                                <summary class="step-body-label">result</summary>
-                                <JsonBlock data={step.result} />
-                              </details>
+                            {#if step.expanded}
+                              <div class="step-card-body">
+                                {#if Object.keys(step.args).length > 0}
+                                  <details open>
+                                    <summary class="step-body-label">args</summary>
+                                    <JsonBlock data={step.args} />
+                                  </details>
+                                {/if}
+                                {#if step.result !== undefined}
+                                  <details open>
+                                    <summary class="step-body-label">result</summary>
+                                    <JsonBlock data={step.result} />
+                                  </details>
+                                {/if}
+                              </div>
                             {/if}
-                          </div>
-                        {/if}
-                      </li>
+                          </li>
+                        {/each}
+                      </ul>
                     {/if}
-                  {/each}
-                </ul>
+                  </div>
+                {/if}
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
@@ -4120,6 +4301,85 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+
+  /* Collapsed toolchain bar — the streaming view's single line for the whole
+     chain. Same shell language as the worker tray: mono label, sunken band,
+     hairline border, a pulsing accent while something is running. */
+  .toolchain {
+    margin: 8px 10px 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    background: var(--surface-sunken);
+  }
+  .toolchain[data-state='running'] {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+  }
+  .toolchain[data-state='error'] {
+    border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+  }
+  .tc-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-right: 8px;
+  }
+  .tc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 4px 6px 8px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .tc-toggle:hover { color: var(--text-primary); }
+  .tc-chev { color: var(--text-ghost); width: 10px; flex-shrink: 0; }
+  .tc-status {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-ghost);
+  }
+  .tc-status[data-status='running'] { color: var(--accent); }
+  .tc-status[data-status='error']   { color: var(--status-error); }
+  .tc-status[data-status='done']    { color: var(--status-success); }
+  .tc-title {
+    flex-shrink: 0;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: var(--fs-label-xs);
+  }
+  .tc-count {
+    flex-shrink: 0;
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    padding: 1px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+  }
+  .tc-latest {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: var(--fs-label-xs);
+  }
+  /* The expanded list keeps the step-card styling verbatim; it just sits inside
+     the bar's shell now instead of directly on the progress bubble. */
+  .toolchain .step-cards {
+    padding: 6px 8px 8px;
+    border-top: 1px solid var(--line-strong);
   }
   .step-card {
     padding: 6px 10px;
