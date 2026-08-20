@@ -53,12 +53,12 @@ export async function removeFile(fileId: string): Promise<void> {
  * even `backfill?full=1` re-reads the bytes only to hit the same gate — so a
  * crashed extraction must never come through here.
  */
-async function retireNoText(fileId: string, hash: string): Promise<void> {
+async function retireNoText(fileId: string, hash: string, reason?: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(fileEmbeddings).where(eq(fileEmbeddings.fileId, fileId));
     await tx
       .update(workflowFiles)
-      .set({ contentHash: hash, indexError: 'no extractable text in this document' })
+      .set({ contentHash: hash, indexError: reason || 'no extractable text in this document' })
       .where(eq(workflowFiles.id, fileId));
   });
 }
@@ -117,7 +117,7 @@ export async function indexFile(fileId: string): Promise<IndexResult> {
     // Clear rows AND stamp the hash so this content is not re-read + re-sent to
     // the vision/STT model on every backfill. A later edit yields a new hash and
     // re-triggers via the hooks.
-    await retireNoText(fileId, hash);
+    await retireNoText(fileId, hash, outcome.reason);
     return { status: 'skipped', reason: 'no-text' };
   }
   const content = outcome.content;

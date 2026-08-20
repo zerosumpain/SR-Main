@@ -17,6 +17,14 @@ RELEASE_DIR="$VPS_DIR/releases/$SHA"
 [ -d build ] || { echo "no build/ directory — did the build step run?" >&2; exit 1; }
 [ -f build/handler.js ] || { echo "build/handler.js missing — the adapter did not package a server bundle. Is SR_GATE_STUB_ADAPTER set? It must never be set here." >&2; exit 1; }
 
+# Some faults exist only after bundling and are invisible to every unit test —
+# pdf.js losing its worker file took every PDF in production down for four days
+# while the gate stayed green. This runs the BUILT extractor over a real PDF.
+# Here rather than in the gate because the gate stubs out adapter-node, so it has
+# no server bundle to check; failing here means `release` never runs.
+echo "==> Checking document extraction in the built bundle..."
+node scripts/check-built-extract.mjs
+
 echo "==> Stamping deploy provenance into build/.deploy-sha..."
 {
   echo "sha=$SHA"

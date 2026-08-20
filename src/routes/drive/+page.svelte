@@ -22,7 +22,42 @@
     uploadedBy: string | null;
     createdAt: string | Date;
     updatedAt: string | Date;
+    indexError?: string | null;
+    indexChunks?: number;
+    indexModality?: string | null;
+    indexStatus?: 'indexed' | 'pending' | 'no-text' | 'failed' | 'skipped';
   };
+
+  // Whether a file reached the @files index. Computed server-side (see
+  // +page.server.ts) because deciding it needs server-only modules.
+  //
+  // Worth showing at all because the alternative is what actually happened: a
+  // PDF produced nothing for four days, the reason existed only in a log line,
+  // and the Drive looked exactly the same as if it had worked.
+  const INDEX_LABEL: Record<string, string> = {
+    indexed: 'INDEXED',
+    pending: 'QUEUED',
+    'no-text': 'NO TEXT',
+    failed: 'FAILED',
+    skipped: 'NOT INDEXED',
+  };
+
+  function indexTitle(f: FileRow): string {
+    const status = f.indexStatus ?? 'skipped';
+    if (status === 'indexed') {
+      const how = f.indexModality === 'ocr'
+        ? ', read by a vision model (scanned document)'
+        : f.indexModality === 'image'
+          ? ' from an image description'
+          : f.indexModality === 'audio'
+            ? ' from an audio transcript'
+            : '';
+      return `Searchable via @files — ${f.indexChunks} chunk${f.indexChunks === 1 ? '' : 's'}${how}.`;
+    }
+    if (status === 'pending') return 'Not indexed yet — it is queued or the last attempt was lost to a restart.';
+    if (status === 'skipped') return 'This file type is not indexed.';
+    return f.indexError || 'No text could be extracted.';
+  }
 
   let files = $state<FileRow[]>(data.files as FileRow[]);
 
@@ -873,6 +908,15 @@
         {/if}
       {/snippet}
 
+      {#snippet indexChip(f: FileRow)}
+        {@const status = f.indexStatus ?? 'skipped'}
+        {#if status !== 'skipped'}
+          <span class="idx-chip idx-{status}" title={indexTitle(f)}>
+            {INDEX_LABEL[status]}{#if status === 'indexed' && f.indexModality === 'ocr'}<span class="idx-ocr">OCR</span>{/if}
+          </span>
+        {/if}
+      {/snippet}
+
       {#snippet permChips(f: FileRow)}
         <span class="perm-chip" class:on={f.permissions?.read !== false}>R</span>
         <span class="perm-chip" class:on={!!f.permissions?.write}>W</span>
@@ -1125,7 +1169,7 @@
                 <div class="tile-name">{baseName(f.name)}</div>
                 <div class="tile-meta">
                   <span>{fmtSize(f.sizeBytes)}</span>
-                  <span class="tile-chips">{@render permChips(f)}</span>
+                  <span class="tile-chips">{@render indexChip(f)}{@render permChips(f)}</span>
                 </div>
                 <div class="tile-actions">{@render fileActions(f)}</div>
               </div>
@@ -1193,7 +1237,7 @@
                   >{fmtShortDate(f.updatedAt)}</span
                 >
                 <span class="fr-intel">{@render erChip(folderOf(f.name))}</span>
-                <div class="file-perms">{@render permChips(f)}</div>
+                <div class="file-perms">{@render indexChip(f)}{@render permChips(f)}</div>
                 <div class="file-actions">{@render fileActions(f)}</div>
               </div>
             {/if}
@@ -1802,6 +1846,46 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg);
+  }
+
+  /* Index state. Deliberately quieter than the permission chips — this is
+     reference information, not a control, and only the two states that need
+     acting on carry any colour. */
+  .idx-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 7px;
+    margin-right: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp, 2px);
+    color: var(--text-ghost);
+    cursor: help;
+  }
+  .idx-indexed {
+    border-color: color-mix(in srgb, var(--accent-ink) 45%, transparent);
+    color: var(--accent-ink);
+  }
+  .idx-no-text {
+    color: var(--text-ghost);
+  }
+  .idx-failed {
+    border-color: var(--error);
+    color: var(--error);
+  }
+  .idx-pending {
+    border-style: dashed;
+  }
+  .idx-ocr {
+    padding: 0 4px;
+    font-size: var(--fs-label-xs);
+    background: var(--accent-tint-08);
+    color: var(--accent);
   }
 
   .file-actions {
