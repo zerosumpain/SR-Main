@@ -51,6 +51,34 @@ const OPENROUTER_CAPS: Record<string, ModelCapabilities> = {
   'openai/gpt-oss-120b': TEXT_ONLY,
 };
 
+/**
+ * What the CHAT can accept as input, which is not the same question as what the
+ * model can accept.
+ *
+ * `getModelCapabilities` answers "can this model take an image in a content
+ * part" — the right question for the legacy in-process lane, which builds those
+ * content parts itself, and for the model picker, which should stay truthful
+ * about the model.
+ *
+ * Hermes is not that. It owns media handling: `_decide_image_input_mode` in
+ * gateway/run.py attaches pixels natively when the model does vision and
+ * otherwise pre-analyses the image with the auxiliary vision model and prepends
+ * the description, and audio goes through STT the same way. So on the Hermes
+ * lane a text-only model still gets the image — which is why the composer must
+ * not grey the attachment out.
+ *
+ * This mattered in practice: John's chats run on `codex/gpt-5.6-terra`, which
+ * maps to TEXT_ONLY, so every image he attached was marked incompatible and
+ * dropped from the turn before it was ever sent.
+ */
+export function getChatInputCapabilities(
+  ctx: ModelContext,
+  opts: { hermes: boolean },
+): ModelCapabilities {
+  if (opts.hermes) return ALL;
+  return getModelCapabilities(ctx);
+}
+
 export function getModelCapabilities(ctx: ModelContext): ModelCapabilities {
   // Codex serves text only. The SDK does accept images, but as `local_image`
   // with a filesystem PATH — the site passes base64/URLs, so there is no route

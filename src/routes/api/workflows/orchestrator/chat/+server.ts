@@ -233,18 +233,13 @@ async function handleWithHermes(reqEvent: Parameters<RequestHandler>[0]): Promis
     if (attachmentRows.length !== attachmentIds.length) {
       return json({ error: 'one or more attachmentIds not found' }, { status: 404 });
     }
-
-    let ctx: ModelContext = await resolveDefaultModel();
-    if (conversationId) {
-      const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-      if (conv) ctx = coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId });
-    }
-    const caps = getModelCapabilities(ctx);
-    for (const a of attachmentRows) {
-      if (!canAcceptKind(caps, a.kind)) {
-        return json({ error: `model ${ctx.modelId} cannot accept ${a.kind}` }, { status: 400 });
-      }
-    }
+    // No per-model capability gate here, deliberately — that is the legacy
+    // lane's question. Hermes owns media handling and degrades by itself: an
+    // image goes to the model natively when it does vision and through the
+    // auxiliary vision model as a description when it doesn't, audio through
+    // STT, everything else as a cached path the agent can read. Gating on
+    // `getModelCapabilities` here would reject exactly the case Hermes exists
+    // to handle — and did, for every Codex conversation, which is all of John's.
   }
 
   const client = new HermesClient({
