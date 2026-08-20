@@ -1138,6 +1138,43 @@
     return labels[name] || name.replace(/_/g, ' ');
   }
 
+  // ── Streaming toolchain bar ───────────────────────────────────────────────
+  // A live turn rendered one step-card per call, so a chain of eight tools
+  // pushed the answer — and everything above it — off the screen while you
+  // watched. The chain is behind one collapsed bar now: status glyph, count,
+  // and the step that is running right this second. Expanding gives back the
+  // same step-cards list, unchanged. Keyed by the in-flight bubble's id so a
+  // background tab keeps its own open/closed state.
+  let toolchainOpen = $state<Record<string, boolean>>({});
+  function toggleToolchain(bubbleId: string) {
+    toolchainOpen = { ...toolchainOpen, [bubbleId]: !toolchainOpen[bubbleId] };
+  }
+
+  type IndexedStep = { step: ToolStep; index: number };
+
+  /** Split a bubble's steps into the tool chain and the `status_update` notes,
+   *  keeping each step's ORIGINAL index — `toggleStepExpanded` addresses steps
+   *  by position in `msg.toolSteps`, so a filtered list would expand the wrong
+   *  card. The notes are prose the model wrote for the user and stay inline;
+   *  only the chain goes behind the bar. */
+  function splitToolSteps(steps: ToolStep[] | undefined): { chain: IndexedStep[]; notes: IndexedStep[] } {
+    const chain: IndexedStep[] = [];
+    const notes: IndexedStep[] = [];
+    (steps ?? []).forEach((step, index) => {
+      (step.tool === 'status_update' ? notes : chain).push({ step, index });
+    });
+    return { chain, notes };
+  }
+
+  /** The step the collapsed bar speaks for: whichever is still running, else
+   *  the last one to have finished. */
+  function currentChainStep(chain: IndexedStep[]): ToolStep | null {
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (chain[i].step.status === 'running') return chain[i].step;
+    }
+    return chain.length > 0 ? chain[chain.length - 1].step : null;
+  }
+
   function toggleStepExpanded(stepIndex: number) {
     messages = messages.map((m) => {
       if (!m.isProgress || !m.toolSteps) return m;
@@ -2661,6 +2698,7 @@
             <WorkerTray agents={Object.values(subAgents)} onToggleStep={toggleSubAgentStep} />
             {#if msg.toolSteps && msg.toolSteps.length > 0}
               <!-- Tool progress box — only shown when tools are actually being used -->
+              {@const split = splitToolSteps(msg.toolSteps)}
               <div class="progress-bubble mb-3">
                 <div class="progress-bubble-hdr">
                   <span class="working-dot" aria-hidden="true"></span>
@@ -2752,75 +2790,132 @@
                     {/if}
                   </div>
                 {/if}
-                <ul class="step-cards">
-                  {#each msg.toolSteps as step, stepIndex}
-                    {#if step.tool === 'status_update'}
+                {#if split.notes.length > 0}
+                  <!-- Status updates render inline as plain prose. Deliberately
+                       OUTSIDE the toolchain bar: this is the model talking to the
+                       user mid-task, not a tool call, and collapsing it would
+                       hide the one thing on the bubble written to be read. -->
+                  <ul class="step-cards">
+                    {#each split.notes as note (note.index)}
                       <li class="step-status-update-wrap">
-                        <!-- Status updates render inline as plain prose -->
                         <div class="status-update-inline">
                           <div class="sr-label-tight status-update-label">Status update</div>
-                          {(step.result as { message?: string })?.message ?? ''}
+                          {(note.step.result as { message?: string })?.message ?? ''}
                         </div>
                       </li>
-                    {:else}
-                      {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
-                      {@const stepCat = categorizeTool(dTool)}
-                      <li class="step-card" data-status={step.status}>
-                        <header class="step-card-hdr">
-                          <span class="step-status" data-status={step.status} aria-label={step.status}>
-                            {#if step.status === 'running'}
-                              <span class="sc-dot"></span>
-                            {:else if step.status === 'error'}
-                              ✗
-                            {:else}
-                              ✓
-                            {/if}
+                    {/each}
+                  </ul>
+                {/if}
+                {#if split.chain.length > 0}
+                  {@const open = toolchainOpen[msg.id] === true}
+                  {@const running = split.chain.filter((e) => e.step.status === 'running').length}
+                  {@const failed = split.chain.filter((e) => e.step.status === 'error').length}
+                  {@const current = currentChainStep(split.chain)}
+                  {@const slowMs = current?.status === 'running' && current.startedAt ? hbNow - current.startedAt : 0}
+                  <!-- One bar for the whole chain, collapsed by default. The
+                       per-call cards are still here, one click away — they were
+                       just never worth pushing the answer off screen for. -->
+                  <div class="toolchain" data-state={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                    <div class="tc-bar">
+                      <button
+                        type="button"
+                        class="tc-toggle"
+                        onclick={() => toggleToolchain(msg.id)}
+                        aria-expanded={open ? 'true' : 'false'}
+                      >
+                        <span class="tc-chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                        <span class="tc-status" data-status={failed > 0 ? 'error' : running > 0 ? 'running' : 'done'}>
+                          {#if running > 0}
+                            <span class="sc-dot"></span>
+                          {:else if failed > 0}
+                            ✗
+                          {:else}
+                            ✓
+                          {/if}
+                        </span>
+                        <span class="tc-title">toolchain</span>
+                        <span class="tc-count">{split.chain.length}</span>
+                        {#if !open && current}
+                          {@const cTool = resolveDisplayTool(current.tool, current.args).tool}
+                          {@const cCat = categorizeTool(cTool)}
+                          <span class="step-cat" data-cat={cCat}>{cCat}</span>
+                          <span class="tc-latest">
+                            {current.summary || friendlyToolName(cTool)}{current.status === 'running' && !current.summary ? ' …' : ''}
                           </span>
-                          <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
-                          <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
-                          {#if step.status === 'running' && step.startedAt}
-                            {@const stepMs = hbNow - step.startedAt}
-                            <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
-                              {formatStepElapsed(stepMs)}
-                            </span>
-                            {#if stepMs >= TOOL_STEP_SLOW_MS}
-                              <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
-                            {/if}
-                          {/if}
-                          {#if step.result !== undefined || Object.keys(step.args).length > 0}
-                            <button
-                              type="button"
-                              class="step-toggle"
-                              onclick={() => toggleStepExpanded(stepIndex)}
-                              aria-expanded={step.expanded ? 'true' : 'false'}
-                            >
-                              {step.expanded ? 'hide' : 'details'}
-                            </button>
-                          {/if}
-                        </header>
-                        {#if step.children?.length}
-                          <DelegateChildren children={step.children} />
                         {/if}
-                        {#if step.expanded}
-                          <div class="step-card-body">
-                            {#if Object.keys(step.args).length > 0}
-                              <details open>
-                                <summary class="step-body-label">args</summary>
-                                <JsonBlock data={step.args} />
-                              </details>
+                      </button>
+                      {#if slowMs >= TOOL_STEP_SLOW_MS}
+                        <!-- The slow-step escape hatch has to be reachable from
+                             the collapsed bar too, or a 16-minute tool call
+                             hides its own Cancel behind a disclosure. -->
+                        <span class="step-clock" data-slow="true">{formatStepElapsed(slowMs)}</span>
+                        <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                      {/if}
+                    </div>
+                    {#if open}
+                      <ul class="step-cards">
+                        {#each split.chain as entry (entry.index)}
+                          {@const step = entry.step}
+                          {@const dTool = resolveDisplayTool(step.tool, step.args).tool}
+                          {@const stepCat = categorizeTool(dTool)}
+                          <li class="step-card" data-status={step.status}>
+                            <header class="step-card-hdr">
+                              <span class="step-status" data-status={step.status} aria-label={step.status}>
+                                {#if step.status === 'running'}
+                                  <span class="sc-dot"></span>
+                                {:else if step.status === 'error'}
+                                  ✗
+                                {:else}
+                                  ✓
+                                {/if}
+                              </span>
+                              <span class="step-cat" data-cat={stepCat}>{stepCat}</span>
+                              <span class="step-summary">{step.summary || friendlyToolName(dTool)}{step.status === 'running' && !step.summary ? ' …' : ''}</span>
+                              {#if step.status === 'running' && step.startedAt}
+                                {@const stepMs = hbNow - step.startedAt}
+                                <span class="step-clock" data-slow={stepMs >= TOOL_STEP_SLOW_MS}>
+                                  {formatStepElapsed(stepMs)}
+                                </span>
+                                {#if stepMs >= TOOL_STEP_SLOW_MS}
+                                  <button type="button" class="step-cancel" onclick={cancelJob}>Cancel</button>
+                                {/if}
+                              {/if}
+                              {#if step.result !== undefined || Object.keys(step.args).length > 0}
+                                <button
+                                  type="button"
+                                  class="step-toggle"
+                                  onclick={() => toggleStepExpanded(entry.index)}
+                                  aria-expanded={step.expanded ? 'true' : 'false'}
+                                >
+                                  {step.expanded ? 'hide' : 'details'}
+                                </button>
+                              {/if}
+                            </header>
+                            {#if step.children?.length}
+                              <DelegateChildren children={step.children} />
                             {/if}
-                            {#if step.result !== undefined}
-                              <details open>
-                                <summary class="step-body-label">result</summary>
-                                <JsonBlock data={step.result} />
-                              </details>
+                            {#if step.expanded}
+                              <div class="step-card-body">
+                                {#if Object.keys(step.args).length > 0}
+                                  <details open>
+                                    <summary class="step-body-label">args</summary>
+                                    <JsonBlock data={step.args} />
+                                  </details>
+                                {/if}
+                                {#if step.result !== undefined}
+                                  <details open>
+                                    <summary class="step-body-label">result</summary>
+                                    <JsonBlock data={step.result} />
+                                  </details>
+                                {/if}
+                              </div>
                             {/if}
-                          </div>
-                        {/if}
-                      </li>
+                          </li>
+                        {/each}
+                      </ul>
                     {/if}
-                  {/each}
-                </ul>
+                  </div>
+                {/if}
               </div>
             {:else}
               <!-- Subtle typing indicator — no tools yet -->
@@ -4176,6 +4271,85 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+
+  /* Collapsed toolchain bar — the streaming view's single line for the whole
+     chain. Same shell language as the worker tray: mono label, sunken band,
+     hairline border, a pulsing accent while something is running. */
+  .toolchain {
+    margin: 8px 10px 2px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+    background: var(--surface-sunken);
+  }
+  .toolchain[data-state='running'] {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong));
+  }
+  .toolchain[data-state='error'] {
+    border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+  }
+  .tc-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-right: 8px;
+  }
+  .tc-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 4px 6px 8px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .tc-toggle:hover { color: var(--text-primary); }
+  .tc-chev { color: var(--text-ghost); width: 10px; flex-shrink: 0; }
+  .tc-status {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-ghost);
+  }
+  .tc-status[data-status='running'] { color: var(--accent); }
+  .tc-status[data-status='error']   { color: var(--status-error); }
+  .tc-status[data-status='done']    { color: var(--status-success); }
+  .tc-title {
+    flex-shrink: 0;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: var(--fs-label-xs);
+  }
+  .tc-count {
+    flex-shrink: 0;
+    font-size: var(--fs-label-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    padding: 1px 5px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sharp);
+  }
+  .tc-latest {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: var(--fs-label-xs);
+  }
+  /* The expanded list keeps the step-card styling verbatim; it just sits inside
+     the bar's shell now instead of directly on the progress bubble. */
+  .toolchain .step-cards {
+    padding: 6px 8px 8px;
+    border-top: 1px solid var(--line-strong);
   }
   .step-card {
     padding: 6px 10px;
