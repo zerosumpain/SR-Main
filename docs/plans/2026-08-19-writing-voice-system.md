@@ -322,6 +322,45 @@ theatre. **Phase 3 gates phases 4–5.**
    suggestion is not the same as wanting it. **It is empty, and correctly so:** nothing
    recorded resolutions until #370 and nothing fired them until #371, so the pairs
    accumulate one editing session at a time.
+
+6. **The loop closes itself.** ✅ **Delivered 2026-08-20.**
+   `scripts/refresh-voice-card.sh`, on homeserv, 07:00 on the 1st — an hour after the
+   drift job so the datastore note lands first and the two agree about what moved.
+
+   **Phase 5 told you the card had aged; it did not do anything about it.** Acting on that
+   note meant an ssh export, a builder run, a commit and a merge, and "John remembers to
+   do a four-step manual job" is not a mechanism — it is the thing that was going to
+   quietly stop happening. The job does those four steps and stops at the one that is a
+   judgement: it opens a **PR**, never a commit to master. Same rule, now with the work
+   done.
+
+   **It runs in a throwaway worktree off `origin/master`, never the main checkout**, which
+   is routinely parked on a feature branch and shared between concurrent sessions. That
+   also guarantees the builder that runs is master's builder rather than whatever happens
+   to be checked out. `node_modules` is hard-linked, never symlinked.
+
+   **The drift table cannot be the whole PR body.** It reports `public-prose` alone, so on
+   a month where John's posts held still but the chat corpus or the generated-post
+   contrast set grew, it says "nothing moved" over a diff that plainly did — observed on
+   the first real run, where chat turns had gone 1,106 → 1,122 and a third `generated`
+   post had appeared. The body reports what changed in the *file*, computed from the two
+   versions, and keeps the drift table as the narrative about his prose.
+
+   **It also carries a merge through to the stacks that cannot see the repo.** Merging a
+   card changes nothing about how Hermes, the Claude skill or sr-docs write until
+   `sync-voice.sh` runs; the job checks that first, syncs when master is ahead, and
+   commits both side repos.
+
+   Guards, all of them learned from `scs-earnings-refresh.sh`: one instance via `flock`; a
+   floor on the export so a truncated read can never be measured as a corpus; force-push
+   only over its own commits, never over a person's; failures alerted once rather than
+   monthly; the corpus file — unpublished drafts and private chat turns — deleted at the
+   end of every run and never written into the repo.
+
+   **What it still refuses to do**: pick exemplars, rewrite the prohibitions, or tag a
+   post `human`. The first two are judgement and the third is the judgement the whole
+   system rests on.
+
 ## Files to touch (~20)
 
 **Core (10):** `src/lib/db/schema.ts` · `src/lib/voice/{measure,card,score,index}.ts` (new) ·
@@ -347,6 +386,7 @@ theatre. **Phase 3 gates phases 4–5.**
 | 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
 | 4 | ✅ Claude skill **appears in the index** (confirmed in a live session). Release-notes prompt asserted to contain the terse block by `wiring.test.ts`, reading the real prompt string. `sync-voice.sh --check` is clean and idempotent. **Not verified: a live jkai turn** — skill bodies load at runtime and never reach `state.db`, so the file being right and Hermes restarting is as far as it goes without driving a real chat turn |
 | 5 | ✅ `drift.test.ts` — detects a moved metric and a new post, ignores a large percentage move on a tiny base, and asserts the summary never proposes applying anything itself. `scripts/voice-drift.ts` run against the live corpus: no drift, exit 0 |
+| 6 | ✅ `--dry-run` against the live corpus on 2026-08-20: exported 13 rows, measured the 5 that clear the floor, and printed a PR body whose every number came from the builder's own report. The card-diff summary caught the case the drift table misses — chat 1,106 → 1,122 turns and a third `generated` post — which is why that section exists. Then a real run, which opened a real PR |
 
 ## Deployment snag found the hard way: schema.ts must be self-contained
 

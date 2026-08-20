@@ -62,6 +62,46 @@ one editing session at a time.
 
 ## Refreshing after new posts
 
-The build stamp is derived from the corpus, not the clock, so re-running over unchanged
-data is a no-op diff. Re-export and rebuild whenever a post is written or an authorship
-tag changes; the dry run will tell you whether anything actually moved.
+Everything above happens on its own now. `scripts/refresh-voice-card.sh` runs on homeserv
+at 07:00 on the 1st — an hour after the in-app drift job, so the datastore note lands
+first — and does the export, the rebuild and the comparison in one go. When the card
+moves it opens a PR; when it doesn't it writes a log line and stops.
+
+```bash
+scripts/refresh-voice-card.sh --dry-run                 # export, rebuild, print, change nothing
+scripts/refresh-voice-card.sh --corpus corpus.json      # reuse an export instead of hitting prod
+scripts/refresh-voice-card.sh                           # the real thing
+```
+
+**It proposes; it never commits to master.** Same rule the drift job follows, for the same
+reason: the card is the only description of how every automated writer sounds, so a
+rebuild nobody read would be untraceable, and the first sign of a bad one would be
+everything quietly writing wrong.
+
+Three things it deliberately does not do:
+
+- **It does not pick exemplars.** A rebuild re-measures the numbers and re-ranks the
+  distinctive terms. Which six passages represent a writer is a judgement, and selection
+  is pinned so the prompt prefix keeps hitting the OpenRouter cache. The PR lists the
+  posts that were measured so the choice is at least in front of you; swapping one is a
+  separate commit in `data/voice/exemplars/`.
+- **It does not touch the prohibitions or the persona lines.** Those are hand-written.
+- **It does not tag anything.** A new post arrives as `authorship='unknown'` and is
+  invisible to the corpus until it is set to `human` on `/admin/content/blog`. Nothing
+  automates that, and nothing should — deciding a post is genuinely yours is the one
+  judgement the whole system rests on.
+
+The run before the rebuild is `scripts/voice-drift.ts`, whose table speaks for
+`public-prose` alone. It can honestly report "nothing moved" over a real diff, because the
+chat corpus and the generated-post contrast set grow on their own; the PR body reports
+what changed in the file separately, derived from the two versions rather than from that
+table.
+
+It also carries the merge through. Hermes, the `john-voice` Claude skill and sr-docs read
+their own copies of the card, so merging a PR changes nothing about how anything writes
+until `scripts/sync-voice.sh` runs — the next scheduled run notices master is ahead and
+syncs before it does anything else.
+
+The build stamp is derived from the corpus rather than the clock, so a rebuild over
+unchanged data is byte-identical and there is nothing to propose. Run it by hand after
+tagging a post rather than waiting for the 1st.
