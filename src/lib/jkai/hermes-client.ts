@@ -1,4 +1,5 @@
 import { mintBridgeToken, type TokenKind, type TokenScope } from '$lib/mcp/auth';
+import type { HermesInboundAttachment } from '$lib/jkai/media/hermes-attachments';
 import { Agent } from 'undici';
 
 // Hermes' `/out` SSE stream stays open for the whole turn. For a `delegate_task`
@@ -43,6 +44,12 @@ export interface SendMessageRequest extends SessionContext {
    * on the HermesClient config). */
   origin?: 'vps' | 'homeserv';
   mcpUrl?: string;
+  /** Files the user attached to this turn, bytes and all. The plugin writes
+   *  them into Hermes' media cache and hands the agent local paths via
+   *  `MessageEvent.media_urls`, which is what routes an image to the model's
+   *  vision input. Built by `buildHermesAttachments` — see that module for why
+   *  the bytes ride inline rather than as a URL Hermes fetches. */
+  attachments?: HermesInboundAttachment[];
 }
 
 export interface SendMessageResponse {
@@ -215,6 +222,12 @@ export class HermesClient {
         turn_id: req.turnId,
         origin: req.origin ?? this.config.defaultOrigin ?? 'homeserv',
         mcp_url: req.mcpUrl ?? this.config.defaultMcpUrl ?? 'http://127.0.0.1:5173/api/mcp/local',
+        // Omitted entirely on a text-only turn so the body stays byte-identical
+        // to what it was before attachments existed (an older plugin ignores
+        // the field either way, but the common case shouldn't grow a null).
+        ...(req.attachments && req.attachments.length > 0
+          ? { attachments: req.attachments }
+          : {}),
       }),
     });
 
