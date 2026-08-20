@@ -256,8 +256,32 @@ theatre. **Phase 3 gates phases 4–5.**
    `feedback_public_prose_voice.md` is now a pointer that keeps only the two rules the
    measurements overturned.
 
-5. **Learn loop.** Recompute on each new `human` post; monthly drift job that *proposes*,
-   never auto-applies.
+5. **Learn loop.** ✅ **Delivered 2026-08-20 (PR #377).** `drift.ts` compares a fresh
+   measurement against the committed card; `drift-engine.ts` runs it monthly (06:00 on the
+   1st, London) behind the same prod-only hostname gate and settings kill switch as
+   `selfimprove`, writes a datastore note when something moved, and **changes nothing
+   else**. `scripts/voice-drift.ts` runs the same comparison by hand and exits non-zero on
+   material drift. Surfaced on `/admin/content/voice`.
+
+   Rebuilding the card stays a deliberate act with a commit behind it. The card is the one
+   description of how everything writes, and an unattended overnight change to it would be
+   untraceable — so the job's entire output is a note that says which numbers moved and
+   which two commands to run.
+
+   **Thresholds are generous on purpose**: 25% *and* an absolute floor per metric. On five
+   posts a single new one moves every number, and a job that cried drift every month would
+   train John to ignore it, which is worse than not having it. Colons going 0 → 0.4 per
+   1,000 words is a 100% change and means nothing; the floor is what stops that being
+   reported. A new post is material on its own, whatever the rates did.
+
+   Immaterial reports are not stored. A row a month saying "nothing moved" is how a log
+   becomes wallpaper.
+
+   `data/voice/preferences.json` now exists, built from the resolutions phases 0 and 0.5
+   started capturing — rejections and edited acceptances only, since tolerating a
+   suggestion is not the same as wanting it. **It is empty, and correctly so:** nothing
+   recorded resolutions until #370 and nothing fired them until #371, so the pairs
+   accumulate one editing session at a time.
 ## Files to touch (~20)
 
 **Core (10):** `src/lib/db/schema.ts` · `src/lib/voice/{measure,card,score,index}.ts` (new) ·
@@ -282,7 +306,7 @@ theatre. **Phase 3 gates phases 4–5.**
 | 2 | `grep -rn "British English\|plain British" src/lib \| grep -v lib/voice` returns nothing |
 | 3 | ✅ `score.test.ts` — committed fixtures, no production dependency. John 100; controls 52 and 63; margins 48 and 37 against a stated 25 |
 | 4 | ✅ Claude skill **appears in the index** (confirmed in a live session). Release-notes prompt asserted to contain the terse block by `wiring.test.ts`, reading the real prompt string. `sync-voice.sh --check` is clean and idempotent. **Not verified: a live jkai turn** — skill bodies load at runtime and never reach `state.db`, so the file being right and Hermes restarting is as far as it goes without driving a real chat turn |
-| 5 | Drift job opens a note, changes nothing on its own |
+| 5 | ✅ `drift.test.ts` — detects a moved metric and a new post, ignores a large percentage move on a tiny base, and asserts the summary never proposes applying anything itself. `scripts/voice-drift.ts` run against the live corpus: no drift, exit 0 |
 
 ## Deployment snag found the hard way: schema.ts must be self-contained
 

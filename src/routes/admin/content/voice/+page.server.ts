@@ -2,10 +2,13 @@ import type { PageServerLoad } from './$types';
 import { getVoiceCard, getExemplars } from '$lib/voice/card';
 import { voiceBlock } from '$lib/voice/block';
 import { REGISTERS } from '$lib/voice/types';
+import { latestDriftReport } from '$lib/voice/drift-engine';
 
 export const load: PageServerLoad = async () => {
   const card = getVoiceCard();
   return {
+    // Advisory. The monthly check writes a note and never touches the card.
+    drift: await latestDriftReport(),
     card,
     exemplars: getExemplars(),
     // The rendered blocks, exactly as the surfaces receive them. Showing the

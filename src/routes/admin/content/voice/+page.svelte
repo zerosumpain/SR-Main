@@ -33,6 +33,25 @@
       <p class="note">{data.card.corpus.sourceNote}</p>
     </section>
 
+    {#if data.drift}
+      <section class="nm-sec">
+        <div class="nm-sec-hd">
+          <span class="sr-label-tight">Drift</span>
+          <span class="nm-sec-meta">
+            checked {data.drift.observedAt?.slice(0, 10) ?? '—'} · advisory only
+          </span>
+        </div>
+        <p class="note">{data.drift.summary}</p>
+        {#if data.drift.items.some((i) => i.material)}
+          <ul class="tensions">
+            {#each data.drift.items.filter((i) => i.material) as i (i.metric)}
+              <li><strong>{i.metric}</strong> {i.was} → {i.now} ({i.changePct}%). {i.note}</li>
+            {/each}
+          </ul>
+        {/if}
+      </section>
+    {/if}
+
     <section class="nm-sec">
       <div class="nm-sec-hd"><span class="sr-label-tight">Where the rules disagree with the evidence</span></div>
       <ul class="tensions">

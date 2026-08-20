@@ -104,6 +104,7 @@ startScheduledEngine().catch((err) => {
 // idle-time run. Neither belongs in the jkai-builder sidecar process.
 import { startDatastoreReaper, stopDatastoreReaper } from '$lib/datastore';
 import { startSelfImprovement, stopSelfImprovement } from '$lib/selfimprove/engine';
+import { startVoiceDrift } from '$lib/voice/drift-engine';
 // Nightly workflow doctor — triages node_executions failures, quarantines
 // runaway schedules, proposes fixes. Structural sibling of selfimprove: same
 // prod-only cron gate, same leader-elected lane, so it boots the same way.
@@ -124,6 +125,8 @@ import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 if (process.env.JKAI_BUILDER_PROCESS !== '1') {
   startDatastoreReaper();
   startSelfImprovement();
+  // Monthly, advisory only — it writes a note and never touches the card.
+  startVoiceDrift();
   startWorkflowDoctor();
   startBriefingEngine();
   startConnectorMonitor();

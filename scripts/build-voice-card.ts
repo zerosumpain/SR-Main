@@ -37,10 +37,12 @@ import { plainTextFromHtml, countWords } from '../src/lib/blog/readability';
 import { CORPUS_AUTHORSHIP, MIN_CORPUS_WORDS } from '../src/lib/blog/authorship';
 import type { VoiceCard, Register, RegisterCard, Exemplar } from '../src/lib/voice/types';
 import { REGISTERS, isRegister } from '../src/lib/voice/types';
+import { parseResolution, preferencePairs } from '../src/lib/blog/assistant/resolution';
 
 const WRITE = process.argv.includes('--write');
 const OUT_DIR = path.resolve('data/voice');
 const CARD_PATH = path.join(OUT_DIR, 'voice-card.json');
+const PREFS_PATH = path.join(OUT_DIR, 'preferences.json');
 const EXEMPLAR_DIR = path.join(OUT_DIR, 'exemplars');
 
 const corpusFlagIdx = process.argv.indexOf('--corpus');
@@ -156,12 +158,13 @@ const REGISTER_RULES: Record<Register, { rules: string[]; avoid: string[] }> = {
 
 type PostRow = { id: number; slug: string; authorship: string; content: string };
 
-async function loadCorpus(): Promise<{ posts: PostRow[]; chat: string[] }> {
+async function loadCorpus(): Promise<{ posts: PostRow[]; chat: string[]; resolutions: string[] }> {
   if (CORPUS_FILE) {
     const raw = JSON.parse(readFileSync(path.resolve(CORPUS_FILE), 'utf8'));
     return {
       posts: (raw.posts ?? []).slice().sort((a: PostRow, b: PostRow) => a.id - b.id),
       chat: (raw.chat ?? []).filter((c: unknown): c is string => typeof c === 'string'),
+      resolutions: (raw.resolutions ?? []).filter((c: unknown): c is string => typeof c === 'string'),
     };
   }
   // Imported here rather than at the top so `--corpus` needs no driver at all.
@@ -181,14 +184,21 @@ async function loadCorpus(): Promise<{ posts: PostRow[]; chat: string[] }> {
           where o.role = 'user' and c.source = 'web'`,
       )
     ).rows as { content: string }[];
-    return { posts, chat: chatRows.map((r) => r.content) };
+    // What he did with the assistant's suggestions. A rejection, and especially
+    // an acceptance he rewrote first, is a direct statement of taste.
+    const resolutionRows = (
+      await pool.query(
+        `select content from blog_assistant_messages where role = 'proposal_resolved' order by created_at`,
+      )
+    ).rows as { content: string }[];
+    return { posts, chat: chatRows.map((r) => r.content), resolutions: resolutionRows.map((r) => r.content) };
   } finally {
     await pool.end();
   }
 }
 
 async function main() {
-  const { posts, chat } = await loadCorpus();
+  const { posts, chat, resolutions } = await loadCorpus();
   const wordsOf = (html: string) => countWords(plainTextFromHtml(html ?? ''));
 
   const human = posts.filter(
@@ -261,6 +271,25 @@ async function main() {
 
   report(card, human, generated);
 
+  // Preference pairs — what he refused, and what he replaced it with. Written
+  // beside the card rather than inside it: they are evidence for later phases,
+  // not instructions, and they grow one editor decision at a time.
+  const pairs = preferencePairs(
+    resolutions.map((c) => parseResolution(c)).filter((r): r is NonNullable<typeof r> => r !== null),
+  );
+  const prefsSerialised = JSON.stringify(
+    {
+      note:
+        'Rejections and edited acceptances from the blog assistant. A rejection says more ' +
+        'than an acceptance; an acceptance he rewrote first says most of all. Generated — ' +
+        'do not edit by hand.',
+      pairs,
+    },
+    null,
+    2,
+  ) + '\n';
+  console.log(`\nPREFERENCE PAIRS\n  ${pairs.length} from ${resolutions.length} resolution(s)`);
+
   const serialised = JSON.stringify(card, null, 2) + '\n';
   if (!WRITE) {
     const existing = existsSync(CARD_PATH) ? readFileSync(CARD_PATH, 'utf8') : null;
@@ -274,7 +303,8 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(CARD_PATH, serialised);
-  console.log(`\nWrote ${CARD_PATH}`);
+  writeFileSync(PREFS_PATH, prefsSerialised);
+  console.log(`\nWrote ${CARD_PATH} and ${PREFS_PATH}`);
 }
 
 /** A content-derived stamp. Using a wall clock here would make every rebuild a
