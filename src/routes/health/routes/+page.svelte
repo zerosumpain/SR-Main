@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-  <title>Saved routes — Trails</title>
+  <title>Saved routes — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -16,7 +16,7 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Routes</div>
+      <div class="kicker">Health · Routes</div>
       <h1>Saved routes</h1>
       <p class="sub">Planned routes, ready to download for offline use or follow in the field.</p>
     </div>

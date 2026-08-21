@@ -379,6 +379,14 @@ function day(i: number, over: Partial<HealthDay> = {}): HealthDay {
 
 const html = (series: HealthDay[]) => render(PulseGrid, { props: { series } }).body;
 
+/** One row's label + its cells. Splitting on the row NAME does not work: the
+ *  name appears again inside every cell's aria-label. */
+function row(body: string, name: string): string {
+  const seg = body.split('class="h-pg-rowlabel ').find((p) => p.includes(`>${name}<`));
+  expect(seg, `no ${name} row in the output`).toBeTruthy();
+  return seg as string;
+}
+
 describe('PulseGrid renders what the helpers decided', () => {
   it('drives the column count from series.length, not a hard-coded 30', () => {
     expect(html(Array.from({ length: 30 }, (_, i) => day(i)))).toContain('--cols: 30');
@@ -407,18 +415,31 @@ describe('PulseGrid renders what the helpers decided', () => {
   });
 
   it('paints a lower-is-better row by direction, not by an inverted normaliser', () => {
-    const body = html(Array.from({ length: 30 }, (_, i) => day(i)));
-    const rhr = body.split('RESTING HR')[1].split('h-pg-rowlabel ')[0];
-    // The lowest resting HR in the window is the BEST day, so it must be cool.
+    const rhr = row(html(Array.from({ length: 30 }, (_, i) => day(i))), 'RESTING HR');
+    // The LOWEST resting HR in the window is the best day, so it must read cool
+    // and say so — without the row inverting its own normaliser to get there.
     const best = rhr.match(/aria-label="[^"]*RESTING HR 50bpm[^"]*"/)?.[0] ?? '';
     expect(best).toContain('better than baseline');
+    expect(best).toContain('best day in window');
     const worst = rhr.match(/aria-label="[^"]*RESTING HR 58bpm[^"]*"/)?.[0] ?? '';
     expect(worst).toContain('worse than baseline');
+    // Cool = more blue than red; warm = the other way round.
+    const cool = rhr.match(/--c: rgb\((\d+), \d+, (\d+)\)" aria-label="[^"]*50bpm/);
+    expect(Number(cool?.[2])).toBeGreaterThan(Number(cool?.[1]));
+    const warm = rhr.match(/--c: rgb\((\d+), \d+, (\d+)\)" aria-label="[^"]*58bpm/);
+    expect(Number(warm?.[1])).toBeGreaterThan(Number(warm?.[2]));
+  });
+
+  it('puts today\'s value in the row label and the range in the tooltip, not the label', () => {
+    const body = html(Array.from({ length: 30 }, (_, i) => day(i)));
+    // Day 29: rhr = 50 + (29 % 9) = 52.
+    expect(row(body, 'RESTING HR')).toContain('>52bpm</span>');
+    // The min–max that used to sit in the row meta has left it.
+    expect(row(body, 'RESTING HR')).not.toContain('50bpm–58bpm');
   });
 
   it('hatches the missing sentinel instead of colouring it as a very bad day', () => {
-    const body = html(Array.from({ length: 30 }, (_, i) => day(i)));
-    const steps = body.split('>STEPS<')[1].split('h-pg-rowlabel ')[0];
+    const steps = row(html(Array.from({ length: 30 }, (_, i) => day(i))), 'STEPS');
     const missing = steps.match(/<button[^>]*missing[^>]*>/g) ?? [];
     expect(missing.length).toBe(5); // i % 6 === 0 over 30 days
     for (const b of missing) {
@@ -429,10 +450,15 @@ describe('PulseGrid renders what the helpers decided', () => {
 
   it('gives the neutral weight row no verdict and no best-day ring', () => {
     const body = html(Array.from({ length: 30 }, (_, i) => day(i)));
-    const weight = body.split('>WEIGHT<')[1];
+    const weight = row(body, 'WEIGHT');
     expect(weight).not.toContain('peak');
     expect(weight).not.toMatch(/aria-label="[^"]*(better|worse) than baseline/);
-    expect(weight).toContain('no direction of good');
+    // Sequential sepia, and never either diverging pole.
+    expect(weight).toContain(neutralRamp(1));
+    expect(weight).not.toContain(ramp(1));
+    expect(weight).not.toContain(ramp(-1));
+    // The legend says so rather than implying a judgement.
+    expect(body).toContain('no direction of good');
   });
 
   it('drops the weight row entirely when nothing was weighed', () => {

@@ -110,7 +110,7 @@
 </script>
 
 <svelte:head>
-  <title>{a.name} — Trails</title>
+  <title>{a.name} — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -119,11 +119,11 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · {activityLabel(a.activityType)}</div>
+      <div class="kicker">Health · {activityLabel(a.activityType)}</div>
       <h1>{a.name}</h1>
       <p class="sub">{formatLocalDate(a.startDateLocal, a.startDate)}</p>
     </div>
-    <a class="back-link" href="/health/activities">All trails</a>
+    <a class="back-link" href="/health/activities">All activities</a>
   </header>
 
   <section class="nm-sec stat-grid">

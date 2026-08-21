@@ -786,11 +786,13 @@
 
   function setBound(key: NumericColumnKey, which: 'min' | 'max', value: string) {
     const trimmed = value.trim();
-    const parsed = trimmed ? Number(trimmed) : null;
-    filters.ranges[key] = {
-      ...filters.ranges[key],
-      [which]: parsed != null && Number.isFinite(parsed) ? parsed : null,
-    };
+    const parsed = trimmed === '' ? null : Number(trimmed);
+    const bound = parsed != null && Number.isFinite(parsed) ? parsed : null;
+    const current = filters.ranges[key];
+    const next: NumericRange = { min: current.min, max: current.max };
+    if (which === 'min') next.min = bound;
+    else next.max = bound;
+    filters.ranges[key] = next;
     syncUrl();
   }
 
@@ -1005,7 +1007,7 @@
               type="button"
               class="menu-btn"
               data-row-menu
-              aria-haspopup="menu"
+              aria-haspopup="dialog"
               aria-expanded={openMenu === row.id}
               aria-label="Actions for {row.name}"
               onclick={(event) => toggleMenu(row.id, event)}
@@ -1111,7 +1113,7 @@
             type="number"
             step="any"
             value={filters.ranges[key].min ?? ''}
-            oninput={(event) => setBound(key, 'min', event.currentTarget.value)}
+            onchange={(event) => setBound(key, 'min', event.currentTarget.value)}
           />
         </label>
         <label class="field">
@@ -1120,7 +1122,7 @@
             type="number"
             step="any"
             value={filters.ranges[key].max ?? ''}
-            oninput={(event) => setBound(key, 'max', event.currentTarget.value)}
+            onchange={(event) => setBound(key, 'max', event.currentTarget.value)}
           />
         </label>
       </div>
@@ -1153,7 +1155,7 @@
   <div
     class="pop menu"
     data-row-menu
-    role="menu"
+    role="dialog"
     aria-label="Corrections for {target.name}"
     style="left: {menuPos.left}px; top: {menuPos.top}px; width: {POP_WIDTH}px"
   >
@@ -1165,7 +1167,6 @@
     <button
       type="button"
       class="pop-btn wide"
-      role="menuitem"
       disabled={savingId === target.id}
       onclick={() => patchRow(target, { excludedFromSegments: !target.excludedFromSegments })}
     >

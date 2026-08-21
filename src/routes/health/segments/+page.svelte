@@ -269,7 +269,7 @@
 </script>
 
 <svelte:head>
-  <title>Segments — Trails</title>
+  <title>Segments — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -278,7 +278,7 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Segments</div>
+      <div class="kicker">Health · Segments</div>
       <h1>Ground you have covered twice</h1>
       <p class="sub">
         Stretches of at least 500 m that turn up in more than one outing of the same kind, matched
@@ -287,7 +287,7 @@
     </div>
     <nav class="hdr-nav">
       <a href="/health">Dashboard</a>
-      <a href="/health/activities">All trails</a>
+      <a href="/health/activities">All activities</a>
     </nav>
   </header>
 

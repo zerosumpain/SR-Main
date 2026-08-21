@@ -38,7 +38,7 @@
 </script>
 
 <svelte:head>
-  <title>Trails — Strange Ramblings</title>
+  <title>Activities — Strange Ramblings</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -47,8 +47,8 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Health · Trails</div>
-      <h1>Trails</h1>
+      <div class="kicker">Health · Activities</div>
+      <h1>Activities</h1>
       <p class="sub">
         Every outdoor workout Apple Health has sent, with its GPS trace, heart rate and splits.
         Every heading below sorts and filters, and every row carries the single best thing about

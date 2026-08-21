@@ -126,7 +126,7 @@
 </script>
 
 <svelte:head>
-  <title>{segment.name} — Segments</title>
+  <title>{segment.name} — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -135,7 +135,7 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Segment</div>
+      <div class="kicker">Health · Segment</div>
       <h1>{segment.name}</h1>
       <p class="sub">
         <span class="type-tag">{activityLabel(segment.activityType)}</span>

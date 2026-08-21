@@ -23,12 +23,16 @@ export function lerp(a: number, b: number, t: number): number {
    sit exactly on the brand tokens; the MID steps carry extra chroma so a
    mid-range cell still reads as cool or warm instead of going grey.
 
-   Checked with a palette validator (CIEDE2000). The two poles separate at
-   ΔE 27.3 normal / 14.4 protan. The MID steps were then given extra chroma
-   until they held up too — at ±0.3 the two arms separate at ΔE 29 normal /
-   19 protan, and the cool arm still clears the baseline neutral at ΔE 20 /
-   10. A washed-out mid step was the thing to avoid: it turns a mildly good
-   day and a mildly bad day into the same grey.
+   The two poles come pre-validated: ΔE 27.3 in normal vision and ΔE 14.4
+   under protanopia, comfortably separable in both.
+
+   The MID steps were then tuned on the same basis here (CIEDE2000 over a
+   Viénot protan simulation, which scores those same two poles 40 / 29, so
+   read these numbers against that scale, not against the 27.3 / 14.4 above):
+   at ±0.3 the two arms separate at ΔE 29 / 19, and the cool arm still clears
+   the baseline neutral at ΔE 20 / 10. That tuning is the point — a washed-out
+   mid step turns a mildly good day and a mildly bad day into the same grey,
+   which is most of the grid on most weeks.
    ──────────────────────────────────────────────────────────────────────────── */
 
 type Rgb = [number, number, number];
@@ -85,7 +89,8 @@ function interpolate(stops: Stop[], t: number): string {
  * The diverging pulse ramp.
  *
  * `p` is a SIGNED position: -1 = as bad as this row gets, 0 = this row's own
- * baseline, +1 = as good as this row gets. Non-finite input paints the neutral.
+ * baseline, +1 = as good as this row gets. NaN paints the baseline neutral;
+ * ±Infinity clamps to a pole like any other out-of-range number.
  */
 export function ramp(p: number): string {
   // NaN falls back to the baseline neutral; ±Infinity clamps to a pole.

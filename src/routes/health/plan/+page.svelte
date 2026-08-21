@@ -383,7 +383,7 @@
 </script>
 
 <svelte:head>
-  <title>Plan a route — Trails</title>
+  <title>Plan a route — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -392,7 +392,7 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Planner</div>
+      <div class="kicker">Health · Planner</div>
       <h1>Plan a route</h1>
       <p class="sub">
         Say what you want, or use the form. Candidates come from openrouteservice; the ranking
@@ -400,7 +400,7 @@
         every route gets a difficulty grade.
       </p>
     </div>
-    <a class="back-link" href="/health/activities">All trails</a>
+    <a class="back-link" href="/health/activities">All activities</a>
   </header>
 
   {#if !data.configured}

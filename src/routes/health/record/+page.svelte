@@ -189,7 +189,7 @@
 </script>
 
 <svelte:head>
-  <title>Record — Trails</title>
+  <title>Record — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -198,14 +198,14 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Record</div>
+      <div class="kicker">Health · Record</div>
       <h1>Record</h1>
       <p class="sub">
         {#if data.route}Following <strong>{data.route.name}</strong>.{:else}Free recording — it will
           land on /health/activities as an activity when you save.{/if}
       </p>
     </div>
-    <a class="back-link" href="/health/activities">All trails</a>
+    <a class="back-link" href="/health/activities">All activities</a>
   </header>
 
   <section class="nm-sec live">
