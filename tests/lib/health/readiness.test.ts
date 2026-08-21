@@ -88,19 +88,46 @@ describe('classifyLoadBalance', () => {
 		expect(result).toEqual({ value: 20, zone: 'danger' });
 	});
 
-	it('returns undertraining zone for ACWR 0.6-0.8', () => {
+	// Below the optimal band you are carrying LESS fatigue, not more. This leg
+	// answers "how much can the body take today", and the answer when you have
+	// done very little lately is "quite a lot". It used to score 60 and 30, so a
+	// rested body read as an unready one — which put a 94% recovery day at a
+	// composite of 66 and had the coach propose a 2 km walk on it.
+	it('treats being undertrained as FRESH, not as unready', () => {
 		const result = classifyLoadBalance(0.7);
-		expect(result).toEqual({ value: 60, zone: 'undertraining' });
+		expect(result.zone).toBe('undertraining');
+		expect(result.value).toBeGreaterThanOrEqual(80);
 	});
 
-	it('returns detraining zone for ACWR < 0.6', () => {
+	it('treats being detrained as fresh too, while still naming the base honestly', () => {
 		const result = classifyLoadBalance(0.3);
-		expect(result).toEqual({ value: 30, zone: 'detraining' });
+		expect(result.zone).toBe('detraining');
+		expect(result.value).toBeGreaterThanOrEqual(80);
 	});
 
-	it('returns detraining zone for ACWR = 0', () => {
+	it('still falls away as real fatigue accumulates', () => {
+		const carrying = [1.2, 1.4, 1.8].map((r) => classifyLoadBalance(r).value);
+		expect(carrying).toEqual([...carrying].sort((a, b) => b - a));
+		expect(classifyLoadBalance(1.8).value).toBeLessThan(classifyLoadBalance(0.3).value);
+	});
+
+	it('handles a zero ratio without special-casing it', () => {
 		const result = classifyLoadBalance(0);
-		expect(result).toEqual({ value: 30, zone: 'detraining' });
+		expect(result.zone).toBe('detraining');
+		expect(result.value).toBeGreaterThanOrEqual(80);
+	});
+
+	it('lets a genuinely good day read as one', () => {
+		// The failure this exists for: 94% recovered, HRV up, slept well, fresh —
+		// and the composite came out at 66, "Moderate Day".
+		const score = calculateReadinessScore({
+			recovery: 94,
+			hrvTrend: 88,
+			sleepQuality: 80,
+			loadBalance: classifyLoadBalance(0.3).value,
+		});
+		expect(score).toBeGreaterThanOrEqual(85);
+		expect(getReadinessLabel(score).label).toMatch(/Ready to Push|Peak Readiness/);
 	});
 });
 

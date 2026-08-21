@@ -7,6 +7,7 @@ import {
   neglectedSport,
   rankGettableSegments,
   stalenessScore,
+  strongerSport,
   trustScore,
   usableAcwr,
   usableMonotony,
@@ -89,6 +90,7 @@ function state(over: Partial<TrainingState> = {}): TrainingState {
     yesterdayIntensity: null,
     last8Weeks: { run: 20 },
     last2Weeks: { run: 5 },
+    readiness: null,
     ...over,
   };
 }
@@ -461,5 +463,78 @@ describe('rankGettableSegments', () => {
 
   it('survives an empty list', () => {
     expect(rankGettableSegments([], { targetDistanceM: 10_000 })).toEqual([]);
+  });
+});
+
+
+describe('applyProgression — readiness', () => {
+  it('spends a peak day instead of proposing the usual walk', () => {
+    // The failure this exists for: 94% recovery, HRV up, slept well — and the
+    // proposal was a 2 km walk, because nothing read readiness upward.
+    const p = applyProgression(
+      { sport: 'walk', targetDistanceM: 1800 },
+      state({ readiness: 92, last8Weeks: { walk: 30, run: 8 }, last2Weeks: { walk: 6 } }),
+    );
+    expect(p.sport).toBe('run');
+    expect(p.targetDistanceM).toBeGreaterThan(1800);
+    expect(p.intensity).toBe('threshold');
+    expect(p.why.join(' ')).toMatch(/Readiness is 92/);
+  });
+
+  it('will not upgrade to a sport with no real history', () => {
+    const p = applyProgression(
+      { sport: 'walk', targetDistanceM: 1800 },
+      state({ readiness: 92, last8Weeks: { walk: 30 }, last2Weeks: { walk: 6 } }),
+    );
+    expect(p.sport).toBe('walk');
+    // Still a bigger day, just the same kind of day.
+    expect(p.targetDistanceM).toBeGreaterThan(1800);
+  });
+
+  it('lengthens a strong day without making it hard', () => {
+    const p = applyProgression(
+      { sport: 'run', targetDistanceM: 8000 },
+      state({ readiness: 74 }),
+    );
+    expect(p.intensity).toBe('steady');
+    expect(p.targetDistanceM).toBeGreaterThan(8000);
+  });
+
+  it('leaves an ordinary day alone', () => {
+    const p = applyProgression({ sport: 'run', targetDistanceM: 8000 }, state({ readiness: 55 }));
+    expect(p.targetDistanceM).toBe(8000);
+    expect(p.why.join(' ')).toMatch(/working day rather than a big one/);
+  });
+
+  it('NEVER overrides the overreached lock, however good the body feels', () => {
+    // Feeling fine on top of a 1.6 ratio is how people get hurt.
+    const p = applyProgression(
+      { sport: 'run', targetDistanceM: 8000 },
+      state({ readiness: 95, acwr: acwr(1.6) }),
+    );
+    expect(p.intensity).toBe('recovery');
+    expect(p.targetDistanceM).toBeLessThan(8000);
+    expect(p.why.join(' ')).not.toMatch(/day to spend/);
+  });
+
+  it('does nothing at all when readiness could not be read', () => {
+    const withNull = applyProgression({ sport: 'run', targetDistanceM: 8000 }, state({ readiness: null }));
+    expect(withNull.targetDistanceM).toBe(8000);
+    expect(withNull.why.join(' ')).not.toMatch(/Readiness/);
+  });
+});
+
+describe('strongerSport', () => {
+  it('picks the most demanding sport with real history', () => {
+    expect(strongerSport(state({ last8Weeks: { walk: 30, run: 8, ride: 4 } }), 'walk')).toBe('run');
+    expect(strongerSport(state({ last8Weeks: { walk: 30, ride: 4 } }), 'walk')).toBe('ride');
+  });
+
+  it('refuses a sport you have barely done', () => {
+    expect(strongerSport(state({ last8Weeks: { walk: 30, run: 1 } }), 'walk')).toBeNull();
+  });
+
+  it('has nothing to offer the most demanding sport already', () => {
+    expect(strongerSport(state({ last8Weeks: { trail_run: 20 } }), 'trail_run')).toBeNull();
   });
 });

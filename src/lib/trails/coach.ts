@@ -70,6 +70,14 @@ export interface TrainingState {
   polarised: MetricResult<PolarisedResult> | null;
   /** How hard yesterday was, where it can be told. Null when it cannot. */
   yesterdayIntensity: Intensity | null;
+  /**
+   * The readiness composite, 0–100, or null when it could not be read.
+   *
+   * The base proposal already applies readiness as a VETO — a score under 40
+   * downgrades a run to a walk. Nothing used to apply it upward, so the best
+   * day in a fortnight proposed the same two-kilometre walk as the worst one.
+   */
+  readiness: number | null;
   /** Outings per effective type over the last 8 weeks, and the last 2. */
   last8Weeks: SportCounts;
   last2Weeks: SportCounts;
@@ -158,6 +166,14 @@ export const ACWR_OVERREACHED = 1.4;
 export const ACWR_UNDERLOADED = 0.8;
 /** Share of Z3 above which the week is middle-heavy — the grey-zone rut. */
 export const MID_HEAVY_PCT = 40;
+
+/** Above this the body is asking for work rather than just permitting it. */
+export const READINESS_STRONG = 70;
+/** Above this it is the best day in a while, and worth spending. */
+export const READINESS_PEAK = 85;
+/** How much longer a strong day goes. */
+const STRONG_DISTANCE_FACTOR = 1.08;
+const PEAK_DISTANCE_FACTOR = 1.2;
 /** Outings in the last 8 weeks that make a sport "real history" rather than a one-off. */
 export const SPORT_HISTORY_MIN = 2;
 
@@ -247,6 +263,38 @@ function differentFrom(wanted: Intensity, yesterday: Intensity): Intensity {
  * add intensity or distance back, because every rule under it is an argument
  * for doing more and the whole point of the first is that there is no room.
  */
+/** Human names for the sports the coach may propose. */
+export const SPORT_LABELS: Record<CoachSport, string> = {
+  run: 'Run',
+  trail_run: 'Trail run',
+  ride: 'Ride',
+  mtb: 'MTB ride',
+  hike: 'Hike',
+  walk: 'Walk',
+  swim: 'Swim',
+  other: 'Session',
+};
+
+/**
+ * The most demanding sport you have REAL history in, when today's proposal is
+ * a cheaper one.
+ *
+ * "Real history" is the eight-week count, so this never proposes something you
+ * have not actually been doing. Ordered by what a session of it costs, not by
+ * preference — a peak day is worth spending on the thing that moves fitness.
+ */
+const SPORT_DEMAND: CoachSport[] = ['trail_run', 'run', 'mtb', 'ride', 'hike', 'walk'];
+const MIN_HISTORY_FOR_UPGRADE = 2;
+
+export function strongerSport(state: TrainingState, current: CoachSport): CoachSport | null {
+  const currentRank = SPORT_DEMAND.indexOf(current);
+  if (currentRank <= 0) return null; // already the most demanding, or unranked
+  for (const candidate of SPORT_DEMAND.slice(0, currentRank)) {
+    if ((state.last8Weeks[candidate] ?? 0) >= MIN_HISTORY_FOR_UPGRADE) return candidate;
+  }
+  return null;
+}
+
 export function applyProgression(base: BaseProposal, state: TrainingState): Progression {
   const why: string[] = [];
   let sport: CoachSport = isCoachSport(base.sport) ? base.sport : 'run';
@@ -280,6 +328,44 @@ export function applyProgression(base: BaseProposal, state: TrainingState): Prog
   } else if (ratio == null) {
     why.push(
       'Not enough load history to read an acute:chronic ratio yet, so the session is proposed off recent habit alone.',
+    );
+  }
+
+  // --- 2b. A day worth spending -------------------------------------------
+  //
+  // The overreached lock still wins: a high readiness score on top of a 1.5
+  // ratio means the body feels fine and is still carrying too much, and feeling
+  // fine is how people get hurt. Everywhere else, a strong score buys a
+  // stronger session — that is the whole point of measuring it.
+  const readiness = state.readiness;
+  if (!locked && readiness != null && readiness >= READINESS_STRONG) {
+    const peak = readiness >= READINESS_PEAK;
+
+    // Upgrade the SPORT before the distance. The base proposal picks whatever
+    // you do most, and what most people do most is walk — so a peak day was
+    // being spent on the cheapest thing in the mix rather than the one that
+    // moves the needle.
+    const stronger = strongerSport(state, sport);
+    if (peak && stronger && stronger !== sport) {
+      const scale = DEFAULT_DISTANCE_M[stronger] / DEFAULT_DISTANCE_M[sport];
+      targetDistanceM = Math.round(targetDistanceM * scale);
+      why.push(
+        `Readiness is ${Math.round(readiness)} — the best it has been in a while — so today is a ${SPORT_LABELS[stronger].toLowerCase()} rather than the ${SPORT_LABELS[sport].toLowerCase()} you default to.`,
+      );
+      sport = stronger;
+    }
+
+    const factor = peak ? PEAK_DISTANCE_FACTOR : STRONG_DISTANCE_FACTOR;
+    targetDistanceM = Math.round(targetDistanceM * factor);
+    intensity = peak ? 'threshold' : 'steady';
+    why.push(
+      peak
+        ? `Recovery, HRV and sleep all read well and there is no fatigue to work around, so this is a day to spend: ${Math.round((factor - 1) * 100)}% longer than usual, at threshold.`
+        : `Readiness at ${Math.round(readiness)} supports a normal working session — ${Math.round((factor - 1) * 100)}% longer than usual, steady.`,
+    );
+  } else if (!locked && readiness != null && readiness < READINESS_STRONG) {
+    why.push(
+      `Readiness is ${Math.round(readiness)}, which is a working day rather than a big one — the target stays where habit puts it.`,
     );
   }
 

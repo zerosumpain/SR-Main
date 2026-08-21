@@ -59,13 +59,34 @@ export function normalizeHrvTrend(
  * 0.6-0.8 => 60  (undertraining)
  * <0.6    => 30  (detraining)
  */
+/**
+ * The load leg of readiness: how much accumulated fatigue you are carrying.
+ *
+ * This used to score DETRAINING at 30 and undertraining at 60 — that is, it
+ * penalised being rested. Readiness is meant to answer "how much can the body
+ * take TODAY", and the answer when you have done very little lately is "quite a
+ * lot": you are fresh. What being detrained costs you is FITNESS, which is the
+ * VO₂max and efficiency story elsewhere on the page, not today's capacity.
+ *
+ * Getting this backwards had a visible consequence: a 94% recovery day with
+ * good sleep and rising HRV came out at 66 — "Moderate Day" — purely because
+ * the load leg scored 30 for being fresh, and the coach then proposed a two
+ * kilometre walk on the best day in a fortnight.
+ *
+ * The high end still falls away, because carrying real fatigue genuinely does
+ * reduce what you can take. `zone` keeps naming what is actually true so the
+ * page can say "fresh — little accumulated fatigue" rather than implying the
+ * base is where it should be.
+ */
 export function classifyLoadBalance(acwr: number): { value: number; zone: string } {
 	if (acwr >= 0.8 && acwr <= 1.1) return { value: 100, zone: 'optimal' };
 	if (acwr > 1.1 && acwr <= 1.3) return { value: 80, zone: 'slightly_high' };
 	if (acwr > 1.3 && acwr <= 1.5) return { value: 50, zone: 'caution' };
 	if (acwr > 1.5) return { value: 20, zone: 'danger' };
-	if (acwr >= 0.6) return { value: 60, zone: 'undertraining' };
-	return { value: 30, zone: 'detraining' };
+	// Below the optimal band you are carrying LESS fatigue, not more. Fresh, and
+	// nearly as ready as the band where fitness is actually built.
+	if (acwr >= 0.6) return { value: 90, zone: 'undertraining' };
+	return { value: 85, zone: 'detraining' };
 }
 
 /**

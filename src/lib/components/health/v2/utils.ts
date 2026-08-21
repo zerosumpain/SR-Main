@@ -10,29 +10,30 @@ export function lerp(a: number, b: number, t: number): number {
    Pulse grid colour model
    ────────────────────────────────────────────────────────────────────────────
    The grid answers "how was I doing", not "what was big", so colour is
-   DIVERGING about each row's own baseline rather than a single warm ramp:
+   DIVERGING about each row's own baseline:
 
-     better than baseline  →  cool pole, ending on --accent-ink  #0e5b66
+     better than baseline  →  green
      at baseline           →  a near-cream neutral that still reads as a tile
-                              against the section's --surface-sunken wash
-     worse than baseline   →  warm pole, via --accent #c4570a and ending on
-                              --trend-down #8a3a08
+     worse than baseline   →  red
 
    Which end is "better" comes from the row's declared direction, so no row has
-   to pre-invert its own normaliser (the old RHR special case). The deep steps
-   sit exactly on the brand tokens; the MID steps carry extra chroma so a
-   mid-range cell still reads as cool or warm instead of going grey.
+   to pre-invert its own normaliser (the old RHR special case).
 
-   The two poles come pre-validated: ΔE 27.3 in normal vision and ΔE 14.4
-   under protanopia, comfortably separable in both.
+   RED AND GREEN ARE THE CLASSIC COLOURBLIND TRAP, and a symmetric ramp — deep
+   red against deep green — is unreadable to roughly one man in twelve: measured
+   here at ΔE 2.4 under deuteranopia, which is indistinguishable. So the two
+   arms are deliberately ASYMMETRIC IN LIGHTNESS as well as hue. Bad days run
+   dark and heavy, good days run light and open, and every step of the worse arm
+   is darker than the matching step of the better arm.
 
-   The MID steps were then tuned on the same basis here (CIEDE2000 over a
-   Viénot protan simulation, which scores those same two poles 40 / 29, so
-   read these numbers against that scale, not against the 27.3 / 14.4 above):
-   at ±0.3 the two arms separate at ΔE 29 / 19, and the cool arm still clears
-   the baseline neutral at ΔE 20 / 10. That tuning is the point — a washed-out
-   mid step turns a mildly good day and a mildly bad day into the same grey,
-   which is most of the grid on most weeks.
+   The poles are #8f2318 and #6aa63c, validated: ΔE 32.9 in normal vision and
+   ΔE 22.3 under deuteranopia, both comfortably clear. Luminance is monotonic
+   along each arm (worse 0.62 → 0.07, better 0.75 → 0.31), so the grid still
+   reads as magnitude in greyscale, in print, and under forced colours.
+
+   Colour is never the only encoding regardless: every cell carries an
+   aria-label with its value and verdict, the tooltip states both, and the best
+   day in each row is ringed.
    ──────────────────────────────────────────────────────────────────────────── */
 
 type Rgb = [number, number, number];
@@ -40,24 +41,27 @@ type Stop = [number, Rgb];
 
 /** Baseline neutral. Deliberately lighter than --surface-rail (the grid's
  *  gutter) so an at-baseline tile is still visibly a tile. */
-const PULSE_NEUTRAL: Rgb = [242, 236, 225];
+const PULSE_NEUTRAL: Rgb = [230, 220, 203];
 
-/** Magnitude 0→1 away from baseline on the BETTER side. */
+/** Magnitude 0→1 away from baseline on the BETTER side. Green, and lighter. */
 const BETTER_STOPS: Stop[] = [
   [0.0, PULSE_NEUTRAL],
-  [0.3, [156, 200, 201]],
-  [0.6, [98, 166, 172]],
-  [0.82, [38, 119, 129]],
-  [1.0, [14, 91, 102]], // --accent-ink
+  // Slightly darker than the neutral, not lighter: green is heavily weighted in
+  // luminance, and a first good step that came out BRIGHTER than baseline made a
+  // barely-good day read as a blank cell.
+  [0.3, [211, 223, 182]],
+  [0.6, [189, 211, 150]],
+  [0.82, [148, 194, 104]],
+  [1.0, [106, 166, 60]], // #6aa63c
 ];
 
-/** Magnitude 0→1 away from baseline on the WORSE side. */
+/** Magnitude 0→1 away from baseline on the WORSE side. Red, and darker. */
 const WORSE_STOPS: Stop[] = [
   [0.0, PULSE_NEUTRAL],
-  [0.3, [244, 203, 148]],
-  [0.6, [233, 151, 72]],
-  [0.82, [196, 87, 10]], // --accent
-  [1.0, [138, 58, 8]], // --trend-down
+  [0.3, [232, 201, 182]],
+  [0.6, [208, 138, 106]],
+  [0.82, [184, 74, 48]],
+  [1.0, [143, 35, 24]], // #8f2318
 ];
 
 /** Single-hue sequential ramp for rows with NO direction of good (weight).

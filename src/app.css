@@ -593,14 +593,100 @@ a {
 
 
 /* ============================================================
+   /health — the chapter grammar.
+
+   Every chapter of the hub is the same three things in the same order:
+   a STAT ROW of key figures, a CHART GRID, and a NOTE. They live in the global
+   sheet rather than in each component because they ARE the system — a scoped
+   copy per component is how the page ended up looking like two dashboards
+   glued together, with two different tile treatments on the same screen.
+
+   (Global, not a standalone CSS import: a `.svelte` file importing a stylesheet
+   breaks the PWA injectManifest step and stops the service worker being
+   emitted.)
+   ============================================================ */
+
+.h-statrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem 1.25rem;
+  margin-bottom: 28px;
+}
+@media (max-width: 700px) {
+  .h-statrow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.h-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.h-stat-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-num-md);
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+.h-stat-value.good { color: var(--success); }
+.h-stat-value.warn { color: var(--warn); }
+.h-stat-value.bad { color: var(--error); }
+.h-stat-unit {
+  font-size: var(--fs-label-xs);
+  color: var(--text-ghost);
+  margin-left: 0.15rem;
+}
+.h-stat-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.h-stat-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  color: var(--text-muted);
+}
+
+.h-chartgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1.5rem 1.75rem;
+}
+@media (max-width: 720px) {
+  .h-chartgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.h-note {
+  font-family: var(--font-body);
+  font-size: var(--fs-body-sm);
+  line-height: 1.55;
+  color: var(--text-muted);
+  margin: 1.25rem 0 0 0;
+  max-width: 68ch;
+}
+
+/* ============================================================
    /health v2 — shared analytic card + grid primitives.
    Kept in the global sheet (not a standalone CSS import) so the
    PWA injectManifest step keeps emitting the SvelteKit service worker.
    ============================================================ */
 /*
- * Canonical /health card + grid primitives, shared across the v2 analytic
- * sections (Breakdown defines its own scoped copy; these globals match it 1:1
- * so every new section is pixel-consistent). Values mirror Breakdown.svelte.
+ * Canonical /health card + grid primitives.
+ *
+ * These used to be mirrored 1:1 by a scoped copy inside Breakdown.svelte, and
+ * the two had already drifted (2px border against 1px). Breakdown is gone —
+ * the hub answers its questions with the pulse grid, the signal tiles and the
+ * trend charts instead — so this is the only copy again. The chapter grammar
+ * above (.h-statrow / .h-chartgrid / .h-note) is what new sections should use;
+ * these card primitives remain for the analytic blocks that still want a grid
+ * of framed cards.
  */
 
 .h-detail-grid {

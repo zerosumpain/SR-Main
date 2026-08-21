@@ -374,11 +374,16 @@
   .h-pg-cell.peak {
     z-index: 2;
   }
+  /* The best day in the row. Three-pixel ink ring with a cream keyline inside
+     it, so it reads as strongly against a light green cell as against a dark
+     red one — a single-weight border disappeared on the pale end of both arms. */
   .h-pg-cell.peak::after {
     content: '';
     position: absolute;
     inset: -1px;
-    border: 2px solid var(--text-primary);
+    border: 3px solid var(--text-primary);
+    outline: 1px solid var(--bg);
+    outline-offset: -4px;
     pointer-events: none;
     z-index: 3;
   }

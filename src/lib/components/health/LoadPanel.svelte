@@ -1,13 +1,13 @@
 <script lang="ts">
-  // Everything that answers "are you doing too much, or not enough".
+  // The work: what you actually did, and whether it was too much of it.
   //
-  // The hub used to answer it three times: an acute:chronic figure in its own
-  // signals row, a second ACWR row inside the nested dashboard, and a whole
-  // TrainingLoad card block underneath with a third treatment of the same
-  // ratio plus monotony and the intensity mix. One chapter, one answer.
+  // Same three-part grammar as every other chapter — stat row, chart grid,
+  // note — rather than the bespoke ACWR block it used to carry. That block was
+  // a third tile treatment on a page that already had two.
   import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
   import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
+  import StatRow, { type Stat } from '$lib/components/health/StatRow.svelte';
   import { zoneEdges } from '$lib/health/analytics/hr-zones';
   import type { ACWRZone } from '$lib/health/analytics/acwr';
   import type { MonotonyResult } from '$lib/health/analytics/monotony';
@@ -33,6 +33,109 @@
     const dt = new Date(Date.parse(day + 'T00:00:00Z'));
     return `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
   }
+
+  const ZONE_TONE: Record<ACWRZone, Stat['tone']> = {
+    detraining: 'warn',
+    undertraining: 'warn',
+    optimal: 'good',
+    caution: 'warn',
+    danger: 'bad',
+  };
+  const ZONE_LABEL: Record<ACWRZone, string> = {
+    detraining: 'detraining',
+    undertraining: 'under the building band',
+    optimal: 'in the building band',
+    caution: 'above it — watch',
+    danger: 'where injuries come from',
+  };
+
+  const MONOTONY_PROSE: Record<string, string> = {
+    low: 'varied — hard and easy days look different',
+    moderate: 'starting to look samey',
+    high: 'every day looks like every other',
+  };
+
+  const stats = $derived.by((): Stat[] => {
+    if (!d) return [];
+    const out: Stat[] = [];
+
+    const t = d.load.trimpAcwr;
+    if (t) {
+      out.push(
+        t.sufficiency === 'insufficient'
+          ? {
+              label: 'Workout load ratio',
+              value: '—',
+              sub: `${d.load.days.length} of the 14 days it needs`,
+              tone: 'neutral',
+              evidence: 'acwr',
+            }
+          : {
+              label: 'Workout load ratio',
+              value: t.value.ratio.toFixed(2),
+              unit: '×',
+              sub:
+                ZONE_LABEL[t.value.zone] +
+                (t.sufficiency === 'partial' ? ' · under 28 days of history' : ''),
+              tone: ZONE_TONE[t.value.zone],
+              evidence: 'acwr',
+            },
+      );
+    }
+
+    const s = d.load.strainAcwr;
+    if (s && s.sufficiency !== 'insufficient') {
+      out.push({
+        label: 'Whole-day ratio',
+        value: s.value.ratio.toFixed(2),
+        unit: '×',
+        sub: 'Whoop strain — counts the days you did not call training',
+        tone: ZONE_TONE[s.value.zone],
+      });
+    }
+
+    // getMonotony() can NEVER report insufficient: it zero-fills seven calendar
+    // days before computing, so sufficiency is always 'ok' even against an
+    // empty database. The mean and the standard deviation are the real guard.
+    if (usable(monotony) && (monotony?.value.mean ?? 0) > 0 && (monotony?.value.sd ?? 0) > 0) {
+      out.push({
+        label: 'Sameness',
+        value: monotony!.value.monotony.toFixed(1),
+        sub: MONOTONY_PROSE[monotony!.value.band] ?? monotony!.value.band,
+        tone:
+          monotony!.value.band === 'high' ? 'bad' : monotony!.value.band === 'moderate' ? 'warn' : 'good',
+        evidence: 'monotony',
+      });
+    }
+
+    const thisWeek = d.weeks.at(-1);
+    if (thisWeek) {
+      const before = d.weeks.slice(0, -1);
+      const typical = before.length ? before.reduce((n, w) => n + w.totalS, 0) / before.length : 0;
+      out.push({
+        label: 'This week',
+        value: (thisWeek.totalS / 3600).toFixed(1),
+        unit: 'h',
+        sub:
+          typical > 0
+            ? `${Math.round(((thisWeek.totalS - typical) / typical) * 100)}% against a typical week`
+            : 'first week on record',
+      });
+    }
+
+    if (d.zones28?.polarised && d.zones28.polarised.sufficiency !== 'insufficient') {
+      const p = d.zones28.polarised.value;
+      out.push({
+        label: 'Intensity mix',
+        value: `${Math.round(p.easyPct)}/${Math.round(p.midPct)}/${Math.round(p.hardPct)}`,
+        sub: 'easy / moderate / hard, last 28 days',
+        tone: p.verdict === 'junk-middle' ? 'warn' : 'good',
+        evidence: 'polarised',
+      });
+    }
+
+    return out;
+  });
 
   const loadBars = $derived.by((): Bar[] =>
     (d?.load.days ?? []).slice(-42).map((day) => ({
@@ -61,15 +164,6 @@
     })),
   );
 
-  type Tone = 'good' | 'warn' | 'bad';
-  const ZONE_LABELS: Record<ACWRZone, { label: string; tone: Tone }> = {
-    detraining: { label: 'DETRAINING', tone: 'warn' },
-    undertraining: { label: 'UNDERTRAINING', tone: 'warn' },
-    optimal: { label: 'OPTIMAL', tone: 'good' },
-    caution: { label: 'CAUTION', tone: 'warn' },
-    danger: { label: 'DANGER', tone: 'bad' },
-  };
-
   const POLARISED_VERDICT: Record<string, string> = {
     polarised: 'polarised — the 80/20 shape the endurance literature favours',
     pyramid: 'pyramidal — mostly easy with a moderate middle; a sound base shape',
@@ -77,89 +171,12 @@
       'moderate-heavy — most time in the middle zones, which Seiler’s work suggests limits return per hour',
     'insufficient-volume': 'not enough zone time to call a shape yet',
   };
-
-  const MONOTONY_PROSE: Record<string, string> = {
-    low: 'varied — hard days and easy days look different from each other',
-    moderate: 'somewhat samey — the days are starting to resemble one another',
-    high: 'monotonous — every day looks like every other, which Foster’s work links to illness and staleness',
-  };
-
-  // getMonotony() can NEVER report insufficient: the service zero-fills seven
-  // calendar days before computing, so sufficiency is always 'ok' even against
-  // an empty database. The mean and the standard deviation are the real guard.
-  const showMonotony = $derived(
-    usable(monotony) && (monotony?.value.mean ?? 0) > 0 && (monotony?.value.sd ?? 0) > 0,
-  );
 </script>
 
 {#if d}
-  <div class="acwr-row">
-    {#if d.load.trimpAcwr}
-      {@const a = d.load.trimpAcwr}
-      <div class="acwr">
-        <span class="sr-label-tight">Workout load ratio</span>
-        {#if a.sufficiency === 'insufficient'}
-          <span class="acwr-value muted">building history</span>
-          <span class="acwr-note">
-            {d.load.days.length} of 14 days banked — the ratio needs two weeks of load
-          </span>
-        {:else}
-          {@const z = ZONE_LABELS[a.value.zone]}
-          <span class="acwr-value">{a.value.ratio.toFixed(2)}</span>
-          <span
-            class="tag"
-            class:good={z.tone === 'good'}
-            class:warn={z.tone === 'warn'}
-            class:bad={z.tone === 'bad'}>{z.label}</span
-          >
-          <span class="acwr-note">
-            HR-weighted minutes from the workouts themselves{a.sufficiency === 'partial'
-              ? ' · early — under 28 days of history'
-              : ''}
-          </span>
-        {/if}
-        <EvidenceChip id="acwr" onopen={onevidence} />
-      </div>
-    {/if}
+  <StatRow {stats} {onevidence} />
 
-    {#if d.load.strainAcwr && d.load.strainAcwr.sufficiency !== 'insufficient'}
-      {@const a = d.load.strainAcwr}
-      {@const z = ZONE_LABELS[a.value.zone]}
-      <div class="acwr">
-        <span class="sr-label-tight">Whole-day load ratio</span>
-        <span class="acwr-value">{a.value.ratio.toFixed(2)}</span>
-        <span
-          class="tag"
-          class:good={z.tone === 'good'}
-          class:warn={z.tone === 'warn'}
-          class:bad={z.tone === 'bad'}>{z.label}</span
-        >
-        <span class="acwr-note">
-          Whoop strain — wrist-measured, so it counts the days you did not call training{a.sufficiency ===
-          'partial'
-            ? ' · early'
-            : ''}
-        </span>
-      </div>
-    {/if}
-
-    {#if showMonotony && monotony}
-      <div class="acwr">
-        <span class="sr-label-tight">Sameness</span>
-        <span class="acwr-value">{monotony.value.monotony.toFixed(1)}</span>
-        <span
-          class="tag"
-          class:good={monotony.value.band === 'low'}
-          class:warn={monotony.value.band === 'moderate'}
-          class:bad={monotony.value.band === 'high'}>{monotony.value.band.toUpperCase()}</span
-        >
-        <span class="acwr-note">{MONOTONY_PROSE[monotony.value.band] ?? ''}</span>
-        <EvidenceChip id="monotony" onopen={onevidence} />
-      </div>
-    {/if}
-  </div>
-
-  <div class="bars">
+  <div class="h-chartgrid">
     <Bars bars={loadBars} label="Daily load — last 6 weeks" formatY={(v) => String(Math.round(v))} />
     <Bars
       bars={weekBars}
@@ -171,7 +188,7 @@
   {#if d.zones28}
     <div class="zones">
       <div class="zones-hd">
-        <span class="sr-label-tight">Where the time went — last 28 days</span>
+        <span class="h-stat-label">Where the time went — last 28 days</span>
         <span class="zones-meta">
           HRmax {d.profile.hrMax} ({d.profile.hrMaxSource})
           <EvidenceChip id="hr-zones" onopen={onevidence} />
@@ -179,92 +196,13 @@
       </div>
       <ZoneBar zones={d.zones28.zones} edges={zoneEdges(d.profile.hrMax)} />
       {#if d.zones28.polarised && d.zones28.polarised.sufficiency !== 'insufficient'}
-        {@const p = d.zones28.polarised.value}
-        <p class="note">
-          {Math.round(p.easyPct)}% easy · {Math.round(p.midPct)}% moderate · {Math.round(p.hardPct)}%
-          hard — {POLARISED_VERDICT[p.verdict]}.
-          <EvidenceChip id="polarised" onopen={onevidence} />
-        </p>
+        <p class="h-note">{POLARISED_VERDICT[d.zones28.polarised.value.verdict]}.</p>
       {/if}
     </div>
   {/if}
 {/if}
 
 <style>
-  .acwr-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    gap: 1.25rem 1.75rem;
-    margin-bottom: 1.75rem;
-  }
-
-  .acwr {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
-  .acwr-value {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: var(--fs-num-lg);
-    letter-spacing: -0.02em;
-    line-height: 1;
-    color: var(--text-primary);
-  }
-  .acwr-value.muted {
-    font-family: var(--font-mono);
-    font-size: var(--fs-body);
-    font-weight: 400;
-    color: var(--text-muted);
-    letter-spacing: 0.05em;
-  }
-
-  .tag {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.14em;
-    padding: 2px 8px;
-    border: 1px solid var(--line-strong);
-    color: var(--text-secondary);
-  }
-  .tag.good {
-    color: var(--success);
-    border-color: var(--success-border);
-    background: var(--success-bg);
-  }
-  .tag.warn {
-    color: var(--warn);
-    border-color: var(--warn-border);
-    background: var(--warn-bg);
-  }
-  .tag.bad {
-    color: var(--error);
-    border-color: var(--error-border);
-    background: var(--error-bg);
-  }
-
-  .acwr-note {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    line-height: 1.5;
-    color: var(--text-muted);
-    max-width: 40ch;
-  }
-
-  .bars {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-    gap: 1.5rem 1.75rem;
-  }
-  @media (max-width: 720px) {
-    .bars {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
   .zones {
     margin-top: 1.75rem;
   }
@@ -281,14 +219,5 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.1em;
     color: var(--text-ghost);
-  }
-
-  .note {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.55;
-    color: var(--text-muted);
-    margin: 0.9rem 0 0 0;
-    max-width: 68ch;
   }
 </style>

@@ -16,6 +16,7 @@ import type { MetricResult } from '$lib/health/analytics/types';
 import type { MonotonyResult } from '$lib/health/analytics/monotony';
 import type { PolarisedResult } from '$lib/health/analytics/polarised';
 import { getMonotony } from '$lib/health/services/monotony-service';
+import { getReadiness } from '$lib/health/readiness-service';
 import { getPolarised } from '$lib/health/services/polarised-service';
 import {
   applyProgression,
@@ -82,9 +83,26 @@ export interface CoachRoute {
   points: number;
 }
 
+/** The figures the card shows to justify the session it proposes. */
+export interface CoachEvidence {
+  readiness: number | null;
+  readinessLabel: string | null;
+  /** The acute:chronic ratio the progression acted on, or null. */
+  acwr: number | null;
+  acwrZone: string | null;
+  /** Daily TRIMP for the last 14 days, oldest first — the load the session sits on. */
+  recentLoad: Array<{ date: string; load: number }>;
+  /** Hours in the last 7 days against the mean of the 8 weeks before it. */
+  weekHours: number | null;
+  typicalWeekHours: number | null;
+  /** Days since a session at threshold intensity or above. */
+  daysSinceHard: number | null;
+}
+
 export interface DailyPlan {
   generatedAt: string;
   session: CoachSession;
+  evidence: CoachEvidence;
   targets: GettableTarget[];
   route: CoachRoute | null;
   /** One calm sentence when there is no route. Null when there is one. */
@@ -214,6 +232,72 @@ function toCandidate(row: SegmentListRow, recentEf?: Array<number | null>) {
     daysSincePb: row.form.daysSincePb,
     recentEf,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Evidence
+
+/**
+ * The numbers the card shows to justify itself.
+ *
+ * A recommendation with no working shown is an opinion. All of this is already
+ * loaded for the page's other chapters; nothing here costs an extra query.
+ */
+function buildEvidence(
+  dashboard: TrailsDashboard | null,
+  readiness: number | null,
+  progression: { intensity: string },
+): CoachEvidence {
+  const days = dashboard?.load.days ?? [];
+  const recentLoad = days.slice(-14).map((d) => ({ date: d.date, load: d.load }));
+
+  const weeks = dashboard?.weeks ?? [];
+  const thisWeek = weeks.length ? weeks[weeks.length - 1] : null;
+  const before = weeks.slice(0, -1);
+  const typical = before.length
+    ? before.reduce((n, w) => n + w.totalS, 0) / before.length / 3600
+    : null;
+
+  // "Hard" is a workout whose mean heart rate sat in zone 4 or above — the only
+  // evidence there is, since nothing records an intended intensity.
+  const hrMax = dashboard?.profile.hrMax ?? 0;
+  const hardFloor = hrMax > 0 ? hrMax * 0.8 : Number.POSITIVE_INFINITY;
+  const hard = (dashboard?.workouts ?? []).filter(
+    (w) => (w.avgHeartrate ?? 0) >= hardFloor,
+  );
+  const lastHard = hard.length ? hard[hard.length - 1].day : null;
+  const daysSinceHard = lastHard
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.parse(new Date().toISOString().slice(0, 10)) - Date.parse(lastHard)) / 86_400_000,
+        ),
+      )
+    : null;
+
+  const acwr = dashboard?.load.trimpAcwr;
+  const usableAcwr = acwr && acwr.sufficiency !== 'insufficient' ? acwr.value : null;
+
+  void progression;
+  return {
+    readiness,
+    readinessLabel: readiness == null ? null : readinessWord(readiness),
+    acwr: usableAcwr?.ratio ?? null,
+    acwrZone: usableAcwr?.zone ?? null,
+    recentLoad,
+    weekHours: thisWeek ? thisWeek.totalS / 3600 : null,
+    typicalWeekHours: typical,
+    daysSinceHard,
+  };
+}
+
+/** The same bands getReadinessLabel uses, so the card and the hero agree. */
+function readinessWord(score: number): string {
+  if (score >= 90) return 'Peak readiness';
+  if (score >= 70) return 'Ready to push';
+  if (score >= 50) return 'Moderate';
+  if (score >= 30) return 'Recovery priority';
+  return 'Rest';
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +516,18 @@ function emptyPlan(degraded: string[]): DailyPlan {
       acwrSource: 'unavailable',
       routable: true,
     },
+    // Nothing was readable, so the evidence says exactly that rather than
+    // showing zeros that would read as measurements.
+    evidence: {
+      readiness: null,
+      readinessLabel: null,
+      acwr: null,
+      acwrZone: null,
+      recentLoad: [],
+      weekHours: null,
+      typicalWeekHours: null,
+      daysSinceHard: null,
+    },
     targets: [],
     route: null,
     routeNote: 'The plan could not be assembled fully, so there is no route today.',
@@ -479,6 +575,8 @@ export async function getDailyPlan(
     dashboard?: TrailsDashboard;
     monotony?: MetricResult<MonotonyResult> | null;
     polarised?: MetricResult<PolarisedResult> | null;
+    /** The readiness composite the caller already computed, 0–100. */
+    readiness?: number | null;
     signal?: AbortSignal;
   } = {},
 ): Promise<DailyPlan> {
@@ -496,7 +594,7 @@ export async function getDailyPlan(
   const signal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
 
   try {
-    const [base, dashboard, monotony, polarised, counts] = await Promise.all([
+    const [base, dashboard, monotony, polarised, counts, readiness] = await Promise.all([
       soft('session proposal', () => proposeSession(), degraded),
       opts.dashboard
         ? Promise.resolve(opts.dashboard)
@@ -511,6 +609,9 @@ export async function getDailyPlan(
         ? Promise.resolve(opts.polarised)
         : soft('intensity mix', () => getPolarised(), degraded),
       soft('sport history', () => sportCounts(), degraded),
+      opts.readiness !== undefined
+        ? Promise.resolve(opts.readiness)
+        : soft('readiness', async () => (await getReadiness()).score, degraded),
     ]);
 
     const state: TrainingState = {
@@ -520,6 +621,7 @@ export async function getDailyPlan(
       yesterdayIntensity: yesterdayIntensity(dashboard),
       last8Weeks: counts?.last8Weeks ?? {},
       last2Weeks: counts?.last2Weeks ?? {},
+      readiness: readiness ?? null,
     };
 
     const progression = applyProgression(
@@ -635,6 +737,7 @@ export async function getDailyPlan(
     const plan: DailyPlan = {
       generatedAt: new Date().toISOString(),
       session,
+      evidence: buildEvidence(dashboard, readiness ?? null, progression),
       targets,
       route,
       routeNote,
