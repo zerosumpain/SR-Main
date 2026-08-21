@@ -140,15 +140,19 @@ export const load: PageServerLoad = async (event) => {
     return { mode: 'public' as const, ...pickPublic(shared) };
   }
 
-  const [dashboard, segments, outings, coach, correlations] = await Promise.all([
-    safe('trails-dashboard', getTrailsDashboard()),
+  // The dashboard is fetched FIRST and handed to the coach, which would
+  // otherwise load the whole physio suite a second time inside the same
+  // request. One extra round trip in sequence is cheaper than doing the
+  // expensive half of this page twice.
+  const dashboard = await safe('trails-dashboard', getTrailsDashboard());
+  const [segments, outings, coach] = await Promise.all([
     safe('segment-highlights', getSegmentHighlights()),
     safe('recent-outings', recentOutings()),
-    safe('coach', getDailyPlan()),
-    Promise.resolve(
-      shared.provenance.correlationsAreIllustrative ? [] : (data?.correlations ?? []),
-    ),
+    safe('coach', getDailyPlan({ dashboard: dashboard ?? undefined })),
   ]);
+  const correlations = shared.provenance.correlationsAreIllustrative
+    ? []
+    : (data?.correlations ?? []);
 
   return {
     mode: 'owner' as const,

@@ -19,6 +19,7 @@
   import { fmtAgo } from '$lib/components/health/v2/utils';
   import { formatDistance, formatDuration, formatLocalDate, activityLabel } from '$lib/trails/format';
   import { formatTemperature } from '$lib/trails/activity-meta';
+  import { ordinal } from '$lib/trails/highlights';
 
   let { data } = $props();
 
@@ -71,7 +72,11 @@
   // a thin data day printed 01, 02, 05, 06, 09 with visible gaps. They are
   // derived from what is actually on the page now.
   const order = $derived.by(() => {
-    const keys: string[] = [];
+    // The hero renders its own "01 / TODAY" eyebrow, so it takes the first slot
+    // whenever it is on the page. Numbering from 1 regardless printed two 01s.
+    const keys: string[] = data.today && data.headline && data.todayDeltas && data.readiness
+      ? ['hero']
+      : [];
     if (showToday) keys.push('today');
     keys.push('signals');
     if (hasSeries) keys.push('pulse');
@@ -110,7 +115,7 @@
         label: 'Cardio fitness',
         value: data.vo2max.value.current.toFixed(1),
         unit: 'ml/kg/min',
-        note: `${data.vo2max.value.band} · ${Math.round(data.vo2max.value.percentile)}th percentile`,
+        note: `${data.vo2max.value.band} · ${ordinal(Math.round(data.vo2max.value.percentile))} percentile`,
       });
     }
     if (data.trainingLoad && !(data.trainingLoad.acute === 0 && data.trainingLoad.chronic === 0)) {
