@@ -1,5 +1,5 @@
-// Read side for /trails/dashboard and the physiological enrichment on
-// /trails/[id]. Composes the pure analytics in $lib/health/analytics over the
+// Read side for /health and the physiological enrichment on
+// /health/activities/[id]. Composes the pure analytics in $lib/health/analytics over the
 // trails tables plus the Whoop/Apple daily metrics. Mirrors the other health
 // services: server-only, plain data out, every sub-source fails soft.
 
@@ -247,7 +247,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
 }
 
 // ---------------------------------------------------------------------------
-// Light strip for the /trails list page — no HR series, two cheap queries.
+// Light strip for the /health/activities list page — no HR series, two cheap queries.
 
 export interface TrailsStrip {
   weeks: WeekVolume[];

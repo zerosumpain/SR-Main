@@ -21,7 +21,7 @@ import { isOffroadType, isPaceSport } from './format';
 import { resampleTrack } from './segments/resample';
 import { discoverSegments, type DiscoveredSegment, type MatchOptions } from './segments/matcher';
 import { makeCorridor, corridorMatch, type LngLat } from './segments/corridor';
-import { effortMetrics } from './segments/metrics';
+import { effortMetrics, rankEfforts } from './segments/metrics';
 import {
   segmentDescriptor,
   segmentName,
@@ -102,6 +102,15 @@ export interface ActivitySegmentRow {
   /** 1-based, against every effort on the segment. Null where unrankable. */
   rankByTime: number | null;
   rankByEfficiency: number | null;
+  /**
+   * How many efforts each rank was measured against. HR-derived metrics go null
+   * far more often than they look — `effortMetrics` discards a heart-rate window
+   * that covers less than half the effort — so "3rd by efficiency" is out of the
+   * EF-RANKED efforts, not out of `effortCount`. Printing the wrong denominator
+   * is how a 3rd of 4 becomes a 3rd of 19.
+   */
+  rankedByTimeOf: number;
+  rankedByEfficiencyOf: number;
 }
 
 type SegmentListSource = Omit<
@@ -523,14 +532,15 @@ export async function getActivitySegments(activityId: string): Promise<ActivityS
     const ours = efforts.filter((e) => e.activityId === activityId);
     if (!ours.length) continue;
 
-    const byTime = [...efforts].sort((a, b) => a.durationS - b.durationS);
-    const byEf = efforts
-      .filter((e) => e.efficiencyFactor != null)
-      .sort((a, b) => (b.efficiencyFactor ?? 0) - (a.efficiencyFactor ?? 0));
+    // Competition ranking, shared with the leaderboard and the highlights
+    // engine: ties share a rank and the next distinct value skips. This used to
+    // be a findIndex over a sorted copy, which silently broke ties by sort order
+    // and printed "2nd of 11" where the leaderboard printed "1st of 11" for the
+    // same effort.
+    const timeRanks = rankEfforts(efforts, 'durationS', (e) => e.durationS);
+    const efRanks = rankEfforts(efforts, 'efficiencyFactor', (e) => e.efficiencyFactor);
 
     for (const effort of ours) {
-      const timeIdx = byTime.findIndex((e) => e.id === effort.id);
-      const efIdx = byEf.findIndex((e) => e.id === effort.id);
       out.push({
         segmentId: segment.id,
         name: segment.name,
@@ -544,8 +554,10 @@ export async function getActivitySegments(activityId: string): Promise<ActivityS
         segmentDistanceM: segment.distanceM,
         effortCount: segment.effortCount,
         effort,
-        rankByTime: timeIdx >= 0 ? timeIdx + 1 : null,
-        rankByEfficiency: efIdx >= 0 ? efIdx + 1 : null,
+        rankByTime: timeRanks.get(effort) ?? null,
+        rankByEfficiency: efRanks.get(effort) ?? null,
+        rankedByTimeOf: timeRanks.size,
+        rankedByEfficiencyOf: efRanks.size,
       });
     }
   }

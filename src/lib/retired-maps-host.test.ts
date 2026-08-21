@@ -38,46 +38,46 @@ describe('requestHost', () => {
 // below is the contract.
 function retiredMapsTarget(pathname: string): string {
   const path = pathname.replace(/\/+$/, '').toLowerCase();
-  if (path === '/create' || path === '/discover') return '/trails/plan';
-  if (path === '/record' || path.endsWith('/record')) return '/trails/record';
-  if (path.startsWith('/route')) return '/trails/routes';
-  if (path.startsWith('/history')) return '/trails';
-  return '/trails';
+  if (path === '/create' || path === '/discover') return '/health/plan';
+  if (path === '/record' || path.endsWith('/record')) return '/health/record';
+  if (path.startsWith('/route')) return '/health/routes';
+  if (path.startsWith('/history')) return '/health/activities';
+  return '/health/activities';
 }
 
 describe('retired maps host redirect', () => {
   it.each([
-    ['/', '/trails'],
-    ['', '/trails'],
-    ['/create', '/trails/plan'],
-    ['/discover', '/trails/plan'],
-    ['/record', '/trails/record'],
-    ['/history', '/trails'],
-    ['/history/abc-123', '/trails'],
-    ['/settings', '/trails'],
-    ['/anything-else', '/trails'],
+    ['/', '/health/activities'],
+    ['', '/health/activities'],
+    ['/create', '/health/plan'],
+    ['/discover', '/health/plan'],
+    ['/record', '/health/record'],
+    ['/history', '/health/activities'],
+    ['/history/abc-123', '/health/activities'],
+    ['/settings', '/health/activities'],
+    ['/anything-else', '/health/activities'],
   ])('sends %s to %s', (from, to) => {
     expect(retiredMapsTarget(from)).toBe(to);
   });
 
   it('sends a saved route to the routes list', () => {
-    expect(retiredMapsTarget('/route/abc-123')).toBe('/trails/routes');
-    expect(retiredMapsTarget('/route/abc-123/edit')).toBe('/trails/routes');
+    expect(retiredMapsTarget('/route/abc-123')).toBe('/health/routes');
+    expect(retiredMapsTarget('/route/abc-123/edit')).toBe('/health/routes');
   });
 
   it('prefers the recorder for a route being recorded', () => {
     // JKAImaps nested this under the route; the recorder is the useful landing.
-    expect(retiredMapsTarget('/route/abc-123/record')).toBe('/trails/record');
+    expect(retiredMapsTarget('/route/abc-123/record')).toBe('/health/record');
   });
 
   it('ignores a trailing slash and case', () => {
-    expect(retiredMapsTarget('/Create/')).toBe('/trails/plan');
-    expect(retiredMapsTarget('/RECORD')).toBe('/trails/record');
+    expect(retiredMapsTarget('/Create/')).toBe('/health/plan');
+    expect(retiredMapsTarget('/RECORD')).toBe('/health/record');
   });
 
-  it('never returns a path outside /trails', () => {
+  it('never returns a path outside the /health hub', () => {
     for (const p of ['/', '/create', '/route/x', '/history', '/zzz', '/../etc']) {
-      expect(retiredMapsTarget(p).startsWith('/trails')).toBe(true);
+      expect(retiredMapsTarget(p).startsWith('/health/')).toBe(true);
     }
   });
 });

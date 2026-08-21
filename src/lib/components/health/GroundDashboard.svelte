@@ -235,10 +235,10 @@
       </p>
     </div>
     <nav class="hdr-nav">
-      <a href="/trails">All trails</a>
-      <a href="/trails/segments">Segments</a>
-      <a href="/trails/plan">Plan</a>
-      <a href="/trails/routes">Routes</a>
+      <a href="/health/activities">All trails</a>
+      <a href="/health/segments">Segments</a>
+      <a href="/health/plan">Plan</a>
+      <a href="/health/routes">Routes</a>
       <a href="/health">Health</a>
     </nav>
   </header>
@@ -429,7 +429,7 @@
             <div>
               <dt>Fastest pace</dt>
               <dd>{formatPace(segs.records.fastestPace.value)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.fastestPace.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.fastestPace.segmentId}">
                 {segs.records.fastestPace.name}
               </a>
             </div>
@@ -438,7 +438,7 @@
             <div>
               <dt>Best efficiency</dt>
               <dd>{segs.records.bestEfficiency.value.toFixed(2)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.bestEfficiency.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.bestEfficiency.segmentId}">
                 {segs.records.bestEfficiency.name}
               </a>
             </div>
@@ -447,7 +447,7 @@
             <div>
               <dt>Lowest cost</dt>
               <dd>{Math.round(segs.records.lowestCost.value)} b/km</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.lowestCost.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.lowestCost.segmentId}">
                 {segs.records.lowestCost.name}
               </a>
             </div>
@@ -456,7 +456,7 @@
             <div>
               <dt>Biggest climb</dt>
               <dd>+{formatElevation(segs.records.biggestClimb.value)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.biggestClimb.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.biggestClimb.segmentId}">
                 {segs.records.biggestClimb.name}
               </a>
             </div>
@@ -470,7 +470,7 @@
               {#each segs.recentPrs as pr (`${pr.segmentId}:${pr.metric}`)}
                 <li>
                   <span class="pr-date">{prDay(pr.startDateLocal)}</span>
-                  <a class="pr-name" href="/trails/segments/{pr.segmentId}">{pr.name}</a>
+                  <a class="pr-name" href="/health/segments/{pr.segmentId}">{pr.name}</a>
                   <span class="pr-what">
                     {pr.metric === 'time'
                       ? `fastest ever — ${formatDuration(pr.value)}`
@@ -484,11 +484,11 @@
         {/if}
 
         <nav class="seg-links">
-          <a href="/trails/segments">All segments</a>
-          <a href="/trails/segments?sort=climb">Biggest climbs</a>
-          <a href="/trails/segments?offroad=1">Offroad</a>
-          <a href="/trails/segments?sort=efficiency">Best efficiency</a>
-          <a href="/trails/segments?sort=cost">Lowest cost</a>
+          <a href="/health/segments">All segments</a>
+          <a href="/health/segments?sort=climb">Biggest climbs</a>
+          <a href="/health/segments?offroad=1">Offroad</a>
+          <a href="/health/segments?sort=efficiency">Best efficiency</a>
+          <a href="/health/segments?sort=cost">Lowest cost</a>
         </nav>
       </section>
     {/if}

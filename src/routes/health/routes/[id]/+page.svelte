@@ -65,7 +65,7 @@
     if (!confirm(`Delete "${r.name}"? This cannot be undone.`)) return;
     deleting = true;
     const res = await fetch(`/api/trails/routes/${r.id}`, { method: 'DELETE' });
-    if (res.ok) await goto('/trails/routes');
+    if (res.ok) await goto('/health/routes');
     else deleting = false;
   }
 </script>
@@ -84,7 +84,7 @@
       <h1>{r.name}</h1>
       <p class="sub">{r.source === 'imported' ? 'Imported' : 'Planned'} route</p>
     </div>
-    <a class="back-link" href="/trails/routes">All routes</a>
+    <a class="back-link" href="/health/routes">All routes</a>
   </header>
 
   <section class="nm-sec stat-grid">
@@ -165,7 +165,7 @@
   <section class="nm-sec">
     <div class="nm-sec-hd"><span class="sr-label-tight">Take it out</span></div>
     <div class="actions">
-      <a class="nm-save-btn" href="/trails/record?route={r.id}">Follow and record</a>
+      <a class="nm-save-btn" href="/health/record?route={r.id}">Follow and record</a>
       <GpxDownload url="/api/trails/routes/{r.id}/gpx" name={r.name} />
       <button class="row-link danger" onclick={remove} disabled={deleting}>
         {deleting ? 'Deleting…' : 'Delete route'}

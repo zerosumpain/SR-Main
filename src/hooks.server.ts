@@ -271,24 +271,50 @@ const { handle: authHandle } = SvelteKitAuth({
   },
 });
 
-// JKAImaps (maps.strangeramblings.com) was retired in favour of /trails, which
+// JKAImaps (maps.strangeramblings.com) was retired in favour of the /health hub, which
 // does the same job with a server behind it — routes and recordings live in
 // Postgres instead of one phone's IndexedDB. The hostname now points at this
 // app, so every request arriving under it is a stale bookmark: send it to the
 // nearest equivalent rather than dumping everything on one landing page.
 //
-// This runs before the auth gate on purpose. /trails is owner-only, so a
+// This runs before the auth gate on purpose. /health/activities is owner-only, so a
 // redirect emitted after the gate would send visitors to /login?callbackUrl=…
 // instead of telling them where the thing went.
 const RETIRED_MAPS_HOST = 'maps.strangeramblings.com';
 
 function retiredMapsTarget(pathname: string): string {
   const path = pathname.replace(/\/+$/, '').toLowerCase();
-  if (path === '/create' || path === '/discover') return '/trails/plan';
-  if (path === '/record' || path.endsWith('/record')) return '/trails/record';
-  if (path.startsWith('/route')) return '/trails/routes';
-  if (path.startsWith('/history')) return '/trails';
-  return '/trails';
+  if (path === '/create' || path === '/discover') return '/health/plan';
+  if (path === '/record' || path.endsWith('/record')) return '/health/record';
+  if (path.startsWith('/route')) return '/health/routes';
+  if (path.startsWith('/history')) return '/health/activities';
+  return '/health/activities';
+}
+
+/**
+ * /trails moved under /health (2026-08).
+ *
+ * The body and the ground it covers were two dashboards asking the same
+ * question, so they became one hub. Old URLs are in the installed PWA, in saved
+ * links and in the retired-maps redirect above, so they 308 rather than 404.
+ *
+ * `/trails/dashboard` has no successor of its own — the physiology it showed is
+ * the signed-in view of /health itself.
+ *
+ * Kept as a pure function and mirrored by trails-redirect.test.ts, which cannot
+ * import this module without pulling in Auth.js and the whole workflow engine.
+ */
+export function trailsRedirectTarget(pathname: string): string | null {
+  if (pathname !== '/trails' && !pathname.startsWith('/trails/')) return null;
+  const rest = pathname.slice('/trails'.length).replace(/^\//, '').replace(/\/+$/, '');
+  if (!rest) return '/health/activities';
+  const [head, ...tail] = rest.split('/');
+  if (head === 'dashboard') return '/health';
+  if (head === 'segments' || head === 'plan' || head === 'routes' || head === 'record') {
+    return ['/health', head, ...tail].join('/');
+  }
+  // Anything else is an activity id.
+  return ['/health/activities', head, ...tail].join('/');
 }
 
 // Route protection
@@ -297,6 +323,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   if (requestHost(event) === RETIRED_MAPS_HOST) {
     throw redirect(301, `https://strangeramblings.com${retiredMapsTarget(pathname)}`);
+  }
+
+  // /trails folded into /health. Before the auth gate on purpose — /trails is no
+  // longer a route at all, so falling through would 302 a stale bookmark to
+  // /login with a callbackUrl that leads nowhere.
+  {
+    const target = trailsRedirectTarget(pathname);
+    if (target) throw redirect(308, target + event.url.search);
   }
 
   // Admin consolidation (2026-07): the /admin route tree was reorganised into
@@ -622,10 +656,23 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // Public page routes — no auth required.
-  const PUBLIC_PATHS = ['/health', '/tools'];
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
-    return resolve(event);
-  }
+  //
+  // /health is EXACT, and that is the whole point. The health hub now owns the
+  // ground data too: /health/activities, /health/segments, /health/plan,
+  // /health/routes and /health/record all carry GPS traces, and a GPS trace
+  // starts at the front door. Under the old prefix rule every one of those
+  // became anonymous the moment its directory existed — with no allowlist edit
+  // to review and, because scripts/check-public-routes.mjs could not see this
+  // array, a green gate. Written as explicit literals so that gate DOES see
+  // them; they are classified in HOOK_EXACT_BYPASSES / HOOK_BYPASSES there.
+  //
+  // The page itself decides what an anonymous visitor gets: /health builds two
+  // disjoint payloads and never sends the owner one to a browser without a
+  // session (see its +page.server.ts).
+  //
+  // /tools stays a PREFIX — static/tools/* is a genuine tree.
+  if (pathname === '/health') return resolve(event);
+  if (pathname === '/tools' || pathname.startsWith('/tools/')) return resolve(event);
 
   // Page routes redirect to sign-in
   const session = await event.locals.auth();

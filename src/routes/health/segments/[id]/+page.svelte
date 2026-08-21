@@ -93,7 +93,7 @@
         {segment.descriptor}
       </p>
     </div>
-    <a class="back-link" href="/trails/segments">All segments</a>
+    <a class="back-link" href="/health/segments">All segments</a>
   </header>
 
   <dl class="stats cellgrid">
@@ -173,7 +173,7 @@
         {@const delta = efficiencyDeltaPct(other.bests.efficiencyFactor)}
         <tr>
           <th scope="row">
-            <a href="/trails/segments/{other.id}">{other.name}</a>
+            <a href="/health/segments/{other.id}">{other.name}</a>
           </th>
           <td class="num profile">
             {formatDistance(other.distanceM)} ·

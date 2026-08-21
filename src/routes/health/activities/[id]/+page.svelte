@@ -118,7 +118,7 @@
       <h1>{a.name}</h1>
       <p class="sub">{formatLocalDate(a.startDateLocal, a.startDate)}</p>
     </div>
-    <a class="back-link" href="/trails">All trails</a>
+    <a class="back-link" href="/health/activities">All trails</a>
   </header>
 
   <section class="nm-sec stat-grid">
@@ -233,12 +233,12 @@
     <section class="nm-sec">
       <div class="nm-sec-hd">
         <span class="sr-label-tight">Segments on this one</span>
-        <a class="nm-sec-meta seg-all" href="/trails/segments">All segments →</a>
+        <a class="nm-sec-meta seg-all" href="/health/segments">All segments →</a>
       </div>
       <ul class="seg-list">
         {#each segments as row (`${row.segmentId}:${row.effort.id}`)}
           <li>
-            <a class="seg-row" href="/trails/segments/{row.segmentId}">
+            <a class="seg-row" href="/health/segments/{row.segmentId}">
               <TrackThumb polyline={row.polyline} size={40} />
               <span class="seg-main">
                 <span class="seg-name">

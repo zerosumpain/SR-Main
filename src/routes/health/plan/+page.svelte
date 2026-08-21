@@ -400,7 +400,7 @@
         every route gets a difficulty grade.
       </p>
     </div>
-    <a class="back-link" href="/trails">All trails</a>
+    <a class="back-link" href="/health/activities">All trails</a>
   </header>
 
   {#if !data.configured}
@@ -718,7 +718,7 @@
           {saving ? 'Saving…' : 'Save this route'}
         </button>
         {#if savedId}
-          <a class="row-link" href="/trails/routes/{savedId}">Saved — open it</a>
+          <a class="row-link" href="/health/routes/{savedId}">Saved — open it</a>
           <GpxDownload
             url="/api/trails/routes/{savedId}/gpx"
             name={chosen ? `${activityLabel(plannedSport)} ${(chosen.distanceM / 1000).toFixed(1)} km` : 'route'}
@@ -806,7 +806,7 @@
                       Back to candidates
                     </button>
                     {#if sharedSavedId}
-                      <a class="row-link" href="/trails/routes/{sharedSavedId}">Saved — open it</a>
+                      <a class="row-link" href="/health/routes/{sharedSavedId}">Saved — open it</a>
                       <GpxDownload
                         url="/api/trails/routes/{sharedSavedId}/gpx"
                         name={sharedDetail.name}

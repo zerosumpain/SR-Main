@@ -58,7 +58,7 @@
     if (type && type !== 'all') params.set('type', type);
     if (days) params.set('days', String(days));
     const q = params.toString();
-    return q ? `/trails?${q}` : '/trails';
+    return q ? `/health/activities?${q}` : '/health/activities';
   }
 
   const hasTypes = $derived(data.types.length > 0);
@@ -81,11 +81,11 @@
       </p>
     </div>
     <nav class="hdr-nav">
-      <a href="/trails/dashboard">Dashboard</a>
-      <a href="/trails/segments">Segments</a>
-      <a href="/trails/plan">Plan</a>
-      <a href="/trails/routes">Routes</a>
-      <a href="/trails/record">Record</a>
+      <a href="/health">Dashboard</a>
+      <a href="/health/segments">Segments</a>
+      <a href="/health/plan">Plan</a>
+      <a href="/health/routes">Routes</a>
+      <a href="/health/record">Record</a>
       <a href="/health">Health</a>
     </nav>
   </header>
@@ -133,7 +133,7 @@
             {acwr.value.zone.toUpperCase()}
           </span>
         {/if}
-        <a class="strip-link" href="/trails/dashboard">Full dashboard →</a>
+        <a class="strip-link" href="/health">Full dashboard →</a>
       </div>
     </section>
   {/if}
@@ -182,7 +182,7 @@
       {#each data.rows as row (row.id)}
         {@const pace = isPaceSport(row.activityType)}
         <li>
-          <a class="activity-row" href="/trails/{encodeURIComponent(row.id)}" data-activity-row>
+          <a class="activity-row" href="/health/activities/{encodeURIComponent(row.id)}" data-activity-row>
             <TrackThumb polyline={row.polyline} />
 
             <div class="row-main">

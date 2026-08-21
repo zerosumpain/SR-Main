@@ -3,7 +3,7 @@ import { listActivities } from '$lib/trails/activities-service';
 import { getTrailsStrip, type TrailsStrip } from '$lib/trails/physio-service';
 
 // Owner-gated by default: hooks.server.ts treats every path outside
-// PUBLIC_PATHS (/health, /tools) as owner-only, so /trails needs no gate of
+// PUBLIC_PATHS (/health, /tools) as owner-only, so /health/activities needs no gate of
 // its own — and must not be added to that list, because a GPS trace starts at
 // the front door.
 export const load: PageServerLoad = async ({ url }) => {

@@ -65,7 +65,7 @@
     if (offroadOnly) params.set('offroad', '1');
     if (sortKey !== 'efforts') params.set('sort', sortKey);
     const qs = params.toString();
-    replaceState(qs ? `?${qs}` : '/trails/segments', {});
+    replaceState(qs ? `?${qs}` : '/health/segments', {});
   }
 
   const filtered = $derived(
@@ -258,8 +258,8 @@
       </p>
     </div>
     <nav class="hdr-nav">
-      <a href="/trails/dashboard">Dashboard</a>
-      <a href="/trails">All trails</a>
+      <a href="/health">Dashboard</a>
+      <a href="/health/activities">All trails</a>
     </nav>
   </header>
 
@@ -353,7 +353,7 @@
             <div>
               <dt>{record.label}</dt>
               <dd>{record.value}</dd>
-              <a class="rec-seg" href="/trails/segments/{record.segment.id}">
+              <a class="rec-seg" href="/health/segments/{record.segment.id}">
                 {record.segment.name}
               </a>
             </div>
@@ -384,7 +384,7 @@
     <ol class="segment-list">
       {#each sorted as segment (segment.id)}
         <li>
-          <a class="segment-row" href="/trails/segments/{segment.id}" data-segment-row>
+          <a class="segment-row" href="/health/segments/{segment.id}" data-segment-row>
             <TrackThumb polyline={segment.polyline} />
             <div class="row-main">
               <span class="row-name">{segment.name}</span>

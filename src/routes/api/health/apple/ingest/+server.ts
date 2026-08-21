@@ -124,7 +124,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  // Workouts — the /trails half. Independent of the metrics loop above: a
+  // Workouts — the /health/activities half. Independent of the metrics loop above: a
   // failure in either must not cost the other its batch.
   let workoutResult = { workoutsSynced: 0, tracksSynced: 0, seriesSynced: 0, skipped: 0 };
   if (workouts.length) {
