@@ -54,54 +54,27 @@ permissions:
   contents: read
 
 jobs:
-  gate:
-    name: Gate (check + test)
+  # ── the cheap classifier every expensive job hangs off ────────────────────────
+  #
+  # This was three steps at the top of one big gate job. It is its own job now
+  # because the type check, the tests and the build run in PARALLEL and all three
+  # need the answer. One classification, one source of truth: three jobs each
+  # running the classifier could in principle disagree, and a gate whose skips
+  # disagree with each other is a gate nobody can reason about.
+  #
+  # It costs ~12s of serial time at the head of the run. That buys back far more
+  # than it spends, and it is the only serial hop in the new shape.
+  level:
+    name: Gate level
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    env:
-      DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
-      # stealth-scrape refuses to run anywhere but homeserv (a datacenter IP
-      # defeats the point of stealth scraping), so its tests only pass there.
-      # This is the documented escape hatch. Safe in the gate: the tests mock
-      # `runScrape`, so nothing is actually scraped — the flag only stops the
-      # host guard short-circuiting before the mock is reached.
-      SCRAPER_ALLOW_NON_HOMESERV: '1'
-      # Must exist at `svelte-kit sync` time, which BOTH the type check and the
-      # build trigger: SvelteKit generates `$env/static/public` from the
-      # environment, so without it the module has no members and
-      # jkai/+layout.svelte fails to type-check ("has no exported member"). It
-      # is the ONLY statically-imported env var. A placeholder is correct here —
-      # the gate never serves push notifications, and the real value is inlined
-      # by the deploy job below.
-      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
-
+    timeout-minutes: 5
+    outputs:
+      level: ${{ steps.level.outputs.level }}
+      shards: ${{ steps.level.outputs.shards }}
     steps:
-      # Postgres starts FIRST and in the BACKGROUND, before the checkout.
-      #
-      # It used to be a `services:` block, which GitHub initialises before the
-      # first step — measured at 23s of dead time, serialised ahead of the
-      # checkout and `npm ci` that do not need it. Started here, the image pull
-      # and boot overlap the ~29s of install that follows, and the wait happens
-      # where the database is actually first needed.
-      #
-      # pgvector, not plain postgres: the schema declares vector() columns and
-      # drizzle-kit push fails without the extension. Throwaway either way — the
-      # gate never touches the production DB.
-      - name: Start Postgres in the background
-        run: |
-          nohup docker run --rm --name ci-postgres \
-            -e POSTGRES_USER=app \
-            -e POSTGRES_PASSWORD=test \
-            -e POSTGRES_DB=strange_rambling \
-            -p 5432:5432 \
-            pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
-          echo "postgres pulling/booting in the background; waited on before the schema push"
-
       # Enough history to diff against a base, and no more. `fetch-depth: 0`
       # would be the obvious choice and is the wrong one: a full clone costs
       # ~10-20s on EVERY run, to enable a shortcut that fires on 3% of them.
-      # That is roughly break-even, which is not worth a new moving part.
       #
       # A small depth is sufficient because both classifiers only ever need the
       # immediate base. On a pull_request the checked-out ref is the merge
@@ -115,32 +88,167 @@ jobs:
       # The blast-radius axis. See scripts/gate-level.sh for why this is a
       # second axis rather than a third value on the risk tier.
       #
-      # EVERY skip below is written as `!= 'L1'`, never `== 'L2'`. If this step
-      # fails, is skipped, or emits nothing, the level is empty — and an empty
-      # string is `!= 'L1'`, so every expensive step still runs. The failure
-      # direction is a full gate, which costs time rather than safety. Written
-      # the other way round, an unrecognised level would silently skip the
-      # install, the tests and the build while the job still reported success.
+      # EVERY skip downstream is written as `!= 'L1'`, never `== 'L2'`. If this
+      # job fails the level is empty — and an empty string is `!= 'L1'`, so every
+      # expensive job still runs. The failure direction is a full gate, which
+      # costs time rather than safety. Written the other way round, an
+      # unrecognised level would silently skip the tests and the build while the
+      # run still reported success.
       - name: Classify gate level
         id: level
         run: |
           ./scripts/gate-level.sh HEAD^ | tee /tmp/level.txt
+          LEVEL="$(sed -n 's/^level=//p' /tmp/level.txt)"
+
+          # Same polarity as the skips. Shard the suite four ways unless the
+          # level is EXACTLY L2, where the run is already scoped to a few dozen
+          # files and splitting it four ways would pay four job set-ups to save
+          # nothing. Empty or unrecognised takes the expensive path.
+          if [ "$LEVEL" = "L2" ]; then SHARDS='[1]'; else SHARDS='[1,2,3,4]'; fi
+          echo "shards=$SHARDS" >> "$GITHUB_OUTPUT"
+          echo "shards=$SHARDS"
+
           {
-            echo "### Gate level: \`$(sed -n 's/^level=//p' /tmp/level.txt)\`"
+            echo "### Gate level: \`$LEVEL\`"
             echo ""
             echo "$(sed -n 's/^reason=//p' /tmp/level.txt)"
+            echo ""
+            echo "Test shards: \`$SHARDS\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Runs at EVERY level — these two ARE the whole gate for a documentation-
+      # only change, so they must not sit behind an `if`.
+      #
+      # No setup-node and no `npm ci`: both linters import nothing but `node:fs`,
+      # so the runner's preinstalled Node is enough. That is what makes an L1 gate
+      # ~25s instead of ~40s. They ran on Node 22 before this split and run on the
+      # image default now; both scripts only read files and compare strings, and
+      # any incompatibility would be a loud red gate rather than a silent pass.
+      - name: Lint gates
+        run: npm run gate:public-routes && npm run gate:font-sizes
+
+  # ── the type check ───────────────────────────────────────────────────────────
+  #
+  # NEVER SCOPED, at any level. A changed type signature breaks its consumers,
+  # not itself, so narrowing it would miss exactly what it exists to catch.
+  #
+  # Measured at ~94s in CI (from L2 runs, where the test half is scoped down to a
+  # few dozen files and the pair's wall clock is therefore this job alone). That
+  # makes it the floor of the whole gate: no amount of test sharding takes the
+  # gate below it.
+  typecheck:
+    name: Type check
+    needs: level
+    if: needs.level.outputs.level != 'L1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Must exist at `svelte-kit sync` time: SvelteKit generates
+      # `$env/static/public` from the environment, so without it the module has
+      # no members and jkai/+layout.svelte fails to type-check ("has no exported
+      # member"). It is the ONLY statically-imported env var.
+      #
+      # DELIBERATELY PER-JOB, never at workflow level. `prebuild` INLINES this
+      # value into the production bundle, and a process env var beats the .env it
+      # reads — hoisting this placeholder up one level would ship
+      # `ci-gate-placeholder` to production and silently break web push.
+      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        if: steps.level.outputs.level != 'L1'
         with:
           node-version: 22
           cache: npm
 
-      # Skipped at L1: both bespoke linters import only node: builtins, so a
-      # documentation-only change needs no dependency tree at all.
       - run: npm ci
-        if: steps.level.outputs.level != 'L1'
+
+      - name: Type check
+        run: ./scripts/gate-check.sh
+
+  # ── the tests, sharded ───────────────────────────────────────────────────────
+  #
+  # The suite was the gate's long pole: ~169s, of which only ~54s is running
+  # assertions. The other ~115s is module import — vitest re-evaluates the
+  # first-party `$lib` graph once per isolated test file, 593 times, and 298s of
+  # import CPU squeezed into a 169s wall means the runner is already saturated.
+  #
+  # Three cheaper-looking fixes were measured and rejected before reaching for
+  # more machines:
+  #   --no-isolate       47% faster and UNSAFE here. With a shared module
+  #                      registry `vi.mock` can silently fail to apply, so a test
+  #                      passes against the real module. ~112 files mock modules
+  #                      they never import.
+  #   --pool=threads     within noise.
+  #   deps.optimizer     within noise — the cost is first-party `$lib`, not
+  #                      node_modules, which is all the optimizer pre-bundles.
+  #
+  # So: spend runners. This repo is PUBLIC, standard runners are free, and
+  # everything expensive used to be crammed into one of them. Sharding raises
+  # TOTAL cpu — each shard re-imports its own graph — and cuts wall clock, which
+  # is the trade a free runner pool makes worth taking.
+  #
+  # Four shards, not two: the suite grew 466 -> 593 files in eleven days, and the
+  # shard count is the dial that keeps the test leg under the type check's ~94s
+  # floor as it keeps growing.
+  test:
+    name: Tests
+    needs: level
+    if: needs.level.outputs.level != 'L1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Report every failing shard rather than cancelling the others on the first
+      # red. The aggregate result is `failure` either way, so this costs nothing
+      # and turns one failure report into all of them.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.level.outputs.shards) }}
+    env:
+      DATABASE_URL: postgresql://app:test@localhost:5432/strange_rambling
+      # stealth-scrape refuses to run anywhere but homeserv (a datacenter IP
+      # defeats the point of stealth scraping), so its tests only pass there.
+      # This is the documented escape hatch. Safe in the gate: the tests mock
+      # `runScrape`, so nothing is actually scraped — the flag only stops the
+      # host guard short-circuiting before the mock is reached.
+      SCRAPER_ALLOW_NON_HOMESERV: '1'
+      # See the note in `typecheck`. Per-job, deliberately.
+      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+    steps:
+      # Postgres starts FIRST and in the BACKGROUND, before the checkout, so the
+      # image pull and boot overlap the install that follows.
+      #
+      # EVERY shard gets one. Exactly one test file reaches a real Postgres
+      # (tests/lib/integrations/credentials.test.ts) and it has NO skip guard —
+      # its beforeEach deletes rows unconditionally — but which shard that file
+      # lands in is an implementation detail of vitest's file ordering. Pinning it
+      # to shard 1 would be a silent trap the first time the ordering changed.
+      # The container costs ~0 wall clock because it boots under `npm ci`.
+      #
+      # pgvector, not plain postgres: the schema declares vector() columns and
+      # drizzle-kit push fails without the extension.
+      - name: Start Postgres in the background
+        run: |
+          nohup docker run --rm --name ci-postgres \
+            -e POSTGRES_USER=app \
+            -e POSTGRES_PASSWORD=test \
+            -e POSTGRES_DB=strange_rambling \
+            -p 5432:5432 \
+            pgvector/pgvector:pg16 > /tmp/ci-postgres.log 2>&1 &
+          echo "postgres pulling/booting in the background; waited on before the schema push"
+
+      # Depth 5, not 1: at L2 the selector diffs HEAD^ to decide which files the
+      # change can reach.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
 
       # `docker exec ... pg_isready` is NOT a sufficient readiness test, and
       # using it turned master red on run 31339327336: the step reported
@@ -150,14 +258,11 @@ jobs:
       # The postgres image runs a TEMPORARY server during initdb so that init
       # scripts can run against it. pg_isready happily succeeds against that
       # server; it is then shut down and restarted for real, and any client
-      # connected in the gap is dropped. The old `services:` block hid this
-      # because its health check had a 10s interval, which usually stepped over
-      # the window rather than into it.
+      # connected in the gap is dropped.
       #
       # Poll the condition the next step actually needs — a query, through the
       # published port, over the same URL the tests use.
       - name: Wait for Postgres
-        if: steps.level.outputs.level != 'L1'
         run: |
           for i in $(seq 1 90); do
             if psql "$DATABASE_URL" -c 'select 1' >/dev/null 2>&1; then
@@ -171,57 +276,141 @@ jobs:
           cat /tmp/ci-postgres.log 2>/dev/null | tail -40 || true
           exit 1
 
-      # The database is here for the schema push, not for the tests. Exactly one
-      # test file reaches a real Postgres (tests/lib/integrations/credentials.test.ts)
-      # and — contrary to what this comment used to claim — it has NO skip guard:
-      # its beforeEach deletes rows unconditionally, so it hard-fails without a
-      # database rather than skipping. Anyone reasoning about removing the
-      # container needs both facts.
       - name: Prepare test database
-        if: steps.level.outputs.level != 'L1'
         run: |
           psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
           CI=1 FORCE_COLOR=0 npx drizzle-kit push --config=drizzle.config.ts --force
 
-      # Cheap and near-instant (~0.4s for the pair), so they run first and fail
-      # fast before anything expensive starts. Runs at EVERY level — these two
-      # are the whole gate for a documentation-only change.
-      - name: Lint gates
-        run: npm run gate:public-routes && npm run gate:font-sizes && npm run gate:schema-imports
-
-      # svelte-check and vitest, concurrently. See scripts/gate-concurrent.sh for
-      # why the exit-code handling in there is written the long way round.
-      # GATE_LEVEL scopes only the TEST half, and only at L2. The type check is
-      # never scoped — a changed type signature breaks its consumers, not itself.
-      # gate-concurrent.sh treats any level other than exactly "L2" as "run the
-      # whole suite", so an unset or unrecognised value costs time rather than
-      # coverage.
-      - name: Type check + tests
-        if: steps.level.outputs.level != 'L1'
-        run: ./scripts/gate-concurrent.sh
+      - name: Tests
+        run: ./scripts/gate-test-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}"
         env:
-          GATE_LEVEL: ${{ steps.level.outputs.level }}
+          GATE_LEVEL: ${{ needs.level.outputs.level }}
           GATE_BASE: HEAD^
 
-      # The build is a PROOF here, not an artifact — the gate deletes it. On a
-      # master push that proof is redundant: the VPS rebuilds the identical tree
-      # minutes later in the deploy job, and its Build step runs BEFORE
-      # ci-deploy.sh, whose first write to production is an rsync. A broken build
-      # therefore fails the deploy with production untouched.
-      #
-      # The guard is `!= push`, deliberately, so that a workflow_dispatch re-run
-      # still builds. Writing it as `== pull_request` would leave a manual
-      # dispatch with no build check from EITHER job.
-      #
+  # ── the build ────────────────────────────────────────────────────────────────
+  #
+  # The build is a PROOF here, not an artifact — the job deletes it. It used to
+  # run at the END of the gate job, adding ~99s to every PR after the tests had
+  # already finished. Nothing in it depends on the tests passing, so it is its own
+  # job and overlaps them.
+  #
+  # On a master push that proof is redundant: the VPS rebuilds the identical tree
+  # minutes later in `prebuild`, and its Build step runs BEFORE ci-release.sh,
+  # whose first write to production is an rsync. A broken build therefore fails
+  # the deploy with production untouched.
+  #
+  # The guard is `!= push`, deliberately, so that a workflow_dispatch re-run still
+  # builds. Writing it as `== pull_request` would leave a manual dispatch with no
+  # build check from EITHER job.
+  build:
+    name: Build
+    needs: level
+    if: github.event_name != 'push' && needs.level.outputs.level != 'L1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # See the note in `typecheck`. Per-job, deliberately.
+      PUBLIC_VAPID_PUBLIC_KEY: ci-gate-placeholder
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
       # SR_GATE_STUB_ADAPTER swaps adapter-node for a no-op, cutting ~93s. The
-      # bundle is still built and checked — only the packaging of a server
-      # bundle nobody reads is skipped. See svelte.config.js. Deliberately set
-      # here and nowhere else: on the VPS this flag would deploy an empty build.
+      # bundle is still built and checked — only the packaging of a server bundle
+      # nobody reads is skipped. See svelte.config.js. Deliberately set here and
+      # nowhere else: on the VPS this flag would deploy an empty build.
       - name: Build
-        if: github.event_name != 'push' && steps.level.outputs.level != 'L1'
         run: npm run gate:build
         env:
           SR_GATE_STUB_ADAPTER: '1'
+
+  # ── the verdict ──────────────────────────────────────────────────────────────
+  #
+  # THE NAME OF THIS JOB IS LOAD-BEARING. `Gate (check + test)` is the context
+  # named by the required-status-check ruleset on master (id 20615626) and by
+  # `needs: gate` on release and auto-merge. Splitting one job into four kept that
+  # name here precisely so neither the ruleset nor the deploy wiring had to change
+  # — rename it and master silently stops requiring a gate at all.
+  #
+  # `!cancelled()` rather than `always()`. `always()` is true for a CANCELLED run
+  # too, and `release` deliberately avoids it for that reason: a cancelled run
+  # that still produced a green gate would turn cancel into a no-op on the one job
+  # that touches production.
+  gate:
+    name: Gate (check + test)
+    needs: [level, typecheck, test, build]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verdict
+        env:
+          LEVEL: ${{ needs.level.outputs.level }}
+          R_LEVEL: ${{ needs.level.result }}
+          R_TYPECHECK: ${{ needs.typecheck.result }}
+          R_TEST: ${{ needs.test.result }}
+          R_BUILD: ${{ needs.build.result }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          FAIL=0
+
+          # The classifier must have succeeded. Every skip below is justified by
+          # its output, and an empty level means none of them can be trusted.
+          if [ "$R_LEVEL" != "success" ]; then
+            echo "::error::gate level job did not succeed (result=$R_LEVEL)"
+            FAIL=1
+          fi
+
+          # ALLOW-LIST, not a deny-list. A result passes only if it is `success`
+          # or a skip this workflow actually asked for. `failure`, `cancelled`,
+          # and anything GitHub invents later all fall through to red.
+          #
+          # Written the other way round — "fail if result == failure" — a
+          # cancelled shard or an unrecognised state would read as a passing
+          # gate. That is the single failure this job exists to prevent, and it
+          # is the same polarity trap as `!= 'L1'` elsewhere in this file.
+          require() {
+            case "$2" in
+              success) echo "  $1: success" ;;
+              skipped)
+                if [ "$3" = "yes" ]; then
+                  echo "  $1: skipped (expected at this level)"
+                else
+                  echo "::error::$1 was skipped, but this level requires it"
+                  FAIL=1
+                fi
+                ;;
+              *) echo "::error::$1: $2"; FAIL=1 ;;
+            esac
+          }
+
+          # L1 is documentation only — the two linters in the level job ARE the
+          # gate, and they already ran unconditionally.
+          if [ "$LEVEL" = "L1" ]; then SKIP_OK=yes; else SKIP_OK=no; fi
+          require "type check" "$R_TYPECHECK" "$SKIP_OK"
+          require "tests"      "$R_TEST"      "$SKIP_OK"
+
+          # The build is additionally skipped on a master push, where prebuild
+          # rebuilds the identical tree before anything reaches production.
+          if [ "$LEVEL" = "L1" ] || [ "$EVENT" = "push" ]; then
+            BUILD_SKIP_OK=yes
+          else
+            BUILD_SKIP_OK=no
+          fi
+          require "build" "$R_BUILD" "$BUILD_SKIP_OK"
+
+          echo
+          if [ "$FAIL" -ne 0 ]; then
+            echo "==> GATE FAILED (level=${LEVEL:-<unset>})"
+            exit 1
+          fi
+          echo "==> gate passed (level=${LEVEL:-<unset>})"
 
   # Building is ~160s of work nobody is waiting on, and it used to sit behind the
   # gate purely because it shared a job with the ship. It does not need the
@@ -239,44 +428,9 @@ jobs:
     runs-on: [self-hosted, srmain]
     timeout-minutes: 30
     steps:
-      # git, NOT actions/checkout, on the self-hosted runner only.
-      #
-      # The action is fetched as a tarball from codeload.github.com at the start
-      # of every job. On 2026-08-17 codeload began 429-ing this runner's IP and
-      # stayed there ~25 minutes: `prebuild` died in "Set up job", before a line
-      # of our own code ran, and took the deploy with it. Nothing was wrong with
-      # the commit — production simply could not be reached. github.com itself
-      # returned 200 throughout; only the tarball CDN was limited, and the
-      # runner wipes `_work/_actions` at job start so the action cannot be
-      # pre-seeded.
-      #
-      # Inlined rather than put in scripts/: this runs BEFORE the repo exists in
-      # the workspace, so a checked-in script could not be the thing that checks
-      # the repo out. The workflow file is delivered by the runner itself.
-      #
-      # The GitHub-hosted jobs (gate, risk-tier, auto-merge) deliberately keep
-      # using the action — it ships on their image, so it costs them no network
-      # call and gets the usual maintenance.
-      #
-      # Detached at the exact triggering sha, never a branch name: a branch can
-      # move between trigger and run, and the deploy must ship the commit that
-      # was tested. Full history because ci-release.sh diffs the previously
-      # deployed sha against HEAD.
-      - name: Checkout (git, not the action)
-        run: |
-          set -euo pipefail
-          if [ ! -d .git ]; then
-            git init -q .
-            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          fi
-          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --tags --force origin
-          git -c advice.detachedHead=false checkout --quiet --force "${GITHUB_SHA}"
-          # Leftovers from a previous job on this reused workspace would
-          # otherwise be packaged into the release. node_modules is preserved:
-          # npm ci re-creates it and deleting it costs minutes every deploy.
-          git clean -qfd -e node_modules
-          echo "checked out $(git rev-parse --short HEAD)"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Runtime versions
         run: node --version && npm --version
@@ -334,44 +488,13 @@ jobs:
     runs-on: [self-hosted, srmain]
     timeout-minutes: 15
     steps:
-      # git, NOT actions/checkout, on the self-hosted runner only.
-      #
-      # The action is fetched as a tarball from codeload.github.com at the start
-      # of every job. On 2026-08-17 codeload began 429-ing this runner's IP and
-      # stayed there ~25 minutes: `prebuild` died in "Set up job", before a line
-      # of our own code ran, and took the deploy with it. Nothing was wrong with
-      # the commit — production simply could not be reached. github.com itself
-      # returned 200 throughout; only the tarball CDN was limited, and the
-      # runner wipes `_work/_actions` at job start so the action cannot be
-      # pre-seeded.
-      #
-      # Inlined rather than put in scripts/: this runs BEFORE the repo exists in
-      # the workspace, so a checked-in script could not be the thing that checks
-      # the repo out. The workflow file is delivered by the runner itself.
-      #
-      # The GitHub-hosted jobs (gate, risk-tier, auto-merge) deliberately keep
-      # using the action — it ships on their image, so it costs them no network
-      # call and gets the usual maintenance.
-      #
-      # Detached at the exact triggering sha, never a branch name: a branch can
-      # move between trigger and run, and the deploy must ship the commit that
-      # was tested. Full history because ci-release.sh diffs the previously
-      # deployed sha against HEAD.
-      - name: Checkout (git, not the action)
-        run: |
-          set -euo pipefail
-          if [ ! -d .git ]; then
-            git init -q .
-            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          fi
-          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --quiet --tags --force origin
-          git -c advice.detachedHead=false checkout --quiet --force "${GITHUB_SHA}"
-          # Leftovers from a previous job on this reused workspace would
-          # otherwise be packaged into the release. node_modules is preserved:
-          # npm ci re-creates it and deleting it costs minutes every deploy.
-          git clean -qfd -e node_modules
-          echo "checked out $(git rev-parse --short HEAD)"
+      # Full history: scripts/ci-release.sh records the release log by diffing
+      # the previously-deployed sha against HEAD, and the default depth-1
+      # checkout has no such commit to diff against. The self-hosted runner
+      # reuses its workspace, so this is a one-off cost rather than a full clone.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # No setup-node and, deliberately, no `npm ci`. Nothing this job runs
       # needs node_modules: the release-log ingest imports only node: builtins
