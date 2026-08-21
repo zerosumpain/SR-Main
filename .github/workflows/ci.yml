@@ -474,17 +474,36 @@ jobs:
 
   release:
     name: Release (VPS)
-    # Both, and plain `needs:` semantics — the job runs only when BOTH succeed,
-    # and is cancelled with the run. Deliberately no `always()`: it returns true
-    # even for a cancelled run, which would turn cancel into a no-op on the one
-    # job that touches production.
+    # A SKIP ANYWHERE UPSTREAM SKIPS THIS JOB, and that is not obvious from
+    # `needs` alone. GitHub propagates `skipped` down the needs graph: a job runs
+    # only if every job it needs succeeded, and a job that itself only ran
+    # because of `always()` / `!cancelled()` does NOT clear the skip for its own
+    # dependents. `gate` needs `build`, and `build` is deliberately skipped on a
+    # master push — so with plain `needs` this job silently stopped deploying the
+    # moment the gate was split into parallel jobs. Merged, green, and never
+    # shipped, which is the exact failure mode this repo has been bitten by
+    # before. Seen for real on run 32469500847.
+    #
+    # So the dependency contract is written out rather than implied: the results
+    # are asserted explicitly, which is immune to a skip appearing anywhere in
+    # the graph in future.
+    #
+    # `!cancelled()` and NOT `always()`. always() is true for a cancelled run
+    # too, which would turn cancel into a no-op on the one job that touches
+    # production — that was the original reason for avoiding it and it still
+    # holds. This keeps the property while dropping the accidental one.
     needs: [gate, prebuild]
     # The ref guard is on BOTH arms, deliberately. It used to sit only on the push arm, which
     # meant `gh workflow run CI --ref <any-branch>` deployed that branch straight to
     # production — the same class of unsanctioned deploy path that once replaced production
     # configuration with a laptop's and cost 33 hours. Dispatch stays available as the manual
     # re-trigger for when GitHub does not fire the push event, but it can only ever ship master.
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
+      needs.prebuild.result == 'success' &&
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: [self-hosted, srmain]
     timeout-minutes: 15
     steps:
@@ -559,7 +578,15 @@ jobs:
     # that `on: pull_request` does not include `ready_for_review`, so marking a
     # rescue PR ready does not re-run this job — un-drafted rescues are merged
     # by hand on purpose.
+    #
+    # `needs.gate.result` is asserted for the same reason as on `release`: an L1
+    # pull request skips `build`, that skip propagates through `gate`, and with
+    # plain `needs` this job would quietly stop merging documentation-only agent
+    # branches. risk-tier needs no such assertion — if it fails or is skipped its
+    # `tier` output is empty, which is already not 'low'.
     if: >-
+      !cancelled() &&
+      needs.gate.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.draft == false &&
       needs.risk-tier.outputs.tier == 'low' &&
