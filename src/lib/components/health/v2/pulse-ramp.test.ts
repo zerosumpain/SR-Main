@@ -443,12 +443,27 @@ describe('PulseGrid renders what the helpers decided', () => {
     expect(Number(bad?.[1])).toBeGreaterThan(Number(bad?.[2]));
   });
 
-  it('puts today\'s value in the row label and the range in the tooltip, not the label', () => {
+  it('labels a row with its name and nothing else — no value, no units line', () => {
     const body = html(Array.from({ length: 30 }, (_, i) => day(i)));
-    // Day 29: rhr = 50 + (29 % 9) = 52.
-    expect(row(body, 'RESTING HR')).toContain('>52bpm</span>');
-    // The min–max that used to sit in the row meta has left it.
-    expect(row(body, 'RESTING HR')).not.toContain('50bpm–58bpm');
+    const labels = body.match(/<div class="h-pg-rowlabel[^"]*"[^>]*>[\s\S]*?<\/div>/g) ?? [];
+    const label = labels.find((l) => l.includes('RESTING HR')) ?? '';
+    expect(label).toContain('RESTING HR');
+    // Today's reading is gone from the label: it was making every label two
+    // lines tall next to a 30px tile, which is what opened a band of empty
+    // ground under every row. Day 29: rhr = 50 + (29 % 9) = 52.
+    expect(label).not.toContain('52bpm');
+    // So is the units line, and so is the min–max that preceded it.
+    expect(label).not.toContain('bpm</span>');
+    expect(label).not.toContain('50bpm–58bpm');
+  });
+
+  it('still reaches today\'s value and the row range through the cells', () => {
+    const rhr = row(html(Array.from({ length: 30 }, (_, i) => day(i))), 'RESTING HR');
+    // Nothing was lost by emptying the label — the last cell names the day, the
+    // reading and the fact that it is today, and the tooltip carries the range.
+    const today = rhr.match(/aria-label="[^"]*· today"/)?.[0] ?? '';
+    expect(today).toContain('RESTING HR 52bpm');
+    expect(today).toContain('AUG 21');
   });
 
   it('hatches the missing sentinel instead of colouring it as a very bad day', () => {

@@ -8,6 +8,7 @@
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
   import HighlightBadge from '$lib/components/health/HighlightBadge.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
+  import ActivityCorrections from '$lib/components/health/ActivityCorrections.svelte';
   import {
     formatDistance,
     formatDuration,
@@ -24,6 +25,16 @@
   let { data } = $props();
 
   const a = $derived(data.activity);
+
+  /** Just the fields a correction reads and writes. */
+  const activity = $derived({
+    id: a.id,
+    name: a.name,
+    activityType: a.activityType,
+    sourceType: a.sourceType,
+    typeOverride: a.typeOverride,
+    excludedFromSegments: a.excludedFromSegments,
+  });
   const phys = $derived(data.physio);
   const pace = $derived(isPaceSport(a.activityType));
 
@@ -119,11 +130,25 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Health · {activityLabel(a.activityType)}</div>
+      <div class="kicker">
+        Health · {activityLabel(a.activityType)}
+        {#if a.typeOverride}<span class="flag" title="Corrected from {activityLabel(a.sourceType)}"
+            >corrected</span
+          >{/if}
+        {#if a.excludedFromSegments}<span class="flag" title="Left out of segment analysis"
+            >excluded</span
+          >{/if}
+      </div>
       <h1>{a.name}</h1>
       <p class="sub">{formatLocalDate(a.startDateLocal, a.startDate)}</p>
     </div>
-    <a class="back-link" href="/health/activities">All activities</a>
+    <div class="hdr-actions">
+      <a class="back-link" href="/health/activities">All activities</a>
+      <!-- The same corrections the `···` on the list opens. They belong here
+           too: this is the page you are on when you notice the phone called a
+           ride a walk. -->
+      <ActivityCorrections {activity} />
+    </div>
   </header>
 
   <section class="nm-sec stat-grid">
@@ -449,6 +474,25 @@
   }
   .back-link:hover {
     text-decoration: underline;
+  }
+  .hdr-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-shrink: 0;
+  }
+  /* Same treatment as the list's row flags, so a corrected outing reads the
+     same whichever page you meet it on. */
+  .flag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--trend-down);
+    border: 1px solid var(--trend-down);
+    padding: 0 0.25rem;
   }
 
   /* Fixed column count rather than auto-fit: eight stats against an auto-fit

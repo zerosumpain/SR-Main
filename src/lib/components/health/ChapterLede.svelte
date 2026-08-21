@@ -18,7 +18,9 @@
     line-height: 1.5;
     color: var(--text-secondary);
     margin: 0 0 28px 0;
-    max-width: 62ch;
+    /* No measure cap. The chapter is the column: a lede that stopped at 62ch
+       left half the chapter empty beside it and read as a pull-quote rather
+       than as the sentence the charts below are answering. */
     border-left: 2px solid var(--accent);
     padding-left: 18px;
   }

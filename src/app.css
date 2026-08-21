@@ -663,13 +663,15 @@ a {
   }
 }
 
+/* The explanatory sentence under a chart or a panel. No measure cap: on
+   /health these sit directly beneath a full-width chart, and a 68ch column
+   under a 1480px chart read as an aside rather than as its caption. */
 .h-note {
   font-family: var(--font-body);
   font-size: var(--fs-body-sm);
   line-height: 1.55;
   color: var(--text-muted);
   margin: 1.25rem 0 0 0;
-  max-width: 68ch;
 }
 
 /* ============================================================
