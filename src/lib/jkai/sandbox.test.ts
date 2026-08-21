@@ -5,6 +5,9 @@ import {
   writeFileInSandboxChunked,
   seedDevCommand,
   parseBuiltChapterCount,
+  reclaimDepsCommand,
+  parseReclaimedBytes,
+  depsMissingCommand,
   type ExecResult,
 } from './sandbox';
 
@@ -178,5 +181,65 @@ describe('writeFileInSandboxChunked cleanup on failure', () => {
 
     expect(result.exitCode).toBe(0);
     expect(cleanupCall(calls)).toBeUndefined();
+  });
+});
+
+// The reclaim sweep runs `rm -rf` inside workspaces that hold uncommitted
+// agent work — 23 of them did when this was written. What it deletes is
+// therefore a property to pin, not something to re-read carefully each time.
+describe('reclaimDepsCommand', () => {
+  const BASE = '/home/jkai/workspace/b1';
+
+  it('deletes the two node_modules trees and nothing else', () => {
+    const cmd = reclaimDepsCommand(BASE);
+    const removed = [...cmd.matchAll(/rm -rf ([^;]+)/g)]
+      .flatMap((m) => m[1].trim().split(/\s+/))
+      .filter((tok) => tok.startsWith('/')); // drop the 2>/dev/null redirect
+    expect(removed).toEqual([`${BASE}/dev/node_modules`, `${BASE}/live/node_modules`]);
+  });
+
+  it.each(['dev/src', 'live/src', 'dev/.git', 'live/.git', 'snapshots', 'dev/build'])(
+    'never targets %s',
+    (path) => {
+      expect(reclaimDepsCommand(BASE)).not.toContain(`rm -rf ${BASE}/${path}`);
+    },
+  );
+
+  it('sizes before it deletes, or the freed total is always zero', () => {
+    const cmd = reclaimDepsCommand(BASE);
+    expect(cmd.indexOf('du -sb')).toBeLessThan(cmd.indexOf('rm -rf'));
+  });
+});
+
+describe('parseReclaimedBytes', () => {
+  it('reads du total from the first line, ignoring the trailing marker', () => {
+    expect(parseReclaimedBytes('2684354560\ndone\n')).toBe(2684354560);
+  });
+
+  // An unreadable total must under-report, never invent a number: the figure
+  // is logged as reclaimed GB and a wrong one hides a sweep that did nothing.
+  it.each([[''], ['done'], ['   '], ['-5\ndone'], [undefined as unknown as string]])(
+    'falls back to 0 for %o',
+    (stdout) => {
+      expect(parseReclaimedBytes(stdout)).toBe(0);
+    },
+  );
+});
+
+describe('depsMissingCommand', () => {
+  const DEV = '/home/jkai/workspace/b1/dev';
+
+  // Both conditions matter. A plain-HTML build has no package.json, and
+  // reporting it "missing" would run npm install there on every iteration
+  // forever.
+  it('requires both a package.json and an absent node_modules', () => {
+    const cmd = depsMissingCommand(DEV);
+    expect(cmd).toContain(`[ -f ${DEV}/package.json ]`);
+    expect(cmd).toContain(`[ ! -d ${DEV}/node_modules ]`);
+    expect(cmd).toContain('&&');
+  });
+
+  it('echoes ok in the negative case, so a failed check never installs', () => {
+    expect(depsMissingCommand(DEV)).toMatch(/else echo ok/);
   });
 });

@@ -10,6 +10,7 @@ import {
   allocatePort,
   ensureSandboxRunning,
   ensureWorkspace,
+  ensureDepsInstalled,
   syncDesignAssets,
   syncJkaiExtension,
 } from './sandbox';
@@ -152,6 +153,11 @@ export async function executeIteration(
   // (admin action, image rebuild, crash). Re-verify every time.
   await ensureSandboxRunning();
   await ensureWorkspace(build.id);
+  // A finished build that gets continued may have had its node_modules
+  // reclaimed (see reclaimFinishedWorkspaces). Put the tree back before the
+  // agent runs — the system prompt promises it that `npm install` has already
+  // happened, and an unresolvable import reads to it as broken code.
+  await ensureDepsInstalled(build.id);
 
   const assignedPort = await allocatePort(build.id);
 

@@ -1080,6 +1080,90 @@ export async function promoteDevToLive(buildId: string): Promise<void> {
 }
 
 /**
+ * Delete `node_modules` from a finished build's dev/ and live/ trees.
+ *
+ * Nothing has ever pruned a build workspace, so they accumulate: on
+ * 2026-08-21 the VPS root disk hit 90% with 74G under /home/jkai/workspace,
+ * and **52G of that was node_modules**. Source, `.git`, build output,
+ * `.svelte-kit` and snapshots together came to ~6G. So this removes only the
+ * reinstallable part and leaves every byte an agent actually wrote — which
+ * matters, because 23 of those workspaces held uncommitted feature work.
+ *
+ * Reversible by design, three ways: `ensureDepsInstalled` restores the tree
+ * before the next iteration, the publish path already runs
+ * `npm install --prefer-offline` on live/ before building, and static serving
+ * reads files out of live/ rather than node_modules — so a reclaimed
+ * published build still serves.
+ *
+ * Returns bytes freed, 0 if there was nothing to remove.
+ */
+export async function reclaimWorkspaceDeps(buildId: string): Promise<number> {
+  const base = `/home/jkai/workspace/${buildId}`;
+  const res = await execInSandbox(reclaimDepsCommand(base), 120000);
+  return parseReclaimedBytes(res.stdout);
+}
+
+/**
+ * Size-then-delete in one round trip, split out so a test can pin exactly what
+ * it deletes. This runs `rm -rf` inside a tree holding uncommitted agent work,
+ * so "only ever the two node_modules paths" is a property worth a test rather
+ * than a careful read.
+ *
+ * `du` writes the byte total on line 1. A missing tree errors to a suppressed
+ * stderr and awk still prints 0, so re-running against an already-reclaimed
+ * build is a no-op rather than a failure.
+ */
+export function reclaimDepsCommand(base: string): string {
+  return (
+    `du -sb ${base}/dev/node_modules ${base}/live/node_modules 2>/dev/null | awk '{s+=$1} END {print s+0}'; ` +
+    `rm -rf ${base}/dev/node_modules ${base}/live/node_modules 2>/dev/null; echo done`
+  );
+}
+
+/** Byte total from `reclaimDepsCommand`'s first output line; 0 if unreadable. */
+export function parseReclaimedBytes(stdout: string): number {
+  const first = ((stdout ?? '').trim().split('\n')[0] ?? '').trim();
+  const n = Number.parseInt(first, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Reinstall dev/node_modules when it is missing but package.json says it
+ * should be there. Returns true if it actually installed.
+ *
+ * The counterpart to `reclaimWorkspaceDeps`: a Continue or resume on a
+ * reclaimed build must not hand the agent a tree whose imports don't resolve —
+ * and the system prompt flatly tells it "npm install has already been run in
+ * your workspace". It self-heals every other cause of a missing tree too (an
+ * interrupted install, a manual delete, an image rebuild).
+ *
+ * `--include=dev` is not optional: with NODE_ENV=production in the sandbox a
+ * plain `npm install` skips devDependencies and the gate's test runner is
+ * missing. Same reason as ensureGitWorkspace's install.
+ */
+export async function ensureDepsInstalled(buildId: string): Promise<boolean> {
+  const dev = `/home/jkai/workspace/${buildId}/dev`;
+  const check = await execInSandbox(depsMissingCommand(dev), 10000);
+  if (!check.stdout.includes('missing')) return false;
+  await execInSandbox(installDepsCommand(dev), 300000);
+  return true;
+}
+
+/**
+ * Echoes `missing` only when there is a package.json AND no node_modules.
+ * A workspace with no package.json (a plain-HTML build) must read as `ok` —
+ * running npm install there would fail every iteration forever.
+ */
+export function depsMissingCommand(dev: string): string {
+  return `if [ -f ${dev}/package.json ] && [ ! -d ${dev}/node_modules ]; then echo missing; else echo ok; fi`;
+}
+
+/** The reinstall itself. `--include=dev` is load-bearing — see ensureDepsInstalled. */
+export function installDepsCommand(dev: string): string {
+  return `cd ${dev} && npm install --include=dev --prefer-offline 2>&1 | tail -3`;
+}
+
+/**
  * Restore dev/ from the last promoted state — without destroying work that was
  * never promoted.
  *

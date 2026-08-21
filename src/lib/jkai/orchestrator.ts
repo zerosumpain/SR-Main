@@ -1,6 +1,6 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations } from '$lib/db/schema';
-import { eq, and, desc, asc, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, desc, asc, isNotNull, sql, inArray } from 'drizzle-orm';
 import { checkBudget } from './budget';
 import {
   ensureSandboxRunning,
@@ -14,6 +14,7 @@ import {
   writeStudioSpine,
   snapshotIteration,
   execInSandbox,
+  reclaimWorkspaceDeps,
   type GitTargetConfig,
 } from './sandbox';
 import { manageServeConfig } from './serve-manager';
@@ -46,6 +47,17 @@ const LIVENESS_PING_MS = 15_000;
  * Above the gate's 1_200_000 ms cap with room to spare — see reapStaleBuilds.
  */
 const STALE_BUILD_MS = 30 * 60_000;
+
+/**
+ * How long a finished build keeps its `node_modules` before the reclaim sweep
+ * takes it back.
+ *
+ * Long enough that a same-day Continue doesn't pay for a reinstall, short
+ * enough that a backlog clears on the first pass — when this was written every
+ * surviving workspace was 2–13 days old, so 24h reclaims the lot immediately
+ * while still protecting anything finished this session.
+ */
+const RECLAIM_AFTER_MS = 24 * 60 * 60_000;
 
 /**
  * Kit files the studio gate checks are actually served (see runStudioGate's
@@ -580,6 +592,47 @@ class Orchestrator {
     }
     if (reaped > 0) console.log(`[orchestrator] reaped ${reaped} abandoned build(s)`);
     return reaped;
+  }
+
+  /**
+   * Reclaim `node_modules` from builds that have finished. Returns bytes freed.
+   *
+   * A sweep rather than a hook on completion, for two reasons. There are nine
+   * separate places in this file that write a terminal status, so a hook would
+   * have to be added — and kept — at all nine. And a sweep also catches every
+   * build that finished before this existed, which is the entire backlog the
+   * feature was written for.
+   *
+   * Deliberately NOT "delete the workspace": a finished build stays viewable,
+   * served out of live/, and 23 workspaces were holding uncommitted agent work
+   * when this was written. Only the reinstallable part goes — see
+   * `reclaimWorkspaceDeps`.
+   */
+  async reclaimFinishedWorkspaces(): Promise<number> {
+    const cutoff = new Date(Date.now() - RECLAIM_AFTER_MS);
+    const finished = await db
+      .select({ id: jkaiBuilds.id, updatedAt: jkaiBuilds.updatedAt })
+      .from(jkaiBuilds)
+      .where(inArray(jkaiBuilds.status, ['completed', 'failed']));
+
+    let freed = 0;
+    let count = 0;
+    for (const b of finished) {
+      if (this.activeBuildId === b.id) continue; // ours, and possibly resuming
+      if (!b.updatedAt || b.updatedAt > cutoff) continue;
+      // One build's sandbox failure must not abort the sweep for the rest.
+      const bytes = await reclaimWorkspaceDeps(b.id).catch(() => 0);
+      if (bytes > 0) {
+        freed += bytes;
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.log(
+        `[orchestrator] reclaimed ${(freed / 1e9).toFixed(1)}GB of node_modules from ${count} finished build(s)`,
+      );
+    }
+    return freed;
   }
 
   private async initAndPlan(buildId: string): Promise<void> {

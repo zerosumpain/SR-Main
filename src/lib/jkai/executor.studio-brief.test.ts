@@ -50,6 +50,7 @@ vi.mock('./sandbox', () => ({
   allocatePort: async () => 8123,
   ensureSandboxRunning: async () => {},
   ensureWorkspace: async () => {},
+  ensureDepsInstalled: async () => false,
   syncDesignAssets: async () => '/ds',
   syncJkaiExtension: async () => '/ext',
   syncExplainerKit: async () => '/kit',

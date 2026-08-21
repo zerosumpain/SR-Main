@@ -15,6 +15,13 @@ import { orchestrator } from '$lib/jkai/orchestrator';
 /** How often to sweep for builds whose liveness ping stopped. */
 const REAPER_INTERVAL_MS = 5 * 60_000;
 
+/**
+ * How often to reclaim node_modules from finished builds. Hourly is plenty —
+ * the sweep only acts on builds idle for a day (RECLAIM_AFTER_MS), so a
+ * tighter interval would just re-scan the same rows.
+ */
+const RECLAIM_INTERVAL_MS = 60 * 60_000;
+
 const xdg = process.env.XDG_RUNTIME_DIR;
 const sock =
   process.env.JKAI_BUILDER_SOCKET ??
@@ -48,6 +55,16 @@ async function main(): Promise<void> {
       .reapStaleBuilds()
       .catch((err) => console.error('[jkai-builder] stale-build sweep failed:', err));
   }, REAPER_INTERVAL_MS);
+
+  // Build workspaces are ~3G each and nothing has ever pruned them; on
+  // 2026-08-21 they were 74G and the VPS root disk hit 90%, which fails CI
+  // because the prebuild runs on this box. Reclaim the reinstallable part
+  // (node_modules, ~70% of a workspace) once a build has been finished a day.
+  setInterval(() => {
+    void orchestrator
+      .reclaimFinishedWorkspaces()
+      .catch((err) => console.error('[jkai-builder] workspace reclaim sweep failed:', err));
+  }, RECLAIM_INTERVAL_MS);
 }
 
 main().catch((err) => {
