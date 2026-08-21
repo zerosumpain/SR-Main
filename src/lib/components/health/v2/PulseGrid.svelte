@@ -24,22 +24,27 @@
     maxTilePx = 30,
   }: { series: HealthDay[]; maxTilePx?: number } = $props();
 
+  // The row label is the row's NAME and nothing else. It used to carry today's
+  // reading and a units line under it, which made every label two lines tall
+  // while the tiles beside it are capped at 30px — so the grid rendered as
+  // seven bands of tiles each floating above a band of empty ground. Units and
+  // the day's value both live in the hover tooltip, which is where you are
+  // looking when you want either of them.
   type RowDef = {
     key: PulseRowKey;
     name: string;
-    meta: string;
     raw: (d: HealthDay) => number;
     display: (v: number) => string;
   };
 
   const ROW_DEFS: RowDef[] = [
-    { key: 'rec', name: 'RECOVERY', meta: 'whoop · %', raw: (d) => d.rec, display: (v) => `${Math.round(v)}%` },
-    { key: 'hrv', name: 'HRV', meta: 'ms · 5d ema', raw: (d) => d.hrv, display: (v) => `${Math.round(v)}ms` },
-    { key: 'rhr', name: 'RESTING HR', meta: 'bpm', raw: (d) => d.rhr, display: (v) => `${Math.round(v)}bpm` },
-    { key: 'slept', name: 'SLEEP', meta: 'hours', raw: (d) => d.slept, display: (v) => `${v.toFixed(1)}h` },
-    { key: 'strain', name: 'STRAIN', meta: 'whoop · 0–21', raw: (d) => d.strain, display: (v) => v.toFixed(1) },
-    { key: 'steps', name: 'STEPS', meta: 'count', raw: (d) => d.steps, display: (v) => `${(v / 1000).toFixed(1)}k` },
-    { key: 'weight', name: 'WEIGHT', meta: 'kg · no direction', raw: (d) => d.weight, display: (v) => `${v.toFixed(1)}kg` },
+    { key: 'rec', name: 'RECOVERY', raw: (d) => d.rec, display: (v) => `${Math.round(v)}%` },
+    { key: 'hrv', name: 'HRV', raw: (d) => d.hrv, display: (v) => `${Math.round(v)}ms` },
+    { key: 'rhr', name: 'RESTING HR', raw: (d) => d.rhr, display: (v) => `${Math.round(v)}bpm` },
+    { key: 'slept', name: 'SLEEP', raw: (d) => d.slept, display: (v) => `${v.toFixed(1)}h` },
+    { key: 'strain', name: 'STRAIN', raw: (d) => d.strain, display: (v) => v.toFixed(1) },
+    { key: 'steps', name: 'STEPS', raw: (d) => d.steps, display: (v) => `${(v / 1000).toFixed(1)}k` },
+    { key: 'weight', name: 'WEIGHT', raw: (d) => d.weight, display: (v) => `${v.toFixed(1)}kg` },
   ];
 
   const hasWeight = $derived(series.some((d) => d.weight > 0));
@@ -59,9 +64,7 @@
   type RowView = {
     key: PulseRowKey;
     name: string;
-    meta: string;
     neutral: boolean;
-    now: string;
     range: string;
     peak: number;
     cells: Cell[];
@@ -102,13 +105,10 @@
         };
       });
 
-      const todayVal = values[lastIndex] ?? 0;
       return {
         key: def.key,
         name: def.name,
-        meta: def.meta,
         neutral,
-        now: todayVal > 0 ? def.display(todayVal) : '—',
         range: extent.n ? `${def.display(extent.min)}–${def.display(extent.max)}` : 'no data',
         peak,
         cells,
@@ -151,11 +151,7 @@
 >
   {#each rows as row (row.key)}
     <div class="h-pg-rowlabel">
-      <span class="h-pg-label-head">
-        <span class="h-pg-row-name">{row.name}</span>
-        <span class="h-pg-row-now">{row.now}</span>
-      </span>
-      <span class="h-pg-row-meta">{row.meta}</span>
+      <span class="h-pg-row-name">{row.name}</span>
     </div>
     <div class="h-pg-row">
       {#each row.cells as cell, i (i)}
@@ -245,16 +241,8 @@
     .h-pulsegrid-wrap {
       --label-w: 96px;
     }
-    .h-pg-row-meta {
-      display: none;
-    }
-    .h-pg-label-head {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1px;
-    }
     .h-pg-rowlabel {
-      padding: 6px 8px;
+      padding: 0 8px;
     }
   }
   @media (max-width: 520px) {
@@ -262,22 +250,23 @@
       --label-w: 78px;
     }
     .h-pg-rowlabel {
-      padding: 5px 6px;
+      padding: 0 6px;
     }
     .h-pg-row-name {
       letter-spacing: 0.04em;
     }
   }
 
+  /* One line, centred on its row of tiles. No fixed height and no vertical
+     padding: the row's height is whatever the tiles beside it come to, so the
+     label can never be the thing that opens a gap between two rows. */
   .h-pg-rowlabel {
-    padding: 8px 12px;
+    padding: 0 12px;
     background: var(--surface-shell);
     border-right: 1px solid var(--line);
     border-bottom: 1px solid var(--line-hair);
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
+    align-items: center;
     min-width: 0;
   }
   /* The axis strip closes the grid, so its label carries no rule beneath it.
@@ -286,12 +275,8 @@
   .h-pg-rowlabel-axis {
     border-bottom: none;
   }
-  .h-pg-label-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 0;
+  .h-pg-rowlabel-axis .h-pg-row-meta {
+    white-space: nowrap;
   }
   .h-pg-row-name {
     font-family: var(--font-mono);
@@ -300,16 +285,8 @@
     text-transform: uppercase;
     color: var(--text-primary);
     min-width: 0;
-  }
-  /* Today's actual value, right-aligned in mono — the grid shows the shape, the
-     label shows the number. */
-  .h-pg-row-now {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    font-variant-numeric: tabular-nums;
-    /* Deliberately NOT the petrol pole — today's number is a reading, not a
-       verdict, and petrol already means "better" everywhere else in here. */
-    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .h-pg-row-meta {

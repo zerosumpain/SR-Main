@@ -35,7 +35,14 @@
       avgRecovery: number;
       avgSleep: number;
     };
-    personalRecords: { label: string; value: number; unit: string; date: string }[];
+    personalRecords: {
+      label: string;
+      value: number;
+      unit: string;
+      date: string;
+      /** Pre-formatted, where value + unit cannot say it — a pace is 5:25, not 5.41. */
+      display?: string;
+    }[];
   };
 
   let {
@@ -217,7 +224,9 @@
             <li class="fit-pr">
               <span class="fit-pr-label">{pr.label}</span>
               <span class="fit-pr-val">
-                {fmtPr(pr.value)}<span class="fit-pr-unit"> {pr.unit}</span>
+                {#if pr.display}{pr.display}{:else}{fmtPr(pr.value)}<span class="fit-pr-unit">
+                    {pr.unit}</span
+                  >{/if}
               </span>
               <span class="fit-pr-date">{pr.date}</span>
             </li>

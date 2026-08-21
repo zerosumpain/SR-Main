@@ -52,7 +52,6 @@
     line-height: 1.55;
     margin: 0;
     color: var(--text-primary);
-    max-width: 780px;
   }
   .h-narr-text :global(em) {
     color: var(--accent);
