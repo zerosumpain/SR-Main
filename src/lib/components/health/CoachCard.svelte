@@ -1,365 +1,284 @@
 <script lang="ts">
-  // Today's brief: the session, the reasoning behind it, the records that are
-  // realistically beatable, and — when there is a key and the ground allows —
-  // the route through them.
+  // Today's session, and the working shown.
   //
-  // The type comes from coach-service as a TYPE ONLY, so none of that module's
-  // database or openrouteservice code follows it into the client bundle.
+  // The first version was a wall of cards that took a screen and a half to say
+  // "steady walk, 2 km", showed no evidence for it, and did that on a day the
+  // body was at 94% recovery. Three things changed:
   //
-  // Shared .h-detail-grid / .h-card / .cellgrid primitives come from app.css;
-  // only the bespoke pieces are in this file's style block.
-  import type { DailyPlan } from '$lib/trails/coach-service';
+  //   * it reads the readiness composite upward, not only as a veto, so a good
+  //     day gets a bigger session (see applyProgression in coach.ts);
+  //   * it SHOWS why — the readiness score, the load ratio, the week against a
+  //     typical week, and the fortnight of daily load the session sits on top
+  //     of, as the same bar chart the load chapter uses;
+  //   * it is one stat row, one chart and a short list, in the same grammar as
+  //     every other chapter, instead of its own card system.
+  import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
+  import StatRow, { type Stat } from '$lib/components/health/StatRow.svelte';
   import { formatDistance, formatDuration } from '$lib/trails/format';
+  import type { DailyPlan } from '$lib/trails/coach-service';
 
-  let { plan }: { plan: DailyPlan } = $props();
+  let { plan, onevidence }: { plan: DailyPlan; onevidence?: (id: string) => void } = $props();
 
   const session = $derived(plan.session);
+  const ev = $derived(plan.evidence);
   const hasWhy = $derived((session.why?.length ?? 0) > 0);
   const hasTargets = $derived((plan.targets?.length ?? 0) > 0);
-  const hasNotes = $derived((plan.route?.notes?.length ?? 0) > 0);
 
-  // Intensity → the card's tag tone. Recovery is the one the body asked for, so
-  // it reads as a warning rather than as a win.
-  const TONE: Record<DailyPlan['session']['intensity'], 'good' | 'warn' | 'bad' | 'flat'> = {
+  const TONE: Record<DailyPlan['session']['intensity'], Stat['tone']> = {
     recovery: 'warn',
-    easy: 'flat',
+    easy: 'neutral',
     steady: 'good',
     threshold: 'good',
     intervals: 'bad',
   };
 
-  // Difficulty band → the word the rest of the site uses. Mapped here rather
-  // than imported so the card pulls in no module beyond the formatters.
-  const DIFFICULTY: Record<string, string> = {
-    easy: 'Easy',
-    moderate: 'Moderate',
-    hard: 'Hard',
-    severe: 'Severe',
-  };
+  const stats = $derived.by((): Stat[] => {
+    const out: Stat[] = [
+      {
+        label: 'The session',
+        value: session.sportLabel,
+        sub: session.intensityLabel.toLowerCase(),
+        tone: TONE[session.intensity],
+      },
+      {
+        label: 'Target',
+        value: formatDistance(session.targetDistanceM),
+        sub: `about ${session.targetMinutes} min`,
+      },
+    ];
 
-  function gapLabel(gapS: number | null, gapPct: number | null): string {
-    if (gapS == null || gapPct == null) return 'No recent effort';
-    if (gapS <= 0) return 'Level with it';
-    // Under a minute reads as seconds; "0:15 behind" is a worse sentence.
-    const behind = gapS < 60 ? `${Math.round(gapS)}s` : formatDuration(gapS);
-    return `+${behind} (${(gapPct * 100).toFixed(1)}%)`;
+    if (ev.readiness != null) {
+      out.push({
+        label: 'Readiness',
+        value: String(Math.round(ev.readiness)),
+        unit: '/100',
+        sub: ev.readinessLabel ?? '',
+        tone: ev.readiness >= 70 ? 'good' : ev.readiness >= 50 ? 'neutral' : 'warn',
+        evidence: 'readiness',
+      });
+    }
+
+    if (ev.acwr != null) {
+      out.push({
+        label: 'Load ratio',
+        value: ev.acwr.toFixed(2),
+        unit: '×',
+        sub: ev.acwrZone ?? '',
+        tone: ev.acwr > 1.4 ? 'bad' : ev.acwr < 0.8 ? 'warn' : 'good',
+        evidence: 'acwr',
+      });
+    }
+
+    if (ev.weekHours != null) {
+      const typical = ev.typicalWeekHours;
+      out.push({
+        label: 'This week',
+        value: ev.weekHours.toFixed(1),
+        unit: 'h',
+        sub:
+          typical != null && typical > 0
+            ? `${Math.round(((ev.weekHours - typical) / typical) * 100)}% vs a typical week`
+            : 'no typical week to compare with yet',
+      });
+    }
+
+    if (ev.daysSinceHard != null) {
+      out.push({
+        label: 'Since a hard one',
+        value: String(ev.daysSinceHard),
+        unit: ev.daysSinceHard === 1 ? 'day' : 'days',
+        sub: 'mean HR in zone 4+',
+      });
+    }
+
+    return out;
+  });
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function shortDay(day: string): string {
+    const dt = new Date(Date.parse(day + 'T00:00:00Z'));
+    return `${dt.getUTCDate()} ${MONTHS[dt.getUTCMonth()]}`;
   }
+
+  const loadBars = $derived.by((): Bar[] =>
+    (ev.recentLoad ?? []).map((d) => ({
+      key: d.date,
+      tick: shortDay(d.date),
+      value: d.load,
+      readout: d.load > 0 ? `${d.load} TRIMP` : 'rest day',
+      readoutSub: shortDay(d.date),
+    })),
+  );
+  const hasLoadBars = $derived(loadBars.length > 1);
 </script>
 
 <div class="coach">
-  <div class="h-detail-grid">
-    <div class="h-card span-6">
-      <div class="h-card-head">
-        <div class="h-card-head-l">
-          <p class="h-card-name">The session</p>
-        </div>
-        <span class="h-card-tag {TONE[session.intensity]}">{session.intensityLabel}</span>
-      </div>
+  <StatRow {stats} {onevidence} />
 
-      <p class="coach-headline">{session.sportLabel}</p>
-
-      <div class="coach-figures cellgrid">
-        <div>
-          <p class="coach-fig-l">Target distance</p>
-          <p class="coach-fig-v">{formatDistance(session.targetDistanceM)}</p>
-        </div>
-        <div>
-          <p class="coach-fig-l">Rough time</p>
-          <p class="coach-fig-v">{session.targetMinutes} min</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="h-card span-6">
-      <div class="h-card-head">
-        <div class="h-card-head-l">
-          <p class="h-card-name">Why this one</p>
-        </div>
-      </div>
-
+  <div class="split">
+    <div class="col">
       {#if hasWhy}
-        <ul class="coach-why">
+        <ul class="why">
           {#each session.why as line, i (i)}
             <li>{line}</li>
           {/each}
         </ul>
       {:else}
-        <p class="coach-why-empty">
-          Nothing in the recent load argues for anything in particular — this is simply what you
-          have been doing, at the distance you usually do it.
+        <p class="h-note">
+          Nothing in the recent load argues for anything in particular — this is what you have been
+          doing, at the distance you usually do it.
         </p>
       {/if}
-
-      <p class="coach-source">Load read from: {session.acwrSource}</p>
+      <p class="source">Load read from {session.acwrSource}</p>
     </div>
+
+    {#if hasLoadBars}
+      <div class="col">
+        <Bars
+          bars={loadBars}
+          label="The fortnight this sits on — daily load"
+          formatY={(v) => String(Math.round(v))}
+          height={120}
+        />
+      </div>
+    {/if}
   </div>
 
   {#if hasTargets}
-    <div class="coach-block">
-      <p class="coach-block-name">Records worth going after</p>
-      <ol class="coach-targets">
-        {#each plan.targets as target (target.id)}
-          <li class="coach-target">
-            <div class="coach-target-head">
-              <a class="coach-target-name" href="/health/segments/{target.id}">{target.name}</a>
-              <span class="coach-target-dist">{formatDistance(target.distanceM)}</span>
-            </div>
-
-            <div class="coach-target-times cellgrid">
-              <div>
-                <p class="coach-fig-l">Your best</p>
-                <p class="coach-fig-v">{formatDuration(target.pbDurationS)}</p>
-              </div>
-              <div>
-                <p class="coach-fig-l">Go for</p>
-                <p class="coach-fig-v accent">{formatDuration(target.targetDurationS)}</p>
-              </div>
-              <div>
-                <p class="coach-fig-l">Currently</p>
-                <p class="coach-fig-v">{gapLabel(target.gapS, target.gapPct)}</p>
-              </div>
-            </div>
-
-            <p class="coach-target-reason">{target.reason}</p>
+    <div class="targets">
+      <span class="targets-hd">Ground worth taking it to</span>
+      <ul class="target-list">
+        {#each plan.targets as t (t.id)}
+          <li>
+            <a class="t-name" href="/health/segments/{t.id}">{t.name}</a>
+            <span class="t-fig">PB {formatDuration(t.pbDurationS ?? 0)}</span>
+            <span class="t-fig t-target">aim {formatDuration(t.targetDurationS ?? 0)}</span>
+            <span class="t-why">{t.reason}</span>
           </li>
         {/each}
-      </ol>
+      </ul>
     </div>
   {/if}
 
-  {#if plan.route}
-    <div class="coach-block">
-      <p class="coach-block-name">A route through them</p>
-      <div class="coach-route cellgrid">
-        <div>
-          <p class="coach-fig-l">Distance</p>
-          <p class="coach-fig-v">{formatDistance(plan.route.distanceM)}</p>
-        </div>
-        <div>
-          <p class="coach-fig-l">Climb</p>
-          <p class="coach-fig-v">
-            {plan.route.ascentM == null ? 'Unknown' : `${plan.route.ascentM} m`}
-          </p>
-        </div>
-        <div>
-          <p class="coach-fig-l">Estimated</p>
-          <p class="coach-fig-v">{formatDuration(plan.route.estimatedTimeS)}</p>
-        </div>
-        <div>
-          <p class="coach-fig-l">Grade</p>
-          <p class="coach-fig-v">{DIFFICULTY[plan.route.difficulty] ?? plan.route.difficulty}</p>
-        </div>
-      </div>
-
-      <p class="coach-route-through">
-        Takes in {plan.route.through.join(', then ')}.
-      </p>
-
-      {#if hasNotes}
-        <p class="coach-route-notes">{plan.route.notes.join(' · ')}</p>
-      {/if}
-
-      <a class="coach-link" href="/health/plan">Open it in the planner</a>
-    </div>
-  {:else if plan.routeNote}
-    <p class="coach-note">{plan.routeNote}</p>
+  {#if plan.routeNote}
+    <p class="h-note">{plan.routeNote}</p>
+  {:else if plan.route}
+    <p class="h-note">
+      A route through them: {formatDistance(plan.route.distanceM)}, {Math.round(
+        plan.route.ascentM ?? 0,
+      )} m of climb, about {Math.round((plan.route.estimatedTimeS ?? 0) / 60)} min.
+      <a href="/health/plan">Open it in the planner →</a>
+    </p>
   {/if}
 </div>
 
 <style>
-  .coach {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 1.5rem 2rem;
+    align-items: start;
   }
-
-  /* The sport, as the headline. Clamped rather than fixed at the card scale —
-     "Trail run" at 3.5rem overflows a half-width card on a phone. */
-  .coach-headline {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: clamp(2rem, 7vw, 3.25rem);
-    line-height: 0.95;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    margin: 0;
+  @media (max-width: 900px) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
-
-  .coach-figures {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: auto;
-  }
-  .coach-fig-l {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-ghost);
-    margin: 0 0 4px;
-  }
-  .coach-fig-v {
-    font-family: var(--font-mono);
-    font-size: var(--fs-body-sm);
-    font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
-    margin: 0;
-  }
-  .coach-fig-v.accent {
-    color: var(--accent);
-  }
-
-  .coach-why {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-  }
-  .coach-why li {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.45;
-    color: var(--text-secondary);
-    padding-left: 14px;
-    border-left: 2px solid var(--accent-tint-35);
-  }
-  .coach-why-empty {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.45;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-  .coach-source {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.06em;
-    color: var(--text-ghost);
-    margin: auto 0 0;
-  }
-
-  /* Blocks below the two head cards, sharing the grid's outer rule. */
-  .coach-block {
-    border: 1px solid var(--line-strong);
-    border-top: 0;
-    padding: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .coach-block-name {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin: 0;
-  }
-
-  .coach-targets {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-  .coach-target {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-  }
-  .coach-target + .coach-target {
-    border-top: 1px solid var(--line-hair);
-    padding-top: 16px;
-  }
-  .coach-target-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .coach-target-name {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-lg);
-    font-weight: 600;
-    color: var(--text-primary);
-    text-decoration: none;
-    border-bottom: 1px solid var(--accent-tint-35);
+  .col {
     min-width: 0;
   }
-  .coach-target-name:hover {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
+
+  .why {
+    margin: 0;
+    padding: 0 0 0 1.1rem;
+    list-style: none;
   }
-  .coach-target-dist {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
-    color: var(--text-ghost);
-    white-space: nowrap;
-  }
-  .coach-target-times {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .coach-target-reason {
+  .why li {
+    position: relative;
     font-family: var(--font-body);
     font-size: var(--fs-body-sm);
-    line-height: 1.45;
+    line-height: 1.55;
     color: var(--text-secondary);
-    margin: 0;
+    margin-bottom: 0.5rem;
+  }
+  .why li::before {
+    content: '';
+    position: absolute;
+    left: -1.1rem;
+    top: 0.6em;
+    width: 5px;
+    height: 5px;
+    background: var(--accent);
   }
 
-  .coach-route {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .coach-route-through,
-  .coach-route-notes,
-  .coach-note {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.45;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-  .coach-route-notes {
+  .source {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
+    color: var(--text-ghost);
+    margin: 0.75rem 0 0 0;
+  }
+
+  /* One line per target. The old treatment gave each one a card with four
+     figures in it, which is a screenful to say "this one is close". */
+  .targets {
+    margin-top: 1.5rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--line-hair);
+  }
+  .targets-hd {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
     color: var(--text-ghost);
   }
-
-  /* No route drawn. One calm line, in the same frame as everything else — an
-     absent route is a stated outcome here, not a failure to hide. */
-  .coach-note {
-    border: 1px solid var(--line-strong);
-    border-top: 0;
-    background: var(--surface-sunken);
-    padding: 16px 18px;
-    color: var(--text-muted);
+  .target-list {
+    list-style: none;
+    margin: 0.5rem 0 0 0;
+    padding: 0;
   }
-
-  .coach-link {
+  .target-list li {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) auto auto minmax(0, 1.6fr);
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--line-hair);
+  }
+  @media (max-width: 720px) {
+    .target-list li {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+    .t-why {
+      grid-column: 1 / -1;
+    }
+  }
+  .t-name {
     font-family: var(--font-mono);
     font-size: var(--fs-label);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
     color: var(--accent);
     text-decoration: none;
-    border-bottom: 1px solid var(--accent-tint-35);
-    align-self: flex-start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .coach-link:hover {
-    border-bottom-color: var(--accent);
+  .t-name:hover {
+    text-decoration: underline;
   }
-
-  @media (max-width: 700px) {
-    .coach-target-times,
-    .coach-route {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  .t-fig {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .t-target {
+    color: var(--text-primary);
+  }
+  .t-why {
+    font-family: var(--font-body);
+    font-size: var(--fs-label-xs);
+    color: var(--text-ghost);
+    min-width: 0;
   }
 </style>

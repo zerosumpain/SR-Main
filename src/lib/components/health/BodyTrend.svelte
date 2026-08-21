@@ -75,7 +75,7 @@
 </script>
 
 {#if lines.length > 0}
-  <div class="chart-grid">
+  <div class="h-chartgrid">
     {#each lines as line (line.key)}
       <DateLineChart
         points={line.points}
@@ -87,29 +87,8 @@
       />
     {/each}
   </div>
-  <p class="note">
+  <p class="h-note">
     Thirty days of daily readings with a seven-day line over them. One night proves nothing; the
     line is the thing to read.
   </p>
 {/if}
-
-<style>
-  .chart-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-    gap: 1.5rem 1.75rem;
-  }
-  @media (max-width: 720px) {
-    .chart-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .note {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.55;
-    color: var(--text-muted);
-    margin: 1.25rem 0 0 0;
-    max-width: 68ch;
-  }
-</style>

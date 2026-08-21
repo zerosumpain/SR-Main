@@ -35,21 +35,17 @@ function chroma(css: string): number {
 
 const ACCENT_INK: [number, number, number] = [14, 91, 102];
 const TREND_DOWN: [number, number, number] = [138, 58, 8];
-const ACCENT: [number, number, number] = [196, 87, 10];
+/** The validated poles: ΔE 32.9 normal, ΔE 22.3 deuteranopia. */
+const RED: [number, number, number] = [143, 35, 24];
+const GREEN: [number, number, number] = [106, 166, 60];
 
 describe('ramp — diverging poles', () => {
-  it('lands exactly on --accent-ink at the better pole', () => {
-    expect(rgb(ramp(1))).toEqual(ACCENT_INK);
+  it('lands exactly on the green pole when better than baseline', () => {
+    expect(rgb(ramp(1))).toEqual(GREEN);
   });
 
-  it('lands exactly on --trend-down at the worse pole', () => {
-    expect(rgb(ramp(-1))).toEqual(TREND_DOWN);
-  });
-
-  it('passes through --accent on the way to the worse pole', () => {
-    // The 0.82 stop is --accent itself, so the warm arm is orange before it is
-    // burnt. Anything between must be at least as red as the mid orange.
-    expect(rgb(ramp(-0.82))).toEqual(ACCENT);
+  it('lands exactly on the red pole when worse than baseline', () => {
+    expect(rgb(ramp(-1))).toEqual(RED);
   });
 
   it('is a near-cream neutral at the midpoint, lighter than the grid gutter', () => {
@@ -74,29 +70,46 @@ describe('ramp — diverging poles', () => {
     expect(ramp(Number.POSITIVE_INFINITY)).toBe(ramp(1));
   });
 
-  it('sends the two arms to opposite sides of the colour wheel', () => {
-    const [br, , bb] = rgb(ramp(0.7)); // better → cool: blue beats red
-    expect(bb).toBeGreaterThan(br);
-    const [wr, , wb] = rgb(ramp(-0.7)); // worse → warm: red beats blue
-    expect(wr).toBeGreaterThan(wb);
+  it('sends the two arms green and red', () => {
+    const [gr, gg] = rgb(ramp(0.7)); // better → green beats red
+    expect(gg).toBeGreaterThan(gr);
+    const [wr, wg] = rgb(ramp(-0.7)); // worse → red beats green
+    expect(wr).toBeGreaterThan(wg);
   });
 
   it('keeps real chroma in the MID steps so they do not read as grey', () => {
-    // A mid-range cell must still be legibly cool or warm.
-    expect(chroma(ramp(0.3))).toBeGreaterThan(24);
-    expect(chroma(ramp(-0.3))).toBeGreaterThan(60);
+    expect(chroma(ramp(0.3))).toBeGreaterThan(20);
+    expect(chroma(ramp(-0.3))).toBeGreaterThan(20);
     expect(chroma(ramp(0.5))).toBeGreaterThan(40);
-    expect(chroma(ramp(-0.5))).toBeGreaterThan(80);
+    expect(chroma(ramp(-0.5))).toBeGreaterThan(60);
   });
 
-  it('darkens monotonically as it leaves the midpoint on either arm', () => {
+  it('separates the arms in LIGHTNESS as well as hue, which is what makes it readable', () => {
+    // Red and green are the classic colourblind trap: a symmetric ramp measures
+    // ΔE 2.4 under deuteranopia, which is indistinguishable. The arms are
+    // deliberately asymmetric — bad days dark and heavy, good days light and
+    // open — so the grid still reads as magnitude with no hue at all.
+    const lum = (c: string) => {
+      const [r, g, b] = rgb(c);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    for (let m = 0.2; m <= 1.0001; m += 0.2) {
+      expect(lum(ramp(-m))).toBeLessThan(lum(ramp(m)));
+    }
+  });
+
+  it('moves monotonically in lightness along each arm', () => {
+    // Both arms darken away from the neutral, which is what carries magnitude
+    // in greyscale, in print and under forced colours. The GOOD arm darkens
+    // more gently and from a lighter start, which is the asymmetry that keeps
+    // the two apart for a deuteranope.
     const lum = (c: string) => {
       const [r, g, b] = rgb(c);
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     for (const sign of [1, -1]) {
-      for (let m = 0.1; m <= 1.0001; m += 0.1) {
-        expect(lum(ramp(sign * m))).toBeLessThan(lum(ramp(sign * (m - 0.1))));
+      for (let m = 0.2; m <= 1.0001; m += 0.2) {
+        expect(lum(ramp(sign * m))).toBeLessThan(lum(ramp(sign * (m - 0.2))));
       }
     }
   });
@@ -416,18 +429,18 @@ describe('PulseGrid renders what the helpers decided', () => {
 
   it('paints a lower-is-better row by direction, not by an inverted normaliser', () => {
     const rhr = row(html(Array.from({ length: 30 }, (_, i) => day(i))), 'RESTING HR');
-    // The LOWEST resting HR in the window is the best day, so it must read cool
+    // The LOWEST resting HR in the window is the best day, so it must read green
     // and say so — without the row inverting its own normaliser to get there.
     const best = rhr.match(/aria-label="[^"]*RESTING HR 50bpm[^"]*"/)?.[0] ?? '';
     expect(best).toContain('better than baseline');
     expect(best).toContain('best day in window');
     const worst = rhr.match(/aria-label="[^"]*RESTING HR 58bpm[^"]*"/)?.[0] ?? '';
     expect(worst).toContain('worse than baseline');
-    // Cool = more blue than red; warm = the other way round.
-    const cool = rhr.match(/--c: rgb\((\d+), \d+, (\d+)\)" aria-label="[^"]*50bpm/);
-    expect(Number(cool?.[2])).toBeGreaterThan(Number(cool?.[1]));
-    const warm = rhr.match(/--c: rgb\((\d+), \d+, (\d+)\)" aria-label="[^"]*58bpm/);
-    expect(Number(warm?.[1])).toBeGreaterThan(Number(warm?.[2]));
+    // Better = green (green channel beats red); worse = red (the other way).
+    const good = rhr.match(/--c: rgb\((\d+), (\d+), \d+\)" aria-label="[^"]*50bpm/);
+    expect(Number(good?.[2])).toBeGreaterThan(Number(good?.[1]));
+    const bad = rhr.match(/--c: rgb\((\d+), (\d+), \d+\)" aria-label="[^"]*58bpm/);
+    expect(Number(bad?.[1])).toBeGreaterThan(Number(bad?.[2]));
   });
 
   it('puts today\'s value in the row label and the range in the tooltip, not the label', () => {

@@ -178,7 +178,18 @@ export const load: PageServerLoad = async (event) => {
     // 1,136 activities and 6,317 efforts.
     safe('segment-chains', getSegmentChains(5)),
     safe('recent-outings', recentOutings()),
-    safe('coach', getDailyPlan({ dashboard: dashboard ?? undefined, monotony, polarised })),
+    safe(
+      'coach',
+      getDailyPlan({
+        dashboard: dashboard ?? undefined,
+        monotony,
+        polarised,
+        // The composite this page already computed. Without it the coach reads
+        // readiness only as a downward veto, and proposed the same two-kilometre
+        // walk on the best day of the fortnight as on the worst.
+        readiness: readiness?.score ?? null,
+      }),
+    ),
   ]);
   const correlations = shared.provenance.correlationsAreIllustrative
     ? []

@@ -12,7 +12,14 @@
   import { isPaceSport } from '$lib/trails/format';
   import type { TrailsDashboard } from '$lib/trails/physio-service';
 
-  let { dashboard }: { dashboard: TrailsDashboard | null } = $props();
+  let {
+    dashboard,
+    scope = 'body',
+  }: {
+    dashboard: TrailsDashboard | null;
+    /** `body` = VO₂max / resting HR / HRV. `work` = efficiency, cost, HRR60. */
+    scope?: 'body' | 'work';
+  } = $props();
 
   const d = $derived(dashboard);
 
@@ -35,15 +42,17 @@
   );
 
   // An empty array is TRUTHY, so every one of these asks for a length.
-  const hasVo2 = $derived((d?.vo2.series?.length ?? 0) > 1);
-  const hasEf = $derived(efPoints.length > 1);
-  const hasBkm = $derived(bkmPoints.length > 1);
-  const hasHrr = $derived(hrrPoints.length > 1);
-  const hasSdnn = $derived((d?.hrvSdnn?.daily.length ?? 0) >= 2);
+  const body = $derived(scope === 'body');
+  const work = $derived(scope === 'work');
+  const hasVo2 = $derived(body && (d?.vo2.series?.length ?? 0) > 1);
+  const hasEf = $derived(work && efPoints.length > 1);
+  const hasBkm = $derived(work && bkmPoints.length > 1);
+  const hasHrr = $derived(work && hrrPoints.length > 1);
+  const hasSdnn = $derived(body && (d?.hrvSdnn?.daily.length ?? 0) >= 2);
 </script>
 
 {#if d}
-  <div class="chart-grid">
+  <div class="h-chartgrid">
     {#if hasVo2}
       <DateLineChart
         points={d.vo2.series}
@@ -53,7 +62,7 @@
         colour="var(--accent)"
       />
     {/if}
-    {#if d.rhr}
+    {#if body && d.rhr}
       <DateLineChart
         points={d.rhr.daily}
         rolling={d.rhr.rolling7}
@@ -63,7 +72,7 @@
         colour="var(--accent-ink)"
       />
     {/if}
-    {#if d.hrv}
+    {#if body && d.hrv}
       <DateLineChart
         points={d.hrv.daily}
         rolling={d.hrv.rolling7}
@@ -111,32 +120,17 @@
     {/if}
   </div>
 
-  <p class="note">
-    Efficiency and cost are one measure read in both directions — metres covered per heartbeat, and
-    heartbeats spent per kilometre — so they should mirror each other. When they and the resting
-    heart rate and HRV all point the same way at once, that is aerobic fitness moving rather than a
-    good night's sleep. Read the seven-day line, not the daily dots.
-  </p>
+  {#if body}
+    <p class="h-note">
+      Rising cardio fitness, a falling resting heart rate and rising HRV all point the same way.
+      When they move together that is fitness; when one moves alone it is usually a good night's
+      sleep. Read the seven-day line, not the daily dots.
+    </p>
+  {:else}
+    <p class="h-note">
+      Efficiency and cost are one measure read in both directions — metres covered per heartbeat,
+      and heartbeats spent per kilometre — so they should mirror each other. HRR60 is how far the
+      pulse falls in the minute after you stop, which is the fastest-moving fitness signal here.
+    </p>
+  {/if}
 {/if}
-
-<style>
-  .chart-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-    gap: 1.5rem 1.75rem;
-  }
-  @media (max-width: 720px) {
-    .chart-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-
-  .note {
-    font-family: var(--font-body);
-    font-size: var(--fs-body-sm);
-    line-height: 1.55;
-    color: var(--text-muted);
-    margin: 1.25rem 0 0 0;
-    max-width: 68ch;
-  }
-</style>

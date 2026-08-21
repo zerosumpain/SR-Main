@@ -21,9 +21,7 @@
   // are the trails register throughout: daily dots, a seven-day line, a dashed
   // baseline, the same shape every time.
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import Hero from '$lib/components/health/v2/Hero.svelte';
   import Narrative from '$lib/components/health/v2/Narrative.svelte';
-  import WeekInNumbers from '$lib/components/health/v2/WeekInNumbers.svelte';
   import PulseGrid from '$lib/components/health/v2/PulseGrid.svelte';
   import RecoverySignals from '$lib/components/health/v2/RecoverySignals.svelte';
   import SleepConsistency from '$lib/components/health/v2/SleepConsistency.svelte';
@@ -32,7 +30,8 @@
   import EpicActivities from '$lib/components/health/v2/EpicActivities.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import ChapterLede from '$lib/components/health/ChapterLede.svelte';
-  import ActivityRingsRow from '$lib/components/health/ActivityRingsRow.svelte';
+  import ReadinessBreakdown from '$lib/components/health/ReadinessBreakdown.svelte';
+  import StatRow, { type Stat } from '$lib/components/health/StatRow.svelte';
   import SignalTiles from '$lib/components/health/SignalTiles.svelte';
   import TrendCharts from '$lib/components/health/TrendCharts.svelte';
   import BodyTrend from '$lib/components/health/BodyTrend.svelte';
@@ -91,8 +90,12 @@
   // printed 01, 02, 05, 06, 09 on a thin-data day, and printed 01 twice once
   // the hero claimed it too.
   const order = $derived.by(() => {
+    // "Today" and "the last thirty days" used to be two chapters and repeated
+    // each other — the hero's four deltas against the week-in-numbers block,
+    // the hero's strap against the narrative paragraph. One chapter now: where
+    // the body is, and how it got there.
     const keys: string[] = ['today'];
-    if (hasSeries || showNarrative) keys.push('window');
+    if (showCoach) keys.push('session');
     if (showDirection) keys.push('direction');
     if (showLoad) keys.push('load');
     if (showRecovery) keys.push('recovery');
@@ -104,6 +107,70 @@
   const num = $derived((key: string) => {
     const i = order.indexOf(key);
     return i < 0 ? '' : String(i + 1).padStart(2, '0');
+  });
+
+  // Today's figures. ONE row — the hero used to carry four deltas and the
+  // week-in-numbers block below it carried five overlapping ones, which is
+  // most of why the top of the page felt like two documents.
+  //
+  // The three activity rings are stats here rather than a dial. A pie of three
+  // concentric arcs took a third of the chapter's width to say what three
+  // numbers say, and left a column of white space beside it.
+  const todayStats = $derived.by((): Stat[] => {
+    const t = data.today;
+    if (!t) return [];
+    const d = data.todayDeltas;
+    const out: Stat[] = [];
+
+    if (t.rec > 0) {
+      out.push({
+        label: 'Recovery',
+        value: String(Math.round(t.rec)),
+        unit: '%',
+        sub: d ? `${d.recDelta > 0 ? '+' : ''}${Math.round(d.recDelta)} on the 7-day mean` : '',
+        tone: t.rec >= 67 ? 'good' : t.rec >= 34 ? 'warn' : 'bad',
+      });
+    }
+    if (t.hrv > 0) {
+      out.push({
+        label: 'HRV',
+        value: String(Math.round(t.hrv)),
+        unit: 'ms',
+        sub: d && d.hrvDeltaPct !== 0 ? `${d.hrvDeltaPct > 0 ? '+' : ''}${d.hrvDeltaPct}% overnight` : 'level overnight',
+      });
+    }
+    if (t.rhr > 0 && data.rhrBaseline > 0) {
+      const diff = Math.round(t.rhr - data.rhrBaseline);
+      out.push({
+        label: 'Resting HR',
+        value: String(Math.round(t.rhr)),
+        unit: 'bpm',
+        sub: diff === 0 ? 'on baseline' : `${Math.abs(diff)} ${diff < 0 ? 'under' : 'over'} a ${Math.round(data.rhrBaseline)} baseline`,
+        tone: diff <= 0 ? 'good' : diff >= 3 ? 'warn' : 'neutral',
+      });
+    }
+    if (t.slept > 0) {
+      out.push({ label: 'Sleep', value: t.slept.toFixed(1), unit: 'h', sub: 'last night' });
+    }
+
+    const r = data.rings;
+    if (r && r.moveKcal > 0) {
+      out.push({
+        label: 'Move',
+        value: String(Math.round(r.moveKcal)),
+        unit: `of ${r.moveTarget} kcal`,
+        sub: 'derived from Whoop, not Apple',
+      });
+    }
+    if (r && r.exerciseMin > 0) {
+      out.push({
+        label: 'Exercise',
+        value: String(Math.round(r.exerciseMin)),
+        unit: `of ${r.exerciseTarget} min`,
+        sub: 'zone 2 and above',
+      });
+    }
+    return out;
   });
 
   // ——— the ledes ————————————————————————————————————————————————
@@ -252,93 +319,73 @@
     </p>
   {/if}
 
-  <!-- ─── 01 · Today ──────────────────────────────────────────────── -->
+  <!-- ─── 01 · Today, and the thirty days behind it ────────────── -->
   <section class="h-chapter">
     <div class="h-chapter-inner">
-      {#if data.today && data.headline && data.todayDeltas && data.readiness}
-        <Hero
-          eyebrow="{num('today')} / TODAY"
-          today={data.today}
-          headline={data.headline}
-          strap={data.strap}
-          todayDeltas={data.todayDeltas}
-          rhrBaseline={data.rhrBaseline}
-          readiness={data.readiness}
+      <div class="h-chapter-head">
+        <div>
+          <p class="h-chapter-num">{num('today')} / TODAY</p>
+          <h2 class="h-chapter-title">WHERE THE BODY IS</h2>
+        </div>
+        <p class="h-chapter-strap">And the thirty days that got it here.</p>
+      </div>
+      <ChapterLede text={todayText} />
+
+      {#if data.readiness}
+        <ReadinessBreakdown
+          score={data.readiness.score}
+          label={data.readiness.label}
+          recommendation={data.readiness.recommendation}
+          factors={data.readiness.factors}
           onevidence={openEvidence}
         />
-      {:else}
-        <p class="h-chapter-num">{num('today')} / TODAY</p>
-        <h2 class="h-chapter-title">NOTHING IN YET</h2>
       {/if}
 
-      {#if todayText}
-        <div class="h-after-hero">
-          <ChapterLede text={todayText} />
+      <div class="h-sub">
+        <StatRow stats={todayStats} onevidence={openEvidence} />
+      </div>
+
+      {#if data.narrative}
+        <div class="h-sub">
+          <Narrative narrative={data.narrative} />
         </div>
       {/if}
 
-      {#if showRings && data.rings}
-        <ActivityRingsRow rings={data.rings} />
-      {/if}
-
-      {#if showCoach && owner?.coach}
+      {#if hasSeries}
         <div class="h-sub">
           <div class="h-sub-hd">
-            <h3 class="h-sub-title">So what should you do about it?</h3>
-            <p class="h-sub-meta">
-              One session, chosen from the load you are carrying — and the ground worth taking it to
-            </p>
+            <h3 class="h-sub-title">Every day, every measure</h3>
+            <p class="h-sub-meta">{windowText}</p>
           </div>
-          <CoachCard plan={owner.coach} />
+          <PulseGrid series={data.series} />
+          {#if data.annotations?.length}
+            <div class="h-annot-grid">
+              {#each data.annotations as annot, i (i)}
+                <div class="h-annot">
+                  <p class="h-annot-when">{annot.when}</p>
+                  <!-- Built server-side from numeric fields in computeAnnotations. -->
+                  <p class="h-annot-text">{@html annot.text}</p>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
   </section>
 
-  <!-- ─── 02 · The last thirty days ───────────────────────────────── -->
-  {#if hasSeries || showNarrative}
+  <!-- ─── 02 · Today's session ────────────────────────────────────── -->
+  {#if showCoach && owner?.coach}
     <section class="h-chapter tinted">
       <div class="h-chapter-inner">
         <div class="h-chapter-head">
           <div>
-            <p class="h-chapter-num">{num('window')} / THE LAST THIRTY DAYS</p>
-            <h2 class="h-chapter-title">WHAT'S BEEN HAPPENING</h2>
+            <p class="h-chapter-num">{num('session')} / THE SESSION</p>
+            <h2 class="h-chapter-title">SO WHAT DO YOU DO ABOUT IT?</h2>
           </div>
+          <p class="h-chapter-strap">One session, and the figures behind it.</p>
         </div>
-        <ChapterLede text={windowText} />
-
-        {#if data.narrative}
-          <Narrative narrative={data.narrative} />
-          {#if data.narrative.stats}
-            <div class="h-sub">
-              <WeekInNumbers stats={data.narrative.stats} />
-            </div>
-          {/if}
-        {/if}
-
-        {#if hasSeries}
-          <div class="h-sub">
-            <div class="h-sub-hd">
-              <h3 class="h-sub-title">Every day, every measure</h3>
-              <p class="h-sub-meta">
-                One cell per day, coloured against that row's own baseline — cool is better than
-                usual for you
-              </p>
-            </div>
-            <PulseGrid series={data.series} />
-            {#if data.annotations?.length}
-              <div class="h-annot-grid">
-                {#each data.annotations as annot, i (i)}
-                  <div class="h-annot">
-                    <p class="h-annot-when">{annot.when}</p>
-                    <!-- Built server-side from numeric fields in computeAnnotations. -->
-                    <p class="h-annot-text">{@html annot.text}</p>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        {/if}
+        <CoachCard plan={owner.coach} onevidence={openEvidence} />
       </div>
     </section>
   {/if}
@@ -349,18 +396,16 @@
       <div class="h-chapter-inner">
         <div class="h-chapter-head">
           <div>
-            <p class="h-chapter-num">{num('direction')} / THE DIRECTION OF TRAVEL</p>
+            <p class="h-chapter-num">{num('direction')} / THE BODY</p>
             <h2 class="h-chapter-title">WHICH WAY IS IT GOING?</h2>
           </div>
-          <p class="h-chapter-strap">
-            A day is weather. These are the lines underneath it.
-          </p>
+          <p class="h-chapter-strap">A day is weather. These are the lines underneath it.</p>
         </div>
         <ChapterLede text={directionText} />
 
         {#if owner?.dashboard}
-          <SignalTiles dashboard={owner.dashboard} onevidence={openEvidence} />
-          <TrendCharts dashboard={owner.dashboard} />
+          <SignalTiles dashboard={owner.dashboard} scope="body" onevidence={openEvidence} />
+          <TrendCharts dashboard={owner.dashboard} scope="body" />
         {:else if hasSeries}
           <BodyTrend series={data.series} />
         {/if}
@@ -384,15 +429,25 @@
       <div class="h-chapter-inner">
         <div class="h-chapter-head">
           <div>
-            <p class="h-chapter-num">{num('load')} / THE LOAD</p>
+            <p class="h-chapter-num">{num('load')} / THE WORK</p>
             <h2 class="h-chapter-title">TOO MUCH, OR NOT ENOUGH?</h2>
           </div>
-          <p class="h-chapter-strap">
-            Recent work against the base you built it on. Both directions hurt.
-          </p>
+          <p class="h-chapter-strap">Recent work against the base you built it on.</p>
         </div>
         <ChapterLede text={loadText} />
         <LoadPanel dashboard={owner.dashboard} monotony={owner.monotony} onevidence={openEvidence} />
+
+        <div class="h-sub">
+          <div class="h-sub-hd">
+            <h3 class="h-sub-title">What the work produced</h3>
+            <p class="h-sub-meta">
+              Efficiency, cost and recovery-per-session — outputs of the training above, not
+              measures of the body at rest
+            </p>
+          </div>
+          <SignalTiles dashboard={owner.dashboard} scope="work" onevidence={openEvidence} />
+          <TrendCharts dashboard={owner.dashboard} scope="work" />
+        </div>
       </div>
     </section>
   {/if}
@@ -527,6 +582,17 @@
 />
 
 <style>
+  /* The design system's only sanctioned shadow is the live dot's --accent-glow.
+     Leaflet brings its own on every map control, popup and attribution box, and
+     they are the one thing on this page that reads as raised. */
+  .h-root :global(.leaflet-control),
+  .h-root :global(.leaflet-bar),
+  .h-root :global(.leaflet-popup-content-wrapper),
+  .h-root :global(.leaflet-popup-tip),
+  .h-root :global(.leaflet-control-attribution) {
+    box-shadow: none;
+  }
+
   .h-root {
     min-height: 100vh;
     background: var(--bg);
