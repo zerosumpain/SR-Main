@@ -1,5 +1,4 @@
 <script lang="ts">
-  import PageHeader from '$lib/components/PageHeader.svelte';
   import DateLineChart from '$lib/components/trails/DateLineChart.svelte';
   import Bars, { type Bar } from '$lib/components/trails/Bars.svelte';
   import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
@@ -16,10 +15,23 @@
     isPaceSport,
   } from '$lib/trails/format';
 
-  let { data } = $props();
+  import type { TrailsDashboard } from '$lib/trails/physio-service';
+  import type { SegmentHighlights } from '$lib/trails/segments-service';
 
-  const d = $derived(data.dashboard);
-  const segs = $derived(data.segments);
+  // Was /trails/dashboard's +page.svelte, where `data` came typed from ./$types.
+  // As a component the props have to say so themselves — without the annotation
+  // every callback parameter lands as implicit any and svelte-check fails the
+  // gate.
+  let {
+    dashboard,
+    segments,
+  }: {
+    dashboard: TrailsDashboard | null;
+    segments: SegmentHighlights | null;
+  } = $props();
+
+  const d = $derived(dashboard);
+  const segs = $derived(segments);
 
   // --- Methodology drawer -------------------------------------------------
   let drawerOpen = $state(false);
@@ -217,37 +229,13 @@
   };
 </script>
 
-<svelte:head>
-  <title>Dashboard — Trails</title>
-  <meta name="robots" content="noindex" />
-</svelte:head>
-
-<PageHeader title="Strange Ramblings" />
-
-<main class="wrap">
-  <header class="page-hdr">
-    <div>
-      <div class="kicker">Health · Trails</div>
-      <h1>Dashboard</h1>
-      <p class="sub">
-        Physiological progression from the workouts Apple Health sends, with Whoop recovery
-        alongside. Every number links to how it is computed and the research behind it.
-      </p>
-    </div>
-    <nav class="hdr-nav">
-      <a href="/trails">All trails</a>
-      <a href="/trails/segments">Segments</a>
-      <a href="/trails/plan">Plan</a>
-      <a href="/trails/routes">Routes</a>
-      <a href="/health">Health</a>
-    </nav>
-  </header>
-
-  {#if data.error}
-    <div class="nm-sec nm-sec-error">
-      <span class="sr-label-tight error">{data.error}</span>
-    </div>
-  {:else if d}
+<!--
+  The physiology half of the /health hub — what used to be its own page at
+  /trails/dashboard. Page chrome (head, PageHeader, the error branch) belongs to
+  the hub now; this is only the sections.
+-->
+<div class="wrap">
+  {#if d}
     {#if tiles.length > 0}
       <section class="nm-sec">
         <div class="nm-sec-hd">
@@ -429,7 +417,7 @@
             <div>
               <dt>Fastest pace</dt>
               <dd>{formatPace(segs.records.fastestPace.value)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.fastestPace.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.fastestPace.segmentId}">
                 {segs.records.fastestPace.name}
               </a>
             </div>
@@ -438,7 +426,7 @@
             <div>
               <dt>Best efficiency</dt>
               <dd>{segs.records.bestEfficiency.value.toFixed(2)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.bestEfficiency.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.bestEfficiency.segmentId}">
                 {segs.records.bestEfficiency.name}
               </a>
             </div>
@@ -447,7 +435,7 @@
             <div>
               <dt>Lowest cost</dt>
               <dd>{Math.round(segs.records.lowestCost.value)} b/km</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.lowestCost.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.lowestCost.segmentId}">
                 {segs.records.lowestCost.name}
               </a>
             </div>
@@ -456,7 +444,7 @@
             <div>
               <dt>Biggest climb</dt>
               <dd>+{formatElevation(segs.records.biggestClimb.value)}</dd>
-              <a class="rec-seg" href="/trails/segments/{segs.records.biggestClimb.segmentId}">
+              <a class="rec-seg" href="/health/segments/{segs.records.biggestClimb.segmentId}">
                 {segs.records.biggestClimb.name}
               </a>
             </div>
@@ -470,7 +458,7 @@
               {#each segs.recentPrs as pr (`${pr.segmentId}:${pr.metric}`)}
                 <li>
                   <span class="pr-date">{prDay(pr.startDateLocal)}</span>
-                  <a class="pr-name" href="/trails/segments/{pr.segmentId}">{pr.name}</a>
+                  <a class="pr-name" href="/health/segments/{pr.segmentId}">{pr.name}</a>
                   <span class="pr-what">
                     {pr.metric === 'time'
                       ? `fastest ever — ${formatDuration(pr.value)}`
@@ -484,11 +472,11 @@
         {/if}
 
         <nav class="seg-links">
-          <a href="/trails/segments">All segments</a>
-          <a href="/trails/segments?sort=climb">Biggest climbs</a>
-          <a href="/trails/segments?offroad=1">Offroad</a>
-          <a href="/trails/segments?sort=efficiency">Best efficiency</a>
-          <a href="/trails/segments?sort=cost">Lowest cost</a>
+          <a href="/health/segments">All segments</a>
+          <a href="/health/segments?sort=climb">Biggest climbs</a>
+          <a href="/health/segments?offroad=1">Offroad</a>
+          <a href="/health/segments?sort=efficiency">Best efficiency</a>
+          <a href="/health/segments?sort=cost">Lowest cost</a>
         </nav>
       </section>
     {/if}
@@ -499,7 +487,7 @@
       </button>
     </section>
   {/if}
-</main>
+</div>
 
 <MethodologyDrawer
   open={drawerOpen}

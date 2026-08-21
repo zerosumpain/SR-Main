@@ -2,7 +2,7 @@
 //
 // A recording made on the phone is the same kind of thing as a workout Apple
 // sent: it gets a row in `activities` with source='recorded', so it appears on
-// /trails alongside everything else rather than in a separate list nobody
+// /health/activities alongside everything else rather than in a separate list nobody
 // remembers to look at.
 
 import { eq } from 'drizzle-orm';

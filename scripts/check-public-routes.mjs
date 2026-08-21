@@ -117,11 +117,36 @@ const HOOK_BYPASSES = [
   '/api/jkai/codegraph/query', // CLAUDE_CHANGELOG_SECRET or owner session
 ];
 
+// Page-level bypasses that are EXACT paths, not trees.
+//
+// These are the only two public PAGE routes. /health used to be a prefix, which
+// meant every file created under src/routes/health/ was anonymously reachable
+// the instant it existed — and this script could not see it, because the check
+// was an array compared inside a callback rather than a `pathname === '...'`
+// literal, so the surface went unmonitored and the gate stayed green. The
+// health hub now owns the GPS data (activities, segments, planner, recorder),
+// so /health is matched exactly and its children fall through to the owner
+// gate. Listing it HERE rather than in HOOK_BYPASSES is the point: an exact
+// match is not a tree, so /health enters the snapshot on its own and nothing
+// underneath it does.
+const HOOK_EXACT_BYPASSES = [
+  '/health', // the public health landing; every /health/* child is owner-only
+];
+
+// Prefix bypasses at the page level. /tools is a genuine tree (static/tools/*).
+const HOOK_PAGE_PREFIX_BYPASSES = ['/tools'];
+
 // Path literals in hooks.server.ts that are NOT bypasses, so drift detection
 // below doesn't flag them every run.
 const HOOK_NON_BYPASSES = [
   '/api', // the catch-all that REQUIRES auth for APIs
   '/projects', // share-token (?t=) handling; /projects is public via PUBLIC_PATHS
+  // A 308 to the /health hub, emitted before the auth gate so a stale bookmark
+  // lands somewhere instead of on /login with a dead callbackUrl. It grants no
+  // access — the target is owner-gated like any other /health child — and no
+  // route files live under src/routes/trails any more, so nothing enters the
+  // inventory through it.
+  '/trails',
 ];
 
 /**
@@ -135,7 +160,12 @@ function assertNoUnclassifiedHookPaths() {
   for (const m of src.matchAll(/pathname(?:\s*===\s*|\.startsWith\()\s*'([^']+)'/g)) {
     seen.add(m[1].replace(/\/$/, ''));
   }
-  const known = new Set([...HOOK_BYPASSES, ...HOOK_NON_BYPASSES]);
+  const known = new Set([
+    ...HOOK_BYPASSES,
+    ...HOOK_EXACT_BYPASSES,
+    ...HOOK_PAGE_PREFIX_BYPASSES,
+    ...HOOK_NON_BYPASSES,
+  ]);
   const unknown = [...seen].filter((p) => !known.has(p));
   if (unknown.length) {
     console.error(
@@ -170,7 +200,8 @@ function walk(dir, acc = []) {
 
 assertNoUnclassifiedHookPaths();
 
-const prefixes = [...new Set([...publicPathsFromAuth(), ...HOOK_BYPASSES])];
+const prefixes = [...new Set([...publicPathsFromAuth(), ...HOOK_BYPASSES, ...HOOK_PAGE_PREFIX_BYPASSES])];
+const exact = new Set(HOOK_EXACT_BYPASSES);
 
 const missing = CANARIES.filter((c) => !prefixes.includes(c));
 if (missing.length) {
@@ -182,7 +213,7 @@ if (missing.length) {
   process.exit(2);
 }
 
-const isPublic = (p) => prefixes.some((pre) => p === pre || p.startsWith(pre + '/'));
+const isPublic = (p) => exact.has(p) || prefixes.some((pre) => p === pre || p.startsWith(pre + '/'));
 
 const surface = walk(ROUTES)
   .map(routePath)
@@ -194,7 +225,9 @@ const header = [
   '# Anonymously-reachable routes — GENERATED, do not hand-edit.',
   '#',
   '# Every route here can be reached WITHOUT a session, because it sits under a',
-  '# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts.',
+  '# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts —',
+  '# or, for the page routes in HOOK_EXACT_BYPASSES, because that exact path is',
+  '# public while everything beneath it is not.',
   '# Being listed is not a bug — but each line should be a deliberate decision,',
   '# and several self-gate internally (requireProjectPublic, requireDeckVisible,',
   '# validateAgentKey, assertScraperServiceRequest, bridge tokens).',

@@ -398,6 +398,15 @@ export const activities = pgTable(
     // Everything the source sent that we don't model, verbatim.
     metadata: jsonb('metadata'),
 
+    // Owner corrections. `activityType` above keeps holding what the SOURCE said,
+    // because ingest upserts it on every sync — an in-place edit would be
+    // clobbered the next time the phone posted. Readers take
+    // `typeOverride ?? activityType` via effectiveType() in trails/activity-meta.
+    typeOverride: text('type_override'),
+    // A bad recording (a drive logged as a ride, a lost fix) drops out of segment
+    // matching without being deleted. The rebuild skips these outright.
+    excludedFromSegments: boolean('excluded_from_segments').notNull().default(false),
+
     syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
   },
   (t) => [
@@ -554,7 +563,7 @@ export type NewActivitySegmentEffort = typeof activitySegmentEfforts.$inferInser
 //
 // A recording made in the field does NOT land here: it becomes a row in
 // `activities` with source='recorded', so it sits alongside the Apple ones on
-// /trails instead of in a parallel world.
+// /health/activities instead of in a parallel world.
 export const plannedRoutes = pgTable(
   'planned_routes',
   {

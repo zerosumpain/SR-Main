@@ -51,7 +51,7 @@ function encodeSigned(value: number, out: string[]): void {
  * Encode [lat, lng] pairs into a Google encoded polyline — the inverse of
  * decodePolyline above.
  *
- * Used to store a compact rendering of an activity track so the /trails list
+ * Used to store a compact rendering of an activity track so the /health/activities list
  * can draw route shapes without loading every full coordinate array. The 1e5
  * rounding costs about a metre of precision, which is invisible at list scale
  * and never used for measurement — distances come from the stored track.

@@ -1,5 +1,5 @@
-// Read side for /trails/dashboard and the physiological enrichment on
-// /trails/[id]. Composes the pure analytics in $lib/health/analytics over the
+// Read side for /health and the physiological enrichment on
+// /health/activities/[id]. Composes the pure analytics in $lib/health/analytics over the
 // trails tables plus the Whoop/Apple daily metrics. Mirrors the other health
 // services: server-only, plain data out, every sub-source fails soft.
 
@@ -40,7 +40,7 @@ import { getACWR } from '$lib/health/services/acwr-service';
 import { computeVO2MaxResult, type VO2Result } from '$lib/health/analytics/vo2max-percentile';
 import { beatsPerKm } from './segments/metrics';
 import { isPaceSport } from './format';
-import type { ActivityDetail } from './activities-service';
+import { EFFECTIVE_TYPE, type ActivityDetail } from './activities-service';
 
 // ---------------------------------------------------------------------------
 // Shapes
@@ -199,7 +199,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
       (samples ? trimpFromSamples(samples, profile) : null) ??
       (row.avgHeartrate ? trimpFromAvg(duration, row.avgHeartrate, profile) : null);
     const ef = efficiencyFactor(row.distanceM, duration, row.avgHeartrate);
-    const curve = hrrCurve((row.metadata as Record<string, unknown> | null)?.heartRateRecovery);
+    const curve = hrrCurve(row.heartRateRecovery);
 
     workouts.push({
       id: row.id,
@@ -247,7 +247,7 @@ export async function getTrailsDashboard(): Promise<TrailsDashboard> {
 }
 
 // ---------------------------------------------------------------------------
-// Light strip for the /trails list page — no HR series, two cheap queries.
+// Light strip for the /health/activities list page — no HR series, two cheap queries.
 
 export interface TrailsStrip {
   weeks: WeekVolume[];
@@ -261,7 +261,7 @@ export async function getTrailsStrip(): Promise<TrailsStrip> {
       db
         .select({
           id: activities.id,
-          activityType: activities.activityType,
+          activityType: EFFECTIVE_TYPE,
           startDate: activities.startDate,
           startDateLocal: activities.startDateLocal,
           durationS: activities.durationS,
@@ -351,7 +351,12 @@ async function typicalForSport(detail: ActivityDetail) {
     .from(activities)
     .where(
       and(
-        eq(activities.activityType, detail.activityType),
+        // `detail.activityType` is the EFFECTIVE type (the owner's correction
+        // where there is one), so the column it is matched against has to be
+        // too. Comparing it with the raw column silently picked the wrong peer
+        // set for every corrected outing — and for a ride corrected to a hike,
+        // the peers were other rides.
+        eq(EFFECTIVE_TYPE, detail.activityType),
         sql`${activities.id} <> ${detail.id}`,
       ),
     )
@@ -456,7 +461,15 @@ interface ActivityWithHr {
   activeDurationS: number | null;
   distanceM: number | null;
   avgHeartrate: number | null;
-  metadata: unknown;
+  /**
+   * ONE key out of the metadata jsonb, not the column.
+   *
+   * `activities.metadata` carries the phone's per-minute stepCount, basalEnergy
+   * and heartRate arrays — about 11 KB of JSON per row — and this query covers
+   * 90 days of workouts on every owner /health render. The only thing read from
+   * it is the heart-rate-recovery curve.
+   */
+  heartRateRecovery: unknown;
   hrSamples: HrSample[] | null;
 }
 
@@ -465,14 +478,14 @@ async function fetchActivitiesWithHr(days: number): Promise<ActivityWithHr[]> {
     .select({
       id: activities.id,
       name: activities.name,
-      activityType: activities.activityType,
+      activityType: EFFECTIVE_TYPE,
       startDate: activities.startDate,
       startDateLocal: activities.startDateLocal,
       durationS: activities.durationS,
       activeDurationS: activities.activeDurationS,
       distanceM: activities.distanceM,
       avgHeartrate: activities.avgHeartrate,
-      metadata: activities.metadata,
+      heartRateRecovery: sql<unknown>`${activities.metadata} -> 'heartRateRecovery'`,
     })
     .from(activities)
     .where(gte(activities.startDate, epochDaysAgo(days)))

@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-  <title>Saved routes — Trails</title>
+  <title>Saved routes — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -16,11 +16,11 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · Routes</div>
+      <div class="kicker">Health · Routes</div>
       <h1>Saved routes</h1>
       <p class="sub">Planned routes, ready to download for offline use or follow in the field.</p>
     </div>
-    <a class="back-link" href="/trails/plan">Plan a route</a>
+    <a class="back-link" href="/health/plan">Plan a route</a>
   </header>
 
   {#if data.error}
@@ -31,7 +31,7 @@
     <section class="nm-sec">
       <p class="empty-title">No saved routes yet.</p>
       <p class="empty-body">
-        Plan one on <a href="/trails/plan">the planner</a> and save it — it will appear here with an
+        Plan one on <a href="/health/plan">the planner</a> and save it — it will appear here with an
         offline map download and a follow-along recorder.
       </p>
     </section>
@@ -39,7 +39,7 @@
     <ol class="route-list">
       {#each data.routes as route (route.id)}
         <li>
-          <a class="route-row" href="/trails/routes/{route.id}" data-route-row>
+          <a class="route-row" href="/health/routes/{route.id}" data-route-row>
             <TrackThumb polyline={route.polyline} />
             <div class="row-main">
               <span class="row-name">{route.name}</span>

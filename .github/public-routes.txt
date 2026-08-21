@@ -1,7 +1,9 @@
 # Anonymously-reachable routes — GENERATED, do not hand-edit.
 #
 # Every route here can be reached WITHOUT a session, because it sits under a
-# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts.
+# prefix in PUBLIC_PATHS (src/lib/auth.ts) or a bypass in hooks.server.ts —
+# or, for the page routes in HOOK_EXACT_BYPASSES, because that exact path is
+# public while everything beneath it is not.
 # Being listed is not a bug — but each line should be a deliberate decision,
 # and several self-gate internally (requireProjectPublic, requireDeckVisible,
 # validateAgentKey, assertScraperServiceRequest, bridge tokens).
@@ -87,6 +89,7 @@
 /decks/[slug]/edit
 /decks/[slug]/print
 /decks/[slug]/track
+/health
 /heart
 /heart/1
 /heart/2

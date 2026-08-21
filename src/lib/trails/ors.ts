@@ -208,6 +208,35 @@ export function roundTrip(args: {
   });
 }
 
+/**
+ * Route through a run of waypoints in the order given.
+ *
+ * `directions()` has always taken N coordinates; only the two-point wrapper was
+ * exported, so a route that has to touch three pieces of ground in sequence had
+ * no way in. The order is the caller's decision and ORS honours it exactly —
+ * which is the point for segments, because a segment is DIRECTIONAL: the climb
+ * and the descent are separate ground, and passing a segment's end before its
+ * start plans the wrong one.
+ */
+export function viaRoute(args: {
+  profile: string;
+  coordinates: [number, number][];
+  avoidFeatures?: string[];
+  signal?: AbortSignal;
+}): Promise<OrsRoute> {
+  if (args.coordinates.length < 2) {
+    throw new OrsError(
+      `A route needs at least two waypoints; got ${args.coordinates.length}.`,
+    );
+  }
+  return directions({
+    profile: args.profile,
+    coordinates: args.coordinates,
+    avoidFeatures: args.avoidFeatures,
+    signal: args.signal,
+  });
+}
+
 export function pointToPoint(args: {
   profile: string;
   waypoints: [number, number][];

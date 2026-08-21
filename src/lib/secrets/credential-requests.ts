@@ -184,7 +184,7 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
       // permissions error that reads nothing like "wrong method".
       allowedMethods: ['POST', 'GET', 'HEAD'],
       allowedPathPrefixes: ['/v2/'],
-      notes: 'Route planning for /trails — used by the planner page and the route_plan tool.',
+      notes: 'Route planning for /health/activities — used by the planner page and the route_plan tool.',
     },
   },
 

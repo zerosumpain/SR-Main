@@ -4,7 +4,7 @@
 // database, and from the endpoint so the same path can be reused by a future
 // backfill upload without duplicating the upsert rules.
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { activities, activitySeries, activityTracks } from '$lib/db/schema';
 import { mapWorkout, type HaeWorkout } from './hae-workouts';
@@ -54,6 +54,15 @@ async function persistWorkout(workout: HaeWorkout): Promise<{ track: number; ser
         avgCadence: activity.avgCadence,
         hasTrack: activity.hasTrack,
         metadata: activity.metadata,
+        // The column's DEFAULT only applies on insert, so a re-ingest used to
+        // leave `synced_at` frozen at whenever the row was first written.
+        // Anything keyed on it — the highlight corpus fingerprint, any future
+        // staleness read — could not tell that the numbers had changed.
+        //
+        // Deliberately NOT in the `set` above with the other columns: the two
+        // owner corrections, `typeOverride` and `excludedFromSegments`, are
+        // absent from this list on purpose. Ingest must never clobber them.
+        syncedAt: sql`extract(epoch from now())::integer`,
       },
     });
 

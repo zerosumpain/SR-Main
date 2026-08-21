@@ -1,4 +1,4 @@
-// Saved planned routes — the read/write side of /trails/routes.
+// Saved planned routes — the read/write side of /health/routes.
 
 import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';

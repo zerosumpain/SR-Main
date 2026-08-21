@@ -112,7 +112,7 @@
         <tr>
           <td class="pos">{i + 1}</td>
           <th scope="row" class="when">
-            <a href="/trails/{encodeURIComponent(effort.activityId)}">
+            <a href="/health/activities/{encodeURIComponent(effort.activityId)}">
               {formatLocalDate(effort.startDateLocal, effort.startedAt)}
             </a>
             {#if effort.lapIndex > 1}<span class="lap">lap {effort.lapIndex}</span>{/if}

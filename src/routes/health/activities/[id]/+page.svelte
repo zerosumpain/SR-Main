@@ -6,6 +6,7 @@
   import TrackThumb from '$lib/components/trails/TrackThumb.svelte';
   import ZoneBar from '$lib/components/trails/ZoneBar.svelte';
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
+  import HighlightBadge from '$lib/components/health/HighlightBadge.svelte';
   import MethodologyDrawer from '$lib/components/health/v2/MethodologyDrawer.svelte';
   import {
     formatDistance,
@@ -38,6 +39,10 @@
   );
 
   const segments = $derived(data.segments ?? []);
+
+  // The full ordered set for this outing — the list page only has room for
+  // highlights[0]. An empty array is TRUTHY, so the length is what gets asked.
+  const highlights = $derived(data.highlights ?? []);
 
   /** "2nd of 11" reads better than "rank 2", and says what the 2 is out of. */
   function ordinal(n: number): string {
@@ -105,7 +110,7 @@
 </script>
 
 <svelte:head>
-  <title>{a.name} — Trails</title>
+  <title>{a.name} — Health</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
@@ -114,11 +119,11 @@
 <main class="wrap">
   <header class="page-hdr">
     <div>
-      <div class="kicker">Trails · {activityLabel(a.activityType)}</div>
+      <div class="kicker">Health · {activityLabel(a.activityType)}</div>
       <h1>{a.name}</h1>
       <p class="sub">{formatLocalDate(a.startDateLocal, a.startDate)}</p>
     </div>
-    <a class="back-link" href="/trails">All trails</a>
+    <a class="back-link" href="/health/activities">All activities</a>
   </header>
 
   <section class="nm-sec stat-grid">
@@ -129,6 +134,25 @@
       </div>
     {/each}
   </section>
+
+  {#if highlights.length > 0}
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">What was excellent</span>
+        <span class="nm-sec-meta">best first</span>
+      </div>
+      <ul class="highlight-list">
+        {#each highlights as highlight, i (`${highlight.kind}:${highlight.segmentId ?? ''}:${i}`)}
+          <li><HighlightBadge {highlight} /></li>
+        {/each}
+      </ul>
+      <p class="highlight-note">
+        Ranks are measured over every outing on record, not the page you came from. Segment
+        placings ignore any recording taken out of segment analysis, and efficiency compares only
+        within the pace sports — a ride's sits near 4 against a run's 1.
+      </p>
+    </section>
+  {/if}
 
   {#if a.coordinates && a.coordinates.length > 1}
     <section class="nm-sec">
@@ -233,12 +257,12 @@
     <section class="nm-sec">
       <div class="nm-sec-hd">
         <span class="sr-label-tight">Segments on this one</span>
-        <a class="nm-sec-meta seg-all" href="/trails/segments">All segments →</a>
+        <a class="nm-sec-meta seg-all" href="/health/segments">All segments →</a>
       </div>
       <ul class="seg-list">
         {#each segments as row (`${row.segmentId}:${row.effort.id}`)}
           <li>
-            <a class="seg-row" href="/trails/segments/{row.segmentId}">
+            <a class="seg-row" href="/health/segments/{row.segmentId}">
               <TrackThumb polyline={row.polyline} size={40} />
               <span class="seg-main">
                 <span class="seg-name">
@@ -251,9 +275,13 @@
               <span class="seg-nums">
                 <span class="seg-time">{formatDuration(row.effort.durationS)}</span>
                 <span class="seg-rank">
-                  {#if row.rankByTime}{ordinal(row.rankByTime)} of {row.effortCount} on time{:else}unranked{/if}
+                  <!-- Out of the RANKED efforts, never `effortCount`: an
+                       HR-derived metric goes null whenever the heart-rate window
+                       covers less than half the effort, which is how a 3rd of 4
+                       gets printed as a 3rd of 19. -->
+                  {#if row.rankByTime}{ordinal(row.rankByTime)} of {row.rankedByTimeOf} on time{:else}unranked on time{/if}
                   {#if row.rankByEfficiency}
-                    · {ordinal(row.rankByEfficiency)} on efficiency
+                    · {ordinal(row.rankByEfficiency)} of {row.rankedByEfficiencyOf} on efficiency
                   {/if}
                 </span>
               </span>
@@ -300,6 +328,27 @@
     color: var(--accent);
     text-decoration: none;
   }
+  .highlight-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .highlight-list li {
+    min-width: 0;
+    max-width: 24rem;
+  }
+  .highlight-note {
+    margin: 0.85rem 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 74ch;
+  }
+
   .seg-list {
     list-style: none;
     margin: 0;
