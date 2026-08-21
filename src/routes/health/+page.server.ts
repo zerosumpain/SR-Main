@@ -15,6 +15,7 @@ import { getPolarised } from '$lib/health/services/polarised-service';
 import { getStats } from '$lib/health/stats-service';
 import { getTrailsDashboard } from '$lib/trails/physio-service';
 import { getSegmentHighlights } from '$lib/trails/segments-service';
+import { getSegmentChains } from '$lib/trails/highlights-service';
 import { listActivities } from '$lib/trails/activities-service';
 import { getHighlightCorpus } from '$lib/trails/highlights-service';
 import { getDailyPlan } from '$lib/trails/coach-service';
@@ -170,8 +171,12 @@ export const load: PageServerLoad = async (event) => {
   // request. One extra round trip in sequence is cheaper than doing the
   // expensive half of this page twice.
   const dashboard = await safe('trails-dashboard', getTrailsDashboard());
-  const [segments, outings, coach] = await Promise.all([
+  const [segments, chains, outings, coach] = await Promise.all([
     safe('segment-highlights', getSegmentHighlights()),
+    // Memoised on the same fingerprint as the highlight corpus, so the hub and
+    // the segments explorer share one computation rather than each reloading
+    // 1,136 activities and 6,317 efforts.
+    safe('segment-chains', getSegmentChains(5)),
     safe('recent-outings', recentOutings()),
     safe('coach', getDailyPlan({ dashboard: dashboard ?? undefined, monotony, polarised })),
   ]);
@@ -194,6 +199,7 @@ export const load: PageServerLoad = async (event) => {
     polarised,
     dashboard,
     segments,
+    chains: chains ?? [],
     outings: outings ?? [],
     coach,
   };
