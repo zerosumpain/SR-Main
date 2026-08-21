@@ -23,6 +23,7 @@
     rhrBaseline,
     readiness,
     onevidence,
+    eyebrow = null,
   }: {
     today: HealthDay;
     headline: { primary: string; ghost: string };
@@ -31,6 +32,12 @@
     rhrBaseline: number;
     readiness: ReadinessData;
     onevidence?: (id: string) => void;
+    /**
+     * The chapter eyebrow. Passed in rather than hard-coded, because the page
+     * numbers its own chapters and a hero that always says "01" printed two of
+     * them the moment anything else claimed the number.
+     */
+    eyebrow?: string | null;
   } = $props();
 
   const dateTag = new Date()
@@ -64,7 +71,7 @@
 
 <section class="h-hero">
   <div class="h-hero-inner">
-    <p class="h-section-num">01 / TODAY · {dateTag}</p>
+    <p class="h-section-num">{eyebrow ?? 'TODAY'} · {dateTag}</p>
 
     {#if readiness}
       <Readiness {readiness} {onevidence} />

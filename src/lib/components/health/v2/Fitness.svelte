@@ -7,6 +7,7 @@
   // come from the globally imported cards.css; only bespoke viz classes live in
   // this file's style block.
   import BandGauge from './BandGauge.svelte';
+  import { ordinal } from '$lib/trails/highlights';
   import EvidenceChip from '$lib/components/health/EvidenceChip.svelte';
 
   type Sufficiency = 'ok' | 'partial' | 'insufficient';
@@ -168,7 +169,7 @@
             max={100}
             zones={VO2_ZONES}
             active={vo2active}
-            formatValue={(v) => Math.round(v) + 'th'}
+            formatValue={(v) => ordinal(Math.round(v))}
           />
         </div>
 
